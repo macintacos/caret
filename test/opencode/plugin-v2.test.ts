@@ -50,8 +50,10 @@ function fakeContext(opts: FakeOpts = {}) {
       },
     },
     session: {
-      get: async ({ sessionID }: { sessionID: string }) =>
-        (opts.session ?? (async () => ({ id: sessionID })))(sessionID),
+      get: async ({ sessionID }: { sessionID: string }) => ({
+        location: { directory },
+        ...(await (opts.session ?? (async () => ({ id: sessionID })))(sessionID)),
+      }),
       hook: async (name: string, cb: (event: unknown) => Promise<void> | void) => {
         hooks.set(name, cb);
         return registration;
@@ -280,8 +282,14 @@ test("stock agent rules allow an in-project file and refuse an out-of-project on
 // --- subagent refusal ---
 
 test("a subagent session is refused without spawning; an unreadable session proceeds", async () => {
-  const child = await pathReview({ session: async () => ({ parentID: "P" }) }, "");
-  expect(String(child.result.content)).toContain("primary agents only");
+  const childStdins: string[] = [];
+  const child = await setupWith(
+    stubRunner(ALLOW, (_c, _e, stdin) => childStdins.push(stdin)),
+    { session: async () => ({ parentID: "P" }) },
+  );
+  const refused = await child.tool.execute({ plan: "# P" }, toolContext());
+  expect(String(refused.content)).toContain("primary agents only");
+  expect(childStdins).toEqual([]);
 
   let spawned = 0;
   const { tool } = await setupWith(
@@ -316,10 +324,70 @@ test("execute returns the decision as string content", async () => {
   expect(String(result.content)).toContain("narrow it");
 });
 
-test("a runner that throws comes back as content, not a rejection", async () => {
+test("a runner that throws fails safe to a deny from the bridge", async () => {
   const { tool } = await setupWith(async () => {
     throw new Error("boom");
   });
   const result = await tool.execute({ plan: "# P" }, toolContext());
   expect(typeof result.content).toBe("string");
+});
+
+test("a failure escaping the review core resolves to a fail-safe deny, not a rejection", async () => {
+  const { tool } = await setupWith(stubRunner(ALLOW));
+  const result = await tool.execute(null, toolContext());
+  expect(String(result.content)).toContain("denying to fail safe");
+});
+
+// --- trust-boundary inputs ---
+
+test("session edit denies refuse a path review even when the agent allows all", async () => {
+  const directory = planDir({ "p.md": "# P\n" });
+  const { result, stdins } = await pathReview(
+    {
+      directory,
+      agentRules: async () => ALLOW_ALL,
+      session: async () => ({
+        location: { directory },
+        permissions: [{ action: "edit", resource: "*", effect: "deny" }],
+      }),
+    },
+    "p.md",
+  );
+  expect(String(result.content)).toContain("not permitted to edit");
+  expect(stdins).toEqual([]);
+});
+
+test("the calling agent's rules decide a path review", async () => {
+  const directory = planDir({ "p.md": "# P\n" });
+  const stdins: string[] = [];
+  const { tool } = await setupWith(
+    stubRunner(ALLOW, (_c, _e, stdin) => stdins.push(stdin)),
+    { directory, agentRules: async (id) => (id === "plan" ? ALLOW_ALL : []) },
+  );
+  const result = await tool.execute(
+    { path: "p.md" },
+    toolContext({ agent: "build" } as Partial<ToolContext>),
+  );
+  expect(String(result.content)).toContain("not permitted to edit");
+  expect(stdins).toEqual([]);
+});
+
+test("a file in the project but outside the session directory counts as internal", async () => {
+  const project = planDir({ "plan.md": "# P\n", "pkg/.keep": "" });
+  const stock: Rule[] = [
+    { action: "*", resource: "*", effect: "allow" },
+    { action: "external_directory", resource: "*", effect: "ask" },
+  ];
+  const { stdins } = await pathReview(
+    { directory: join(project, "pkg"), projectDirectory: project, agentRules: async () => stock },
+    join(project, "plan.md"),
+  );
+  expect(stdins).toHaveLength(1);
+});
+
+test("a build-agent call with an inline plan spawns the review", async () => {
+  let spawned = 0;
+  const { tool } = await setupWith(stubRunner(ALLOW, () => spawned++));
+  await tool.execute({ plan: "# P" }, toolContext({ agent: "build" } as Partial<ToolContext>));
+  expect(spawned).toBe(1);
 });

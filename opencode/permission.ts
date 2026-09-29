@@ -1,7 +1,8 @@
 // OpenCode v2 permission evaluation, for checking a plan file write-back that v2 gives a
 // plugin no way to ask about. Copied from anomalyco/opencode at v2.0.18:
 // packages/core/src/util/wildcard.ts (match), packages/core/src/permission.ts (evaluate),
-// and the resource forming in packages/core/src/file-access.ts (resolve).
+// the resource forming in packages/core/src/file-access.ts (resolve), and
+// packages/util/src/fs-util.ts (contains, from FSUtil.contains).
 //
 // Copyright (c) 2025 opencode. MIT License. Permission is hereby granted, free of charge,
 // to any person obtaining a copy of this software and associated documentation files (the
@@ -45,7 +46,7 @@ export function wildcardMatch(input: string, pattern: string): boolean {
 }
 
 /** The last rule matching both `action` and `resource` wins; no match asks. */
-export function evaluate(action: string, resource: string, ...rulesets: Rule[][]): Rule {
+export function evaluate(action: string, resource: string, ...rulesets: (readonly Rule[])[]): Rule {
   return (
     rulesets
       .flat()
@@ -92,10 +93,10 @@ export function editChecks(planFilePath: string, location: Location): Check[] {
 export function editPermitted(
   planFilePath: string,
   location: Location,
-  agentRules: Rule[],
-  sessionRules: Rule[],
+  rules: { agent: readonly Rule[]; session: readonly Rule[] },
 ): boolean {
   return editChecks(planFilePath, location).every(
-    (check) => evaluate(check.action, check.resource, agentRules, sessionRules).effect === "allow",
+    (check) =>
+      evaluate(check.action, check.resource, rules.agent, rules.session).effect === "allow",
   );
 }

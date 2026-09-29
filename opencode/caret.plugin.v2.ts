@@ -24,19 +24,13 @@ import {
   runPlanReview,
   type WarmRunner,
 } from "./caret.plugin.ts";
-import { editPermitted, type Rule } from "./permission.ts";
-import { nodeSpawnRunner, type SpawnRunner } from "./review-bridge.ts";
+import { editPermitted } from "./permission.ts";
+import { decisionText, nodeSpawnRunner, type SpawnRunner } from "./review-bridge.ts";
 
 type SetupContext = Pick<Plugin.Context, "location" | "agent" | "session" | "tool">;
 
-type SessionInfo = {
-  parentID?: string;
-  agent?: string;
-  location?: { directory: string };
-  permissions?: readonly Rule[];
-};
-
-/** Build caret's v2 `setup`. The DI seam mirrors createCaretPlugin's. */
+/** Build caret's v2 `setup` over injected runners, so tests drive it with a stub review
+ * runner and a recording warm. */
 export function createCaretSetup(opts: {
   bin: string;
   run: SpawnRunner;
@@ -46,14 +40,14 @@ export function createCaretSetup(opts: {
   const { bin, run, warm, plansDir } = opts;
 
   return async (ctx) => {
-    const readSession = async (sessionID: string): Promise<SessionInfo> =>
-      (await ctx.session.get({ sessionID })) as SessionInfo;
+    const readSession = (sessionID: string) => ctx.session.get({ sessionID });
 
     async function execute(input: unknown, context: ToolContext): Promise<{ content: string }> {
       try {
         const session = await readSession(context.sessionID).catch(() => undefined);
-        const directory = session?.location?.directory ?? ctx.location.directory;
+        const directory = session?.location.directory ?? ctx.location.directory;
         const { text } = await runPlanReview(
+          // v2 decodes input against the JSON Schema below before execute runs.
           input as { plan?: string; path?: string },
           {
             sessionID: context.sessionID,
@@ -61,14 +55,14 @@ export function createCaretSetup(opts: {
             // Fail-open: an unreadable session is treated as primary, as on v1.
             isSubagent: async () => Boolean(session?.parentID),
             canEdit: async (planFilePath) => {
+              // Session rules can deny, so an unreadable session cannot prove allow.
               if (!session) return false;
               try {
                 const agent = await ctx.agent.get({ agentID: context.agent });
                 return editPermitted(
                   planFilePath,
                   { directory, projectDirectory: ctx.location.project.directory },
-                  [...agent.data.permissions],
-                  [...(session.permissions ?? [])],
+                  { agent: agent.data.permissions, session: session.permissions ?? [] },
                 );
               } catch {
                 return false;
@@ -80,7 +74,16 @@ export function createCaretSetup(opts: {
         );
         return { content: text };
       } catch (error) {
-        return { content: `caret: ${REVIEW_TOOL} failed: ${String(error)}` };
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          content: decisionText(
+            {
+              behavior: "deny",
+              feedback: `caret: review failed to run (${message}) — denying to fail safe.`,
+            },
+            REVIEW_TOOL,
+          ),
+        };
       }
     }
 
@@ -134,6 +137,7 @@ const setup = createCaretSetup({
     env: process.env,
     home: homedir(),
     readFile: (p) => readFileSync(p, "utf-8"),
+    // v2's plan agent may edit only this dir, and v2 roots it at $HOME, not XDG.
     defaultDir: join(homedir(), ".opencode", "plan"),
   }),
 });

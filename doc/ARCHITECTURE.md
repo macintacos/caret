@@ -290,6 +290,13 @@ selected; `--uninstall` reverses every agent at once, and `--dry-run` previews t
 without writing. See [`agents/opencode-integration.md`](agents/opencode-integration.md)
 for the design.
 
+caret supports OpenCode v1 1.3.4 or later (an older v1 fails to load the plugin) and v2
+2.0.18 or later. On v2 the same package loads through a dual default export. The review
+tool, planning steer, prewarm and abort work, but the review-link and update toasts are
+v1-only for now, prewarm runs per prompt, and a `path` outside what the agent may edit is
+refused rather than asked about (see
+[Calling the review tool from your own skill](#calling-the-review-tool-from-your-own-skill)).
+
 `caret install --refresh` takes an update: it compares the caret OpenCode would load
 against npm's published one, then either clears the stale cached copy so OpenCode
 re-resolves on next start **or**, for a stale pinned entry, bumps the pin in the array in

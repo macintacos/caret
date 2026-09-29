@@ -89,7 +89,9 @@ describe("editPermitted", () => {
   test("ask and deny both refuse", () => {
     for (const effect of ["ask", "deny"] as const) {
       const rules: Rule[] = [...allowAll, { action: "edit", resource: "*", effect }];
-      expect(editPermitted("/work/app/plan.md", PROJECT, rules, [])).toBe(false);
+      expect(editPermitted("/work/app/plan.md", PROJECT, { agent: rules, session: [] })).toBe(
+        false,
+      );
     }
   });
 
@@ -100,12 +102,16 @@ describe("editPermitted", () => {
   ];
 
   test("v2's plan agent may write in its plan dir", () => {
-    expect(editPermitted(`${HOME}/.opencode/plan/x.md`, PROJECT, planAgent, [])).toBe(true);
+    expect(
+      editPermitted(`${HOME}/.opencode/plan/x.md`, PROJECT, { agent: planAgent, session: [] }),
+    ).toBe(true);
   });
 
   test("v2's plan agent may not write elsewhere", () => {
-    expect(editPermitted("/work/app/plan.md", PROJECT, planAgent, [])).toBe(false);
-    expect(editPermitted("/notes/plan.md", PROJECT, planAgent, [])).toBe(false);
+    expect(editPermitted("/work/app/plan.md", PROJECT, { agent: planAgent, session: [] })).toBe(
+      false,
+    );
+    expect(editPermitted("/notes/plan.md", PROJECT, { agent: planAgent, session: [] })).toBe(false);
   });
 
   const stockAgent: Rule[] = [
@@ -114,15 +120,21 @@ describe("editPermitted", () => {
   ];
 
   test("stock agent rules permit an in-project file", () => {
-    expect(editPermitted("/work/app/plan.md", PROJECT, stockAgent, [])).toBe(true);
+    expect(editPermitted("/work/app/plan.md", PROJECT, { agent: stockAgent, session: [] })).toBe(
+      true,
+    );
   });
 
   test("stock agent rules refuse an out-of-project file", () => {
-    expect(editPermitted("/notes/plan.md", PROJECT, stockAgent, [])).toBe(false);
+    expect(editPermitted("/notes/plan.md", PROJECT, { agent: stockAgent, session: [] })).toBe(
+      false,
+    );
   });
 
   test("session rules outrank agent rules", () => {
     const session: Rule[] = [{ action: "edit", resource: "*", effect: "deny" }];
-    expect(editPermitted("/work/app/plan.md", PROJECT, stockAgent, session)).toBe(false);
+    expect(
+      editPermitted("/work/app/plan.md", PROJECT, { agent: stockAgent, session: session }),
+    ).toBe(false);
   });
 });

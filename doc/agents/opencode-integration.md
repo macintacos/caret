@@ -36,7 +36,8 @@ this:
   (`caret.plugin.ts`), which takes a small `ReviewHost` port — session id, base directory,
   `isSubagent`, `canEdit`, abort `signal`, `onUrl` — and both registrations read the same
   exported tool strings. v2's `execute` never throws: a rejection would skip v2's
-  `execute.after` hooks, so every failure comes back as `{ content }`.
+  `execute.after` hooks, so every failure comes back as `{ content }` carrying the
+  bridge's fail-safe deny.
 - A hook injects a planning steer telling the Plan agent to call `caret_review_plan`. On
   v1 that is `experimental.chat.system.transform` (and a `tool.definition` hook redirects
   the native `plan_exit` description toward it); on v2 it is
@@ -48,7 +49,9 @@ this:
   `caret_review_plan` rather than end planning any other way, writing the plan file in the
   plans dir is the user's request (v2's own plan-mode reminder says not to create plan
   files unless asked), and pass the plan inline as `plan` when that file may not be
-  written.
+  written. With `path`, a change request means re-reading the file, revising it with
+  targeted edits, and resubmitting the same `path`; an approved plan is already saved
+  there.
 - The tool's `execute()` runs the review **synchronously and blocks** until the human
   decides, then returns an approval string or a change-request string (the reviewer
   feedback plus a resubmit instruction; the plan itself is not echoed back — the agent
@@ -118,13 +121,14 @@ On a `path` call the plugin reads the file itself and sends its text along with 
 resolved absolute path as `planFilePath`, which gives the envelope the same shape Claude
 Code's hook sends. The core's plan-file guard, write-back, and notes append then run
 unchanged. The plugin can't import `src/`, so it repeats the core's "`.md`, existing
-regular file" check. It then asks OpenCode for `edit` permission on the file, the pattern
-being the path relative to the session worktree. The core's plan-file guard assumes the
-agent wrote the file itself, as Claude Code's does; here the model picks the string, so
-without the ask caret's write-back would bypass OpenCode's edit rules and rewrite a file
-the agent may not edit. When the check fails or the ask is denied, the plugin returns an
-error string to the agent without spawning `caret review`. That is an error, not a deny:
-no review happened.
+regular file" check. It then checks `edit` permission on the file, the pattern being the
+path relative to the session worktree: v1 asks OpenCode (`context.ask`); v2 evaluates
+OpenCode's rules itself, as below. The core's plan-file guard assumes the agent wrote the
+file itself, as Claude Code's does; here the model picks the string, so without that check
+caret's write-back would bypass OpenCode's edit rules and rewrite a file the agent may not
+edit. When the check fails or permission is refused, the plugin returns an error string to
+the agent without spawning `caret review`. That is an error, not a deny: no review
+happened.
 
 **On v2 the check is evaluate-then-refuse**, because no v2 plugin API raises an
 interactive permission ask. `opencode/permission.ts` copies OpenCode v2's `Wildcard.match`
@@ -155,7 +159,8 @@ All three close when upstream exposes a permission assert (anomalyco/opencode#46
 
 Abort reaches the child on both hosts: `runPlanReview` passes the host's signal (v1's
 `context.abort`, v2's `context.signal`) to the bridge, whose `spawn({ signal })` kills
-`caret review`.
+`caret review`. On v1 an abort after the review-link toast replaces it with a neutral
+"caret: review cancelled" toast.
 
 Because both ends of this wire are caret-owned (the plugin writes the envelope, the
 `opencode` adapter renders the decision the plugin reads), the OpenCode adapter is the
@@ -300,13 +305,14 @@ so it wants the live check § Verified vs. follow-up already schedules.
   `readOpencodeInstallState` (a read-only probe of OpenCode's config dir). Registered in
   `src/adapters/index.ts`; selectable via `CARET_AGENT=opencode`. Claude stays the
   default.
-- **Packaging (`opencode/`)** — the plugin (`caret.plugin.ts`), its package entrypoint
-  (`index.ts`, see § The export surface), and command files (`commands/*.md`). The plugin
-  ships in the `@macintacos/caret` npm package and resolves its binary and version at
-  runtime from that package (§ Runtime resolution + update check); only the command files
-  still carry substituted markers — `__CARET_BIN__` and `__CARET_DEMO_TEMPLATE__`, the
-  template embedded rather than read because under `bunx` the install-time root is a temp
-  dir.
+- **Packaging (`opencode/`)** — the v1 plugin (`caret.plugin.ts`), the v2 plugin
+  (`caret.plugin.v2.ts`) and its permission evaluator (`permission.ts`), their package
+  entrypoint (`index.ts`, see § The export surface), and command files (`commands/*.md`).
+  The plugin ships in the `@macintacos/caret` npm package and resolves its binary and
+  version at runtime from that package (§ Runtime resolution + update check); only the
+  command files still carry substituted markers — `__CARET_BIN__` and
+  `__CARET_DEMO_TEMPLATE__`, the template embedded rather than read because under `bunx`
+  the install-time root is a temp dir.
 - **Install (`caret install`)** — adds caret to the user's OpenCode `plugin` array
   (comment-preserving, via `jsonc-parser` in `config-plugin.ts`) as either
   `@macintacos/caret` or, under `--from-local`, `file:<checkout>` (§ The local form) and
@@ -449,15 +455,15 @@ version skew between the pinned `@opencode-ai/plugin` and the running OpenCode i
 harmless: `tool()` is identity, `tool.schema` is just zod, the hook names are stable). A
 fresh install still needs **one OpenCode restart** (packages install/load at startup).
 
-## The export surface: a plugin module may export ONLY Plugin functions
+## The export surface: a plugin module may export ONLY plugins
 
 OpenCode's plugin loader iterates a module's exports (`Object.values(mod)`) and throws
 `TypeError("Plugin export is not a function")` on the FIRST export it cannot coerce to a
 Plugin (a function, or a `{ server }` object) — one bad export rejects the whole module.
 caret's plugin SOURCE (`caret.plugin.ts`) exports constants (`CARET_PLUGIN_VERSION`,
-`REVIEW_TOOL`, `PLANNING_AGENTS`) and pure helpers so `test/opencode/` can unit-test them,
-so it can't be OpenCode's entrypoint directly — the first non-Plugin export would reject
-it (a live EXC-339 bug, log line
+`REVIEW_TOOL`, `PLANNING_AGENTS`) and pure helpers so `test/opencode/` can unit-test them
+and so `caret.plugin.v2.ts` can share them, so it can't be OpenCode's entrypoint directly
+— the first non-Plugin export would reject it (a live EXC-339 bug, log line
 `failed to load plugin … "Plugin export is not a function"`).
 
 So the package's entrypoint is a tiny dedicated module, `opencode/index.ts`, whose
@@ -498,7 +504,10 @@ runs `prewarm` with `CARET_AGENT=opencode`); the entrypoint's
 `Object.values`-single-Plugin invariant; the config-array editor (add/remove,
 comment-preserving); target selection + dispatch; the `claude` target's CLI command
 sequence; the runtime bin/version resolvers; and the update check (toasts when behind,
-silent on error / opt-out).
+silent on error / opt-out). On v2 they also cover the permission evaluator, the tool's
+registration (`codemode: false`, JSON Schema input), steer and prewarm gating,
+evaluate-then-refuse on `path`, the subagent refusal and its fail-open, abort on both
+hosts, and v1↔v2 parity of the refusal texts.
 
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
 the array install's LOCAL form, which is what ties the run to that plugin version: a

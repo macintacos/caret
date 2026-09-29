@@ -6,7 +6,8 @@
 // tool's execute() by spawning `caret review` (CARET_AGENT=opencode). The whole
 // caret daemon/review pipeline is reused unchanged — this plugin is the
 // OpenCode-side counterpart to Claude Code's hooks.json, which likewise spawns
-// `caret review`.
+// `caret review`. It is also the host-neutral review core that caret.plugin.v2.ts
+// imports.
 //
 // Subagent-bypass mitigation: OpenCode's tool.execute.before does not fire for
 // subagent tool calls, so caret does NOT rely on a hook to gate subagents. The
@@ -369,8 +370,9 @@ export async function realUpdateChecker(
 }
 
 /** Where the planning steer sends the plan agent's plan file: `[opencode] plans_dir`
- * from caret's config.toml (a leading `~` expanded), else OpenCode's data-dir
- * `plans/`, which OpenCode's plan agent may edit. The config path mirrors
+ * from caret's config.toml (a leading `~` expanded), else `defaultDir`, the host's
+ * plan-agent directory, which defaults to OpenCode v1's data-dir `plans/`
+ * (`$XDG_DATA_HOME` honoured). The config path mirrors
  * src/config/paths.ts configFile() by hand, since the plugin cannot import src/. */
 export function resolvePlansDir(opts: {
   env: Record<string, string | undefined>;
@@ -403,7 +405,7 @@ export function planningSteer(plansDir: string): string {
     "## Plan review (caret)",
     "",
     `When you have a plan ready for the user, submit it by calling the \`${REVIEW_TOOL}\` tool, not by ending planning any other way (for example with plan_exit). The user asks you to write the plan as markdown to a file in \`${plansDir}/\`, for example \`${plansDir}/<short-name>.md\`, and pass that file as the \`path\` argument. If you may not write that file, pass the plan inline as the \`plan\` argument instead.`,
-    "It opens caret's visual review UI in the browser; the user approves or requests changes. A change request comes back as the tool result: re-read the file, revise it with targeted edits rather than rewriting it, and call the tool again with the same `path` until it is approved. An approved plan is already saved in that file.",
+    "It opens caret's visual review UI in the browser; the user approves or requests changes. A change request comes back as the tool result. With `path`, re-read the file, revise it with targeted edits rather than rewriting it, and call the tool again with the same `path` until it is approved. An approved plan is already saved in that file.",
     PLAN_TITLE_INSTRUCTION,
   ].join("\n");
 }
@@ -481,6 +483,8 @@ export const nodeWarmRunner: WarmRunner = (bin) => {
 // The shared review core (v1 and v2 hosts are thin adapters over it)
 // ---------------------------------------------------------------------------
 
+// The review tool's model-facing text. Both hosts' registrations read these, so v1 and
+// v2 stay word-for-word identical (plugin-v2.test.ts pins the refusal texts).
 export const REVIEW_TOOL_DESCRIPTION =
   "Submit the current plan to caret for human review in a local browser UI. For plans only: caret presents what it receives as a plan, so do not use it for other documents or questions. Pass exactly one of `path` (preferred: a markdown file you write once and revise with edits) or `plan` (the plan inline). Blocks until the user approves or requests changes. On a change request, follow the result's instructions and call this tool again. Do not implement the plan until a call returns an approval.";
 
@@ -507,7 +511,9 @@ export type ReviewHost = {
   /** caret rewrites the file and the model chose the path, so OpenCode's own edit rules
    * must allow it. false = denied, ask-only, or the check failed. */
   canEdit: (planFilePath: string) => Promise<boolean>;
+  /** Aborting it kills the `caret review` child. */
   signal?: AbortSignal;
+  /** Fires once with the review URL while the review is pending. */
   onUrl?: (url: string) => void;
 };
 
@@ -667,7 +673,13 @@ export function createCaretPlugin(
             );
             // Supersede the pending review-link toast with a brief decision toast —
             // the surface is single-slot with no hide API (EXC-691).
-            if (linkShown && decision) {
+            if (linkShown && context.abort.aborted) {
+              showToast(client, {
+                message: "caret: review cancelled",
+                variant: "info",
+                duration: DECISION_TOAST_MS,
+              });
+            } else if (linkShown && decision) {
               showToast(
                 client,
                 decision.behavior === "allow"
@@ -692,8 +704,8 @@ export function createCaretPlugin(
   };
 }
 
-/** The plugin OpenCode loads (bare default-export function), wiring the production
- * update checker. */
+/** caret's OpenCode v1 plugin (the `server` half of index.ts's default), wiring the
+ * production update checker. */
 const CaretPlugin: Plugin = createCaretPlugin({
   checkUpdate: (client) => {
     void realUpdateChecker(client, {

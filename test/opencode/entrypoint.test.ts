@@ -2,12 +2,15 @@
 // plugin via a bare `plugin: ["@macintacos/caret"]` array entry. OpenCode's loader
 // iterates a plugin module's exports (Object.values) and rejects the whole module
 // on the FIRST export that isn't a plugin, so the entrypoint must expose EXACTLY
-// one value: the object both OpenCode v1 (`server`) and v2 (`setup`) load. These tests pin that invariant and the package.json wiring
-// (a bare specifier resolves the package's `exports["."]`; the plugin's runtime
-// import must be a real dependency so OpenCode's `bun install` provides it).
+// one value: the object both OpenCode v1 (`server`) and v2 (`setup`) load. These
+// tests pin that invariant and the package.json wiring (a bare specifier resolves
+// the package's `exports["."]`; v1's runtime import, `@opencode-ai/plugin`'s
+// `tool()`, must be a real dependency so OpenCode's `bun install` provides it).
 
 import { expect, test } from "bun:test";
 
+import v1Server from "@opencode/caret.plugin.ts";
+import v2Setup from "@opencode/caret.plugin.v2.ts";
 import pkgJson from "@root/package.json" with { type: "json" };
 
 // package.json arrives as a parsed module (as test/core/lib/build-id.test.ts
@@ -30,8 +33,9 @@ test("the OpenCode package entrypoint exports one plugin serving both v1 (server
   expect(values).toHaveLength(1);
   const plugin = values[0] as Record<string, unknown>;
   expect(plugin.id).toBe("caret");
-  expect(typeof plugin.setup).toBe("function");
-  expect(typeof plugin.server).toBe("function");
+  expect(plugin.setup).toBe(v2Setup);
+  expect(plugin.server).toBe(v1Server);
+  // v1 rejects a default holding both `server` and `tui`; a TUI module is its own export.
   expect(plugin.tui).toBeUndefined();
 });
 
