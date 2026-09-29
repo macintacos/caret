@@ -27,13 +27,28 @@ The robust, version-stable way to gate on a plan in OpenCode is to
 **register a dedicated plan-review tool** and steer the Plan agent to call it. caret does
 this:
 
-- The plugin registers a `caret_review_plan` tool
-  (`tool({ description, args, execute })`).
-- An `experimental.chat.system.transform` hook injects a planning steer telling the Plan
-  agent to call `caret_review_plan` (and a `tool.definition` hook redirects the native
-  `plan_exit` description toward it). The steer is pushed **only for the plan agent** —
-  every other primary agent may call the tool but is not prompted toward it (§ The
-  subagent bypass).
+- The plugin registers a `caret_review_plan` tool. On v1 that is
+  `tool({ description, args, execute })`; on v2 it is
+  `ctx.tool.transform((tools) => tools.add({ name, description, input, options, execute }))`,
+  with `input` a plain JSON Schema object (no zod at runtime) and
+  `options: { codemode: false }`, without which v2 registers the tool only inside its Code
+  Mode catalog. Both `execute`s are thin adapters over one host-neutral `runPlanReview`
+  (`caret.plugin.ts`), which takes a small `ReviewHost` port — session id, base directory,
+  `isSubagent`, `canEdit`, abort `signal`, `onUrl` — and both registrations read the same
+  exported tool strings. v2's `execute` never throws: a rejection would skip v2's
+  `execute.after` hooks, so every failure comes back as `{ content }`.
+- A hook injects a planning steer telling the Plan agent to call `caret_review_plan`. On
+  v1 that is `experimental.chat.system.transform` (and a `tool.definition` hook redirects
+  the native `plan_exit` description toward it); on v2 it is
+  `ctx.session.hook("context")`, whose event carries the agent, so v2 needs no
+  session→agent map and has no `plan_exit` to redirect. The session→agent map,
+  `chat.message`, and the `plan_exit` rewrite are v1-only. The steer is pushed
+  **only for the plan agent** — every other primary agent may call the tool but is not
+  prompted toward it (§ The subagent bypass). Its text reads on both hosts: submit through
+  `caret_review_plan` rather than end planning any other way, writing the plan file in the
+  plans dir is the user's request (v2's own plan-mode reminder says not to create plan
+  files unless asked), and pass the plan inline as `plan` when that file may not be
+  written.
 - The tool's `execute()` runs the review **synchronously and blocks** until the human
   decides, then returns an approval string or a change-request string (the reviewer
   feedback plus a resubmit instruction; the plan itself is not echoed back — the agent
@@ -42,9 +57,11 @@ this:
   block; OpenCode has no separate "pause" primitive.
 - The tool takes the plan as **exactly one of `path` or `plan`**. `path` is a `.md` file,
   resolved against the session directory. The steer asks for it and points the plan agent
-  at a plans directory it may edit: OpenCode's data-dir `plans/` (OpenCode's `agent.ts`
-  allows that and a project's `.opencode/plans/`), or caret's `[opencode] plans_dir`. The
-  plugin reads that key from caret's `config.toml` itself when OpenCode loads it
+  at a plans directory it may edit. The default is per host: on v1, OpenCode's data-dir
+  `plans/` (OpenCode's `agent.ts` allows that and a project's `.opencode/plans/`); on v2,
+  `~/.opencode/plan` — home-relative, not XDG — the only directory v2's plan agent may
+  edit (`resolvePlansDir`'s `defaultDir`). caret's `[opencode] plans_dir` wins verbatim on
+  both. The plugin reads that key from caret's `config.toml` itself when OpenCode loads it
   (`resolvePlansDir`, mirroring `configFile()`), since it cannot import `src/`. `plan` is
   the inline text. A `path` review gets the same plan-file treatment as Claude Code's:
   caret writes its canonical, reformatted text back onto the file at ingest and appends
@@ -109,6 +126,37 @@ the agent may not edit. When the check fails or the ask is denied, the plugin re
 error string to the agent without spawning `caret review`. That is an error, not a deny:
 no review happened.
 
+**On v2 the check is evaluate-then-refuse**, because no v2 plugin API raises an
+interactive permission ask. `opencode/permission.ts` copies OpenCode v2's `Wildcard.match`
+and `Permission.evaluate` (its `*` crosses `/`, which `Bun.Glob` and `path.matchesGlob` do
+not, and no published package exports the matcher) and mirrors the resource forming of
+v2's `file-access.ts`. `editPermitted` evaluates the agent's rules (`ctx.agent.get`,
+config `permission` already folded in), then the session's `permissions` — last matching
+rule wins, default `ask` — for `edit` on the file, plus `external_directory` when the file
+is outside the project, since that is OpenCode's own check for such a file. It permits
+only when every evaluated effect is `allow`; a failed agent or session read refuses.
+**An `ask` refuses** too, with the not-permitted text, which tells the agent to pass the
+plan inline as `plan`: `ask` means "only with the user's consent", v2 gives a plugin no
+way to obtain it, and proceeding would write without it.
+
+Known limits of evaluate-then-refuse:
+
+- **Stock v2 refuses a non-plan agent's out-of-project `path`.** Stock agent rules are
+  `* * allow`, then `external_directory * ask`, so a `build` agent submitting
+  `~/notes/plan.md` is refused and passes the plan inline — the review still happens,
+  without the file write-back. In-project files fall through to `* allow`. v1 raises
+  OpenCode's interactive ask instead.
+- **Saved "always" grants are invisible to a plugin**, so caret may refuse a file OpenCode
+  would allow; the inline hint applies.
+- **Config and organization policy denies are invisible too**, so caret may proceed where
+  a policy would deny.
+
+All three close when upstream exposes a permission assert (anomalyco/opencode#46530).
+
+Abort reaches the child on both hosts: `runPlanReview` passes the host's signal (v1's
+`context.abort`, v2's `context.signal`) to the bridge, whose `spawn({ signal })` kills
+`caret review`.
+
 Because both ends of this wire are caret-owned (the plugin writes the envelope, the
 `opencode` adapter renders the decision the plugin reads), the OpenCode adapter is the
 *least* speculative of the three — there is no foreign agent wire format to model. The
@@ -130,6 +178,13 @@ The plugin warms caret's daemon by fire-and-forget spawning `caret prewarm` from
 (`isPlanningAgent`). It is the counterpart to Claude Code's `PostToolUse`/`EnterPlanMode`
 prewarm hook, for which OpenCode offers no equivalent event: absent this hook the daemon
 only comes up when the first `caret_review_plan` call spawns `caret review`.
+
+On v2 the warm hangs off `ctx.session.hook("prompt")`. That event carries no agent, so the
+hook reads it with `ctx.session.get` and calls the same production warm runner for a
+planning agent — once per prompt. It starts that lookup without awaiting it, so a prompt
+never waits on caret, and swallows every error: a rejected v2 hook aborts the prompt that
+triggered it. A session whose `agent` is unset gets no warm: a user whose default agent is
+`plan` warms nothing there, at the cost of one cold spawn.
 
 **Why the warm stays plan-only even though any primary agent may call the tool.** The plan
 agent is the one whose turn *reliably* ends in a review; a `build`-agent review is an
@@ -209,6 +264,11 @@ only remove the review option from every primary caller the moment the SDK shift
 exact failure this widening exists to remove. So a missing client, an absent
 `session.get`, an error payload, and a thrown request all fall through to permitting the
 call, and `primary_tools` carries the enforcement.
+
+**On v2 the in-body check is the only subagent gate** until EXC-1519 adds v2's per-request
+tool removal; v2 has no `config` hook writing `primary_tools`. It reads `ctx.session.get`
+once per call — `parentID` refuses, an unreadable session allows — and that session's
+`location.directory` is the `path` base, falling back to `ctx.location.directory`.
 
 `applyCaretConfig` writes exactly one per-agent permission: `allow` for
 `caret_review_plan` on the `plan` agent, and only when the agent has no entry of its own.
@@ -400,13 +460,21 @@ so it can't be OpenCode's entrypoint directly — the first non-Plugin export wo
 it (a live EXC-339 bug, log line
 `failed to load plugin … "Plugin export is not a function"`).
 
-So the package's entrypoint is a tiny dedicated re-export, `opencode/index.ts`:
-`export { default } from "./caret.plugin.ts"` — its module namespace is exactly
-`{ default }`, so `Object.values` yields only the Plugin function, and `package.json`
-`exports` `.` points at it. (Before EXC-794 the file-deploy path instead stripped every
-non-default export at deploy time via `stripNonDefaultExports`; the re-export entrypoint
-isolates the invariant without a build step.) `test/opencode/entrypoint.test.ts` asserts
-it.
+So the package's entrypoint is a tiny dedicated module, `opencode/index.ts`, whose
+namespace is exactly `{ default }`, and `package.json` `exports` `.` points at it.
+`test/opencode/entrypoint.test.ts` asserts it.
+
+**One default serves both runtimes: `{ id: "caret", setup, server }`.** OpenCode v2
+decodes `default` as `{ id, setup }` and ignores the extra `server`; v1 runs `server` (the
+v1 plugin, `caret.plugin.ts`'s default) and ignores `setup` (the v2 plugin,
+`caret.plugin.v2.ts`'s default). `id` is a fixed whitespace-free string both loaders
+accept. The v1 floor is **1.3.4**, the first v1 loader that reads an object default's
+`server`; an older v1 sees a non-function export and fails to load the plugin.
+
+`@opencode/plugin` (v2's plugin API) is a `dependency` but imported **for types only**.
+Its `Plugin.define` is the identity function, and its runtime entry would pull Effect and
+OpenCode's client into the module graph — which `index.ts → caret.plugin.v2.ts` loads on
+v1 hosts too.
 
 ## Verified vs. follow-up
 
@@ -456,6 +524,27 @@ session started from a repo subdirectory, where `context.directory` and `context
 differ. This mirrors the Codex adapter's live-contract follow-up (EXC-549) and the upgrade
 story tracked in EXC-383.
 
+**Confirmed against a live OpenCode v2.0.18** loading a `"plugin": ["file:<checkout>"]`
+entry, with all four `XDG_*` directories and `HOME` isolated and a scripted
+OpenAI-compatible mock model
+(`providers.<id>.package = "@opencode/ai/providers/openai-compatible"`): the plugin loads
+and `caret_review_plan` appears by name in the plan agent's request `tools` (so
+`codemode: false` takes effect); the steer reaches the plan agent's system prompt; an
+inline plan reaches `caret review`, is served in caret's UI, and approving there returns
+`approvedMessage` as the tool result; a `path` in `~/.opencode/plan/` passes
+evaluate-then-refuse against v2's real plan-agent rules and returns the "already saved at"
+approval; and a `path` outside it under the plan agent is refused with the not-permitted
+text, opens no review, and leaves the file unchanged.
+**Against OpenCode v1.18.29 loading the packed npm tarball** (an installed package, not a
+symlinked checkout), `caret_review_plan` is in the tools v1 sends the model and no
+`failed to load plugin` line is logged — v1 runs the dual export's `server`.
+
+**v2 follow-ups.** Whether a real model obeys the steer over v2's own "do not create or
+update plan files unless the user explicitly asks" reminder — a mock model cannot show it
+(anomalyco/opencode#49879). Not yet built on v2: the toasts, the plan-agent allow, and the
+per-request subagent deny (EXC-1519); `caret install` writing v2's `plugins` key, the v2
+cache layout, and doctor (EXC-1520).
+
 ## Sources
 
 - OpenCode plugin API: `@opencode-ai/plugin` (`packages/plugin/src/index.ts`, `tool.ts`) —
@@ -465,3 +554,10 @@ story tracked in EXC-383.
 - OpenCode config: per-agent `permission`, `experimental.primary_tools`
   (`packages/core/src/v1/config/*`).
 - Subagent bypass: sst/opencode#5894.
+- OpenCode v2 (`anomalyco/opencode@v2.0.18`): loader `packages/core/src/plugin/module.ts`;
+  plugin API `packages/plugin/src/README.md` (`@opencode/plugin`); plan agent and its
+  directory `packages/core/src/plugin/plan.ts`, `packages/util/src/global.ts`; permission
+  evaluation `packages/core/src/util/wildcard.ts`, `packages/core/src/permission.ts`,
+  `packages/core/src/file-access.ts`; stock agent rules `packages/schema/src/agent.ts`;
+  tool input schema `packages/core/src/tool/runtime.ts`.
+- v2 permission assert (upstream, open): anomalyco/opencode#46530.

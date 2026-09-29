@@ -114,7 +114,7 @@ change takes effect after you restart OpenCode.
 
 | Key                  | Default                          | Purpose                                                                                                                                                                                                                                    |
 | -------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `opencode.plans_dir` | `~/.local/share/opencode/plans`  | Where the Plan agent is told to write the plan file it submits for review. A leading `~` means your home directory. The default is OpenCode's own data-dir `plans/` (under `$XDG_DATA_HOME` when that is set), which the Plan agent is allowed to edit. OpenCode must also let the Plan agent edit a directory you choose instead, or caret refuses the review. |
+| `opencode.plans_dir` | per OpenCode version (see Purpose) | Where the Plan agent is told to write the plan file it submits for review. A leading `~` means your home directory. The default is the directory OpenCode's Plan agent is allowed to edit: on OpenCode v1, its data-dir `plans/` (`~/.local/share/opencode/plans`, under `$XDG_DATA_HOME` when that is set); on OpenCode v2, `~/.opencode/plan`. On either version, OpenCode must also let the Plan agent edit a directory you choose instead, or caret refuses the review. |
 
 ```toml
 [opencode]
