@@ -74,11 +74,11 @@ async function setupWith(
   fake: FakeOpts = {},
   warm: (bin: string) => void = () => {},
 ) {
-  const f = fakeContext(fake);
-  await createCaretSetup({ bin: "caret", run, warm, plansDir: PLANS_DIR })(f.ctx);
-  const tool = f.tools[0];
+  const harness = fakeContext(fake);
+  await createCaretSetup({ bin: "caret", run, warm, plansDir: PLANS_DIR })(harness.ctx);
+  const tool = harness.tools[0];
   if (!tool) throw new Error("no tool registered");
-  return { ...f, tool };
+  return { ...harness, tool };
 }
 
 function toolContext(extra: Partial<ToolContext> = {}): ToolContext {
