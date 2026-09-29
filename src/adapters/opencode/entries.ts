@@ -40,14 +40,15 @@ export function caretEntries(
 ): CaretEntry[] {
   return KEYS.flatMap((key) =>
     pluginEntries(text, key)
-      .filter((spec) => {
-        const path = localSpecifierPath(spec);
-        return path === undefined
-          ? splitPluginSpecifier(spec).pkg === CARET_PACKAGE
-          : isCheckout(path);
-      })
+      .filter((spec) => isCaretSpec(spec, isCheckout))
       .map((spec) => ({ key, spec })),
   );
+}
+
+/** Whether one specifier is caret's, by `caretEntries`' rule. */
+export function isCaretSpec(spec: string, isCheckout: (dir: string) => boolean): boolean {
+  const path = localSpecifierPath(spec);
+  return path === undefined ? splitPluginSpecifier(spec).pkg === CARET_PACKAGE : isCheckout(path);
 }
 
 /** caret's verbatim npm-package entry in `configFile`, pin and all, `plugin` before

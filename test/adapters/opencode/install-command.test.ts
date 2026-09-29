@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -37,6 +37,7 @@ function deps(overrides: InstallOpencodeDeps = {}): InstallOpencodeDeps {
     published: async () => null,
     cacheDir: (e) => join(dir, "cache", e.spec),
     cacheDirs: () => [],
+    opencodeVersion: () => null,
     ...overrides,
   };
 }
@@ -608,4 +609,139 @@ test("--dry-run names the legacy files in its preview and removes none of them",
   expect(said).toContain("pre-array-install files to remove:");
   for (const p of legacyPaths()) expect(said).toContain(p);
   expect(missing(legacyPaths())).toEqual([]);
+});
+
+// --- the key the host loads: v2's `plugins`, v1's `plugin` -------------------------
+
+const V2 = { opencodeVersion: () => [2, 0, 18] as [number, number, number] };
+const V1 = { opencodeVersion: () => [1, 18, 29] as [number, number, number] };
+const config = () => JSON.parse(readFileSync(configJson(), "utf-8"));
+
+async function installOn(overrides: InstallOpencodeDeps, local?: string): Promise<void> {
+  await runInstallOpencodeTarget(
+    {
+      uninstall: false,
+      dryRun: false,
+      refresh: false,
+      ...(local === undefined
+        ? {}
+        : { local: { repoDir: local, marketplaceDir: join(dir, "dev-marketplace") } }),
+    },
+    deps(overrides),
+  );
+}
+
+test("on v2, install writes caret to plugins as a bare string", async () => {
+  await installOn(V2);
+  expect(config()).toEqual({ plugins: [CARET_PACKAGE] });
+});
+
+test("on v2, a caret plugin entry moves to plugins, keeping comments and other entries", async () => {
+  writeFileSync(
+    configJson(),
+    [
+      "{",
+      "  // mine",
+      `  "plugin": ["wakatime", "${CARET_PACKAGE}"],`,
+      '  "plugins": ["other"]',
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await installOn(V2);
+  const text = readFileSync(configJson(), "utf-8");
+  expect(text).toContain("// mine");
+  const { parse } = await import("jsonc-parser");
+  expect(parse(text)).toEqual({ plugin: ["wakatime"], plugins: ["other", CARET_PACKAGE] });
+});
+
+test("on v2, a pin survives the move to plugins", async () => {
+  writeFileSync(configJson(), JSON.stringify({ plugin: [`${CARET_PACKAGE}@0.8.1`] }));
+  await installOn(V2);
+  expect(config()).toEqual({ plugin: [], plugins: [`${CARET_PACKAGE}@0.8.1`] });
+});
+
+test("on v2, duplicate caret plugins entries collapse to the pinned one", async () => {
+  writeFileSync(
+    configJson(),
+    JSON.stringify({ plugins: [CARET_PACKAGE, `${CARET_PACKAGE}@0.8.1`] }),
+  );
+  await installOn(V2);
+  expect(config()).toEqual({ plugins: [`${CARET_PACKAGE}@0.8.1`] });
+});
+
+test("on v2, a string and an object caret item collapse to one", async () => {
+  writeFileSync(
+    configJson(),
+    JSON.stringify({ plugins: [CARET_PACKAGE, { package: CARET_PACKAGE }] }),
+  );
+  await installOn(V2);
+  expect(config()).toEqual({ plugins: [CARET_PACKAGE] });
+});
+
+test("on v2, the plugin pin the user runs today wins over a bare plugins entry", async () => {
+  writeFileSync(
+    configJson(),
+    JSON.stringify({ plugin: [`${CARET_PACKAGE}@0.8.1`], plugins: [CARET_PACKAGE] }),
+  );
+  await installOn(V2);
+  expect(config()).toEqual({ plugin: [], plugins: [`${CARET_PACKAGE}@0.8.1`] });
+});
+
+test("re-installing over a correct v2 config writes nothing", async () => {
+  const text = `{\n  "plugins": [{ "package": "${CARET_PACKAGE}" }]\n}\n`;
+  writeFileSync(configJson(), text);
+  const before = statSync(configJson()).mtimeMs;
+  await Bun.sleep(5);
+  await installOn(V2);
+  expect(readFileSync(configJson(), "utf-8")).toBe(text);
+  expect(statSync(configJson()).mtimeMs).toBe(before);
+});
+
+test("--from-local on v2 writes the checkout to plugins and drops package entries in both keys", async () => {
+  const repo = checkout("repo");
+  writeFileSync(
+    configJson(),
+    JSON.stringify({ plugin: [CARET_PACKAGE], plugins: [CARET_PACKAGE] }),
+  );
+  await installOn(V2, repo);
+  expect(config()).toEqual({ plugin: [], plugins: [`file:${repo}`] });
+});
+
+test("on v1, install writes caret to plugin", async () => {
+  await installOn(V1);
+  expect(config()).toEqual({ plugin: [CARET_PACKAGE] });
+});
+
+test("an unreadable version moves caret back to plugin, deleting a plugins it emptied", async () => {
+  writeFileSync(configJson(), JSON.stringify({ plugins: [`${CARET_PACKAGE}@0.8.1`] }));
+  const said = await transcript({});
+  expect(config()).toEqual({ plugin: [`${CARET_PACKAGE}@0.8.1`] });
+  expect(said).toContain("(moved from plugins)");
+});
+
+test("a non-caret file: entry is kept on v2", async () => {
+  const other = join(dir, "not-caret");
+  mkdirSync(other, { recursive: true });
+  writeFileSync(configJson(), JSON.stringify({ plugin: [`file:${other}`] }));
+  await installOn(V2);
+  expect(config()).toEqual({ plugin: [`file:${other}`], plugins: [CARET_PACKAGE] });
+});
+
+test("the install names the host it found and the key it writes", async () => {
+  expect(await transcript(V2)).toContain("OpenCode 2.0.18 — writing caret to plugins");
+  expect(await transcript({})).toContain("couldn't read `opencode --version`");
+});
+
+test("the dry run names the key and writes nothing", async () => {
+  const said = await transcript(V2, { dryRun: true });
+  expect(said).toContain(`plugin entry: ${CARET_PACKAGE} → plugins`);
+  expect(existsSync(configJson())).toBe(false);
+});
+
+test("--refresh bumps a stale plugins pin in plugins", async () => {
+  writeFileSync(configJson(), JSON.stringify({ plugins: [`${CARET_PACKAGE}@0.7.3`] }, null, 2));
+  cacheDir(`${CARET_PACKAGE}@0.7.3`, "0.7.3");
+  await transcript({ ...V2, published: async () => "0.8.1" }, { refresh: true });
+  expect(config()).toEqual({ plugins: [`${CARET_PACKAGE}@0.8.1`] });
 });

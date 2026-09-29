@@ -23,7 +23,7 @@ function pluginArray(text: string, key: PluginKey): unknown[] {
 }
 
 /** An item's specifier: the string itself, or a `{ package }` object's package. */
-function itemSpec(item: unknown): string | null {
+export function itemSpec(item: unknown): string | null {
   if (typeof item === "string") return item;
   const pkg = (item as { package?: unknown } | null)?.package;
   return typeof item === "object" && typeof pkg === "string" ? pkg : null;
@@ -101,6 +101,12 @@ export function findPluginEntry(
   return itemSpec(pluginArray(existing, key).find((e) => entryNames(e, pkg)));
 }
 
+/** Every raw item's specifier in the `key` array, null for an unrecognisable item, so
+ * index `i` is the array's own index. */
+export function pluginItemSpecs(existing: string, key: PluginKey): (string | null)[] {
+  return pluginArray(existing, key).map(itemSpec);
+}
+
 /** Every item's specifier in the config's `key` array, in order. Which of them are
  * caret's is the caller's call: recognizing a local entry means asking the filesystem
  * whether the path is a caret checkout, and this module never touches disk. */
@@ -142,10 +148,10 @@ export function setPluginVersionInConfigText(
 export function rewritePluginArray(
   existing: string,
   key: PluginKey,
-  keep: (item: unknown) => boolean,
+  keep: (item: unknown, index: number) => boolean,
 ): string {
   const arr = pluginArray(existing, key);
-  const next = arr.filter(keep);
+  const next = arr.filter((item, i) => keep(item, i));
   if (next.length === arr.length) return existing;
   const value = key === "plugins" && next.length === 0 ? undefined : next;
   const edits = modify(existing, [key], value, { formattingOptions: FORMATTING });

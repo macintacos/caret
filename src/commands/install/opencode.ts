@@ -17,8 +17,13 @@ import { basename, join } from "node:path";
 
 import {
   addPluginToConfigText,
+  itemSpec,
+  type PluginKey,
+  pluginItemSpecs,
   removePluginFromConfigText,
+  rewritePluginArray,
   setPluginVersionInConfigText,
+  splitPluginSpecifier,
 } from "@/adapters/opencode/config-plugin.ts";
 import {
   type DeployFile,
@@ -30,8 +35,11 @@ import {
   type CaretEntry,
   caretEntries,
   isCaretCheckout,
+  isCaretSpec,
+  readCaretEntry,
   readConfigText,
 } from "@/adapters/opencode/entries.ts";
+import { pluginKeyFor, readOpencodeVersion } from "@/adapters/opencode/host.ts";
 import { loadOpencodePackaging, type OpencodePackaging } from "@/adapters/opencode/packaging.ts";
 import {
   CARET_PACKAGE,
@@ -74,6 +82,7 @@ export interface InstallOpencodeDeps {
   confirm?: (verdict: StaleVerdict) => Promise<boolean | null>;
   isInteractive?: () => boolean;
   isCheckout?: (dir: string) => boolean;
+  opencodeVersion?: () => [number, number, number] | null;
 }
 
 /** Whether an existing caret entry is the same FORM as the one being written, and so may
@@ -87,20 +96,47 @@ function sameEntryForm(entry: string, specifier: string): boolean {
   return entryIsLocal ? entry === specifier : true;
 }
 
-/** Rewrite the `plugin` array so caret's single entry is `specifier`, dropping any entry
- * of the other form. Leaving both a package entry and a local one would load two caret
- * plugins, each registering the review tool — and the published one would answer with a
- * caret the developer did not build. */
+const KEYS: readonly PluginKey[] = ["plugin", "plugins"];
+
+/** Rewrite both plugin keys so caret has exactly one entry, in `key`. Two caret entries
+ * would load two plugins, each registering the review tool (v2 rejects them outright as a
+ * duplicate id). Of the existing entries of `specifier`'s form, the first pinned one in
+ * load order is kept — so the user's pin survives a move — else the first, else
+ * `specifier` is added. A kept entry already in `key` stays in place, as written. */
 function setCaretPluginEntry(
   text: string | null,
-  specifier: string,
-  isCheckout: (dir: string) => boolean,
+  target: { specifier: string; key: PluginKey; isCheckout: (dir: string) => boolean },
 ): string {
-  if (text === null) return addPluginToConfigText(null, specifier);
-  const pruned = caretEntries(text, isCheckout)
-    .filter((entry) => entry.key === "plugin" && !sameEntryForm(entry.spec, specifier))
-    .reduce((acc, entry) => removePluginFromConfigText(acc, entry.spec), text);
-  return addPluginToConfigText(pruned, specifier);
+  const { specifier, key, isCheckout } = target;
+  if (text === null) return addPluginToConfigText(null, specifier, key);
+  const isCaret = (spec: string | null) => spec !== null && isCaretSpec(spec, isCheckout);
+  const candidates = KEYS.flatMap((k) =>
+    pluginItemSpecs(text, k).flatMap((spec, i) =>
+      spec !== null && isCaret(spec) && sameEntryForm(spec, specifier) ? [{ k, i, spec }] : [],
+    ),
+  );
+  const kept =
+    candidates.find((c) => splitPluginSpecifier(c.spec).version !== null) ?? candidates[0];
+  const stays = kept?.k === key;
+  const pruned = KEYS.reduce(
+    (acc, k) =>
+      rewritePluginArray(
+        acc,
+        k,
+        (item, i) => !isCaret(itemSpec(item)) || (stays && k === key && kept?.i === i),
+      ),
+    text,
+  );
+  return stays ? pruned : addPluginToConfigText(pruned, kept?.spec ?? specifier, key);
+}
+
+/** The line naming the host install found and the key it writes. */
+function hostLine(version: readonly number[] | null, key: PluginKey, moved: boolean): string {
+  const found =
+    version === null
+      ? `couldn't read \`opencode --version\` — writing caret to plugin, which every OpenCode loads`
+      : `OpenCode ${version.join(".")} — writing caret to ${key}`;
+  return moved ? `${found} (moved from plugins)` : found;
 }
 
 /** Install (or, with `uninstall`, remove) caret into OpenCode: edit the config's
@@ -125,15 +161,26 @@ export async function runInstallOpencodeTarget(
   // checkout's own — and the `../bin/caret` that plugin spawns is the binary
   // `mise run build` just produced, picked up on every later rebuild with no reinstall.
   const specifier = opts.local ? localPluginSpecifier(opts.local.repoDir) : CARET_PACKAGE;
+  // Uninstall never probes: it clears caret from both keys.
+  const version = opts.uninstall ? null : (deps.opencodeVersion ?? readOpencodeVersion)();
+  const key = pluginKeyFor(version);
+  const moved =
+    key === "plugin" &&
+    !opts.uninstall &&
+    caretEntries(readConfigText(configFile), isCheckout).some((e) => e.key === "plugins");
 
   if (opts.dryRun) {
     const verb = opts.uninstall ? "remove" : "write";
     // The check is read-only, so a preview can still run it and say what it found. A
     // preview has no warning to carry an `unknown`'s reason, so the note carries it.
-    const found = checks(opts) ? ["", previewLine(await readVerdict(configFile, deps))] : [];
+    const found = checks(opts)
+      ? ["", previewLine(await readVerdict(configFile, version, deps))]
+      : [];
     // The specifier is the one thing a preview can't be read off the paths: `--from-local`
     // and a published install write the same file with very different content.
-    const entry = opts.uninstall ? [] : ["", `plugin entry: ${specifier}`];
+    const entry = opts.uninstall
+      ? []
+      : ["", `plugin entry: ${specifier} → ${key}`, hostLine(version, key, moved)];
     // Their own labelled section: an install's bare path list is titled "would write", and
     // listing a file caret is about to DELETE under that heading would misread badly.
     const sweep = legacy.length === 0 ? [] : ["", "pre-array-install files to remove:", ...legacy];
@@ -173,9 +220,11 @@ export async function runInstallOpencodeTarget(
     return;
   }
 
+  ui.info(hostLine(version, key, moved));
   await ui.step(
-    `Adding ${specifier} to OpenCode's plugin array`,
-    async () => editConfig(configFile, (text) => setCaretPluginEntry(text, specifier, isCheckout)),
+    `Adding ${specifier} to OpenCode's ${key} array`,
+    async () =>
+      editConfig(configFile, (text) => setCaretPluginEntry(text, { specifier, key, isCheckout })),
     (changed) =>
       changed.length > 0
         ? `Added ${specifier} to ${basename(configFile)}`
@@ -183,7 +232,7 @@ export async function runInstallOpencodeTarget(
   );
   // After the array edit — the entry has to exist before it can be read — and before the
   // command files, so a cache clear is settled by the time the run reports it deployed.
-  if (checks(opts)) await upgradeStep(configFile, opts, deps, ui);
+  if (checks(opts)) await upgradeStep(configFile, { ...opts, version }, deps, ui);
   // Only once the array entry exists and a stale cached copy has been offered a refresh:
   // dropping the plugin file any earlier could move a user backwards onto an older cached
   // caret. It still sweeps when that refresh is declined — two loaded caret plugins are
@@ -235,8 +284,17 @@ function previewLine(verdict: UpgradeVerdict): string {
 }
 
 /** This run's upgrade check: the adapter's read, with the test seams threaded in. */
-async function readVerdict(configFile: string, deps: InstallOpencodeDeps): Promise<UpgradeVerdict> {
-  return readUpgradeVerdict({ configFile, cacheDir: deps.cacheDir, published: deps.published });
+async function readVerdict(
+  configFile: string,
+  version: readonly number[] | null,
+  deps: InstallOpencodeDeps,
+): Promise<UpgradeVerdict> {
+  return readUpgradeVerdict({
+    configFile,
+    hostMajor: version?.[0],
+    cacheDir: deps.cacheDir,
+    published: deps.published,
+  });
 }
 
 /** Report the upgrade check, then act on it. Only a stale verdict has anything to do,
@@ -246,13 +304,13 @@ async function readVerdict(configFile: string, deps: InstallOpencodeDeps): Promi
  * the way the rumdl step treats its own failure. */
 async function upgradeStep(
   configFile: string,
-  opts: { refresh: boolean },
+  opts: { refresh: boolean; version: readonly number[] | null },
   deps: InstallOpencodeDeps,
   ui: InstallUI,
 ): Promise<void> {
   const verdict = await ui.step(
     "Checking OpenCode's caret version",
-    () => readVerdict(configFile, deps),
+    () => readVerdict(configFile, opts.version, deps),
     upgradeVerdictLine,
   );
   if (verdict.kind === "unknown") {
@@ -290,7 +348,11 @@ async function upgradeStep(
       editConfig(configFile, (text) =>
         text === null
           ? null
-          : setPluginVersionInConfigText(text, { pkg: CARET_PACKAGE, version: verdict.published }),
+          : setPluginVersionInConfigText(text, {
+              pkg: CARET_PACKAGE,
+              version: verdict.published,
+              key: readCaretEntry(configFile)?.key,
+            }),
       ),
     (changed) =>
       changed.length > 0
