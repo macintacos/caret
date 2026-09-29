@@ -65,6 +65,7 @@ test("a success after the link shows the decision toast", () => {
     ["allow", { message: "caret: plan approved", variant: "success" }],
     ["deny", { message: "caret: changes requested", variant: "info" }],
     [undefined, { message: "caret: review cancelled", variant: "info" }],
+    ["bogus", { message: "caret: review cancelled", variant: "info" }],
   ];
   for (const [decision, expected] of cases) {
     const { shown, emit } = start();

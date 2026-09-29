@@ -109,15 +109,17 @@ export function isPlanningAgent(agent: string | undefined): boolean {
  * tool's `metadata` title. */
 const REVIEW_TOAST_TITLE = "caret: review this plan";
 
-/** OpenCode's plugin client, structurally narrowed to the calls caret makes.
- * A structural type (rather than importing the SDK client) keeps this robust
- * against version skew between the pinned plugin SDK and the running OpenCode. */
+/** A toast's content — structurally both v1's `showToast` body and v2's TUI
+ * `ToastOptions`, which `caret.tui.ts` passes it to unchanged. */
 export type ToastBody = {
   title?: string;
   message: string;
   variant: "info" | "success" | "warning" | "error";
   duration?: number;
 };
+/** OpenCode's plugin client, structurally narrowed to the calls caret makes.
+ * A structural type (rather than importing the SDK client) keeps this robust
+ * against version skew between the pinned plugin SDK and the running OpenCode. */
 export type ToastClient =
   | { tui?: { showToast?: (opts: { body: ToastBody }) => unknown } }
   | undefined;
@@ -149,15 +151,18 @@ export function reviewLinkToast(url: string): ToastBody {
   return { title: REVIEW_TOAST_TITLE, message: url, variant: "info", duration: REVIEW_TOAST_MS };
 }
 
-/** The toast that supersedes the review link: an `allow` or `deny` outcome, else cancelled. */
-export function decisionToast(outcome: unknown): ToastBody {
-  if (outcome === "allow") {
-    return { message: "caret: plan approved", variant: "success", duration: DECISION_TOAST_MS };
+export type ReviewOutcome = CaretDecision["behavior"] | "cancelled";
+
+/** The toast that supersedes the review link. */
+export function decisionToast(outcome: ReviewOutcome): ToastBody {
+  switch (outcome) {
+    case "allow":
+      return { message: "caret: plan approved", variant: "success", duration: DECISION_TOAST_MS };
+    case "deny":
+      return { message: "caret: changes requested", variant: "info", duration: DECISION_TOAST_MS };
+    case "cancelled":
+      return { message: "caret: review cancelled", variant: "info", duration: DECISION_TOAST_MS };
   }
-  if (outcome === "deny") {
-    return { message: "caret: changes requested", variant: "info", duration: DECISION_TOAST_MS };
-  }
-  return { message: "caret: review cancelled", variant: "info", duration: DECISION_TOAST_MS };
 }
 
 /** Best-effort toast: surfacing or clearing the review link must never crash or
@@ -690,7 +695,7 @@ export function createCaretPlugin(
             // Supersede the pending review-link toast with a brief decision toast —
             // the surface is single-slot with no hide API (EXC-691).
             if (linkShown && context.abort.aborted) {
-              showToast(client, decisionToast(undefined));
+              showToast(client, decisionToast("cancelled"));
             } else if (linkShown && decision) {
               showToast(client, decisionToast(decision.behavior));
             }

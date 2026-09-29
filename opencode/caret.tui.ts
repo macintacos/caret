@@ -4,14 +4,17 @@
 // `tui` exists because v1's installer may register this module as a v1 TUI plugin, and
 // v1's TUI loader throws on a default without one.
 //
-// Not named `tui.ts` or `plugin*`: the `@opencode/*` tsconfig alias would shadow the real
-// `@opencode/plugin/tui` and `@opencode/plugin` packages.
+// Not named `tui.ts` or `plugin*`: through the `@opencode/*` tsconfig alias, `@opencode/tui`
+// or `@opencode/plugin[/…]` would resolve here instead of to the real packages.
+
+import type { Plugin } from "@opencode/plugin/tui";
 
 import {
   CARET_DECISION_KEY,
   CARET_URL_KEY,
   decisionToast,
   productionUpdateCheck,
+  type ReviewOutcome,
   reviewLinkToast,
   showToast,
   type ToastBody,
@@ -20,8 +23,8 @@ import {
 
 type ToolEvent = { data: { id: string; metadata?: Record<string, unknown> } };
 
-/** The slice of v2's TUI context caret uses — structural, so it depends on neither
- * `@opencode/plugin/tui`'s unresolved peer types nor the `@opencode/*` alias. */
+/** The slice of v2's TUI context caret uses, narrow so tests build it without casts; the
+ * `Plugin.Definition["setup"]` annotation below pins it to v2's real `Context`. */
 export type TuiContext = {
   data: {
     on: (
@@ -46,7 +49,7 @@ export function createCaretTui(opts: {
 
     // Tool events carry the call id, not the tool name: only calls that showed a link count.
     const linkShown = new Set<string>();
-    const settle = (id: string, outcome: unknown) => {
+    const settle = (id: string, outcome: ReviewOutcome) => {
       if (linkShown.delete(id)) showToast(client, decisionToast(outcome));
     };
     const unsubscribe = [
@@ -56,10 +59,11 @@ export function createCaretTui(opts: {
         linkShown.add(data.id);
         showToast(client, reviewLinkToast(url));
       }),
-      ctx.data.on("session.tool.success", ({ data }) =>
-        settle(data.id, data.metadata?.[CARET_DECISION_KEY]),
-      ),
-      ctx.data.on("session.tool.failed", ({ data }) => settle(data.id, undefined)),
+      ctx.data.on("session.tool.success", ({ data }) => {
+        const decision = data.metadata?.[CARET_DECISION_KEY];
+        settle(data.id, decision === "allow" || decision === "deny" ? decision : "cancelled");
+      }),
+      ctx.data.on("session.tool.failed", ({ data }) => settle(data.id, "cancelled")),
     ];
     return () => {
       for (const off of unsubscribe) off();
@@ -67,8 +71,10 @@ export function createCaretTui(opts: {
   };
 }
 
+const setup: Plugin.Definition["setup"] = createCaretTui({ checkUpdate: productionUpdateCheck });
+
 export default {
   id: "caret",
-  setup: createCaretTui({ checkUpdate: productionUpdateCheck }),
+  setup,
   tui: async () => {},
 };

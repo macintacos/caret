@@ -193,8 +193,10 @@ planning agent — once per prompt. The hook is awaited, because the same pass w
 plan-agent allow (§ The subagent bypass) and that must land before the step selects its
 tools; the warm spawn itself is never awaited, so a prompt waits on in-process reads, not
 on a process. The hook swallows every error: a rejected v2 hook fails the prompt that
-triggered it. A session whose `agent` is unset gets no warm and no allow: a user whose
-default agent is `plan` warms nothing there, at the cost of one cold spawn.
+triggered it. The warm runs in its own `try`, so a warm that throws still lets the allow
+be written. A session whose `agent` is unset gets no warm and no allow: a user whose
+default agent is `plan` warms nothing there (one cold spawn) and, under a deny-all, loses
+the tool (§ The subagent bypass).
 
 **Why the warm stays plan-only even though any primary agent may call the tool.** The plan
 agent is the one whose turn *reliably* ends in a review; a `build`-agent review is an
@@ -276,32 +278,37 @@ exact failure this widening exists to remove. So a missing client, an absent
 call, and `primary_tools` carries the enforcement.
 
 **On v2 the enforcing gate is a per-request tool removal**, because v2 has no `config`
-hook to write `primary_tools`. The `context` hook reads the session and deletes
+hook to write `primary_tools`. The #5894 gap is v1's `tool.execute.before`; v2's `context`
+hook runs on every model request, child sessions included (live-verified), which is what
+the removal relies on. The `context` hook reads the session and deletes
 `caret_review_plan` from the request's `tools` when it has a `parentID`; v2 then neither
 offers the tool nor accepts a call to it (both depend on `codemode: false`). It runs per
 request, so it covers every agent mode and agents added later, with no creation-time race.
 It fails open like the in-body check: an unreadable session keeps the tool, and the
-in-body check still refuses a subagent call that slips through. That check reads
-`ctx.session.get` once per call — `parentID` refuses, an unreadable session allows — and
-that session's `location.directory` is the `path` base, falling back to
-`ctx.location.directory`.
+in-body check still refuses a subagent call that slips through. The same hook then pushes
+the planning steer, in a separate `try`, only while `caret_review_plan` is still in the
+request's `tools`: a plan subagent loses the tool and gets no steer, a plan agent whose
+tool the user disabled is not steered, and a failed steer cannot skip the removal. The
+in-body check reads `ctx.session.get` once per call — `parentID` refuses, an unreadable
+session allows — and that session's `location.directory` is the `path` base, falling back
+to `ctx.location.directory`.
 
 **On v2 the plan-agent allow is a session rule**, written by the awaited `prompt` hook (§
 Daemon warm-up) for a plan-agent session. An agent-level transform would lose to a config
 deny-all; a session rule is evaluated after the agent's rules, and v2 disables a tool only
 when the *last* rule naming it is a `*` deny, so an appended
 `{ action: "caret_review_plan", resource: "*", effect: "allow" }` outranks
-`{ "*": "deny" }`. `withPlanAllow` skips the write when the agent's rules **or** the
-session's already name the tool by exact `action`: v2 folds the user's config permissions
-into the agent's ruleset, so a session-only check would let caret's allow override the
-user's own deny — what v1's `??=` prevents. A `*` catch-all does not count; it is what the
-allow exists to override. The allow follows the session and is never revoked: a plan
-session switched to `build` keeps the tool, which this section already treats as wanted,
-and a revoke could not tell caret's rule from a user's identical one. The awaited hook,
-not a `session.created` event, carries it because v2 activates a cold location's plugins
-asynchronously, so the first session could be created before caret subscribes. **Limit:**
-a session on the configured default agent has no `agent` field, so a user whose default
-agent is `plan` gets no allow under deny-all.
+`{ action: "*", resource: "*", effect: "deny" }`. `withPlanAllow` skips the write when the
+agent's rules **or** the session's already name the tool by exact `action`: v2 folds the
+user's config permissions into the agent's ruleset, so a session-only check would let
+caret's allow override the user's own deny — what v1's `??=` prevents. A `*` catch-all
+does not count; it is what the allow exists to override. The allow follows the session and
+is never revoked: a plan session switched to `build` keeps the tool, which this section
+already treats as wanted, and a revoke could not tell caret's rule from a user's identical
+one. The awaited hook, not a `session.created` event, carries it because v2 activates a
+cold location's plugins asynchronously, so the first session could be created before caret
+subscribes. **Limit:** a session on the configured default agent has no `agent` field, so
+a user whose default agent is `plan` gets no allow under deny-all.
 
 On v1, `applyCaretConfig` writes exactly one per-agent permission: `allow` for
 `caret_review_plan` on the `plan` agent, and only when the agent has no entry of its own.
@@ -334,13 +341,13 @@ so it wants the live check § Verified vs. follow-up already schedules.
   `src/adapters/index.ts`; selectable via `CARET_AGENT=opencode`. Claude stays the
   default.
 - **Packaging (`opencode/`)** — the v1 plugin (`caret.plugin.ts`), the v2 plugin
-  (`caret.plugin.v2.ts`) and its permission evaluator (`permission.ts`), their package
-  entrypoint (`index.ts`, see § The export surface), and command files (`commands/*.md`).
-  The plugin ships in the `@macintacos/caret` npm package and resolves its binary and
-  version at runtime from that package (§ Runtime resolution + update check); only the
-  command files still carry substituted markers — `__CARET_BIN__` and
-  `__CARET_DEMO_TEMPLATE__`, the template embedded rather than read because under `bunx`
-  the install-time root is a temp dir.
+  (`caret.plugin.v2.ts`) and its permission evaluator (`permission.ts`), the v2 TUI module
+(`caret.tui.ts`, `exports["./tui"]`), their package entrypoint (`index.ts`, see § The
+export surface), and command files (`commands/*.md`). The plugin ships in the
+`@macintacos/caret` npm package and resolves its binary and version at runtime from that
+package (§ Runtime resolution + update check); only the command files still carry
+substituted markers — `__CARET_BIN__` and `__CARET_DEMO_TEMPLATE__`, the template embedded
+rather than read because under `bunx` the install-time root is a temp dir.
 - **Install (`caret install`)** — adds caret to the user's OpenCode `plugin` array
   (comment-preserving, via `jsonc-parser` in `config-plugin.ts`) as either
   `@macintacos/caret` or, under `--from-local`, `file:<checkout>` (§ The local form) and
@@ -465,9 +472,9 @@ runtime from the package it ships in:
   `bin/caret` shim shipped beside the plugin in the package).
 - **Version** (`resolveCaretVersion`): a substituted marker if present → the sibling
   `../package.json`'s `version`. Used by the update check.
-- **Update check** (`realUpdateChecker`, wired only into the production default export):
-  on load, fetch caret's latest GitHub release and toast a nudge when the running version
-  is behind. Best-effort — a network error, a non-200, or the
+- **Update check** (`realUpdateChecker`, wired only into the production defaults, via
+  `productionUpdateCheck`): on load, fetch caret's latest GitHub release and toast a nudge
+  when the running version is behind. Best-effort — a network error, a non-200, or the
   `CARET_OPENCODE_NO_UPDATE_CHECK` opt-out is silent. An inline semver compare keeps the
   plugin self-contained. Both hosts call the same `productionUpdateCheck`: v1 from
   `server()`, v2 from the TUI half's `setup`, since v2's server has no toast. They share
@@ -517,21 +524,23 @@ v1 hosts too.
 **v2's toasts live in a second module, `opencode/caret.tui.ts`, under
 `exports["./tui"]`.** v2's server `Context` has no toast surface; toasts belong to a TUI
 plugin, which v2 resolves as `<pkg>/tui` from the same `plugin`/`plugins` entry and loads
-only as a default `{ id, setup }` with a non-empty `id`. Its `setup` runs the update check
-and listens for tool events: `session.tool.progress` carrying the `caretUrl` metadata key
-shows the review-link toast, and `session.tool.success` (`caretDecision`) or
-`session.tool.failed` for that call supersedes it with the decision toast. Those events
-carry the call id, not the tool name, so the metadata keys the server half's `execute`
-writes are the only link between the halves. The decision toast matters because v2's toast
-surface is single-slot with no hide API — without it the 10-minute link toast would linger
-after every decision. v1 keeps its toasts in `server()` (`client.tui.showToast`), so caret
-needs no `tui.json` entry; the toast bodies (`reviewLinkToast`, `decisionToast`) are
-shared from `caret.plugin.ts`. The default also carries a no-op `tui`: v1's own installer
-may register this module as a v1 TUI plugin, and v1's TUI loader throws on a default
-without one. The module is not named `tui.ts` or `plugin*`, because the `@opencode/*`
-tsconfig alias would then shadow the real `@opencode/plugin` packages. The `Object.values`
-rule binds only `index.ts`: both TUI loaders read only `default`, so `createCaretTui`
-stays a named export for tests.
+only as a default `{ id, setup }` with a non-empty `id`. v2's host resolves `<pkg>/tui`
+through the package's `exports` itself; § Distribution choice rules out subpaths only for
+the `plugin` array specifier. Its `setup` runs the update check and listens for tool
+events: `session.tool.progress` carrying the `caretUrl` metadata key shows the review-link
+toast, and `session.tool.success` (`caretDecision`) or `session.tool.failed` for that call
+supersedes it with the decision toast. Those events carry the call id, not the tool name,
+so the metadata keys the server half's `execute` writes are the only link between the
+halves. The decision toast matters because v2's toast surface is single-slot with no hide
+API — without it the 10-minute link toast would linger after every decision. v1 keeps its
+toasts in `server()` (`client.tui.showToast`), so caret needs no `tui.json` entry; the
+toast bodies (`reviewLinkToast`, `decisionToast`) are shared from `caret.plugin.ts`. The
+default also carries a no-op `tui`: v1's own installer may register this module as a v1
+TUI plugin, and v1's TUI loader throws on a default without one. The module is not named
+`tui.ts` or `plugin*`, because the `@opencode/*` tsconfig alias would then shadow the real
+`@opencode/plugin` and `@opencode/tui` packages. The `Object.values` rule binds only
+`index.ts`: both TUI loaders read only `default`, so `createCaretTui` stays a named export
+for tests.
 
 ## Verified vs. follow-up
 

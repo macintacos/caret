@@ -415,17 +415,18 @@ waiting out the timeout, and no agent is waiting on its result.
 
 **Who may call it differs by agent.**
 
-- **OpenCode: any primary agent; subagents may not.** OpenCode doesn't fire plugin hooks
-  for subagent tool calls, so caret marks the review tool primary-only (on v1,
+- **OpenCode: any primary agent; subagents may not.** On v1, where OpenCode doesn't fire
+  plugin hooks for subagent tool calls, caret marks the review tool primary-only through
   `experimental.primary_tools`, which OpenCode turns into a deny rule on every subagent
-  session; on v2, removing the tool from each subagent request) and re-checks in the tool
-  body that the call didn't come from a subagent's child session. Only the Plan agent is
-  _steered_ toward the tool; every other primary agent has to reach for it deliberately.
-  One exception is worth knowing about: caret writes the permission rescue for the `plan`
-  agent alone, so a config with a global `permission: { "*": "deny" }` keeps the tool
-  there and loses it everywhere else. If your skill is pinned to a non-plan agent,
-  `caret_review_plan` is the route — OpenCode's own `plan_exit` is permitted on the `plan`
-  agent alone, so there is nothing to fall back on.
+  session; on v2 it removes the tool from every subagent request. Either way it re-checks
+  in the tool body that the call didn't come from a subagent's child session. Only the
+  Plan agent is _steered_ toward the tool; every other primary agent has to reach for it
+  deliberately. One exception is worth knowing about: on v1 the permission rescue is a
+  `plan`-agent permission, so a global deny-all keeps the tool there and loses it
+  everywhere else; on v2 it is a rule on each plan session, which stays with the session
+  if it switches agent, and a user whose default agent is `plan` gets none. If your skill
+  is pinned to a non-plan agent, `caret_review_plan` is the route — OpenCode's own
+  `plan_exit` is permitted on the `plan` agent alone, so there is nothing to fall back on.
 - **Claude Code: any agent, subagents included.** The tool grants no permission and gates
   no edit, so there is nothing a subagent could bypass by calling it.
 
