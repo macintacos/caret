@@ -33,6 +33,7 @@ import { type Hooks, type Plugin, tool } from "@opencode-ai/plugin";
 
 import {
   buildEnvelope,
+  type CaretDecision,
   decisionText,
   nodeSpawnRunner,
   PLAN_TITLE_INSTRUCTION,
@@ -45,7 +46,7 @@ import {
  * placeholders, so the resolvers below fall back to the package that ships this
  * file. */
 export const CARET_PLUGIN_VERSION = "__CARET_VERSION__";
-const CARET_BIN = "__CARET_BIN__";
+export const CARET_BIN = "__CARET_BIN__";
 
 /** The caret binary the review tool spawns. Env override wins; then a substituted
  * marker (an absolute path, from the legacy file-deploy path); else the binary that
@@ -375,6 +376,7 @@ export function resolvePlansDir(opts: {
   env: Record<string, string | undefined>;
   home: string;
   readFile: (path: string) => string;
+  defaultDir?: string;
 }): string {
   const configFile =
     opts.env.CARET_CONFIG_FILE ||
@@ -388,16 +390,19 @@ export function resolvePlansDir(opts: {
   } catch {
     // An absent or malformed config.toml leaves the default.
   }
-  return `${opts.env.XDG_DATA_HOME || `${opts.home}/.local/share`}/opencode/plans`;
+  return (
+    opts.defaultDir ?? `${opts.env.XDG_DATA_HOME || `${opts.home}/.local/share`}/opencode/plans`
+  );
 }
 
-/** The planning-prompt steer appended to the system array so the Plan agent
- * submits its plan to caret instead of calling the native plan_exit. */
+/** The planning-prompt steer appended to the plan agent's system prompt so it submits
+ * its plan to caret rather than ending planning any other way. Worded for both OpenCode
+ * v1 (which has plan_exit) and v2 (which does not). */
 export function planningSteer(plansDir: string): string {
   return [
     "## Plan review (caret)",
     "",
-    `When you have a plan ready for the user, do NOT call plan_exit. Instead write the plan as markdown to a file in \`${plansDir}/\` (a directory you may write to), for example \`${plansDir}/<short-name>.md\`, and call the \`${REVIEW_TOOL}\` tool with that file as the \`path\` argument.`,
+    `When you have a plan ready for the user, submit it by calling the \`${REVIEW_TOOL}\` tool, not by ending planning any other way (for example with plan_exit). The user asks you to write the plan as markdown to a file in \`${plansDir}/\`, for example \`${plansDir}/<short-name>.md\`, and pass that file as the \`path\` argument. If you may not write that file, pass the plan inline as the \`plan\` argument instead.`,
     "It opens caret's visual review UI in the browser; the user approves or requests changes. A change request comes back as the tool result: re-read the file, revise it with targeted edits rather than rewriting it, and call the tool again with the same `path` until it is approved. An approved plan is already saved in that file.",
     PLAN_TITLE_INSTRUCTION,
   ].join("\n");
@@ -462,7 +467,7 @@ export type WarmRunner = (bin: string) => void;
  * from that env; the 'error' handler is mandatory because spawn emits 'error'
  * ASYNCHRONOUSLY (ENOENT on a bad bin), where the hook's synchronous try/catch
  * cannot see it and an unhandled event would take OpenCode's whole process down. */
-const nodeWarmRunner: WarmRunner = (bin) => {
+export const nodeWarmRunner: WarmRunner = (bin) => {
   const child = spawn(bin, ["prewarm"], {
     stdio: "ignore",
     detached: true,
@@ -471,6 +476,69 @@ const nodeWarmRunner: WarmRunner = (bin) => {
   child.on("error", () => {});
   child.unref();
 };
+
+// ---------------------------------------------------------------------------
+// The shared review core (v1 and v2 hosts are thin adapters over it)
+// ---------------------------------------------------------------------------
+
+export const REVIEW_TOOL_DESCRIPTION =
+  "Submit the current plan to caret for human review in a local browser UI. For plans only: caret presents what it receives as a plan, so do not use it for other documents or questions. Pass exactly one of `path` (preferred: a markdown file you write once and revise with edits) or `plan` (the plan inline). Blocks until the user approves or requests changes. On a change request, follow the result's instructions and call this tool again. Do not implement the plan until a call returns an approval.";
+
+export const PLAN_ARG_DESCRIPTION =
+  "The complete plan, as markdown, to present for human review. The inline alternative to `path`.";
+
+export function pathArgDescription(plansDir: string): string {
+  return `Preferred. A markdown (.md) file holding the complete plan, absolute or relative to the session directory. (OpenCode's plan agent writes its plan files in ${plansDir}/.)`;
+}
+
+export const SUBAGENT_REFUSAL = `${REVIEW_TOOL} is available to primary agents only; this call came from a subagent session. Continue without caret review, or hand the plan back to the primary agent to submit.`;
+
+export function notPermittedToEdit(planFilePath: string, plansDir: string): string {
+  return `caret: ${REVIEW_TOOL} was not permitted to edit ${planFilePath}, which a path review rewrites. Write the plan in \`${plansDir}/\` and pass that file as \`path\`, or pass the plan inline as \`plan\`.`;
+}
+
+/** What differs per OpenCode host for one review-tool call. */
+export type ReviewHost = {
+  sessionID: string;
+  /** The base a `path` resolves against. */
+  directory: string;
+  /** Fail-open: false when the session is unreadable. */
+  isSubagent: () => Promise<boolean>;
+  /** caret rewrites the file and the model chose the path, so OpenCode's own edit rules
+   * must allow it. false = denied, ask-only, or the check failed. */
+  canEdit: (planFilePath: string) => Promise<boolean>;
+  signal?: AbortSignal;
+  onUrl?: (url: string) => void;
+};
+
+/** One review-tool call, host-neutral: subagent refusal, plan source, the `path` edit
+ * check, then `caret review`. `decision` is absent when the call was refused before
+ * spawning. */
+export async function runPlanReview(
+  args: { plan?: string; path?: string },
+  host: ReviewHost,
+  deps: { bin: string; run: SpawnRunner; plansDir: string },
+): Promise<{ text: string; decision?: CaretDecision }> {
+  if (await host.isSubagent()) return { text: SUBAGENT_REFUSAL };
+  const source = resolvePlanSource(args, host.directory, readRegularFile);
+  if ("error" in source) return { text: source.error };
+  if (source.planFilePath && !(await host.canEdit(source.planFilePath))) {
+    return { text: notPermittedToEdit(source.planFilePath, deps.plansDir) };
+  }
+  const envelope = buildEnvelope(source.plan, {
+    sessionID: host.sessionID,
+    directory: host.directory,
+    planFilePath: source.planFilePath,
+  });
+  const decision = await runReviewViaCaret(envelope, {
+    command: [deps.bin, "review"],
+    agent: "opencode",
+    run: deps.run,
+    signal: host.signal,
+    onUrl: host.onUrl,
+  });
+  return { text: decisionText(decision, REVIEW_TOOL, source.planFilePath), decision };
+}
 
 // ---------------------------------------------------------------------------
 // The plugin
@@ -557,66 +625,49 @@ export function createCaretPlugin(
       },
       tool: {
         [REVIEW_TOOL]: tool({
-          description:
-            "Submit the current plan to caret for human review in a local browser UI. For plans only: caret presents what it receives as a plan, so do not use it for other documents or questions. Pass exactly one of `path` (preferred: a markdown file you write once and revise with edits) or `plan` (the plan inline). Blocks until the user approves or requests changes. On a change request, follow the result's instructions and call this tool again. Do not implement the plan until a call returns an approval.",
+          description: REVIEW_TOOL_DESCRIPTION,
           args: {
-            plan: tool.schema
-              .string()
-              .optional()
-              .describe(
-                "The complete plan, as markdown, to present for human review. The inline alternative to `path`.",
-              ),
-            path: tool.schema
-              .string()
-              .optional()
-              .describe(
-                `Preferred. A markdown (.md) file holding the complete plan, absolute or relative to the session directory. (OpenCode's plan agent writes its plan files in ${plansDir}/.)`,
-              ),
+            plan: tool.schema.string().optional().describe(PLAN_ARG_DESCRIPTION),
+            path: tool.schema.string().optional().describe(pathArgDescription(plansDir)),
           },
           async execute(args, context) {
-            if (await isSubagentSession(client, context.sessionID)) {
-              return `${REVIEW_TOOL} is available to primary agents only; this call came from a subagent session. Continue without caret review, or hand the plan back to the primary agent to submit.`;
-            }
-            const source = resolvePlanSource(args, context.directory, readRegularFile);
-            if ("error" in source) return source.error;
-            if (source.planFilePath) {
-              // caret rewrites this file, and the model chose the path, so OpenCode's own
-              // edit permission must allow it.
-              try {
-                await context.ask({
-                  permission: "edit",
-                  patterns: [relative(context.worktree, source.planFilePath)],
-                  always: ["*"],
-                  metadata: { filepath: source.planFilePath },
-                });
-              } catch {
-                return `caret: ${REVIEW_TOOL} was not permitted to edit ${source.planFilePath}, which a path review rewrites. Write the plan in \`${plansDir}/\` and pass that file as \`path\`, or pass the plan inline as \`plan\`.`;
-              }
-            }
-            const envelope = buildEnvelope(source.plan, {
-              sessionID: context.sessionID,
-              directory: context.directory,
-              planFilePath: source.planFilePath,
-            });
             let linkShown = false;
-            const decision = await runReviewViaCaret(envelope, {
-              command: [bin, "review"],
-              agent: "opencode",
-              run,
-              // Show the review URL as a toast while the plan is pending.
-              onUrl: (url) => {
-                linkShown = true;
-                showToast(client, {
-                  title: REVIEW_TOAST_TITLE,
-                  message: url,
-                  variant: "info",
-                  duration: REVIEW_TOAST_MS,
-                });
+            const { text, decision } = await runPlanReview(
+              args,
+              {
+                sessionID: context.sessionID,
+                directory: context.directory,
+                isSubagent: () => isSubagentSession(client, context.sessionID),
+                canEdit: async (planFilePath) => {
+                  try {
+                    await context.ask({
+                      permission: "edit",
+                      patterns: [relative(context.worktree, planFilePath)],
+                      always: ["*"],
+                      metadata: { filepath: planFilePath },
+                    });
+                    return true;
+                  } catch {
+                    return false;
+                  }
+                },
+                signal: context.abort,
+                // Show the review URL as a toast while the plan is pending.
+                onUrl: (url) => {
+                  linkShown = true;
+                  showToast(client, {
+                    title: REVIEW_TOAST_TITLE,
+                    message: url,
+                    variant: "info",
+                    duration: REVIEW_TOAST_MS,
+                  });
+                },
               },
-            });
+              { bin, run, plansDir },
+            );
             // Supersede the pending review-link toast with a brief decision toast —
             // the surface is single-slot with no hide API (EXC-691).
-            if (linkShown) {
+            if (linkShown && decision) {
               showToast(
                 client,
                 decision.behavior === "allow"
@@ -632,7 +683,7 @@ export function createCaretPlugin(
                     },
               );
             }
-            return decisionText(decision, REVIEW_TOOL, source.planFilePath);
+            return text;
           },
         }),
       },

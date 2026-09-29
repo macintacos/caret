@@ -52,6 +52,16 @@ test("planningSteer points the plan agent at a file in the plans directory, subm
   expect(s).toContain("`path`");
 });
 
+test("planningSteer leads with the review tool and names plan_exit only as an example", () => {
+  const s = planningSteer("/data/opencode/plans");
+  expect(s.startsWith("## Plan review (caret)")).toBe(true);
+  expect(s.indexOf(REVIEW_TOOL)).toBeLessThan(s.indexOf("plan_exit"));
+});
+
+test("planningSteer falls back to passing the plan inline as `plan`", () => {
+  expect(planningSteer("/data/opencode/plans")).toContain("`plan`");
+});
+
 test("planningSteer asks the plan agent to open its plan with a title heading", () => {
   expect(planningSteer("/data/opencode/plans")).toContain(PLAN_TITLE_INSTRUCTION);
 });
@@ -104,6 +114,24 @@ test("resolvePlansDir reads the config file caret itself reads", () => {
 test("resolvePlansDir falls back to the default on an unreadable or malformed config", () => {
   const readFile = fakeFiles({ "/h/.config/caret/config.toml": "[opencode\nplans_dir =" });
   expect(resolvePlansDir({ env: {}, home: "/h", readFile })).toBe("/h/.local/share/opencode/plans");
+});
+
+test("resolvePlansDir returns an explicit defaultDir when no plans_dir is configured", () => {
+  expect(
+    resolvePlansDir({
+      env: {},
+      home: "/h",
+      readFile: fakeFiles({}),
+      defaultDir: "/h/.opencode/plan",
+    }),
+  ).toBe("/h/.opencode/plan");
+});
+
+test("resolvePlansDir prefers plans_dir over an explicit defaultDir", () => {
+  const readFile = fakeFiles({
+    "/h/.config/caret/config.toml": '[opencode]\nplans_dir = "/mine"\n',
+  });
+  expect(resolvePlansDir({ env: {}, home: "/h", readFile, defaultDir: "/d" })).toBe("/mine");
 });
 
 // --- resolvePlanSource (the tool's plan / path args) ---
@@ -267,6 +295,18 @@ test("the review tool denies: a plan-agent call returns the feedback", async () 
   const hooks = await buildHooks(stubRunner(`{"behavior":"deny","feedback":"narrow it"}`));
   const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P\nbody" }, ctx("plan"));
   expect(String(out)).toContain("narrow it");
+});
+
+test("the review tool hands the tool call's abort signal to the runner", async () => {
+  const abort = new AbortController().signal;
+  let handed: AbortSignal | undefined;
+  const run: SpawnRunner = async (_c, _e, _s, _o, signal) => {
+    handed = signal;
+    return { exitCode: 0, stdout: `{"behavior":"allow"}` };
+  };
+  const hooks = await buildHooks(run);
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, { ...ctx("plan"), abort });
+  expect(handed === abort).toBe(true);
 });
 
 const planDirs: string[] = [];
