@@ -182,7 +182,7 @@ export function liveGenerationDir(dir: string): string | null {
   if (generations.length === 0) return null;
   return join(
     dir,
-    generations.reduce((a, b) => (Number(b) > Number(a) ? b : a)),
+    generations.reduce((newest, name) => (Number(name) > Number(newest) ? name : newest)),
   );
 }
 

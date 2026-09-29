@@ -58,8 +58,10 @@ function isCaretSpec(spec: string, isCheckout: (dir: string) => boolean): boolea
  * both keys. */
 export function dropEntries(text: string, drop: readonly CaretEntry[]): string {
   return PLUGIN_KEYS.reduce((acc, key) => {
-    const gone = new Set(drop.filter((e) => e.key === key).map((e) => e.index));
-    return gone.size === 0 ? acc : rewritePluginArray(acc, key, (_, i) => !gone.has(i));
+    const droppedIndices = new Set(drop.filter((e) => e.key === key).map((e) => e.index));
+    return droppedIndices.size === 0
+      ? acc
+      : rewritePluginArray(acc, key, (_, i) => !droppedIndices.has(i));
   }, text);
 }
 

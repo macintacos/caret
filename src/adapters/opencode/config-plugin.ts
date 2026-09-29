@@ -164,14 +164,16 @@ function commaAfter(text: string, from: number): number | null {
 
 /** Widen [start, end) to its whole line, `\n` or `\r\n`, when nothing else sits on it. */
 function wholeLine(text: string, start: number, end: number): Edit {
-  let s = start;
-  let e = end;
-  while (s > 0 && (text[s - 1] === " " || text[s - 1] === "\t")) s--;
-  while (e < text.length && (text[e] === " " || text[e] === "\t")) e++;
-  const eol = text.startsWith("\r\n", e) ? 2 : text[e] === "\n" ? 1 : 0;
-  const alone = (s === 0 || text[s - 1] === "\n") && (e === text.length || eol > 0);
-  return alone
-    ? { offset: s, length: e + eol - s, content: "" }
+  let lineStart = start;
+  let lineEnd = end;
+  while (lineStart > 0 && (text[lineStart - 1] === " " || text[lineStart - 1] === "\t"))
+    lineStart--;
+  while (lineEnd < text.length && (text[lineEnd] === " " || text[lineEnd] === "\t")) lineEnd++;
+  const eol = text.startsWith("\r\n", lineEnd) ? 2 : text[lineEnd] === "\n" ? 1 : 0;
+  const aloneOnLine =
+    (lineStart === 0 || text[lineStart - 1] === "\n") && (lineEnd === text.length || eol > 0);
+  return aloneOnLine
+    ? { offset: lineStart, length: lineEnd + eol - lineStart, content: "" }
     : { offset: start, length: end - start, content: "" };
 }
 
@@ -185,13 +187,15 @@ function deleteProperty(text: string, key: string): string {
   const i = siblings.indexOf(prop);
   const end = prop.offset + prop.length;
   const edits: Edit[] = [];
-  const after = commaAfter(text, end);
-  if (after !== null && text.slice(end, after).trim() === "") {
-    edits.push(wholeLine(text, prop.offset, after + 1));
+  const trailingComma = commaAfter(text, end);
+  if (trailingComma !== null && text.slice(end, trailingComma).trim() === "") {
+    edits.push(wholeLine(text, prop.offset, trailingComma + 1));
   } else {
     edits.push(wholeLine(text, prop.offset, end));
-    const prev = siblings[i - 1];
-    const comma = after ?? (prev ? commaAfter(text, prev.offset + prev.length) : null);
+    const previousSibling = siblings[i - 1];
+    const comma =
+      trailingComma ??
+      (previousSibling ? commaAfter(text, previousSibling.offset + previousSibling.length) : null);
     if (comma !== null) edits.push({ offset: comma, length: 1, content: "" });
   }
   return applyEdits(text, edits);

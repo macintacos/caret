@@ -60,11 +60,11 @@ export function hostCheck(version: VersionTriple | null, keys: readonly PluginKe
   if (version === null) {
     return { ...base, status: "unknown", detail: "", reason: "couldn't read `opencode --version`" };
   }
-  const v = version.join(".");
+  const shownVersion = version.join(".");
   const faults: string[] = [];
   const remedies: string[] = [];
-  if (!isV2Host(version) && isNewer(V1_FLOOR, v)) {
-    faults.push(`OpenCode ${v} is older than ${V1_FLOOR}, the first that loads caret`);
+  if (!isV2Host(version) && isNewer(V1_FLOOR, shownVersion)) {
+    faults.push(`OpenCode ${shownVersion} is older than ${V1_FLOOR}, the first that loads caret`);
     remedies.push(`upgrade OpenCode to ${V1_FLOOR} or later`);
   }
   const wrongKey = keys.find((k) => k !== pluginKeyFor(version));
@@ -74,14 +74,14 @@ export function hostCheck(version: VersionTriple | null, keys: readonly PluginKe
     );
     remedies.push("run `caret install`");
   } else if (wrongKey === "plugin") {
-    faults.push(`caret is in the legacy \`plugin\` key on OpenCode ${v}`);
+    faults.push(`caret is in the legacy \`plugin\` key on OpenCode ${shownVersion}`);
     remedies.push("run `caret install`");
   }
   if (faults.length === 0) {
     return {
       ...base,
       status: "pass",
-      detail: `OpenCode ${v} loads caret from \`${keys.join("`, `")}\``,
+      detail: `OpenCode ${shownVersion} loads caret from \`${keys.join("`, `")}\``,
     };
   }
   return { ...base, status: "fail", detail: faults.join("; "), remedy: remedies.join("; ") };

@@ -113,12 +113,12 @@ function setCaretPluginEntry(
   if (text === null) return addPluginToConfigText(null, specifier, key);
   const entries = caretEntries(text, isCheckout);
   const kept = keptEntry(entries, specifier);
-  const inPlace = kept?.key === key ? kept : undefined;
+  const keptInPlace = kept?.key === key ? kept : undefined;
   const pruned = dropEntries(
     text,
-    entries.filter((e) => e !== inPlace),
+    entries.filter((e) => e !== keptInPlace),
   );
-  return inPlace ? pruned : addPluginToConfigText(pruned, kept?.spec ?? specifier, key);
+  return keptInPlace ? pruned : addPluginToConfigText(pruned, kept?.spec ?? specifier, key);
 }
 
 /** The line naming the host install found and the key it writes; `movedFrom` is the other
@@ -161,9 +161,9 @@ export async function runInstallOpencodeTarget(
   const version = opts.uninstall ? null : (deps.opencodeVersion ?? readOpencodeVersion)();
   const key = pluginKeyFor(version);
   const entries = opts.uninstall ? [] : caretEntries(readConfigText(configFile), isCheckout);
-  const other: PluginKey = key === "plugin" ? "plugins" : "plugin";
-  const movedFrom = entries.some((e) => e.key === other) ? other : null;
-  const written = keptEntry(entries, specifier)?.spec ?? specifier;
+  const otherKey: PluginKey = key === "plugin" ? "plugins" : "plugin";
+  const movedFrom = entries.some((e) => e.key === otherKey) ? otherKey : null;
+  const writtenSpec = keptEntry(entries, specifier)?.spec ?? specifier;
 
   if (opts.dryRun) {
     const verb = opts.uninstall ? "remove" : "write";
@@ -218,8 +218,8 @@ export async function runInstallOpencodeTarget(
       editConfig(configFile, (text) => setCaretPluginEntry(text, { specifier, key, isCheckout })),
     (changed) =>
       changed.length > 0
-        ? `Added ${written} to ${basename(configFile)}`
-        : `${written} was already in ${basename(configFile)}`,
+        ? `Added ${writtenSpec} to ${basename(configFile)}`
+        : `${writtenSpec} was already in ${basename(configFile)}`,
   );
   // After the array edit — the entry has to exist before it can be read — and before the
   // command files, so a cache clear is settled by the time the run reports it deployed.

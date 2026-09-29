@@ -21,12 +21,12 @@ export async function readOpencodeChecks(deps: {
 }): Promise<Check[]> {
   const entries = caretEntries(readConfigText(deps.configFile), isCaretCheckout);
   if (entries.length === 0) return [];
-  const version = deps.opencodeVersion();
-  const host = hostCheck(version, [...new Set(entries.map((e) => e.key))]);
+  const hostVersion = deps.opencodeVersion();
+  const host = hostCheck(hostVersion, [...new Set(entries.map((e) => e.key))]);
   if (entries.every((e) => isLocalPluginSpecifier(e.spec))) return [host];
   const verdict = await readUpgradeVerdict({
     configFile: deps.configFile,
-    host: version,
+    host: hostVersion,
     published: deps.published,
   });
   return [host, upgradeCheck(verdict)];
