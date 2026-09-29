@@ -48,15 +48,15 @@ export function createCaretTui(opts: {
     }
 
     // Tool events carry the call id, not the tool name: only calls that showed a link count.
-    const linkShown = new Set<string>();
+    const callsWithLink = new Set<string>();
     const settle = (id: string, outcome: ReviewOutcome) => {
-      if (linkShown.delete(id)) showToast(client, decisionToast(outcome));
+      if (callsWithLink.delete(id)) showToast(client, decisionToast(outcome));
     };
-    const unsubscribe = [
+    const unsubscribers = [
       ctx.data.on("session.tool.progress", ({ data }) => {
         const url = data.metadata?.[CARET_URL_KEY];
         if (typeof url !== "string") return;
-        linkShown.add(data.id);
+        callsWithLink.add(data.id);
         showToast(client, reviewLinkToast(url));
       }),
       ctx.data.on("session.tool.success", ({ data }) => {
@@ -66,7 +66,7 @@ export function createCaretTui(opts: {
       ctx.data.on("session.tool.failed", ({ data }) => settle(data.id, "cancelled")),
     ];
     return () => {
-      for (const off of unsubscribe) off();
+      for (const unsubscribe of unsubscribers) unsubscribe();
     };
   };
 }

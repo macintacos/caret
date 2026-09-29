@@ -313,9 +313,9 @@ test("the prompt hook swallows a failing agent read or session write", async () 
   const fail = async () => {
     throw new Error("boom");
   };
-  const plan = async () => ({ agent: "plan" });
-  expect(await grant({ session: plan, agentRules: fail })).toEqual([]);
-  expect(await grant({ session: plan, update: fail })).toEqual([]);
+  const planSession = async () => ({ agent: "plan" });
+  expect(await grant({ session: planSession, agentRules: fail })).toEqual([]);
+  expect(await grant({ session: planSession, update: fail })).toEqual([]);
 });
 
 test("a warm that throws still grants a plan session", async () => {

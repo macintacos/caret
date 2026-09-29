@@ -44,8 +44,8 @@ export function withPlanAllow(
   agentRules: readonly Rule[],
   sessionRules: readonly Rule[],
 ): Rule[] | undefined {
-  const named = (rule: Rule) => rule.action === REVIEW_TOOL;
-  if (agentRules.some(named) || sessionRules.some(named)) return undefined;
+  const namesReviewTool = (rule: Rule) => rule.action === REVIEW_TOOL;
+  if (agentRules.some(namesReviewTool) || sessionRules.some(namesReviewTool)) return undefined;
   return [...sessionRules, PLAN_ALLOW_RULE];
 }
 
