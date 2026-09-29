@@ -6,7 +6,16 @@
 // would corrupt a jsonc config. Pure text-in/text-out, so it is unit-testable without
 // touching disk.
 
-import { applyEdits, type JSONPath, modify, parse } from "jsonc-parser";
+import {
+  applyEdits,
+  createScanner,
+  type Edit,
+  findNodeAtLocation,
+  type JSONPath,
+  modify,
+  parse,
+  parseTree,
+} from "jsonc-parser";
 
 import { isLocalPluginSpecifier } from "@/adapters/opencode/paths.ts";
 
@@ -153,9 +162,57 @@ export function rewritePluginArray(
   const arr = pluginArray(existing, key);
   const next = arr.filter((item, i) => keep(item, i));
   if (next.length === arr.length) return existing;
-  const value = key === "plugins" && next.length === 0 ? undefined : next;
-  const edits = modify(existing, [key], value, { formattingOptions: FORMATTING });
+  if (key === "plugins" && next.length === 0) return deleteProperty(existing, key);
+  const edits = modify(existing, [key], next, { formattingOptions: FORMATTING });
   return applyEdits(existing, edits);
+}
+
+/** The offset of the comma that follows `from`, skipping whitespace and comments, or
+ * null when the next token is not a comma. */
+function commaAfter(text: string, from: number): number | null {
+  const scanner = createScanner(text, true);
+  scanner.setPosition(from);
+  // SyntaxKind is an ambient const enum, unreadable under verbatimModuleSyntax.
+  do scanner.scan();
+  while (
+    text.startsWith("//", scanner.getTokenOffset()) ||
+    text.startsWith("/*", scanner.getTokenOffset())
+  );
+  return text[scanner.getTokenOffset()] === "," ? scanner.getTokenOffset() : null;
+}
+
+/** Widen [start, end) to its whole line when nothing else sits on that line. */
+function wholeLine(text: string, start: number, end: number): Edit {
+  let s = start;
+  let e = end;
+  while (s > 0 && (text[s - 1] === " " || text[s - 1] === "\t")) s--;
+  while (e < text.length && (text[e] === " " || text[e] === "\t")) e++;
+  const alone = (s === 0 || text[s - 1] === "\n") && (e === text.length || text[e] === "\n");
+  return alone
+    ? { offset: s, length: Math.min(e + 1, text.length) - s, content: "" }
+    : { offset: start, length: end - start, content: "" };
+}
+
+/** Delete top-level property `key` and one separating comma, leaving every comment —
+ * jsonc-parser's own removal swallows a comment that precedes the property. */
+function deleteProperty(text: string, key: string): string {
+  const root = parseTree(text);
+  const prop = root && findNodeAtLocation(root, [key])?.parent;
+  const siblings = prop?.parent?.children;
+  if (!prop || !siblings) return text;
+  const i = siblings.indexOf(prop);
+  const end = prop.offset + prop.length;
+  const edits: Edit[] = [];
+  const after = i < siblings.length - 1 ? commaAfter(text, end) : null;
+  if (after !== null && text.slice(end, after).trim() === "") {
+    edits.push(wholeLine(text, prop.offset, after + 1));
+  } else {
+    edits.push(wholeLine(text, prop.offset, end));
+    const prev = siblings[i - 1];
+    const comma = after ?? (prev ? commaAfter(text, prev.offset + prev.length) : null);
+    if (comma !== null) edits.push({ offset: comma, length: 1, content: "" });
+  }
+  return applyEdits(text, edits);
 }
 
 /** Remove `pkg` from the config's `key` array (default `plugin`), returning the new

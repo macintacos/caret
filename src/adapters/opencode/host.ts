@@ -62,7 +62,7 @@ export function hostCheck(
   const wrongKey = keys.find((k) => k !== pluginKeyFor(version));
   if (wrongKey === "plugins") {
     faults.push(
-      `caret is in \`plugins\`, which OpenCode ${v} ignores; v1 before 1.18.16 will not start with it`,
+      `caret is in \`plugins\`, which OpenCode v1 never loads (before 1.18.16 it refuses to start with the key)`,
     );
     remedies.push("run `caret install`");
   } else if (wrongKey === "plugin") {

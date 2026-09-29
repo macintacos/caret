@@ -745,3 +745,11 @@ test("--refresh bumps a stale plugins pin in plugins", async () => {
   await transcript({ ...V2, published: async () => "0.8.1" }, { refresh: true });
   expect(config()).toEqual({ plugins: [`${CARET_PACKAGE}@0.8.1`] });
 });
+
+test("moving caret out of plugins on a v1 host keeps the config's comments", async () => {
+  writeFileSync(configJson(), `{\n  // mine\n  "plugins": ["${CARET_PACKAGE}"]\n}\n`);
+  await install();
+  const out = readFileSync(configJson(), "utf-8");
+  expect(out).toContain("// mine");
+  expect(JSON.parse(out.replace(/^\s*\/\/.*$/gm, ""))).toEqual({ plugin: [CARET_PACKAGE] });
+});

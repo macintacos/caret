@@ -261,3 +261,14 @@ test("rewritePluginArray keeps exactly the items the predicate keeps", () => {
 function stripComments(s: string): string {
   return s.replace(/^\s*\/\/.*$/gm, "");
 }
+
+test("an emptied plugins key is deleted with its comma, keeping every comment", () => {
+  const cases: [string, string][] = [
+    ['{\n  // c\n  "plugins": ["x"]\n}\n', "{\n  // c\n}\n"],
+    ['{\n  // c\n  "plugins": ["x"],\n  "a": 1\n}\n', '{\n  // c\n  "a": 1\n}\n'],
+    ['{\n  "a": 1,\n  // c\n  "plugins": ["x"]\n}\n', '{\n  "a": 1\n  // c\n}\n'],
+  ];
+  for (const [src, want] of cases) {
+    expect(removePluginFromConfigText(src, "x", "plugins")).toBe(want);
+  }
+});

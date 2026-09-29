@@ -75,6 +75,7 @@ test("the host check fails for caret in plugins on v1, naming the version that s
   const check = hostCheck([1, 18, 29], ["plugins"]);
   expect(check.status).toBe("fail");
   expect(check.detail).toContain("1.18.16");
+  expect(hostCheck([1, 18, 15], ["plugins"]).detail).not.toContain("ignores");
 });
 
 test("the host check fails for a v1 too old to load caret", () => {
