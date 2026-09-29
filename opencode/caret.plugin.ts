@@ -658,7 +658,6 @@ export function createCaretPlugin(
                   }
                 },
                 signal: context.abort,
-                // Show the review URL as a toast while the plan is pending.
                 onUrl: (url) => {
                   linkShown = true;
                   showToast(client, {
