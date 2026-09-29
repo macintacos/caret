@@ -12,6 +12,8 @@ import type { ToolContext } from "@opencode/plugin/promise/tool";
 
 import {
   CARET_BIN,
+  CARET_DECISION_KEY,
+  CARET_URL_KEY,
   isPlanningAgent,
   nodeWarmRunner,
   PLAN_ARG_DESCRIPTION,
@@ -58,11 +60,14 @@ export function createCaretSetup(opts: {
   return async (ctx) => {
     const readSession = (sessionID: string) => ctx.session.get({ sessionID });
 
-    async function execute(input: unknown, context: ToolContext): Promise<{ content: string }> {
+    async function execute(
+      input: unknown,
+      context: ToolContext,
+    ): Promise<{ content: string; metadata?: Record<string, string> }> {
       try {
         const session = await readSession(context.sessionID).catch(() => undefined);
         const directory = session?.location.directory ?? ctx.location.directory;
-        const { text } = await runPlanReview(
+        const { text, decision } = await runPlanReview(
           // v2 decodes input against the JSON Schema below before execute runs.
           input as { plan?: string; path?: string },
           {
@@ -85,10 +90,15 @@ export function createCaretSetup(opts: {
               }
             },
             signal: context.signal,
+            // The TUI half toasts from these progress and result keys.
+            onUrl: (url) => {
+              context.progress({ [CARET_URL_KEY]: url }).catch(() => {});
+            },
           },
           { bin, run, plansDir },
         );
-        return { content: text };
+        if (!decision || context.signal.aborted) return { content: text };
+        return { content: text, metadata: { [CARET_DECISION_KEY]: decision.behavior } };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return {

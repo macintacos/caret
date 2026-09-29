@@ -112,13 +112,15 @@ const REVIEW_TOAST_TITLE = "caret: review this plan";
 /** OpenCode's plugin client, structurally narrowed to the calls caret makes.
  * A structural type (rather than importing the SDK client) keeps this robust
  * against version skew between the pinned plugin SDK and the running OpenCode. */
-type ToastBody = {
+export type ToastBody = {
   title?: string;
   message: string;
   variant: "info" | "success" | "warning" | "error";
   duration?: number;
 };
-type ToastClient = { tui?: { showToast?: (opts: { body: ToastBody }) => unknown } } | undefined;
+export type ToastClient =
+  | { tui?: { showToast?: (opts: { body: ToastBody }) => unknown } }
+  | undefined;
 
 /** The same client, narrowed to the session read the review tool's subagent check
  * makes — narrowed separately, and for the same skew-safety reason, so each helper
@@ -138,11 +140,31 @@ const REVIEW_TOAST_MS = 10 * 60_000;
  * toast, since OpenCode's single-slot toast surface has no hide API. */
 const DECISION_TOAST_MS = 4_000;
 
+/** Tool-call metadata keys that carry the review URL and decision from the v2 server
+ * half to its TUI half, whose tool events name the call but not the tool. */
+export const CARET_URL_KEY = "caretUrl";
+export const CARET_DECISION_KEY = "caretDecision";
+
+export function reviewLinkToast(url: string): ToastBody {
+  return { title: REVIEW_TOAST_TITLE, message: url, variant: "info", duration: REVIEW_TOAST_MS };
+}
+
+/** The toast that supersedes the review link: an `allow` or `deny` outcome, else cancelled. */
+export function decisionToast(outcome: unknown): ToastBody {
+  if (outcome === "allow") {
+    return { message: "caret: plan approved", variant: "success", duration: DECISION_TOAST_MS };
+  }
+  if (outcome === "deny") {
+    return { message: "caret: changes requested", variant: "info", duration: DECISION_TOAST_MS };
+  }
+  return { message: "caret: review cancelled", variant: "info", duration: DECISION_TOAST_MS };
+}
+
 /** Best-effort toast: surfacing or clearing the review link must never crash or
  * delay the review. Swallows a missing method (SDK skew) and any sync throw or
  * async rejection. Called as `tui.showToast(...)` so the SDK client keeps its
  * `this` binding. */
-function showToast(client: ToastClient, body: ToastBody): void {
+export function showToast(client: ToastClient, body: ToastBody): void {
   const tui = client?.tui;
   if (!tui || typeof tui.showToast !== "function") return;
   try {
@@ -660,12 +682,7 @@ export function createCaretPlugin(
                 signal: context.abort,
                 onUrl: (url) => {
                   linkShown = true;
-                  showToast(client, {
-                    title: REVIEW_TOAST_TITLE,
-                    message: url,
-                    variant: "info",
-                    duration: REVIEW_TOAST_MS,
-                  });
+                  showToast(client, reviewLinkToast(url));
                 },
               },
               { bin, run, plansDir },
@@ -673,26 +690,9 @@ export function createCaretPlugin(
             // Supersede the pending review-link toast with a brief decision toast —
             // the surface is single-slot with no hide API (EXC-691).
             if (linkShown && context.abort.aborted) {
-              showToast(client, {
-                message: "caret: review cancelled",
-                variant: "info",
-                duration: DECISION_TOAST_MS,
-              });
+              showToast(client, decisionToast(undefined));
             } else if (linkShown && decision) {
-              showToast(
-                client,
-                decision.behavior === "allow"
-                  ? {
-                      message: "caret: plan approved",
-                      variant: "success",
-                      duration: DECISION_TOAST_MS,
-                    }
-                  : {
-                      message: "caret: changes requested",
-                      variant: "info",
-                      duration: DECISION_TOAST_MS,
-                    },
-              );
+              showToast(client, decisionToast(decision.behavior));
             }
             return text;
           },
@@ -703,21 +703,22 @@ export function createCaretPlugin(
   };
 }
 
+/** The update check both hosts run, wired to production; one file stamp throttles both. */
+export function productionUpdateCheck(client: ToastClient): void {
+  void realUpdateChecker(client, {
+    currentVersion: resolveCaretVersion({
+      marker: CARET_PLUGIN_VERSION,
+      importMetaUrl: import.meta.url,
+      readFile: (p) => readFileSync(p, "utf-8"),
+    }),
+    env: process.env,
+    fetchImpl: fetch,
+    now: () => Date.now(),
+    cache: fileUpdateCache(updateCheckCachePath(process.env, homedir())),
+  });
+}
+
 /** caret's OpenCode v1 plugin (the `server` half of index.ts's default), wiring the
  * production update checker. */
-const CaretPlugin: Plugin = createCaretPlugin({
-  checkUpdate: (client) => {
-    void realUpdateChecker(client, {
-      currentVersion: resolveCaretVersion({
-        marker: CARET_PLUGIN_VERSION,
-        importMetaUrl: import.meta.url,
-        readFile: (p) => readFileSync(p, "utf-8"),
-      }),
-      env: process.env,
-      fetchImpl: fetch,
-      now: () => Date.now(),
-      cache: fileUpdateCache(updateCheckCachePath(process.env, homedir())),
-    });
-  },
-});
+const CaretPlugin: Plugin = createCaretPlugin({ checkUpdate: productionUpdateCheck });
 export default CaretPlugin;

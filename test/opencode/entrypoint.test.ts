@@ -44,6 +44,23 @@ test('package.json entrypoint resolves to the OpenCode plugin so `plugin: ["@mac
   expect(pkg.main).toBe("./opencode/index.ts");
 });
 
+test("package.json exposes the v2 TUI module at `./tui`", () => {
+  expect(pkg.exports?.["./tui"]).toBe("./opencode/caret.tui.ts");
+});
+
+test("the TUI module's default loads on v2 as { id, setup } and on v1 as a TUI-only plugin", async () => {
+  // v2's TUI loader reads only the default and requires a non-empty `id` and a `setup`
+  // (anomalyco/opencode packages/tui/src/plugin/context.tsx:694-696,741-751); v1 rejects a
+  // default holding both `server` and `tui`, and needs `tui` on a TUI target.
+  const mod = await import("@opencode/caret.tui.ts");
+  const plugin = mod.default as Record<string, unknown>;
+  expect(typeof plugin.id).toBe("string");
+  expect(plugin.id).not.toBe("");
+  expect(typeof plugin.setup).toBe("function");
+  expect(typeof plugin.tui).toBe("function");
+  expect("server" in plugin).toBe(false);
+});
+
 test("package.json exposes a `caret` bin so `bunx @macintacos/caret` runs the CLI", () => {
   // Installing caret from npm is `bunx @macintacos/caret install`, and `npm i -g
   // @macintacos/caret` must yield a `caret` command — both resolve this bin entry (the

@@ -8,14 +8,20 @@ import { join } from "node:path";
 
 import type { PluginInput, ToolContext as V1ToolContext } from "@opencode-ai/plugin";
 
-import { createCaretPlugin, planningSteer, REVIEW_TOOL } from "@opencode/caret.plugin.ts";
+import {
+  CARET_DECISION_KEY,
+  CARET_URL_KEY,
+  createCaretPlugin,
+  planningSteer,
+  REVIEW_TOOL,
+} from "@opencode/caret.plugin.ts";
 import { createCaretSetup, PLAN_ALLOW_RULE, withPlanAllow } from "@opencode/caret.plugin.v2.ts";
 import type { Rule } from "@opencode/permission.ts";
 import type { Plugin } from "@opencode/plugin";
 import type { ToolContext } from "@opencode/plugin/promise/tool";
 import type { SpawnRunner } from "@opencode/review-bridge.ts";
 import { fakeDistDir } from "@test/support/fs-tree.ts";
-import { stubRunner } from "@test/support/spawn-runner.ts";
+import { streamingRunner, stubRunner } from "@test/support/spawn-runner.ts";
 
 const PLANS_DIR = "/home/u/.opencode/plan";
 const ALLOW = `{"behavior":"allow"}`;
@@ -506,4 +512,45 @@ test("a build-agent call with an inline plan spawns the review", async () => {
   const { tool } = await setupWith(stubRunner(ALLOW, () => spawned++));
   await tool.execute({ plan: "# P" }, toolContext({ agent: "build" } as Partial<ToolContext>));
   expect(spawned).toBe(1);
+});
+
+// --- toast metadata ---
+
+const URL_LINE = "caret: review this plan at http://127.0.0.1:4242/r/1\n";
+
+test("execute reports the review URL as tool progress", async () => {
+  const progressed: unknown[] = [];
+  const { tool } = await setupWith(streamingRunner(ALLOW, [URL_LINE]));
+  await tool.execute(
+    { plan: "# P" },
+    toolContext({ progress: async (m: unknown) => void progressed.push(m) } as never),
+  );
+  expect(progressed).toEqual([{ [CARET_URL_KEY]: "http://127.0.0.1:4242/r/1" }]);
+});
+
+test("a rejecting progress call does not stop the review", async () => {
+  const { tool } = await setupWith(streamingRunner(ALLOW, [URL_LINE]));
+  const result = await tool.execute(
+    { plan: "# P" },
+    toolContext({ progress: async () => Promise.reject(new Error("gone")) } as never),
+  );
+  expect((result as { metadata?: unknown }).metadata).toEqual({ [CARET_DECISION_KEY]: "allow" });
+});
+
+test("execute returns the decision's behavior as metadata beside the content", async () => {
+  for (const behavior of ["allow", "deny"]) {
+    const { tool } = await setupWith(stubRunner(`{"behavior":"${behavior}","feedback":"x"}`));
+    const result = await tool.execute({ plan: "# P" }, toolContext());
+    expect(typeof result.content).toBe("string");
+    expect((result as { metadata?: unknown }).metadata).toEqual({ [CARET_DECISION_KEY]: behavior });
+  }
+});
+
+test("an aborted review returns content without decision metadata", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const { tool } = await setupWith(stubRunner(ALLOW));
+  const result = await tool.execute({ plan: "# P" }, toolContext({ signal: controller.signal }));
+  expect(typeof result.content).toBe("string");
+  expect((result as { metadata?: unknown }).metadata).toBeUndefined();
 });
