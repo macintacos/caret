@@ -290,6 +290,13 @@ selected; `--uninstall` reverses every agent at once, and `--dry-run` previews t
 without writing. See [`agents/opencode-integration.md`](agents/opencode-integration.md)
 for the design.
 
+caret supports OpenCode v1 1.3.4 or later (an older v1 fails to load the plugin) and v2
+2.0.18 or later. On v2 the same package loads through a dual default export. The review
+tool, planning steer, prewarm and abort work, but the review-link and update toasts are
+v1-only for now, prewarm runs per prompt, and a `path` outside what the agent may edit is
+refused rather than asked about (see
+[Calling the review tool from your own skill](#calling-the-review-tool-from-your-own-skill)).
+
 `caret install --refresh` takes an update: it compares the caret OpenCode would load
 against npm's published one, then either clears the stale cached copy so OpenCode
 re-resolves on next start **or**, for a stale pinned entry, bumps the pin in the array in
@@ -379,12 +386,17 @@ once. On a change request, re-read the file, make targeted edits, and call again
 same `path`. On approval there is nothing left to save: the file already holds the
 approved plan, with any reviewer notes appended unless you rewrote the file after caret
 read it (the notes still come back in the tool result too). Because caret rewrites the
-file, it first asks OpenCode for edit permission on it, and a denied ask comes back as an
-error with no review. OpenCode's `plan` agent may edit plan files only in a few places, so
-caret's planning steer tells it to write to OpenCode's plans directory:
-`~/.local/share/opencode/plans` (under `$XDG_DATA_HOME` when that is set), or wherever
-`[opencode] plans_dir` in caret's [config file](CONFIGURING.md#the-opencode-table) points.
-Any other agent can use any `.md` file its edit rules allow.
+file, it first checks OpenCode's edit permission on it. On OpenCode v1 it asks, and a
+denied ask comes back as an error with no review. OpenCode v2 gives a plugin no way to
+ask, so caret evaluates OpenCode's rules itself and refuses anything they do not allow,
+with the same error. OpenCode's `plan` agent may edit plan files only in a few places, so
+caret's planning steer tells it to write to OpenCode's plans directory — on v1
+`~/.local/share/opencode/plans` (under `$XDG_DATA_HOME` when that is set), on v2
+`~/.opencode/plan` — or wherever `[opencode] plans_dir` in caret's
+[config file](CONFIGURING.md#the-opencode-table) points. Any other agent can use any `.md`
+file its edit rules allow. On v2 a stock config refuses a file outside the project,
+because `external_directory` defaults to `ask`, so the agent passes the plan inline as
+`plan` instead.
 
 On Claude Code a long wait has two more wrinkles. From Claude Code v2.1.212 a tool call
 still running after two minutes can move to the background; the tool's description tells

@@ -52,6 +52,23 @@ test("planningSteer points the plan agent at a file in the plans directory, subm
   expect(s).toContain("`path`");
 });
 
+test("planningSteer leads with the review tool and names plan_exit only as an example", () => {
+  const s = planningSteer("/data/opencode/plans");
+  expect(s.startsWith("## Plan review (caret)")).toBe(true);
+  expect(s.indexOf(REVIEW_TOOL)).toBeLessThan(s.indexOf("plan_exit"));
+});
+
+test("planningSteer falls back to passing the plan inline as `plan`", () => {
+  expect(planningSteer("/data/opencode/plans")).toContain("`plan`");
+});
+
+test("planningSteer scopes the re-read instruction to a `path` submission", () => {
+  const s = planningSteer("/data/opencode/plans");
+  const reread = s.split(/(?<=\.) /).find((sentence) => sentence.includes("re-read"));
+  expect(reread?.indexOf("`path`")).toBeLessThan(reread?.indexOf("re-read") ?? -1);
+  expect(reread?.indexOf("`path`")).toBeGreaterThanOrEqual(0);
+});
+
 test("planningSteer asks the plan agent to open its plan with a title heading", () => {
   expect(planningSteer("/data/opencode/plans")).toContain(PLAN_TITLE_INSTRUCTION);
 });
@@ -104,6 +121,24 @@ test("resolvePlansDir reads the config file caret itself reads", () => {
 test("resolvePlansDir falls back to the default on an unreadable or malformed config", () => {
   const readFile = fakeFiles({ "/h/.config/caret/config.toml": "[opencode\nplans_dir =" });
   expect(resolvePlansDir({ env: {}, home: "/h", readFile })).toBe("/h/.local/share/opencode/plans");
+});
+
+test("resolvePlansDir returns an explicit defaultDir when no plans_dir is configured", () => {
+  expect(
+    resolvePlansDir({
+      env: {},
+      home: "/h",
+      readFile: fakeFiles({}),
+      defaultDir: "/h/.opencode/plan",
+    }),
+  ).toBe("/h/.opencode/plan");
+});
+
+test("resolvePlansDir prefers plans_dir over an explicit defaultDir", () => {
+  const readFile = fakeFiles({
+    "/h/.config/caret/config.toml": '[opencode]\nplans_dir = "/mine"\n',
+  });
+  expect(resolvePlansDir({ env: {}, home: "/h", readFile, defaultDir: "/d" })).toBe("/mine");
 });
 
 // --- resolvePlanSource (the tool's plan / path args) ---
@@ -235,7 +270,12 @@ async function buildHooks(run: SpawnRunner, client?: PluginInput["client"]) {
 
 // Minimal ToolContext stub — an inline-plan execute() only reads agent/sessionID/directory.
 function ctx(agent: string): ToolContext {
-  return { agent, sessionID: "S", directory: "/p" } as unknown as ToolContext;
+  return {
+    agent,
+    sessionID: "S",
+    directory: "/p",
+    abort: new AbortController().signal,
+  } as unknown as ToolContext;
 }
 
 test("the review tool runs `<bin> review` as the opencode agent", async () => {
@@ -267,6 +307,18 @@ test("the review tool denies: a plan-agent call returns the feedback", async () 
   const hooks = await buildHooks(stubRunner(`{"behavior":"deny","feedback":"narrow it"}`));
   const out = await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P\nbody" }, ctx("plan"));
   expect(String(out)).toContain("narrow it");
+});
+
+test("the review tool hands the tool call's abort signal to the runner", async () => {
+  const abort = new AbortController().signal;
+  let handed: AbortSignal | undefined;
+  const run: SpawnRunner = async (_c, _e, _s, _o, signal) => {
+    handed = signal;
+    return { exitCode: 0, stdout: `{"behavior":"allow"}` };
+  };
+  const hooks = await buildHooks(run);
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, { ...ctx("plan"), abort });
+  expect(handed === abort).toBe(true);
 });
 
 const planDirs: string[] = [];
@@ -469,6 +521,32 @@ test("the review tool clears the link with a changes-requested toast on deny (EX
   await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
   expect(toasts[0]?.message).toBe(url);
   expect(toasts[1]?.message.toLowerCase()).toContain("change");
+});
+
+test("an aborted review clears the link with a short neutral cancelled toast", async () => {
+  const bodies: Array<{ message: string; variant: string; duration?: number }> = [];
+  const client = {
+    tui: {
+      showToast: (opts: { body: { message: string; variant: string; duration?: number } }) => {
+        bodies.push(opts.body);
+        return Promise.resolve({});
+      },
+    },
+  } as unknown as PluginInput["client"];
+  const controller = new AbortController();
+  const run: SpawnRunner = async (_c, _e, _s, onStderr) => {
+    onStderr?.("caret: review this plan at http://caret.localhost:42718/?review=esc\n");
+    controller.abort();
+    throw new Error("aborted");
+  };
+  const hooks = await buildHooks(run, client);
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.(
+    { plan: "# P" },
+    { ...ctx("plan"), abort: controller.signal },
+  );
+  expect(bodies).toHaveLength(2);
+  expect(bodies[1]).toMatchObject({ message: "caret: review cancelled", variant: "info" });
+  expect(bodies[1]?.duration).toBeLessThan(bodies[0]?.duration ?? 0);
 });
 
 test("the review tool shows no toast when no review URL is surfaced", async () => {

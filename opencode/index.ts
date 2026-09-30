@@ -1,7 +1,9 @@
 // The published entrypoint OpenCode imports when `@macintacos/caret` appears in a
-// user's `plugin` array. OpenCode's loader iterates a plugin module's exports
-// (Object.values) and rejects the whole module on the FIRST export that isn't a
-// Plugin — and caret.plugin.ts additionally exports test helpers/constants for
-// test/opencode/. So this file re-exports ONLY the default plugin, leaving a module
-// namespace of exactly `{ default }`.
-export { default } from "./caret.plugin.ts";
+// user's plugin list. One default export serves both runtimes: OpenCode v2 decodes
+// `{ id, setup }` and ignores `server`; OpenCode v1 (>= 1.3.4) runs `server` and ignores
+// `setup`. v1's loader also rejects a module on its first non-plugin export, so the
+// namespace stays exactly `{ default }`.
+import server from "./caret.plugin.ts";
+import setup from "./caret.plugin.v2.ts";
+
+export default { id: "caret", setup, server };
