@@ -271,31 +271,38 @@ While the Plan agent is working, the plugin also warms the daemon in the backgro
 `caret prewarm` on each plan-agent message, mirroring the `caret prewarm` row in the
 Claude hooks table above — so your first review doesn't wait on a cold start.
 
-caret installs into OpenCode as a `plugin` array entry: `caret install` adds
-`@macintacos/caret` to your OpenCode config's `plugin` array (comment-preserving, via
-`jsonc-parser`) and deploys the `/caret:*` command files, or you can add the array entry
-by hand. Install and uninstall both remove the plugin and command files older caret
-versions deployed into that config dir: OpenCode still loads them, so a leftover plugin
-file would register a second review tool beside the array entry. The config dir's own
-`package.json` is left alone — it may belong to another of your plugins. On its next start
-OpenCode installs the package and its `@opencode-ai/plugin` dependency into its own cache
-and loads it — caret writes no config-dir manifest and runs no `bun install` itself. The
-plugin resolves the caret binary and its own version at runtime from the package it ships
-in (`CARET_OPENCODE_BIN` overrides the binary — see
-[Environment variables](CONFIGURING.md#environment-variables)), and on load it checks
-caret's latest GitHub release and toasts an update nudge when you're behind
-(`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). `caret install` registers caret with Claude
-Code through its plugin CLI too, and covers both agents in a single run when both are
-selected; `--uninstall` reverses every agent at once, and `--dry-run` previews the changes
-without writing. See [`agents/opencode-integration.md`](agents/opencode-integration.md)
-for the design.
+caret installs into OpenCode as a plugin array entry. `caret install` runs
+`opencode --version` (bounded at 5 s) and adds `@macintacos/caret` to your OpenCode
+config's `plugins` array on v2 or its `plugin` array otherwise — v1, or a version it
+cannot read, since both hosts load `plugin` — comment-preserving, via `jsonc-parser`. On
+v2 it moves an existing `plugin` entry into `plugins` in the same write, keeping a pinned
+version: v2 loads both arrays, and two caret entries fail with `Duplicate plugin ID`. It
+deletes a `plugins` key it empties, because v1 below 1.18.16 refuses to start with one. It
+also deploys the `/caret:*` command files, which v1 and v2 both discover. You can add the
+array entry by hand instead. `--uninstall` removes caret from both arrays. Install and
+uninstall both remove the plugin and command files older caret versions deployed into that
+config dir: OpenCode still loads them, so a leftover plugin file would register a second
+review tool beside the array entry. The config dir's own `package.json` is left alone — it
+may belong to another of your plugins. On its next start OpenCode installs the package and
+its `@opencode-ai/plugin` dependency into its own cache and loads it — caret writes no
+config-dir manifest and runs no `bun install` itself. The plugin resolves the caret binary
+and its own version at runtime from the package it ships in (`CARET_OPENCODE_BIN`
+overrides the binary — see [Environment variables](CONFIGURING.md#environment-variables)),
+and on load it checks caret's latest GitHub release and toasts an update nudge when you're
+behind (`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). `caret install` registers caret with
+Claude Code through its plugin CLI too, and covers both agents in a single run when both
+are selected; `--uninstall` reverses every agent at once, and `--dry-run` previews the
+changes without writing. See
+[`agents/opencode-integration.md`](agents/opencode-integration.md) for the design.
 
 caret supports OpenCode v1 1.3.4 or later (an older v1 fails to load the plugin) and v2
-2.0.18 or later. On v2 the same package loads through a dual default export. The review
-tool, planning steer, prewarm, abort, and the review-link and update toasts work; the
-toasts come from a TUI half under the package's `./tui` export, so they need an attached
-terminal UI (web and desktop show none). Prewarm runs per prompt, and a `path` outside
-what the agent may edit is refused rather than asked about (see
+2.0.18 or later. `caret doctor`'s `opencode-host` check flags a v1 below that floor, and
+caret sitting in the array the running host does not load. On v2 the same package loads
+through a dual default export. The review tool, planning steer, prewarm, abort, and the
+review-link and update toasts work; the toasts come from a TUI half under the package's
+`./tui` export, so they need an attached terminal UI (web and desktop show none). Prewarm
+runs per prompt, and a `path` outside what the agent may edit is refused rather than asked
+about (see
 [Calling the review tool from your own skill](#calling-the-review-tool-from-your-own-skill)).
 
 `caret install --refresh` takes an update: it compares the caret OpenCode would load
@@ -308,18 +315,25 @@ nothing. Restart OpenCode afterward. Until then the caret service does not fall 
 older root: a published `caret install` keeps a copy of itself under
 `~/.local/state/caret/roots/<version>/`, which the service's launcher scans as a third
 place (see [the service's launcher](#the-daemons-lifecycle)). Pinning
-`"@macintacos/caret@<version>"` in the array and bumping it yourself is the other way to
-control which version loads. Clearing the cache by hand is:
+`"@macintacos/caret@<version>"` in either array and bumping it yourself is the other way
+to control which version loads. Clearing the cache by hand is, on v1:
 
 ```sh
 rm -rf ~/.cache/opencode/packages/@macintacos/caret*
 ```
 
+and on v2, which keys a bare entry as `@latest` and keeps older install generations beside
+the live one:
+
+```sh
+rm -rf ~/.cache/opencode/npm/@macintacos/caret@*
+```
+
 > [!NOTE]
-> The glob is load-bearing. OpenCode names one cache dir per **verbatim** specifier, so a
-> bare `@macintacos/caret` entry and every pinned `@macintacos/caret@<version>` get
-> separate dirs, and all of them have to go. Drop the `*` and the pinned dirs survive, so
-> OpenCode reloads the stale copy from one of them.
+> The glob is load-bearing. OpenCode names one cache dir per specifier, so a bare
+> `@macintacos/caret` entry and every pinned `@macintacos/caret@<version>` get separate
+> dirs, and all of them have to go. Drop the `*` and the pinned dirs survive, so OpenCode
+> reloads the stale copy from one of them.
 
 `caret install` picks the agents for you: it detects which agents you have (`claude` on
 your PATH; `opencode` on your PATH or an existing OpenCode config dir) and asks which to
@@ -338,8 +352,8 @@ own — see
 At a terminal the whole run renders as one
 [`@clack/prompts`](https://github.com/bombshell-dev/clack) session: the chooser, then a
 spinner per operation (registering the marketplace, installing the plugin, editing
-OpenCode's `plugin` array, deploying the command files, fetching rumdl) that settles into
-a line saying what it did, and a closing summary. Off a terminal — piped, `CI=true`, or
+OpenCode's plugin array, deploying the command files, fetching rumdl) that settles into a
+line saying what it did, and a closing summary. Off a terminal — piped, `CI=true`, or
 `NO_COLOR` set — the same run reports as plain `caret: …` lines with no escape codes, so
 CI transcripts and captured logs stay readable.
 

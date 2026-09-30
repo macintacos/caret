@@ -26,6 +26,9 @@ BSD-flavored `ps -axo pid=,comm=` everywhere.
 > If the browser doesn't open, or doctor shows no processes, on Linux or Windows: the
 > review URL caret prints to stderr is the fallback.
 
+The OpenCode versions caret supports are listed in
+[the OpenCode adapter](ARCHITECTURE.md#the-opencode-adapter).
+
 ## Config file
 
 caret reads optional settings from a TOML file. You own it; the one line caret writes
