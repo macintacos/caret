@@ -292,9 +292,10 @@ for the design.
 
 caret supports OpenCode v1 1.3.4 or later (an older v1 fails to load the plugin) and v2
 2.0.18 or later. On v2 the same package loads through a dual default export. The review
-tool, planning steer, prewarm and abort work, but the review-link and update toasts are
-v1-only for now, prewarm runs per prompt, and a `path` outside what the agent may edit is
-refused rather than asked about (see
+tool, planning steer, prewarm, abort, and the review-link and update toasts work; the
+toasts come from a TUI half under the package's `./tui` export, so they need an attached
+terminal UI (web and desktop show none). Prewarm runs per prompt, and a `path` outside
+what the agent may edit is refused rather than asked about (see
 [Calling the review tool from your own skill](#calling-the-review-tool-from-your-own-skill)).
 
 `caret install --refresh` takes an update: it compares the caret OpenCode would load
@@ -414,15 +415,17 @@ waiting out the timeout, and no agent is waiting on its result.
 
 **Who may call it differs by agent.**
 
-- **OpenCode: any primary agent; subagents may not.** OpenCode doesn't fire plugin hooks
-  for subagent tool calls, so caret marks the review tool primary-only
-  (`experimental.primary_tools`, which OpenCode turns into a deny rule on every subagent
-  session) and re-checks in the tool body that the call didn't come from a subagent's
-  child session. Only the Plan agent is _steered_ toward the tool; every other primary
-  agent has to reach for it deliberately. One exception is worth knowing about: caret
-  writes the permission rescue for the `plan` agent alone, so a config with a global
-  `permission: { "*": "deny" }` keeps the tool there and loses it everywhere else. If your
-  skill is pinned to a non-plan agent, `caret_review_plan` is the route — OpenCode's own
+- **OpenCode: any primary agent; subagents may not.** On v1, where OpenCode doesn't fire
+  plugin hooks for subagent tool calls, caret marks the review tool primary-only through
+  `experimental.primary_tools`, which OpenCode turns into a deny rule on every subagent
+  session; on v2 it removes the tool from every subagent request. Either way it re-checks
+  in the tool body that the call didn't come from a subagent's child session. Only the
+  Plan agent is _steered_ toward the tool; every other primary agent has to reach for it
+  deliberately. One exception is worth knowing about: on v1 the permission rescue is a
+  `plan`-agent permission, so a global deny-all keeps the tool there and loses it
+  everywhere else; on v2 it is a rule on each plan session, which stays with the session
+  if it switches agent, and a user whose default agent is `plan` gets none. If your skill
+  is pinned to a non-plan agent, `caret_review_plan` is the route — OpenCode's own
   `plan_exit` is permitted on the `plan` agent alone, so there is nothing to fall back on.
 - **Claude Code: any agent, subagents included.** The tool grants no permission and gates
   no edit, so there is nothing a subagent could bypass by calling it.

@@ -12,6 +12,8 @@ import type { ToolContext } from "@opencode/plugin/promise/tool";
 
 import {
   CARET_BIN,
+  CARET_DECISION_KEY,
+  CARET_URL_KEY,
   isPlanningAgent,
   nodeWarmRunner,
   PLAN_ARG_DESCRIPTION,
@@ -24,8 +26,28 @@ import {
   runPlanReview,
   type WarmRunner,
 } from "./caret.plugin.ts";
-import { editPermitted } from "./permission.ts";
+import { editPermitted, type Rule } from "./permission.ts";
 import { decisionText, nodeSpawnRunner, type SpawnRunner } from "./review-bridge.ts";
+
+/** Appended last, it outranks a config deny-all: v2 disables a tool only when the last
+ * rule naming it is a `*` deny. */
+export const PLAN_ALLOW_RULE: Readonly<Rule> = Object.freeze({
+  action: REVIEW_TOOL,
+  resource: "*",
+  effect: "allow",
+});
+
+/** The session rules with caret's allow appended, or undefined when either ruleset already
+ * names the tool — the user's own rule (never overridden), or caret's from an earlier prompt.
+ * Agent rules count because v2 folds the user's config permissions into them. */
+export function withPlanAllow(
+  agentRules: readonly Rule[],
+  sessionRules: readonly Rule[],
+): Rule[] | undefined {
+  const namesReviewTool = (rule: Rule) => rule.action === REVIEW_TOOL;
+  if (agentRules.some(namesReviewTool) || sessionRules.some(namesReviewTool)) return undefined;
+  return [...sessionRules, PLAN_ALLOW_RULE];
+}
 
 type SetupContext = Pick<Plugin.Context, "location" | "agent" | "session" | "tool">;
 
@@ -42,11 +64,14 @@ export function createCaretSetup(opts: {
   return async (ctx) => {
     const readSession = (sessionID: string) => ctx.session.get({ sessionID });
 
-    async function execute(input: unknown, context: ToolContext): Promise<{ content: string }> {
+    async function execute(
+      input: unknown,
+      context: ToolContext,
+    ): Promise<{ content: string; metadata?: Record<string, string> }> {
       try {
         const session = await readSession(context.sessionID).catch(() => undefined);
         const directory = session?.location.directory ?? ctx.location.directory;
-        const { text } = await runPlanReview(
+        const { text, decision } = await runPlanReview(
           // v2 decodes input against the JSON Schema below before execute runs.
           input as { plan?: string; path?: string },
           {
@@ -69,10 +94,16 @@ export function createCaretSetup(opts: {
               }
             },
             signal: context.signal,
+            // The TUI half toasts from these progress and result keys.
+            onUrl: (url) => {
+              context.progress({ [CARET_URL_KEY]: url }).catch(() => {});
+            },
           },
           { bin, run, plansDir },
         );
-        return { content: text };
+        // An abort's fail-safe deny is no reviewer's decision; the TUI reads a missing key as cancelled.
+        if (!decision || context.signal.aborted) return { content: text };
+        return { content: text, metadata: { [CARET_DECISION_KEY]: decision.behavior } };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return {
@@ -104,9 +135,17 @@ export function createCaretSetup(opts: {
     );
 
     // A rejected hook aborts the model request that fired it, so every hook swallows.
-    await ctx.session.hook("context", (event) => {
+    await ctx.session.hook("context", async (event) => {
       try {
-        if (isPlanningAgent(event.agent)) {
+        if (event.tools?.[REVIEW_TOOL] && (await readSession(event.sessionID)).parentID) {
+          delete event.tools[REVIEW_TOOL];
+        }
+      } catch {
+        // Fail-open: an unreadable session keeps the tool; execute still refuses a subagent.
+      }
+      try {
+        // Only while the tool is still offered: never steer toward a denied or disabled tool.
+        if (isPlanningAgent(event.agent) && event.tools?.[REVIEW_TOOL]) {
           event.system.push({ type: "text", text: planningSteer(plansDir) });
         }
       } catch {
@@ -114,16 +153,25 @@ export function createCaretSetup(opts: {
       }
     });
 
-    // Per prompt, never per session: the daemon idle-exits 60s after a warm. Not awaited,
-    // so a prompt never waits on caret.
-    await ctx.session.hook("prompt", (event) => {
-      // ponytail: an unset session agent means the configured default agent, which is not
-      // resolved, so a default-`plan` user gets no warm; resolve the default agent to fix.
-      readSession(event.sessionID)
-        .then((session) => {
-          if (isPlanningAgent(session.agent)) warm(bin);
-        })
-        .catch(() => {});
+    // Per prompt, never per session: the daemon idle-exits 60s after a warm. Awaited so the
+    // allow lands before the step selects its tools; the warm itself is never awaited.
+    await ctx.session.hook("prompt", async (event) => {
+      try {
+        const session = await readSession(event.sessionID);
+        // ponytail: an unset session agent means the configured default agent, which is not
+        // resolved, so a default-`plan` user gets no warm and no allow; resolve it to fix.
+        if (!session.agent || !isPlanningAgent(session.agent)) return;
+        try {
+          warm(bin);
+        } catch {
+          // best-effort — the review path spawns the daemon itself if this missed
+        }
+        const agent = await ctx.agent.get({ agentID: session.agent });
+        const permissions = withPlanAllow(agent.data.permissions, session.permissions ?? []);
+        if (permissions) await ctx.session.update({ sessionID: event.sessionID, permissions });
+      } catch {
+        // best-effort
+      }
     });
   };
 }

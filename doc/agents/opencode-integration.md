@@ -159,8 +159,9 @@ All three close when upstream exposes a permission assert (anomalyco/opencode#46
 
 Abort reaches the child on both hosts: `runPlanReview` passes the host's signal (v1's
 `context.abort`, v2's `context.signal`) to the bridge, whose `spawn({ signal })` kills
-`caret review`. On v1 an abort after the review-link toast replaces it with a neutral
-"caret: review cancelled" toast.
+`caret review`. An abort after the review-link toast replaces it with a neutral "caret:
+review cancelled" toast — on v2 through the TUI half's `session.tool.failed` handler (§
+The export surface).
 
 Because both ends of this wire are caret-owned (the plugin writes the envelope, the
 `opencode` adapter renders the decision the plugin reads), the OpenCode adapter is the
@@ -173,8 +174,10 @@ through the same module, passing its own argv, `CARET_AGENT=claude-mcp`, and too
 keep `review-bridge.ts` free of anything OpenCode-specific and of any import but node
 builtins. `caret steer` (`src/adapters/claude/steer.ts`), Claude Code's title-steer hook,
 is a third consumer: it imports only `PLAN_TITLE_INSTRUCTION`, the title steer the plugin
-and `caret mcp` send too. Config mutation is the adapter's, not the plugin's, so it lives
-in `src/adapters/opencode/config-plugin.ts` and is covered from `test/adapters/opencode/`.
+and `caret mcp` send too. The running-config mutation is `applyCaretConfig` in
+`opencode/caret.plugin.ts`, and it is v1-only: v2 has no `config` hook (§ The subagent
+bypass says what replaces it). `src/adapters/opencode/config-plugin.ts` edits the user's
+config *file* at install time and is covered from `test/adapters/opencode/`.
 
 ## Daemon warm-up: plan-agent only, not session start (EXC-838)
 
@@ -186,10 +189,14 @@ only comes up when the first `caret_review_plan` call spawns `caret review`.
 
 On v2 the warm hangs off `ctx.session.hook("prompt")`. That event carries no agent, so the
 hook reads it with `ctx.session.get` and calls the same production warm runner for a
-planning agent — once per prompt. It starts that lookup without awaiting it, so a prompt
-never waits on caret, and swallows every error: a rejected v2 hook aborts the prompt that
-triggered it. A session whose `agent` is unset gets no warm: a user whose default agent is
-`plan` warms nothing there, at the cost of one cold spawn.
+planning agent — once per prompt. The hook is awaited, because the same pass writes the
+plan-agent allow (§ The subagent bypass) and that must land before the step selects its
+tools; the warm spawn itself is never awaited, so a prompt waits on in-process reads, not
+on a process. The hook swallows every error: a rejected v2 hook fails the prompt that
+triggered it. The warm runs in its own `try`, so a warm that throws still lets the allow
+be written. A session whose `agent` is unset gets no warm and no allow: a user whose
+default agent is `plan` warms nothing there (one cold spawn) and, under a deny-all, loses
+the tool (§ The subagent bypass).
 
 **Why the warm stays plan-only even though any primary agent may call the tool.** The plan
 agent is the one whose turn *reliably* ends in a review; a `build`-agent review is an
@@ -270,12 +277,40 @@ exact failure this widening exists to remove. So a missing client, an absent
 `session.get`, an error payload, and a thrown request all fall through to permitting the
 call, and `primary_tools` carries the enforcement.
 
-**On v2 the in-body check is the only subagent gate** until EXC-1519 adds v2's per-request
-tool removal; v2 has no `config` hook writing `primary_tools`. It reads `ctx.session.get`
-once per call — `parentID` refuses, an unreadable session allows — and that session's
-`location.directory` is the `path` base, falling back to `ctx.location.directory`.
+**On v2 the enforcing gate is a per-request tool removal**, because v2 has no `config`
+hook to write `primary_tools`. The #5894 gap is v1's `tool.execute.before`; v2's `context`
+hook runs on every model request, child sessions included (live-verified), which is what
+the removal relies on. The `context` hook reads the session and deletes
+`caret_review_plan` from the request's `tools` when it has a `parentID`; v2 then neither
+offers the tool nor accepts a call to it (both depend on `codemode: false`). It runs per
+request, so it covers every agent mode and agents added later, with no creation-time race.
+It fails open like the in-body check: an unreadable session keeps the tool, and the
+in-body check still refuses a subagent call that slips through. The same hook then pushes
+the planning steer, in a separate `try`, only while `caret_review_plan` is still in the
+request's `tools`: a plan subagent loses the tool and gets no steer, a plan agent whose
+tool the user disabled is not steered, and a failed steer cannot skip the removal. The
+in-body check reads `ctx.session.get` once per call — `parentID` refuses, an unreadable
+session allows — and that session's `location.directory` is the `path` base, falling back
+to `ctx.location.directory`.
 
-`applyCaretConfig` writes exactly one per-agent permission: `allow` for
+**On v2 the plan-agent allow is a session rule**, written by the awaited `prompt` hook (§
+Daemon warm-up) for a plan-agent session. An agent-level transform would lose to a config
+deny-all; a session rule is evaluated after the agent's rules, and v2 disables a tool only
+when the *last* rule naming it is a `*` deny, so an appended
+`{ action: "caret_review_plan", resource: "*", effect: "allow" }` outranks
+`{ action: "*", resource: "*", effect: "deny" }`. `withPlanAllow` skips the write when the
+agent's rules **or** the session's already name the tool by exact `action`: v2 folds the
+user's config permissions into the agent's ruleset, so a session-only check would let
+caret's allow override the user's own deny — what v1's `??=` prevents. A `*` catch-all
+does not count; it is what the allow exists to override. The allow follows the session and
+is never revoked: a plan session switched to `build` keeps the tool, which this section
+already treats as wanted, and a revoke could not tell caret's rule from a user's identical
+one. The awaited hook, not a `session.created` event, carries it because v2 activates a
+cold location's plugins asynchronously, so the first session could be created before caret
+subscribes. **Limit:** a session on the configured default agent has no `agent` field, so
+a user whose default agent is `plan` gets no allow under deny-all.
+
+On v1, `applyCaretConfig` writes exactly one per-agent permission: `allow` for
 `caret_review_plan` on the `plan` agent, and only when the agent has no entry of its own.
 Every other primary agent is left untouched — OpenCode's base ruleset permits an unknown
 tool id, so the *absence* of an entry is what makes the tool available. The `plan` entry
@@ -306,13 +341,13 @@ so it wants the live check § Verified vs. follow-up already schedules.
   `src/adapters/index.ts`; selectable via `CARET_AGENT=opencode`. Claude stays the
   default.
 - **Packaging (`opencode/`)** — the v1 plugin (`caret.plugin.ts`), the v2 plugin
-  (`caret.plugin.v2.ts`) and its permission evaluator (`permission.ts`), their package
-  entrypoint (`index.ts`, see § The export surface), and command files (`commands/*.md`).
-  The plugin ships in the `@macintacos/caret` npm package and resolves its binary and
-  version at runtime from that package (§ Runtime resolution + update check); only the
-  command files still carry substituted markers — `__CARET_BIN__` and
-  `__CARET_DEMO_TEMPLATE__`, the template embedded rather than read because under `bunx`
-  the install-time root is a temp dir.
+  (`caret.plugin.v2.ts`) and its permission evaluator (`permission.ts`), the v2 TUI module
+(`caret.tui.ts`, `exports["./tui"]`), their package entrypoint (`index.ts`, see § The
+export surface), and command files (`commands/*.md`). The plugin ships in the
+`@macintacos/caret` npm package and resolves its binary and version at runtime from that
+package (§ Runtime resolution + update check); only the command files still carry
+substituted markers — `__CARET_BIN__` and `__CARET_DEMO_TEMPLATE__`, the template embedded
+rather than read because under `bunx` the install-time root is a temp dir.
 - **Install (`caret install`)** — adds caret to the user's OpenCode `plugin` array
   (comment-preserving, via `jsonc-parser` in `config-plugin.ts`) as either
   `@macintacos/caret` or, under `--from-local`, `file:<checkout>` (§ The local form) and
@@ -437,11 +472,15 @@ runtime from the package it ships in:
   `bin/caret` shim shipped beside the plugin in the package).
 - **Version** (`resolveCaretVersion`): a substituted marker if present → the sibling
   `../package.json`'s `version`. Used by the update check.
-- **Update check** (`realUpdateChecker`, wired only into the production default export):
-  on load, fetch caret's latest GitHub release and toast a nudge when the running version
-  is behind. Best-effort — a network error, a non-200, or the
+- **Update check** (`realUpdateChecker`, wired only into the production defaults, via
+  `productionUpdateCheck`): on load, fetch caret's latest GitHub release and toast a nudge
+  when the running version is behind. Best-effort — a network error, a non-200, or the
   `CARET_OPENCODE_NO_UPDATE_CHECK` opt-out is silent. An inline semver compare keeps the
-  plugin self-contained.
+  plugin self-contained. Both hosts call the same `productionUpdateCheck`: v1 from
+  `server()`, v2 from the TUI half's `setup`, since v2's server has no toast. They share
+  one 24 h stamp at `$XDG_STATE_HOME/caret/opencode-update-check`, so a user who switches
+  hosts gets one nudge a day, not two; v2's `ctx.storage` was passed over because whether
+  it loads before the synchronous stamp read is unverified.
 
 **How deps resolve now (vs. the retired manifest).** OpenCode installs the array package
 and its declared `dependencies` into its cache, so `@opencode-ai/plugin` resolves because
@@ -482,6 +521,27 @@ Its `Plugin.define` is the identity function, and its runtime entry would pull E
 OpenCode's client into the module graph — which `index.ts → caret.plugin.v2.ts` loads on
 v1 hosts too.
 
+**v2's toasts live in a second module, `opencode/caret.tui.ts`, under
+`exports["./tui"]`.** v2's server `Context` has no toast surface; toasts belong to a TUI
+plugin, which v2 resolves as `<pkg>/tui` from the same `plugin`/`plugins` entry and loads
+only as a default `{ id, setup }` with a non-empty `id`. v2's host resolves `<pkg>/tui`
+through the package's `exports` itself; § Distribution choice rules out subpaths only for
+the `plugin` array specifier. Its `setup` runs the update check and listens for tool
+events: `session.tool.progress` carrying the `caretUrl` metadata key shows the review-link
+toast, and `session.tool.success` (`caretDecision`) or `session.tool.failed` for that call
+supersedes it with the decision toast. Those events carry the call id, not the tool name,
+so the metadata keys the server half's `execute` writes are the only link between the
+halves. The decision toast matters because v2's toast surface is single-slot with no hide
+API — without it the 10-minute link toast would linger after every decision. v1 keeps its
+toasts in `server()` (`client.tui.showToast`), so caret needs no `tui.json` entry; the
+toast bodies (`reviewLinkToast`, `decisionToast`) are shared from `caret.plugin.ts`. The
+default also carries a no-op `tui`: v1's own installer may register this module as a v1
+TUI plugin, and v1's TUI loader throws on a default without one. The module is not named
+`tui.ts` or `plugin*`, because the `@opencode/*` tsconfig alias would then shadow the real
+`@opencode/plugin` and `@opencode/tui` packages. The `Object.values` rule binds only
+`index.ts`: both TUI loaders read only `default`, so `createCaretTui` stays a named export
+for tests.
+
 ## Verified vs. follow-up
 
 **Verified in this repo (unit + integration tests, no live OpenCode required):** the
@@ -506,8 +566,10 @@ comment-preserving); target selection + dispatch; the `claude` target's CLI comm
 sequence; the runtime bin/version resolvers; and the update check (toasts when behind,
 silent on error / opt-out). On v2 they also cover the permission evaluator, the tool's
 registration (`codemode: false`, JSON Schema input), steer and prewarm gating,
-evaluate-then-refuse on `path`, the subagent refusal and its fail-open, abort on both
-hosts, and v1↔v2 parity of the refusal texts.
+evaluate-then-refuse on `path`, the subagent refusal and its fail-open, the `context`-hook
+tool removal and its fail-open, the plan-agent allow and its agent-and-session skip, the
+TUI half's toasts and update check, abort on both hosts, and v1↔v2 parity of the refusal
+texts.
 
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
 the array install's LOCAL form, which is what ties the run to that plugin version: a
@@ -548,11 +610,37 @@ text, opens no review, and leaves the file unchanged.
 symlinked checkout), `caret_review_plan` is in the tools v1 sends the model and no
 `failed to load plugin` line is logged — v1 runs the dual export's `server`.
 
+**Also confirmed live on v2.0.18** (same harness), for the toasts, the plan-agent allow,
+and the subagent deny:
+
+- **Plan-agent allow under a config deny-all.** On a freshly started service the plan
+  agent's first request offered `caret_review_plan`, and approving returned the approval.
+  A plan-agent `caret_review_plan` deny in the user's config wins: no request offered the
+  tool and no review opened. Without the allow, the plan agent was offered no caret tool
+  under the same deny-all.
+- **Subagent deny.** v2's subagent tool is `subagent`, not `task`. A `general` child
+  spawned from a plan session was not offered `caret_review_plan` while its parent was,
+  under default permissions and under deny-all with `subagent` allowed (where the child
+  inherits the session rules). Without the removal, the child was offered the tool.
+- **Toasts.** In an attached TUI, the TUI half loaded from `exports["./tui"]` through the
+  same `file:` entry, with no second entry and no id clash. The link toast showed the
+  review URL while the review was pending; approving replaced it with "caret: plan
+  approved", and an interrupt replaced it with "caret: review cancelled" — v2 emits
+  `session.tool.failed` for an interrupted tool.
+- **Update toast.** Behind the latest release, the TUI showed one update toast; a relaunch
+  showed none, held off by the shared stamp; `CARET_OPENCODE_NO_UPDATE_CHECK=1` suppressed
+  it.
+- **v1 unchanged** (v1.18.29, packed tarball): it offered `caret_review_plan`, logged no
+  `failed to load plugin`, and its `debug config` still showed
+  `experimental.primary_tools` holding the tool and the plan agent's
+  `caret_review_plan: allow`.
+
 **v2 follow-ups.** Whether a real model obeys the steer over v2's own "do not create or
 update plan files unless the user explicitly asks" reminder — a mock model cannot show it
-(anomalyco/opencode#49879). Not yet built on v2: the toasts, the plan-agent allow, and the
-per-request subagent deny (EXC-1519); `caret install` writing v2's `plugins` key, the v2
-cache layout, and doctor (EXC-1520).
+(anomalyco/opencode#49879). Web and desktop, which attach no TUI and so show no toasts.
+The default-agent limit: a user whose default agent is `plan` gets no warm and no allow.
+That the allow follows a plan session switched to another agent was not observed directly.
+`caret install` writing v2's `plugins` key, the v2 cache layout, and doctor (EXC-1520).
 
 ## Sources
 
@@ -568,5 +656,17 @@ cache layout, and doctor (EXC-1520).
   directory `packages/core/src/plugin/plan.ts`, `packages/util/src/global.ts`; permission
   evaluation `packages/core/src/util/wildcard.ts`, `packages/core/src/permission.ts`,
   `packages/core/src/file-access.ts`; stock agent rules `packages/schema/src/agent.ts`;
-  tool input schema `packages/core/src/tool/runtime.ts`.
+  tool input schema `packages/core/src/tool/runtime.ts`; tool availability and the
+  per-request tool list `packages/core/src/tool.ts`,
+  `packages/core/src/session/model-request.ts`; config permissions folded into agent rules
+  `packages/core/src/config/plugin/agent.ts`; agent-then-session rule order
+  `packages/core/src/session/context.ts`; the `prompt` hook and plugin activation
+  `packages/core/src/session/prompt.ts`, `packages/core/src/plugin/hooks.ts`,
+  `packages/core/src/plugin/service.ts`, `packages/core/src/plugin/supervisor.ts`; TUI
+  plugin loading `packages/tui/src/plugin/context.tsx`; the toast surface
+  `packages/tui/src/ui/toast.tsx`; `./tui` and server entry resolution
+  `@opencode/plugin`'s `dist/host.js`.
+- v1 TUI plugins (`anomalyco/opencode@v1.18.29`):
+  `packages/opencode/specs/tui-plugins.md`, loader
+  `packages/opencode/src/plugin/shared.ts`.
 - v2 permission assert (upstream, open): anomalyco/opencode#46530.

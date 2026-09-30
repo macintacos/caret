@@ -1,6 +1,7 @@
 // Unit coverage for caret's OpenCode v2 `setup` adapter: tool registration, the
-// planning steer, the prewarm, the evaluate-then-refuse `path` check, the subagent
-// refusal, and abort — driven through a fake v2 plugin context and a stub runner.
+// planning steer, the `context`-hook subagent removal, the prewarm, the plan-agent allow,
+// the evaluate-then-refuse `path` check, the subagent refusal, abort, and the toast
+// progress and metadata keys — driven through a fake v2 plugin context and a stub runner.
 
 import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
@@ -8,14 +9,20 @@ import { join } from "node:path";
 
 import type { PluginInput, ToolContext as V1ToolContext } from "@opencode-ai/plugin";
 
-import { createCaretPlugin, planningSteer, REVIEW_TOOL } from "@opencode/caret.plugin.ts";
-import { createCaretSetup } from "@opencode/caret.plugin.v2.ts";
+import {
+  CARET_DECISION_KEY,
+  CARET_URL_KEY,
+  createCaretPlugin,
+  planningSteer,
+  REVIEW_TOOL,
+} from "@opencode/caret.plugin.ts";
+import { createCaretSetup, PLAN_ALLOW_RULE, withPlanAllow } from "@opencode/caret.plugin.v2.ts";
 import type { Rule } from "@opencode/permission.ts";
 import type { Plugin } from "@opencode/plugin";
 import type { ToolContext } from "@opencode/plugin/promise/tool";
 import type { SpawnRunner } from "@opencode/review-bridge.ts";
 import { fakeDistDir } from "@test/support/fs-tree.ts";
-import { stubRunner } from "@test/support/spawn-runner.ts";
+import { streamingRunner, stubRunner } from "@test/support/spawn-runner.ts";
 
 const PLANS_DIR = "/home/u/.opencode/plan";
 const ALLOW = `{"behavior":"allow"}`;
@@ -25,7 +32,10 @@ type Registered = {
   description: string;
   input: unknown;
   options?: { codemode?: boolean };
-  execute: (input: unknown, context: ToolContext) => Promise<{ content?: unknown }>;
+  execute: (
+    input: unknown,
+    context: ToolContext,
+  ) => Promise<{ content?: unknown; metadata?: unknown }>;
 };
 
 type FakeOpts = {
@@ -33,6 +43,7 @@ type FakeOpts = {
   projectDirectory?: string;
   session?: (id: string) => Promise<Record<string, unknown>>;
   agentRules?: (id: string) => Promise<Rule[]>;
+  update?: (input: { sessionID: string; permissions: Rule[] }) => Promise<void>;
 };
 
 /** A v2 plugin context that records the registered tool and hooks. */
@@ -40,6 +51,7 @@ function fakeContext(opts: FakeOpts = {}) {
   const directory = opts.directory ?? "/proj";
   const tools: Registered[] = [];
   const hooks = new Map<string, (event: unknown) => Promise<void> | void>();
+  const updates: Array<{ sessionID: string; permissions: Rule[] }> = [];
   const registration = { dispose: async () => {} };
   const ctx = {
     location: { directory, project: { directory: opts.projectDirectory ?? directory } },
@@ -54,6 +66,10 @@ function fakeContext(opts: FakeOpts = {}) {
         location: { directory },
         ...(await (opts.session ?? (async () => ({ id: sessionID })))(sessionID)),
       }),
+      update: async (input: { sessionID: string; permissions: Rule[] }) => {
+        await opts.update?.(input);
+        updates.push(input);
+      },
       hook: async (name: string, cb: (event: unknown) => Promise<void> | void) => {
         hooks.set(name, cb);
         return registration;
@@ -66,7 +82,7 @@ function fakeContext(opts: FakeOpts = {}) {
       }),
     },
   };
-  return { ctx: ctx as unknown as Plugin.Context, tools, hooks };
+  return { ctx: ctx as unknown as Plugin.Context, tools, hooks, updates };
 }
 
 async function setupWith(
@@ -159,11 +175,16 @@ test("v1 and v2 reject the same invalid inputs with identical text, never spawni
 
 // --- steer ---
 
-type ContextEvent = { agent: string; system: Array<{ type: string; text: string }> };
+type ContextEvent = {
+  agent: string;
+  system: Array<{ type: string; text: string }>;
+  sessionID?: string;
+  tools?: Record<string, unknown>;
+};
 
 async function steer(agent: string) {
   const { hooks } = await setupWith(stubRunner(ALLOW));
-  const event: ContextEvent = { agent, system: [] };
+  const event: ContextEvent = { agent, system: [], tools: { [REVIEW_TOOL]: {} } };
   await hooks.get("context")?.(event);
   return event.system;
 }
@@ -182,13 +203,139 @@ test("a context hook that cannot push resolves instead of rejecting", async () =
   await hooks.get("context")?.({ agent: "plan", system: null });
 });
 
+// --- subagent deny ---
+
+async function contextTools(session: FakeOpts["session"], agent = "build") {
+  const { hooks } = await setupWith(stubRunner(ALLOW), { session });
+  const event: ContextEvent = {
+    agent,
+    system: [],
+    sessionID: "S",
+    tools: { [REVIEW_TOOL]: {}, read: {} },
+  };
+  await hooks.get("context")?.(event);
+  return { tools: Object.keys(event.tools ?? {}).sort(), system: event.system };
+}
+
+test("the context hook removes the review tool from a subagent session's request", async () => {
+  expect((await contextTools(async () => ({ parentID: "P" }))).tools).toEqual(["read"]);
+});
+
+test("the context hook keeps the review tool for a primary session", async () => {
+  expect((await contextTools(async () => ({}))).tools).toEqual([REVIEW_TOOL, "read"].sort());
+});
+
+test("the context hook keeps the review tool when the session cannot be read", async () => {
+  const { tools } = await contextTools(async () => {
+    throw new Error("gone");
+  });
+  expect(tools).toEqual([REVIEW_TOOL, "read"].sort());
+});
+
+test("the context hook strips the tool from a plan subagent and does not steer it", async () => {
+  const { tools, system } = await contextTools(async () => ({ parentID: "P" }), "plan");
+  expect(tools).toEqual(["read"]);
+  expect(system).toEqual([]);
+});
+
+test("a steer that cannot push still removes the tool from a subagent", async () => {
+  const { hooks } = await setupWith(stubRunner(ALLOW), {
+    session: async () => ({ parentID: "P" }),
+  });
+  const event = { agent: "plan", system: null, sessionID: "S", tools: { [REVIEW_TOOL]: {} } };
+  await hooks.get("context")?.(event);
+  expect(Object.keys(event.tools)).toEqual([]);
+});
+
+test("a context event without tools resolves", async () => {
+  const { hooks } = await setupWith(stubRunner(ALLOW), {
+    session: async () => ({ parentID: "P" }),
+  });
+  await hooks.get("context")?.({ agent: "build", system: [], sessionID: "S" });
+});
+
+// --- plan-agent allow ---
+
+const DENY_ALL: Rule[] = [{ action: "*", resource: "*", effect: "deny" }];
+const DENY_TOOL: Rule[] = [{ action: REVIEW_TOOL, resource: "*", effect: "deny" }];
+
+test("withPlanAllow appends caret's allow to the session rules", () => {
+  expect(withPlanAllow(DENY_ALL, DENY_ALL)).toEqual([...DENY_ALL, PLAN_ALLOW_RULE]);
+  expect(withPlanAllow([], [])).toEqual([PLAN_ALLOW_RULE]);
+});
+
+test("withPlanAllow leaves rules that already name the tool alone", () => {
+  expect(withPlanAllow([], DENY_TOOL)).toBeUndefined();
+  expect(withPlanAllow(DENY_TOOL, [])).toBeUndefined();
+  expect(withPlanAllow([], [PLAN_ALLOW_RULE])).toBeUndefined();
+});
+
+async function grant(fake: FakeOpts) {
+  const { hooks, updates } = await setupWith(stubRunner(ALLOW), fake);
+  await hooks.get("prompt")?.({ sessionID: "S" });
+  return updates;
+}
+
+test("the prompt hook grants a plan session the review tool before it resolves", async () => {
+  const updates = await grant({
+    session: async () => ({ agent: "plan", permissions: DENY_ALL }),
+    agentRules: async () => DENY_ALL,
+    update: () => Bun.sleep(1),
+  });
+  expect(updates).toEqual([{ sessionID: "S", permissions: [...DENY_ALL, PLAN_ALLOW_RULE] }]);
+});
+
+test("the prompt hook grants nothing outside a plan session or over the user's rule", async () => {
+  expect(await grant({ session: async () => ({ agent: "build" }) })).toEqual([]);
+  expect(await grant({ session: async () => ({}) })).toEqual([]);
+  expect(await grant({ session: async () => ({ agent: "plan", permissions: DENY_TOOL }) })).toEqual(
+    [],
+  );
+  expect(
+    await grant({ session: async () => ({ agent: "plan" }), agentRules: async () => DENY_TOOL }),
+  ).toEqual([]);
+});
+
+test("a second prompt on a granted session writes nothing", async () => {
+  let permissions: Rule[] = [];
+  const { hooks, updates } = await setupWith(stubRunner(ALLOW), {
+    session: async () => ({ agent: "plan", permissions }),
+    update: async (input) => {
+      permissions = input.permissions;
+    },
+  });
+  await hooks.get("prompt")?.({ sessionID: "S" });
+  await hooks.get("prompt")?.({ sessionID: "S" });
+  expect(updates).toHaveLength(1);
+});
+
+test("the prompt hook swallows a failing agent read or session write", async () => {
+  const fail = async () => {
+    throw new Error("boom");
+  };
+  const planSession = async () => ({ agent: "plan" });
+  expect(await grant({ session: planSession, agentRules: fail })).toEqual([]);
+  expect(await grant({ session: planSession, update: fail })).toEqual([]);
+});
+
+test("a warm that throws still grants a plan session", async () => {
+  const { hooks, updates } = await setupWith(
+    stubRunner(ALLOW),
+    { session: async () => ({ agent: "plan" }) },
+    () => {
+      throw new Error("spawn failed");
+    },
+  );
+  await hooks.get("prompt")?.({ sessionID: "S" });
+  expect(updates).toEqual([{ sessionID: "S", permissions: [PLAN_ALLOW_RULE] }]);
+});
+
 // --- prewarm ---
 
 async function prompt(session: FakeOpts["session"]) {
   const warmed: string[] = [];
   const { hooks } = await setupWith(stubRunner(ALLOW), { session }, (bin) => warmed.push(bin));
   await hooks.get("prompt")?.({ sessionID: "S" });
-  await Bun.sleep(0);
   return warmed;
 }
 
@@ -390,4 +537,45 @@ test("a build-agent call with an inline plan spawns the review", async () => {
   const { tool } = await setupWith(stubRunner(ALLOW, () => spawned++));
   await tool.execute({ plan: "# P" }, toolContext({ agent: "build" } as Partial<ToolContext>));
   expect(spawned).toBe(1);
+});
+
+// --- toast metadata ---
+
+const URL_LINE = "caret: review this plan at http://127.0.0.1:4242/r/1\n";
+
+test("execute reports the review URL as tool progress", async () => {
+  const progressed: unknown[] = [];
+  const { tool } = await setupWith(streamingRunner(ALLOW, [URL_LINE]));
+  await tool.execute(
+    { plan: "# P" },
+    toolContext({ progress: async (m: unknown) => void progressed.push(m) }),
+  );
+  expect(progressed).toEqual([{ [CARET_URL_KEY]: "http://127.0.0.1:4242/r/1" }]);
+});
+
+test("a rejecting progress call does not stop the review", async () => {
+  const { tool } = await setupWith(streamingRunner(ALLOW, [URL_LINE]));
+  const result = await tool.execute(
+    { plan: "# P" },
+    toolContext({ progress: async () => Promise.reject(new Error("gone")) }),
+  );
+  expect(result.metadata).toEqual({ [CARET_DECISION_KEY]: "allow" });
+});
+
+test("execute returns the decision's behavior as metadata beside the content", async () => {
+  for (const behavior of ["allow", "deny"]) {
+    const { tool } = await setupWith(stubRunner(`{"behavior":"${behavior}","feedback":"x"}`));
+    const result = await tool.execute({ plan: "# P" }, toolContext());
+    expect(typeof result.content).toBe("string");
+    expect(result.metadata).toEqual({ [CARET_DECISION_KEY]: behavior });
+  }
+});
+
+test("an aborted review returns content without decision metadata", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const { tool } = await setupWith(stubRunner(ALLOW));
+  const result = await tool.execute({ plan: "# P" }, toolContext({ signal: controller.signal }));
+  expect(typeof result.content).toBe("string");
+  expect(result.metadata).toBeUndefined();
 });
