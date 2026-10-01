@@ -1,15 +1,14 @@
-// Semver comparison for caret's own version numbers — the `X.Y.Z` triple parse and
-// the strictly-newer test every upgrade check decides on. Pure TS with no imports,
-// shared by the daemon's update check and the OpenCode adapter's install-time
-// staleness verdict so both answer "is this behind?" the same way. Browser-safe: the UI
+// Semver parsing and comparison — the `X.Y.Z` triple and the strictly-newer test —
+// shared by the daemon's update check and the OpenCode adapter (its host-version read
+// and its install-time staleness verdict). Pure TS with no imports. Browser-safe: the UI
 // reaches it through `@core` to build the What's new compare link, so it must stay
 // node-free.
 
 /** A version as `[major, minor, patch]`. */
 export type VersionTriple = readonly [number, number, number];
 
-/** Semver triple `[major, minor, patch]`, or null when `v` is not `X.Y.Z` (an optional
- * leading `v` is stripped; trailing prerelease/build metadata is ignored). */
+/** `v` as a `VersionTriple`, or null when `v` is not `X.Y.Z` (an optional leading `v` is
+ * stripped; trailing prerelease/build metadata is ignored). */
 export function parseVersionTriple(v: string): VersionTriple | null {
   const m = v
     .trim()
