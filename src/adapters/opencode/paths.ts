@@ -1,10 +1,11 @@
 // Shared OpenCode config-dir + packaging-path resolution for caret's OpenCode
-// integration. caret installs into OpenCode as an entry in its plugin list (`plugin` on
-// v1, `plugins` on v2) — @macintacos/caret — plus its command files; the install writer
-// (commands/install/opencode.ts) and the doctor probe (install.ts) resolve WHERE
-// those live through this single module, so the reader and the writer can never
-// disagree about a path. It also resolves what the file-deploy era left in that config
-// dir, which install and uninstall sweep, and both hosts' plugin cache layouts.
+// integration. caret installs into OpenCode as an entry in its plugin list (`plugins`
+// when every `opencode` on PATH is v2, else `plugin`) — @macintacos/caret — plus its
+// command files; the install writer (commands/install/opencode.ts) and the doctor probe
+// (install.ts) resolve WHERE those live through this single module, so the reader and the
+// writer can never disagree about a path. It also resolves what the file-deploy era left
+// in that config dir, which install and uninstall sweep, and both hosts' plugin cache
+// layouts.
 
 import { type Dirent, existsSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";

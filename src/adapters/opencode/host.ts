@@ -21,16 +21,18 @@ export function parseOpencodeVersion(stdout: string): VersionTriple | null {
 
 /** Runs `<bin> --version`; null when the exit is non-zero, the output does not parse, or
  * the bound kills it. Never throws. */
-export function readOpencodeVersion(opts: {
+export function readOpencodeVersion({
+  bin,
+  timeoutMs = OPENCODE_VERSION_TIMEOUT_MS,
+}: {
   bin: string;
   timeoutMs?: number;
 }): VersionTriple | null {
-  const { bin } = opts;
   try {
     // Synchronous on purpose: async `Bun.spawn`'s timeout kills only the direct child, and
     // a grandchild holding stdout (npm v1's node wrapper) keeps a pipe read waiting.
     const res = Bun.spawnSync([bin, "--version"], {
-      timeout: opts.timeoutMs ?? OPENCODE_VERSION_TIMEOUT_MS,
+      timeout: timeoutMs,
       stdin: "ignore",
       stderr: "ignore",
     });
@@ -87,16 +89,16 @@ export function readOpencodeHosts(
   }));
 }
 
-/** The version that stands for every host when each reads and all share a major — all the
- * key, config-filename, and cache-layout rules turn on. Null for no host, an unreadable
- * one, or v1 beside v2; each rule answers null with what every OpenCode loads. */
+/** The first host's version when every host reads and all sit on the same side of v2,
+ * else null (none found, one unreadable, or v1 beside v2). Only its v1/v2-ness is
+ * meaningful — all the key, config-filename, and cache-layout rules read — and each
+ * rule answers null with what every OpenCode loads. */
 export function sharedHost(hosts: readonly OpencodeHost[]): VersionTriple | null {
-  const versions = hosts.map((h) => h.version);
-  const [first] = versions;
-  if (first == null || versions.some((v) => v === null || isV2Host(v) !== isV2Host(first))) {
-    return null;
-  }
-  return first;
+  const first = hosts[0]?.version ?? null;
+  if (first === null) return null;
+  return hosts.every((h) => h.version !== null && isV2Host(h.version) === isV2Host(first))
+    ? first
+    : null;
 }
 
 /** Each host as "OpenCode 2.0.18 at /a/opencode" or "couldn't read `/b/opencode --version`",
@@ -173,7 +175,7 @@ export function hostCheck(
   const wrongKey = keys.find((k) => k !== pluginKeyFor(sharedHost(hosts)));
   if (wrongKey === "plugins") {
     faults.push(
-      `caret is in \`plugins\`, which OpenCode v1 never loads (before 1.18.16 it refuses to start with the key)`,
+      "caret is in `plugins`, which only OpenCode v2 loads, and not every `opencode` on PATH reads as v2 (v1 before 1.18.16 refuses to start with the key)",
     );
     remedies.push("run `caret install`");
   } else if (wrongKey === "plugin") {

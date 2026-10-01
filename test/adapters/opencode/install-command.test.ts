@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 
 import { parse as parseJsonc } from "jsonc-parser";
 
@@ -711,7 +711,7 @@ async function installOn(overrides: InstallOpencodeDeps, local?: string): Promis
 test("a v1 behind a v2 on PATH gets plugin, which both load", async () => {
   const v2 = writeOpencodeShim(join(dir, "v2"), "echo opencode v2.0.18");
   const v1 = writeOpencodeShim(join(dir, "v1"), "echo 1.18.15");
-  const said = await withEnv({ PATH: `${join(dir, "v2")}:${join(dir, "v1")}` }, () =>
+  const said = await withEnv({ PATH: [join(dir, "v2"), join(dir, "v1")].join(delimiter) }, () =>
     transcript({ opencodeHosts: undefined }),
   );
   expect(said).toContain(`OpenCode 2.0.18 at ${v2}, OpenCode 1.18.15 at ${v1}`);

@@ -176,7 +176,10 @@ test("the host check fails caret in plugins with v1 beside v2", () => {
 });
 
 test("the host check fails caret in plugins when one host can't be read", () => {
-  expect(hostCheck([at([2, 0, 18]), at(null, "/x/opencode")], ["plugins"], []).status).toBe("fail");
+  const check = hostCheck([at([2, 0, 18]), at(null, "/x/opencode")], ["plugins"], []);
+  expect(check.status).toBe("fail");
+  expect(check.detail).toContain("not every `opencode` on PATH reads as v2");
+  expect(check.detail).not.toContain("OpenCode v1 never loads");
 });
 
 test("the host check is unknown with no host or none readable", () => {

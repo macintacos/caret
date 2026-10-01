@@ -1,11 +1,11 @@
 // caret's OpenCode install target. `caret install` makes caret an entry in the host's
-// plugin key (`plugins` when every `opencode` on PATH is v2, else `plugin`) — OpenCode installs it and its deps into its
-// own cache and loads it — and
-// deploys the `/caret:*` command files (which aren't array-installable). `--uninstall`
-// reverses both. Either arm also sweeps the plugin and command FILES an older caret
-// deployed into the config dir: OpenCode still loads them, so a leftover plugin file
-// would register a second review tool beside the array entry. The config-array edit is
-// comment-preserving (config-plugin.ts).
+// plugin key (`plugins` when every `opencode` on PATH is v2, else `plugin`) — OpenCode
+// installs it and its deps into its own cache and loads it — and deploys the `/caret:*`
+// command files (which aren't array-installable). `--uninstall` reverses both. Either
+// arm also sweeps the plugin and command FILES an older caret deployed into the config
+// dir: OpenCode still loads them, so a leftover plugin file would register a second
+// review tool beside the array entry. The config-array edit is comment-preserving
+// (config-plugin.ts).
 //
 // caret owns exactly one entry across both keys and every global config file, in one of
 // two forms: the npm package (@macintacos/caret), or `file:<checkout>` under
@@ -155,15 +155,16 @@ function bumpPin(version: string): ConfigEdit["transform"] {
   };
 }
 
-/** The line naming the host install found and the key it writes; `movedFrom` is the other
- * key when caret had an entry there. */
-function hostLine(
-  hosts: readonly OpencodeHost[],
-  key: PluginKey,
-  movedFrom: PluginKey | null,
-): string {
-  const every = sharedHost(hosts) === null ? ", which every OpenCode loads" : "";
-  const found = `${describeHosts(hosts)} — writing caret to ${key}${every}`;
+/** The line naming every `opencode` install found and the key it writes; `movedFrom` is the
+ * other key when caret had an entry there. */
+function hostLine({
+  hosts,
+  version,
+  key,
+  movedFrom,
+}: Pick<Placement, "hosts" | "version" | "key" | "movedFrom">): string {
+  const loadedByAll = version === null ? ", which every OpenCode loads" : "";
+  const found = `${describeHosts(hosts)} — writing caret to ${key}${loadedByAll}`;
   return movedFrom === null ? found : `${found} (moved from ${movedFrom})`;
 }
 
@@ -178,11 +179,13 @@ interface OpencodeSetup {
   legacy: string[];
 }
 
-/** Where an install puts caret on this host. */
+/** Where an install puts caret for the `opencode` binaries on PATH. */
 interface Placement {
   /** The form this run installs: the package name, or `file:<checkout>`. */
   specifier: string;
+  /** Every `opencode` on PATH and what each read as. */
   hosts: readonly OpencodeHost[];
+  /** `sharedHost(hosts)`: the one version the key, file and cache rules read. */
   version: VersionTriple | null;
   key: PluginKey;
   movedFrom: PluginKey | null;
@@ -191,7 +194,7 @@ interface Placement {
   writtenSpec: string;
   /** The config file caret is written into. */
   target: string;
-  /** The existing config files this host loads. */
+  /** The existing config files every `opencode` on PATH loads. */
   loadedFiles: string[];
 }
 
@@ -342,11 +345,7 @@ async function previewInstall(
     : [];
   // The specifier is the one thing a preview can't be read off the paths: `--from-local`
   // and a published install write the same file with very different content.
-  const entry = [
-    "",
-    `plugin entry: ${placed.specifier} → ${placed.key}`,
-    hostLine(placed.hosts, placed.key, placed.movedFrom),
-  ];
+  const entry = ["", `plugin entry: ${placed.specifier} → ${placed.key}`, hostLine(placed)];
   const changed = strictPlan(installEdits(setup, placed)).map((e) => e.path);
   const note = ignoredConfigNote(setup, placed, changed);
   if (note !== null) entry.push(note);
@@ -390,8 +389,8 @@ async function installOpencode(
 ): Promise<void> {
   const { dir, pkg, ui, legacy } = setup;
   const placed = readPlacement(setup, opts.local, deps.opencodeHosts ?? readOpencodeHosts);
-  const { specifier, hosts, key, movedFrom, writtenSpec, target } = placed;
-  ui.info(hostLine(hosts, key, movedFrom));
+  const { specifier, key, writtenSpec, target } = placed;
+  ui.info(hostLine(placed));
   const changed = await ui.step(
     `Adding ${specifier} to OpenCode's ${key} array`,
     async () => writeConfigEdits(strictPlan(installEdits(setup, placed))),

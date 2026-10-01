@@ -9,9 +9,10 @@ import { join } from "node:path";
 
 import { withEnv } from "@test/support/env.ts";
 import { readOpencodeChecks } from "@/adapters/opencode/checks.ts";
-import type { VersionTriple } from "@/lib/semver.ts";
+import type { OpencodeHost } from "@/adapters/opencode/host.ts";
 
 const PKG = "@macintacos/caret";
+const V2 = (): OpencodeHost[] => [{ bin: "/v2/opencode", version: [2, 0, 18] }];
 
 let tmp: string;
 beforeEach(async () => {
@@ -33,7 +34,7 @@ test("a config with no caret entry runs no check and never reads the host versio
     configFiles: [configWith({ plugin: ["opencode-wakatime"] })],
     opencodeHosts: () => {
       asked = true;
-      return [{ bin: "/v2/opencode", version: [2, 0, 18] }];
+      return V2();
     },
   });
   expect(checks).toEqual([]);
@@ -46,7 +47,7 @@ test("a checkout-only config gets the host check alone", async () => {
   writeFileSync(join(checkout, "opencode", "caret.plugin.ts"), "");
   const checks = await readOpencodeChecks({
     configFiles: [configWith({ plugins: [`file:${checkout}`] })],
-    opencodeHosts: () => [{ bin: "/v2/opencode", version: [2, 0, 18] }],
+    opencodeHosts: V2,
   });
   expect(checks.map((c) => c.id)).toEqual(["opencode-host"]);
 });
@@ -54,13 +55,12 @@ test("a checkout-only config gets the host check alone", async () => {
 test("a tarball-only config gets the host check alone", async () => {
   const checks = await readOpencodeChecks({
     configFiles: [configWith({ plugins: [`file:${tmp}/macintacos-caret-1.2.3.tgz`] })],
-    opencodeHosts: () => [{ bin: "/v2/opencode", version: [2, 0, 18] }],
+    opencodeHosts: V2,
   });
   expect(checks.map((c) => c.id)).toEqual(["opencode-host"]);
 });
 
 test("a package entry gets both checks, the version read from the host's cache layout", async () => {
-  const v2: VersionTriple = [2, 0, 18];
   const gen = join(tmp, "opencode", "npm", `${PKG}@latest`, "1");
   mkdirSync(join(gen, "node_modules", PKG), { recursive: true });
   writeFileSync(
@@ -70,7 +70,7 @@ test("a package entry gets both checks, the version read from the host's cache l
   const checks = await withEnv({ XDG_CACHE_HOME: tmp }, () =>
     readOpencodeChecks({
       configFiles: [configWith({ plugin: [PKG] })],
-      opencodeHosts: () => [{ bin: "/v2/opencode", version: v2 }],
+      opencodeHosts: V2,
       published: async () => "0.9.0",
     }),
   );
@@ -83,7 +83,7 @@ test("a caret entry in a later config file is found", async () => {
   writeFileSync(jsonc, JSON.stringify({ plugin: ["opencode-wakatime"] }));
   const checks = await readOpencodeChecks({
     configFiles: [jsonc, configWith({ plugin: [PKG] })],
-    opencodeHosts: () => [{ bin: "/v2/opencode", version: [2, 0, 18] }],
+    opencodeHosts: V2,
     published: async () => "0.9.0",
   });
   expect(checks.map((c) => c.id)).toEqual(["opencode-host", "opencode-caret-version"]);
@@ -94,7 +94,7 @@ test("v2 with caret only in config.json fails the host check alone", async () =>
   writeFileSync(legacy, JSON.stringify({ plugins: [PKG] }));
   const checks = await readOpencodeChecks({
     configFiles: [legacy],
-    opencodeHosts: () => [{ bin: "/v2/opencode", version: [2, 0, 18] }],
+    opencodeHosts: V2,
     published: async () => "0.9.0",
   });
   expect(checks).toEqual([
@@ -111,7 +111,7 @@ test("v2 with a stale caret in config.json beside opencode.json fails the host c
   writeFileSync(legacy, JSON.stringify({ plugins: [PKG] }));
   const checks = await readOpencodeChecks({
     configFiles: [configWith({ plugins: [PKG] }), legacy],
-    opencodeHosts: () => [{ bin: "/v2/opencode", version: [2, 0, 18] }],
+    opencodeHosts: V2,
     published: async () => "0.9.0",
   });
   expect(checks.map((c) => c.id)).toEqual(["opencode-host", "opencode-caret-version"]);
@@ -119,9 +119,9 @@ test("v2 with a stale caret in config.json beside opencode.json fails the host c
   expect(checks[0]?.detail).toContain("config.json");
 });
 
-const MIXED = () => [
-  { bin: "/v1/opencode", version: [1, 18, 15] as VersionTriple },
-  { bin: "/v2/opencode", version: [2, 0, 18] as VersionTriple },
+const MIXED = (): OpencodeHost[] => [
+  { bin: "/v1/opencode", version: [1, 18, 15] },
+  { bin: "/v2/opencode", version: [2, 0, 18] },
 ];
 
 test("v1 beside v2 passes caret in plugin, naming both", async () => {
@@ -138,17 +138,39 @@ test("v1 beside v2 passes caret in plugin, naming both", async () => {
   expect(host?.detail).toContain("/v2/opencode");
 });
 
-test("v1 beside v2 fails caret in config.json as ignored by v2", async () => {
+/** doctor's checks for caret's package entry alone in `config.json`, off the network. */
+function checksForLegacyConfig(hosts: OpencodeHost[]) {
   const legacy = join(tmp, "config.json");
   writeFileSync(legacy, JSON.stringify({ plugin: [PKG] }));
-  const checks = await withEnv({ XDG_CACHE_HOME: tmp }, () =>
+  return withEnv({ XDG_CACHE_HOME: tmp }, () =>
     readOpencodeChecks({
       configFiles: [legacy],
-      opencodeHosts: MIXED,
+      opencodeHosts: () => hosts,
       published: async () => "0.9.0",
     }),
   );
+}
+
+test("v1 beside v2 fails caret in config.json as ignored by v2", async () => {
+  const host = (await checksForLegacyConfig(MIXED())).find((c) => c.id === "opencode-host");
+  expect(host?.status).toBe("fail");
+  expect(host?.detail).toContain("config.json, which OpenCode v2 doesn't load");
+});
+
+test("v2 beside an unreadable opencode fails caret in config.json as ignored by v2", async () => {
+  const checks = await checksForLegacyConfig([...V2(), { bin: "/x/opencode", version: null }]);
   const host = checks.find((c) => c.id === "opencode-host");
   expect(host?.status).toBe("fail");
   expect(host?.detail).toContain("config.json, which OpenCode v2 doesn't load");
+});
+
+test("v1 beside an unreadable opencode loads caret from config.json", async () => {
+  const checks = await checksForLegacyConfig([
+    { bin: "/v1/opencode", version: [1, 18, 15] },
+    { bin: "/x/opencode", version: null },
+  ]);
+  expect(checks.map((c) => [c.id, c.status])).toEqual([
+    ["opencode-host", "pass"],
+    ["opencode-caret-version", "pass"],
+  ]);
 });

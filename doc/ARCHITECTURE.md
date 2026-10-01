@@ -274,22 +274,22 @@ Claude hooks table above — so your first review doesn't wait on a cold start.
 caret installs into OpenCode as a plugin array entry. `caret install` probes every
 `opencode` on `PATH` (each bounded at 5 s) and adds `@macintacos/caret` to your OpenCode
 config's `plugins` array only when all of them are v2, else its `plugin` array, which
-every OpenCode loads — comment-preserving, via `jsonc-parser`. When every one is v2, or
-the set is mixed or unreadable, it writes the first of `opencode.jsonc` and
-`opencode.json` that exists, else a new `opencode.json` — never `config.json`, which v2
-ignores; a known v1 keeps the first of all three. It removes caret's entry from every
-other global config file, so OpenCode loads exactly one, and it writes nothing when a
-config file can't be read or parsed, or when an edit to it would not re-parse to the
-intended config. When every `opencode` is v2 it moves an existing `plugin` entry into
-`plugins` in the same write, keeping a pinned version: v2 loads both arrays, and two caret
-entries fail with `Duplicate plugin ID`. It deletes a `plugins` key it empties, because v1
-below 1.18.16 refuses to start with one. It also deploys the `/caret:*` command files,
-which v1 and v2 both discover. You can add the array entry by hand instead. `--uninstall`
-removes caret from both arrays of every global config file. Install and uninstall both
-remove the plugin and command files older caret versions deployed into that config dir:
-OpenCode still loads them, so a leftover plugin file would register a second review tool
-beside the array entry. The config dir's own `package.json` is left alone — it may belong
-to another of your plugins. On its next start OpenCode installs the package and its
+every OpenCode loads — comment-preserving, via `jsonc-parser`. Unless every one reads as
+v1, it writes the first of `opencode.jsonc` and `opencode.json` that exists, else a new
+`opencode.json` — never `config.json`, which v2 ignores; a `PATH` whose every `opencode`
+reads as v1 keeps the first of all three. It removes caret's entry from every other global
+config file, so OpenCode loads exactly one, and it writes nothing when a config file can't
+be read or parsed, or when an edit to it would not re-parse to the intended config. When
+every `opencode` is v2 it moves an existing `plugin` entry into `plugins` in the same
+write, keeping a pinned version: v2 loads both arrays, and two caret entries fail with
+`Duplicate plugin ID`. It deletes a `plugins` key it empties, because v1 below 1.18.16
+refuses to start with one. It also deploys the `/caret:*` command files, which v1 and v2
+both discover. You can add the array entry by hand instead. `--uninstall` removes caret
+from both arrays of every global config file. Install and uninstall both remove the plugin
+and command files older caret versions deployed into that config dir: OpenCode still loads
+them, so a leftover plugin file would register a second review tool beside the array
+entry. The config dir's own `package.json` is left alone — it may belong to another of
+your plugins. On its next start OpenCode installs the package and its
 `@opencode-ai/plugin` dependency into its own cache and loads it — caret writes no
 config-dir manifest and runs no `bun install` itself. The plugin resolves the caret binary
 and its own version at runtime from the package it ships in (`CARET_OPENCODE_BIN`

@@ -389,16 +389,16 @@ rather than read because under `bunx` the install-time root is a temp dir.
 ## Distribution choice (amended by EXC-794)
 
 caret installs into OpenCode as a first-class plugin array entry —
-`plugin: ["@macintacos/caret"]` on v1, `plugins: ["@macintacos/caret"]` on v2 — which
-OpenCode installs (package + deps) into its own cache and loads. The
-**package entrypoint is the plugin** (`package.json` `exports` `.` → `opencode/index.ts`),
-so a **bare** specifier loads it: Bun's dynamic `import()` does not support subpath
-imports, and OpenCode's `parsePluginSpecifier` yields only `{ pkg, version }`, so a
-`@macintacos/caret/opencode` subpath is not viable. The plugin's runtime import
-(`@opencode-ai/plugin`, for `tool.schema`'s zod — zod is not cross-instance-compatible, so
-the tool's args must use OpenCode's zod) is a real `dependency` now, so OpenCode's install
-provides it. The compiled caret binary stays lean regardless: `src/` never imports
-`@opencode-ai/plugin`, so the bundler doesn't pull it in.
+`plugins: ["@macintacos/caret"]` when every `opencode` on `PATH` is v2, else
+`plugin: ["@macintacos/caret"]` — which OpenCode installs (package + deps) into its own
+cache and loads. The **package entrypoint is the plugin** (`package.json` `exports` `.` →
+`opencode/index.ts`), so a **bare** specifier loads it: Bun's dynamic `import()` does not
+support subpath imports, and OpenCode's `parsePluginSpecifier` yields only
+`{ pkg, version }`, so a `@macintacos/caret/opencode` subpath is not viable. The plugin's
+runtime import (`@opencode-ai/plugin`, for `tool.schema`'s zod — zod is not
+cross-instance-compatible, so the tool's args must use OpenCode's zod) is a real
+`dependency` now, so OpenCode's install provides it. The compiled caret binary stays lean
+regardless: `src/` never imports `@opencode-ai/plugin`, so the bundler doesn't pull it in.
 
 **EXC-794 amended the original decision.** The spike had rejected option (c) — "publishing
 a second npm package + mutating the user's `plugin` array" — as too heavy. But caret
@@ -468,22 +468,23 @@ empties `plugins` deletes the key, because v1 below 1.18.16 rejects any `plugins
 `opencode plugin add` does, and every reader also accepts a `{ "package": … }` object
 item.
 
-When every binary is v2, or the set is mixed or unreadable, install writes into the first
-of `opencode.jsonc` and `opencode.json` that exists, else creates `opencode.json`, and
-never into `config.json`, which v2 ignores; a known v1 keeps the first of all three
-(`resolveConfigFile`). A pin in a file the host loads wins over one in a file it ignores.
-Every other existing global config loses caret's entry (`stripCaret`), the other files
-first and the target last, so a failure in between leaves no caret entry rather than two.
-`planConfigEdits` checks every file before `writeConfigEdits` touches one. A file is
-uneditable when it fails to read or parse, or when its edit does not re-parse to the
-intended value: a duplicate `plugins` key parses to its last value while edits land on the
-first. Install's step then refuses and writes nothing; uninstall clears every file it can
-and warns about each one it leaves. Two config names that resolve to one file, a symlink
-alias, count once under the earlier name (`existingConfigFiles`). The dry run lists the
-files that change, and a failed later write names the files already changed. Doctor reads
-every existing global config; caret in a file the host does not load fails
-`opencode-host`, and when caret sits only in such files the `opencode-caret-version` check
-is skipped. With any unreadable binary every file counts as loaded.
+Unless every `opencode` on `PATH` reads as v1, install writes into the first of
+`opencode.jsonc` and `opencode.json` that exists, else creates `opencode.json`, and never
+into `config.json`, which v2 ignores; a `PATH` whose every `opencode` reads as v1 keeps
+the first of all three (`resolveConfigFile`). A pin in a file the host loads wins over one
+in a file it ignores. Every other existing global config loses caret's entry
+(`stripCaret`), the other files first and the target last, so a failure in between leaves
+no caret entry rather than two. `planConfigEdits` checks every file before
+`writeConfigEdits` touches one. A file is uneditable when it fails to read or parse, or
+when its edit does not re-parse to the intended value: a duplicate `plugins` key parses to
+its last value while edits land on the first. Install's step then refuses and writes
+nothing; uninstall clears every file it can and warns about each one it leaves. Two config
+names that resolve to one file, a symlink alias, count once under the earlier name
+(`existingConfigFiles`). The dry run lists the files that change, and a failed later write
+names the files already changed. Doctor reads every existing global config; caret in a
+file the host does not load fails `opencode-host`, and when caret sits only in such files
+the `opencode-caret-version` check is skipped. Doctor counts a file as ignored only when
+it finds a readable v2; with none, every file counts as loaded.
 
 caret deletes a changed plugin array's elements one by one, with the same comment-keeping
 range cut it uses for an emptied `plugins` key, because no jsonc-parser release deletes an
@@ -545,10 +546,11 @@ doctor's `opencode-host` check (`hostCheck` in `host.ts`, composed in `readOpenc
 in `checks.ts`) runs whenever caret has an entry in either key, the `file:` form included.
 It lists every `opencode` it finds and judges the key by the rule install uses, so a mixed
 v1/v2 `PATH` passes with `plugin`. It fails for each v1 below 1.3.4 (the dual export's
-floor, § The export surface), for caret in `plugins` on a v1, which v1 never loads (before
-1.18.16 it refuses to start with the key), for caret in `plugin` on a v2, and for caret in
-a config file the host does not load (`config.json` on v2). Each remedy is
-`caret install`. It reports `unknown` when no binary is found or none can be read.
+floor, § The export surface), for caret in `plugins` unless every `opencode` reads as v2,
+since v1 never loads it (before 1.18.16 it refuses to start with the key), for caret in
+`plugin` when every one is v2, and for caret in a config file the host does not load
+(`config.json` on v2). Each remedy is `caret install`. It reports `unknown` when no binary
+is found or none can be read.
 
 ## Runtime resolution + update check (EXC-794)
 

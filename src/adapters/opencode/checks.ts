@@ -5,6 +5,7 @@
 import { isCaretCheckout, readCaretEntries } from "@/adapters/opencode/entries.ts";
 import {
   hostCheck,
+  isV2Host,
   loadedConfigFiles,
   type OpencodeHost,
   sharedHost,
@@ -26,11 +27,10 @@ export async function readOpencodeChecks(deps: {
 }): Promise<Check[]> {
   if (readCaretEntries(deps.configFiles, isCaretCheckout).length === 0) return [];
   const hosts = deps.opencodeHosts();
-  // An unreadable version can't say a file is ignored.
+  // Only a known v2 ignores a file; an unreadable version can't say one is ignored.
+  const v2 = hosts.find((h) => isV2Host(h.version));
   const loadedFiles =
-    hosts.length === 0 || hosts.some((h) => h.version === null)
-      ? deps.configFiles
-      : loadedConfigFiles(deps.configFiles, sharedHost(hosts));
+    v2 === undefined ? deps.configFiles : loadedConfigFiles(deps.configFiles, v2.version);
   const ignored = deps.configFiles.filter(
     (f) => !loadedFiles.includes(f) && readCaretEntries([f], isCaretCheckout).length > 0,
   );
