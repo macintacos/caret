@@ -129,6 +129,7 @@ function setCaretPluginEntry(
     entries.find((e) => e.key === key && e.spec === spec) ?? entries.find((e) => e.key === key);
   const others = entries.filter((e) => e !== kept);
   if (kept === undefined) return addPluginToConfigText(dropEntries(text, others), spec, key);
+  // The swap changes no array's length, so `others`' indices, read from `text`, hold in `placed`.
   const placed =
     kept.spec === spec ? text : setPluginItemSpec(text, { key, index: kept.index, spec });
   return dropEntries(placed, others);
@@ -205,7 +206,8 @@ interface PlannedWrite {
 
 interface ConfigPlan {
   planned: PlannedWrite[];
-  /** Each existing file that can't be read or fails to parse; never planned. */
+  /** Each existing file that can't be read, fails to parse, or whose edit misses its intent;
+   * never planned. */
   uneditable: { path: string; reason: string }[];
 }
 
@@ -366,7 +368,7 @@ async function uninstallOpencode(setup: OpencodeSetup): Promise<void> {
       if (changed.length > 0)
         return `Removed caret from ${changed.map((p) => basename(p)).join(", ")}`;
       return uneditable.length > 0
-        ? "caret was not in any readable OpenCode config"
+        ? "caret was not in any editable OpenCode config"
         : "caret was not in any OpenCode config";
     },
   );

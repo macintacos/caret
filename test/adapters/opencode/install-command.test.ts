@@ -441,6 +441,13 @@ test("--from-local replaces a pinned npm entry so only one caret plugin loads", 
   expect(plugins()).toEqual(["someone-else", `file:${repo}`]);
 });
 
+test("--from-local keeps caret's slot in the array when it replaces a pinned entry", async () => {
+  const repo = checkout("repo");
+  seedPlugins([`${CARET_PACKAGE}@0.7.3`, "someone-else"]);
+  await installLocal(repo);
+  expect(plugins()).toEqual([`file:${repo}`, "someone-else"]);
+});
+
 test("--from-local is idempotent", async () => {
   const repo = checkout("repo");
   await installLocal(repo);
@@ -1006,10 +1013,10 @@ test("uninstall warns past a config it cannot read and clears the rest", async (
   expect(said).toMatch(/warn:.*config\.json/);
 });
 
-test("uninstall that could only skip caret's file says no readable config held it", async () => {
+test("uninstall that could only skip caret's file says no editable config held it", async () => {
   writeFileSync(configFile("config.json"), `{ "plugin": ["${CARET_PACKAGE}"`);
   const said = await transcript({}, { uninstall: true });
-  expect(said).toContain("caret was not in any readable OpenCode config");
+  expect(said).toContain("caret was not in any editable OpenCode config");
 });
 
 test("a failed later write names the files already changed", async () => {
@@ -1032,5 +1039,6 @@ test("uninstall leaves a config whose edit does not re-parse to its intended val
   writeFileSync(configJson(), src);
   const said = await transcript({}, { uninstall: true });
   expect(said).toMatch(/opencode\.json can't be edited/);
+  expect(said).toContain("caret was not in any editable OpenCode config");
   expect(readFileSync(configJson(), "utf-8")).toBe(src);
 });

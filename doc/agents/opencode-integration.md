@@ -452,30 +452,32 @@ of every global config file.
 
 `readPlacement` picks the spec install writes with `keptEntry` — the first pinned entry of
 the installed form, else the first, read from the files the host loads before any it
-ignores — and `setCaretPluginEntry` writes that spec into the target's host key, dropping
-every other caret item in that file, a pin included. That move is load-bearing: v2
-concatenates a leftover `plugin` array ahead of `plugins`, and two caret entries fail with
-`Duplicate plugin ID: caret`. A removal that empties `plugins` deletes the key, because v1
-below 1.18.16 rejects any `plugins` key, `[]` included; an emptied `plugin: []` stays.
-caret writes a bare string item, as v2's own `opencode plugin add` does, and every reader
-also accepts a `{ "package": … }` object item.
+ignores — and `setCaretPluginEntry` writes that spec into the target's host key, swapping
+a caret entry already in that key in place, so the key, its comment, and caret's array
+slot stay where they are, and dropping every other caret item in that file, a pin
+included. That move is load-bearing: v2 concatenates a leftover `plugin` array ahead of
+`plugins`, and two caret entries fail with `Duplicate plugin ID: caret`. A removal that
+empties `plugins` deletes the key, because v1 below 1.18.16 rejects any `plugins` key,
+`[]` included; an emptied `plugin: []` stays. caret writes a bare string item, as v2's own
+`opencode plugin add` does, and every reader also accepts a `{ "package": … }` object
+item.
 
 v2 and an unreadable version write into the first of `opencode.jsonc` and `opencode.json`
 that exists, else create `opencode.json`, and never into `config.json`, which v2 ignores;
 a known v1 keeps the first of all three (`resolveConfigFile`). A pin in a file the host
 loads wins over one in a file it ignores. Every other existing global config loses caret's
 entry (`stripCaret`), the other files first and the target last, so a failure in between
-leaves no caret entry rather than two. `planConfigEdits` parse-checks every file before
-`writeConfigEdits` touches one, and counts a file as uneditable too when its edit does not
-re-parse to the intended value (a duplicate `plugins` key parses to its last value while
-edits land on the first), so that step writes nothing: install's step refuses when any
-file is uneditable, while uninstall clears every file it can and warns about each one it
-leaves. Two config names that resolve to one file, a symlink alias, count once under the
-earlier name (`existingConfigFiles`). The dry run lists the files that change, and a
-failed later write names the files already changed. Doctor reads every existing global
-config; caret in a file the host does not load fails `opencode-host`, and when caret sits
-only in such files the `opencode-caret-version` check is skipped. With an unreadable
-version every file counts as loaded.
+leaves no caret entry rather than two. `planConfigEdits` checks every file before
+`writeConfigEdits` touches one. A file is uneditable when it fails to read or parse, or
+when its edit does not re-parse to the intended value: a duplicate `plugins` key parses to
+its last value while edits land on the first. Install's step then refuses and writes
+nothing; uninstall clears every file it can and warns about each one it leaves. Two config
+names that resolve to one file, a symlink alias, count once under the earlier name
+(`existingConfigFiles`). The dry run lists the files that change, and a failed later write
+names the files already changed. Doctor reads every existing global config; caret in a
+file the host does not load fails `opencode-host`, and when caret sits only in such files
+the `opencode-caret-version` check is skipped. With an unreadable version every file
+counts as loaded.
 
 caret deletes a changed plugin array's elements one by one, with the same comment-keeping
 range cut it uses for an emptied `plugins` key, because no jsonc-parser release deletes an

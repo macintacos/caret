@@ -362,6 +362,17 @@ test("add indents an appended element the way its siblings are", () => {
       addPluginToConfigText(`${header}{\n  "plugin": [\n    "a"\n  ]\n}\n`, "b", "plugin"),
     ).toBe(`${header}{\n  "plugin": [\n    "a",\n    "b"\n  ]\n}\n`);
   }
+  expect(
+    addPluginToConfigText('/*\n\t"note"\n*/\n{\n  "plugin": [\n    "a"\n  ]\n}\n', "b", "plugin"),
+  ).toBe('/*\n\t"note"\n*/\n{\n  "plugin": [\n    "a",\n    "b"\n  ]\n}\n');
+  const inner = '{\n  /*\n      "old": 1\n  */\n  "plugin": [\n    "a"\n  ]\n}\n';
+  expect(addPluginToConfigText(inner, "b", "plugin")).toBe(
+    '{\n  /*\n      "old": 1\n  */\n  "plugin": [\n    "a",\n    "b"\n  ]\n}\n',
+  );
+  const absent = '{\n  /*\n\t"old": 1\n  */\n  "theme": "x"\n}\n';
+  expect(addPluginToConfigText(absent, "b", "plugin")).toStartWith(
+    '{\n  /*\n\t"old": 1\n  */\n  "theme": "x",\n  "plugin"',
+  );
 });
 
 // Minimal comment stripper so a jsonc body can be JSON.parsed for structural checks.
@@ -411,9 +422,9 @@ test("an item swap that does not re-parse to its intended value throws", () => {
 });
 
 test("add and drop edit a BOM-prefixed config", () => {
-  const src = `﻿{ "plugins": ["a"] }`;
+  const src = `\uFEFF{ "plugins": ["a"] }`;
   expect(addPluginToConfigText(src, PKG, "plugins")).toContain(PKG);
-  expect(dropCaret(`﻿{ "plugins": ["a", "${PKG}"] }`, "plugins")).not.toContain(PKG);
+  expect(dropCaret(`\uFEFF{ "plugins": ["a", "${PKG}"] }`, "plugins")).not.toContain(PKG);
 });
 
 test("add edits an empty file", () => {
