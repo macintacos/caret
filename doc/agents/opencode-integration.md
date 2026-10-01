@@ -611,10 +611,11 @@ v1 plugin, `caret.plugin.ts`'s default) and ignores `setup` (the v2 plugin,
 accept. The v1 floor is **1.3.4**, the first v1 loader that reads an object default's
 `server`; an older v1 sees a non-function export and fails to load the plugin.
 
-`@opencode/plugin` (v2's plugin API) is a `dependency` but imported **for types only**.
-Its `Plugin.define` is the identity function, and its runtime entry would pull Effect and
-OpenCode's client into the module graph — which `index.ts → caret.plugin.v2.ts` loads on
-v1 hosts too.
+`@opencode/plugin` (v2's plugin API) is a `devDependency`. `caret.plugin.v2.ts` and
+`caret.tui.ts` declare the v2 members they use as local structural types, and
+`test/opencode/sdk-conformance.ts` checks them against the SDK in both directions inside
+the tsc program. Its runtime entry would pull Effect and OpenCode's client into the module
+graph — which `index.ts → caret.plugin.v2.ts` loads on v1 hosts too.
 
 **v2's toasts live in a second module, `opencode/caret.tui.ts`, under
 `exports["./tui"]`.** v2's server `Context` has no toast surface; toasts belong to a TUI

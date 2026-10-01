@@ -49,19 +49,23 @@ digraph caret_dependency_placement {
     "devDependencies" [shape=box];
 
     "Adding a package" -> "Reachable from opencode/?";
-    "Reachable from opencode/?" -> "dependencies" [label="yes — opencode/ ships as source, so a consumer's install must resolve it"];
+    "Reachable from opencode/?" -> "dependencies" [label="yes, imported at runtime — opencode/ ships as source, so a consumer's install must resolve it"];
     "Reachable from opencode/?" -> "devDependencies" [label="no — src/ and ui/src/ are bundled; scripts/ and test/ never ship"];
 }
 ```
 
-*Reachable* means imported from `opencode/`, or a **non-optional** peer of something that
-is — a peer obligation has no import site of its own, so it belongs wherever the package
-declaring it belongs. Optional peers are not reachable: `@opencode-ai/plugin` declares
-three `@opentui/*` peers as optional, which is why caret declares none of them.
+*Reachable* means imported **at runtime** from `opencode/`, or a **non-optional** peer of
+something that is — a peer obligation has no import site of its own, so it belongs
+wherever the package declaring it belongs. Optional peers are not reachable:
+`@opencode-ai/plugin` declares three `@opentui/*` peers as optional, which is why caret
+declares none of them. A statement TypeScript erases — `import type { X } from` or
+`export type { X } from` — does not count; `import { type X } from` survives as
+`import {} from` under `verbatimModuleSyntax`, so it does.
 
 [`../../test/structure/dependency-placement.test.ts`](../../test/structure/dependency-placement.test.ts)
-is the falsifier: it derives the reachable set from `opencode/`'s own imports and fails on
-a `dependencies` that holds anything else, so a package placed by copying a neighbour reds
+is the falsifier: it derives the reachable set from `opencode/`'s runtime imports
+(`runtimeImportSpecifiers` in `test/support/import-specifiers.ts`) and fails on a
+`dependencies` that holds anything else, so a package placed by copying a neighbour reds
 on the push that adds it. A **reachable** peer obligation has no import site to derive, so
 it would go in the suite's expected set by hand; the header records that condition and why
 the term is empty today.
