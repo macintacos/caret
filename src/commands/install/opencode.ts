@@ -136,6 +136,25 @@ function hostLine(
   return movedFrom === null ? found : `${found} (moved from ${movedFrom})`;
 }
 
+/** What every arm reads before it branches. */
+interface OpencodeSetup {
+  dir: string;
+  pkg: OpencodePackaging;
+  ui: InstallUI;
+  isCheckout: (dir: string) => boolean;
+  configFile: string;
+  legacy: string[];
+}
+
+/** Where an install puts caret: see `placement`. */
+interface Placement {
+  specifier: string;
+  version: VersionTriple | null;
+  key: PluginKey;
+  movedFrom: PluginKey | null;
+  writtenSpec: string;
+}
+
 /** Install (or, with `uninstall`, remove) caret into OpenCode: write caret's entry to
  * the key the host loads, or remove it from both, deploy/remove the `/caret:*` command
  * files, and sweep whatever the file-deploy era left in the config dir.
@@ -146,72 +165,114 @@ export async function runInstallOpencodeTarget(
   deps: InstallOpencodeDeps = {},
 ): Promise<void> {
   const dir = deps.configDir ?? opencodeConfigDir();
-  const pkg = deps.packaging ?? loadOpencodePackaging();
-  const ui = deps.ui ?? silentUI;
-  const isCheckout = deps.isCheckout ?? isCaretCheckout;
-  const configFile = resolveConfigFile(dir);
-  const commandPaths = pkg.commands.map((c) =>
-    join(commandDir(dir), namespacedCommandFilename(c.name)),
-  );
-  const legacy = existingLegacyInstallFiles(dir);
+  const setup: OpencodeSetup = {
+    dir,
+    pkg: deps.packaging ?? loadOpencodePackaging(),
+    ui: deps.ui ?? silentUI,
+    isCheckout: deps.isCheckout ?? isCaretCheckout,
+    configFile: resolveConfigFile(dir),
+    legacy: existingLegacyInstallFiles(dir),
+  };
+  if (opts.dryRun) return previewOpencode(setup, opts, deps);
+  if (opts.uninstall) return uninstallOpencode(setup);
+  return installOpencode(setup, opts, deps);
+}
+
+/** Where an install puts caret: the entry it writes, the key the installed OpenCode
+ * loads, and the other key caret moves out of. Probes `opencode --version` and reads the
+ * config, so only the install arms call it; uninstall clears both keys and needs neither. */
+function placement(
+  setup: Pick<OpencodeSetup, "configFile" | "isCheckout">,
+  local: LocalInstall | undefined,
+  probe: () => VersionTriple | null,
+): Placement {
   // OpenCode symlinks a `file:` target into its cache, so the plugin it loads is the
   // checkout's own — and the `../bin/caret` that plugin spawns is the binary
   // `mise run build` just produced, picked up on every later rebuild with no reinstall.
-  const specifier = opts.local ? localPluginSpecifier(opts.local.repoDir) : CARET_PACKAGE;
-  // Uninstall never probes: it clears caret from both keys.
-  const version = opts.uninstall ? null : (deps.opencodeVersion ?? readOpencodeVersion)();
+  const specifier = local ? localPluginSpecifier(local.repoDir) : CARET_PACKAGE;
+  const version = probe();
   const key = pluginKeyFor(version);
-  const entries = opts.uninstall ? [] : caretEntries(readConfigText(configFile), isCheckout);
+  const entries = caretEntries(readConfigText(setup.configFile), setup.isCheckout);
   const otherKey: PluginKey = key === "plugin" ? "plugins" : "plugin";
   const movedFrom = entries.some((e) => e.key === otherKey) ? otherKey : null;
   const writtenSpec = keptEntry(entries, specifier)?.spec ?? specifier;
+  return { specifier, version, key, movedFrom, writtenSpec };
+}
 
-  if (opts.dryRun) {
-    const verb = opts.uninstall ? "remove" : "write";
-    // The check is read-only, so a preview can still run it and say what it found. A
-    // preview has no warning to carry an `unknown`'s reason, so the note carries it.
-    const found = checks(opts)
-      ? ["", previewLine(await readVerdict({ configFile, host: version }, deps))]
-      : [];
-    // The specifier is the one thing a preview can't be read off the paths: `--from-local`
-    // and a published install write the same file with very different content.
-    const entry = opts.uninstall
+/** The `/caret:*` command files caret deploys into the config dir. */
+function commandPaths({ dir, pkg }: Pick<OpencodeSetup, "dir" | "pkg">): string[] {
+  return pkg.commands.map((c) => join(commandDir(dir), namespacedCommandFilename(c.name)));
+}
+
+async function previewOpencode(
+  setup: OpencodeSetup,
+  opts: { uninstall: boolean; local?: LocalInstall },
+  deps: InstallOpencodeDeps,
+): Promise<void> {
+  const { configFile, legacy, ui } = setup;
+  const verb = opts.uninstall ? "remove" : "write";
+  const placed = opts.uninstall
+    ? null
+    : placement(setup, opts.local, deps.opencodeVersion ?? readOpencodeVersion);
+  // The check is read-only, so a preview can still run it and say what it found. A
+  // preview has no warning to carry an `unknown`'s reason, so the note carries it.
+  const found = checks(opts)
+    ? ["", previewLine(await readVerdict({ configFile, host: placed?.version ?? null }, deps))]
+    : [];
+  // The specifier is the one thing a preview can't be read off the paths: `--from-local`
+  // and a published install write the same file with very different content.
+  const entry =
+    placed === null
       ? []
-      : ["", `plugin entry: ${specifier} → ${key}`, hostLine(version, key, movedFrom)];
-    // Their own labelled section: an install's bare path list is titled "would write", and
-    // listing a file caret is about to DELETE under that heading would misread badly.
-    const sweep = legacy.length === 0 ? [] : ["", "pre-array-install files to remove:", ...legacy];
-    ui.note(
-      [configFile, ...commandPaths, ...entry, ...sweep, ...found].join("\n"),
-      `OpenCode — would ${verb}`,
-    );
-    return;
-  }
+      : [
+          "",
+          `plugin entry: ${placed.specifier} → ${placed.key}`,
+          hostLine(placed.version, placed.key, placed.movedFrom),
+        ];
+  // Their own labelled section: an install's bare path list is titled "would write", and
+  // listing a file caret is about to DELETE under that heading would misread badly.
+  const sweep = legacy.length === 0 ? [] : ["", "pre-array-install files to remove:", ...legacy];
+  ui.note(
+    [configFile, ...commandPaths(setup), ...entry, ...sweep, ...found].join("\n"),
+    `OpenCode — would ${verb}`,
+  );
+}
 
-  if (opts.uninstall) {
-    // Every form caret may have written, not just the package: a developer who ran
-    // `--from-local` has a checkout entry, and an uninstall that left it behind would
-    // keep OpenCode loading caret after saying it removed it.
-    await ui.step(
-      "Removing caret from OpenCode's plugin and plugins keys",
-      async () =>
-        editConfig(configFile, (text) =>
-          text === null ? null : dropEntries(text, caretEntries(text, isCheckout)),
-        ),
-      (changed) =>
-        changed.length > 0
-          ? `Removed caret from ${basename(configFile)}`
-          : `caret was not in ${basename(configFile)}`,
-    );
-    await ui.step(
-      "Removing the /caret:* command files",
-      async () => removeFiles(commandPaths, { dryRun: false }),
-      (removed) => `Removed ${removed.paths.length} command file(s) from ${dir}`,
-    );
-    await sweepLegacy(legacy, dir, ui);
-    return;
-  }
+async function uninstallOpencode(setup: OpencodeSetup): Promise<void> {
+  const { configFile, isCheckout, ui, dir, legacy } = setup;
+  // Every form caret may have written, not just the package: a developer who ran
+  // `--from-local` has a checkout entry, and an uninstall that left it behind would
+  // keep OpenCode loading caret after saying it removed it.
+  await ui.step(
+    "Removing caret from OpenCode's plugin and plugins keys",
+    async () =>
+      editConfig(configFile, (text) =>
+        text === null ? null : dropEntries(text, caretEntries(text, isCheckout)),
+      ),
+    (changed) =>
+      changed.length > 0
+        ? `Removed caret from ${basename(configFile)}`
+        : `caret was not in ${basename(configFile)}`,
+  );
+  await ui.step(
+    "Removing the /caret:* command files",
+    async () => removeFiles(commandPaths(setup), { dryRun: false }),
+    (removed) => `Removed ${removed.paths.length} command file(s) from ${dir}`,
+  );
+  await sweepLegacy(legacy, dir, ui);
+}
 
+async function installOpencode(
+  setup: OpencodeSetup,
+  opts: { uninstall: boolean; refresh: boolean; local?: LocalInstall },
+  deps: InstallOpencodeDeps,
+): Promise<void> {
+  const { dir, pkg, ui, isCheckout, configFile, legacy } = setup;
+  const { specifier, version, key, movedFrom, writtenSpec } = placement(
+    setup,
+    opts.local,
+    deps.opencodeVersion ?? readOpencodeVersion,
+  );
   ui.info(hostLine(version, key, movedFrom));
   await ui.step(
     `Adding ${specifier} to OpenCode's ${key} array`,
