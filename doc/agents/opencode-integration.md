@@ -449,15 +449,26 @@ the direct child, and npm v1's node wrapper leaves a grandchild holding stdout).
 writes `plugins`; v1, a missing binary, a failed or hung run, or unparseable output writes
 `plugin`, which both hosts load. Uninstall never probes: it removes caret from both keys.
 
-The write is one `editConfig` transform that keeps exactly one caret entry across both
-keys — the first pinned one in load order (`plugin` before `plugins`), else the first —
-carries its spec verbatim so a pin survives, and drops every other caret item. That move
-is load-bearing: v2 concatenates a leftover `plugin` array ahead of `plugins`, and two
-caret entries fail with `Duplicate plugin ID: caret`. A removal that empties `plugins`
-deletes the key, because v1 below 1.18.16 rejects any `plugins` key, `[]` included; an
-emptied `plugin: []` stays. caret writes a bare string item, as v2's own
+Within its target file, install's `setCaretPluginEntry` keeps exactly one caret entry
+across both keys — the first pinned one in load order (`plugin` before `plugins`), else
+the first — carries its spec verbatim so a pin survives, and drops every other caret item.
+That move is load-bearing: v2 concatenates a leftover `plugin` array ahead of `plugins`,
+and two caret entries fail with `Duplicate plugin ID: caret`. A removal that empties
+`plugins` deletes the key, because v1 below 1.18.16 rejects any `plugins` key, `[]`
+included; an emptied `plugin: []` stays. caret writes a bare string item, as v2's own
 `opencode plugin add` does, and every reader also accepts a `{ "package": … }` object
 item.
+
+v2 and an unreadable version write into the first of `opencode.jsonc` and `opencode.json`
+that exists, else create `opencode.json`, and never into `config.json`, which v2 ignores;
+a known v1 keeps the first of all three (`resolveConfigFile`). A pin in a file the host
+loads wins over one in a file it ignores. Every other existing global config loses caret's
+entry (`stripCaret`), the other files first and the target last, so a failure in between
+leaves no caret entry rather than two. `planConfigEdits` parse-checks every file before
+`writeConfigEdits` touches one: install stops before any write if a file fails to parse,
+while uninstall clears every file it can and warns about the rest. The dry run lists the
+files that change, a failed later write names the files already changed, and doctor reads
+every existing global config (`existingConfigFiles`).
 
 caret rewrites a changed plugin array whole, because jsonc-parser's element deletion
 mishandles a trailing element's comma, so a comment inside that array is lost. Comments
@@ -727,13 +738,8 @@ v1.18.15 and v1.18.29 from npm):
 
 - `bin/caret-launcher` and `launcherCandidateDirs` glob only v1's `packages/`, so the
   service never sees a v2 caret root. Harmless: it stays on caret's owned copy.
-- v2 does not read `config.json`, so a user whose only config is `config.json` gets a
-  `plugins` entry v2 never sees.
 - A v1 below 1.18.16 and a v2 on one `PATH`, sharing a config: install probes only the
   first.
-- v2 loads and merges both global `opencode.json` and `opencode.jsonc`; caret edits only
-  the first that exists, so a caret entry in the other survives install as a second one.
-  This predates EXC-1520.
 - A `file:<tarball>` caret entry is not recognised as caret's (only the package and a
   checkout are), so install adds a second entry beside it. `caret install` never writes
   one.
