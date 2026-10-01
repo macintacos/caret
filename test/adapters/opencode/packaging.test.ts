@@ -12,10 +12,7 @@ let root: string;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "caret-pkg-"));
   await mkdir(join(root, "opencode", "commands"), { recursive: true });
-  await writeFile(
-    join(root, "opencode", "caret.plugin.ts"),
-    `const CARET_PLUGIN_VERSION = "__CARET_VERSION__";\n// plugin body\n`,
-  );
+  await writeFile(join(root, "opencode", "caret.plugin.ts"), "// plugin body\n");
   await writeFile(join(root, "opencode", "commands", "demo.md"), "# demo\n");
   await writeFile(join(root, "opencode", "commands", "doctor.md"), "# doctor\n");
   await mkdir(join(root, "templates"), { recursive: true });

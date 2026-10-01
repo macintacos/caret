@@ -8,7 +8,7 @@ import { createCaretTui, type TuiContext } from "@oc/caret.tui.ts";
 
 type Handler = Parameters<TuiContext["data"]["on"]>[1];
 
-function fakeTui(show: (body: ToastBody) => void = () => {}) {
+function fakeTui(show: ToastSink = () => {}) {
   const handlers = new Map<string, Handler>();
   const shown: ToastBody[] = [];
   let unsubscribed = 0;
@@ -25,7 +25,7 @@ function fakeTui(show: (body: ToastBody) => void = () => {}) {
       toast: {
         show: (body) => {
           shown.push(body);
-          show(body);
+          return show(body);
         },
       },
     },
@@ -89,6 +89,21 @@ test("a throwing toast surface does not escape a handler", () => {
   });
   createCaretTui({ checkUpdate: () => {} })(fake.ctx);
   expect(() => fake.emit("session.tool.progress", "C", { caretUrl: URL })).not.toThrow();
+});
+
+test("a rejecting toast surface leaves no unhandled rejection", async () => {
+  const unhandled: unknown[] = [];
+  const record = (reason: unknown) => unhandled.push(reason);
+  process.on("unhandledRejection", record);
+  try {
+    const fake = fakeTui(() => Promise.reject(new Error("x")));
+    createCaretTui({ checkUpdate: () => {} })(fake.ctx);
+    fake.emit("session.tool.progress", "C", { caretUrl: URL });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(unhandled).toEqual([]);
+  } finally {
+    process.off("unhandledRejection", record);
+  }
 });
 
 test("a throwing update check does not escape setup", () => {

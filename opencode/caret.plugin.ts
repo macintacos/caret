@@ -71,10 +71,8 @@ type SessionClient =
 /** What OpenCode actually hands the plugin: both narrowings at once. */
 type CaretClient = NonNullable<ToastClient> & NonNullable<SessionClient>;
 
-/** Best-effort toast: surfacing or clearing the review link must never crash or
- * delay the review. Swallows a missing method (SDK skew) and any sync throw or
- * async rejection. Called as `tui.showToast(...)` so the SDK client keeps its
- * `this` binding. */
+/** v1's toast sink, through `toastBestEffort`. A missing method (SDK skew) is a no-op.
+ * Called as `tui.showToast(...)` so the SDK client keeps its `this` binding. */
 export function showToast(client: ToastClient, body: ToastBody): void {
   const tui = client?.tui;
   if (!tui || typeof tui.showToast !== "function") return;

@@ -2,7 +2,7 @@
 // best-effort startup update-check toast (EXC-794). The plugin runs from the npm
 // package (array install), so it resolves its binary and version at runtime; on load
 // it checks caret's latest GitHub release and toasts a nudge when the user is
-// behind. All logic is exercised through injected env / fetch / file-read / client —
+// behind. All logic is exercised through injected env / fetch / file-read / toast sink —
 // no network, no real files.
 
 import { expect, test } from "bun:test";
@@ -17,6 +17,7 @@ import {
   resolveCaretVersion,
   shouldCheckForUpdate,
   type ToastBody,
+  type ToastSink,
   updateCheckCachePath,
   updateToastBody,
 } from "@oc/caret.core.ts";
@@ -155,40 +156,37 @@ function memCache(last: number | null = null): {
   };
 }
 
+function recordingSink(): { show: ToastSink; toasts: ToastBody[] } {
+  const toasts: ToastBody[] = [];
+  return { show: (body) => toasts.push(body), toasts };
+}
+
 /** Run realUpdateChecker against a genuinely newer release, expecting the
  * shared outcome — one toast, one stamped check — that every case below
  * differs from only by the cache's seeded last-check time. */
 async function checkAndExpectToast(
-  shown: ToastBody[],
+  { show, toasts }: ReturnType<typeof recordingSink>,
   { cache, writes }: ReturnType<typeof memCache>,
 ): Promise<void> {
-  await realUpdateChecker(
-    (body) => {
-      shown.push(body);
-    },
-    {
-      currentVersion: "0.3.0",
-      env: {},
-      fetchImpl: async () => jsonResponse({ tag_name: "v0.4.0", html_url: "https://x/0.4.0" }),
-      now: fixedNow,
-      cache,
-    },
-  );
-  expect(shown).toHaveLength(1);
+  await realUpdateChecker(show, {
+    currentVersion: "0.3.0",
+    env: {},
+    fetchImpl: async () => jsonResponse({ tag_name: "v0.4.0", html_url: "https://x/0.4.0" }),
+    now: fixedNow,
+    cache,
+  });
+  expect(toasts).toHaveLength(1);
   expect(writes).toEqual([NOW]);
 }
 
 test("realUpdateChecker toasts when a newer release exists, and stamps the check", async () => {
-  const shown: ToastBody[] = [];
-  await checkAndExpectToast(shown, memCache(null));
-  expect(shown[0]?.message).toContain("0.4.0");
+  const sink = recordingSink();
+  await checkAndExpectToast(sink, memCache(null));
+  expect(sink.toasts[0]?.message).toContain("0.4.0");
 });
 
 test("realUpdateChecker is silent when already current", async () => {
-  const toasts: ToastBody[] = [];
-  const show = (body: ToastBody) => {
-    toasts.push(body);
-  };
+  const { show, toasts } = recordingSink();
   await realUpdateChecker(show, {
     currentVersion: "0.4.0",
     env: {},
@@ -200,10 +198,7 @@ test("realUpdateChecker is silent when already current", async () => {
 });
 
 test("realUpdateChecker is silent on a non-200 or a fetch error", async () => {
-  const toasts: ToastBody[] = [];
-  const show = (body: ToastBody) => {
-    toasts.push(body);
-  };
+  const { show, toasts } = recordingSink();
   await realUpdateChecker(show, {
     currentVersion: "0.3.0",
     env: {},
@@ -224,10 +219,7 @@ test("realUpdateChecker is silent on a non-200 or a fetch error", async () => {
 });
 
 test("realUpdateChecker respects the CARET_OPENCODE_NO_UPDATE_CHECK opt-out (and never stamps)", async () => {
-  const toasts: ToastBody[] = [];
-  const show = (body: ToastBody) => {
-    toasts.push(body);
-  };
+  const { show, toasts } = recordingSink();
   const { cache, writes } = memCache(null);
   let fetched = false;
   await realUpdateChecker(show, {
@@ -246,10 +238,7 @@ test("realUpdateChecker respects the CARET_OPENCODE_NO_UPDATE_CHECK opt-out (and
 });
 
 test("realUpdateChecker skips the network when it checked within the last day", async () => {
-  const toasts: ToastBody[] = [];
-  const show = (body: ToastBody) => {
-    toasts.push(body);
-  };
+  const { show, toasts } = recordingSink();
   let fetched = false;
   await realUpdateChecker(show, {
     currentVersion: "0.3.0",
@@ -266,7 +255,7 @@ test("realUpdateChecker skips the network when it checked within the last day", 
 });
 
 test("realUpdateChecker checks again once a day has passed", async () => {
-  await checkAndExpectToast([], memCache(NOW - 25 * 60 * 60_000)); // 25h ago
+  await checkAndExpectToast(recordingSink(), memCache(NOW - 25 * 60 * 60_000)); // 25h ago
 });
 
 test("realUpdateChecker stamps the check even when the fetch fails, so it backs off a day", async () => {

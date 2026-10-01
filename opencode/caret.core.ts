@@ -21,7 +21,7 @@ import {
 } from "./review-bridge.ts";
 
 /** The caret binary the review tool spawns. Env override wins; else the binary that
- * ships beside this module in the npm package (the array install). */
+ * ships beside this module in the npm package. */
 export function resolveCaretBin(opts: {
   env: Record<string, string | undefined>;
   importMetaUrl: string;
@@ -32,8 +32,8 @@ export function resolveCaretBin(opts: {
 }
 
 /** The plugin's own caret version, for the update check, read from the package.json
- * shipped beside this module (the array install). "unknown" when it is unreadable — deliberately UNPARSEABLE so
- * `isNewer` compares false and a broken read stays silent ("0.0.0" would parse and
+ * shipped beside this module. "unknown" when it is unreadable — deliberately UNPARSEABLE
+ * so `isNewer` compares false and a broken read stays silent ("0.0.0" would parse and
  * nag "update available (you have 0.0.0)" on every start). */
 export function resolveCaretVersion(opts: {
   importMetaUrl: string;
@@ -54,10 +54,6 @@ export const REVIEW_TOOL = "caret_review_plan";
 /** OpenCode's built-in primary planning agent — the one agent caret steers toward
  * the review tool and warms the daemon for. */
 export const PLANNING_AGENTS = ["plan"] as const;
-
-// ---------------------------------------------------------------------------
-// Pure helpers (exported for unit tests)
-// ---------------------------------------------------------------------------
 
 /** True for the planning agent(s) caret treats specially — the planning steer and
  * the daemon warm-up both fire only for them. Not a permission check: the review
@@ -82,16 +78,17 @@ export type ToastBody = {
   variant: "info" | "success" | "warning" | "error";
   duration?: number;
 };
-/** Where a host shows a toast. */
+
+/** Where a host shows a toast: v2's `ctx.ui.toast.show`, or v1's client as its adapter
+ * wraps it. A sink may throw or reject, so call it through `toastBestEffort`. */
 export type ToastSink = (body: ToastBody) => unknown;
 
-/** Show a toast best-effort: a sync throw or async rejection is swallowed. */
+/** Show a toast best-effort: a toast must never crash or delay the review or plugin load,
+ * so a sync throw or async rejection is swallowed. */
 export function toastBestEffort(show: ToastSink, body: ToastBody): void {
   try {
     Promise.resolve(show(body)).catch(() => {});
-  } catch {
-    // best-effort — the review decision is what matters.
-  }
+  } catch {}
 }
 
 /** How long the pending review-link toast stays up. Long enough to outlast a
@@ -130,7 +127,7 @@ type PlanSource = { plan: string; planFilePath?: string };
 /** The plan the review tool submits, from exactly one of its `plan` / `path` args (an
  * empty string counts as absent). A `path` resolves against the session directory and
  * must be a readable `.md` file — mirroring the core's `isPlanFile`
- * (src/plan/canonical-file.ts), repeated here because this plugin cannot import src/.
+ * (src/plan/canonical-file.ts), repeated here because this module cannot import src/.
  * `readFile` returns the text, or undefined when absPath is not a readable regular
  * file. */
 export function resolvePlanSource(

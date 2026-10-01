@@ -32,9 +32,9 @@ const REPO_ROOT = join(import.meta.dir, "..", "..");
 const SHIPPED_DIR = "opencode";
 
 // The scan boundary is the publish boundary: `files` ships `opencode/` entire, so every
-// module extension a consumer could resolve is read, not just the three `.ts` files here
-// today. A shipped file this glob missed would go silently underived — the one failure
-// direction that leaves the gate green while a consumer's install breaks.
+// module extension a consumer could resolve is read, not just the `.ts` files. A shipped
+// file this glob missed would go silently underived — the one failure direction that
+// leaves the gate green while a consumer's install breaks.
 const SHIPPED_GLOB = "**/*.{ts,mts,cts,js,mjs,cjs}";
 
 /**
@@ -90,13 +90,17 @@ test("review-bridge.ts, which the CLI bundles, imports node builtins only and no
   expect(source).not.toMatch(/\b(?:from|import)\s*\(?\s*"\.\.?\//);
 });
 
-test("caret.core.ts reaches only review-bridge.ts in opencode/, and the pair imports node builtins only", () => {
-  const read = (file: string) => readFileSync(join(REPO_ROOT, SHIPPED_DIR, file), "utf-8");
-  const specifiers = importSpecifiers(read("caret.core.ts"));
-  const siblings = new Set(specifiers.filter((spec) => spec.startsWith(".")));
-  expect(siblings).toEqual(new Set(["./review-bridge.ts"]));
-  expect(specifiers.filter((spec) => !spec.startsWith(".") && !isBuiltin(spec))).toEqual([]);
-  expect(importedPackages(read("review-bridge.ts"))).toEqual([]);
+const readShipped = (file: string) => readFileSync(join(REPO_ROOT, SHIPPED_DIR, file), "utf-8");
+
+// Type-only imports count here, unlike the gates above: tsc still resolves an erased
+// `import type`, so one from caret.plugin.ts re-couples the modules this split separates,
+// and one from @opencode-ai/plugin ties the core back to v1's SDK.
+const nonBuiltinImports = (file: string) =>
+  new Set(importSpecifiers(readShipped(file)).filter((spec) => !isBuiltin(spec)));
+
+test("caret.core.ts's closure is review-bridge.ts and node builtins, type-only imports included", () => {
+  expect(nonBuiltinImports("caret.core.ts")).toEqual(new Set(["./review-bridge.ts"]));
+  expect(nonBuiltinImports("review-bridge.ts")).toEqual(new Set());
 });
 
 test("src/ reaches opencode/ only through review-bridge.ts, so the CLI bundle never pulls in the plugin SDK", () => {

@@ -345,14 +345,14 @@ so it wants the live check § Verified vs. follow-up already schedules.
   `src/adapters/index.ts`; selectable via `CARET_AGENT=opencode`. Claude stays the
   default.
 - **Packaging (`opencode/`)** — the host-neutral core (`caret.core.ts`), the v1 plugin
-(`caret.plugin.ts`), the v2 plugin (`caret.plugin.v2.ts`) and its permission evaluator
-(`permission.ts`), the v2 TUI module (`caret.tui.ts`, `exports["./tui"]`), their package
-entrypoint (`index.ts`, see § The export surface), and command files (`commands/*.md`).
-The plugin ships in the `@macintacos/caret` npm package and resolves its binary and
-version at runtime from that package (§ Runtime resolution + update check); only the
-command files still carry substituted markers — `__CARET_BIN__` and
-`__CARET_DEMO_TEMPLATE__`, the template embedded rather than read because under `bunx` the
-install-time root is a temp dir.
+  (`caret.plugin.ts`), the v2 plugin (`caret.plugin.v2.ts`) and its permission evaluator
+  (`permission.ts`), the v2 TUI module (`caret.tui.ts`, `exports["./tui"]`), their package
+  entrypoint (`index.ts`, see § The export surface), and command files (`commands/*.md`).
+  The plugin ships in the `@macintacos/caret` npm package and resolves its binary and
+  version at runtime from that package (§ Runtime resolution + update check); only the
+  command files still carry substituted markers — `__CARET_BIN__` and
+  `__CARET_DEMO_TEMPLATE__`, the template embedded rather than read because under `bunx`
+  the install-time root is a temp dir.
 - **Install (`caret install`)** — adds caret to the user's OpenCode config
   (comment-preserving, via `jsonc-parser` in `config-plugin.ts`) as either
   `@macintacos/caret` or, under `--from-local`, `file:<checkout>` (§ The local form) and
@@ -597,9 +597,9 @@ fresh install still needs **one OpenCode restart** (packages install/load at sta
 OpenCode's plugin loader iterates a module's exports (`Object.values(mod)`) and throws
 `TypeError("Plugin export is not a function")` on the FIRST export it cannot coerce to a
 Plugin (a function, or a `{ server }` object) — one bad export rejects the whole module.
-caret's plugin SOURCE exports constants (`REVIEW_TOOL`, `PLANNING_AGENTS`) and pure
-helpers so `test/opencode/` can unit-test them; the shared ones come from `caret.core.ts`,
-which the v1, v2 and TUI modules import. None of those modules can be OpenCode's
+caret's plugin modules export more than plugins: `caret.core.ts` exports the constants
+(`REVIEW_TOOL`, `PLANNING_AGENTS`) and helpers the v1, v2 and TUI modules share, and each
+module exports helpers `test/opencode/` unit-tests. None of them can be OpenCode's
 entrypoint directly — the first non-Plugin export would reject it (a live EXC-339 bug, log
 line `failed to load plugin … "Plugin export is not a function"`).
 
