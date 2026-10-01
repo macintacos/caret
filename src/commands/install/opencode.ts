@@ -171,7 +171,7 @@ export async function runInstallOpencodeTarget(
     // The check is read-only, so a preview can still run it and say what it found. A
     // preview has no warning to carry an `unknown`'s reason, so the note carries it.
     const found = checks(opts)
-      ? ["", previewLine(await readVerdict(configFile, version, deps))]
+      ? ["", previewLine(await readVerdict({ configFile, host: version }, deps))]
       : [];
     // The specifier is the one thing a preview can't be read off the paths: `--from-local`
     // and a published install write the same file with very different content.
@@ -277,16 +277,10 @@ function previewLine(verdict: UpgradeVerdict): string {
 
 /** This run's upgrade check: the adapter's read, with the test seams threaded in. */
 async function readVerdict(
-  configFile: string,
-  host: VersionTriple | null,
+  at: { configFile: string; host?: VersionTriple | null },
   deps: InstallOpencodeDeps,
 ): Promise<UpgradeVerdict> {
-  return readUpgradeVerdict({
-    configFile,
-    host,
-    cacheDir: deps.cacheDir,
-    published: deps.published,
-  });
+  return readUpgradeVerdict({ ...at, cacheDir: deps.cacheDir, published: deps.published });
 }
 
 /** Report the upgrade check, then act on it. Only a stale verdict has anything to do,
@@ -304,7 +298,7 @@ async function upgradeStep(
     "Checking OpenCode's caret version",
     // After the write caret sits in the key its host loads, so the key alone picks the
     // cache layout.
-    () => readVerdict(configFile, null, deps),
+    () => readVerdict({ configFile }, deps),
     upgradeVerdictLine,
   );
   if (verdict.kind === "unknown") {
