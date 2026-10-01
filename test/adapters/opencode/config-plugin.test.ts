@@ -391,3 +391,36 @@ test("configParseError names why a truncated config or an array root is unreadab
 test("configParseError accepts a config that opens with a UTF-8 BOM", () => {
   expect(configParseError('﻿{ "plugin": ["x"] }')).toBeNull();
 });
+
+// jsonc-parser's parse keeps a duplicate key's last value while its edits land on the
+// first, so no edit of this config re-parses to what it intends.
+const DUPLICATE_PLUGINS = '{ "plugins": ["a"], "plugins": ["b", "@macintacos/caret"] }';
+
+test("an array rewrite that does not re-parse to its intended value throws", () => {
+  expect(() => rewritePluginArray(DUPLICATE_PLUGINS, "plugins", (_, i) => i !== 1)).toThrow();
+});
+
+test("an add that does not re-parse to its intended value throws", () => {
+  expect(() => addPluginToConfigText(DUPLICATE_PLUGINS, "x", "plugins")).toThrow();
+});
+
+test("an item swap that does not re-parse to its intended value throws", () => {
+  expect(() =>
+    setPluginItemSpec(DUPLICATE_PLUGINS, { key: "plugins", index: 1, spec: `${PKG}@0.8.1` }),
+  ).toThrow();
+});
+
+test("add and drop edit a BOM-prefixed config", () => {
+  const src = `﻿{ "plugins": ["a"] }`;
+  expect(addPluginToConfigText(src, PKG, "plugins")).toContain(PKG);
+  expect(dropCaret(`﻿{ "plugins": ["a", "${PKG}"] }`, "plugins")).not.toContain(PKG);
+});
+
+test("add edits an empty file", () => {
+  expect(JSON.parse(addPluginToConfigText("", PKG, "plugins"))).toEqual({ plugins: [PKG] });
+});
+
+test("add edits a config with trailing commas", () => {
+  const out = addPluginToConfigText('{ "plugins": ["a",], }', PKG, "plugins");
+  expect(parse(out, [], { allowTrailingComma: true })).toEqual({ plugins: ["a", PKG] });
+});

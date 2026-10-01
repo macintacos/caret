@@ -8,6 +8,8 @@
 // loses or moves a neighbouring comment. Pure text-in/text-out, so it is unit-testable
 // without touching disk.
 
+import { isDeepStrictEqual } from "node:util";
+
 import {
   applyEdits,
   createScanner,
@@ -42,16 +44,35 @@ export type PluginKey = (typeof PLUGIN_KEYS)[number];
  * is not an object — or null when it is. Lenient the way OpenCode is (trailing commas),
  * and an empty file passes: install treats it as a config with no keys. */
 export function configParseError(text: string): string | null {
+  const { root, errors } = lenientParse(text);
+  const [first] = errors;
+  if (first !== undefined) return `${printParseErrorCode(first.error)} at offset ${first.offset}`;
+  const isObject = typeof root === "object" && root !== null && !Array.isArray(root);
+  return root === undefined || isObject ? null : "not a JSON object";
+}
+
+/** `text` parsed the way OpenCode loads it. */
+function lenientParse(text: string): { root: unknown; errors: ParseError[] } {
   const errors: ParseError[] = [];
   // Bun, which OpenCode runs on, strips a leading BOM before parsing.
   const root: unknown = parse(text.replace(/^\uFEFF/, ""), errors, {
     allowTrailingComma: true,
     allowEmptyContent: true,
   });
-  const [first] = errors;
-  if (first !== undefined) return `${printParseErrorCode(first.error)} at offset ${first.offset}`;
-  const isObject = typeof root === "object" && root !== null && !Array.isArray(root);
-  return root === undefined || isObject ? null : "not a JSON object";
+  return { root, errors };
+}
+
+/** `edited`, when it parses to `existing` with `key` set to `value` (removed when
+ * undefined); throws otherwise. A duplicate key parses to its last value while edits land
+ * on the first, so an edit can miss even when its bytes look right — or did not change. */
+function checked(existing: string, edited: string, key: PluginKey, value: unknown): string {
+  const { [key]: _, ...rest } = (lenientParse(existing).root ?? {}) as Record<string, unknown>;
+  const intended = value === undefined ? rest : { ...rest, [key]: value };
+  const { root, errors } = lenientParse(edited);
+  if (errors.length > 0 || !isDeepStrictEqual(root ?? {}, intended)) {
+    throw new Error(`editing "${key}" would not give the intended config`);
+  }
+  return edited;
 }
 
 /** The current `key` array as a plain array (empty when absent/not an array). */
@@ -128,10 +149,10 @@ export function addPluginToConfigText(
       isArrayInsertion: true,
       formattingOptions: formattingOf(text),
     });
-    return applyEdits(text, edits);
+    return checked(text, applyEdits(text, edits), key, [...current, pkg]);
   }
   const edits = modify(text, [key], [pkg], { formattingOptions: formattingOf(text) });
-  return applyEdits(text, edits);
+  return checked(text, applyEdits(text, edits), key, [pkg]);
 }
 
 /** Every raw item's specifier in the `key` array, null for an unrecognisable item, so
@@ -164,10 +185,14 @@ export function setPluginItemSpec(
   target: { key: PluginKey; index: number; spec: string },
 ): string {
   const { key, index, spec } = target;
-  const item = pluginArray(existing, key)[index];
-  const path: JSONPath = typeof item === "string" ? [key, index] : [key, index, "package"];
+  const arr = pluginArray(existing, key);
+  const item = arr[index];
+  const isString = typeof item === "string";
+  const path: JSONPath = isString ? [key, index] : [key, index, "package"];
   const edits = modify(existing, path, spec, { formattingOptions: formattingOf(existing) });
-  return applyEdits(existing, edits);
+  const swapped = isString ? spec : { ...(item as object), package: spec };
+  const next = arr.map((e, i) => (i === index ? swapped : e));
+  return checked(existing, applyEdits(existing, edits), key, next);
 }
 
 /** Rewrite the `key` array to the items `keep` accepts, returning the new config text,
@@ -183,12 +208,15 @@ export function rewritePluginArray(
   const arr = pluginArray(existing, key);
   const next = arr.filter((item, i) => keep(item, i));
   if (next.length === arr.length) return existing;
-  if (key === "plugins" && next.length === 0) return deleteNode(existing, [key]);
-  return arr
+  if (key === "plugins" && next.length === 0) {
+    return checked(existing, deleteNode(existing, [key]), key, undefined);
+  }
+  const edited = arr
     .map((_, i) => i)
     .filter((i) => !keep(arr[i], i))
     .reverse()
     .reduce((text, i) => deleteNode(text, [key, i]), existing);
+  return checked(existing, edited, key, next);
 }
 
 /** The offset of the comma that follows `from`, skipping whitespace and comments, or

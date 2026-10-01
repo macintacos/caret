@@ -1019,3 +1019,18 @@ test("a failed later write names the files already changed", async () => {
   await expect(installOn(V2)).rejects.toThrow(/already changed: .*config\.json/);
   expect(caretEntries(readFileSync(legacy, "utf-8"), () => false)).toEqual([]);
 });
+
+test("install refuses a config whose edit does not re-parse to its intended value", async () => {
+  const src = '{ "plugins": ["a"], "plugins": ["b"] }';
+  writeFileSync(configJson(), src);
+  await expect(installOn(V2)).rejects.toThrow(/can't edit .*caret changed nothing/);
+  expect(readFileSync(configJson(), "utf-8")).toBe(src);
+});
+
+test("uninstall leaves a config whose edit does not re-parse to its intended value", async () => {
+  const src = `{ "plugins": ["a"], "plugins": ["b", "${CARET_PACKAGE}"] }`;
+  writeFileSync(configJson(), src);
+  const said = await transcript({}, { uninstall: true });
+  expect(said).toMatch(/opencode\.json can't be edited/);
+  expect(readFileSync(configJson(), "utf-8")).toBe(src);
+});

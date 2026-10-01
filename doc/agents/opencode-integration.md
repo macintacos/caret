@@ -466,14 +466,16 @@ a known v1 keeps the first of all three (`resolveConfigFile`). A pin in a file t
 loads wins over one in a file it ignores. Every other existing global config loses caret's
 entry (`stripCaret`), the other files first and the target last, so a failure in between
 leaves no caret entry rather than two. `planConfigEdits` parse-checks every file before
-`writeConfigEdits` touches one: install stops before any write if a file fails to parse,
-while uninstall clears every file it can and warns about each one it cannot read or parse.
-Two config names that resolve to one file, a symlink alias, count once under the earlier
-name (`existingConfigFiles`). The dry run lists the files that change, and a failed later
-write names the files already changed. Doctor reads every existing global config; caret in
-a file the host does not load fails `opencode-host`, and when caret sits only in such
-files the `opencode-caret-version` check is skipped. With an unreadable version every file
-counts as loaded.
+`writeConfigEdits` touches one, and counts a file as uneditable too when its edit does not
+re-parse to the intended value (a duplicate `plugins` key parses to its last value while
+edits land on the first), so that step writes nothing: install's step refuses when any
+file is uneditable, while uninstall clears every file it can and warns about each one it
+leaves. Two config names that resolve to one file, a symlink alias, count once under the
+earlier name (`existingConfigFiles`). The dry run lists the files that change, and a
+failed later write names the files already changed. Doctor reads every existing global
+config; caret in a file the host does not load fails `opencode-host`, and when caret sits
+only in such files the `opencode-caret-version` check is skipped. With an unreadable
+version every file counts as loaded.
 
 caret deletes a changed plugin array's elements one by one, with the same comment-keeping
 range cut it uses for an emptied `plugins` key, because no jsonc-parser release deletes an

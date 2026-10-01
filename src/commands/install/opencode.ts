@@ -541,7 +541,13 @@ function planConfigEdits(edits: readonly ConfigEdit[]): ConfigPlan {
       plan.uneditable.push({ path, reason: parseError });
       continue;
     }
-    const text = transform(existing);
+    let text: string | null;
+    try {
+      text = transform(existing);
+    } catch (e) {
+      plan.uneditable.push({ path, reason: errorMessage(e) });
+      continue;
+    }
     if (text !== null && text !== existing) plan.planned.push({ path, text });
   }
   return plan;
