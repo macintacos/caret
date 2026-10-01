@@ -61,8 +61,8 @@ function isCaretSpec(spec: string, isCheckout: (dir: string) => boolean): boolea
 const CARET_TARBALL_PREFIX = `${CARET_PACKAGE.slice(1).replace("/", "-")}-`;
 
 function isCaretTarball(path: string): boolean {
-  const name = basename(path);
-  return name.startsWith(CARET_TARBALL_PREFIX) && name.endsWith(".tgz");
+  const filename = basename(path);
+  return filename.startsWith(CARET_TARBALL_PREFIX) && filename.endsWith(".tgz");
 }
 
 /** Remove `drop` — entries read from `text` — returning the new config text. Each key's
