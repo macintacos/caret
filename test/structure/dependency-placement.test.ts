@@ -25,7 +25,7 @@ import { isBuiltin } from "node:module";
 import { join } from "node:path";
 
 import pkg from "@root/package.json" with { type: "json" };
-import { runtimeImportSpecifiers } from "@test/support/import-specifiers.ts";
+import { importSpecifiers, runtimeImportSpecifiers } from "@test/support/import-specifiers.ts";
 
 // From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
@@ -88,6 +88,15 @@ test("review-bridge.ts, which the CLI bundles, imports node builtins only and no
   const source = readFileSync(join(REPO_ROOT, SHIPPED_DIR, "review-bridge.ts"), "utf-8");
   expect(importedPackages(source)).toEqual([]);
   expect(source).not.toMatch(/\b(?:from|import)\s*\(?\s*"\.\.?\//);
+});
+
+test("caret.core.ts reaches only review-bridge.ts in opencode/, and the pair imports node builtins only", () => {
+  const read = (file: string) => readFileSync(join(REPO_ROOT, SHIPPED_DIR, file), "utf-8");
+  const specifiers = importSpecifiers(read("caret.core.ts"));
+  const siblings = new Set(specifiers.filter((spec) => spec.startsWith(".")));
+  expect(siblings).toEqual(new Set(["./review-bridge.ts"]));
+  expect(specifiers.filter((spec) => !spec.startsWith(".") && !isBuiltin(spec))).toEqual([]);
+  expect(importedPackages(read("review-bridge.ts"))).toEqual([]);
 });
 
 test("src/ reaches opencode/ only through review-bridge.ts, so the CLI bundle never pulls in the plugin SDK", () => {

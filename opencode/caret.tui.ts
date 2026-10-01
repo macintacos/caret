@@ -14,7 +14,7 @@ import {
   type ToastBody,
   type ToastSink,
   toastBestEffort,
-} from "./caret.plugin.ts";
+} from "./caret.core.ts";
 
 type ToolEvent = { data: { id: string; metadata?: Record<string, unknown> } };
 

@@ -10,7 +10,6 @@ import { expect, test } from "bun:test";
 import type { PluginInput } from "@opencode-ai/plugin";
 
 import {
-  createCaretPlugin,
   isNewer,
   parseLatestRelease,
   realUpdateChecker,
@@ -20,7 +19,8 @@ import {
   type ToastBody,
   updateCheckCachePath,
   updateToastBody,
-} from "@oc/caret.plugin.ts";
+} from "@oc/caret.core.ts";
+import { createCaretPlugin } from "@oc/caret.plugin.ts";
 import { recordingClient } from "@test/support/opencode-toast-client.ts";
 
 // --- isNewer (inline semver) ---

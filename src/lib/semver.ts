@@ -20,9 +20,9 @@ export function parseVersionTriple(v: string): VersionTriple | null {
 /** True when `latest` is a strictly higher semver than `current`; an unparseable version
  * on either side compares false, so the check never claims staleness it can't read.
  *
- * A deliberate twin of the same function in `opencode/caret.plugin.ts`: that file is
- * self-contained by contract (its only imports are node builtins and
- * `@opencode-ai/plugin`, so OpenCode can load it straight out of the package cache) and
+ * A deliberate twin of the same function in `opencode/caret.core.ts`: that file is
+ * self-contained by contract (its only imports are node builtins and its sibling
+ * `review-bridge.ts`, so OpenCode can load it straight out of the package cache) and
  * therefore cannot import from `src/`. */
 export function isNewer(latest: string, current: string): boolean {
   const a = parseVersionTriple(latest);

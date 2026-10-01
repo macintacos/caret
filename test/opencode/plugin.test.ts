@@ -14,15 +14,14 @@ import { join } from "node:path";
 import type { PluginInput, ToolContext } from "@opencode-ai/plugin";
 
 import {
-  applyCaretConfig,
-  createCaretPlugin,
   isPlanningAgent,
   planningSteer,
   REVIEW_TOOL,
   resolvePlanSource,
   resolvePlansDir,
   type WarmRunner,
-} from "@oc/caret.plugin.ts";
+} from "@oc/caret.core.ts";
+import { applyCaretConfig, createCaretPlugin } from "@oc/caret.plugin.ts";
 import { PLAN_TITLE_INSTRUCTION, type SpawnRunner } from "@oc/review-bridge.ts";
 import { fakeDistDir } from "@test/support/fs-tree.ts";
 import { recordingClient } from "@test/support/opencode-toast-client.ts";

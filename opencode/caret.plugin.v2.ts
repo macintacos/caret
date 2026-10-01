@@ -1,5 +1,5 @@
 // caret's OpenCode v2 plugin: the `setup` half of the dual default export in index.ts.
-// A thin adapter over the shared review core in caret.plugin.ts. The v2 SDK shapes it
+// A thin adapter over the shared review core in caret.core.ts. The v2 SDK shapes it
 // uses are declared locally, so the shipped source names no package a consumer's install
 // lacks; test/opencode/sdk-conformance.ts pins them to `@opencode/plugin`. Never import a
 // value from that SDK here: its entry pulls Effect, and v1 hosts load this file too.
@@ -22,7 +22,7 @@ import {
   resolvePlansDir,
   runPlanReview,
   type WarmRunner,
-} from "./caret.plugin.ts";
+} from "./caret.core.ts";
 import { editPermitted, type Rule } from "./permission.ts";
 import { decisionText, nodeSpawnRunner, type SpawnRunner } from "./review-bridge.ts";
 

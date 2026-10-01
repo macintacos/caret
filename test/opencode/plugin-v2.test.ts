@@ -11,13 +11,8 @@ import type { Plugin } from "@opencode/plugin";
 import type { ToolContext } from "@opencode/plugin/promise/tool";
 import type { PluginInput, ToolContext as V1ToolContext } from "@opencode-ai/plugin";
 
-import {
-  CARET_DECISION_KEY,
-  CARET_URL_KEY,
-  createCaretPlugin,
-  planningSteer,
-  REVIEW_TOOL,
-} from "@oc/caret.plugin.ts";
+import { CARET_DECISION_KEY, CARET_URL_KEY, planningSteer, REVIEW_TOOL } from "@oc/caret.core.ts";
+import { createCaretPlugin } from "@oc/caret.plugin.ts";
 import { createCaretSetup, PLAN_ALLOW_RULE, withPlanAllow } from "@oc/caret.plugin.v2.ts";
 import type { Rule } from "@oc/permission.ts";
 import type { SpawnRunner } from "@oc/review-bridge.ts";
