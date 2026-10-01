@@ -4,7 +4,7 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 
-import { PLAN_TITLE_INSTRUCTION } from "@opencode/review-bridge.ts";
+import { PLAN_TITLE_INSTRUCTION } from "@oc/review-bridge.ts";
 import { runCaretCli } from "@test/support/cli-process.ts";
 import { planTitleSteer } from "@/adapters/claude/steer.ts";
 

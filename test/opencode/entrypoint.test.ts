@@ -9,8 +9,8 @@
 
 import { expect, test } from "bun:test";
 
-import v1Server from "@opencode/caret.plugin.ts";
-import v2Setup from "@opencode/caret.plugin.v2.ts";
+import v1Server from "@oc/caret.plugin.ts";
+import v2Setup from "@oc/caret.plugin.v2.ts";
 import pkgJson from "@root/package.json" with { type: "json" };
 
 // package.json arrives as a parsed module (as test/core/lib/build-id.test.ts
@@ -28,7 +28,7 @@ const pkg = pkgJson as {
 };
 
 test("the OpenCode package entrypoint exports one plugin serving both v1 (server) and v2 (setup)", async () => {
-  const mod = await import("@opencode/index.ts");
+  const mod = await import("@oc/index.ts");
   const values = Object.values(mod);
   expect(values).toHaveLength(1);
   const plugin = values[0] as Record<string, unknown>;
@@ -52,7 +52,7 @@ test("the TUI module's default loads on v2 as { id, setup } and on v1 as a TUI-o
   // v2's TUI loader reads only the default and requires a non-empty `id` and a `setup`
   // (anomalyco/opencode packages/tui/src/plugin/context.tsx:694-696,741-751); v1 rejects a
   // default holding both `server` and `tui`, and needs `tui` on a TUI target.
-  const mod = await import("@opencode/caret.tui.ts");
+  const mod = await import("@oc/caret.tui.ts");
   const plugin = mod.default as Record<string, unknown>;
   expect(typeof plugin.id).toBe("string");
   expect(plugin.id).not.toBe("");

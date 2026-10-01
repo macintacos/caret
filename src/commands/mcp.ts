@@ -18,7 +18,7 @@ import {
   PLAN_TITLE_INSTRUCTION,
   runReviewViaCaret,
   type SpawnRunner,
-} from "@opencode/review-bridge.ts";
+} from "@oc/review-bridge.ts";
 import { CLAUDE_MCP_AGENT } from "@/adapters/index.ts";
 import { bootHookLogging } from "@/commands/boot.ts";
 import { loadSettings } from "@/config/settings.ts";

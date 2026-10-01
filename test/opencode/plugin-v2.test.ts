@@ -7,6 +7,8 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
+import type { Plugin } from "@opencode/plugin";
+import type { ToolContext } from "@opencode/plugin/promise/tool";
 import type { PluginInput, ToolContext as V1ToolContext } from "@opencode-ai/plugin";
 
 import {
@@ -15,12 +17,10 @@ import {
   createCaretPlugin,
   planningSteer,
   REVIEW_TOOL,
-} from "@opencode/caret.plugin.ts";
-import { createCaretSetup, PLAN_ALLOW_RULE, withPlanAllow } from "@opencode/caret.plugin.v2.ts";
-import type { Rule } from "@opencode/permission.ts";
-import type { Plugin } from "@opencode/plugin";
-import type { ToolContext } from "@opencode/plugin/promise/tool";
-import type { SpawnRunner } from "@opencode/review-bridge.ts";
+} from "@oc/caret.plugin.ts";
+import { createCaretSetup, PLAN_ALLOW_RULE, withPlanAllow } from "@oc/caret.plugin.v2.ts";
+import type { Rule } from "@oc/permission.ts";
+import type { SpawnRunner } from "@oc/review-bridge.ts";
 import { fakeDistDir } from "@test/support/fs-tree.ts";
 import { streamingRunner, stubRunner } from "@test/support/spawn-runner.ts";
 

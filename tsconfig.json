@@ -43,7 +43,7 @@
       "@core/*": ["./src/*"],
       "@test/*": ["./test/*"],
       "@scripts/*": ["./scripts/*"],
-      "@opencode/*": ["./opencode/*"],
+      "@oc/*": ["./opencode/*"],
       "@ui/*": ["./ui/*"],
       "@root/package.json": ["./package.json"]
     }

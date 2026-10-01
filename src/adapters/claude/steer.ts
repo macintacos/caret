@@ -1,7 +1,7 @@
 // The plan-title steer for EnterPlanMode's PostToolUse and UserPromptSubmit. Entering plan mode
 // with Shift+Tab fires no EnterPlanMode, so a prompt sent in plan mode is the only signal.
 
-import { PLAN_TITLE_INSTRUCTION } from "@opencode/review-bridge.ts";
+import { PLAN_TITLE_INSTRUCTION } from "@oc/review-bridge.ts";
 import { parseHookStdin } from "@/adapters/wire.ts";
 
 interface SteerHookStdin {

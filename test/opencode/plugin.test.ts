@@ -22,8 +22,8 @@ import {
   resolvePlanSource,
   resolvePlansDir,
   type WarmRunner,
-} from "@opencode/caret.plugin.ts";
-import { PLAN_TITLE_INSTRUCTION, type SpawnRunner } from "@opencode/review-bridge.ts";
+} from "@oc/caret.plugin.ts";
+import { PLAN_TITLE_INSTRUCTION, type SpawnRunner } from "@oc/review-bridge.ts";
 import { fakeDistDir } from "@test/support/fs-tree.ts";
 import { recordingClient } from "@test/support/opencode-toast-client.ts";
 import { until } from "@test/support/poll.ts";
