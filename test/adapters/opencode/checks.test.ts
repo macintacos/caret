@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 import { withEnv } from "@test/support/env.ts";
 import { readOpencodeChecks } from "@/adapters/opencode/checks.ts";
-import type { VersionTriple } from "@/adapters/opencode/host.ts";
+import type { VersionTriple } from "@/lib/semver.ts";
 
 const PKG = "@macintacos/caret";
 

@@ -23,7 +23,7 @@ import { join } from "node:path";
 
 import { splitPluginSpecifier } from "@/adapters/opencode/config-plugin.ts";
 import { type CaretEntry, readCaretEntry } from "@/adapters/opencode/entries.ts";
-import { isV2Host, type VersionTriple } from "@/adapters/opencode/host.ts";
+import { isV2Host } from "@/adapters/opencode/host.ts";
 import {
   CARET_PACKAGE,
   existingOpencodeCachePackageDirs,
@@ -35,7 +35,7 @@ import {
 } from "@/adapters/opencode/paths.ts";
 import type { Check } from "@/doctor/report.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
-import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
+import { isNewer, parseVersionTriple, type VersionTriple } from "@/lib/semver.ts";
 import { publishedCaretVersion } from "@/lib/upstream.ts";
 
 /** What install found when it compared the caret OpenCode would load against the one

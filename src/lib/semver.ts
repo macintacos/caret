@@ -5,9 +5,12 @@
 // reaches it through `@core` to build the What's new compare link, so it must stay
 // node-free.
 
+/** A version as `[major, minor, patch]`. */
+export type VersionTriple = readonly [number, number, number];
+
 /** Semver triple `[major, minor, patch]`, or null when `v` is not `X.Y.Z` (an optional
  * leading `v` is stripped; trailing prerelease/build metadata is ignored). */
-export function parseVersionTriple(v: string): [number, number, number] | null {
+export function parseVersionTriple(v: string): VersionTriple | null {
   const m = v
     .trim()
     .replace(/^v/, "")

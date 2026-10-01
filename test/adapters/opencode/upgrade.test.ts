@@ -14,7 +14,6 @@ import { join } from "node:path";
 
 import { withEnv } from "@test/support/env.ts";
 import { readCaretEntry } from "@/adapters/opencode/entries.ts";
-import type { VersionTriple } from "@/adapters/opencode/host.ts";
 import { existingOpencodeCachePackageDirs } from "@/adapters/opencode/paths.ts";
 import {
   caretCacheDir,
@@ -26,6 +25,7 @@ import {
   upgradeVerdict,
   upgradeVerdictLine,
 } from "@/adapters/opencode/upgrade.ts";
+import type { VersionTriple } from "@/lib/semver.ts";
 
 const PKG = "@macintacos/caret";
 const STALE_CACHE = { kind: "stale-cache", cached: "0.2.0", published: "0.8.1" } as const;

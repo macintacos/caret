@@ -8,11 +8,11 @@ import { parse as parseJsonc } from "jsonc-parser";
 
 import { withEnv } from "@test/support/env.ts";
 import { expectCleanExitCode } from "@test/support/exit-code.ts";
-import type { VersionTriple } from "@/adapters/opencode/host.ts";
 import type { OpencodePackaging } from "@/adapters/opencode/packaging.ts";
 import { CARET_PACKAGE } from "@/adapters/opencode/paths.ts";
 import { type InstallOpencodeDeps, runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
 import { type InstallUI, recordingUI } from "@/commands/install/ui.ts";
+import type { VersionTriple } from "@/lib/semver.ts";
 
 // Stub packaging so the target never resolves the real caret root. Only the command
 // files, bin path, and demo template matter (caret itself installs as a

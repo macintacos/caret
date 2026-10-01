@@ -36,7 +36,7 @@ import {
   isCaretCheckout,
   readConfigText,
 } from "@/adapters/opencode/entries.ts";
-import { pluginKeyFor, readOpencodeVersion, type VersionTriple } from "@/adapters/opencode/host.ts";
+import { pluginKeyFor, readOpencodeVersion } from "@/adapters/opencode/host.ts";
 import { loadOpencodePackaging, type OpencodePackaging } from "@/adapters/opencode/packaging.ts";
 import {
   CARET_PACKAGE,
@@ -61,6 +61,7 @@ import { promptUpgrade } from "@/commands/install/prompt.ts";
 import type { InstallUI } from "@/commands/install/ui.ts";
 import { isTerminal, silentUI } from "@/commands/install/ui.ts";
 import { VERSION } from "@/lib/build-id.ts";
+import type { VersionTriple } from "@/lib/semver.ts";
 
 /** Injection seam for tests: override the config dir and packaging so the target
  * can run against a temp dir without resolving the real caret root, and every effect

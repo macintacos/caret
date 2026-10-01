@@ -4,13 +4,10 @@
 
 import type { PluginKey } from "@/adapters/opencode/config-plugin.ts";
 import type { Check } from "@/doctor/report.ts";
-import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
+import { isNewer, parseVersionTriple, type VersionTriple } from "@/lib/semver.ts";
 
 /** Covers a cold v1 start (npm's node wrapper took 1.6 s) with margin. */
 const OPENCODE_VERSION_TIMEOUT_MS = 5_000;
-
-/** An OpenCode version as `[major, minor, patch]`. */
-export type VersionTriple = readonly [number, number, number];
 
 /** "opencode v2.0.18" (v2) or a bare "1.14.17" (v1); null for anything else. */
 export function parseOpencodeVersion(stdout: string): VersionTriple | null {
