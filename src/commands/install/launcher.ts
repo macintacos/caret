@@ -220,11 +220,11 @@ export interface LauncherCandidate {
  * v1's, OpenCode v2's live generations, then caret's own copies. Keep in sync with
  * candidate_dirs() in bin/caret-launcher. */
 export function launcherCandidateDirs(): LauncherCandidate[] {
-  const opencode = opencodeRootPaths().filter(isDir);
+  const opencodeRoots = opencodeRootPaths().filter(isDir);
   return [
     ...[
       ...listDirs(join(claudeConfigDir(), "plugins", "cache", "caret", "caret")),
-      ...opencode,
+      ...opencodeRoots,
     ].map((dir) => ({ dir, owned: false })),
     ...listDirs(ownedRootsDir()).map((dir) => ({ dir, owned: true })),
   ];

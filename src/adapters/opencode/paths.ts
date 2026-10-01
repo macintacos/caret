@@ -227,10 +227,10 @@ export function existingOpencodeCachePackageDirs(pkg: string = CARET_PACKAGE): s
  * checked, so a dir an interrupted install left empty still yields a path. Keep in sync
  * with candidate_dirs()/live_generation() in bin/caret-launcher. */
 export function opencodeRootPaths(pkg: string = CARET_PACKAGE): string[] {
-  const v2 = listCacheDirs(join(opencodeNpmDir(), pkg))
+  const liveGenerations = listCacheDirs(join(opencodeNpmDir(), pkg))
     .map(liveGenerationDir)
     .filter((d) => d !== null);
-  return [...listCacheDirs(opencodeCachePackageDir(pkg)), ...v2].map((d) =>
+  return [...listCacheDirs(opencodeCachePackageDir(pkg)), ...liveGenerations].map((d) =>
     join(d, "node_modules", pkg),
   );
 }

@@ -98,13 +98,13 @@ candidate_version() {
 # child. Older generations persist beside it and are never loaded. Keep in sync with
 # liveGenerationDir (src/adapters/opencode/paths.ts).
 live_generation() {
-  local dir name best=""
+  local dir name newest=""
   for dir in "$1"/*; do
     name="${dir##*/}"
     case "$name" in '' | *[!0-9]*) continue ;; esac
-    if [ -z "$best" ] || [ "$name" -gt "$best" ]; then best="$name"; fi
+    if [ -z "$newest" ] || [ "$name" -gt "$newest" ]; then newest="$name"; fi
   done
-  if [ -n "$best" ]; then printf '%s' "$1/$best"; fi
+  if [ -n "$newest" ]; then printf '%s' "$1/$newest"; fi
 }
 
 # Every dir either agent's cache or caret's own copies offer, runnable caret or
