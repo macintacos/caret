@@ -103,6 +103,17 @@ export type ToastBody = {
   variant: "info" | "success" | "warning" | "error";
   duration?: number;
 };
+/** Where a host shows a toast. */
+export type ToastSink = (body: ToastBody) => unknown;
+
+/** Show a toast best-effort: a sync throw or async rejection is swallowed. */
+export function toastBestEffort(show: ToastSink, body: ToastBody): void {
+  try {
+    Promise.resolve(show(body)).catch(() => {});
+  } catch {
+    // best-effort — the review decision is what matters.
+  }
+}
 /** OpenCode's plugin client, structurally narrowed to the calls caret makes.
  * A structural type (rather than importing the SDK client) keeps this robust
  * against version skew between the pinned plugin SDK and the running OpenCode. */
@@ -158,11 +169,7 @@ export function decisionToast(outcome: ReviewOutcome): ToastBody {
 export function showToast(client: ToastClient, body: ToastBody): void {
   const tui = client?.tui;
   if (!tui || typeof tui.showToast !== "function") return;
-  try {
-    Promise.resolve(tui.showToast({ body })).catch(() => {});
-  } catch {
-    // best-effort — the review decision is what matters.
-  }
+  toastBestEffort((b) => tui.showToast?.({ body: b }), body);
 }
 
 /** True when this tool call arrived from a subagent — a `parentID` on the calling
@@ -353,7 +360,7 @@ function fileUpdateCache(path: string): UpdateCache {
  * — the `CARET_OPENCODE_NO_UPDATE_CHECK` opt-out and every failure resolve
  * silently. */
 export async function realUpdateChecker(
-  client: ToastClient,
+  show: ToastSink,
   opts: {
     currentVersion: string;
     env: Record<string, string | undefined>;
@@ -376,7 +383,7 @@ export async function realUpdateChecker(
     const latest = parseLatestRelease(await res.json());
     if (!latest) return;
     const body = updateToastBody(opts.currentVersion, latest);
-    if (body) showToast(client, body);
+    if (body) toastBestEffort(show, body);
   } catch {
     // best-effort — an update nudge must never disrupt the session.
   }
@@ -572,7 +579,7 @@ export function createCaretPlugin(
     bin?: string;
     run?: SpawnRunner;
     warm?: WarmRunner;
-    checkUpdate?: (client: ToastClient) => void;
+    checkUpdate?: (show: ToastSink) => void;
     plansDir?: string;
   } = {},
 ): Plugin {
@@ -593,7 +600,7 @@ export function createCaretPlugin(
     const client = (input as { client?: CaretClient }).client;
     // Startup update nudge (EXC-794), fire-and-forget. Only the production default
     // export wires this.
-    if (opts.checkUpdate) opts.checkUpdate(client);
+    if (opts.checkUpdate) opts.checkUpdate((body) => showToast(client, body));
     // The agent driving each session, recorded by chat.message and read by
     // system.transform, which carries no agent of its own. Why a map is the only
     // route: `doc/agents/opencode-integration.md` § Why gating the steer needs a
@@ -693,8 +700,8 @@ export function createCaretPlugin(
 }
 
 /** The update check both hosts run, wired to production; one file stamp throttles both. */
-export function productionUpdateCheck(client: ToastClient): void {
-  void realUpdateChecker(client, {
+export function productionUpdateCheck(show: ToastSink): void {
+  void realUpdateChecker(show, {
     currentVersion: resolveCaretVersion({
       importMetaUrl: import.meta.url,
       readFile: (p) => readFileSync(p, "utf-8"),

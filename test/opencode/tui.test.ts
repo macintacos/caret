@@ -3,7 +3,7 @@
 
 import { expect, test } from "bun:test";
 
-import type { ToastBody, ToastClient } from "@oc/caret.plugin.ts";
+import type { ToastBody, ToastSink } from "@oc/caret.plugin.ts";
 import { createCaretTui, type TuiContext } from "@oc/caret.tui.ts";
 
 type Handler = Parameters<TuiContext["data"]["on"]>[1];
@@ -35,7 +35,7 @@ function fakeTui(show: (body: ToastBody) => void = () => {}) {
   return { ctx, shown, emit, unsubscribed: () => unsubscribed };
 }
 
-function start(checkUpdate: (client: ToastClient) => void = () => {}) {
+function start(checkUpdate: (show: ToastSink) => void = () => {}) {
   const fake = fakeTui();
   const cleanup = createCaretTui({ checkUpdate })(fake.ctx);
   return { ...fake, cleanup };
@@ -102,12 +102,12 @@ test("a throwing update check does not escape setup", () => {
   ).not.toThrow();
 });
 
-test("the update check runs once on a client that toasts through the TUI", () => {
-  const clients: ToastClient[] = [];
-  const { shown } = start((client) => clients.push(client));
-  expect(clients).toHaveLength(1);
+test("the update check runs once on a sink that toasts through the TUI", () => {
+  const sinks: ToastSink[] = [];
+  const { shown } = start((show) => sinks.push(show));
+  expect(sinks).toHaveLength(1);
   const body: ToastBody = { message: "caret 9.9.9 is available", variant: "info" };
-  clients[0]?.tui?.showToast?.({ body });
+  sinks[0]?.(body);
   expect(shown).toEqual([body]);
 });
 
