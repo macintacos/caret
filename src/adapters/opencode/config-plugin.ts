@@ -30,10 +30,12 @@ import { isLocalPluginSpecifier } from "@/adapters/opencode/paths.ts";
 /** Indent edits the way `text` already is: by the whitespace before its first top-level
  * property, read from the parse tree so a comment cannot mislead it. */
 function formattingOf(text: string): FormattingOptions {
-  const first = parseTree(text)?.children?.[0];
-  const lead = first ? text.slice(text.lastIndexOf("\n", first.offset) + 1, first.offset) : "";
-  if (lead.startsWith("\t")) return { insertSpaces: false, tabSize: 1 };
-  return { insertSpaces: true, tabSize: /^ +$/.test(lead) ? lead.length : 2 };
+  const firstProperty = parseTree(text)?.children?.[0];
+  const indent = firstProperty
+    ? text.slice(text.lastIndexOf("\n", firstProperty.offset) + 1, firstProperty.offset)
+    : "";
+  if (indent.startsWith("\t")) return { insertSpaces: false, tabSize: 1 };
+  return { insertSpaces: true, tabSize: /^ +$/.test(indent) ? indent.length : 2 };
 }
 
 /** The config keys a plugin list lives under — v1's `plugin`, v2's `plugins` — in load
@@ -260,17 +262,17 @@ function deleteNode(text: string, path: JSONPath): string {
   const root = parseTree(text);
   const found = root && findNodeAtLocation(root, path);
   // For a key, findNodeAtLocation returns the value; the cut spans the whole "key": value property.
-  const prop = typeof path.at(-1) === "number" ? found : found?.parent;
-  const siblings = prop?.parent?.children;
-  if (!prop || !siblings) return text;
-  const i = siblings.indexOf(prop);
-  const end = prop.offset + prop.length;
+  const node = typeof path.at(-1) === "number" ? found : found?.parent;
+  const siblings = node?.parent?.children;
+  if (!node || !siblings) return text;
+  const i = siblings.indexOf(node);
+  const end = node.offset + node.length;
   const edits: Edit[] = [];
   const trailingComma = commaAfter(text, end);
   if (trailingComma !== null && text.slice(end, trailingComma).trim() === "") {
-    edits.push(wholeLine(text, prop.offset, trailingComma + 1));
+    edits.push(wholeLine(text, node.offset, trailingComma + 1));
   } else {
-    edits.push(wholeLine(text, prop.offset, end));
+    edits.push(wholeLine(text, node.offset, end));
     const previousSibling = siblings[i - 1];
     const comma =
       trailingComma ??
