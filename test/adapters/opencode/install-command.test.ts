@@ -163,6 +163,28 @@ test("uninstall with caret never installed reports nothing removed, and is not a
   expect(said).toContain("Removed 0 command file(s)");
 });
 
+test("dry-run uninstall previews what it would remove and writes nothing", async () => {
+  await install();
+  const said = await transcript({}, { uninstall: true, dryRun: true });
+  expect(said).toContain("OpenCode — would remove");
+  expect(said).toContain(configJson());
+  expect(said).toContain(join("commands", "caret:demo.md"));
+  expect(said).not.toContain("plugin entry:");
+  expect(plugins()).toEqual([CARET_PACKAGE]);
+  expect(existsSync(commandFile())).toBe(true);
+});
+
+test("uninstall never probes the OpenCode version, live or previewed", async () => {
+  const probes: string[] = [];
+  const opencodeVersion = () => {
+    probes.push("probed");
+    return null;
+  };
+  await transcript({ opencodeVersion }, { uninstall: true, dryRun: true });
+  await transcript({ opencodeVersion }, { uninstall: true });
+  expect(probes).toEqual([]);
+});
+
 test("dry-run install writes nothing", async () => {
   await install(false, true);
   expect(existsSync(configJson())).toBe(false);
