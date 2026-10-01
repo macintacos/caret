@@ -71,17 +71,28 @@ export function caretPackageEntry(text: string | null): CaretEntry | null {
   return caretEntries(text, () => false)[0] ?? null;
 }
 
-/** `caretPackageEntry` over `configFile`. Throws when the file exists but cannot be
- * read. */
-export function readCaretEntry(configFile: string): CaretEntry | null {
-  return caretPackageEntry(readConfigText(configFile));
+/** `caretEntries` across `configFiles`, in the order given. That order is caret's file
+ * preference, not OpenCode's load order, and each `index` is per-file — so the result is
+ * for reading only and must never reach `dropEntries`. Throws when a file exists but
+ * cannot be read. */
+export function readCaretEntries(
+  configFiles: readonly string[],
+  isCheckout: (dir: string) => boolean,
+): CaretEntry[] {
+  return configFiles.flatMap((f) => caretEntries(readConfigText(f), isCheckout));
 }
 
-/** The caret entry OpenCode loads from `configFile`: the package or a `--from-local`
- * checkout, the first in load order when it lists several. Throws like
- * `readCaretEntry`. */
-export function readLoadedCaretEntry(configFile: string): CaretEntry | null {
-  return caretEntries(readConfigText(configFile), isCaretCheckout)[0] ?? null;
+/** The first `caretPackageEntry` across `configFiles`. Throws when a file exists but
+ * cannot be read. */
+export function readCaretEntry(configFiles: readonly string[]): CaretEntry | null {
+  return readCaretEntries(configFiles, () => false)[0] ?? null;
+}
+
+/** The first caret entry across `configFiles` in a form OpenCode can load — the package or
+ * a `--from-local` checkout. Whether the host reads the file it sits in is the caller's
+ * concern. Throws like `readCaretEntry`. */
+export function readLoadedCaretEntry(configFiles: readonly string[]): CaretEntry | null {
+  return readCaretEntries(configFiles, isCaretCheckout)[0] ?? null;
 }
 
 /** The config file's text, or null when it is absent. */

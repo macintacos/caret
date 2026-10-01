@@ -176,7 +176,7 @@ test("a caret entry in any config file is found (scans all; parses jsonc comment
 
 test("an unreadable config reports the install as unknown, never throwing", async () => {
   await configWithCaret();
-  // resolveConfigFile prefers opencode.jsonc, so a directory there makes the read EISDIR.
+  // existingConfigFiles lists opencode.jsonc, so a directory there makes the read EISDIR.
   await mkdir(join(configDir(), "opencode.jsonc"));
   expect(readOpencodeInstallState()).toEqual({
     pluginVersion: "unknown",
@@ -225,4 +225,11 @@ test("a plugins entry reports the version installed in v2's live generation", as
     pluginEnabled: true,
     hookInUserSettings: true,
   });
+});
+
+test("the version is read from a caret entry in opencode.json when opencode.jsonc has none", async () => {
+  await configWithCaret();
+  await writeFile(join(configDir(), "opencode.jsonc"), JSON.stringify({ plugin: [] }));
+  await writeCachePkg("@macintacos/caret", shim("0.8.0"));
+  expect(readOpencodeInstallState().pluginVersion).toBe("0.8.0");
 });

@@ -222,7 +222,7 @@ function configWith(entries: string[]): string {
 /** The verdict for a config carrying `entries`, against a cache under `tmp`. */
 function verdictFor(entries: string[], published: string) {
   return readUpgradeVerdict({
-    configFile: configWith(entries),
+    configFiles: [configWith(entries)],
     cacheDir: (e) => join(tmp, e.spec),
     published: async () => published,
   });
@@ -258,7 +258,7 @@ test("a range shim with an installed caret behind npm is a stale cache", async (
 test("an absent config file reads as no entry at all", async () => {
   expect(
     await readUpgradeVerdict({
-      configFile: join(tmp, "no-such-config.json"),
+      configFiles: [join(tmp, "no-such-config.json")],
       cacheDir: (e) => join(tmp, e.spec),
       published: async () => "0.9.0",
     }),
@@ -286,20 +286,20 @@ test("a range shim with nothing installed is unknown, naming the range", async (
 // ---- readCaretEntry: the package-form entry the version check reads ----
 
 test("a config naming caret has an entry; one naming another plugin does not", () => {
-  expect(readCaretEntry(configWith([`${PKG}@0.8.0`])) !== null).toBe(true);
-  expect(readCaretEntry(configWith([PKG])) !== null).toBe(true);
-  expect(readCaretEntry(configWith(["opencode-wakatime"])) !== null).toBe(false);
+  expect(readCaretEntry([configWith([`${PKG}@0.8.0`])]) !== null).toBe(true);
+  expect(readCaretEntry([configWith([PKG])]) !== null).toBe(true);
+  expect(readCaretEntry([configWith(["opencode-wakatime"])]) !== null).toBe(false);
 });
 
 test("a --from-local checkout entry is not the package entry the version check reads", () => {
   const checkoutDir = join(tmp, "checkout");
   mkdirSync(join(checkoutDir, "opencode"), { recursive: true });
   writeFileSync(join(checkoutDir, "opencode", "caret.plugin.ts"), "");
-  expect(readCaretEntry(configWith([`file:${checkoutDir}`])) !== null).toBe(false);
+  expect(readCaretEntry([configWith([`file:${checkoutDir}`])]) !== null).toBe(false);
 });
 
 test("an absent config file carries no entry", () => {
-  expect(readCaretEntry(join(tmp, "no-such-config.json")) !== null).toBe(false);
+  expect(readCaretEntry([join(tmp, "no-such-config.json")]) !== null).toBe(false);
 });
 
 // ---- the verdict's line, and the check doctor renders it as ----
@@ -370,7 +370,7 @@ function v2Verdict(entry: string, key: "plugin" | "plugins", host?: VersionTripl
   const path = join(tmp, "opencode.json");
   writeFileSync(path, JSON.stringify({ [key]: [entry] }));
   return withEnv({ XDG_CACHE_HOME: tmp }, () =>
-    readUpgradeVerdict({ configFile: path, host, published: async () => "0.9.0" }),
+    readUpgradeVerdict({ configFiles: [path], host, published: async () => "0.9.0" }),
   );
 }
 
@@ -414,7 +414,7 @@ test("a v2 cache dir with no generation reads as nothing cached", async () => {
 test("a plugins entry counts as caret's package entry", () => {
   const path = join(tmp, "opencode.json");
   writeFileSync(path, JSON.stringify({ plugins: [{ package: PKG }] }));
-  expect(readCaretEntry(path) !== null).toBe(true);
+  expect(readCaretEntry([path]) !== null).toBe(true);
 });
 
 test("clearing removes a whole v2 npm dir, every generation with it", () => {
@@ -424,4 +424,10 @@ test("clearing removes a whole v2 npm dir, every generation with it", () => {
   const dirs = withEnv({ XDG_CACHE_HOME: tmp }, () => existingOpencodeCachePackageDirs());
   expect(clearCachedCaret(dirs)).toEqual([dir]);
   expect(existsSync(dir)).toBe(false);
+});
+
+test("a caret entry in a later config file is found", () => {
+  const jsonc = join(tmp, "opencode.jsonc");
+  writeFileSync(jsonc, JSON.stringify({ plugin: ["opencode-wakatime"] }));
+  expect(readCaretEntry([jsonc, configWith([`${PKG}@0.8.0`])])?.spec).toBe(`${PKG}@0.8.0`);
 });

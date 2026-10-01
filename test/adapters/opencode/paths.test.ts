@@ -1,17 +1,21 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { withEnv } from "@test/support/env.ts";
+import { hostConfigFilenames } from "@/adapters/opencode/host.ts";
 import {
+  existingConfigFiles,
   existingOpencodeCachePackageDirs,
   liveGenerationDir,
   opencodeCachePackageDir,
   opencodeNpmCacheDir,
   opencodeNpmLocalCacheDir,
+  resolveConfigFile,
 } from "@/adapters/opencode/paths.ts";
+import type { VersionTriple } from "@/lib/semver.ts";
 
 let tmp: string;
 beforeEach(async () => {
@@ -94,4 +98,40 @@ test("caret's cache dirs cover v2's npm layout beside v1's packages layout", () 
       ].sort(),
     );
   });
+});
+
+test("existingConfigFiles lists the configs that exist, jsonc first", () => {
+  for (const name of ["config.json", "opencode.jsonc"]) writeFileSync(join(tmp, name), "{}");
+  expect(existingConfigFiles(tmp)).toEqual([join(tmp, "opencode.jsonc"), join(tmp, "config.json")]);
+});
+
+test("existingConfigFiles lists two names for one file once, under the earlier name", () => {
+  writeFileSync(join(tmp, "opencode.json"), "{}");
+  symlinkSync(join(tmp, "opencode.json"), join(tmp, "config.json"));
+  expect(existingConfigFiles(tmp)).toEqual([join(tmp, "opencode.json")]);
+});
+
+test("resolveConfigFile on v2 and an unknown host skips a config.json-only dir for a new opencode.json", () => {
+  writeFileSync(join(tmp, "config.json"), "{}");
+  const hosts: (VersionTriple | null)[] = [[2, 0, 18], null];
+  for (const host of hosts) {
+    expect(resolveConfigFile(tmp, hostConfigFilenames(host))).toBe(join(tmp, "opencode.json"));
+  }
+});
+
+test("resolveConfigFile on v1 keeps a config.json-only dir", () => {
+  writeFileSync(join(tmp, "config.json"), "{}");
+  expect(resolveConfigFile(tmp, hostConfigFilenames([1, 18, 29]))).toBe(join(tmp, "config.json"));
+});
+
+test("resolveConfigFile prefers opencode.jsonc when opencode.json is beside it", () => {
+  for (const name of ["opencode.json", "opencode.jsonc"]) writeFileSync(join(tmp, name), "{}");
+  const hosts: (VersionTriple | null)[] = [[2, 0, 18], [1, 18, 29], null];
+  for (const host of hosts) {
+    expect(resolveConfigFile(tmp, hostConfigFilenames(host))).toBe(join(tmp, "opencode.jsonc"));
+  }
+});
+
+test("resolveConfigFile falls back to opencode.json when no config exists", () => {
+  expect(resolveConfigFile(tmp, hostConfigFilenames([2, 0, 18]))).toBe(join(tmp, "opencode.json"));
 });

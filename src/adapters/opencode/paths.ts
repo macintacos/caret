@@ -6,7 +6,7 @@
 // disagree about a path. It also resolves what the file-deploy era left in that config
 // dir, which install and uninstall sweep, and both hosts' plugin cache layouts.
 
-import { type Dirent, existsSync, readdirSync } from "node:fs";
+import { type Dirent, existsSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
@@ -57,8 +57,8 @@ export function namespacedCommandFilename(sourceName: string): string {
 
 /** Config filenames OpenCode may use in its config dir, in the order caret prefers
  * to WRITE (jsonc first — OpenCode's documented primary form, edited in place so a
- * commented config survives; then json; then the legacy global `config.json`). The
- * doctor probe scans every one, so order doesn't mask a later file for reads. */
+ * commented config survives; then json; then the legacy global `config.json`). Readers
+ * scan every one that exists, in this order. */
 export const CONFIG_FILENAMES = ["opencode.jsonc", "opencode.json", "config.json"] as const;
 
 /** The OpenCode config dir: OPENCODE_CONFIG_DIR override, else
@@ -70,15 +70,31 @@ export function opencodeConfigDir(): string {
   return join(xdg || join(homedir(), ".config"), "opencode");
 }
 
-/** The config file caret edits to add/remove its plugin-list entry: the first
- * existing candidate (jsonc preferred), else `opencode.json` to create when the dir
- * has no config yet. */
-export function resolveConfigFile(configDir: string): string {
-  for (const name of CONFIG_FILENAMES) {
+export type ConfigFilename = (typeof CONFIG_FILENAMES)[number];
+
+/** The global config file install writes caret into: the first of `names` that exists
+ * under `configDir`, else `opencode.json` to create. */
+export function resolveConfigFile(configDir: string, names: readonly ConfigFilename[]): string {
+  for (const name of names) {
     const p = join(configDir, name);
     if (existsSync(p)) return p;
   }
   return join(configDir, "opencode.json");
+}
+
+/** Every global config file that exists under `configDir`, in `CONFIG_FILENAMES` order:
+ * what install strips, uninstall clears, and doctor reads. Two names for one file list
+ * once, under the earlier: edits planned per name would overwrite each other. */
+export function existingConfigFiles(configDir: string): string[] {
+  const seen = new Set<string>();
+  return CONFIG_FILENAMES.map((name) => join(configDir, name))
+    .filter((p) => existsSync(p))
+    .filter((p) => {
+      const real = realpathSync(p);
+      if (seen.has(real)) return false;
+      seen.add(real);
+      return true;
+    });
 }
 
 /** Absolute path to OpenCode's command dir under a config dir. */

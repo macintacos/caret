@@ -14,8 +14,10 @@ import {
   findNodeAtLocation,
   type JSONPath,
   modify,
+  type ParseError,
   parse,
   parseTree,
+  printParseErrorCode,
 } from "jsonc-parser";
 
 import { isLocalPluginSpecifier } from "@/adapters/opencode/paths.ts";
@@ -27,6 +29,22 @@ const FORMATTING = { insertSpaces: true, tabSize: 2 } as const;
 export const PLUGIN_KEYS = ["plugin", "plugins"] as const;
 
 export type PluginKey = (typeof PLUGIN_KEYS)[number];
+
+/** Why `text` is not a config OpenCode can load — the first parse error, or a root that
+ * is not an object — or null when it is. Lenient the way OpenCode is (trailing commas),
+ * and an empty file passes: install treats it as a config with no keys. */
+export function configParseError(text: string): string | null {
+  const errors: ParseError[] = [];
+  // Bun, which OpenCode runs on, strips a leading BOM before parsing.
+  const root: unknown = parse(text.replace(/^\uFEFF/, ""), errors, {
+    allowTrailingComma: true,
+    allowEmptyContent: true,
+  });
+  const [first] = errors;
+  if (first !== undefined) return `${printParseErrorCode(first.error)} at offset ${first.offset}`;
+  const isObject = typeof root === "object" && root !== null && !Array.isArray(root);
+  return root === undefined || isObject ? null : "not a JSON object";
+}
 
 /** The current `key` array as a plain array (empty when absent/not an array). */
 function pluginArray(text: string, key: PluginKey): unknown[] {

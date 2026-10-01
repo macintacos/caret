@@ -150,13 +150,13 @@ export function upgradeCheck(verdict: UpgradeVerdict): Check {
  * site for both `caret install` and `caret doctor`, so neither can describe a version
  * gap the other would describe differently. */
 export async function readUpgradeVerdict(deps: {
-  configFile: string;
+  configFiles: readonly string[];
   /** The OpenCode version, when known; a `plugin` entry on v2 is in v2's cache. */
   host?: VersionTriple | null;
   cacheDir?: (entry: CaretEntry) => string | null;
   published?: () => Promise<string | null>;
 }): Promise<UpgradeVerdict> {
-  const entry = readCaretEntry(deps.configFile);
+  const entry = readCaretEntry(deps.configFiles);
   const cacheDir = deps.cacheDir ?? ((e: CaretEntry) => caretCacheDir(e, deps.host));
   return upgradeVerdict({
     entry: entry?.spec ?? null,

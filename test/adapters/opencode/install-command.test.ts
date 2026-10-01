@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -8,8 +16,9 @@ import { parse as parseJsonc } from "jsonc-parser";
 
 import { withEnv } from "@test/support/env.ts";
 import { expectCleanExitCode } from "@test/support/exit-code.ts";
+import { caretEntries, readConfigText } from "@/adapters/opencode/entries.ts";
 import type { OpencodePackaging } from "@/adapters/opencode/packaging.ts";
-import { CARET_PACKAGE } from "@/adapters/opencode/paths.ts";
+import { CARET_PACKAGE, CONFIG_FILENAMES } from "@/adapters/opencode/paths.ts";
 import { type InstallOpencodeDeps, runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
 import { type InstallUI, recordingUI } from "@/commands/install/ui.ts";
 import type { VersionTriple } from "@/lib/semver.ts";
@@ -159,7 +168,7 @@ test("uninstall with caret never installed reports nothing removed, and is not a
   // `--uninstall` sweeps every agent, so a machine that only runs the other one lands
   // here; a throw or a non-zero exit would stop the run before the rest of the teardown.
   const said = await expectCleanExitCode(() => transcript({}, { uninstall: true }));
-  expect(said).toContain("caret was not in opencode.json");
+  expect(said).toContain("caret was not in any OpenCode config");
   expect(said).toContain("Removed 0 command file(s)");
 });
 
@@ -743,6 +752,112 @@ test("--from-local on v2 writes the checkout to plugins and drops package entrie
   expect(config()).toEqual({ plugin: [], plugins: [`file:${repo}`] });
 });
 
+const configFile = (name: string) => join(dir, name);
+const parsed = (name: string) => parseJsonc(readFileSync(configFile(name), "utf-8"));
+const caretCount = () =>
+  CONFIG_FILENAMES.reduce(
+    (n, name) => n + caretEntries(readConfigText(configFile(name)), () => false).length,
+    0,
+  );
+
+test("v2: a config.json-only user gets caret in a new opencode.json", async () => {
+  writeFileSync(
+    configFile("config.json"),
+    JSON.stringify({ theme: "dark", plugin: ["wakatime", `${CARET_PACKAGE}@1.0.0`] }),
+  );
+  await installOn(V2);
+  expect(config()).toEqual({ plugins: [`${CARET_PACKAGE}@1.0.0`] });
+  expect(parsed("config.json")).toEqual({ theme: "dark", plugin: ["wakatime"] });
+});
+
+test("v2: with both opencode.json and opencode.jsonc, caret stays only in opencode.jsonc", async () => {
+  writeFileSync(configFile("opencode.jsonc"), '{\n  // mine\n  "theme": "dark"\n}\n');
+  writeFileSync(
+    configJson(),
+    JSON.stringify({ plugin: [CARET_PACKAGE], plugins: [CARET_PACKAGE] }),
+  );
+  await installOn(V2);
+  expect(parsed("opencode.jsonc").plugins).toEqual([CARET_PACKAGE]);
+  expect(config()).toEqual({ plugin: [] });
+  expect(caretCount()).toBe(1);
+});
+
+test("v2: a duplicate spread across both keys and both files collapses to one", async () => {
+  writeFileSync(configFile("opencode.jsonc"), JSON.stringify({ plugin: [CARET_PACKAGE] }));
+  writeFileSync(configJson(), JSON.stringify({ plugins: [`${CARET_PACKAGE}@1.2.3`] }));
+  await installOn(V2);
+  expect(caretCount()).toBe(1);
+  expect(parsed("opencode.jsonc").plugins).toEqual([`${CARET_PACKAGE}@1.2.3`]);
+});
+
+test("v2: install says v2 ignores config.json once", async () => {
+  writeFileSync(configFile("config.json"), JSON.stringify({ plugin: [CARET_PACKAGE] }));
+  const note = "OpenCode v2 ignores config.json — caret goes in opencode.json";
+  expect(await transcript(V2)).toContain(note);
+  expect(await transcript(V2)).not.toContain(note);
+});
+
+test("v1: a config.json-only user keeps caret in config.json", async () => {
+  writeFileSync(configFile("config.json"), JSON.stringify({ theme: "dark" }));
+  await installOn(V1);
+  expect(parsed("config.json")).toEqual({ theme: "dark", plugin: [CARET_PACKAGE] });
+  expect(existsSync(configJson())).toBe(false);
+});
+
+test("unknown host: a config.json-only user moves caret to opencode.json", async () => {
+  writeFileSync(configFile("config.json"), JSON.stringify({ plugin: [CARET_PACKAGE] }));
+  await installOn({});
+  expect(config()).toEqual({ plugin: [CARET_PACKAGE] });
+  expect(parsed("config.json")).toEqual({ plugin: [] });
+});
+
+test("v2: a pin in an ignored config.json does not replace the opencode.json entry", async () => {
+  writeFileSync(configJson(), JSON.stringify({ plugins: [CARET_PACKAGE] }));
+  writeFileSync(configFile("config.json"), JSON.stringify({ plugin: [`${CARET_PACKAGE}@0.4.0`] }));
+  await installOn(V2);
+  expect(config()).toEqual({ plugins: [CARET_PACKAGE] });
+  expect(parsed("config.json")).toEqual({ plugin: [] });
+});
+
+test("uninstall removes caret from every global config file", async () => {
+  for (const name of CONFIG_FILENAMES) {
+    writeFileSync(
+      configFile(name),
+      JSON.stringify({ theme: name, plugin: ["wakatime", CARET_PACKAGE] }),
+    );
+  }
+  await install(true);
+  for (const name of CONFIG_FILENAMES) {
+    expect(parsed(name)).toEqual({ theme: name, plugin: ["wakatime"] });
+  }
+});
+
+/** v2, with caret absent from the target opencode.jsonc but present in both files the
+ * install strips. */
+function seedSpreadCaret(): Map<string, string> {
+  writeFileSync(configFile("opencode.jsonc"), '{ "theme": "dark" }');
+  writeFileSync(configJson(), JSON.stringify({ plugins: [CARET_PACKAGE] }));
+  writeFileSync(configFile("config.json"), JSON.stringify({ plugin: [CARET_PACKAGE] }));
+  return new Map(CONFIG_FILENAMES.map((n) => [n, readFileSync(configFile(n), "utf-8")]));
+}
+
+test("install --dry-run lists every config file it would change and writes nothing", async () => {
+  const before = seedSpreadCaret();
+  const said = await transcript(V2, { dryRun: true });
+  for (const name of CONFIG_FILENAMES) {
+    expect(said).toContain(configFile(name));
+    expect(readFileSync(configFile(name), "utf-8")).toBe(before.get(name) ?? "");
+  }
+});
+
+test("uninstall --dry-run lists every config file it would change", async () => {
+  seedSpreadCaret();
+  const said = await transcript(V2, { uninstall: true, dryRun: true });
+  expect(said).toContain(configJson());
+  expect(said).toContain(configFile("config.json"));
+  expect(said).not.toContain(configFile("opencode.jsonc"));
+});
+
 test("on v1, install writes caret to plugin", async () => {
   await installOn(V1);
   expect(config()).toEqual({ plugin: [CARET_PACKAGE] });
@@ -801,4 +916,79 @@ test("a v2 dry run reads a plugin entry's version from v2's cache layout", async
     transcript({ ...V2, cacheDir: undefined, published: async () => "0.9.0" }, { dryRun: true }),
   );
   expect(said).toContain("OpenCode's cached caret is 0.8.0");
+});
+
+test("a config that fails to parse stops install before any write", async () => {
+  const jsonc = configFile("opencode.jsonc");
+  writeFileSync(jsonc, '{ "plugins": [');
+  writeFileSync(configJson(), JSON.stringify({ plugin: [CARET_PACKAGE] }));
+  const before = [readFileSync(jsonc, "utf-8"), readFileSync(configJson(), "utf-8")];
+  await expect(installOn(V2)).rejects.toThrow("opencode.jsonc");
+  expect([readFileSync(jsonc, "utf-8"), readFileSync(configJson(), "utf-8")]).toEqual(before);
+});
+
+test("a config that fails to parse stops an install dry run, naming it", async () => {
+  const jsonc = configFile("opencode.jsonc");
+  writeFileSync(jsonc, '{ "plugins": [');
+  writeFileSync(configJson(), JSON.stringify({ plugin: [CARET_PACKAGE] }));
+  const before = [readFileSync(jsonc, "utf-8"), readFileSync(configJson(), "utf-8")];
+  await expect(transcript(V2, { dryRun: true })).rejects.toThrow("opencode.jsonc");
+  expect([readFileSync(jsonc, "utf-8"), readFileSync(configJson(), "utf-8")]).toEqual(before);
+});
+
+test("uninstall skips a config that fails to parse and clears the rest", async () => {
+  const garbled = configFile("config.json");
+  const jsonc = configFile("opencode.jsonc");
+  writeFileSync(garbled, "{ nope");
+  writeFileSync(jsonc, JSON.stringify({ plugins: [CARET_PACKAGE] }));
+  const said = await transcript({}, { uninstall: true });
+  expect(caretEntries(readFileSync(jsonc, "utf-8"), () => false)).toEqual([]);
+  expect(readFileSync(garbled, "utf-8")).toBe("{ nope");
+  expect(said).toMatch(/warn.*config\.json/);
+  expect(said.search(/warn:.*config\.json/)).toBeLessThan(
+    said.indexOf("step:Removing caret from OpenCode's plugin and plugins keys"),
+  );
+});
+
+test("a symlinked config is edited through to its target", async () => {
+  const elsewhere = await mkdtemp(join(tmpdir(), "caret-install-oc-target-"));
+  try {
+    const real = join(elsewhere, "opencode.jsonc");
+    writeFileSync(real, "{}");
+    symlinkSync(real, configFile("opencode.jsonc"));
+    await installOn(V2);
+    expect(lstatSync(configFile("opencode.jsonc")).isSymbolicLink()).toBe(true);
+    expect(caretEntries(readFileSync(real, "utf-8"), () => false).length).toBe(1);
+  } finally {
+    await rm(elsewhere, { recursive: true, force: true });
+  }
+});
+
+test("a config.json that aliases opencode.json keeps caret on v2", async () => {
+  writeFileSync(configJson(), JSON.stringify({ plugins: [CARET_PACKAGE] }));
+  symlinkSync(configJson(), configFile("config.json"));
+  await installOn(V2);
+  expect(config()).toEqual({ plugins: [CARET_PACKAGE] });
+});
+
+test("uninstall warns past a config it cannot read and clears the rest", async () => {
+  mkdirSync(configFile("config.json"));
+  writeFileSync(configFile("opencode.jsonc"), JSON.stringify({ plugins: [CARET_PACKAGE] }));
+  const said = await transcript({}, { uninstall: true });
+  expect(parsed("opencode.jsonc")).toEqual({});
+  expect(said).toMatch(/warn:.*config\.json/);
+});
+
+test("uninstall that could only skip caret's file says no readable config held it", async () => {
+  writeFileSync(configFile("config.json"), `{ "plugin": ["${CARET_PACKAGE}"`);
+  const said = await transcript({}, { uninstall: true });
+  expect(said).toContain("caret was not in any readable OpenCode config");
+});
+
+test("a failed later write names the files already changed", async () => {
+  const legacy = configFile("config.json");
+  writeFileSync(legacy, JSON.stringify({ plugin: [CARET_PACKAGE] }));
+  symlinkSync(join(dir, "missing", "opencode.json"), configJson());
+  await expect(installOn(V2)).rejects.toThrow(/already changed: .*config\.json/);
+  expect(caretEntries(readFileSync(legacy, "utf-8"), () => false)).toEqual([]);
 });

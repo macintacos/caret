@@ -14,7 +14,7 @@ import { release } from "node:os";
 import { selectAdapter } from "@/adapters/index.ts";
 import { readOpencodeChecks } from "@/adapters/opencode/checks.ts";
 import { readOpencodeVersion } from "@/adapters/opencode/host.ts";
-import { opencodeConfigDir, resolveConfigFile } from "@/adapters/opencode/paths.ts";
+import { existingConfigFiles, opencodeConfigDir } from "@/adapters/opencode/paths.ts";
 import { upgradeCheck } from "@/adapters/opencode/upgrade.ts";
 import { isTerminal } from "@/commands/install/ui.ts";
 import { prodService } from "@/commands/service-target.ts";
@@ -110,7 +110,7 @@ function prodDoctorDeps(s: Settings): DoctorDeps {
 async function readAdapterChecks(): Promise<Check[]> {
   try {
     return await readOpencodeChecks({
-      configFile: resolveConfigFile(opencodeConfigDir()),
+      configFiles: existingConfigFiles(opencodeConfigDir()),
       opencodeVersion: readOpencodeVersion,
     });
   } catch (e) {

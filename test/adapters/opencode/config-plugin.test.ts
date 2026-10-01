@@ -9,6 +9,7 @@ import { type ParseError, parse } from "jsonc-parser";
 
 import {
   addPluginToConfigText,
+  configParseError,
   type PluginKey,
   pluginItemSpecs,
   rewritePluginArray,
@@ -290,3 +291,18 @@ function dropCaret(src: string, key: PluginKey): string {
     caretEntries(src, () => false).filter((e) => e.key === key),
   );
 }
+
+test("configParseError accepts what OpenCode loads: comments, a trailing comma, an empty file", () => {
+  expect(configParseError('// mine\n{ "plugin": ["x"] }')).toBeNull();
+  expect(configParseError('{ "plugin": ["x"], }')).toBeNull();
+  expect(configParseError("")).toBeNull();
+});
+
+test("configParseError names why a truncated config or an array root is unreadable", () => {
+  expect(configParseError('{ "plugin": [')).not.toBeNull();
+  expect(configParseError("[]")).toBe("not a JSON object");
+});
+
+test("configParseError accepts a config that opens with a UTF-8 BOM", () => {
+  expect(configParseError('﻿{ "plugin": ["x"] }')).toBeNull();
+});
