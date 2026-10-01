@@ -31,6 +31,9 @@
     // would cost the one alias here with a crisp definition. `@test/*` also
     // disambiguates the two distinct support harnesses — test/support/ (bun) vs
     // test/e2e/support/ (Playwright) — which a bare `./support/x` could not.
+    // `@oc/*` maps opencode/ but is not spelled `@opencode/*`: `@opencode` is a
+    // real npm scope (`@opencode/plugin`), which that alias would shadow the
+    // moment a matching file landed in opencode/.
     //
     // `@root/package.json` is exact rather than a `@root/*` wildcard because the
     // repo root is not a source root: `@root/*` would alias the whole tree at
