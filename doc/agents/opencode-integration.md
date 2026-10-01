@@ -33,7 +33,7 @@ this:
   with `input` a plain JSON Schema object (no zod at runtime) and
   `options: { codemode: false }`, without which v2 registers the tool only inside its Code
   Mode catalog. Both `execute`s are thin adapters over one host-neutral `runPlanReview`
-  (`caret.plugin.ts`), which takes a small `ReviewHost` port — session id, base directory,
+  (`caret.core.ts`), which takes a small `ReviewHost` port — session id, base directory,
   `isSubagent`, `canEdit`, abort `signal`, `onUrl` — and both registrations read the same
   exported tool strings. v2's `execute` never throws: a rejection would skip v2's
   `execute.after` hooks, so every failure comes back as `{ content }` carrying the
@@ -344,14 +344,15 @@ so it wants the live check § Verified vs. follow-up already schedules.
   `readOpencodeInstallState` (a read-only probe of OpenCode's config dir). Registered in
   `src/adapters/index.ts`; selectable via `CARET_AGENT=opencode`. Claude stays the
   default.
-- **Packaging (`opencode/`)** — the v1 plugin (`caret.plugin.ts`), the v2 plugin
-  (`caret.plugin.v2.ts`) and its permission evaluator (`permission.ts`), the v2 TUI module
-(`caret.tui.ts`, `exports["./tui"]`), their package entrypoint (`index.ts`, see § The
-export surface), and command files (`commands/*.md`). The plugin ships in the
-`@macintacos/caret` npm package and resolves its binary and version at runtime from that
-package (§ Runtime resolution + update check); only the command files still carry
-substituted markers — `__CARET_BIN__` and `__CARET_DEMO_TEMPLATE__`, the template embedded
-rather than read because under `bunx` the install-time root is a temp dir.
+- **Packaging (`opencode/`)** — the host-neutral core (`caret.core.ts`), the v1 plugin
+(`caret.plugin.ts`), the v2 plugin (`caret.plugin.v2.ts`) and its permission evaluator
+(`permission.ts`), the v2 TUI module (`caret.tui.ts`, `exports["./tui"]`), their package
+entrypoint (`index.ts`, see § The export surface), and command files (`commands/*.md`).
+The plugin ships in the `@macintacos/caret` npm package and resolves its binary and
+version at runtime from that package (§ Runtime resolution + update check); only the
+command files still carry substituted markers — `__CARET_BIN__` and
+`__CARET_DEMO_TEMPLATE__`, the template embedded rather than read because under `bunx` the
+install-time root is a temp dir.
 - **Install (`caret install`)** — adds caret to the user's OpenCode config
   (comment-preserving, via `jsonc-parser` in `config-plugin.ts`) as either
   `@macintacos/caret` or, under `--from-local`, `file:<checkout>` (§ The local form) and
@@ -562,20 +563,22 @@ is found or none can be read.
 The array install has no marker-substitution step, so the plugin resolves what it needs at
 runtime from the package it ships in:
 
-- **Binary** (`resolveCaretBin`): `CARET_OPENCODE_BIN` env override → a substituted marker
-  (only the retired file-deploy set one) → `new URL("../bin/caret", import.meta.url)` (the
-  `bin/caret` shim shipped beside the plugin in the package).
-- **Version** (`resolveCaretVersion`): a substituted marker if present → the sibling
-  `../package.json`'s `version`. Used by the update check.
+- **Binary** (`resolveCaretBin`): `CARET_OPENCODE_BIN` env override →
+  `new URL("../bin/caret", import.meta.url)` (the `bin/caret` shim shipped beside the
+  plugin in the package).
+- **Version** (`resolveCaretVersion`): the sibling `../package.json`'s `version`. Used by
+  the update check.
 - **Update check** (`realUpdateChecker`, wired only into the production defaults, via
   `productionUpdateCheck`): on load, fetch caret's latest GitHub release and toast a nudge
   when the running version is behind. Best-effort — a network error, a non-200, or the
   `CARET_OPENCODE_NO_UPDATE_CHECK` opt-out is silent. An inline semver compare keeps the
   plugin self-contained. Both hosts call the same `productionUpdateCheck`: v1 from
-  `server()`, v2 from the TUI half's `setup`, since v2's server has no toast. They share
-  one 24 h stamp at `$XDG_STATE_HOME/caret/opencode-update-check`, so a user who switches
-  hosts gets one nudge a day, not two; v2's `ctx.storage` was passed over because whether
-  it loads before the synchronous stamp read is unverified.
+  `server()`, v2 from the TUI half's `setup`, since v2's server has no toast.
+  `realUpdateChecker` takes a `show(body)` sink: v1 wraps its client into it, and the TUI
+  fills it with `ctx.ui.toast.show`. They share one 24 h stamp at
+  `$XDG_STATE_HOME/caret/opencode-update-check`, so a user who switches hosts gets one
+  nudge a day, not two; v2's `ctx.storage` was passed over because whether it loads before
+  the synchronous stamp read is unverified.
 
 **How deps resolve now (vs. the retired manifest).** OpenCode installs the array package
 and its declared `dependencies` into its cache, so `@opencode-ai/plugin` resolves because
@@ -594,11 +597,11 @@ fresh install still needs **one OpenCode restart** (packages install/load at sta
 OpenCode's plugin loader iterates a module's exports (`Object.values(mod)`) and throws
 `TypeError("Plugin export is not a function")` on the FIRST export it cannot coerce to a
 Plugin (a function, or a `{ server }` object) — one bad export rejects the whole module.
-caret's plugin SOURCE (`caret.plugin.ts`) exports constants (`CARET_PLUGIN_VERSION`,
-`REVIEW_TOOL`, `PLANNING_AGENTS`) and pure helpers so `test/opencode/` can unit-test them
-and so `caret.plugin.v2.ts` can share them, so it can't be OpenCode's entrypoint directly
-— the first non-Plugin export would reject it (a live EXC-339 bug, log line
-`failed to load plugin … "Plugin export is not a function"`).
+caret's plugin SOURCE exports constants (`REVIEW_TOOL`, `PLANNING_AGENTS`) and pure
+helpers so `test/opencode/` can unit-test them; the shared ones come from `caret.core.ts`,
+which the v1, v2 and TUI modules import. None of those modules can be OpenCode's
+entrypoint directly — the first non-Plugin export would reject it (a live EXC-339 bug, log
+line `failed to load plugin … "Plugin export is not a function"`).
 
 So the package's entrypoint is a tiny dedicated module, `opencode/index.ts`, whose
 namespace is exactly `{ default }`, and `package.json` `exports` `.` points at it.
@@ -634,7 +637,7 @@ so the metadata keys the server half's `execute` writes are the only link betwee
 halves. The decision toast matters because v2's toast surface is single-slot with no hide
 API — without it the 10-minute link toast would linger after every decision. v1 keeps its
 toasts in `server()` (`client.tui.showToast`), so caret needs no `tui.json` entry; the
-toast bodies (`reviewLinkToast`, `decisionToast`) are shared from `caret.plugin.ts`. The
+toast bodies (`reviewLinkToast`, `decisionToast`) are shared from `caret.core.ts`. The
 default also carries a no-op `tui`: v1's own installer may register this module as a v1
 TUI plugin, and v1's TUI loader throws on a default without one. The `Object.values` rule
 binds only `index.ts`: both TUI loaders read only `default`, so `createCaretTui` stays a
@@ -766,10 +769,6 @@ v1.18.15 and v1.18.29 from npm):
   non-caret entries and the comment, and removed the command files.
 - **doctor.** `opencode-host` failed for caret in `plugin` on v2 and in `plugins` on
   1.18.15, and passed after install moved each.
-
-**EXC-1520 follow-ups:**
-
-- `opencode/caret.plugin.ts`'s header still says caret loads from the `plugin` array.
 
 ## Sources
 
