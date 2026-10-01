@@ -42,10 +42,8 @@ const SHIPPED_GLOB = "**/*.{ts,mts,cts,js,mjs,cjs}";
  * builtins are dropped; a subpath is reduced to its package name (`@scope/pkg/sub` to
  * `@scope/pkg`, `pkg/sub` to `pkg`), which is the unit `package.json` declares. The
  * extractor's limits (double quotes only, raw source) are exhaustive here: a template-
- * literal or `require()` specifier has no place in an ESM plugin. A statement TypeScript
- * erases entirely (`import type …`, `export type … from`) does not count — no consumer
- * resolves it — while an inline `import { type X }` still does, since it survives as
- * `import {} from`.
+ * literal or `require()` specifier has no place in an ESM plugin. Statements TypeScript
+ * erases whole do not count (`runtimeImportSpecifiers`).
  */
 function importedPackages(source: string): string[] {
   return runtimeImportSpecifiers(source)

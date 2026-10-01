@@ -18,7 +18,8 @@ import pkgJson from "@root/package.json" with { type: "json" };
 // it — `paths` governs module resolution, not `new URL(…, import.meta.url)`.
 // The assertions read through a widened shape because the inferred literal type
 // admits no lookup for a key that is correctly absent — devDependencies must
-// *not* carry @opencode-ai/plugin, which is precisely what the last test pins.
+// *not* carry `@opencode-ai/plugin`, nor dependencies `@opencode/plugin` — what the last
+// two tests pin.
 const pkg = pkgJson as {
   exports?: Record<string, unknown>;
   main?: string;
@@ -75,5 +76,5 @@ test("@opencode-ai/plugin is a runtime dependency, not a devDependency", () => {
 
 test("@opencode/plugin is a devDependency, not a runtime dependency", () => {
   expect(pkg.devDependencies["@opencode/plugin"]).toBeDefined();
-  expect((pkg.dependencies as Record<string, string>)["@opencode/plugin"]).toBeUndefined();
+  expect(pkg.dependencies["@opencode/plugin"]).toBeUndefined();
 });

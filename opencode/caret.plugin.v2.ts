@@ -1,7 +1,8 @@
 // caret's OpenCode v2 plugin: the `setup` half of the dual default export in index.ts.
-// A thin adapter over the shared review core in caret.plugin.ts. The v2 SDK types it needs
-// are local slices, pinned to `@opencode/plugin` by test/opencode/sdk-conformance.ts, so
-// the SDK stays a devDependency.
+// A thin adapter over the shared review core in caret.plugin.ts. The v2 SDK shapes it
+// uses are declared locally, so the shipped source names no package a consumer's install
+// lacks; test/opencode/sdk-conformance.ts pins them to `@opencode/plugin`. Never import a
+// value from that SDK here: its entry pulls Effect, and v1 hosts load this file too.
 
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -53,12 +54,14 @@ type SessionInfo = {
   permissions?: Rule[];
 };
 
-type ContextEvent = {
+export type ContextEvent = {
   sessionID: string;
   agent: string;
   tools?: Record<string, unknown>;
   system: { push: (part: { type: "text"; text: string }) => unknown };
 };
+
+export type PromptEvent = { sessionID: string };
 
 type ReviewTool = {
   name: string;
@@ -71,7 +74,7 @@ type ReviewTool = {
   ) => Promise<{ content: string; metadata?: Record<string, string> }>;
 };
 
-/** The slice of v2's plugin `Context` caret uses; test/opencode/sdk-conformance.ts pins it to the SDK. */
+/** The slice of v2's plugin `Context` caret uses. */
 export type SetupContext = {
   location: { directory: string; project: { directory: string } };
   session: {
@@ -79,7 +82,7 @@ export type SetupContext = {
     update: (input: { sessionID: string; permissions: Rule[] }) => Promise<unknown>;
     hook: {
       (name: "context", callback: (event: ContextEvent) => Promise<void>): Promise<unknown>;
-      (name: "prompt", callback: (event: { sessionID: string }) => Promise<void>): Promise<unknown>;
+      (name: "prompt", callback: (event: PromptEvent) => Promise<void>): Promise<unknown>;
     };
   };
   agent: {

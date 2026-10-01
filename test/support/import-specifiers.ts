@@ -1,11 +1,8 @@
 /**
- * `importSpecifiers` returns every import form, type-only ones included;
- * `runtimeImportSpecifiers` returns only those that survive compilation.
- *
- * Every module specifier in `source`, in source order: `from "…"` (which also catches
- * `export … from`), a bare side-effect `import "…"`, and a dynamic `import("…")`. The
- * structure suites that police imports read them through this one extractor, so
- * hardening it hardens all of them.
+ * Every module specifier in `source`, type-only imports included, in source order:
+ * `from "…"` (which also catches `export … from`), a bare side-effect `import "…"`, and a
+ * dynamic `import("…")`. The structure suites that police imports read them through this
+ * one extractor, so hardening it hardens all of them.
  *
  * - The `(?<!@)` guard drops CSS `@import` at-rules, which are not module references.
  * - **Double-quoted specifiers only**: biome formats the tree with `quoteStyle: "double"`,
@@ -22,14 +19,16 @@ export function importSpecifiers(source: string): string[] {
   );
 }
 
-// Statements TypeScript erases entirely. `import { type X } from "p"` is not one: under
-// verbatimModuleSyntax it survives as `import {} from "p"`, so it still counts. `[^{}]`
-// rather than `[^}]` keeps an unclosed `import type {` in a comment from running on to a
-// later statement's `}` and erasing a real import.
+// Statements TypeScript erases entirely. `import { type X } from "p"` still counts: whether
+// it survives depends on the transpiler (caret's verbatimModuleSyntax keeps it as
+// `import {} from`), so the gate assumes it does. The `^` anchor keeps a match out of
+// comments and binding lists; `[^{}]` rather than `[^}]` keeps an unclosed `import type {`
+// from running on to a later statement's `}` and erasing a real import.
 const ERASED_STATEMENT =
-  /\b(?:import|export)\s+type\s+(?:\{[^{}]*\}|\*(?:\s+as\s+\w+)?|\w+)\s*from\s*"[^"]+"/g;
+  /^(?:import|export)\s+type\s+(?:\{[^{}]*\}|\*(?:\s+as\s+\w+)?|\w+)\s*from\s*"[^"]+"/gm;
 
-/** Specifiers of the imports that survive compilation. */
+/** Every specifier except those of whole statements TypeScript erases; a type-position
+ * `import("…")` still counts. */
 export function runtimeImportSpecifiers(source: string): string[] {
   return importSpecifiers(source.replace(ERASED_STATEMENT, ""));
 }

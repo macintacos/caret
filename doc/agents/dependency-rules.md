@@ -59,8 +59,9 @@ something that is — a peer obligation has no import site of its own, so it bel
 wherever the package declaring it belongs. Optional peers are not reachable:
 `@opencode-ai/plugin` declares three `@opentui/*` peers as optional, which is why caret
 declares none of them. A statement TypeScript erases — `import type { X } from` or
-`export type { X } from` — does not count; `import { type X } from` survives as
-`import {} from` under `verbatimModuleSyntax`, so it does.
+`export type { X } from` — does not count. `import { type X } from` still counts: whether
+it survives depends on the transpiler (caret's `verbatimModuleSyntax` keeps it as
+`import {} from`), so the gate assumes it does.
 
 [`../../test/structure/dependency-placement.test.ts`](../../test/structure/dependency-placement.test.ts)
 is the falsifier: it derives the reachable set from `opencode/`'s runtime imports
