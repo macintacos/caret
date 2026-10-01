@@ -692,6 +692,33 @@ test("on v2, a caret plugin entry moves to plugins, keeping comments and other e
   expect(parseJsonc(text)).toEqual({ plugin: ["wakatime"], plugins: ["other", CARET_PACKAGE] });
 });
 
+test("on v2, plugins keeps its position and the comment above it when caret's entry is swapped", async () => {
+  writeFileSync(
+    configJson(),
+    [
+      "{",
+      `  "plugin": ["${CARET_PACKAGE}@0.8.1"],`,
+      "  // caret",
+      `  "plugins": ["${CARET_PACKAGE}"],`,
+      '  "theme": "dark"',
+      "}",
+      "",
+    ].join("\n"),
+  );
+  await installOn(V2);
+  expect(readFileSync(configJson(), "utf-8")).toBe(
+    [
+      "{",
+      '  "plugin": [],',
+      "  // caret",
+      `  "plugins": ["${CARET_PACKAGE}@0.8.1"],`,
+      '  "theme": "dark"',
+      "}",
+      "",
+    ].join("\n"),
+  );
+});
+
 test("on v2, a pin survives the move to plugins", async () => {
   writeFileSync(configJson(), JSON.stringify({ plugin: [`${CARET_PACKAGE}@0.8.1`] }));
   await installOn(V2);

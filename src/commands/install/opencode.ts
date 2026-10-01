@@ -21,6 +21,7 @@ import {
   addPluginToConfigText,
   configParseError,
   type PluginKey,
+  setPluginItemSpec,
   setPluginVersionInConfigText,
   splitPluginSpecifier,
 } from "@/adapters/opencode/config-plugin.ts";
@@ -114,7 +115,9 @@ function keptEntry(entries: readonly CaretEntry[], specifier: string): CaretEntr
 
 /** Rewrite both plugin keys so caret has exactly one entry, `spec` in `key`. Two caret
  * entries would load two plugins, each registering the review tool (v2 rejects them
- * outright as a duplicate id). An entry already matching stays in place, as written. */
+ * outright as a duplicate id). A caret entry already in `key` — the one matching `spec`,
+ * else the first — is swapped to `spec` in place, so the key and its comments stay where
+ * they are. */
 function setCaretPluginEntry(
   text: string | null,
   target: { spec: string; key: PluginKey; isCheckout: (dir: string) => boolean },
@@ -122,12 +125,13 @@ function setCaretPluginEntry(
   const { spec, key, isCheckout } = target;
   if (text === null) return addPluginToConfigText(null, spec, key);
   const entries = caretEntries(text, isCheckout);
-  const inPlace = entries.find((e) => e.key === key && e.spec === spec);
-  const pruned = dropEntries(
-    text,
-    entries.filter((e) => e !== inPlace),
-  );
-  return inPlace ? pruned : addPluginToConfigText(pruned, spec, key);
+  const kept =
+    entries.find((e) => e.key === key && e.spec === spec) ?? entries.find((e) => e.key === key);
+  const others = entries.filter((e) => e !== kept);
+  if (kept === undefined) return addPluginToConfigText(dropEntries(text, others), spec, key);
+  const placed =
+    kept.spec === spec ? text : setPluginItemSpec(text, { key, index: kept.index, spec });
+  return dropEntries(placed, others);
 }
 
 /** The transform that clears every caret entry from a config, in every form caret may have

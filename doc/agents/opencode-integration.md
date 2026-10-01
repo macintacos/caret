@@ -750,8 +750,6 @@ v1.18.15 and v1.18.29 from npm):
 - A `file:<tarball>` caret entry is not recognised as caret's (only the package and a
   checkout are), so install adds a second entry beside it. `caret install` never writes
   one.
-- When install empties the target key and re-adds it, the key moves to the end of the
-  object, and a comment above it stays behind.
 - `opencode/caret.plugin.ts`'s header still says caret loads from the `plugin` array.
 
 ## Sources

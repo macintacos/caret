@@ -13,6 +13,7 @@ import {
   type PluginKey,
   pluginItemSpecs,
   rewritePluginArray,
+  setPluginItemSpec,
   setPluginVersionInConfigText,
   splitPluginSpecifier,
 } from "@/adapters/opencode/config-plugin.ts";
@@ -133,6 +134,21 @@ test("set pins a bare entry, leaving other entries and keys alone", () => {
     theme: "dark",
     plugin: ["opencode-wakatime", `${PKG}@0.8.1`],
   });
+});
+
+test("setPluginItemSpec swaps one string item in place, keeping the key's position and comment", () => {
+  const src =
+    '{\n  "first": 1,\n  // above plugins\n  "plugins": ["@macintacos/caret"],\n  "last": 2\n}\n';
+  expect(setPluginItemSpec(src, { key: "plugins", index: 0, spec: `${PKG}@0.8.1` })).toBe(
+    '{\n  "first": 1,\n  // above plugins\n  "plugins": ["@macintacos/caret@0.8.1"],\n  "last": 2\n}\n',
+  );
+});
+
+test("setPluginItemSpec swaps an object item's package, keeping its options", () => {
+  const src = `{\n  "plugins": [{ "package": "${PKG}", "options": { "a": 1 } }]\n}\n`;
+  expect(setPluginItemSpec(src, { key: "plugins", index: 0, spec: `${PKG}@0.8.1` })).toBe(
+    `{\n  "plugins": [{ "package": "${PKG}@0.8.1", "options": { "a": 1 } }]\n}\n`,
+  );
 });
 
 test("set rewrites an existing pin rather than appending a second one", () => {

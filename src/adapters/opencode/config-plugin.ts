@@ -150,12 +150,23 @@ export function setPluginVersionInConfigText(
 ): string {
   const { pkg, version, key } = target;
   const arr = pluginArray(existing, key);
-  const i = arr.findIndex((e) => entryNames(e, pkg));
-  if (i === -1) return existing;
-  const item = arr[i];
-  const path: JSONPath = typeof item === "string" ? [key, i] : [key, i, "package"];
-  const next = `${packageName(itemSpec(item) ?? pkg)}@${version}`;
-  const edits = modify(existing, path, next, { formattingOptions: formattingOf(existing) });
+  const index = arr.findIndex((e) => entryNames(e, pkg));
+  if (index === -1) return existing;
+  const spec = `${packageName(itemSpec(arr[index]) ?? pkg)}@${version}`;
+  return setPluginItemSpec(existing, { key, index, spec });
+}
+
+/** Set the specifier of the `key` array's item at `index` to `spec`, returning the new
+ * config text: a string item is replaced, an object item's `package` is, keeping its
+ * `options`. The key, its siblings, and their comments stay where they are. */
+export function setPluginItemSpec(
+  existing: string,
+  target: { key: PluginKey; index: number; spec: string },
+): string {
+  const { key, index, spec } = target;
+  const item = pluginArray(existing, key)[index];
+  const path: JSONPath = typeof item === "string" ? [key, index] : [key, index, "package"];
+  const edits = modify(existing, path, spec, { formattingOptions: formattingOf(existing) });
   return applyEdits(existing, edits);
 }
 
