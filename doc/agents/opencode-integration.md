@@ -530,7 +530,8 @@ persist, so the stale-cache clear deletes the whole `npm/@macintacos/caret@<spec
 one generation. `readCachedCaretVersion` reads both layouts alike: the installed manifest
 sits at `node_modules/@macintacos/caret/package.json` under both a v1 package dir and a v2
 generation dir. `existingOpencodeCachePackageDirs` lists both layouts, and the clear
-removes every caret dir in either.
+removes every caret dir in either. The service launcher offers each caret spec dir's live
+generation, never an older one.
 
 Which layout an entry reads from (`caretCacheDir` in `upgrade.ts`): a `plugins` entry is
 always v2's, since v1 never installs it; a `plugin` entry is v2's when the caller knows
@@ -764,8 +765,6 @@ v1.18.15 and v1.18.29 from npm):
 
 **EXC-1520 follow-ups:**
 
-- `bin/caret-launcher` and `launcherCandidateDirs` glob only v1's `packages/`, so the
-  service never sees a v2 caret root. Harmless: it stays on caret's owned copy.
 - `opencode/caret.plugin.ts`'s header still says caret loads from the `plugin` array.
 
 ## Sources
