@@ -209,6 +209,15 @@ test("a file: entry that is not a caret checkout is not caret's install", async 
   });
 });
 
+test("a caret tarball entry is caret's install", async () => {
+  await configWithCaret(`file:${join(configDir(), "macintacos-caret-1.2.3.tgz")}`);
+  expect(readOpencodeInstallState()).toEqual({
+    pluginVersion: "unknown",
+    pluginEnabled: false,
+    hookInUserSettings: true,
+  });
+});
+
 test("a plugins entry reports the version installed in v2's live generation", async () => {
   const dir = configDir();
   await mkdir(dir, { recursive: true });

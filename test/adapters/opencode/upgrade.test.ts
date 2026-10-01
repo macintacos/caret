@@ -265,10 +265,11 @@ test("an absent config file reads as no entry at all", async () => {
   ).toEqual({ kind: "fresh" });
 });
 
-test("the update check skips a tarball-only config without erroring", async () => {
-  expect(await verdictFor([`file:${tmp}/macintacos-caret-1.2.3.tgz`], "0.9.0")).toEqual({
-    kind: "fresh",
-  });
+test("the update check skips a tarball entry, whatever its cache holds", async () => {
+  const tarball = `file:${tmp}/macintacos-caret-1.2.3.tgz`;
+  cacheDir(tarball, shim("0.2.0"));
+  expect(await verdictFor([tarball], "0.8.1")).toEqual({ kind: "fresh" });
+  expect(await verdictFor([tarball, `${PKG}@0.7.3`], "0.8.1")).toEqual(STALE_PIN);
 });
 
 test("a pinned entry reads its own cache dir, not the bare one", async () => {

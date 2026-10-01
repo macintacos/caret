@@ -1,9 +1,8 @@
 // Which of OpenCode's plugin entries — v1's `plugin` array or v2's `plugins` — are
 // caret's, for install's writer, doctor's probe, and the upgrade check. There are two
-// answers, and they differ on purpose: `caretEntries` counts what OpenCode loads — the
-// npm package under any pin, a `--from-local` `file:` entry for a caret checkout, or a
-// `file:` entry for a packed caret tarball — while `caretPackageEntry` counts the package
-// form only, because npm's version says nothing about a checkout or tarball.
+// answers, and they differ on purpose: `caretEntries` counts every form OpenCode loads,
+// while `caretPackageEntry` counts the package form only, because npm's version says
+// nothing about a local entry.
 
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -99,13 +98,13 @@ export function readCaretEntries(
  * cannot be read. */
 export function readCaretEntry(configFiles: readonly string[]): CaretEntry | null {
   return (
-    readCaretEntries(configFiles, () => false).find((e) => !isLocalPluginSpecifier(e.spec)) ?? null
+    configFiles.map((f) => caretPackageEntry(readConfigText(f))).find((e) => e !== null) ?? null
   );
 }
 
-/** The first caret entry across `configFiles` in a form OpenCode can load — the package,
- * a `--from-local` checkout, or a caret tarball matched by filename. Whether the host
- * reads the file it sits in is the caller's concern. Throws like `readCaretEntry`. */
+/** The first entry `caretEntries` counts across `configFiles`, any form OpenCode can load.
+ * Whether the host reads the file it sits in is the caller's concern. Throws like
+ * `readCaretEntry`. */
 export function readLoadedCaretEntry(configFiles: readonly string[]): CaretEntry | null {
   return readCaretEntries(configFiles, isCaretCheckout)[0] ?? null;
 }

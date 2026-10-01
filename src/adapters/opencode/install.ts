@@ -3,12 +3,13 @@
 // (@macintacos/caret) — in v1's `plugin` array or v2's `plugins` key — that OpenCode
 // installs into its own cache, with the installed version recorded in
 // `node_modules/@macintacos/caret/package.json` under the entry's cache dir; a
-// `--from-local` `file:` entry pointing at a caret checkout is caret's entry too, its
-// version read through OpenCode's cache symlink to the checkout. Mirrors claude/codex
-// install.ts's degrade-to-"unknown" discipline — every field degrades rather than
-// throwing, so doctor always renders. Reads only caret's own cache dirs, the user's plugin
-// lists, and whether each `file:` entry's path holds caret's plugin — never any other
-// config key.
+// `--from-local` `file:` entry pointing at a caret checkout, or a `file:` entry naming a
+// packed caret tarball, is caret's entry too, a checkout's version read through
+// OpenCode's cache symlink to the checkout. Mirrors claude/codex install.ts's
+// degrade-to-"unknown" discipline — every field degrades rather than throwing, so doctor
+// always renders. Reads only caret's own cache dirs, the user's plugin lists, and whether
+// each `file:` entry's path holds caret's plugin (a tarball is judged by filename alone)
+// — never any other config key.
 //
 // The probe never runs `opencode`, so it picks the cache layout from the key alone: v2's
 // `npm/` for a `plugins` entry, v1's `packages/<specifier>/` for a `plugin` one. It

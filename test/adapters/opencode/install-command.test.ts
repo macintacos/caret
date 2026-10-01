@@ -491,6 +491,12 @@ test("a tarball not named for caret is another plugin's, and is kept", async () 
   expect(plugins()).toEqual([`file:${dir}/other-plugin-1.0.0.tgz`, CARET_PACKAGE]);
 });
 
+test("a caret-prefixed file: entry that is no tarball is another plugin's, and is kept", async () => {
+  seedPlugins([`file:${dir}/macintacos-caret-1.2.3`]);
+  await install();
+  expect(plugins()).toEqual([`file:${dir}/macintacos-caret-1.2.3`, CARET_PACKAGE]);
+});
+
 test("uninstall removes a caret tarball entry", async () => {
   seedPlugins(["someone-else", `file:${dir}/macintacos-caret-1.2.3.tgz`]);
   await install(true);
