@@ -18,8 +18,7 @@
 //
 // It ships in the @macintacos/caret npm package; OpenCode loads it when the package
 // is in the user's `plugin` array, and it resolves its own binary and version at
-// runtime from that package. (The legacy file-deploy path substitutes the two
-// __CARET_*__ markers instead.) It stays self-contained: its only imports are node
+// runtime from that package. It stays self-contained: its only imports are node
 // builtins, its sibling review-bridge.ts, and @opencode-ai/plugin (resolved by OpenCode
 // at runtime). Which ctx/tool/config shapes are live-verified and which are not:
 // doc/agents/opencode-integration.md § Verified vs. follow-up.
@@ -42,38 +41,25 @@ import {
   type SpawnRunner,
 } from "./review-bridge.ts";
 
-/** Install-time markers. The legacy file-deploy path substituted these with the
- * resolved caret version and binary path; the array install leaves them as
- * placeholders, so the resolvers below fall back to the package that ships this
- * file. */
-export const CARET_PLUGIN_VERSION = "__CARET_VERSION__";
-export const CARET_BIN = "__CARET_BIN__";
-
-/** The caret binary the review tool spawns. Env override wins; then a substituted
- * marker (an absolute path, from the legacy file-deploy path); else the binary that
+/** The caret binary the review tool spawns. Env override wins; else the binary that
  * ships beside this module in the npm package (the array install). */
 export function resolveCaretBin(opts: {
   env: Record<string, string | undefined>;
-  marker: string;
   importMetaUrl: string;
 }): string {
   const override = opts.env.CARET_OPENCODE_BIN?.trim();
   if (override) return override;
-  if (opts.marker !== "__CARET_BIN__") return opts.marker;
   return fileURLToPath(new URL("../bin/caret", opts.importMetaUrl));
 }
 
-/** The plugin's own caret version, for the update check. A substituted marker wins
- * (file-deploy); else read it from the package.json shipped beside this module (the
- * array install). "unknown" when neither is available — deliberately UNPARSEABLE so
+/** The plugin's own caret version, for the update check, read from the package.json
+ * shipped beside this module (the array install). "unknown" when it is unreadable — deliberately UNPARSEABLE so
  * `isNewer` compares false and a broken read stays silent ("0.0.0" would parse and
  * nag "update available (you have 0.0.0)" on every start). */
 export function resolveCaretVersion(opts: {
-  marker: string;
   importMetaUrl: string;
   readFile: (path: string) => string;
 }): string {
-  if (opts.marker !== "__CARET_VERSION__") return opts.marker;
   try {
     const raw = opts.readFile(fileURLToPath(new URL("../package.json", opts.importMetaUrl)));
     const v = (JSON.parse(raw) as { version?: unknown }).version;
@@ -590,9 +576,7 @@ export function createCaretPlugin(
     plansDir?: string;
   } = {},
 ): Plugin {
-  const bin =
-    opts.bin ??
-    resolveCaretBin({ env: process.env, marker: CARET_BIN, importMetaUrl: import.meta.url });
+  const bin = opts.bin ?? resolveCaretBin({ env: process.env, importMetaUrl: import.meta.url });
   const run = opts.run ?? nodeSpawnRunner;
   const warm = opts.warm ?? nodeWarmRunner;
   const plansDir =
@@ -712,7 +696,6 @@ export function createCaretPlugin(
 export function productionUpdateCheck(client: ToastClient): void {
   void realUpdateChecker(client, {
     currentVersion: resolveCaretVersion({
-      marker: CARET_PLUGIN_VERSION,
       importMetaUrl: import.meta.url,
       readFile: (p) => readFileSync(p, "utf-8"),
     }),

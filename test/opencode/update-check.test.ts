@@ -67,22 +67,9 @@ test("updateToastBody returns a nudge when behind, null when current", () => {
 
 // --- resolveCaretVersion ---
 
-test("resolveCaretVersion prefers a substituted marker (file-deploy)", () => {
+test("resolveCaretVersion reads the sibling package.json", () => {
   expect(
     resolveCaretVersion({
-      marker: "0.3.0",
-      importMetaUrl: "file:///pkg/opencode/caret.plugin.ts",
-      readFile: () => {
-        throw new Error("should not read");
-      },
-    }),
-  ).toBe("0.3.0");
-});
-
-test("resolveCaretVersion reads the sibling package.json when the marker is a placeholder (array install)", () => {
-  expect(
-    resolveCaretVersion({
-      marker: "__CARET_VERSION__",
       importMetaUrl: "file:///pkg/opencode/caret.plugin.ts",
       readFile: (p) => {
         expect(p).toBe("/pkg/package.json");
@@ -94,7 +81,6 @@ test("resolveCaretVersion reads the sibling package.json when the marker is a pl
 
 test("resolveCaretVersion degrades to an unparseable sentinel when the package.json is unreadable (never nags)", () => {
   const v = resolveCaretVersion({
-    marker: "__CARET_VERSION__",
     importMetaUrl: "file:///pkg/opencode/caret.plugin.ts",
     readFile: () => {
       throw new Error("nope");
@@ -108,21 +94,12 @@ test("resolveCaretVersion degrades to an unparseable sentinel when the package.j
 
 // --- resolveCaretBin ---
 
-test("resolveCaretBin: env override wins, then marker, then package-relative bin", () => {
+test("resolveCaretBin: env override wins, then the package-relative bin", () => {
   const importMetaUrl = "file:///pkg/opencode/caret.plugin.ts";
-  expect(
-    resolveCaretBin({
-      env: { CARET_OPENCODE_BIN: "/override" },
-      marker: "/deployed",
-      importMetaUrl,
-    }),
-  ).toBe("/override");
-  expect(resolveCaretBin({ env: {}, marker: "/deployed/bin/caret", importMetaUrl })).toBe(
-    "/deployed/bin/caret",
+  expect(resolveCaretBin({ env: { CARET_OPENCODE_BIN: "/override" }, importMetaUrl })).toBe(
+    "/override",
   );
-  expect(resolveCaretBin({ env: {}, marker: "__CARET_BIN__", importMetaUrl })).toBe(
-    "/pkg/bin/caret",
-  );
+  expect(resolveCaretBin({ env: {}, importMetaUrl })).toBe("/pkg/bin/caret");
 });
 
 // --- shouldCheckForUpdate (24h throttle, pure) ---

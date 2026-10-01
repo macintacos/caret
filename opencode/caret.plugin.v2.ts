@@ -9,7 +9,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import {
-  CARET_BIN,
   CARET_DECISION_KEY,
   CARET_URL_KEY,
   isPlanningAgent,
@@ -230,7 +229,7 @@ export function createCaretSetup(opts: {
 
 /** The v2 `setup` OpenCode loads, wired to the production runners. */
 const setup = createCaretSetup({
-  bin: resolveCaretBin({ env: process.env, marker: CARET_BIN, importMetaUrl: import.meta.url }),
+  bin: resolveCaretBin({ env: process.env, importMetaUrl: import.meta.url }),
   run: nodeSpawnRunner,
   warm: nodeWarmRunner,
   plansDir: resolvePlansDir({
