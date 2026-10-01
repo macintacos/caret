@@ -158,15 +158,16 @@ export function createCaretSetup(opts: {
     await ctx.session.hook("prompt", async (event) => {
       try {
         const session = await readSession(event.sessionID);
-        // ponytail: an unset session agent means the configured default agent, which is not
-        // resolved, so a default-`plan` user gets no warm and no allow; resolve it to fix.
-        if (!session.agent || !isPlanningAgent(session.agent)) return;
+        // v2 never writes the resolved default agent back to the session; `list()` leads with
+        // it — an order v2 implements but does not document.
+        const agentID = session.agent ?? (await ctx.agent.list()).data[0]?.id;
+        if (!agentID || !isPlanningAgent(agentID)) return;
         try {
           warm(bin);
         } catch {
           // best-effort — the review path spawns the daemon itself if this missed
         }
-        const agent = await ctx.agent.get({ agentID: session.agent });
+        const agent = await ctx.agent.get({ agentID });
         const permissions = withPlanAllow(agent.data.permissions, session.permissions ?? []);
         if (permissions) await ctx.session.update({ sessionID: event.sessionID, permissions });
       } catch {
