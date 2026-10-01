@@ -18,6 +18,7 @@ import { basename, join } from "node:path";
 
 import {
   addPluginToConfigText,
+  configParseError,
   type PluginKey,
   setPluginVersionInConfigText,
   splitPluginSpecifier,
@@ -65,6 +66,7 @@ import type { InstallUI } from "@/commands/install/ui.ts";
 import { isTerminal, silentUI } from "@/commands/install/ui.ts";
 import { VERSION } from "@/lib/build-id.ts";
 import type { VersionTriple } from "@/lib/semver.ts";
+import { errorMessage } from "@/lib/types.ts";
 
 /** Injection seam for tests: override the config dir and packaging so the target
  * can run against a temp dir without resolving the real caret root, and every effect
@@ -305,7 +307,7 @@ async function previewInstall(
     `plugin entry: ${placed.specifier} → ${placed.key}`,
     hostLine(placed.version, placed.key, placed.movedFrom),
   ];
-  const changed = planConfigEdits(installEdits(setup, placed)).map((e) => e.path);
+  const changed = strictPlan(installEdits(setup, placed)).map((e) => e.path);
   const note = configJsonNote(setup, placed, changed);
   if (note !== null) entry.push(note);
   const configs = [placed.target, ...changed.filter((p) => p !== placed.target)];
@@ -314,15 +316,17 @@ async function previewInstall(
 
 /** The uninstall dry run: what it would remove. */
 function previewUninstall(setup: OpencodeSetup): void {
-  const configs = planConfigEdits(uninstallEdits(setup)).map((e) => e.path);
+  const configs = lenientPlan(uninstallEdits(setup), setup.ui).map((e) => e.path);
   previewNote(setup, "remove", { configs, entry: [], found: [] });
 }
 
 async function uninstallOpencode(setup: OpencodeSetup): Promise<void> {
   const { ui, dir, legacy } = setup;
+  // Planned outside the step: its warnings drawn under a running spinner corrupt the render.
+  const planned = lenientPlan(uninstallEdits(setup), ui);
   await ui.step(
     "Removing caret from OpenCode's plugin and plugins keys",
-    async () => writeConfigEdits(planConfigEdits(uninstallEdits(setup))),
+    async () => writeConfigEdits(planned),
     (changed) =>
       changed.length > 0
         ? `Removed caret from ${changed.map((p) => basename(p)).join(", ")}`
@@ -347,7 +351,7 @@ async function installOpencode(
   ui.info(hostLine(version, key, movedFrom));
   const changed = await ui.step(
     `Adding ${specifier} to OpenCode's ${key} array`,
-    async () => writeConfigEdits(planConfigEdits(installEdits(setup, placed))),
+    async () => writeConfigEdits(strictPlan(installEdits(setup, placed))),
     (written) => installedLine(writtenSpec, target, written),
   );
   const note = configJsonNote(setup, placed, changed);
@@ -464,7 +468,7 @@ async function upgradeStep(
     `Bumping ${CARET_PACKAGE} to ${verdict.published}`,
     async () =>
       writeConfigEdits(
-        planConfigEdits([
+        strictPlan([
           {
             path: target,
             transform: (text) => {
@@ -504,18 +508,62 @@ interface ConfigEdit {
   transform: (text: string | null) => string | null;
 }
 
-/** The edits whose text changes, with that text. Writes nothing, so a dry run lists exactly
- * the files a live run would write. */
-function planConfigEdits(edits: readonly ConfigEdit[]): { path: string; text: string }[] {
-  return edits.flatMap(({ path, transform }) => {
-    const existing = readConfigText(path);
-    const text = transform(existing);
-    return text === null || text === existing ? [] : [{ path, text }];
-  });
+interface ConfigPlan {
+  planned: { path: string; text: string }[];
+  /** `"<path> (<reason>)"` for each existing file that fails to parse; never planned. */
+  unparseable: string[];
 }
 
-/** Write each planned file in order, returning the paths written. */
+/** The edits whose text changes, with that text, plus the files too garbled to edit. Writes
+ * nothing, so a dry run lists exactly the files a live run would write. */
+function planConfigEdits(edits: readonly ConfigEdit[]): ConfigPlan {
+  const plan: ConfigPlan = { planned: [], unparseable: [] };
+  for (const { path, transform } of edits) {
+    const existing = readConfigText(path);
+    const error = existing === null ? null : configParseError(existing);
+    if (error !== null) {
+      plan.unparseable.push(`${path} (${error})`);
+      continue;
+    }
+    const text = transform(existing);
+    if (text !== null && text !== existing) plan.planned.push({ path, text });
+  }
+  return plan;
+}
+
+/** The planned writes, refusing the whole plan when any file fails to parse: caret cannot
+ * promise one entry across files it cannot read. */
+function strictPlan(edits: readonly ConfigEdit[]): { path: string; text: string }[] {
+  const { planned, unparseable } = planConfigEdits(edits);
+  if (unparseable.length > 0) {
+    throw new Error(`${unparseable.join(", ")} doesn't parse — caret changed nothing`);
+  }
+  return planned;
+}
+
+/** The planned writes, warning past each file that fails to parse: clearing the readable
+ * files still gets closer to zero entries. */
+function lenientPlan(
+  edits: readonly ConfigEdit[],
+  ui: InstallUI,
+): { path: string; text: string }[] {
+  const { planned, unparseable } = planConfigEdits(edits);
+  for (const file of unparseable) ui.warn(`Skipped ${file}: it doesn't parse`);
+  return planned;
+}
+
+/** Write each planned file in order, returning the paths written. A failure after the
+ * first write names the files already changed. */
 function writeConfigEdits(planned: readonly { path: string; text: string }[]): string[] {
-  for (const { path, text } of planned) writeFileSync(path, text);
-  return planned.map((e) => e.path);
+  const written: string[] = [];
+  for (const { path, text } of planned) {
+    try {
+      writeFileSync(path, text);
+    } catch (e) {
+      if (written.length === 0) throw e;
+      throw new Error(`${errorMessage(e)} — already changed: ${written.join(", ")}`, { cause: e });
+    }
+    written.push(path);
+  }
+  return written;
 }
