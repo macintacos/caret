@@ -9,7 +9,7 @@ import { readUpgradeVerdict, upgradeCheck } from "@/adapters/opencode/upgrade.ts
 import type { Check } from "@/doctor/report.ts";
 import type { VersionTriple } from "@/lib/semver.ts";
 
-/** The OpenCode checks for `configFiles`, or none when none carries no caret entry — a
+/** The OpenCode checks for `configFiles`, or none when no file carries a caret entry — a
  * Claude-only user then pays no spawn or network call. `opencode-host` checks that the
  * OpenCode on `PATH` loads caret from the keys it sits in. `opencode-caret-version` is
  * the upgrade verdict, skipped for a `file:` entry alone: it re-resolves to its checkout

@@ -10,6 +10,9 @@ import { type Dirent, existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
+import { isV2Host } from "@/adapters/opencode/host.ts";
+import type { VersionTriple } from "@/lib/semver.ts";
+
 /** caret's npm package — the entry users add to OpenCode's plugin list. Its
  * package entrypoint (package.json `exports`) IS the OpenCode plugin, so a bare
  * specifier loads it; OpenCode installs it and its deps into its own cache. */
@@ -70,11 +73,19 @@ export function opencodeConfigDir(): string {
   return join(xdg || join(homedir(), ".config"), "opencode");
 }
 
-/** The config file caret edits to add/remove its plugin-list entry: the first
- * existing candidate (jsonc preferred), else `opencode.json` to create when the dir
- * has no config yet. */
-export function resolveConfigFile(configDir: string): string {
-  for (const name of CONFIG_FILENAMES) {
+/** The global config filenames `host` loads, in caret's write preference: all three on a
+ * known v1; without `config.json` on v2, which ignores it, and on an unreadable version,
+ * where `opencode.jsonc` and `opencode.json` are the files every OpenCode loads. */
+export function hostConfigFilenames(host: VersionTriple | null): readonly string[] {
+  return host !== null && !isV2Host(host)
+    ? CONFIG_FILENAMES
+    : CONFIG_FILENAMES.filter((name) => name !== "config.json");
+}
+
+/** The global config file install writes caret into: the first existing
+ * `hostConfigFilenames(host)` file, else `opencode.json` to create. */
+export function resolveConfigFile(configDir: string, host: VersionTriple | null): string {
+  for (const name of hostConfigFilenames(host)) {
     const p = join(configDir, name);
     if (existsSync(p)) return p;
   }

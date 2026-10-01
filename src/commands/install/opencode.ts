@@ -7,7 +7,7 @@
 // would register a second review tool beside the array entry. The config-array edit is
 // comment-preserving (config-plugin.ts).
 //
-// caret owns exactly one entry across both keys, in one of two forms: the npm package
+// caret owns exactly one entry across both keys and every global config file, in one of two forms: the npm package
 // (@macintacos/caret), or `file:<checkout>` under `--from-local`. A published install
 // also checks whether the caret OpenCode would load is behind the published one, because
 // OpenCode resolves an array entry once and caches it forever — re-adding the entry, all
@@ -34,6 +34,7 @@ import {
   caretPackageEntry,
   dropEntries,
   isCaretCheckout,
+  readCaretEntries,
   readConfigText,
 } from "@/adapters/opencode/entries.ts";
 import { pluginKeyFor, readOpencodeVersion } from "@/adapters/opencode/host.ts";
@@ -41,8 +42,10 @@ import { loadOpencodePackaging, type OpencodePackaging } from "@/adapters/openco
 import {
   CARET_PACKAGE,
   commandDir,
+  existingConfigFiles,
   existingLegacyInstallFiles,
   existingOpencodeCachePackageDirs,
+  hostConfigFilenames,
   isLocalPluginSpecifier,
   localPluginSpecifier,
   namespacedCommandFilename,
@@ -102,24 +105,29 @@ function keptEntry(entries: readonly CaretEntry[], specifier: string): CaretEntr
   return sameForm.find((e) => splitPluginSpecifier(e.spec).version !== null) ?? sameForm[0];
 }
 
-/** Rewrite both plugin keys so caret has exactly one entry, in `key`: `keptEntry`, else
- * `specifier`. Two caret entries would load two plugins, each registering the review tool
- * (v2 rejects them outright as a duplicate id). A kept entry already in `key` stays in
- * place, as written. */
+/** Rewrite both plugin keys so caret has exactly one entry, `spec` in `key`. Two caret
+ * entries would load two plugins, each registering the review tool (v2 rejects them
+ * outright as a duplicate id). An entry already matching stays in place, as written. */
 function setCaretPluginEntry(
   text: string | null,
-  target: { specifier: string; key: PluginKey; isCheckout: (dir: string) => boolean },
+  target: { spec: string; key: PluginKey; isCheckout: (dir: string) => boolean },
 ): string {
-  const { specifier, key, isCheckout } = target;
-  if (text === null) return addPluginToConfigText(null, specifier, key);
+  const { spec, key, isCheckout } = target;
+  if (text === null) return addPluginToConfigText(null, spec, key);
   const entries = caretEntries(text, isCheckout);
-  const kept = keptEntry(entries, specifier);
-  const keptInPlace = kept?.key === key ? kept : undefined;
+  const inPlace = entries.find((e) => e.key === key && e.spec === spec);
   const pruned = dropEntries(
     text,
-    entries.filter((e) => e !== keptInPlace),
+    entries.filter((e) => e !== inPlace),
   );
-  return keptInPlace ? pruned : addPluginToConfigText(pruned, kept?.spec ?? specifier, key);
+  return inPlace ? pruned : addPluginToConfigText(pruned, spec, key);
+}
+
+/** The transform that clears every caret entry from a config, in every form caret may have
+ * written: a developer who ran `--from-local` has a checkout entry, and leaving it would keep
+ * OpenCode loading caret. */
+function stripCaret(isCheckout: (dir: string) => boolean): ConfigEdit["transform"] {
+  return (text) => (text === null ? null : dropEntries(text, caretEntries(text, isCheckout)));
 }
 
 /** The line naming the host install found and the key it writes; `movedFrom` is the other
@@ -142,7 +150,7 @@ interface OpencodeSetup {
   pkg: OpencodePackaging;
   ui: InstallUI;
   isCheckout: (dir: string) => boolean;
-  configFile: string;
+  configFiles: string[];
   /** What an older, file-deploying caret left in `dir`. */
   legacy: string[];
 }
@@ -157,6 +165,8 @@ interface Placement {
   /** What the config holds afterwards: a kept entry's spec, so a user's pin survives,
    * else `specifier`. */
   writtenSpec: string;
+  /** The config file caret is written into. */
+  target: string;
 }
 
 /** Install (or, with `uninstall`, remove) caret into OpenCode: write caret's entry to
@@ -174,7 +184,7 @@ export async function runInstallOpencodeTarget(
     pkg: deps.packaging ?? loadOpencodePackaging(),
     ui: deps.ui ?? silentUI,
     isCheckout: deps.isCheckout ?? isCaretCheckout,
-    configFile: resolveConfigFile(dir),
+    configFiles: existingConfigFiles(dir),
     legacy: existingLegacyInstallFiles(dir),
   };
   if (opts.uninstall) return opts.dryRun ? previewUninstall(setup) : uninstallOpencode(setup);
@@ -184,7 +194,7 @@ export async function runInstallOpencodeTarget(
 /** Probes `opencode --version` and reads the config, so only the install arms call it;
  * uninstall clears both keys and needs neither. */
 function readPlacement(
-  setup: Pick<OpencodeSetup, "configFile" | "isCheckout">,
+  setup: Pick<OpencodeSetup, "dir" | "configFiles" | "isCheckout">,
   local: LocalInstall | undefined,
   probe: () => VersionTriple | null,
 ): Placement {
@@ -194,11 +204,59 @@ function readPlacement(
   const specifier = local ? localPluginSpecifier(local.repoDir) : CARET_PACKAGE;
   const version = probe();
   const key = pluginKeyFor(version);
-  const entries = caretEntries(readConfigText(setup.configFile), setup.isCheckout);
+  const all = readCaretEntries(setup.configFiles, setup.isCheckout);
+  // A pin in a file the host ignores is not what the user runs, so it never beats one the
+  // host loads.
+  const loadedNames = hostConfigFilenames(version);
+  const loaded = readCaretEntries(
+    setup.configFiles.filter((p) => loadedNames.includes(basename(p))),
+    setup.isCheckout,
+  );
   const otherKey: PluginKey = key === "plugin" ? "plugins" : "plugin";
-  const movedFrom = entries.some((e) => e.key === otherKey) ? otherKey : null;
-  const writtenSpec = keptEntry(entries, specifier)?.spec ?? specifier;
-  return { specifier, version, key, movedFrom, writtenSpec };
+  const movedFrom = all.some((e) => e.key === otherKey) ? otherKey : null;
+  const writtenSpec =
+    (keptEntry(loaded, specifier) ?? keptEntry(all, specifier))?.spec ?? specifier;
+  const target = resolveConfigFile(setup.dir, version);
+  return { specifier, version, key, movedFrom, writtenSpec, target };
+}
+
+/** Install's config edits: caret stripped from every other file, then written into the
+ * target last, so a failure between them leaves no caret entry rather than two. */
+function installEdits(
+  { configFiles, isCheckout }: Pick<OpencodeSetup, "configFiles" | "isCheckout">,
+  { target, writtenSpec, key }: Placement,
+): ConfigEdit[] {
+  return [
+    ...configFiles
+      .filter((path) => path !== target)
+      .map((path) => ({ path, transform: stripCaret(isCheckout) })),
+    {
+      path: target,
+      transform: (text) => setCaretPluginEntry(text, { spec: writtenSpec, key, isCheckout }),
+    },
+  ];
+}
+
+function uninstallEdits({
+  configFiles,
+  isCheckout,
+}: Pick<OpencodeSetup, "configFiles" | "isCheckout">): ConfigEdit[] {
+  return configFiles.map((path) => ({ path, transform: stripCaret(isCheckout) }));
+}
+
+/** The note for a host that ignores `config.json`, raised only when this run moves caret
+ * out of it or creates the target — so it says so once, not on every later install. */
+function configJsonNote(
+  { configFiles }: Pick<OpencodeSetup, "configFiles">,
+  { version, target }: Pick<Placement, "version" | "target">,
+  changed: readonly string[],
+): string | null {
+  const configJson = configFiles.find((p) => basename(p) === "config.json");
+  if (configJson === undefined || hostConfigFilenames(version).includes("config.json")) {
+    return null;
+  }
+  if (!changed.includes(configJson) && configFiles.includes(target)) return null;
+  return `OpenCode v2 ignores config.json — caret goes in ${basename(target)}`;
 }
 
 /** The `/caret:*` command files caret deploys into the config dir. */
@@ -211,14 +269,14 @@ function commandPaths({ dir, pkg }: Pick<OpencodeSetup, "dir" | "pkg">): string[
 function previewNote(
   setup: OpencodeSetup,
   verb: "write" | "remove",
-  parts: { entry: string[]; found: string[] },
+  parts: { configs: string[]; entry: string[]; found: string[] },
 ): void {
-  const { configFile, legacy, ui } = setup;
+  const { legacy, ui } = setup;
   // Their own labelled section: an install's bare path list is titled "would write", and
   // listing a file caret is about to DELETE under that heading would misread badly.
   const sweep = legacy.length === 0 ? [] : ["", "pre-array-install files to remove:", ...legacy];
   ui.note(
-    [configFile, ...commandPaths(setup), ...parts.entry, ...sweep, ...parts.found].join("\n"),
+    [...parts.configs, ...commandPaths(setup), ...parts.entry, ...sweep, ...parts.found].join("\n"),
     `OpenCode — would ${verb}`,
   );
 }
@@ -236,7 +294,7 @@ async function previewInstall(
     ? [
         "",
         previewLine(
-          await readVerdict({ configFiles: [setup.configFile], host: placed.version }, deps),
+          await readVerdict({ configFiles: setup.configFiles, host: placed.version }, deps),
         ),
       ]
     : [];
@@ -247,29 +305,28 @@ async function previewInstall(
     `plugin entry: ${placed.specifier} → ${placed.key}`,
     hostLine(placed.version, placed.key, placed.movedFrom),
   ];
-  previewNote(setup, "write", { entry, found });
+  const changed = planConfigEdits(installEdits(setup, placed)).map((e) => e.path);
+  const note = configJsonNote(setup, placed, changed);
+  if (note !== null) entry.push(note);
+  const configs = [placed.target, ...changed.filter((p) => p !== placed.target)];
+  previewNote(setup, "write", { configs, entry, found });
 }
 
 /** The uninstall dry run: what it would remove. */
 function previewUninstall(setup: OpencodeSetup): void {
-  previewNote(setup, "remove", { entry: [], found: [] });
+  const configs = planConfigEdits(uninstallEdits(setup)).map((e) => e.path);
+  previewNote(setup, "remove", { configs, entry: [], found: [] });
 }
 
 async function uninstallOpencode(setup: OpencodeSetup): Promise<void> {
-  const { configFile, isCheckout, ui, dir, legacy } = setup;
-  // Every form caret may have written, not just the package: a developer who ran
-  // `--from-local` has a checkout entry, and an uninstall that left it behind would
-  // keep OpenCode loading caret after saying it removed it.
+  const { ui, dir, legacy } = setup;
   await ui.step(
     "Removing caret from OpenCode's plugin and plugins keys",
-    async () =>
-      editConfig(configFile, (text) =>
-        text === null ? null : dropEntries(text, caretEntries(text, isCheckout)),
-      ),
+    async () => writeConfigEdits(planConfigEdits(uninstallEdits(setup))),
     (changed) =>
       changed.length > 0
-        ? `Removed caret from ${basename(configFile)}`
-        : `caret was not in ${basename(configFile)}`,
+        ? `Removed caret from ${changed.map((p) => basename(p)).join(", ")}`
+        : "caret was not in any OpenCode config",
   );
   await ui.step(
     "Removing the /caret:* command files",
@@ -284,25 +341,20 @@ async function installOpencode(
   opts: { refresh: boolean; local?: LocalInstall },
   deps: InstallOpencodeDeps,
 ): Promise<void> {
-  const { dir, pkg, ui, isCheckout, configFile, legacy } = setup;
-  const { specifier, version, key, movedFrom, writtenSpec } = readPlacement(
-    setup,
-    opts.local,
-    deps.opencodeVersion ?? readOpencodeVersion,
-  );
+  const { dir, pkg, ui, legacy } = setup;
+  const placed = readPlacement(setup, opts.local, deps.opencodeVersion ?? readOpencodeVersion);
+  const { specifier, version, key, movedFrom, writtenSpec, target } = placed;
   ui.info(hostLine(version, key, movedFrom));
-  await ui.step(
+  const changed = await ui.step(
     `Adding ${specifier} to OpenCode's ${key} array`,
-    async () =>
-      editConfig(configFile, (text) => setCaretPluginEntry(text, { specifier, key, isCheckout })),
-    (changed) =>
-      changed.length > 0
-        ? `Added ${writtenSpec} to ${basename(configFile)}`
-        : `${writtenSpec} was already in ${basename(configFile)}`,
+    async () => writeConfigEdits(planConfigEdits(installEdits(setup, placed))),
+    (written) => installedLine(writtenSpec, target, written),
   );
+  const note = configJsonNote(setup, placed, changed);
+  if (note !== null) ui.info(note);
   // After the array edit — the entry has to exist before it can be read — and before the
   // command files, so a cache clear is settled by the time the run reports it deployed.
-  if (checksPublished(opts.local)) await upgradeStep(configFile, opts, deps, ui);
+  if (checksPublished(opts.local)) await upgradeStep(target, opts, deps, ui);
   // Only once the array entry exists and a stale cached copy has been offered a refresh:
   // dropping the plugin file any earlier could move a user backwards onto an older cached
   // caret. It still sweeps when that refresh is declined — two loaded caret plugins are
@@ -367,7 +419,7 @@ async function readVerdict(
  * is a "no", not a failure — and neither is `unknown`, which warns and changes nothing,
  * the way the rumdl step treats its own failure. */
 async function upgradeStep(
-  configFile: string,
+  target: string,
   opts: { refresh: boolean },
   deps: InstallOpencodeDeps,
   ui: InstallUI,
@@ -376,7 +428,7 @@ async function upgradeStep(
     "Checking OpenCode's caret version",
     // After the write caret sits in the key its host loads, so the key alone picks the
     // cache layout.
-    () => readVerdict({ configFiles: [configFile] }, deps),
+    () => readVerdict({ configFiles: [target] }, deps),
     upgradeVerdictLine,
   );
   if (verdict.kind === "unknown") {
@@ -411,31 +463,59 @@ async function upgradeStep(
   await ui.step(
     `Bumping ${CARET_PACKAGE} to ${verdict.published}`,
     async () =>
-      editConfig(configFile, (text) => {
-        const entry = caretPackageEntry(text);
-        return text === null || entry === null
-          ? null
-          : setPluginVersionInConfigText(text, {
-              pkg: CARET_PACKAGE,
-              version: verdict.published,
-              key: entry.key,
-            });
-      }),
+      writeConfigEdits(
+        planConfigEdits([
+          {
+            path: target,
+            transform: (text) => {
+              const entry = caretPackageEntry(text);
+              return text === null || entry === null
+                ? null
+                : setPluginVersionInConfigText(text, {
+                    pkg: CARET_PACKAGE,
+                    version: verdict.published,
+                    key: entry.key,
+                  });
+            },
+          },
+        ]),
+      ),
     (changed) =>
       changed.length > 0
         ? `Bumped the pin to ${CARET_PACKAGE}@${verdict.published}`
-        : `Left ${basename(configFile)} unchanged`,
+        : `Left ${basename(target)} unchanged`,
   );
 }
 
-/** Apply `transform` to the config file's text (null when the file is absent),
- * writing the result when it changes. Returns `[path]` when the file was changed, else
- * `[]`. A `null` transform result means "nothing to do" (e.g. removing from a config
- * that doesn't exist). Dry-run never reaches here — it returns after the preview. */
-function editConfig(path: string, transform: (text: string | null) => string | null): string[] {
-  const existing = readConfigText(path);
-  const next = transform(existing);
-  if (next === null || next === existing) return [];
-  writeFileSync(path, next);
-  return [path];
+/** The install step's settled line: whether the target changed, plus every other file
+ * caret was stripped from. */
+function installedLine(spec: string, target: string, written: readonly string[]): string {
+  const name = basename(target);
+  const line = written.includes(target)
+    ? `Added ${spec} to ${name}`
+    : `${spec} was already in ${name}`;
+  const stripped = written.filter((p) => p !== target).map((p) => basename(p));
+  return stripped.length === 0 ? line : `${line} (removed it from ${stripped.join(", ")})`;
+}
+
+interface ConfigEdit {
+  path: string;
+  /** The file's next text from its current one (null when absent); null for no change. */
+  transform: (text: string | null) => string | null;
+}
+
+/** The edits whose text changes, with that text. Writes nothing, so a dry run lists exactly
+ * the files a live run would write. */
+function planConfigEdits(edits: readonly ConfigEdit[]): { path: string; text: string }[] {
+  return edits.flatMap(({ path, transform }) => {
+    const existing = readConfigText(path);
+    const text = transform(existing);
+    return text === null || text === existing ? [] : [{ path, text }];
+  });
+}
+
+/** Write each planned file in order, returning the paths written. */
+function writeConfigEdits(planned: readonly { path: string; text: string }[]): string[] {
+  for (const { path, text } of planned) writeFileSync(path, text);
+  return planned.map((e) => e.path);
 }

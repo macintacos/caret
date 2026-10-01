@@ -12,6 +12,7 @@ import {
   opencodeCachePackageDir,
   opencodeNpmCacheDir,
   opencodeNpmLocalCacheDir,
+  resolveConfigFile,
 } from "@/adapters/opencode/paths.ts";
 
 let tmp: string;
@@ -100,4 +101,31 @@ test("caret's cache dirs cover v2's npm layout beside v1's packages layout", () 
 test("existingConfigFiles lists the configs that exist, jsonc first", () => {
   for (const name of ["config.json", "opencode.jsonc"]) writeFileSync(join(tmp, name), "{}");
   expect(existingConfigFiles(tmp)).toEqual([join(tmp, "opencode.jsonc"), join(tmp, "config.json")]);
+});
+
+test("resolveConfigFile on v2 and an unknown host skips a config.json-only dir for a new opencode.json", () => {
+  writeFileSync(join(tmp, "config.json"), "{}");
+  for (const host of [[2, 0, 18] as const, null]) {
+    expect(resolveConfigFile(tmp, host === null ? null : [...host])).toBe(
+      join(tmp, "opencode.json"),
+    );
+  }
+});
+
+test("resolveConfigFile on v1 keeps a config.json-only dir", () => {
+  writeFileSync(join(tmp, "config.json"), "{}");
+  expect(resolveConfigFile(tmp, [1, 18, 29])).toBe(join(tmp, "config.json"));
+});
+
+test("resolveConfigFile prefers opencode.jsonc when opencode.json is beside it", () => {
+  for (const name of ["opencode.json", "opencode.jsonc"]) writeFileSync(join(tmp, name), "{}");
+  for (const host of [[2, 0, 18], [1, 18, 29], null] as const) {
+    expect(resolveConfigFile(tmp, host === null ? null : [...host])).toBe(
+      join(tmp, "opencode.jsonc"),
+    );
+  }
+});
+
+test("resolveConfigFile falls back to opencode.json when no config exists", () => {
+  expect(resolveConfigFile(tmp, [2, 0, 18])).toBe(join(tmp, "opencode.json"));
 });
