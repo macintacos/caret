@@ -240,15 +240,15 @@ function readPlacement(
   const specifier = local ? localPluginSpecifier(local.repoDir) : CARET_PACKAGE;
   const version = probe();
   const key = pluginKeyFor(version);
-  const all = readCaretEntries(setup.configFiles, setup.isCheckout);
+  const allEntries = readCaretEntries(setup.configFiles, setup.isCheckout);
   // A pin in a file the host ignores is not what the user runs, so it never beats one the
   // host loads.
   const loadedFiles = loadedConfigFiles(setup.configFiles, version);
-  const loaded = readCaretEntries(loadedFiles, setup.isCheckout);
+  const loadedEntries = readCaretEntries(loadedFiles, setup.isCheckout);
   const otherKey: PluginKey = key === "plugin" ? "plugins" : "plugin";
-  const movedFrom = all.some((e) => e.key === otherKey) ? otherKey : null;
+  const movedFrom = allEntries.some((e) => e.key === otherKey) ? otherKey : null;
   const writtenSpec =
-    (keptEntry(loaded, specifier) ?? keptEntry(all, specifier))?.spec ?? specifier;
+    (keptEntry(loadedEntries, specifier) ?? keptEntry(allEntries, specifier))?.spec ?? specifier;
   const target = resolveConfigFile(setup.dir, hostConfigFilenames(version));
   return { specifier, version, key, movedFrom, writtenSpec, target, loadedFiles };
 }
@@ -532,9 +532,9 @@ function planConfigEdits(edits: readonly ConfigEdit[]): ConfigPlan {
       plan.uneditable.push({ path, reason: errorMessage(e) });
       continue;
     }
-    const error = existing === null ? null : configParseError(existing);
-    if (error !== null) {
-      plan.uneditable.push({ path, reason: error });
+    const parseError = existing === null ? null : configParseError(existing);
+    if (parseError !== null) {
+      plan.uneditable.push({ path, reason: parseError });
       continue;
     }
     const text = transform(existing);
