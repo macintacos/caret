@@ -271,16 +271,16 @@ While the Plan agent is working, the plugin also warms the daemon in the backgro
 `caret prewarm` on each plan-agent message, mirroring the `caret prewarm` row in the
 Claude hooks table above — so your first review doesn't wait on a cold start.
 
-caret installs into OpenCode as a plugin array entry. `caret install` runs
-`opencode --version` (bounded at 5 s) and adds `@macintacos/caret` to your OpenCode
-config's `plugins` array on v2 or its `plugin` array otherwise — v1, or a version it
-cannot read, since both hosts load `plugin` — comment-preserving, via `jsonc-parser`. On
-v2, or a version it cannot read, it writes the first of `opencode.jsonc` and
-`opencode.json` that exists, else a new `opencode.json` — never `config.json`, which v2
-ignores; a known v1 keeps the first of all three. It removes caret's entry from every
-other global config file, so OpenCode loads exactly one, and it writes nothing when a
-config file can't be read or parsed, or when an edit to it would not re-parse to the
-intended config. On v2 it moves an existing `plugin` entry into `plugins` in the same
+caret installs into OpenCode as a plugin array entry. `caret install` probes every
+`opencode` on `PATH` (each bounded at 5 s) and adds `@macintacos/caret` to your OpenCode
+config's `plugins` array only when all of them are v2, else its `plugin` array, which
+every OpenCode loads — comment-preserving, via `jsonc-parser`. Unless every one reads as
+v1, it writes the first of `opencode.jsonc` and `opencode.json` that exists, else a new
+`opencode.json` — never `config.json`, which v2 ignores; a `PATH` whose every `opencode`
+reads as v1 keeps the first of all three. It removes caret's entry from every other global
+config file, so OpenCode loads exactly one, and it writes nothing when a config file can't
+be read or parsed, or when an edit to it would not re-parse to the intended config. When
+every `opencode` is v2 it moves an existing `plugin` entry into `plugins` in the same
 write, keeping a pinned version: v2 loads both arrays, and two caret entries fail with
 `Duplicate plugin ID`. It deletes a `plugins` key it empties, because v1 below 1.18.16
 refuses to start with one. It also deploys the `/caret:*` command files, which v1 and v2

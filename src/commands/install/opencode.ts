@@ -1,11 +1,11 @@
 // caret's OpenCode install target. `caret install` makes caret an entry in the host's
-// plugin key (`plugins` on v2, else `plugin`) — OpenCode installs it and its deps into its
-// own cache and loads it — and
-// deploys the `/caret:*` command files (which aren't array-installable). `--uninstall`
-// reverses both. Either arm also sweeps the plugin and command FILES an older caret
-// deployed into the config dir: OpenCode still loads them, so a leftover plugin file
-// would register a second review tool beside the array entry. The config-array edit is
-// comment-preserving (config-plugin.ts).
+// plugin key (`plugins` when every `opencode` on PATH is v2, else `plugin`) — OpenCode
+// installs it and its deps into its own cache and loads it — and deploys the `/caret:*`
+// command files (which aren't array-installable). `--uninstall` reverses both. Either
+// arm also sweeps the plugin and command FILES an older caret deployed into the config
+// dir: OpenCode still loads them, so a leftover plugin file would register a second
+// review tool beside the array entry. The config-array edit is comment-preserving
+// (config-plugin.ts).
 //
 // caret owns exactly one entry across both keys and every global config file, in one of
 // two forms: the npm package (@macintacos/caret), or `file:<checkout>` under
@@ -41,10 +41,13 @@ import {
   readConfigText,
 } from "@/adapters/opencode/entries.ts";
 import {
+  describeHosts,
   hostConfigFilenames,
   loadedConfigFiles,
+  type OpencodeHost,
   pluginKeyFor,
-  readOpencodeVersion,
+  readOpencodeHosts,
+  sharedHost,
 } from "@/adapters/opencode/host.ts";
 import { loadOpencodePackaging, type OpencodePackaging } from "@/adapters/opencode/packaging.ts";
 import {
@@ -91,7 +94,7 @@ export interface InstallOpencodeDeps {
   confirm?: (verdict: StaleVerdict) => Promise<boolean | null>;
   isInteractive?: () => boolean;
   isCheckout?: (dir: string) => boolean;
-  opencodeVersion?: () => VersionTriple | null;
+  opencodeHosts?: () => readonly OpencodeHost[];
 }
 
 /** Whether an existing caret entry is the same FORM as the one being written, and so may
@@ -152,17 +155,16 @@ function bumpPin(version: string): ConfigEdit["transform"] {
   };
 }
 
-/** The line naming the host install found and the key it writes; `movedFrom` is the other
- * key when caret had an entry there. */
-function hostLine(
-  version: VersionTriple | null,
-  key: PluginKey,
-  movedFrom: PluginKey | null,
-): string {
-  const found =
-    version === null
-      ? `couldn't read \`opencode --version\` — writing caret to ${key}, which every OpenCode loads`
-      : `OpenCode ${version.join(".")} — writing caret to ${key}`;
+/** The line naming every `opencode` install found and the key it writes; `movedFrom` is the
+ * other key when caret had an entry there. */
+function hostLine({
+  hosts,
+  version,
+  key,
+  movedFrom,
+}: Pick<Placement, "hosts" | "version" | "key" | "movedFrom">): string {
+  const loadedByAll = version === null ? ", which every OpenCode loads" : "";
+  const found = `${describeHosts(hosts)} — writing caret to ${key}${loadedByAll}`;
   return movedFrom === null ? found : `${found} (moved from ${movedFrom})`;
 }
 
@@ -177,10 +179,13 @@ interface OpencodeSetup {
   legacy: string[];
 }
 
-/** Where an install puts caret on this host. */
+/** Where an install puts caret for the `opencode` binaries on PATH. */
 interface Placement {
   /** The form this run installs: the package name, or `file:<checkout>`. */
   specifier: string;
+  /** Every `opencode` on PATH and what each read as. */
+  hosts: readonly OpencodeHost[];
+  /** `sharedHost(hosts)`: the one version the key, file and cache rules read. */
   version: VersionTriple | null;
   key: PluginKey;
   movedFrom: PluginKey | null;
@@ -189,7 +194,7 @@ interface Placement {
   writtenSpec: string;
   /** The config file caret is written into. */
   target: string;
-  /** The existing config files this host loads. */
+  /** The existing config files every `opencode` on PATH loads. */
   loadedFiles: string[];
 }
 
@@ -233,18 +238,19 @@ export async function runInstallOpencodeTarget(
   return opts.dryRun ? previewInstall(setup, opts, deps) : installOpencode(setup, opts, deps);
 }
 
-/** Probes `opencode --version`, reads every global config and picks the target file, so
+/** Probes every `opencode` on PATH, reads every global config and picks the target file, so
  * only the install arms call it; uninstall clears every file and needs neither. */
 function readPlacement(
   setup: Pick<OpencodeSetup, "dir" | "configFiles" | "isCheckout">,
   local: LocalInstall | undefined,
-  probe: () => VersionTriple | null,
+  probe: () => readonly OpencodeHost[],
 ): Placement {
   // OpenCode symlinks a `file:` target into its cache, so the plugin it loads is the
   // checkout's own — and the `../bin/caret` that plugin spawns is the binary
   // `mise run build` just produced, picked up on every later rebuild with no reinstall.
   const specifier = local ? localPluginSpecifier(local.repoDir) : CARET_PACKAGE;
-  const version = probe();
+  const hosts = probe();
+  const version = sharedHost(hosts);
   const key = pluginKeyFor(version);
   const allEntries = readCaretEntries(setup.configFiles, setup.isCheckout);
   // A pin in a file the host ignores is not what the user runs, so it never beats one the
@@ -256,7 +262,7 @@ function readPlacement(
   const writtenSpec =
     (keptEntry(loadedEntries, specifier) ?? keptEntry(allEntries, specifier))?.spec ?? specifier;
   const target = resolveConfigFile(setup.dir, hostConfigFilenames(version));
-  return { specifier, version, key, movedFrom, writtenSpec, target, loadedFiles };
+  return { specifier, hosts, version, key, movedFrom, writtenSpec, target, loadedFiles };
 }
 
 /** Install's config edits: caret stripped from every other file, then written into the
@@ -326,7 +332,7 @@ async function previewInstall(
   opts: { local?: LocalInstall },
   deps: InstallOpencodeDeps,
 ): Promise<void> {
-  const placed = readPlacement(setup, opts.local, deps.opencodeVersion ?? readOpencodeVersion);
+  const placed = readPlacement(setup, opts.local, deps.opencodeHosts ?? readOpencodeHosts);
   // The check is read-only, so a preview can still run it and say what it found. A
   // preview has no warning to carry an `unknown`'s reason, so the note carries it.
   const found = checksPublished(opts.local)
@@ -339,11 +345,7 @@ async function previewInstall(
     : [];
   // The specifier is the one thing a preview can't be read off the paths: `--from-local`
   // and a published install write the same file with very different content.
-  const entry = [
-    "",
-    `plugin entry: ${placed.specifier} → ${placed.key}`,
-    hostLine(placed.version, placed.key, placed.movedFrom),
-  ];
+  const entry = ["", `plugin entry: ${placed.specifier} → ${placed.key}`, hostLine(placed)];
   const changed = strictPlan(installEdits(setup, placed)).map((e) => e.path);
   const note = ignoredConfigNote(setup, placed, changed);
   if (note !== null) entry.push(note);
@@ -386,9 +388,9 @@ async function installOpencode(
   deps: InstallOpencodeDeps,
 ): Promise<void> {
   const { dir, pkg, ui, legacy } = setup;
-  const placed = readPlacement(setup, opts.local, deps.opencodeVersion ?? readOpencodeVersion);
-  const { specifier, version, key, movedFrom, writtenSpec, target } = placed;
-  ui.info(hostLine(version, key, movedFrom));
+  const placed = readPlacement(setup, opts.local, deps.opencodeHosts ?? readOpencodeHosts);
+  const { specifier, key, writtenSpec, target } = placed;
+  ui.info(hostLine(placed));
   const changed = await ui.step(
     `Adding ${specifier} to OpenCode's ${key} array`,
     async () => writeConfigEdits(strictPlan(installEdits(setup, placed))),

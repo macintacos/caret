@@ -10,12 +10,13 @@ import {
 } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 
 import { parse as parseJsonc } from "jsonc-parser";
 
 import { withEnv } from "@test/support/env.ts";
 import { expectCleanExitCode } from "@test/support/exit-code.ts";
+import { writeOpencodeShim } from "@test/support/opencode-shim.ts";
 import { caretEntries, readConfigText } from "@/adapters/opencode/entries.ts";
 import type { OpencodePackaging } from "@/adapters/opencode/packaging.ts";
 import { CARET_PACKAGE, CONFIG_FILENAMES } from "@/adapters/opencode/paths.ts";
@@ -51,7 +52,7 @@ function deps(overrides: InstallOpencodeDeps = {}): InstallOpencodeDeps {
     published: async () => null,
     cacheDir: (e) => join(dir, "cache", e.spec),
     cacheDirs: () => [],
-    opencodeVersion: () => null,
+    opencodeHosts: () => [],
     ...overrides,
   };
 }
@@ -185,12 +186,12 @@ test("dry-run uninstall previews what it would remove and writes nothing", async
 
 test("uninstall never probes the OpenCode version, live or previewed", async () => {
   const probes: string[] = [];
-  const opencodeVersion = () => {
+  const opencodeHosts = () => {
     probes.push("probed");
-    return null;
+    return [];
   };
-  await transcript({ opencodeVersion }, { uninstall: true, dryRun: true });
-  await transcript({ opencodeVersion }, { uninstall: true });
+  await transcript({ opencodeHosts }, { uninstall: true, dryRun: true });
+  await transcript({ opencodeHosts }, { uninstall: true });
   expect(probes).toEqual([]);
 });
 
@@ -689,8 +690,8 @@ test("--dry-run names the legacy files in its preview and removes none of them",
 
 const V2_VERSION: VersionTriple = [2, 0, 18];
 const V1_VERSION: VersionTriple = [1, 18, 29];
-const V2 = { opencodeVersion: () => V2_VERSION };
-const V1 = { opencodeVersion: () => V1_VERSION };
+const V2 = { opencodeHosts: () => [{ bin: "/v2/opencode", version: V2_VERSION }] };
+const V1 = { opencodeHosts: () => [{ bin: "/v1/opencode", version: V1_VERSION }] };
 const config = () => JSON.parse(readFileSync(configJson(), "utf-8"));
 
 async function installOn(overrides: InstallOpencodeDeps, local?: string): Promise<void> {
@@ -706,6 +707,48 @@ async function installOn(overrides: InstallOpencodeDeps, local?: string): Promis
     deps(overrides),
   );
 }
+
+test("a v1 behind a v2 on PATH gets plugin, which both load", async () => {
+  const v2 = writeOpencodeShim(join(dir, "v2"), "echo opencode v2.0.18");
+  const v1 = writeOpencodeShim(join(dir, "v1"), "echo 1.18.15");
+  const said = await withEnv({ PATH: [join(dir, "v2"), join(dir, "v1")].join(delimiter) }, () =>
+    transcript({ opencodeHosts: undefined }),
+  );
+  expect(said).toContain(`OpenCode 2.0.18 at ${v2}, OpenCode 1.18.15 at ${v1}`);
+  expect(config()).toEqual({ plugin: [CARET_PACKAGE] });
+});
+
+const mixed = (v1: VersionTriple) => ({
+  opencodeHosts: () => [
+    { bin: "/v2/opencode", version: V2_VERSION },
+    { bin: "/v1/opencode", version: v1 },
+  ],
+});
+
+test("a v1 that ignores plugins beside v2 also gets plugin", async () => {
+  await installOn(mixed([1, 18, 29]));
+  expect(config()).toEqual({ plugin: [CARET_PACKAGE] });
+});
+
+test("on v1 beside v2, caret moves from plugins to plugin, deleting the emptied plugins", async () => {
+  writeFileSync(configJson(), JSON.stringify({ plugins: [CARET_PACKAGE] }));
+  await installOn(mixed([1, 18, 15]));
+  expect(config()).toEqual({ plugin: [CARET_PACKAGE] });
+});
+
+test("a probe that fails beside v2 is reported, and install writes plugin", async () => {
+  const hosts = {
+    opencodeHosts: () => [
+      { bin: "/v2/opencode", version: V2_VERSION },
+      { bin: "/x/opencode", version: null },
+    ],
+  };
+  const said = await transcript(hosts, { dryRun: true });
+  expect(said).toContain("couldn't read `/x/opencode --version`");
+  expect(said).toContain("writing caret to plugin, which every OpenCode loads");
+  await installOn(hosts);
+  expect(config()).toEqual({ plugin: [CARET_PACKAGE] });
+});
 
 test("on v2, install writes caret to plugins as a bare string", async () => {
   await installOn(V2);
@@ -944,8 +987,10 @@ test("a non-caret file: entry is kept on v2", async () => {
 });
 
 test("the install names the host it found and the key it writes", async () => {
-  expect(await transcript(V2)).toContain("OpenCode 2.0.18 — writing caret to plugins");
-  expect(await transcript({})).toContain("couldn't read `opencode --version`");
+  expect(await transcript(V2)).toContain(
+    "OpenCode 2.0.18 at /v2/opencode — writing caret to plugins",
+  );
+  expect(await transcript({})).toContain("no `opencode` on PATH");
 });
 
 test("the dry run names the key and writes nothing", async () => {

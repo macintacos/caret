@@ -13,7 +13,7 @@ import { release } from "node:os";
 
 import { selectAdapter } from "@/adapters/index.ts";
 import { readOpencodeChecks } from "@/adapters/opencode/checks.ts";
-import { readOpencodeVersion } from "@/adapters/opencode/host.ts";
+import { readOpencodeHosts } from "@/adapters/opencode/host.ts";
 import { existingConfigFiles, opencodeConfigDir } from "@/adapters/opencode/paths.ts";
 import { upgradeCheck } from "@/adapters/opencode/upgrade.ts";
 import { isTerminal } from "@/commands/install/ui.ts";
@@ -111,7 +111,7 @@ async function readAdapterChecks(): Promise<Check[]> {
   try {
     return await readOpencodeChecks({
       configFiles: existingConfigFiles(opencodeConfigDir()),
-      opencodeVersion: readOpencodeVersion,
+      opencodeHosts: readOpencodeHosts,
     });
   } catch (e) {
     return [upgradeCheck({ kind: "unknown", reason: errorMessage(e) })];
