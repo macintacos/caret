@@ -13,6 +13,7 @@ import {
   type PluginKey,
   pluginItemSpecs,
   rewritePluginArray,
+  setPluginItemSpec,
   setPluginVersionInConfigText,
   splitPluginSpecifier,
 } from "@/adapters/opencode/config-plugin.ts";
@@ -133,6 +134,21 @@ test("set pins a bare entry, leaving other entries and keys alone", () => {
     theme: "dark",
     plugin: ["opencode-wakatime", `${PKG}@0.8.1`],
   });
+});
+
+test("setPluginItemSpec swaps one string item in place, keeping the key's position and comment", () => {
+  const src =
+    '{\n  "first": 1,\n  // above plugins\n  "plugins": ["@macintacos/caret"],\n  "last": 2\n}\n';
+  expect(setPluginItemSpec(src, { key: "plugins", index: 0, spec: `${PKG}@0.8.1` })).toBe(
+    '{\n  "first": 1,\n  // above plugins\n  "plugins": ["@macintacos/caret@0.8.1"],\n  "last": 2\n}\n',
+  );
+});
+
+test("setPluginItemSpec swaps an object item's package, keeping its options", () => {
+  const src = `{\n  "plugins": [{ "package": "${PKG}", "options": { "a": 1 } }]\n}\n`;
+  expect(setPluginItemSpec(src, { key: "plugins", index: 0, spec: `${PKG}@0.8.1` })).toBe(
+    `{\n  "plugins": [{ "package": "${PKG}@0.8.1", "options": { "a": 1 } }]\n}\n`,
+  );
 });
 
 test("set rewrites an existing pin rather than appending a second one", () => {
@@ -279,6 +295,86 @@ test("an emptied plugins key is deleted with its comma, keeping every comment", 
   }
 });
 
+/** Assert `rewritePluginArray` drops `drop` from `src`'s plugin array to exactly `want`,
+ * strict about commas so a dangling one fails. */
+function expectDrop(src: string, drop: string[], want: string): void {
+  const out = rewritePluginArray(src, "plugin", (item) => !drop.includes(item as string));
+  expect(out).toBe(want);
+  const errors: ParseError[] = [];
+  parse(out, errors, { allowTrailingComma: false });
+  expect(errors).toEqual([]);
+}
+
+const MULTI = [
+  "{",
+  '  "plugin": [',
+  "    // lead-a",
+  '    "a",     // a-inline',
+  '    /* block-b */ "b",',
+  '    "c" /* x */, "d" // tail-d',
+  "  ]",
+  "}",
+  "",
+] as const;
+
+/** MULTI with its element lines (index 2…5) replaced by `lines`. */
+function multi(...lines: string[]): string {
+  return [...MULTI.slice(0, 2), ...lines, ...MULTI.slice(6)].join("\n");
+}
+
+test("dropping an element keeps every comment in a multi-line array in place", () => {
+  const src = MULTI.join("\n");
+  expectDrop(src, ["a"], multi("    // lead-a", "         // a-inline", MULTI[4], MULTI[5]));
+  expectDrop(src, ["b"], multi(MULTI[2], MULTI[3], "    /* block-b */ ", MULTI[5]));
+  expectDrop(src, ["c"], multi(MULTI[2], MULTI[3], MULTI[4], '     /* x */ "d" // tail-d'));
+  expectDrop(src, ["d"], multi(MULTI[2], MULTI[3], MULTI[4], '    "c" /* x */  // tail-d'));
+  expectDrop(
+    src,
+    ["c", "d"],
+    multi(MULTI[2], MULTI[3], '    /* block-b */ "b"', "     /* x */  // tail-d"),
+  );
+});
+
+test("dropping an element keeps a single-line array on one line with its comments", () => {
+  const src = '{ "plugin": ["a", /* between */ "b", "c" /* tail */] }';
+  expectDrop(src, ["a"], '{ "plugin": [ /* between */ "b", "c" /* tail */] }');
+  expectDrop(src, ["b"], '{ "plugin": ["a", /* between */  "c" /* tail */] }');
+  expectDrop(src, ["c"], '{ "plugin": ["a", /* between */ "b"  /* tail */] }');
+});
+
+test("dropping a trailing element keeps CRLF line endings", () => {
+  const src = '{\r\n  "plugin": [\r\n    "a", // keep\r\n    "b"\r\n  ]\r\n}\r\n';
+  expectDrop(src, ["b"], '{\r\n  "plugin": [\r\n    "a" // keep\r\n  ]\r\n}\r\n');
+});
+
+test("dropping an element leaves a tab-indented array's tabs as they were", () => {
+  const src = '{\n\t"plugin": [\n\t\t// keep\n\t\t"a",\n\t\t"b"\n\t]\n}\n';
+  expectDrop(src, ["a"], '{\n\t"plugin": [\n\t\t// keep\n\t\t"b"\n\t]\n}\n');
+});
+
+test("add indents an appended element the way its siblings are", () => {
+  const tabs = '{\n\t"plugin": [\n\t\t"a"\n\t]\n}\n';
+  expect(addPluginToConfigText(tabs, "b", "plugin")).toBe(
+    '{\n\t"plugin": [\n\t\t"a",\n\t\t"b"\n\t]\n}\n',
+  );
+  for (const header of ["/*\n   my header\n*/\n", "/**\n * header\n */\n"]) {
+    expect(
+      addPluginToConfigText(`${header}{\n  "plugin": [\n    "a"\n  ]\n}\n`, "b", "plugin"),
+    ).toBe(`${header}{\n  "plugin": [\n    "a",\n    "b"\n  ]\n}\n`);
+  }
+  expect(
+    addPluginToConfigText('/*\n\t"note"\n*/\n{\n  "plugin": [\n    "a"\n  ]\n}\n', "b", "plugin"),
+  ).toBe('/*\n\t"note"\n*/\n{\n  "plugin": [\n    "a",\n    "b"\n  ]\n}\n');
+  const inner = '{\n  /*\n      "old": 1\n  */\n  "plugin": [\n    "a"\n  ]\n}\n';
+  expect(addPluginToConfigText(inner, "b", "plugin")).toBe(
+    '{\n  /*\n      "old": 1\n  */\n  "plugin": [\n    "a",\n    "b"\n  ]\n}\n',
+  );
+  const absent = '{\n  /*\n\t"old": 1\n  */\n  "theme": "x"\n}\n';
+  expect(addPluginToConfigText(absent, "b", "plugin")).toStartWith(
+    '{\n  /*\n\t"old": 1\n  */\n  "theme": "x",\n  "plugin"',
+  );
+});
+
 // Minimal comment stripper so a jsonc body can be JSON.parsed for structural checks.
 function stripComments(s: string): string {
   return s.replace(/^\s*\/\/.*$/gm, "");
@@ -305,4 +401,37 @@ test("configParseError names why a truncated config or an array root is unreadab
 
 test("configParseError accepts a config that opens with a UTF-8 BOM", () => {
   expect(configParseError('﻿{ "plugin": ["x"] }')).toBeNull();
+});
+
+// jsonc-parser's parse keeps a duplicate key's last value while its edits land on the
+// first, so no edit of this config re-parses to what it intends.
+const DUPLICATE_PLUGINS = '{ "plugins": ["a"], "plugins": ["b", "@macintacos/caret"] }';
+
+test("an array rewrite that does not re-parse to its intended value throws", () => {
+  expect(() => rewritePluginArray(DUPLICATE_PLUGINS, "plugins", (_, i) => i !== 1)).toThrow();
+});
+
+test("an add that does not re-parse to its intended value throws", () => {
+  expect(() => addPluginToConfigText(DUPLICATE_PLUGINS, "x", "plugins")).toThrow();
+});
+
+test("an item swap that does not re-parse to its intended value throws", () => {
+  expect(() =>
+    setPluginItemSpec(DUPLICATE_PLUGINS, { key: "plugins", index: 1, spec: `${PKG}@0.8.1` }),
+  ).toThrow();
+});
+
+test("add and drop edit a BOM-prefixed config", () => {
+  const src = `\uFEFF{ "plugins": ["a"] }`;
+  expect(addPluginToConfigText(src, PKG, "plugins")).toContain(PKG);
+  expect(dropCaret(`\uFEFF{ "plugins": ["a", "${PKG}"] }`, "plugins")).not.toContain(PKG);
+});
+
+test("add edits an empty file", () => {
+  expect(JSON.parse(addPluginToConfigText("", PKG, "plugins"))).toEqual({ plugins: [PKG] });
+});
+
+test("add edits a config with trailing commas", () => {
+  const out = addPluginToConfigText('{ "plugins": ["a",], }', PKG, "plugins");
+  expect(parse(out, [], { allowTrailingComma: true })).toEqual({ plugins: ["a", PKG] });
 });
