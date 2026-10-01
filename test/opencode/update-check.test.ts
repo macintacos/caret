@@ -296,12 +296,12 @@ test("createCaretPlugin fires checkUpdate at load only when wired", async () => 
 });
 
 test("createCaretPlugin's update check toasts through the v1 client", async () => {
-  let check: Promise<void> | undefined;
+  let updateCheck: Promise<void> | undefined;
   const plugin = createCaretPlugin({
     bin: "caret",
     run: async () => ({ stdout: "{}", exitCode: 0 }),
     checkUpdate: (show) => {
-      check = realUpdateChecker(show, {
+      updateCheck = realUpdateChecker(show, {
         currentVersion: "0.3.0",
         env: {},
         fetchImpl: async () => jsonResponse({ tag_name: "v0.4.0", html_url: "https://x/0.4.0" }),
@@ -312,7 +312,7 @@ test("createCaretPlugin's update check toasts through the v1 client", async () =
   });
   const { client, toasts } = recordingClient();
   await plugin({ client } as unknown as PluginInput);
-  await check;
+  await updateCheck;
   expect(toasts).toEqual([
     {
       title: "caret update available",
