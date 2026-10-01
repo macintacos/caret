@@ -196,9 +196,9 @@ on a process. The hook swallows every error: a rejected v2 hook fails the prompt
 triggered it. The warm runs in its own `try`, so a warm that throws still lets the allow
 be written. v2 resolves a session's unset `agent` per step and never writes it back, so
 the hook takes the first entry of `ctx.agent.list()` instead — v2 orders that list
-default-first, by the same `selectedDefault` an unset session gets — and a default `plan`
-warms and allows exactly as an explicit one. A list that is unreadable or empty warms and
-allows nothing.
+default-first, by the same `selectedDefault` an unset session gets, though that order is
+an implementation detail, not a contract — and a default `plan` warms and allows exactly
+as an explicit one. A list that is unreadable or empty warms and allows nothing.
 
 **Why the warm stays plan-only even though any primary agent may call the tool.** The plan
 agent is the one whose turn *reliably* ends in a review; a `build`-agent review is an
@@ -309,11 +309,10 @@ is never revoked: a plan session switched to `build` keeps the tool, which this 
 already treats as wanted, and a revoke could not tell caret's rule from a user's identical
 one. The awaited hook, not a `session.created` event, carries it because v2 activates a
 cold location's plugins asynchronously, so the first session could be created before caret
-subscribes. A session on the configured default agent carries no `agent` field, so the
-hook resolves it as the first entry of `ctx.agent.list()`. That order is an implementation
-detail, not a contract: a reorder fails closed when the new first entry is not a planning
-agent, and at worst grants the tool to one session when it is `plan`, which this section
-already accepts for a plan session switched to `build`.
+subscribes. A default-agent session is resolved from `ctx.agent.list()` as § Daemon
+warm-up describes; should v2 reorder that list, a non-plan first entry fails closed and a
+`plan` one at worst grants the tool to one session, which this section already accepts for
+a plan session switched to `build`.
 
 On v1, `applyCaretConfig` writes exactly one per-agent permission: `allow` for
 `caret_review_plan` on the `plan` agent, and only when the agent has no entry of its own.
@@ -660,16 +659,16 @@ runs `prewarm` with `CARET_AGENT=opencode`); the entrypoint's
 comment-preserving); target selection + dispatch; the `claude` target's CLI command
 sequence; the runtime bin/version resolvers; and the update check (toasts when behind,
 silent on error / opt-out). On v2 they also cover the permission evaluator, the tool's
-registration (`codemode: false`, JSON Schema input), steer and prewarm gating (the default
-agent resolved from `ctx.agent.list()`, failing closed on an unreadable or empty list and
-on a non-plan default), evaluate-then-refuse on `path`, the subagent refusal and its
-fail-open, the `context`-hook tool removal and its fail-open, the plan-agent allow and its
-agent-and-session skip, the TUI half's toasts and update check, abort on both hosts, and
-v1↔v2 parity of the refusal texts. For the plugin key they cover the host probe's 5 s
-bound (a grandchild holding stdout included), key selection and the one-transform move,
-deleting `plugins` without losing comments (a trailing comma and CRLF included), v2 cache
-reads and clears, and doctor's `opencode-host` and `opencode-caret-version` checks and
-their gating.
+registration (`codemode: false`, JSON Schema input), steer and prewarm gating,
+evaluate-then-refuse on `path`, the subagent refusal and its fail-open, the `context`-hook
+tool removal and its fail-open, the plan-agent allow and its agent-and-session skip, the
+default agent the warm and allow resolve from `ctx.agent.list()` (failing closed on an
+unreadable or empty list and on a non-plan default), the TUI half's toasts and update
+check, abort on both hosts, and v1↔v2 parity of the refusal texts. For the plugin key they
+cover the host probe's 5 s bound (a grandchild holding stdout included), key selection and
+the one-transform move, deleting `plugins` without losing comments (a trailing comma and
+CRLF included), v2 cache reads and clears, and doctor's `opencode-host` and
+`opencode-caret-version` checks and their gating.
 
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
 the array install's LOCAL form, which is what ties the run to that plugin version: a
@@ -793,7 +792,9 @@ v1.18.15 and v1.18.29 from npm):
   plugin loading `packages/tui/src/plugin/context.tsx`; the toast surface
   `packages/tui/src/ui/toast.tsx`; `./tui` and server entry resolution
   `@opencode/plugin`'s `dist/host.js`; default-agent resolution and list order
-  `packages/core/src/agent.ts`.
+  `packages/core/src/agent.ts`; the plugin's `agent.list`
+  `packages/core/src/plugin/host.ts`; the unset agent stored as given
+  `packages/core/src/session.ts`.
 - OpenCode v2 plugin keys and install (`anomalyco/opencode@v2.0.18`): the legacy `plugin`
   array concatenated ahead of `plugins` `packages/core/src/config/normalize.ts:185-190`;
   `opencode plugin add` writing a bare string

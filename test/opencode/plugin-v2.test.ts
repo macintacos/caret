@@ -84,12 +84,7 @@ function fakeContext(opts: FakeOpts = {}) {
       }),
       list: async () => ({
         location: { directory },
-        data: await Promise.all(
-          (await (opts.agents ?? (async () => ["build", "plan"]))()).map(async (id) => ({
-            id,
-            permissions: await (opts.agentRules ?? (async () => []))(id),
-          })),
-        ),
+        data: (await (opts.agents ?? (async () => ["build", "plan"]))()).map((id) => ({ id })),
       }),
     },
   };
@@ -304,6 +299,15 @@ test("the prompt hook grants nothing outside a plan session or over the user's r
   expect(
     await grant({ session: async () => ({ agent: "plan" }), agentRules: async () => DENY_TOOL }),
   ).toEqual([]);
+  const agents = async () => ["plan"];
+  expect(await grant({ session: async () => ({ permissions: DENY_TOOL }), agents })).toEqual([]);
+  expect(
+    await grant({
+      session: async () => ({}),
+      agents,
+      agentRules: async (id) => (id === "plan" ? DENY_TOOL : []),
+    }),
+  ).toEqual([]);
 });
 
 test("a second prompt on a granted session writes nothing", async () => {
@@ -355,8 +359,8 @@ test("the prompt hook warms the daemon for a plan-agent session", async () => {
   expect((await prompt({ session: async () => ({ agent: "plan" }) })).warmed).toEqual(["caret"]);
 });
 
-test("the prompt hook does not warm for a build session or a session on a build default agent", async () => {
-  expect((await prompt({ session: async () => ({ agent: "build" }) })).warmed).toEqual([]);
+test("the prompt hook neither warms nor grants a build session or a session on a build default agent", async () => {
+  expect(await prompt({ session: async () => ({ agent: "build" }) })).toEqual(NOTHING);
   expect(
     await prompt({ session: async () => ({}), agents: async () => ["build", "plan"] }),
   ).toEqual(NOTHING);
@@ -381,14 +385,6 @@ test("the prompt hook warms and grants a session on a plan default agent", async
     warmed: ["caret"],
     updates: [{ sessionID: "S", permissions: [...DENY_ALL, PLAN_ALLOW_RULE] }],
   });
-  const agents = async () => ["plan"];
-  expect(
-    (await prompt({ session: async () => ({ permissions: DENY_TOOL }), agents })).updates,
-  ).toEqual([]);
-  expect(
-    (await prompt({ session: async () => ({}), agents, agentRules: async () => DENY_TOOL }))
-      .updates,
-  ).toEqual([]);
 });
 
 test("the prompt hook fails closed when the default agent cannot be resolved", async () => {
@@ -404,6 +400,13 @@ test("an explicit session agent outranks the default agent", async () => {
   expect(
     await prompt({ session: async () => ({ agent: "build" }), agents: async () => ["plan"] }),
   ).toEqual(NOTHING);
+  const agents = async (): Promise<string[]> => {
+    throw new Error("boom");
+  };
+  expect(await prompt({ session: async () => ({ agent: "plan" }), agents })).toEqual({
+    warmed: ["caret"],
+    updates: [{ sessionID: "S", permissions: [PLAN_ALLOW_RULE] }],
+  });
 });
 
 // --- path flow ---

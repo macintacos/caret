@@ -158,7 +158,8 @@ export function createCaretSetup(opts: {
     await ctx.session.hook("prompt", async (event) => {
       try {
         const session = await readSession(event.sessionID);
-        // v2 never writes the resolved default agent back to the session; `list()` leads with it.
+        // v2 never writes the resolved default agent back to the session; `list()` leads with
+        // it — an order v2 implements but does not document.
         const agentID = session.agent ?? (await ctx.agent.list()).data[0]?.id;
         if (!agentID || !isPlanningAgent(agentID)) return;
         try {

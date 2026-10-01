@@ -444,11 +444,10 @@ waiting out the timeout, and no agent is waiting on its result.
   Plan agent is _steered_ toward the tool; every other primary agent has to reach for it
   deliberately. One exception is worth knowing about: on v1 the permission rescue is a
   `plan`-agent permission, so a global deny-all keeps the tool there and loses it
-  everywhere else; on v2 it is a rule on each plan session, which stays with the session
-  if it switches agent, and a session on the configured default agent gets it when that
-  default is `plan`. If your skill is pinned to a non-plan agent, `caret_review_plan` is
-  the route — OpenCode's own `plan_exit` is permitted on the `plan` agent alone, so there
-  is nothing to fall back on.
+  everywhere else; on v2 it is a rule on each plan session — one on a default `plan` agent
+  included — which stays with the session if it switches agent. If your skill is pinned to
+  a non-plan agent, `caret_review_plan` is the route — OpenCode's own `plan_exit` is
+  permitted on the `plan` agent alone, so there is nothing to fall back on.
 - **Claude Code: any agent, subagents included.** The tool grants no permission and gates
   no edit, so there is nothing a subagent could bypass by calling it.
 
