@@ -265,6 +265,13 @@ test("an absent config file reads as no entry at all", async () => {
   ).toEqual({ kind: "fresh" });
 });
 
+test("the update check skips a tarball entry, whatever its cache holds", async () => {
+  const tarball = `file:${tmp}/macintacos-caret-1.2.3.tgz`;
+  cacheDir(tarball, shim("0.2.0"));
+  expect(await verdictFor([tarball], "0.8.1")).toEqual({ kind: "fresh" });
+  expect(await verdictFor([tarball, `${PKG}@0.7.3`], "0.8.1")).toEqual(STALE_PIN);
+});
+
 test("a pinned entry reads its own cache dir, not the bare one", async () => {
   cacheDir(PKG, shim("0.8.1"));
   cacheDir(`${PKG}@latest`, shim("0.2.0"));
@@ -296,6 +303,12 @@ test("a --from-local checkout entry is not the package entry the version check r
   mkdirSync(join(checkoutDir, "opencode"), { recursive: true });
   writeFileSync(join(checkoutDir, "opencode", "caret.plugin.ts"), "");
   expect(readCaretEntry([configWith([`file:${checkoutDir}`])]) !== null).toBe(false);
+});
+
+test("a caret tarball entry is not the package entry the version check reads", () => {
+  expect(readCaretEntry([configWith([`file:${tmp}/macintacos-caret-1.2.3.tgz`])]) !== null).toBe(
+    false,
+  );
 });
 
 test("an absent config file carries no entry", () => {

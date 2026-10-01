@@ -13,9 +13,8 @@ import type { VersionTriple } from "@/lib/semver.ts";
  * Claude-only user then pays no spawn or network call. `opencode-host` checks that the
  * OpenCode on `PATH` loads caret from the keys and files it sits in.
  * `opencode-caret-version` is the upgrade verdict over the files the host loads, skipped
- * when none of them holds caret or for a `file:` entry alone: it re-resolves to its
- * checkout on every start, so npm's version says nothing about it. Throws when a config
- * exists but cannot be read. */
+ * when none of them holds caret or for a `file:` entry alone: npm's version says nothing
+ * about a local checkout or tarball. Throws when a config exists but cannot be read. */
 export async function readOpencodeChecks(deps: {
   configFiles: readonly string[];
   opencodeVersion: () => VersionTriple | null;

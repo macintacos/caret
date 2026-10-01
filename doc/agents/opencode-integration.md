@@ -430,16 +430,18 @@ or an absolute path would reach v2's local-directory loader, which ignores `pack
 ("server target"); a bare `exports["."]` is rejected.
 
 Caret owns **exactly one** entry across both keys, so install rewrites across forms:
-`--from-local` drops a package entry, a published install drops a checkout entry, and
-`--uninstall` removes either. Both present would load two caret plugins, each registering
-the review tool. A `file:` entry pointing somewhere that is not a caret checkout (no
-`opencode/caret.plugin.ts`) belongs to another plugin and is left alone. A version **pin**
-is not a different form — `@macintacos/caret@0.8.1` is the user's pin and survives a
-re-install.
+`--from-local` drops a package or tarball entry, a published install drops a checkout or
+tarball entry, and `--uninstall` removes any of them. Both present would load two caret
+plugins, each registering the review tool. A `file:` entry is caret's when it names a
+caret checkout (one with `opencode/caret.plugin.ts`) or a tarball `npm pack` made of caret
+(`macintacos-caret-*.tgz`, judged by filename, never opened); any other `file:` entry
+belongs to another plugin and is left alone. A version **pin** is not a different form —
+`@macintacos/caret@0.8.1` is the user's pin and survives a re-install.
 
 The upgrade check is skipped in local mode, and now for a load-bearing reason rather than
 convenience: a checkout entry re-resolves to that checkout on every OpenCode start, so it
-cannot go stale and npm's published version says nothing about it.
+cannot go stale and npm's published version says nothing about it. A tarball entry is
+skipped too: the check reads the package form only.
 
 ### Which key install writes
 
@@ -528,11 +530,11 @@ so it goes by the key alone. After install the key matches the host and the two 
 agree; they disagree only for a `plugin` entry on a v2 host, which `opencode-host` fails
 on.
 
-The probe recognises a `--from-local` checkout entry the way install does (`caretEntries`)
-and reads its version through the cache symlink § The local form describes. doctor's
-`opencode-caret-version` check does not: `readCaretEntry` matches the package form only,
-since npm's version says nothing about a checkout. It takes the host version only to pick
-the cache layout.
+The probe recognises a `--from-local` checkout or caret tarball entry the way install does
+(`caretEntries`); a checkout's version reads through the cache symlink § The local form
+describes. doctor's `opencode-caret-version` check does not: `readCaretEntry` matches the
+package form only, since npm's version says nothing about a local entry. It takes the host
+version only to pick the cache layout.
 
 doctor's `opencode-host` check (`hostCheck` in `host.ts`, composed in `readOpencodeChecks`
 in `checks.ts`) runs whenever caret has an entry in either key, the `file:` form included.
@@ -751,9 +753,6 @@ v1.18.15 and v1.18.29 from npm):
   service never sees a v2 caret root. Harmless: it stays on caret's owned copy.
 - A v1 below 1.18.16 and a v2 on one `PATH`, sharing a config: install probes only the
   first.
-- A `file:<tarball>` caret entry is not recognised as caret's (only the package and a
-  checkout are), so install adds a second entry beside it. `caret install` never writes
-  one.
 - `opencode/caret.plugin.ts`'s header still says caret loads from the `plugin` array.
 
 ## Sources

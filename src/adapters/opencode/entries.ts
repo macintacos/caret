@@ -1,12 +1,11 @@
 // Which of OpenCode's plugin entries — v1's `plugin` array or v2's `plugins` — are
 // caret's, for install's writer, doctor's probe, and the upgrade check. There are two
-// answers, and they differ on purpose: `caretEntries` counts what OpenCode loads — the
-// npm package under any pin, or a `--from-local` `file:` entry for a caret checkout —
+// answers, and they differ on purpose: `caretEntries` counts every form OpenCode loads,
 // while `caretPackageEntry` counts the package form only, because npm's version says
-// nothing about a checkout.
+// nothing about a local entry.
 
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import {
   PLUGIN_KEYS,
@@ -15,7 +14,11 @@ import {
   rewritePluginArray,
   splitPluginSpecifier,
 } from "@/adapters/opencode/config-plugin.ts";
-import { CARET_PACKAGE, localSpecifierPath } from "@/adapters/opencode/paths.ts";
+import {
+  CARET_PACKAGE,
+  isLocalPluginSpecifier,
+  localSpecifierPath,
+} from "@/adapters/opencode/paths.ts";
 
 /** Whether `dir` is a caret checkout, by the one file OpenCode would have to load out of
  * it. `resolveCaretRoot` asks the same question, so "is this a caret?" has one answer. */
@@ -32,10 +35,10 @@ export interface CaretEntry {
 }
 
 /** The entries that are caret's: the npm package under any pin, plus any local specifier
- * whose path is a caret checkout. A `file:` entry pointing anywhere else is another
- * tool's. `plugin` hits come first, then `plugins`, each in array order — the order both
- * hosts load (v2 concatenates legacy `plugin` ahead of `plugins`; v1 never loads
- * `plugins`). */
+ * whose path is a caret checkout or, by filename alone, a packed caret tarball. A `file:`
+ * entry pointing anywhere else is another tool's. `plugin` hits come first, then
+ * `plugins`, each in array order — the order both hosts load (v2 concatenates legacy
+ * `plugin` ahead of `plugins`; v1 never loads `plugins`). */
 export function caretEntries(
   text: string | null,
   isCheckout: (dir: string) => boolean,
@@ -50,7 +53,16 @@ export function caretEntries(
 
 function isCaretSpec(spec: string, isCheckout: (dir: string) => boolean): boolean {
   const path = localSpecifierPath(spec);
-  return path === undefined ? splitPluginSpecifier(spec).pkg === CARET_PACKAGE : isCheckout(path);
+  if (path === undefined) return splitPluginSpecifier(spec).pkg === CARET_PACKAGE;
+  return isCaretTarball(path) || isCheckout(path);
+}
+
+// npm pack: @macintacos/caret → macintacos-caret-<version>.tgz
+const CARET_TARBALL_PREFIX = `${CARET_PACKAGE.slice(1).replace("/", "-")}-`;
+
+function isCaretTarball(path: string): boolean {
+  const filename = basename(path);
+  return filename.startsWith(CARET_TARBALL_PREFIX) && filename.endsWith(".tgz");
 }
 
 /** Remove `drop` — entries read from `text` — returning the new config text. Each key's
@@ -68,7 +80,7 @@ export function dropEntries(text: string, drop: readonly CaretEntry[]): string {
 /** caret's verbatim npm-package entry in `text`, pin and all, `plugin` before `plugins`,
  * or null when the text is null or lists none. */
 export function caretPackageEntry(text: string | null): CaretEntry | null {
-  return caretEntries(text, () => false)[0] ?? null;
+  return caretEntries(text, () => false).find((e) => !isLocalPluginSpecifier(e.spec)) ?? null;
 }
 
 /** `caretEntries` across `configFiles`, in the order given. That order is caret's file
@@ -85,12 +97,14 @@ export function readCaretEntries(
 /** The first `caretPackageEntry` across `configFiles`. Throws when a file exists but
  * cannot be read. */
 export function readCaretEntry(configFiles: readonly string[]): CaretEntry | null {
-  return readCaretEntries(configFiles, () => false)[0] ?? null;
+  return (
+    configFiles.map((f) => caretPackageEntry(readConfigText(f))).find((e) => e !== null) ?? null
+  );
 }
 
-/** The first caret entry across `configFiles` in a form OpenCode can load — the package or
- * a `--from-local` checkout. Whether the host reads the file it sits in is the caller's
- * concern. Throws like `readCaretEntry`. */
+/** The first entry `caretEntries` counts across `configFiles`, any form OpenCode can load.
+ * Whether the host reads the file it sits in is the caller's concern. Throws like
+ * `readCaretEntry`. */
 export function readLoadedCaretEntry(configFiles: readonly string[]): CaretEntry | null {
   return readCaretEntries(configFiles, isCaretCheckout)[0] ?? null;
 }
