@@ -93,7 +93,7 @@ test("review-bridge.ts, which the CLI bundles, imports node builtins only and no
 const readShipped = (file: string) => readFileSync(join(REPO_ROOT, SHIPPED_DIR, file), "utf-8");
 
 // Type-only imports count here, unlike the gates above: tsc still resolves an erased
-// `import type`, so one from caret.plugin.ts re-couples the modules this split separates,
+// `import type`, so one from caret.plugin.ts re-couples the core to the v1 plugin,
 // and one from @opencode-ai/plugin ties the core back to v1's SDK.
 const nonBuiltinImports = (file: string) =>
   new Set(importSpecifiers(readShipped(file)).filter((spec) => !isBuiltin(spec)));
