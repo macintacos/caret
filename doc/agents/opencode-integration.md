@@ -668,7 +668,8 @@ unreadable or empty list and on a non-plan default), the TUI half's toasts and u
 check, abort on both hosts, and v1↔v2 parity of the refusal texts. For the plugin key they
 cover the host probe's 5 s bound (a grandchild holding stdout included), key selection and
 the one-transform move, deleting `plugins` without losing comments (a trailing comma and
-CRLF included), v2 cache reads and clears, and doctor's `opencode-host` and
+CRLF included), v2 cache reads and clears, the service launcher's pick of v2's live
+generation (bash and TS against one shared fixture), and doctor's `opencode-host` and
 `opencode-caret-version` checks and their gating.
 
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,

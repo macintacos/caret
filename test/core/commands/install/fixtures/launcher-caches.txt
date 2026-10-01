@@ -1,9 +1,9 @@
-# Caret roots seeded into a fresh XDG_CACHE_HOME, one cache per case, read by both
-# test/core/commands/install/launcher.test.ts and scripts/caret-launcher.bats. Each asserts
-# its rule picks the case's `win` line. Versions are unique within a case, since bats
-# identifies the pick by the version the exec'd root echoes.
+# Caret roots seeded into a fresh XDG_CACHE_HOME, one opencode/ cache per case, read by
+# both test/core/commands/install/launcher.test.ts and scripts/caret-launcher.bats. Each
+# asserts its rule picks the case's `win` line. Versions are unique within a case, since
+# bats identifies the pick by the version the exec'd root echoes.
 #
-# Format: <case> <version> <path under XDG_CACHE_HOME> [win]
+# Format: <case> <version> <path under XDG_CACHE_HOME> [win]; exactly one `win` per case.
 v2-live-generation 0.20.0 opencode/npm/@macintacos/caret@latest/9/node_modules/@macintacos/caret
 v2-live-generation 0.15.0 opencode/npm/@macintacos/caret@latest/10/node_modules/@macintacos/caret win
 v2-beats-lower-v1 0.14.0 opencode/packages/@macintacos/caret/node_modules/@macintacos/caret

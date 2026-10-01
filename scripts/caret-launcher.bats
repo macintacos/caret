@@ -56,7 +56,7 @@ CARET
 # version.
 seed_cache_case() {
   local name version path win
-  while read -r name version path win; do
+  while read -r name version path win || [ -n "$name" ]; do
     case "$name" in '' | '#'*) continue ;; esac
     if [ "$name" != "$1" ]; then continue; fi
     seed_caret "$home/.cache/$path" "$version"
@@ -150,12 +150,13 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
 @test "every shared cache case runs the fixture's winner" {
   stub_bun
   local name seen=" " want
-  while read -r name _; do
+  while read -r name _ || [ -n "$name" ]; do
     case "$name" in '' | '#'*) continue ;; esac
     case "$seen" in *" $name "*) continue ;; esac
     seen="$seen$name "
     rm -rf "$home/.cache/opencode"
     want="$(seed_cache_case "$name")"
+    # </dev/null: the launcher must not read the fixture this loop is consuming
     run launcher </dev/null
     if [[ "$output" != *"CARET $want "* ]]; then
       echo "case $name: want $want, got: $output"
@@ -171,6 +172,18 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
   seed_caret "$home/.cache/opencode/packages/@macintacos/caret@latest/node_modules/@macintacos/caret" 0.11.0
   run -0 launcher
   [[ "$output" == *"CARET 0.11.0"* ]]
+}
+
+# v2 reinstalls into a new generation rather than load an older one, so a non-dir
+# highest generation offers nothing.
+@test "a broken live generation never falls back to a stale one" {
+  stub_bun
+  local spec="$home/.cache/opencode/npm/@macintacos/caret@latest"
+  seed_caret "$spec/9/node_modules/@macintacos/caret" 0.20.0
+  printf 'x\n' >"$spec/10"
+  seed_caret "$home/.cache/opencode/packages/@macintacos/caret/node_modules/@macintacos/caret" 0.15.0
+  run -0 launcher
+  [[ "$output" == *"CARET 0.15.0"* ]]
 }
 
 @test "a pinned root beats a higher installed version" {

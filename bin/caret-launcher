@@ -102,7 +102,6 @@ live_generation() {
   for dir in "$1"/*; do
     name="${dir##*/}"
     case "$name" in '' | *[!0-9]*) continue ;; esac
-    if [ ! -d "$dir" ]; then continue; fi
     if [ -z "$best" ] || [ "$name" -gt "$best" ]; then best="$name"; fi
   done
   if [ -n "$best" ]; then printf '%s' "$1/$best"; fi
@@ -114,8 +113,9 @@ live_generation() {
 # holds a two-line npm project with the root one level down; v2's holds numbered
 # generations, of which only the live one is offered. `*` skips dot-prefixed dirs,
 # so a half-copied owned root is never a candidate. Keep in sync with
-# launcherCandidateDirs (src/commands/install/launcher.ts) and opencodeInstalledRoots
-# (src/adapters/opencode/paths.ts).
+# launcherCandidateDirs (src/commands/install/launcher.ts) and opencodeRootPaths
+# (src/adapters/opencode/paths.ts); both suites pin it through
+# test/core/commands/install/fixtures/launcher-caches.txt.
 candidate_dirs() {
   local dir spec live
   for dir in "$claude_roots"/* \

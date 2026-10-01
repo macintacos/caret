@@ -187,7 +187,8 @@ export function opencodeNpmLocalCacheDir(spec: string): string {
 }
 
 /** The generation v2 loads under one of its cache dirs: the numerically largest
- * all-digit child, or null when there is none (or no dir). */
+ * all-digit child, or null when there is none (or no dir). Keep in sync with
+ * live_generation() in bin/caret-launcher. */
 export function liveGenerationDir(dir: string): string | null {
   let names: string[];
   try {
@@ -221,10 +222,11 @@ export function existingOpencodeCachePackageDirs(pkg: string = CARET_PACKAGE): s
   ];
 }
 
-/** Every caret root OpenCode has installed for `pkg`, unfiltered by existence: under each
- * v1 cache dir, and under the live generation of each v2 one (a stale generation is never
- * offered). Keep in sync with candidate_dirs()/live_generation() in bin/caret-launcher. */
-export function opencodeInstalledRoots(pkg: string = CARET_PACKAGE): string[] {
+/** The caret root path under each v1 cache dir for `pkg` and under the live generation of
+ * each v2 one; a stale generation is never offered. The `node_modules/<pkg>` leaf is not
+ * checked, so a dir an interrupted install left empty still yields a path. Keep in sync
+ * with candidate_dirs()/live_generation() in bin/caret-launcher. */
+export function opencodeRootPaths(pkg: string = CARET_PACKAGE): string[] {
   const v2 = listCacheDirs(join(opencodeNpmDir(), pkg))
     .map(liveGenerationDir)
     .filter((d) => d !== null);

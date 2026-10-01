@@ -26,7 +26,7 @@ import { z } from "zod";
 
 import { claudeConfigDir } from "@/adapters/claude/paths.ts";
 import { resolveCaretRoot } from "@/adapters/opencode/packaging.ts";
-import { opencodeInstalledRoots } from "@/adapters/opencode/paths.ts";
+import { opencodeRootPaths } from "@/adapters/opencode/paths.ts";
 import {
   ensureStateDir,
   launcherBunFile,
@@ -220,7 +220,7 @@ export interface LauncherCandidate {
  * v1's, OpenCode v2's live generations, then caret's own copies. Keep in sync with
  * candidate_dirs() in bin/caret-launcher. */
 export function launcherCandidateDirs(): LauncherCandidate[] {
-  const opencode = opencodeInstalledRoots().filter(isDir);
+  const opencode = opencodeRootPaths().filter(isDir);
   return [
     ...[
       ...listDirs(join(claudeConfigDir(), "plugins", "cache", "caret", "caret")),
