@@ -183,7 +183,7 @@ export async function runInstallOpencodeTarget(
 
 /** Probes `opencode --version` and reads the config, so only the install arms call it;
  * uninstall clears both keys and needs neither. */
-function placement(
+function readPlacement(
   setup: Pick<OpencodeSetup, "configFile" | "isCheckout">,
   local: LocalInstall | undefined,
   probe: () => VersionTriple | null,
@@ -229,10 +229,10 @@ async function previewInstall(
   opts: { local?: LocalInstall },
   deps: InstallOpencodeDeps,
 ): Promise<void> {
-  const placed = placement(setup, opts.local, deps.opencodeVersion ?? readOpencodeVersion);
+  const placed = readPlacement(setup, opts.local, deps.opencodeVersion ?? readOpencodeVersion);
   // The check is read-only, so a preview can still run it and say what it found. A
   // preview has no warning to carry an `unknown`'s reason, so the note carries it.
-  const found = checks(opts.local)
+  const found = checksPublished(opts.local)
     ? [
         "",
         previewLine(
@@ -285,7 +285,7 @@ async function installOpencode(
   deps: InstallOpencodeDeps,
 ): Promise<void> {
   const { dir, pkg, ui, isCheckout, configFile, legacy } = setup;
-  const { specifier, version, key, movedFrom, writtenSpec } = placement(
+  const { specifier, version, key, movedFrom, writtenSpec } = readPlacement(
     setup,
     opts.local,
     deps.opencodeVersion ?? readOpencodeVersion,
@@ -302,7 +302,7 @@ async function installOpencode(
   );
   // After the array edit — the entry has to exist before it can be read — and before the
   // command files, so a cache clear is settled by the time the run reports it deployed.
-  if (checks(opts.local)) await upgradeStep(configFile, opts, deps, ui);
+  if (checksPublished(opts.local)) await upgradeStep(configFile, opts, deps, ui);
   // Only once the array entry exists and a stale cached copy has been offered a refresh:
   // dropping the plugin file any earlier could move a user backwards onto an older cached
   // caret. It still sweeps when that refresh is declined — two loaded caret plugins are
@@ -342,7 +342,7 @@ async function sweepLegacy(legacy: string[], dir: string, ui: InstallUI): Promis
  * npm's version says nothing about it and a network read mid-build would only cost a
  * stall. The Claude target skips its own update phase in local mode for the same
  * reason. */
-function checks(local: LocalInstall | undefined): boolean {
+function checksPublished(local: LocalInstall | undefined): boolean {
   return local === undefined;
 }
 
