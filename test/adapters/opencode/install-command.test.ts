@@ -8,8 +8,9 @@ import { parse as parseJsonc } from "jsonc-parser";
 
 import { withEnv } from "@test/support/env.ts";
 import { expectCleanExitCode } from "@test/support/exit-code.ts";
+import { caretEntries, readConfigText } from "@/adapters/opencode/entries.ts";
 import type { OpencodePackaging } from "@/adapters/opencode/packaging.ts";
-import { CARET_PACKAGE } from "@/adapters/opencode/paths.ts";
+import { CARET_PACKAGE, CONFIG_FILENAMES } from "@/adapters/opencode/paths.ts";
 import { type InstallOpencodeDeps, runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
 import { type InstallUI, recordingUI } from "@/commands/install/ui.ts";
 import type { VersionTriple } from "@/lib/semver.ts";
@@ -741,6 +742,44 @@ test("--from-local on v2 writes the checkout to plugins and drops package entrie
   );
   await installOn(V2, repo);
   expect(config()).toEqual({ plugin: [], plugins: [`file:${repo}`] });
+});
+
+const configFile = (name: string) => join(dir, name);
+const parsed = (name: string) => parseJsonc(readFileSync(configFile(name), "utf-8"));
+const caretCount = () =>
+  CONFIG_FILENAMES.reduce(
+    (n, name) => n + caretEntries(readConfigText(configFile(name)), () => false).length,
+    0,
+  );
+
+test("v2: a config.json-only user gets caret in a new opencode.json", async () => {
+  writeFileSync(
+    configFile("config.json"),
+    JSON.stringify({ theme: "dark", plugin: ["wakatime", `${CARET_PACKAGE}@1.0.0`] }),
+  );
+  await installOn(V2);
+  expect(config()).toEqual({ plugins: [`${CARET_PACKAGE}@1.0.0`] });
+  expect(parsed("config.json")).toEqual({ theme: "dark", plugin: ["wakatime"] });
+});
+
+test("v2: with both opencode.json and opencode.jsonc, caret stays only in opencode.jsonc", async () => {
+  writeFileSync(configFile("opencode.jsonc"), '{\n  // mine\n  "theme": "dark"\n}\n');
+  writeFileSync(
+    configJson(),
+    JSON.stringify({ plugin: [CARET_PACKAGE], plugins: [CARET_PACKAGE] }),
+  );
+  await installOn(V2);
+  expect(parsed("opencode.jsonc").plugins).toEqual([CARET_PACKAGE]);
+  expect(config()).toEqual({ plugin: [], plugins: [] });
+  expect(caretCount()).toBe(1);
+});
+
+test("v2: a duplicate spread across both keys and both files collapses to one", async () => {
+  writeFileSync(configFile("opencode.jsonc"), JSON.stringify({ plugin: [CARET_PACKAGE] }));
+  writeFileSync(configJson(), JSON.stringify({ plugins: [`${CARET_PACKAGE}@1.2.3`] }));
+  await installOn(V2);
+  expect(caretCount()).toBe(1);
+  expect(parsed("opencode.jsonc").plugins).toEqual([`${CARET_PACKAGE}@1.2.3`]);
 });
 
 test("on v1, install writes caret to plugin", async () => {
