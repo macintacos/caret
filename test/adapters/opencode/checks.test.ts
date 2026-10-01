@@ -31,9 +31,9 @@ test("a config with no caret entry runs no check and never reads the host versio
   let asked = false;
   const checks = await readOpencodeChecks({
     configFiles: [configWith({ plugin: ["opencode-wakatime"] })],
-    opencodeVersion: () => {
+    opencodeHosts: () => {
       asked = true;
-      return [2, 0, 18];
+      return [{ bin: "/v2/opencode", version: [2, 0, 18] }];
     },
   });
   expect(checks).toEqual([]);
@@ -46,7 +46,7 @@ test("a checkout-only config gets the host check alone", async () => {
   writeFileSync(join(checkout, "opencode", "caret.plugin.ts"), "");
   const checks = await readOpencodeChecks({
     configFiles: [configWith({ plugins: [`file:${checkout}`] })],
-    opencodeVersion: () => [2, 0, 18],
+    opencodeHosts: () => [{ bin: "/v2/opencode", version: [2, 0, 18] }],
   });
   expect(checks.map((c) => c.id)).toEqual(["opencode-host"]);
 });
@@ -54,7 +54,7 @@ test("a checkout-only config gets the host check alone", async () => {
 test("a tarball-only config gets the host check alone", async () => {
   const checks = await readOpencodeChecks({
     configFiles: [configWith({ plugins: [`file:${tmp}/macintacos-caret-1.2.3.tgz`] })],
-    opencodeVersion: () => [2, 0, 18],
+    opencodeHosts: () => [{ bin: "/v2/opencode", version: [2, 0, 18] }],
   });
   expect(checks.map((c) => c.id)).toEqual(["opencode-host"]);
 });
@@ -70,7 +70,7 @@ test("a package entry gets both checks, the version read from the host's cache l
   const checks = await withEnv({ XDG_CACHE_HOME: tmp }, () =>
     readOpencodeChecks({
       configFiles: [configWith({ plugin: [PKG] })],
-      opencodeVersion: () => v2,
+      opencodeHosts: () => [{ bin: "/v2/opencode", version: v2 }],
       published: async () => "0.9.0",
     }),
   );
@@ -83,7 +83,7 @@ test("a caret entry in a later config file is found", async () => {
   writeFileSync(jsonc, JSON.stringify({ plugin: ["opencode-wakatime"] }));
   const checks = await readOpencodeChecks({
     configFiles: [jsonc, configWith({ plugin: [PKG] })],
-    opencodeVersion: () => [2, 0, 18],
+    opencodeHosts: () => [{ bin: "/v2/opencode", version: [2, 0, 18] }],
     published: async () => "0.9.0",
   });
   expect(checks.map((c) => c.id)).toEqual(["opencode-host", "opencode-caret-version"]);
@@ -94,7 +94,7 @@ test("v2 with caret only in config.json fails the host check alone", async () =>
   writeFileSync(legacy, JSON.stringify({ plugins: [PKG] }));
   const checks = await readOpencodeChecks({
     configFiles: [legacy],
-    opencodeVersion: () => [2, 0, 18],
+    opencodeHosts: () => [{ bin: "/v2/opencode", version: [2, 0, 18] }],
     published: async () => "0.9.0",
   });
   expect(checks).toEqual([
@@ -111,10 +111,44 @@ test("v2 with a stale caret in config.json beside opencode.json fails the host c
   writeFileSync(legacy, JSON.stringify({ plugins: [PKG] }));
   const checks = await readOpencodeChecks({
     configFiles: [configWith({ plugins: [PKG] }), legacy],
-    opencodeVersion: () => [2, 0, 18],
+    opencodeHosts: () => [{ bin: "/v2/opencode", version: [2, 0, 18] }],
     published: async () => "0.9.0",
   });
   expect(checks.map((c) => c.id)).toEqual(["opencode-host", "opencode-caret-version"]);
   expect(checks[0]?.status).toBe("fail");
   expect(checks[0]?.detail).toContain("config.json");
+});
+
+const MIXED = () => [
+  { bin: "/v1/opencode", version: [1, 18, 15] as VersionTriple },
+  { bin: "/v2/opencode", version: [2, 0, 18] as VersionTriple },
+];
+
+test("v1 beside v2 passes caret in plugin, naming both", async () => {
+  const checks = await withEnv({ XDG_CACHE_HOME: tmp }, () =>
+    readOpencodeChecks({
+      configFiles: [configWith({ plugin: [PKG] })],
+      opencodeHosts: MIXED,
+      published: async () => "0.9.0",
+    }),
+  );
+  const host = checks.find((c) => c.id === "opencode-host");
+  expect(host?.status).toBe("pass");
+  expect(host?.detail).toContain("/v1/opencode");
+  expect(host?.detail).toContain("/v2/opencode");
+});
+
+test("v1 beside v2 fails caret in config.json as ignored by v2", async () => {
+  const legacy = join(tmp, "config.json");
+  writeFileSync(legacy, JSON.stringify({ plugin: [PKG] }));
+  const checks = await withEnv({ XDG_CACHE_HOME: tmp }, () =>
+    readOpencodeChecks({
+      configFiles: [legacy],
+      opencodeHosts: MIXED,
+      published: async () => "0.9.0",
+    }),
+  );
+  const host = checks.find((c) => c.id === "opencode-host");
+  expect(host?.status).toBe("fail");
+  expect(host?.detail).toContain("config.json, which OpenCode v2 doesn't load");
 });
