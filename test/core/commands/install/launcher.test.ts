@@ -373,6 +373,10 @@ test("the candidates are every agent's caret dir and caret's own copies", () => 
     "opencode/packages/@macintacos/caret@1.0.2/node_modules/@macintacos/caret",
   );
   mkdirSync(opencode, { recursive: true });
+  const v2Spec = join(cacheDir, "opencode/npm/@macintacos/caret@latest");
+  const v2Live = join(v2Spec, "10/node_modules/@macintacos/caret");
+  mkdirSync(v2Live, { recursive: true });
+  mkdirSync(join(v2Spec, "9/node_modules/@macintacos/caret"), { recursive: true });
   const ownedRoot = seedOwnedRoot("1.1.0");
   mkdirSync(join(ownedRootsDir(), ".1.2.0.9.tmp"));
 
@@ -383,6 +387,7 @@ test("the candidates are every agent's caret dir and caret's own copies", () => 
   expect(dirs).toEqual([
     { dir: join(claudeRoots, "1.0.2"), owned: false },
     { dir: opencode, owned: false },
+    { dir: v2Live, owned: false },
     { dir: ownedRoot, owned: true },
   ]);
 });
@@ -399,3 +404,37 @@ test("an OpenCode-only machine still offers the owned root", () => {
   expect(dirs).toEqual([{ dir: ownedRoot, owned: true }]);
   expect(pickLauncherRoot(null, dirs)).toEqual({ root: ownedRoot, version: "1.1.0" });
 });
+
+interface CacheLine {
+  version: string;
+  path: string;
+  win: boolean;
+}
+
+/** The shared launcher-cache fixture's lines, grouped by case. */
+function cacheCases(): Map<string, CacheLine[]> {
+  const text = readFileSync(join(import.meta.dir, "fixtures", "launcher-caches.txt"), "utf8");
+  const cases = new Map<string, CacheLine[]>();
+  for (const line of text.split("\n")) {
+    const [name, version, path, win] = line.trim().split(/\s+/);
+    if (!name || name.startsWith("#") || !version || !path) continue;
+    cases.set(name, [...(cases.get(name) ?? []), { version, path, win: win === "win" }]);
+  }
+  return cases;
+}
+
+for (const [name, lines] of cacheCases()) {
+  test(`the launcher picks the shared fixture's winner: ${name}`, () => {
+    const cacheDir = mkdtempSync(join(tmpdir(), "caret-cache-"));
+    for (const { version, path } of lines) runnableRoot(join(cacheDir, path), manifest(version));
+    const env = {
+      CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), "caret-claude-")),
+      XDG_CACHE_HOME: cacheDir,
+    };
+
+    const picked = withEnv(env, () => pickLauncherRoot(null, launcherCandidateDirs()));
+
+    const winner = lines.find((l) => l.win);
+    expect(picked?.root).toBe(winner && join(cacheDir, winner.path));
+  });
+}

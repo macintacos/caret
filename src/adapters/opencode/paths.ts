@@ -221,6 +221,18 @@ export function existingOpencodeCachePackageDirs(pkg: string = CARET_PACKAGE): s
   ];
 }
 
+/** Every caret root OpenCode has installed for `pkg`, unfiltered by existence: under each
+ * v1 cache dir, and under the live generation of each v2 one (a stale generation is never
+ * offered). Keep in sync with candidate_dirs()/live_generation() in bin/caret-launcher. */
+export function opencodeInstalledRoots(pkg: string = CARET_PACKAGE): string[] {
+  const v2 = listCacheDirs(join(opencodeNpmDir(), pkg))
+    .map(liveGenerationDir)
+    .filter((d) => d !== null);
+  return [...listCacheDirs(opencodeCachePackageDir(pkg)), ...v2].map((d) =>
+    join(d, "node_modules", pkg),
+  );
+}
+
 /** `bare` itself when it exists, then each `<bare>@*` sibling. */
 function listCacheDirs(bare: string): string[] {
   const parent = dirname(bare);
