@@ -43,6 +43,8 @@ type FakeOpts = {
   projectDirectory?: string;
   session?: (id: string) => Promise<Record<string, unknown>>;
   agentRules?: (id: string) => Promise<Rule[]>;
+  /** Agent ids, default first. */
+  agents?: () => Promise<string[]>;
   update?: (input: { sessionID: string; permissions: Rule[] }) => Promise<void>;
 };
 
@@ -79,6 +81,15 @@ function fakeContext(opts: FakeOpts = {}) {
       get: async ({ agentID }: { agentID: string }) => ({
         location: { directory },
         data: { permissions: await (opts.agentRules ?? (async () => []))(agentID) },
+      }),
+      list: async () => ({
+        location: { directory },
+        data: await Promise.all(
+          (await (opts.agents ?? (async () => ["build", "plan"]))()).map(async (id) => ({
+            id,
+            permissions: await (opts.agentRules ?? (async () => []))(id),
+          })),
+        ),
       }),
     },
   };
@@ -287,7 +298,6 @@ test("the prompt hook grants a plan session the review tool before it resolves",
 
 test("the prompt hook grants nothing outside a plan session or over the user's rule", async () => {
   expect(await grant({ session: async () => ({ agent: "build" }) })).toEqual([]);
-  expect(await grant({ session: async () => ({}) })).toEqual([]);
   expect(await grant({ session: async () => ({ agent: "plan", permissions: DENY_TOOL }) })).toEqual(
     [],
   );
@@ -332,28 +342,68 @@ test("a warm that throws still grants a plan session", async () => {
 
 // --- prewarm ---
 
-async function prompt(session: FakeOpts["session"]) {
+async function prompt(fake: FakeOpts) {
   const warmed: string[] = [];
-  const { hooks } = await setupWith(stubRunner(ALLOW), { session }, (bin) => warmed.push(bin));
+  const { hooks, updates } = await setupWith(stubRunner(ALLOW), fake, (bin) => warmed.push(bin));
   await hooks.get("prompt")?.({ sessionID: "S" });
-  return warmed;
+  return { warmed, updates };
 }
 
+const NOTHING = { warmed: [], updates: [] };
+
 test("the prompt hook warms the daemon for a plan-agent session", async () => {
-  expect(await prompt(async () => ({ agent: "plan" }))).toEqual(["caret"]);
+  expect((await prompt({ session: async () => ({ agent: "plan" }) })).warmed).toEqual(["caret"]);
 });
 
-test("the prompt hook does not warm for a build session or an unset agent", async () => {
-  expect(await prompt(async () => ({ agent: "build" }))).toEqual([]);
-  expect(await prompt(async () => ({}))).toEqual([]);
+test("the prompt hook does not warm for a build session or a session on a build default agent", async () => {
+  expect((await prompt({ session: async () => ({ agent: "build" }) })).warmed).toEqual([]);
+  expect(
+    await prompt({ session: async () => ({}), agents: async () => ["build", "plan"] }),
+  ).toEqual(NOTHING);
 });
 
 test("the prompt hook swallows a session read failure", async () => {
+  const session = async () => {
+    throw new Error("gone");
+  };
+  expect((await prompt({ session })).warmed).toEqual([]);
+});
+
+test("the prompt hook warms and grants a session on a plan default agent", async () => {
   expect(
-    await prompt(async () => {
-      throw new Error("gone");
+    await prompt({
+      session: async () => ({ permissions: DENY_ALL }),
+      agents: async () => ["plan", "build"],
+      agentRules: async () => DENY_ALL,
+      update: () => Bun.sleep(1),
     }),
+  ).toEqual({
+    warmed: ["caret"],
+    updates: [{ sessionID: "S", permissions: [...DENY_ALL, PLAN_ALLOW_RULE] }],
+  });
+  const agents = async () => ["plan"];
+  expect(
+    (await prompt({ session: async () => ({ permissions: DENY_TOOL }), agents })).updates,
   ).toEqual([]);
+  expect(
+    (await prompt({ session: async () => ({}), agents, agentRules: async () => DENY_TOOL }))
+      .updates,
+  ).toEqual([]);
+});
+
+test("the prompt hook fails closed when the default agent cannot be resolved", async () => {
+  const session = async () => ({});
+  const agents = async (): Promise<string[]> => {
+    throw new Error("boom");
+  };
+  expect(await prompt({ session, agents })).toEqual(NOTHING);
+  expect(await prompt({ session, agents: async () => [] })).toEqual(NOTHING);
+});
+
+test("an explicit session agent outranks the default agent", async () => {
+  expect(
+    await prompt({ session: async () => ({ agent: "build" }), agents: async () => ["plan"] }),
+  ).toEqual(NOTHING);
 });
 
 // --- path flow ---
