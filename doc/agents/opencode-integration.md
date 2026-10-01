@@ -475,9 +475,10 @@ a file the host does not load fails `opencode-host`, and when caret sits only in
 files the `opencode-caret-version` check is skipped. With an unreadable version every file
 counts as loaded.
 
-caret rewrites a changed plugin array whole, because jsonc-parser's element deletion
-mishandles a trailing element's comma, so a comment inside that array is lost. Comments
-outside the arrays survive, including those around a deleted `plugins` key.
+caret deletes a changed plugin array's elements one by one, with the same comment-keeping
+range cut it uses for an emptied `plugins` key, because no jsonc-parser release deletes an
+element without losing or moving a neighbour's comment. Every comment survives, except one
+inside a deleted object item and one inside a `plugins` array that empties and is deleted.
 
 ### The cache layout, and what the probe may conclude from it
 

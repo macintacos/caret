@@ -279,6 +279,75 @@ test("an emptied plugins key is deleted with its comma, keeping every comment", 
   }
 });
 
+/** Assert `rewritePluginArray` drops `drop` from `src`'s plugin array to exactly `want`,
+ * strict about commas so a dangling one fails. */
+function expectDrop(src: string, drop: string[], want: string): void {
+  const out = rewritePluginArray(src, "plugin", (item) => !drop.includes(item as string));
+  expect(out).toBe(want);
+  const errors: ParseError[] = [];
+  parse(out, errors, { allowTrailingComma: false });
+  expect(errors).toEqual([]);
+}
+
+const MULTI = [
+  "{",
+  '  "plugin": [',
+  "    // lead-a",
+  '    "a",     // a-inline',
+  '    /* block-b */ "b",',
+  '    "c" /* x */, "d" // tail-d',
+  "  ]",
+  "}",
+  "",
+] as const;
+
+/** MULTI with its element lines (index 2…5) replaced by `lines`. */
+function multi(...lines: string[]): string {
+  return [...MULTI.slice(0, 2), ...lines, ...MULTI.slice(6)].join("\n");
+}
+
+test("dropping an element keeps every comment in a multi-line array in place", () => {
+  const src = MULTI.join("\n");
+  expectDrop(src, ["a"], multi("    // lead-a", "         // a-inline", MULTI[4], MULTI[5]));
+  expectDrop(src, ["b"], multi(MULTI[2], MULTI[3], "    /* block-b */ ", MULTI[5]));
+  expectDrop(src, ["c"], multi(MULTI[2], MULTI[3], MULTI[4], '     /* x */ "d" // tail-d'));
+  expectDrop(src, ["d"], multi(MULTI[2], MULTI[3], MULTI[4], '    "c" /* x */  // tail-d'));
+  expectDrop(
+    src,
+    ["c", "d"],
+    multi(MULTI[2], MULTI[3], '    /* block-b */ "b"', "     /* x */  // tail-d"),
+  );
+});
+
+test("dropping an element keeps a single-line array on one line with its comments", () => {
+  const src = '{ "plugin": ["a", /* between */ "b", "c" /* tail */] }';
+  expectDrop(src, ["a"], '{ "plugin": [ /* between */ "b", "c" /* tail */] }');
+  expectDrop(src, ["b"], '{ "plugin": ["a", /* between */  "c" /* tail */] }');
+  expectDrop(src, ["c"], '{ "plugin": ["a", /* between */ "b"  /* tail */] }');
+});
+
+test("dropping a trailing element keeps CRLF line endings", () => {
+  const src = '{\r\n  "plugin": [\r\n    "a", // keep\r\n    "b"\r\n  ]\r\n}\r\n';
+  expectDrop(src, ["b"], '{\r\n  "plugin": [\r\n    "a" // keep\r\n  ]\r\n}\r\n');
+});
+
+test("dropping an element leaves a tab-indented array's tabs as they were", () => {
+  const src = '{\n\t"plugin": [\n\t\t// keep\n\t\t"a",\n\t\t"b"\n\t]\n}\n';
+  expectDrop(src, ["a"], '{\n\t"plugin": [\n\t\t// keep\n\t\t"b"\n\t]\n}\n');
+});
+
+test("add indents an appended element the way its siblings are", () => {
+  const tabs = '{\n\t"plugin": [\n\t\t"a"\n\t]\n}\n';
+  expect(addPluginToConfigText(tabs, "b", "plugin")).toBe(
+    '{\n\t"plugin": [\n\t\t"a",\n\t\t"b"\n\t]\n}\n',
+  );
+  for (const header of ["/*\n   my header\n*/\n", "/**\n * header\n */\n"]) {
+    expect(
+      addPluginToConfigText(`${header}{\n  "plugin": [\n    "a"\n  ]\n}\n`, "b", "plugin"),
+    ).toBe(`${header}{\n  "plugin": [\n    "a",\n    "b"\n  ]\n}\n`);
+  }
+});
+
 // Minimal comment stripper so a jsonc body can be JSON.parsed for structural checks.
 function stripComments(s: string): string {
   return s.replace(/^\s*\/\/.*$/gm, "");

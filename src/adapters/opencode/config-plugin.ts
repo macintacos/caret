@@ -3,14 +3,16 @@
 // `{ package, options }` object. `caret install` adds caret's entry and `--uninstall`
 // removes it. Edits run through jsonc-parser's modify/applyEdits so a user's other plugin
 // entries, other config keys, and comments all survive — hand-rolled JSON string munging
-// would corrupt a jsonc config — except deleting an emptied `plugins` key, which cuts
-// the property's parse-tree range, since jsonc-parser's removal swallows a preceding
-// comment. Pure text-in/text-out, so it is unit-testable without touching disk.
+// would corrupt a jsonc config — except deletion, of an array element or an emptied
+// `plugins` key, which cuts the node's parse-tree range, since jsonc-parser's removal
+// loses or moves a neighbouring comment. Pure text-in/text-out, so it is unit-testable
+// without touching disk.
 
 import {
   applyEdits,
   createScanner,
   type Edit,
+  type FormattingOptions,
   findNodeAtLocation,
   type JSONPath,
   modify,
@@ -22,7 +24,13 @@ import {
 
 import { isLocalPluginSpecifier } from "@/adapters/opencode/paths.ts";
 
-const FORMATTING = { insertSpaces: true, tabSize: 2 } as const;
+/** Indent edits the way `text` already is: by its first indented property or string
+ * line, so a header comment's indentation cannot mislead it. */
+function formattingOf(text: string): FormattingOptions {
+  const indent = /^([ \t]+)"/m.exec(text)?.[1];
+  if (indent?.startsWith("\t")) return { insertSpaces: false, tabSize: 1 };
+  return { insertSpaces: true, tabSize: indent?.length ?? 2 };
+}
 
 /** The config keys a plugin list lives under — v1's `plugin`, v2's `plugins` — in load
  * order: v2 concatenates legacy `plugin` ahead of `plugins`. */
@@ -118,11 +126,11 @@ export function addPluginToConfigText(
     const path: JSONPath = [key, current.length];
     const edits = modify(text, path, pkg, {
       isArrayInsertion: true,
-      formattingOptions: FORMATTING,
+      formattingOptions: formattingOf(text),
     });
     return applyEdits(text, edits);
   }
-  const edits = modify(text, [key], [pkg], { formattingOptions: FORMATTING });
+  const edits = modify(text, [key], [pkg], { formattingOptions: formattingOf(text) });
   return applyEdits(text, edits);
 }
 
@@ -135,8 +143,7 @@ export function pluginItemSpecs(existing: string, key: PluginKey): (string | nul
 /** Pin `pkg`'s entry in the `key` array to `version`, returning the new config text —
  * rewriting an existing pin rather than appending beside it. Returns the text unchanged
  * when no entry names `pkg`. Replaces the one array element — or an object item's
- * `package` — in place, which keeps sibling entries, other keys, and comments intact,
- * unlike the whole-array replacement `rewritePluginArray` does. */
+ * `package` — in place, which keeps sibling entries, other keys, and comments intact. */
 export function setPluginVersionInConfigText(
   existing: string,
   target: { pkg: string; version: string; key: PluginKey },
@@ -148,16 +155,15 @@ export function setPluginVersionInConfigText(
   const item = arr[i];
   const path: JSONPath = typeof item === "string" ? [key, i] : [key, i, "package"];
   const next = `${packageName(itemSpec(item) ?? pkg)}@${version}`;
-  const edits = modify(existing, path, next, { formattingOptions: FORMATTING });
+  const edits = modify(existing, path, next, { formattingOptions: formattingOf(existing) });
   return applyEdits(existing, edits);
 }
 
 /** Rewrite the `key` array to the items `keep` accepts, returning the new config text,
- * or the text unchanged when it keeps every item. Replaces the whole array rather than
- * deleting elements — jsonc-parser's array-element deletion mishandles a trailing
- * element's comma — which keeps sibling keys and comments intact (only an unusual
- * in-array comment would be lost). An emptied `plugins` is deleted outright: OpenCode v1
- * before 1.18.16 refuses to start on the key, even as `[]`. */
+ * or the text unchanged when it keeps every item. Cuts each dropped element with its
+ * comma, highest index first so lower indices stay valid, keeping every comment. An
+ * emptied `plugins` is deleted outright: OpenCode v1 before 1.18.16 refuses to start on
+ * the key, even as `[]`. */
 export function rewritePluginArray(
   existing: string,
   key: PluginKey,
@@ -166,9 +172,12 @@ export function rewritePluginArray(
   const arr = pluginArray(existing, key);
   const next = arr.filter((item, i) => keep(item, i));
   if (next.length === arr.length) return existing;
-  if (key === "plugins" && next.length === 0) return deleteProperty(existing, key);
-  const edits = modify(existing, [key], next, { formattingOptions: FORMATTING });
-  return applyEdits(existing, edits);
+  if (key === "plugins" && next.length === 0) return deleteNode(existing, [key]);
+  return arr
+    .map((_, i) => i)
+    .filter((i) => !keep(arr[i], i))
+    .reverse()
+    .reduce((text, i) => deleteNode(text, [key, i]), existing);
 }
 
 /** The offset of the comma that follows `from`, skipping whitespace and comments, or
@@ -195,11 +204,12 @@ function wholeLine(text: string, start: number, end: number): Edit {
     : { offset: start, length: end - start, content: "" };
 }
 
-/** Delete top-level property `key` and one separating comma, leaving every comment —
- * jsonc-parser's own removal swallows a comment that precedes the property. */
-function deleteProperty(text: string, key: string): string {
+/** Delete the property or array element at `path` and one separating comma, leaving
+ * every comment — jsonc-parser's own removal loses or moves a neighbouring comment. */
+function deleteNode(text: string, path: JSONPath): string {
   const root = parseTree(text);
-  const prop = root && findNodeAtLocation(root, [key])?.parent;
+  const found = root && findNodeAtLocation(root, path);
+  const prop = typeof path.at(-1) === "number" ? found : found?.parent;
   const siblings = prop?.parent?.children;
   if (!prop || !siblings) return text;
   const i = siblings.indexOf(prop);
