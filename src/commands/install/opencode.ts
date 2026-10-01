@@ -9,10 +9,10 @@
 //
 // caret owns exactly one entry across both keys and every global config file, in one of
 // two forms: the npm package (@macintacos/caret), or `file:<checkout>` under
-// `--from-local`. A published install
-// also checks whether the caret OpenCode would load is behind the published one, because
-// OpenCode resolves an array entry once and caches it forever — re-adding the entry, all
-// a re-run would otherwise do, never moves anyone off the version they installed on.
+// `--from-local`. A published install also checks whether the caret OpenCode would load is
+// behind the published one, because OpenCode resolves an array entry once and caches it
+// forever — re-adding the entry, all a re-run would otherwise do, never moves anyone off
+// the version they installed on.
 
 import { writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -105,8 +105,8 @@ function sameEntryForm(entry: string, specifier: string): boolean {
 }
 
 /** The existing entry of `specifier`'s form that install keeps: the first pinned one in
- * the order given — so the user's pin survives a move — else the first; undefined when there
- * is none and `specifier` is added. */
+ * the order given — so the user's pin survives a move — else the first; undefined when
+ * there is none and `specifier` is added. */
 function keptEntry(entries: readonly CaretEntry[], specifier: string): CaretEntry | undefined {
   const sameForm = entries.filter((e) => sameEntryForm(e.spec, specifier));
   return sameForm.find((e) => splitPluginSpecifier(e.spec).version !== null) ?? sameForm[0];
