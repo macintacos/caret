@@ -302,3 +302,7 @@ test("configParseError names why a truncated config or an array root is unreadab
   expect(configParseError('{ "plugin": [')).not.toBeNull();
   expect(configParseError("[]")).toBe("not a JSON object");
 });
+
+test("configParseError accepts a config that opens with a UTF-8 BOM", () => {
+  expect(configParseError('﻿{ "plugin": ["x"] }')).toBeNull();
+});

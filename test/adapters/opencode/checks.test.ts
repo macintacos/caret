@@ -80,3 +80,33 @@ test("a caret entry in a later config file is found", async () => {
   });
   expect(checks.map((c) => c.id)).toEqual(["opencode-host", "opencode-caret-version"]);
 });
+
+test("v2 with caret only in config.json fails the host check alone", async () => {
+  const legacy = join(tmp, "config.json");
+  writeFileSync(legacy, JSON.stringify({ plugins: [PKG] }));
+  const checks = await readOpencodeChecks({
+    configFiles: [legacy],
+    opencodeVersion: () => [2, 0, 18],
+    published: async () => "0.9.0",
+  });
+  expect(checks).toEqual([
+    expect.objectContaining({
+      id: "opencode-host",
+      status: "fail",
+      remedy: expect.stringContaining("caret install"),
+    }),
+  ]);
+});
+
+test("v2 with a stale caret in config.json beside opencode.json fails the host check, naming it", async () => {
+  const legacy = join(tmp, "config.json");
+  writeFileSync(legacy, JSON.stringify({ plugins: [PKG] }));
+  const checks = await readOpencodeChecks({
+    configFiles: [configWith({ plugins: [PKG] }), legacy],
+    opencodeVersion: () => [2, 0, 18],
+    published: async () => "0.9.0",
+  });
+  expect(checks.map((c) => c.id)).toEqual(["opencode-host", "opencode-caret-version"]);
+  expect(checks[0]?.status).toBe("fail");
+  expect(checks[0]?.detail).toContain("config.json");
+});

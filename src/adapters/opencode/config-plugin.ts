@@ -35,7 +35,11 @@ export type PluginKey = (typeof PLUGIN_KEYS)[number];
  * and an empty file passes: install treats it as a config with no keys. */
 export function configParseError(text: string): string | null {
   const errors: ParseError[] = [];
-  const root: unknown = parse(text, errors, { allowTrailingComma: true, allowEmptyContent: true });
+  // Bun, which OpenCode runs on, strips a leading BOM before parsing.
+  const root: unknown = parse(text.replace(/^\uFEFF/, ""), errors, {
+    allowTrailingComma: true,
+    allowEmptyContent: true,
+  });
   const [first] = errors;
   if (first !== undefined) return `${printParseErrorCode(first.error)} at offset ${first.offset}`;
   const isObject = typeof root === "object" && root !== null && !Array.isArray(root);

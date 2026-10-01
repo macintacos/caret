@@ -43,7 +43,8 @@ export function readOpencodeInstallState(): InstallProbe {
   if (!existsSync(dir)) {
     return { pluginVersion: "unknown", pluginEnabled: "unknown", hookInUserSettings: "unknown" };
   }
-  // The same file set install writes and the opencode-caret-version check reads.
+  // Every existing global config: the probe never runs `opencode --version`, so it cannot
+  // narrow to the files the host loads.
   let entry: CaretEntry | null;
   try {
     entry = readLoadedCaretEntry(existingConfigFiles(dir));

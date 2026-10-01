@@ -6,12 +6,9 @@
 // disagree about a path. It also resolves what the file-deploy era left in that config
 // dir, which install and uninstall sweep, and both hosts' plugin cache layouts.
 
-import { type Dirent, existsSync, readdirSync } from "node:fs";
+import { type Dirent, existsSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
-
-import { isV2Host } from "@/adapters/opencode/host.ts";
-import type { VersionTriple } from "@/lib/semver.ts";
 
 /** caret's npm package — the entry users add to OpenCode's plugin list. Its
  * package entrypoint (package.json `exports`) IS the OpenCode plugin, so a bare
@@ -73,19 +70,12 @@ export function opencodeConfigDir(): string {
   return join(xdg || join(homedir(), ".config"), "opencode");
 }
 
-/** The global config filenames `host` loads, in caret's write preference: all three on a
- * known v1; without `config.json` on v2, which ignores it, and on an unreadable version,
- * where `opencode.jsonc` and `opencode.json` are the files every OpenCode loads. */
-export function hostConfigFilenames(host: VersionTriple | null): readonly string[] {
-  return host !== null && !isV2Host(host)
-    ? CONFIG_FILENAMES
-    : CONFIG_FILENAMES.filter((name) => name !== "config.json");
-}
+export type ConfigFilename = (typeof CONFIG_FILENAMES)[number];
 
-/** The global config file install writes caret into: the first existing
- * `hostConfigFilenames(host)` file, else `opencode.json` to create. */
-export function resolveConfigFile(configDir: string, host: VersionTriple | null): string {
-  for (const name of hostConfigFilenames(host)) {
+/** The global config file install writes caret into: the first of `names` that exists
+ * under `configDir`, else `opencode.json` to create. */
+export function resolveConfigFile(configDir: string, names: readonly ConfigFilename[]): string {
+  for (const name of names) {
     const p = join(configDir, name);
     if (existsSync(p)) return p;
   }
@@ -93,9 +83,18 @@ export function resolveConfigFile(configDir: string, host: VersionTriple | null)
 }
 
 /** Every global config file that exists under `configDir`, in `CONFIG_FILENAMES` order:
- * what install strips, uninstall clears, and doctor reads. */
+ * what install strips, uninstall clears, and doctor reads. Two names for one file list
+ * once, under the earlier: edits planned per name would overwrite each other. */
 export function existingConfigFiles(configDir: string): string[] {
-  return CONFIG_FILENAMES.map((name) => join(configDir, name)).filter((p) => existsSync(p));
+  const seen = new Set<string>();
+  return CONFIG_FILENAMES.map((name) => join(configDir, name))
+    .filter((p) => existsSync(p))
+    .filter((p) => {
+      const real = realpathSync(p);
+      if (seen.has(real)) return false;
+      seen.add(real);
+      return true;
+    });
 }
 
 /** Absolute path to OpenCode's command dir under a config dir. */

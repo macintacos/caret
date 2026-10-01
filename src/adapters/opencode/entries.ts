@@ -88,8 +88,9 @@ export function readCaretEntry(configFiles: readonly string[]): CaretEntry | nul
   return readCaretEntries(configFiles, () => false)[0] ?? null;
 }
 
-/** The first caret entry across `configFiles` that OpenCode would load: the package or a
- * `--from-local` checkout. Throws like `readCaretEntry`. */
+/** The first caret entry across `configFiles` in a form OpenCode can load — the package or
+ * a `--from-local` checkout. Whether the host reads the file it sits in is the caller's
+ * concern. Throws like `readCaretEntry`. */
 export function readLoadedCaretEntry(configFiles: readonly string[]): CaretEntry | null {
   return readCaretEntries(configFiles, isCaretCheckout)[0] ?? null;
 }

@@ -919,19 +919,26 @@ test("a v2 dry run reads a plugin entry's version from v2's cache layout", async
 });
 
 test("a config that fails to parse stops install before any write", async () => {
-  const jsonc = join(dir, "opencode.jsonc");
+  const jsonc = configFile("opencode.jsonc");
   writeFileSync(jsonc, '{ "plugins": [');
   writeFileSync(configJson(), JSON.stringify({ plugin: [CARET_PACKAGE] }));
   const before = [readFileSync(jsonc, "utf-8"), readFileSync(configJson(), "utf-8")];
-  await expect(
-    runInstallOpencodeTarget({ uninstall: false, dryRun: false, refresh: false }, deps(V2)),
-  ).rejects.toThrow("opencode.jsonc");
+  await expect(installOn(V2)).rejects.toThrow("opencode.jsonc");
+  expect([readFileSync(jsonc, "utf-8"), readFileSync(configJson(), "utf-8")]).toEqual(before);
+});
+
+test("a config that fails to parse stops an install dry run, naming it", async () => {
+  const jsonc = configFile("opencode.jsonc");
+  writeFileSync(jsonc, '{ "plugins": [');
+  writeFileSync(configJson(), JSON.stringify({ plugin: [CARET_PACKAGE] }));
+  const before = [readFileSync(jsonc, "utf-8"), readFileSync(configJson(), "utf-8")];
+  await expect(transcript(V2, { dryRun: true })).rejects.toThrow("opencode.jsonc");
   expect([readFileSync(jsonc, "utf-8"), readFileSync(configJson(), "utf-8")]).toEqual(before);
 });
 
 test("uninstall skips a config that fails to parse and clears the rest", async () => {
-  const garbled = join(dir, "config.json");
-  const jsonc = join(dir, "opencode.jsonc");
+  const garbled = configFile("config.json");
+  const jsonc = configFile("opencode.jsonc");
   writeFileSync(garbled, "{ nope");
   writeFileSync(jsonc, JSON.stringify({ plugins: [CARET_PACKAGE] }));
   const said = await transcript({}, { uninstall: true });
@@ -948,21 +955,40 @@ test("a symlinked config is edited through to its target", async () => {
   try {
     const real = join(elsewhere, "opencode.jsonc");
     writeFileSync(real, "{}");
-    symlinkSync(real, join(dir, "opencode.jsonc"));
-    await runInstallOpencodeTarget({ uninstall: false, dryRun: false, refresh: false }, deps(V2));
-    expect(lstatSync(join(dir, "opencode.jsonc")).isSymbolicLink()).toBe(true);
+    symlinkSync(real, configFile("opencode.jsonc"));
+    await installOn(V2);
+    expect(lstatSync(configFile("opencode.jsonc")).isSymbolicLink()).toBe(true);
     expect(caretEntries(readFileSync(real, "utf-8"), () => false).length).toBe(1);
   } finally {
     await rm(elsewhere, { recursive: true, force: true });
   }
 });
 
+test("a config.json that aliases opencode.json keeps caret on v2", async () => {
+  writeFileSync(configJson(), JSON.stringify({ plugins: [CARET_PACKAGE] }));
+  symlinkSync(configJson(), configFile("config.json"));
+  await installOn(V2);
+  expect(config()).toEqual({ plugins: [CARET_PACKAGE] });
+});
+
+test("uninstall warns past a config it cannot read and clears the rest", async () => {
+  mkdirSync(configFile("config.json"));
+  writeFileSync(configFile("opencode.jsonc"), JSON.stringify({ plugins: [CARET_PACKAGE] }));
+  const said = await transcript({}, { uninstall: true });
+  expect(parsed("opencode.jsonc")).toEqual({});
+  expect(said).toMatch(/warn:.*config\.json/);
+});
+
+test("uninstall that could only skip caret's file says no readable config held it", async () => {
+  writeFileSync(configFile("config.json"), `{ "plugin": ["${CARET_PACKAGE}"`);
+  const said = await transcript({}, { uninstall: true });
+  expect(said).toContain("caret was not in any readable OpenCode config");
+});
+
 test("a failed later write names the files already changed", async () => {
-  const legacy = join(dir, "config.json");
+  const legacy = configFile("config.json");
   writeFileSync(legacy, JSON.stringify({ plugin: [CARET_PACKAGE] }));
   symlinkSync(join(dir, "missing", "opencode.json"), configJson());
-  await expect(
-    runInstallOpencodeTarget({ uninstall: false, dryRun: false, refresh: false }, deps(V2)),
-  ).rejects.toThrow(/already changed: .*config\.json/);
+  await expect(installOn(V2)).rejects.toThrow(/already changed: .*config\.json/);
   expect(caretEntries(readFileSync(legacy, "utf-8"), () => false)).toEqual([]);
 });

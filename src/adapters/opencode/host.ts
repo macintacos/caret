@@ -2,7 +2,10 @@
 // caret from `plugins`, while v1 before 1.18.16 refuses to start on that key at all, so an
 // unreadable version falls back to `plugin`, which every OpenCode loads.
 
+import { basename } from "node:path";
+
 import type { PluginKey } from "@/adapters/opencode/config-plugin.ts";
+import { CONFIG_FILENAMES, type ConfigFilename } from "@/adapters/opencode/paths.ts";
 import type { Check } from "@/doctor/report.ts";
 import { isNewer, parseVersionTriple, type VersionTriple } from "@/lib/semver.ts";
 
@@ -47,12 +50,36 @@ export function pluginKeyFor(version: VersionTriple | null): PluginKey {
   return isV2Host(version) ? "plugins" : "plugin";
 }
 
+/** The global config filenames `host` loads, in caret's write preference: all three on a
+ * known v1; without `config.json` on v2, which ignores it, and on an unreadable version,
+ * where `opencode.jsonc` and `opencode.json` are the files every OpenCode loads. */
+export function hostConfigFilenames(host: VersionTriple | null): readonly ConfigFilename[] {
+  return host !== null && !isV2Host(host)
+    ? CONFIG_FILENAMES
+    : CONFIG_FILENAMES.filter((name) => name !== "config.json");
+}
+
+/** The files among `configFiles` whose basename `host` loads. */
+export function loadedConfigFiles(
+  configFiles: readonly string[],
+  host: VersionTriple | null,
+): string[] {
+  const names: readonly string[] = hostConfigFilenames(host);
+  return configFiles.filter((p) => names.includes(basename(p)));
+}
+
 /** v1.3.4 is the first loader that accepts the plugin's object default. */
 const V1_FLOOR = "1.3.4";
 
 /** doctor's `opencode-host` check: whether the OpenCode on `PATH` loads caret from the keys
- * caret's entries sit in. Every fault joins into one fail, each with its remedy. */
-export function hostCheck(version: VersionTriple | null, keys: readonly PluginKey[]): Check {
+ * its entries in loaded files sit in, and whether any `ignoredFiles` — config files holding
+ * caret that this host never loads — exist. Every fault joins into one fail, each with its
+ * remedy. */
+export function hostCheck(
+  version: VersionTriple | null,
+  keys: readonly PluginKey[],
+  ignoredFiles: readonly string[],
+): Check {
   const base = { id: "opencode-host", title: "OpenCode host" };
   if (version === null) {
     return { ...base, status: "unknown", detail: "", reason: "couldn't read `opencode --version`" };
@@ -72,6 +99,11 @@ export function hostCheck(version: VersionTriple | null, keys: readonly PluginKe
     remedies.push("run `caret install`");
   } else if (wrongKey === "plugin") {
     faults.push(`caret is in the legacy \`plugin\` key on OpenCode ${shownVersion}`);
+    remedies.push("run `caret install`");
+  }
+  if (ignoredFiles.length > 0) {
+    const names = ignoredFiles.map((p) => basename(p)).join(", ");
+    faults.push(`caret is in ${names}, which OpenCode ${shownVersion} doesn't load`);
     remedies.push("run `caret install`");
   }
   if (faults.length === 0) {
