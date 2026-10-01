@@ -30,7 +30,9 @@ set -euo pipefail
 state="${XDG_STATE_HOME:-$HOME/.local/state}/caret"
 records="$state/launcher"
 claude_roots="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache/caret/caret"
-opencode_roots="${XDG_CACHE_HOME:-$HOME/.cache}/opencode/packages/@macintacos"
+opencode_cache="${XDG_CACHE_HOME:-$HOME/.cache}/opencode"
+opencode_v1_roots="$opencode_cache/packages/@macintacos"
+opencode_v2_roots="$opencode_cache/npm/@macintacos"
 # Keep in sync with ownedRootsDir() (src/config/paths.ts).
 owned_roots="$state/roots"
 
@@ -92,16 +94,42 @@ candidate_version() {
   sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1/package.json" 2>/dev/null | head -1
 }
 
+# OpenCode v2's live install under spec dir $1: the numerically largest all-digit
+# child. Older generations persist beside it and are never loaded. Keep in sync with
+# liveGenerationDir (src/adapters/opencode/paths.ts).
+live_generation() {
+  local dir name newest=""
+  for dir in "$1"/*; do
+    name="${dir##*/}"
+    case "$name" in '' | *[!0-9]*) continue ;; esac
+    if [ -z "$newest" ] || [ "$name" -gt "$newest" ]; then newest="$name"; fi
+  done
+  if [ -n "$newest" ]; then printf '%s' "$1/$newest"; fi
+}
+
 # Every dir either agent's cache or caret's own copies offer, runnable caret or
 # not — the difference between a broken install (terminal) and an empty cache
-# (eviction). The OpenCode entry is a two-line npm project, not a caret root; the
-# root is one level down. `*` skips dot-prefixed dirs, so a half-copied owned root
-# is never a candidate. Keep in sync with launcherCandidateDirs
-# (src/commands/install/launcher.ts).
+# (eviction). OpenCode's cache dir is named exactly `caret` or `caret@<spec>`: v1's
+# holds a two-line npm project with the root one level down; v2's holds numbered
+# generations, of which only the live one is offered. `*` skips dot-prefixed dirs,
+# so a half-copied owned root is never a candidate. Keep in sync with
+# launcherCandidateDirs (src/commands/install/launcher.ts) and opencodeRootPaths
+# (src/adapters/opencode/paths.ts); both suites pin it through
+# test/core/commands/install/fixtures/launcher-caches.txt.
 candidate_dirs() {
-  local dir
-  for dir in "$claude_roots"/* "$opencode_roots"/caret*/node_modules/@macintacos/caret \
-    "$owned_roots"/*; do
+  local dir spec live
+  for dir in "$claude_roots"/* \
+    "$opencode_v1_roots"/caret/node_modules/@macintacos/caret \
+    "$opencode_v1_roots"/caret@*/node_modules/@macintacos/caret; do
+    if [ -d "$dir" ]; then printf '%s\n' "$dir"; fi
+  done
+  for spec in "$opencode_v2_roots"/caret "$opencode_v2_roots"/caret@*; do
+    if [ ! -d "$spec" ]; then continue; fi
+    live="$(live_generation "$spec")"
+    dir="$live/node_modules/@macintacos/caret"
+    if [ -n "$live" ] && [ -d "$dir" ]; then printf '%s\n' "$dir"; fi
+  done
+  for dir in "$owned_roots"/*; do
     if [ -d "$dir" ]; then printf '%s\n' "$dir"; fi
   done
 }

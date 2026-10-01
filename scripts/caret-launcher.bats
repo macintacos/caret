@@ -15,8 +15,9 @@ bats_require_minimum_version 1.5.0
 
 setup_file() {
   LAUNCHER="$(cd "$(dirname "$BATS_TEST_FILENAME")/../bin" && pwd)/caret-launcher"
+  CACHE_CASES="$(cd "$(dirname "$BATS_TEST_FILENAME")/.." && pwd)/test/core/commands/install/fixtures/launcher-caches.txt"
   BASH_BIN="$(command -v bash)"
-  export LAUNCHER BASH_BIN
+  export LAUNCHER CACHE_CASES BASH_BIN
 }
 
 # A throwaway machine with both agent cache roots and caret's state dir. The stub
@@ -49,6 +50,18 @@ seed_caret() {
 echo "CARET $2 \$* PATH=\$PATH"
 CARET
   chmod +x "$1/bin/caret"
+}
+
+# Seeds every line of shared cache case $1 under $home/.cache and prints its winning
+# version.
+seed_cache_case() {
+  local name version path win
+  while read -r name version path win || [ -n "$name" ]; do
+    case "$name" in '' | '#'*) continue ;; esac
+    if [ "$name" != "$1" ]; then continue; fi
+    seed_caret "$home/.cache/$path" "$version"
+    if [ "$win" = win ]; then printf '%s' "$version"; fi
+  done <"$CACHE_CASES"
 }
 
 # A bun the launcher can find, recorded the way installLauncher records it.
@@ -132,6 +145,26 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
   [[ "$output" == *"CARET 0.15.0"* ]]
 }
 
+# The same cases drive launcherCandidateDirs' suite, so the bash and TS rules cannot
+# drift apart.
+@test "every shared cache case runs the fixture's winner" {
+  stub_bun
+  local name seen=" " want
+  while read -r name _ || [ -n "$name" ]; do
+    case "$name" in '' | '#'*) continue ;; esac
+    case "$seen" in *" $name "*) continue ;; esac
+    seen="$seen$name "
+    rm -rf "$home/.cache/opencode"
+    want="$(seed_cache_case "$name")"
+    # </dev/null: the launcher must not read the fixture this loop is consuming
+    run launcher </dev/null
+    if [[ "$output" != *"CARET $want "* ]]; then
+      echo "case $name: want $want, got: $output"
+      return 1
+    fi
+  done <"$CACHE_CASES"
+}
+
 # OpenCode names the dir after the verbatim `plugin` specifier, so the version
 # has to come from package.json one level down.
 @test "an @latest-named OpenCode dir resolves through node_modules" {
@@ -139,6 +172,18 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
   seed_caret "$home/.cache/opencode/packages/@macintacos/caret@latest/node_modules/@macintacos/caret" 0.11.0
   run -0 launcher
   [[ "$output" == *"CARET 0.11.0"* ]]
+}
+
+# v2 reinstalls into a new generation rather than load an older one, so a non-dir
+# highest generation offers nothing.
+@test "a broken live generation never falls back to a stale one" {
+  stub_bun
+  local spec="$home/.cache/opencode/npm/@macintacos/caret@latest"
+  seed_caret "$spec/9/node_modules/@macintacos/caret" 0.20.0
+  printf 'x\n' >"$spec/10"
+  seed_caret "$home/.cache/opencode/packages/@macintacos/caret/node_modules/@macintacos/caret" 0.15.0
+  run -0 launcher
+  [[ "$output" == *"CARET 0.15.0"* ]]
 }
 
 @test "a pinned root beats a higher installed version" {

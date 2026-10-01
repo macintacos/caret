@@ -530,7 +530,8 @@ persist, so the stale-cache clear deletes the whole `npm/@macintacos/caret@<spec
 one generation. `readCachedCaretVersion` reads both layouts alike: the installed manifest
 sits at `node_modules/@macintacos/caret/package.json` under both a v1 package dir and a v2
 generation dir. `existingOpencodeCachePackageDirs` lists both layouts, and the clear
-removes every caret dir in either.
+removes every caret dir in either. The service launcher offers each caret spec dir's live
+generation, never an older one.
 
 Which layout an entry reads from (`caretCacheDir` in `upgrade.ts`): a `plugins` entry is
 always v2's, since v1 never installs it; a `plugin` entry is v2's when the caller knows
@@ -667,7 +668,8 @@ unreadable or empty list and on a non-plan default), the TUI half's toasts and u
 check, abort on both hosts, and v1↔v2 parity of the refusal texts. For the plugin key they
 cover the host probe's 5 s bound (a grandchild holding stdout included), key selection and
 the one-transform move, deleting `plugins` without losing comments (a trailing comma and
-CRLF included), v2 cache reads and clears, and doctor's `opencode-host` and
+CRLF included), v2 cache reads and clears, the service launcher's pick of v2's live
+generation (bash and TS against one shared fixture), and doctor's `opencode-host` and
 `opencode-caret-version` checks and their gating.
 
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
@@ -764,8 +766,6 @@ v1.18.15 and v1.18.29 from npm):
 
 **EXC-1520 follow-ups:**
 
-- `bin/caret-launcher` and `launcherCandidateDirs` glob only v1's `packages/`, so the
-  service never sees a v2 caret root. Harmless: it stays on caret's owned copy.
 - `opencode/caret.plugin.ts`'s header still says caret loads from the `plugin` array.
 
 ## Sources

@@ -20,13 +20,13 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { z } from "zod";
 
 import { claudeConfigDir } from "@/adapters/claude/paths.ts";
 import { resolveCaretRoot } from "@/adapters/opencode/packaging.ts";
-import { opencodeCachePackageDir } from "@/adapters/opencode/paths.ts";
+import { opencodeRootPaths } from "@/adapters/opencode/paths.ts";
 import {
   ensureStateDir,
   launcherBunFile,
@@ -216,17 +216,15 @@ export interface LauncherCandidate {
   owned: boolean;
 }
 
-/** Every dir the launcher offers as a candidate, in its glob order. Keep in sync with
+/** Every dir the launcher offers as a candidate, in its order: Claude Code's, OpenCode
+ * v1's, OpenCode v2's live generations, then caret's own copies. Keep in sync with
  * candidate_dirs() in bin/caret-launcher. */
 export function launcherCandidateDirs(): LauncherCandidate[] {
-  const opencode = listDirs(dirname(opencodeCachePackageDir()))
-    .filter((d) => basename(d).startsWith("caret"))
-    .map((d) => join(d, "node_modules", "@macintacos", "caret"))
-    .filter(isDir);
+  const opencodeRoots = opencodeRootPaths().filter(isDir);
   return [
     ...[
       ...listDirs(join(claudeConfigDir(), "plugins", "cache", "caret", "caret")),
-      ...opencode,
+      ...opencodeRoots,
     ].map((dir) => ({ dir, owned: false })),
     ...listDirs(ownedRootsDir()).map((dir) => ({ dir, owned: true })),
   ];
