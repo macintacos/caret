@@ -154,7 +154,8 @@ interface Placement {
   version: VersionTriple | null;
   key: PluginKey;
   movedFrom: PluginKey | null;
-  /** What the config holds afterwards: a kept entry's spec, so a user's pin survives, else `specifier`. */
+  /** What the config holds afterwards: a kept entry's spec, so a user's pin survives,
+   * else `specifier`. */
   writtenSpec: string;
 }
 
@@ -205,7 +206,8 @@ function commandPaths({ dir, pkg }: Pick<OpencodeSetup, "dir" | "pkg">): string[
   return pkg.commands.map((c) => join(commandDir(dir), namespacedCommandFilename(c.name)));
 }
 
-/** The dry run's note: the paths an arm touches, `entry` above the legacy sweep, `found` below. */
+/** The dry run's note: the paths an arm touches, `entry` above the legacy sweep, `found`
+ * below. */
 function previewNote(
   setup: OpencodeSetup,
   verb: "write" | "remove",
@@ -335,10 +337,11 @@ async function sweepLegacy(legacy: string[], dir: string, ui: InstallUI): Promis
   );
 }
 
-/** Whether this run asks npm which caret is published. `--from-local` writes a checkout entry, which OpenCode
- * resolves to that checkout every start — it can never be stale, so npm's version says
- * nothing about it and a network read mid-build would only cost a stall. The Claude target
- * skips its own update phase in local mode for the same reason. */
+/** Whether this run asks npm which caret is published. `--from-local` writes a checkout
+ * entry, which OpenCode resolves to that checkout every start — it can never be stale, so
+ * npm's version says nothing about it and a network read mid-build would only cost a
+ * stall. The Claude target skips its own update phase in local mode for the same
+ * reason. */
 function checks(local: LocalInstall | undefined): boolean {
   return local === undefined;
 }
