@@ -73,7 +73,7 @@ test("@opencode-ai/plugin is a runtime dependency, not a devDependency", () => {
   expect(pkg.devDependencies["@opencode-ai/plugin"]).toBeUndefined();
 });
 
-test("@opencode/plugin is a runtime dependency, not a devDependency", () => {
-  expect(pkg.dependencies["@opencode/plugin"]).toBeDefined();
-  expect(pkg.devDependencies["@opencode/plugin"]).toBeUndefined();
+test("@opencode/plugin is a devDependency, not a runtime dependency", () => {
+  expect(pkg.devDependencies["@opencode/plugin"]).toBeDefined();
+  expect((pkg.dependencies as Record<string, string>)["@opencode/plugin"]).toBeUndefined();
 });
