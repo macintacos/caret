@@ -72,17 +72,19 @@ third-party):
   `architecture-rules.md`.
 - **`$lib`** — the UI's `ui/src/lib/` directory, the prefix shadcn-svelte's copied
   components and `components.json` assume. See `svelte-rules.md` / `shadcn-rules.md`.
-- **`@test/*`, `@scripts/*`, `@opencode/*`, `@ui/*`** — the repo's other roots, so a test
-  never addresses a target by counting `../` hops (EXC-879). `@test/*` also names *which*
+- **`@test/*`, `@scripts/*`, `@oc/*`, `@ui/*`** — the repo's other roots, so a test never
+  addresses a target by counting `../` hops (EXC-879). `@oc/*` maps `opencode/`,
+  deliberately not `@opencode/*`, because `@opencode` is a real npm scope
+  (`@opencode/plugin`) that a local file could shadow. `@test/*` also names *which*
   harness is meant: `test/support/` (bun) and `test/e2e/support/` (Playwright) are two
   different directories that a bare `./support/x` could not distinguish. These are
   top-level rather than grafted under `@/` deliberately — `@/` means "this program's
   source root", and widening it to "any root" would cost the one alias with a crisp
-  definition. `src/` may import only `@opencode/review-bridge.ts` through `@opencode/*`:
-  the plugin module would drag `@opencode-ai/plugin` into the bundle. The shared bridge
-  has to live in `opencode/`, the one directory that ships as unbundled source, because
-  the OpenCode plugin can import only relative siblings; `bun build` inlines it into
-  `dist/cli.js`. `test/structure/dependency-placement.test.ts` enforces the rule.
+  definition. `src/` may import only `@oc/review-bridge.ts` through `@oc/*`: the plugin
+  module would drag `@opencode-ai/plugin` into the bundle. The shared bridge has to live
+  in `opencode/`, the one directory that ships as unbundled source, because the OpenCode
+  plugin can import only relative siblings; `bun build` inlines it into `dist/cli.js`.
+  `test/structure/dependency-placement.test.ts` enforces the rule.
 - **`@root/package.json`** — exact rather than a `@root/*` wildcard, because the repo root
   is not a source root: `@root/*` would alias the whole tree at once, including every root
   above that already has its own alias, making it a second spelling for all of them. One
@@ -114,8 +116,7 @@ read-only by `mise run lint` — so ordering is mechanical, never hand-maintaine
 Svelte.) Every alias that isn't `@/`-prefixed looks like a scoped npm package to Biome, so
 each is carved out of the package group explicitly (`!@core/**`, `!@test/**`, and so on)
 and folded in with the app code — a pattern to extend when adding a root alias, not a
-one-off. The match is on the exact segment, which is why `!@opencode/**` leaves the real
-`@opencode-ai/*` package where it belongs. Don't remove those carve-outs.
+one-off. Don't remove those carve-outs.
 
 ## Shared-helper policy
 

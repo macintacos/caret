@@ -631,11 +631,9 @@ API — without it the 10-minute link toast would linger after every decision. v
 toasts in `server()` (`client.tui.showToast`), so caret needs no `tui.json` entry; the
 toast bodies (`reviewLinkToast`, `decisionToast`) are shared from `caret.plugin.ts`. The
 default also carries a no-op `tui`: v1's own installer may register this module as a v1
-TUI plugin, and v1's TUI loader throws on a default without one. The module is not named
-`tui.ts` or `plugin*`, because the `@opencode/*` tsconfig alias would then shadow the real
-`@opencode/plugin` and `@opencode/tui` packages. The `Object.values` rule binds only
-`index.ts`: both TUI loaders read only `default`, so `createCaretTui` stays a named export
-for tests.
+TUI plugin, and v1's TUI loader throws on a default without one. The `Object.values` rule
+binds only `index.ts`: both TUI loaders read only `default`, so `createCaretTui` stays a
+named export for tests.
 
 ## Verified vs. follow-up
 

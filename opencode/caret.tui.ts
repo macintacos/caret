@@ -3,9 +3,6 @@
 // `exports["./tui"]` as `{ id, setup }`. v1 keeps its own toasts in `server()`; the no-op
 // `tui` exists because v1's installer may register this module as a v1 TUI plugin, and
 // v1's TUI loader throws on a default without one.
-//
-// Not named `tui.ts` or `plugin*`: through the `@opencode/*` tsconfig alias, `@opencode/tui`
-// or `@opencode/plugin[/…]` would resolve here instead of to the real packages.
 
 import type { Plugin } from "@opencode/plugin/tui";
 
