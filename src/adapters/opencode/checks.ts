@@ -3,10 +3,11 @@
 // what it is handed.
 
 import { caretEntries, isCaretCheckout, readConfigText } from "@/adapters/opencode/entries.ts";
-import { hostCheck, type VersionTriple } from "@/adapters/opencode/host.ts";
+import { hostCheck } from "@/adapters/opencode/host.ts";
 import { isLocalPluginSpecifier } from "@/adapters/opencode/paths.ts";
 import { readUpgradeVerdict, upgradeCheck } from "@/adapters/opencode/upgrade.ts";
 import type { Check } from "@/doctor/report.ts";
+import type { VersionTriple } from "@/lib/semver.ts";
 
 /** The OpenCode checks for `configFile`, or none when it carries no caret entry — a
  * Claude-only user then pays no spawn or network call. `opencode-host` checks that the

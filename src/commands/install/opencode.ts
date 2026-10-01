@@ -36,7 +36,7 @@ import {
   isCaretCheckout,
   readConfigText,
 } from "@/adapters/opencode/entries.ts";
-import { pluginKeyFor, readOpencodeVersion, type VersionTriple } from "@/adapters/opencode/host.ts";
+import { pluginKeyFor, readOpencodeVersion } from "@/adapters/opencode/host.ts";
 import { loadOpencodePackaging, type OpencodePackaging } from "@/adapters/opencode/packaging.ts";
 import {
   CARET_PACKAGE,
@@ -61,6 +61,7 @@ import { promptUpgrade } from "@/commands/install/prompt.ts";
 import type { InstallUI } from "@/commands/install/ui.ts";
 import { isTerminal, silentUI } from "@/commands/install/ui.ts";
 import { VERSION } from "@/lib/build-id.ts";
+import type { VersionTriple } from "@/lib/semver.ts";
 
 /** Injection seam for tests: override the config dir and packaging so the target
  * can run against a temp dir without resolving the real caret root, and every effect
@@ -135,6 +136,29 @@ function hostLine(
   return movedFrom === null ? found : `${found} (moved from ${movedFrom})`;
 }
 
+/** What the entry point resolves before dispatching to an arm. */
+interface OpencodeSetup {
+  dir: string;
+  pkg: OpencodePackaging;
+  ui: InstallUI;
+  isCheckout: (dir: string) => boolean;
+  configFile: string;
+  /** What an older, file-deploying caret left in `dir`. */
+  legacy: string[];
+}
+
+/** Where an install puts caret on this host. */
+interface Placement {
+  /** The form this run installs: the package name, or `file:<checkout>`. */
+  specifier: string;
+  version: VersionTriple | null;
+  key: PluginKey;
+  movedFrom: PluginKey | null;
+  /** What the config holds afterwards: a kept entry's spec, so a user's pin survives,
+   * else `specifier`. */
+  writtenSpec: string;
+}
+
 /** Install (or, with `uninstall`, remove) caret into OpenCode: write caret's entry to
  * the key the host loads, or remove it from both, deploy/remove the `/caret:*` command
  * files, and sweep whatever the file-deploy era left in the config dir.
@@ -145,72 +169,127 @@ export async function runInstallOpencodeTarget(
   deps: InstallOpencodeDeps = {},
 ): Promise<void> {
   const dir = deps.configDir ?? opencodeConfigDir();
-  const pkg = deps.packaging ?? loadOpencodePackaging();
-  const ui = deps.ui ?? silentUI;
-  const isCheckout = deps.isCheckout ?? isCaretCheckout;
-  const configFile = resolveConfigFile(dir);
-  const commandPaths = pkg.commands.map((c) =>
-    join(commandDir(dir), namespacedCommandFilename(c.name)),
-  );
-  const legacy = existingLegacyInstallFiles(dir);
+  const setup: OpencodeSetup = {
+    dir,
+    pkg: deps.packaging ?? loadOpencodePackaging(),
+    ui: deps.ui ?? silentUI,
+    isCheckout: deps.isCheckout ?? isCaretCheckout,
+    configFile: resolveConfigFile(dir),
+    legacy: existingLegacyInstallFiles(dir),
+  };
+  if (opts.uninstall) return opts.dryRun ? previewUninstall(setup) : uninstallOpencode(setup);
+  return opts.dryRun ? previewInstall(setup, opts, deps) : installOpencode(setup, opts, deps);
+}
+
+/** Probes `opencode --version` and reads the config, so only the install arms call it;
+ * uninstall clears both keys and needs neither. */
+function readPlacement(
+  setup: Pick<OpencodeSetup, "configFile" | "isCheckout">,
+  local: LocalInstall | undefined,
+  probe: () => VersionTriple | null,
+): Placement {
   // OpenCode symlinks a `file:` target into its cache, so the plugin it loads is the
   // checkout's own — and the `../bin/caret` that plugin spawns is the binary
   // `mise run build` just produced, picked up on every later rebuild with no reinstall.
-  const specifier = opts.local ? localPluginSpecifier(opts.local.repoDir) : CARET_PACKAGE;
-  // Uninstall never probes: it clears caret from both keys.
-  const version = opts.uninstall ? null : (deps.opencodeVersion ?? readOpencodeVersion)();
+  const specifier = local ? localPluginSpecifier(local.repoDir) : CARET_PACKAGE;
+  const version = probe();
   const key = pluginKeyFor(version);
-  const entries = opts.uninstall ? [] : caretEntries(readConfigText(configFile), isCheckout);
+  const entries = caretEntries(readConfigText(setup.configFile), setup.isCheckout);
   const otherKey: PluginKey = key === "plugin" ? "plugins" : "plugin";
   const movedFrom = entries.some((e) => e.key === otherKey) ? otherKey : null;
   const writtenSpec = keptEntry(entries, specifier)?.spec ?? specifier;
+  return { specifier, version, key, movedFrom, writtenSpec };
+}
 
-  if (opts.dryRun) {
-    const verb = opts.uninstall ? "remove" : "write";
-    // The check is read-only, so a preview can still run it and say what it found. A
-    // preview has no warning to carry an `unknown`'s reason, so the note carries it.
-    const found = checks(opts)
-      ? ["", previewLine(await readVerdict(configFile, version, deps))]
-      : [];
-    // The specifier is the one thing a preview can't be read off the paths: `--from-local`
-    // and a published install write the same file with very different content.
-    const entry = opts.uninstall
-      ? []
-      : ["", `plugin entry: ${specifier} → ${key}`, hostLine(version, key, movedFrom)];
-    // Their own labelled section: an install's bare path list is titled "would write", and
-    // listing a file caret is about to DELETE under that heading would misread badly.
-    const sweep = legacy.length === 0 ? [] : ["", "pre-array-install files to remove:", ...legacy];
-    ui.note(
-      [configFile, ...commandPaths, ...entry, ...sweep, ...found].join("\n"),
-      `OpenCode — would ${verb}`,
-    );
-    return;
-  }
+/** The `/caret:*` command files caret deploys into the config dir. */
+function commandPaths({ dir, pkg }: Pick<OpencodeSetup, "dir" | "pkg">): string[] {
+  return pkg.commands.map((c) => join(commandDir(dir), namespacedCommandFilename(c.name)));
+}
 
-  if (opts.uninstall) {
-    // Every form caret may have written, not just the package: a developer who ran
-    // `--from-local` has a checkout entry, and an uninstall that left it behind would
-    // keep OpenCode loading caret after saying it removed it.
-    await ui.step(
-      "Removing caret from OpenCode's plugin and plugins keys",
-      async () =>
-        editConfig(configFile, (text) =>
-          text === null ? null : dropEntries(text, caretEntries(text, isCheckout)),
+/** The dry run's note: the paths an arm touches, `entry` above the legacy sweep, `found`
+ * below. */
+function previewNote(
+  setup: OpencodeSetup,
+  verb: "write" | "remove",
+  parts: { entry: string[]; found: string[] },
+): void {
+  const { configFile, legacy, ui } = setup;
+  // Their own labelled section: an install's bare path list is titled "would write", and
+  // listing a file caret is about to DELETE under that heading would misread badly.
+  const sweep = legacy.length === 0 ? [] : ["", "pre-array-install files to remove:", ...legacy];
+  ui.note(
+    [configFile, ...commandPaths(setup), ...parts.entry, ...sweep, ...parts.found].join("\n"),
+    `OpenCode — would ${verb}`,
+  );
+}
+
+/** The install dry run: what it would write, plus the upgrade verdict. Writes nothing. */
+async function previewInstall(
+  setup: OpencodeSetup,
+  opts: { local?: LocalInstall },
+  deps: InstallOpencodeDeps,
+): Promise<void> {
+  const placed = readPlacement(setup, opts.local, deps.opencodeVersion ?? readOpencodeVersion);
+  // The check is read-only, so a preview can still run it and say what it found. A
+  // preview has no warning to carry an `unknown`'s reason, so the note carries it.
+  const found = checksPublished(opts.local)
+    ? [
+        "",
+        previewLine(
+          await readVerdict({ configFile: setup.configFile, host: placed.version }, deps),
         ),
-      (changed) =>
-        changed.length > 0
-          ? `Removed caret from ${basename(configFile)}`
-          : `caret was not in ${basename(configFile)}`,
-    );
-    await ui.step(
-      "Removing the /caret:* command files",
-      async () => removeFiles(commandPaths, { dryRun: false }),
-      (removed) => `Removed ${removed.paths.length} command file(s) from ${dir}`,
-    );
-    await sweepLegacy(legacy, dir, ui);
-    return;
-  }
+      ]
+    : [];
+  // The specifier is the one thing a preview can't be read off the paths: `--from-local`
+  // and a published install write the same file with very different content.
+  const entry = [
+    "",
+    `plugin entry: ${placed.specifier} → ${placed.key}`,
+    hostLine(placed.version, placed.key, placed.movedFrom),
+  ];
+  previewNote(setup, "write", { entry, found });
+}
 
+/** The uninstall dry run: what it would remove. */
+function previewUninstall(setup: OpencodeSetup): void {
+  previewNote(setup, "remove", { entry: [], found: [] });
+}
+
+async function uninstallOpencode(setup: OpencodeSetup): Promise<void> {
+  const { configFile, isCheckout, ui, dir, legacy } = setup;
+  // Every form caret may have written, not just the package: a developer who ran
+  // `--from-local` has a checkout entry, and an uninstall that left it behind would
+  // keep OpenCode loading caret after saying it removed it.
+  await ui.step(
+    "Removing caret from OpenCode's plugin and plugins keys",
+    async () =>
+      editConfig(configFile, (text) =>
+        text === null ? null : dropEntries(text, caretEntries(text, isCheckout)),
+      ),
+    (changed) =>
+      changed.length > 0
+        ? `Removed caret from ${basename(configFile)}`
+        : `caret was not in ${basename(configFile)}`,
+  );
+  await ui.step(
+    "Removing the /caret:* command files",
+    async () => removeFiles(commandPaths(setup), { dryRun: false }),
+    (removed) => `Removed ${removed.paths.length} command file(s) from ${dir}`,
+  );
+  await sweepLegacy(legacy, dir, ui);
+}
+
+async function installOpencode(
+  setup: OpencodeSetup,
+  opts: { refresh: boolean; local?: LocalInstall },
+  deps: InstallOpencodeDeps,
+): Promise<void> {
+  const { dir, pkg, ui, isCheckout, configFile, legacy } = setup;
+  const { specifier, version, key, movedFrom, writtenSpec } = readPlacement(
+    setup,
+    opts.local,
+    deps.opencodeVersion ?? readOpencodeVersion,
+  );
   ui.info(hostLine(version, key, movedFrom));
   await ui.step(
     `Adding ${specifier} to OpenCode's ${key} array`,
@@ -223,7 +302,7 @@ export async function runInstallOpencodeTarget(
   );
   // After the array edit — the entry has to exist before it can be read — and before the
   // command files, so a cache clear is settled by the time the run reports it deployed.
-  if (checks(opts)) await upgradeStep(configFile, opts, deps, ui);
+  if (checksPublished(opts.local)) await upgradeStep(configFile, opts, deps, ui);
   // Only once the array entry exists and a stale cached copy has been offered a refresh:
   // dropping the plugin file any earlier could move a user backwards onto an older cached
   // caret. It still sweeps when that refresh is declined — two loaded caret plugins are
@@ -258,13 +337,13 @@ async function sweepLegacy(legacy: string[], dir: string, ui: InstallUI): Promis
   );
 }
 
-/** Whether this run asks npm which caret is published. An uninstall is tearing caret out,
- * so there is nothing to compare. `--from-local` writes a checkout entry, which OpenCode
- * resolves to that checkout every start — it can never be stale, so npm's version says
- * nothing about it and a network read mid-build would only cost a stall. The Claude target
- * skips its own update phase in local mode for the same reason. */
-function checks(opts: { uninstall: boolean; local?: LocalInstall }): boolean {
-  return !opts.uninstall && opts.local === undefined;
+/** Whether this run asks npm which caret is published. `--from-local` writes a checkout
+ * entry, which OpenCode resolves to that checkout every start — it can never be stale, so
+ * npm's version says nothing about it and a network read mid-build would only cost a
+ * stall. The Claude target skips its own update phase in local mode for the same
+ * reason. */
+function checksPublished(local: LocalInstall | undefined): boolean {
+  return local === undefined;
 }
 
 /** The verdict as a dry run states it: the settled line, plus an `unknown`'s reason —
@@ -276,16 +355,10 @@ function previewLine(verdict: UpgradeVerdict): string {
 
 /** This run's upgrade check: the adapter's read, with the test seams threaded in. */
 async function readVerdict(
-  configFile: string,
-  host: VersionTriple | null,
+  at: { configFile: string; host?: VersionTriple | null },
   deps: InstallOpencodeDeps,
 ): Promise<UpgradeVerdict> {
-  return readUpgradeVerdict({
-    configFile,
-    host,
-    cacheDir: deps.cacheDir,
-    published: deps.published,
-  });
+  return readUpgradeVerdict({ ...at, cacheDir: deps.cacheDir, published: deps.published });
 }
 
 /** Report the upgrade check, then act on it. Only a stale verdict has anything to do,
@@ -303,7 +376,7 @@ async function upgradeStep(
     "Checking OpenCode's caret version",
     // After the write caret sits in the key its host loads, so the key alone picks the
     // cache layout.
-    () => readVerdict(configFile, null, deps),
+    () => readVerdict({ configFile }, deps),
     upgradeVerdictLine,
   );
   if (verdict.kind === "unknown") {
