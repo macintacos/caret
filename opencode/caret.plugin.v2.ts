@@ -1,14 +1,11 @@
 // caret's OpenCode v2 plugin: the `setup` half of the dual default export in index.ts.
-// A thin adapter over the shared review core in caret.plugin.ts. Every `@opencode/plugin`
-// import is type-only: its runtime entry pulls Effect and OpenCode's client into the module
-// graph, and this file also loads on v1 hosts.
+// A thin adapter over the shared review core in caret.plugin.ts. The v2 SDK types it needs
+// are local slices, pinned to `@opencode/plugin` by test/opencode/sdk-conformance.ts, so
+// the SDK stays a devDependency.
 
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-
-import type { Plugin } from "@opencode/plugin";
-import type { ToolContext } from "@opencode/plugin/promise/tool";
 
 import {
   CARET_BIN,
@@ -49,7 +46,58 @@ export function withPlanAllow(
   return [...sessionRules, PLAN_ALLOW_RULE];
 }
 
-type SetupContext = Pick<Plugin.Context, "location" | "agent" | "session" | "tool">;
+type SessionInfo = {
+  location: { directory: string };
+  parentID?: string;
+  agent?: string;
+  permissions?: Rule[];
+};
+
+type ContextEvent = {
+  sessionID: string;
+  agent: string;
+  tools?: Record<string, unknown>;
+  system: { push: (part: { type: "text"; text: string }) => unknown };
+};
+
+type ReviewTool = {
+  name: string;
+  description: string;
+  input: { type: "object"; properties: Record<string, { type: "string"; description: string }> };
+  options: { codemode: boolean };
+  execute: (
+    input: unknown,
+    context: ToolContext,
+  ) => Promise<{ content: string; metadata?: Record<string, string> }>;
+};
+
+/** The slice of v2's plugin `Context` caret uses; test/opencode/sdk-conformance.ts pins it to the SDK. */
+export type SetupContext = {
+  location: { directory: string; project: { directory: string } };
+  session: {
+    get: (input: { sessionID: string }) => Promise<SessionInfo>;
+    update: (input: { sessionID: string; permissions: Rule[] }) => Promise<unknown>;
+    hook: {
+      (name: "context", callback: (event: ContextEvent) => Promise<void>): Promise<unknown>;
+      (name: "prompt", callback: (event: { sessionID: string }) => Promise<void>): Promise<unknown>;
+    };
+  };
+  agent: {
+    get: (input: { agentID: string }) => Promise<{ data: { permissions: Rule[] } }>;
+    list: () => Promise<{ data: { id: string }[] }>;
+  };
+  tool: {
+    transform: (callback: (tools: { add: (tool: ReviewTool) => void }) => void) => Promise<unknown>;
+  };
+};
+
+/** The v2 tool-call context fields caret's `execute` reads. */
+export type ToolContext = {
+  sessionID: string;
+  agent: string;
+  signal: AbortSignal;
+  progress: (metadata: Record<string, string>) => Promise<unknown>;
+};
 
 /** Build caret's v2 `setup` over injected runners, so tests drive it with a stub review
  * runner and a recording warm. */

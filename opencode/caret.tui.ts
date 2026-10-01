@@ -4,8 +4,6 @@
 // `tui` exists because v1's installer may register this module as a v1 TUI plugin, and
 // v1's TUI loader throws on a default without one.
 
-import type { Plugin } from "@opencode/plugin/tui";
-
 import {
   CARET_DECISION_KEY,
   CARET_URL_KEY,
@@ -20,8 +18,8 @@ import {
 
 type ToolEvent = { data: { id: string; metadata?: Record<string, unknown> } };
 
-/** The slice of v2's TUI context caret uses, narrow so tests build it without casts; the
- * `Plugin.Definition["setup"]` annotation below pins it to v2's real `Context`. */
+/** The slice of v2's TUI context caret uses, narrow so tests build it without casts;
+ * test/opencode/sdk-conformance.ts pins it to v2's real `Context`. */
 export type TuiContext = {
   data: {
     on: (
@@ -68,7 +66,7 @@ export function createCaretTui(opts: {
   };
 }
 
-const setup: Plugin.Definition["setup"] = createCaretTui({ checkUpdate: productionUpdateCheck });
+const setup = createCaretTui({ checkUpdate: productionUpdateCheck });
 
 export default {
   id: "caret",
