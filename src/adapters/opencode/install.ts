@@ -30,8 +30,8 @@ import {
 } from "@/adapters/opencode/entries.ts";
 import {
   CONFIG_FILENAMES,
+  existingConfigFiles,
   opencodeConfigDir,
-  resolveConfigFile,
 } from "@/adapters/opencode/paths.ts";
 import { readEntryCachedVersion } from "@/adapters/opencode/upgrade.ts";
 import { parseVersionTriple } from "@/lib/semver.ts";
@@ -43,11 +43,10 @@ export function readOpencodeInstallState(): InstallProbe {
   if (!existsSync(dir)) {
     return { pluginVersion: "unknown", pluginEnabled: "unknown", hookInUserSettings: "unknown" };
   }
-  // First existing config file only, not readCaretInPluginLists' all-files scan, so it
-  // reads the same file the opencode-caret-version check does.
+  // The same file set install writes and the opencode-caret-version check reads.
   let entry: CaretEntry | null;
   try {
-    entry = readLoadedCaretEntry(resolveConfigFile(dir));
+    entry = readLoadedCaretEntry(existingConfigFiles(dir));
   } catch {
     return {
       pluginVersion: "unknown",

@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { withEnv } from "@test/support/env.ts";
 import {
+  existingConfigFiles,
   existingOpencodeCachePackageDirs,
   liveGenerationDir,
   opencodeCachePackageDir,
@@ -94,4 +95,9 @@ test("caret's cache dirs cover v2's npm layout beside v1's packages layout", () 
       ].sort(),
     );
   });
+});
+
+test("existingConfigFiles lists the configs that exist, jsonc first", () => {
+  for (const name of ["config.json", "opencode.jsonc"]) writeFileSync(join(tmp, name), "{}");
+  expect(existingConfigFiles(tmp)).toEqual([join(tmp, "opencode.jsonc"), join(tmp, "config.json")]);
 });

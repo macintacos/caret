@@ -236,7 +236,7 @@ async function previewInstall(
     ? [
         "",
         previewLine(
-          await readVerdict({ configFile: setup.configFile, host: placed.version }, deps),
+          await readVerdict({ configFiles: [setup.configFile], host: placed.version }, deps),
         ),
       ]
     : [];
@@ -355,7 +355,7 @@ function previewLine(verdict: UpgradeVerdict): string {
 
 /** This run's upgrade check: the adapter's read, with the test seams threaded in. */
 async function readVerdict(
-  at: { configFile: string; host?: VersionTriple | null },
+  at: { configFiles: readonly string[]; host?: VersionTriple | null },
   deps: InstallOpencodeDeps,
 ): Promise<UpgradeVerdict> {
   return readUpgradeVerdict({ ...at, cacheDir: deps.cacheDir, published: deps.published });
@@ -376,7 +376,7 @@ async function upgradeStep(
     "Checking OpenCode's caret version",
     // After the write caret sits in the key its host loads, so the key alone picks the
     // cache layout.
-    () => readVerdict({ configFile }, deps),
+    () => readVerdict({ configFiles: [configFile] }, deps),
     upgradeVerdictLine,
   );
   if (verdict.kind === "unknown") {

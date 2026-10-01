@@ -30,7 +30,7 @@ function configWith(cfg: object): string {
 test("a config with no caret entry runs no check and never reads the host version", async () => {
   let asked = false;
   const checks = await readOpencodeChecks({
-    configFile: configWith({ plugin: ["opencode-wakatime"] }),
+    configFiles: [configWith({ plugin: ["opencode-wakatime"] })],
     opencodeVersion: () => {
       asked = true;
       return [2, 0, 18];
@@ -45,7 +45,7 @@ test("a checkout-only config gets the host check alone", async () => {
   mkdirSync(join(checkout, "opencode"), { recursive: true });
   writeFileSync(join(checkout, "opencode", "caret.plugin.ts"), "");
   const checks = await readOpencodeChecks({
-    configFile: configWith({ plugins: [`file:${checkout}`] }),
+    configFiles: [configWith({ plugins: [`file:${checkout}`] })],
     opencodeVersion: () => [2, 0, 18],
   });
   expect(checks.map((c) => c.id)).toEqual(["opencode-host"]);
@@ -61,11 +61,22 @@ test("a package entry gets both checks, the version read from the host's cache l
   );
   const checks = await withEnv({ XDG_CACHE_HOME: tmp }, () =>
     readOpencodeChecks({
-      configFile: configWith({ plugin: [PKG] }),
+      configFiles: [configWith({ plugin: [PKG] })],
       opencodeVersion: () => v2,
       published: async () => "0.9.0",
     }),
   );
   expect(checks.map((c) => c.id)).toEqual(["opencode-host", "opencode-caret-version"]);
   expect(checks[1]?.detail).toContain("0.8.0");
+});
+
+test("a caret entry in a later config file is found", async () => {
+  const jsonc = join(tmp, "opencode.jsonc");
+  writeFileSync(jsonc, JSON.stringify({ plugin: ["opencode-wakatime"] }));
+  const checks = await readOpencodeChecks({
+    configFiles: [jsonc, configWith({ plugin: [PKG] })],
+    opencodeVersion: () => [2, 0, 18],
+    published: async () => "0.9.0",
+  });
+  expect(checks.map((c) => c.id)).toEqual(["opencode-host", "opencode-caret-version"]);
 });

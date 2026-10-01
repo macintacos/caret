@@ -57,8 +57,8 @@ export function namespacedCommandFilename(sourceName: string): string {
 
 /** Config filenames OpenCode may use in its config dir, in the order caret prefers
  * to WRITE (jsonc first — OpenCode's documented primary form, edited in place so a
- * commented config survives; then json; then the legacy global `config.json`). The
- * doctor probe scans every one, so order doesn't mask a later file for reads. */
+ * commented config survives; then json; then the legacy global `config.json`). Readers
+ * scan every one that exists, in this order. */
 export const CONFIG_FILENAMES = ["opencode.jsonc", "opencode.json", "config.json"] as const;
 
 /** The OpenCode config dir: OPENCODE_CONFIG_DIR override, else
@@ -79,6 +79,12 @@ export function resolveConfigFile(configDir: string): string {
     if (existsSync(p)) return p;
   }
   return join(configDir, "opencode.json");
+}
+
+/** Every global config file that exists under `configDir`, in `CONFIG_FILENAMES` order:
+ * what install strips, uninstall clears, and doctor reads. */
+export function existingConfigFiles(configDir: string): string[] {
+  return CONFIG_FILENAMES.map((name) => join(configDir, name)).filter((p) => existsSync(p));
 }
 
 /** Absolute path to OpenCode's command dir under a config dir. */
