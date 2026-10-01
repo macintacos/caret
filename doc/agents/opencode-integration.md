@@ -460,7 +460,10 @@ included. That move is load-bearing: v2 concatenates a leftover `plugin` array a
 empties `plugins` deletes the key, because v1 below 1.18.16 rejects any `plugins` key,
 `[]` included; an emptied `plugin: []` stays. caret writes a bare string item, as v2's own
 `opencode plugin add` does, and every reader also accepts a `{ "package": … }` object
-item.
+item. A `file:` entry counts as caret's when it names a caret checkout or a tarball
+`npm pack` made of caret (`macintacos-caret-*.tgz`, judged by filename, never opened), so
+install and uninstall replace and remove it like any other caret entry, while the update
+check, which reads the package form only, skips it.
 
 v2 and an unreadable version write into the first of `opencode.jsonc` and `opencode.json`
 that exists, else create `opencode.json`, and never into `config.json`, which v2 ignores;
@@ -751,9 +754,6 @@ v1.18.15 and v1.18.29 from npm):
   service never sees a v2 caret root. Harmless: it stays on caret's owned copy.
 - A v1 below 1.18.16 and a v2 on one `PATH`, sharing a config: install probes only the
   first.
-- A `file:<tarball>` caret entry is not recognised as caret's (only the package and a
-  checkout are), so install adds a second entry beside it. `caret install` never writes
-  one.
 - `opencode/caret.plugin.ts`'s header still says caret loads from the `plugin` array.
 
 ## Sources
