@@ -472,6 +472,31 @@ test("a local entry that is not a caret checkout is another plugin's, and is kep
   expect(plugins()).toEqual([`file:${other}`, CARET_PACKAGE]);
 });
 
+test("a published install replaces a caret tarball entry", async () => {
+  seedPlugins([`file:${dir}/macintacos-caret-1.2.3.tgz`]);
+  await install();
+  expect(plugins()).toEqual([CARET_PACKAGE]);
+});
+
+test("--from-local replaces a caret tarball entry", async () => {
+  const repo = checkout("repo");
+  seedPlugins(["someone-else", `file:${dir}/macintacos-caret-1.2.3.tgz`]);
+  await installLocal(repo);
+  expect(plugins()).toEqual(["someone-else", `file:${repo}`]);
+});
+
+test("a tarball not named for caret is another plugin's, and is kept", async () => {
+  seedPlugins([`file:${dir}/other-plugin-1.0.0.tgz`]);
+  await install();
+  expect(plugins()).toEqual([`file:${dir}/other-plugin-1.0.0.tgz`, CARET_PACKAGE]);
+});
+
+test("uninstall removes a caret tarball entry", async () => {
+  seedPlugins(["someone-else", `file:${dir}/macintacos-caret-1.2.3.tgz`]);
+  await install(true);
+  expect(plugins()).toEqual(["someone-else"]);
+});
+
 test("uninstall removes a checkout entry, not just the npm package", async () => {
   const repo = checkout("repo");
   seedPlugins(["someone-else", `file:${repo}`]);

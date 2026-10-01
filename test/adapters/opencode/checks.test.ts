@@ -51,6 +51,14 @@ test("a checkout-only config gets the host check alone", async () => {
   expect(checks.map((c) => c.id)).toEqual(["opencode-host"]);
 });
 
+test("a tarball-only config gets the host check alone", async () => {
+  const checks = await readOpencodeChecks({
+    configFiles: [configWith({ plugins: [`file:${tmp}/macintacos-caret-1.2.3.tgz`] })],
+    opencodeVersion: () => [2, 0, 18],
+  });
+  expect(checks.map((c) => c.id)).toEqual(["opencode-host"]);
+});
+
 test("a package entry gets both checks, the version read from the host's cache layout", async () => {
   const v2: VersionTriple = [2, 0, 18];
   const gen = join(tmp, "opencode", "npm", `${PKG}@latest`, "1");
