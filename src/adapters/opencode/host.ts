@@ -94,10 +94,10 @@ export function readOpencodeHosts(
  * meaningful — all the key, config-filename, and cache-layout rules read — and each
  * rule answers null with what every OpenCode loads. */
 export function sharedHost(hosts: readonly OpencodeHost[]): VersionTriple | null {
-  const first = hosts[0]?.version ?? null;
-  if (first === null) return null;
-  return hosts.every((h) => h.version !== null && isV2Host(h.version) === isV2Host(first))
-    ? first
+  const firstVersion = hosts[0]?.version ?? null;
+  if (firstVersion === null) return null;
+  return hosts.every((h) => h.version !== null && isV2Host(h.version) === isV2Host(firstVersion))
+    ? firstVersion
     : null;
 }
 

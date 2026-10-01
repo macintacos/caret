@@ -28,19 +28,20 @@ export async function readOpencodeChecks(deps: {
   if (readCaretEntries(deps.configFiles, isCaretCheckout).length === 0) return [];
   const hosts = deps.opencodeHosts();
   // Only a known v2 ignores a file; an unreadable version can't say one is ignored.
-  const v2 = hosts.find((h) => isV2Host(h.version));
+  const v2Host = hosts.find((h) => isV2Host(h.version));
   const loadedFiles =
-    v2 === undefined ? deps.configFiles : loadedConfigFiles(deps.configFiles, v2.version);
+    v2Host === undefined ? deps.configFiles : loadedConfigFiles(deps.configFiles, v2Host.version);
   const ignored = deps.configFiles.filter(
     (f) => !loadedFiles.includes(f) && readCaretEntries([f], isCaretCheckout).length > 0,
   );
   const entries = readCaretEntries(loadedFiles, isCaretCheckout);
-  const host = hostCheck(hosts, [...new Set(entries.map((e) => e.key))], ignored);
-  if (entries.length === 0 || entries.every((e) => isLocalPluginSpecifier(e.spec))) return [host];
+  const hostResult = hostCheck(hosts, [...new Set(entries.map((e) => e.key))], ignored);
+  if (entries.length === 0 || entries.every((e) => isLocalPluginSpecifier(e.spec)))
+    return [hostResult];
   const verdict = await readUpgradeVerdict({
     configFiles: loadedFiles,
     host: sharedHost(hosts),
     published: deps.published,
   });
-  return [host, upgradeCheck(verdict)];
+  return [hostResult, upgradeCheck(verdict)];
 }
