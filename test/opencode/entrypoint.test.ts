@@ -4,9 +4,9 @@
 // on the FIRST export that isn't a plugin, so the entrypoint must expose EXACTLY
 // one value: the object both OpenCode v1 (`server`) and v2 (`setup`) load. These
 // tests pin that invariant, that a v2 load never evaluates v1's SDK, and the
-// package.json wiring (a bare specifier resolves
-// the package's `exports["."]`; v1's runtime import, `@opencode-ai/plugin`'s
-// `tool()`, must be a real dependency so OpenCode's `bun install` provides it).
+// package.json wiring (a bare specifier resolves the package's `exports["."]`; v1's
+// runtime import, `@opencode-ai/plugin`'s `tool()`, must be a real dependency so
+// OpenCode's `bun install` provides it).
 
 import { expect, test } from "bun:test";
 
