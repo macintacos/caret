@@ -1,5 +1,5 @@
 // Standing gate for the import-convention invariant (EXC-879). Every root the
-// test layer reaches now has an alias (@test, @scripts, @opencode, @ui,
+// test layer reaches now has an alias (@test, @scripts, @oc, @ui,
 // @root/package.json), so a `../` dance is no longer the only way to address a
 // cross-directory target — it is drift. `doc/agents/typescript-rules.md` states
 // the rule; this suite is what makes it falsifiable, so a reintroduced `../`

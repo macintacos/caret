@@ -3,8 +3,8 @@
 
 import { expect, test } from "bun:test";
 
-import type { ToastBody, ToastClient } from "@opencode/caret.plugin.ts";
-import { createCaretTui, type TuiContext } from "@opencode/caret.tui.ts";
+import type { ToastBody, ToastClient } from "@oc/caret.plugin.ts";
+import { createCaretTui, type TuiContext } from "@oc/caret.tui.ts";
 
 type Handler = Parameters<TuiContext["data"]["on"]>[1];
 

@@ -13,7 +13,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { buildEnvelope } from "@opencode/review-bridge.ts";
+import { buildEnvelope } from "@oc/review-bridge.ts";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { emitWire as emitWireVia } from "@test/support/wire-contract.ts";
 import { opencodeAdapter } from "@/adapters/opencode/index.ts";

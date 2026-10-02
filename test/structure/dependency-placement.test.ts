@@ -93,14 +93,17 @@ test("review-bridge.ts, which the CLI bundles, imports node builtins only and no
 });
 
 test("src/ reaches opencode/ only through review-bridge.ts, so the CLI bundle never pulls in the plugin SDK", () => {
+  // `@opencode/` is the real v2 plugin SDK's scope, which src/ must not import either.
   const specifiers = [...new Bun.Glob("**/*.ts").scanSync({ cwd: join(REPO_ROOT, "src") })].flatMap(
     (file) =>
       [
-        ...readFileSync(join(REPO_ROOT, "src", file), "utf-8").matchAll(/"(@opencode\/[^"]+)"/g),
+        ...readFileSync(join(REPO_ROOT, "src", file), "utf-8").matchAll(
+          /"((?:@oc|@opencode)\/[^"]+)"/g,
+        ),
       ].map((match) => match[1]),
   );
   expect(specifiers.length).toBeGreaterThan(0);
-  expect(new Set(specifiers)).toEqual(new Set(["@opencode/review-bridge.ts"]));
+  expect(new Set(specifiers)).toEqual(new Set(["@oc/review-bridge.ts"]));
 });
 
 test("the extractor reduces a subpath to its package name and keeps the scope", () => {

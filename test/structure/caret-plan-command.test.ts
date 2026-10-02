@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { REVIEW_TOOL } from "@opencode/caret.plugin.ts";
+import { REVIEW_TOOL } from "@oc/caret.plugin.ts";
 import pkg from "@root/package.json" with { type: "json" };
 import { MARKDOWN_READ_BY_TESTS } from "@scripts/preflight.ts";
 

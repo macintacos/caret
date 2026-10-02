@@ -4,13 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 
-import {
-  editChecks,
-  editPermitted,
-  evaluate,
-  type Rule,
-  wildcardMatch,
-} from "@opencode/permission.ts";
+import { editChecks, editPermitted, evaluate, type Rule, wildcardMatch } from "@oc/permission.ts";
 
 const HOME = "/home/u";
 const PROJECT = { directory: "/work/app", projectDirectory: "/work/app" };
