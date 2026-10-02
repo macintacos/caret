@@ -2,7 +2,7 @@
 // best-effort startup update-check toast (EXC-794). The plugin runs from the npm
 // package (array install), so it resolves its binary and version at runtime; on load
 // it checks caret's latest GitHub release and toasts a nudge when the user is
-// behind. All logic is exercised through injected env / fetch / file-read / client —
+// behind. All logic is exercised through injected env / fetch / file-read / toast sink —
 // no network, no real files.
 
 import { expect, test } from "bun:test";
@@ -10,16 +10,18 @@ import { expect, test } from "bun:test";
 import type { PluginInput } from "@opencode-ai/plugin";
 
 import {
-  createCaretPlugin,
   isNewer,
   parseLatestRelease,
   realUpdateChecker,
   resolveCaretBin,
   resolveCaretVersion,
   shouldCheckForUpdate,
+  type ToastBody,
+  type ToastSink,
   updateCheckCachePath,
   updateToastBody,
-} from "@oc/caret.plugin.ts";
+} from "@oc/caret.core.ts";
+import { createCaretPlugin } from "@oc/caret.plugin.ts";
 import { recordingClient } from "@test/support/opencode-toast-client.ts";
 
 // --- isNewer (inline semver) ---
@@ -67,22 +69,9 @@ test("updateToastBody returns a nudge when behind, null when current", () => {
 
 // --- resolveCaretVersion ---
 
-test("resolveCaretVersion prefers a substituted marker (file-deploy)", () => {
+test("resolveCaretVersion reads the sibling package.json", () => {
   expect(
     resolveCaretVersion({
-      marker: "0.3.0",
-      importMetaUrl: "file:///pkg/opencode/caret.plugin.ts",
-      readFile: () => {
-        throw new Error("should not read");
-      },
-    }),
-  ).toBe("0.3.0");
-});
-
-test("resolveCaretVersion reads the sibling package.json when the marker is a placeholder (array install)", () => {
-  expect(
-    resolveCaretVersion({
-      marker: "__CARET_VERSION__",
       importMetaUrl: "file:///pkg/opencode/caret.plugin.ts",
       readFile: (p) => {
         expect(p).toBe("/pkg/package.json");
@@ -94,7 +83,6 @@ test("resolveCaretVersion reads the sibling package.json when the marker is a pl
 
 test("resolveCaretVersion degrades to an unparseable sentinel when the package.json is unreadable (never nags)", () => {
   const v = resolveCaretVersion({
-    marker: "__CARET_VERSION__",
     importMetaUrl: "file:///pkg/opencode/caret.plugin.ts",
     readFile: () => {
       throw new Error("nope");
@@ -108,21 +96,12 @@ test("resolveCaretVersion degrades to an unparseable sentinel when the package.j
 
 // --- resolveCaretBin ---
 
-test("resolveCaretBin: env override wins, then marker, then package-relative bin", () => {
+test("resolveCaretBin: env override wins, then the package-relative bin", () => {
   const importMetaUrl = "file:///pkg/opencode/caret.plugin.ts";
-  expect(
-    resolveCaretBin({
-      env: { CARET_OPENCODE_BIN: "/override" },
-      marker: "/deployed",
-      importMetaUrl,
-    }),
-  ).toBe("/override");
-  expect(resolveCaretBin({ env: {}, marker: "/deployed/bin/caret", importMetaUrl })).toBe(
-    "/deployed/bin/caret",
+  expect(resolveCaretBin({ env: { CARET_OPENCODE_BIN: "/override" }, importMetaUrl })).toBe(
+    "/override",
   );
-  expect(resolveCaretBin({ env: {}, marker: "__CARET_BIN__", importMetaUrl })).toBe(
-    "/pkg/bin/caret",
-  );
+  expect(resolveCaretBin({ env: {}, importMetaUrl })).toBe("/pkg/bin/caret");
 });
 
 // --- shouldCheckForUpdate (24h throttle, pure) ---
@@ -177,14 +156,19 @@ function memCache(last: number | null = null): {
   };
 }
 
+function recordingSink(): { show: ToastSink; toasts: ToastBody[] } {
+  const toasts: ToastBody[] = [];
+  return { show: (body) => toasts.push(body), toasts };
+}
+
 /** Run realUpdateChecker against a genuinely newer release, expecting the
  * shared outcome — one toast, one stamped check — that every case below
  * differs from only by the cache's seeded last-check time. */
 async function checkAndExpectToast(
-  { client, toasts }: ReturnType<typeof recordingClient>,
+  { show, toasts }: ReturnType<typeof recordingSink>,
   { cache, writes }: ReturnType<typeof memCache>,
 ): Promise<void> {
-  await realUpdateChecker(client, {
+  await realUpdateChecker(show, {
     currentVersion: "0.3.0",
     env: {},
     fetchImpl: async () => jsonResponse({ tag_name: "v0.4.0", html_url: "https://x/0.4.0" }),
@@ -196,14 +180,14 @@ async function checkAndExpectToast(
 }
 
 test("realUpdateChecker toasts when a newer release exists, and stamps the check", async () => {
-  const recording = recordingClient();
-  await checkAndExpectToast(recording, memCache(null));
-  expect(recording.toasts[0]?.message).toContain("0.4.0");
+  const sink = recordingSink();
+  await checkAndExpectToast(sink, memCache(null));
+  expect(sink.toasts[0]?.message).toContain("0.4.0");
 });
 
 test("realUpdateChecker is silent when already current", async () => {
-  const { client, toasts } = recordingClient();
-  await realUpdateChecker(client, {
+  const { show, toasts } = recordingSink();
+  await realUpdateChecker(show, {
     currentVersion: "0.4.0",
     env: {},
     fetchImpl: async () => jsonResponse({ tag_name: "v0.4.0", html_url: "https://x" }),
@@ -214,15 +198,15 @@ test("realUpdateChecker is silent when already current", async () => {
 });
 
 test("realUpdateChecker is silent on a non-200 or a fetch error", async () => {
-  const { client, toasts } = recordingClient();
-  await realUpdateChecker(client, {
+  const { show, toasts } = recordingSink();
+  await realUpdateChecker(show, {
     currentVersion: "0.3.0",
     env: {},
     fetchImpl: async () => jsonResponse({ tag_name: "v0.4.0" }, false),
     now: fixedNow,
     cache: memCache(null).cache,
   });
-  await realUpdateChecker(client, {
+  await realUpdateChecker(show, {
     currentVersion: "0.3.0",
     env: {},
     fetchImpl: async () => {
@@ -235,10 +219,10 @@ test("realUpdateChecker is silent on a non-200 or a fetch error", async () => {
 });
 
 test("realUpdateChecker respects the CARET_OPENCODE_NO_UPDATE_CHECK opt-out (and never stamps)", async () => {
-  const { client, toasts } = recordingClient();
+  const { show, toasts } = recordingSink();
   const { cache, writes } = memCache(null);
   let fetched = false;
-  await realUpdateChecker(client, {
+  await realUpdateChecker(show, {
     currentVersion: "0.3.0",
     env: { CARET_OPENCODE_NO_UPDATE_CHECK: "1" },
     fetchImpl: async () => {
@@ -254,9 +238,9 @@ test("realUpdateChecker respects the CARET_OPENCODE_NO_UPDATE_CHECK opt-out (and
 });
 
 test("realUpdateChecker skips the network when it checked within the last day", async () => {
-  const { client, toasts } = recordingClient();
+  const { show, toasts } = recordingSink();
   let fetched = false;
-  await realUpdateChecker(client, {
+  await realUpdateChecker(show, {
     currentVersion: "0.3.0",
     env: {},
     fetchImpl: async () => {
@@ -271,13 +255,12 @@ test("realUpdateChecker skips the network when it checked within the last day", 
 });
 
 test("realUpdateChecker checks again once a day has passed", async () => {
-  await checkAndExpectToast(recordingClient(), memCache(NOW - 25 * 60 * 60_000)); // 25h ago
+  await checkAndExpectToast(recordingSink(), memCache(NOW - 25 * 60 * 60_000)); // 25h ago
 });
 
 test("realUpdateChecker stamps the check even when the fetch fails, so it backs off a day", async () => {
-  const { client } = recordingClient();
   const { cache, writes } = memCache(null);
-  await realUpdateChecker(client, {
+  await realUpdateChecker(() => {}, {
     currentVersion: "0.3.0",
     env: {},
     fetchImpl: async () => {
@@ -310,4 +293,31 @@ test("createCaretPlugin fires checkUpdate at load only when wired", async () => 
   });
   await bare({ client: undefined } as unknown as PluginInput);
   expect(called).toBe(1);
+});
+
+test("createCaretPlugin's update check toasts through the v1 client", async () => {
+  let updateCheck: Promise<void> | undefined;
+  const plugin = createCaretPlugin({
+    bin: "caret",
+    run: async () => ({ stdout: "{}", exitCode: 0 }),
+    checkUpdate: (show) => {
+      updateCheck = realUpdateChecker(show, {
+        currentVersion: "0.3.0",
+        env: {},
+        fetchImpl: async () => jsonResponse({ tag_name: "v0.4.0", html_url: "https://x/0.4.0" }),
+        now: fixedNow,
+        cache: memCache(null).cache,
+      });
+    },
+  });
+  const { client, toasts } = recordingClient();
+  await plugin({ client } as unknown as PluginInput);
+  await updateCheck;
+  expect(toasts).toEqual([
+    {
+      title: "caret update available",
+      message: "caret 0.4.0 is available (you have 0.3.0). https://x/0.4.0",
+      variant: "info",
+    },
+  ]);
 });

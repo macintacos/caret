@@ -3,12 +3,12 @@
 
 import { expect, test } from "bun:test";
 
-import type { ToastBody, ToastClient } from "@oc/caret.plugin.ts";
+import type { ToastBody, ToastSink } from "@oc/caret.core.ts";
 import { createCaretTui, type TuiContext } from "@oc/caret.tui.ts";
 
 type Handler = Parameters<TuiContext["data"]["on"]>[1];
 
-function fakeTui(show: (body: ToastBody) => void = () => {}) {
+function fakeTui(show: ToastSink = () => {}) {
   const handlers = new Map<string, Handler>();
   const shown: ToastBody[] = [];
   let unsubscribed = 0;
@@ -25,7 +25,7 @@ function fakeTui(show: (body: ToastBody) => void = () => {}) {
       toast: {
         show: (body) => {
           shown.push(body);
-          show(body);
+          return show(body);
         },
       },
     },
@@ -35,7 +35,7 @@ function fakeTui(show: (body: ToastBody) => void = () => {}) {
   return { ctx, shown, emit, unsubscribed: () => unsubscribed };
 }
 
-function start(checkUpdate: (client: ToastClient) => void = () => {}) {
+function start(checkUpdate: (show: ToastSink) => void = () => {}) {
   const fake = fakeTui();
   const cleanup = createCaretTui({ checkUpdate })(fake.ctx);
   return { ...fake, cleanup };
@@ -91,6 +91,21 @@ test("a throwing toast surface does not escape a handler", () => {
   expect(() => fake.emit("session.tool.progress", "C", { caretUrl: URL })).not.toThrow();
 });
 
+test("a rejecting toast surface leaves no unhandled rejection", async () => {
+  const unhandled: unknown[] = [];
+  const record = (reason: unknown) => unhandled.push(reason);
+  process.on("unhandledRejection", record);
+  try {
+    const fake = fakeTui(() => Promise.reject(new Error("x")));
+    createCaretTui({ checkUpdate: () => {} })(fake.ctx);
+    fake.emit("session.tool.progress", "C", { caretUrl: URL });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(unhandled).toEqual([]);
+  } finally {
+    process.off("unhandledRejection", record);
+  }
+});
+
 test("a throwing update check does not escape setup", () => {
   const fake = fakeTui();
   expect(() =>
@@ -102,12 +117,12 @@ test("a throwing update check does not escape setup", () => {
   ).not.toThrow();
 });
 
-test("the update check runs once on a client that toasts through the TUI", () => {
-  const clients: ToastClient[] = [];
-  const { shown } = start((client) => clients.push(client));
-  expect(clients).toHaveLength(1);
+test("the update check runs once on a sink that toasts through the TUI", () => {
+  const sinks: ToastSink[] = [];
+  const { shown } = start((show) => sinks.push(show));
+  expect(sinks).toHaveLength(1);
   const body: ToastBody = { message: "caret 9.9.9 is available", variant: "info" };
-  clients[0]?.tui?.showToast?.({ body });
+  sinks[0]?.(body);
   expect(shown).toEqual([body]);
 });
 

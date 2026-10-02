@@ -1,5 +1,5 @@
 // caret's OpenCode v2 plugin: the `setup` half of the dual default export in index.ts.
-// A thin adapter over the shared review core in caret.plugin.ts. The v2 SDK shapes it
+// A thin adapter over the shared review core in caret.core.ts. The v2 SDK shapes it
 // uses are declared locally, so the shipped source names no package a consumer's install
 // lacks; test/opencode/sdk-conformance.ts pins them to `@opencode/plugin`. Never import a
 // value from that SDK here: its entry pulls Effect, and v1 hosts load this file too.
@@ -9,7 +9,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import {
-  CARET_BIN,
   CARET_DECISION_KEY,
   CARET_URL_KEY,
   isPlanningAgent,
@@ -23,7 +22,7 @@ import {
   resolvePlansDir,
   runPlanReview,
   type WarmRunner,
-} from "./caret.plugin.ts";
+} from "./caret.core.ts";
 import { editPermitted, type Rule } from "./permission.ts";
 import { decisionText, nodeSpawnRunner, type SpawnRunner } from "./review-bridge.ts";
 
@@ -230,7 +229,7 @@ export function createCaretSetup(opts: {
 
 /** The v2 `setup` OpenCode loads, wired to the production runners. */
 const setup = createCaretSetup({
-  bin: resolveCaretBin({ env: process.env, marker: CARET_BIN, importMetaUrl: import.meta.url }),
+  bin: resolveCaretBin({ env: process.env, importMetaUrl: import.meta.url }),
   run: nodeSpawnRunner,
   warm: nodeWarmRunner,
   plansDir: resolvePlansDir({

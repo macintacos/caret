@@ -23,10 +23,10 @@ const NPM_LATEST_URL = `https://registry.npmjs.org/${pkg.name}/latest`;
 /** GitHub's newest published release for caret — the answer for a compiled binary,
  * which npm never served.
  *
- * A deliberate twin of the URL in `opencode/caret.plugin.ts`: that file is
- * self-contained by contract (its only imports are node builtins and
- * `@opencode-ai/plugin`, so OpenCode can load it straight out of the package cache)
- * and therefore cannot import from `src/`. */
+ * A deliberate twin of the URL in `opencode/caret.core.ts`: that file is
+ * self-contained by contract (its only imports are node builtins and its sibling
+ * `review-bridge.ts`, so OpenCode can load it straight out of the package cache) and
+ * therefore cannot import from `src/`. */
 const LATEST_RELEASE_URL = "https://api.github.com/repos/macintacos/caret/releases/latest";
 
 /** GitHub's commit comparison, `<commit>...trunk`: `ahead_by` is how many commits

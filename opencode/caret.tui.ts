@@ -11,10 +11,10 @@ import {
   productionUpdateCheck,
   type ReviewOutcome,
   reviewLinkToast,
-  showToast,
   type ToastBody,
-  type ToastClient,
-} from "./caret.plugin.ts";
+  type ToastSink,
+  toastBestEffort,
+} from "./caret.core.ts";
 
 type ToolEvent = { data: { id: string; metadata?: Record<string, unknown> } };
 
@@ -32,12 +32,12 @@ export type TuiContext = {
 
 /** Build caret's v2 TUI `setup` over an injected update check. */
 export function createCaretTui(opts: {
-  checkUpdate: (client: ToastClient) => void;
+  checkUpdate: (show: ToastSink) => void;
 }): (ctx: TuiContext) => () => void {
   return (ctx) => {
-    const client: ToastClient = { tui: { showToast: ({ body }) => ctx.ui.toast.show(body) } };
+    const show: ToastSink = (body) => ctx.ui.toast.show(body);
     try {
-      opts.checkUpdate(client);
+      opts.checkUpdate(show);
     } catch {
       // best-effort
     }
@@ -45,14 +45,14 @@ export function createCaretTui(opts: {
     // Tool events carry the call id, not the tool name: only calls that showed a link count.
     const callsWithLink = new Set<string>();
     const settle = (id: string, outcome: ReviewOutcome) => {
-      if (callsWithLink.delete(id)) showToast(client, decisionToast(outcome));
+      if (callsWithLink.delete(id)) toastBestEffort(show, decisionToast(outcome));
     };
     const unsubscribers = [
       ctx.data.on("session.tool.progress", ({ data }) => {
         const url = data.metadata?.[CARET_URL_KEY];
         if (typeof url !== "string") return;
         callsWithLink.add(data.id);
-        showToast(client, reviewLinkToast(url));
+        toastBestEffort(show, reviewLinkToast(url));
       }),
       ctx.data.on("session.tool.success", ({ data }) => {
         const decision = data.metadata?.[CARET_DECISION_KEY];
