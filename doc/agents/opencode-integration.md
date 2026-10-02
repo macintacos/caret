@@ -611,10 +611,15 @@ v1 plugin, `caret.plugin.ts`'s default) and ignores `setup` (the v2 plugin,
 accept. The v1 floor is **1.3.4**, the first v1 loader that reads an object default's
 `server`; an older v1 sees a non-function export and fails to load the plugin.
 
-`@opencode/plugin` (v2's plugin API) is a `dependency` but imported **for types only**.
-Its `Plugin.define` is the identity function, and its runtime entry would pull Effect and
-OpenCode's client into the module graph — which `index.ts → caret.plugin.v2.ts` loads on
-v1 hosts too.
+`@opencode/plugin` (v2's plugin API) is a `devDependency`, never imported from
+`opencode/`: its runtime entry would pull Effect and OpenCode's client into the module
+graph, which `index.ts → caret.plugin.v2.ts` loads on v1 hosts too. The placement gate
+ignores statements TypeScript erases, so even an `import type` from it would not need a
+`dependency` ([`dependency-rules.md`](dependency-rules.md#where-a-new-package-goes) §
+Where a new package goes); the two files declare the v2 members they use as local
+structural types instead, and `test/opencode/sdk-conformance.ts` pins them inside the tsc
+program: what the host passes must fit each slice, and what caret exports must fit what
+the host loads.
 
 **v2's toasts live in a second module, `opencode/caret.tui.ts`, under
 `exports["./tui"]`.** v2's server `Context` has no toast surface; toasts belong to a TUI

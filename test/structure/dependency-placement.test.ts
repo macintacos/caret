@@ -25,7 +25,7 @@ import { isBuiltin } from "node:module";
 import { join } from "node:path";
 
 import pkg from "@root/package.json" with { type: "json" };
-import { importSpecifiers } from "@test/support/import-specifiers.ts";
+import { runtimeImportSpecifiers } from "@test/support/import-specifiers.ts";
 
 // From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
@@ -42,13 +42,11 @@ const SHIPPED_GLOB = "**/*.{ts,mts,cts,js,mjs,cjs}";
  * builtins are dropped; a subpath is reduced to its package name (`@scope/pkg/sub` to
  * `@scope/pkg`, `pkg/sub` to `pkg`), which is the unit `package.json` declares. The
  * extractor's limits (double quotes only, raw source) are exhaustive here: a template-
- * literal or `require()` specifier has no place in an ESM plugin. A type-only import
- * counts: types are erased before a consumer runs anything, so this is strict in the
- * safe direction; keep `opencode/` free of `import type` from a package you would not
- * want every consumer to download.
+ * literal or `require()` specifier has no place in an ESM plugin. Statements TypeScript
+ * erases whole do not count (`runtimeImportSpecifiers`).
  */
 function importedPackages(source: string): string[] {
-  return importSpecifiers(source)
+  return runtimeImportSpecifiers(source)
     .filter((spec) => !spec.startsWith(".") && !spec.startsWith("/") && !isBuiltin(spec))
     .map((spec) =>
       spec

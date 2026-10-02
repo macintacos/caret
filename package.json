@@ -52,6 +52,7 @@
     "@laststance/tailwind-suggest-canonical-classes": "^0.1.1",
     "@lezer/highlight": "^1.2.3",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@opencode/plugin": "^2.0.18",
     "@pierre/diffs": "1.3.6",
     "@pierre/trees": "1.0.0-beta.6",
     "@playwright/test": "^1.62.1",
@@ -85,8 +86,7 @@
     "zod": "^4.4.3"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "^1.18.17",
-    "@opencode/plugin": "^2.0.18"
+    "@opencode-ai/plugin": "^1.18.17"
   },
   "pinned": {
     "//": "bun.lock is committed, so it is what pins every dependency exactly; a range above is the upgrade policy, not the resolved version. A bare version therefore means `bun update` must never move this one on its own, and these entries are the whole set. Everything else takes a range deliberately — zod and the TOML parser reading the config.toml trust boundary included: the lockfile already holds them, so a range costs no reproducibility and keeps them visible to an upgrade sweep. test/structure/exact-pin.test.ts fails on an exact pin with no reason, and on a reason that outlived its pin.",
