@@ -3,12 +3,12 @@
 // iterates a plugin module's exports (Object.values) and rejects the whole module
 // on the FIRST export that isn't a plugin, so the entrypoint must expose EXACTLY
 // one value: the object both OpenCode v1 (`server`) and v2 (`setup`) load. These
-// tests pin that invariant and the package.json wiring (a bare specifier resolves
+// tests pin that invariant, that a v2 load never evaluates v1's SDK, and the
+// package.json wiring (a bare specifier resolves
 // the package's `exports["."]`; v1's runtime import, `@opencode-ai/plugin`'s
 // `tool()`, must be a real dependency so OpenCode's `bun install` provides it).
 
 import { expect, test } from "bun:test";
-import { join } from "node:path";
 
 import v2Setup from "@oc/caret.plugin.v2.ts";
 import pkgJson from "@root/package.json" with { type: "json" };
@@ -40,16 +40,15 @@ test("the OpenCode package entrypoint exports one plugin serving both v1 (server
   expect(plugin.tui).toBeUndefined();
 });
 
-// From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
-const REPO_ROOT = join(import.meta.dir, "..", "..");
-const ENTRY = join(REPO_ROOT, "opencode", "index.ts");
-const V1 = join(REPO_ROOT, "opencode", "caret.plugin.ts");
+const ENTRY = Bun.resolveSync("@oc/index.ts", import.meta.dir);
+const V1 = Bun.resolveSync("@oc/caret.plugin.ts", import.meta.dir);
 
 /** Runs `script` in a fresh bun, whose module registry this file's imports haven't touched. */
 function inFreshBun(script: string): string {
   const { exitCode, stdout, stderr } = Bun.spawnSync([process.execPath, "-e", script], {
-    cwd: REPO_ROOT,
-    env: { ...process.env },
+    // Bun hands a child its startup env unless given one, which drops the XDG preload's
+    // redirect; the opt-out keeps a server() that reaches the real v1 plugin offline.
+    env: { ...process.env, CARET_OPENCODE_NO_UPDATE_CHECK: "1" },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -71,14 +70,22 @@ test("a v2 load — index.ts plus setup() — never evaluates @opencode-ai/plugi
 });
 
 test("server() rejects when the v1 module fails to load, never swallowing it", () => {
-  const out = inFreshBun(`
+  const out = inFreshBun(String.raw`
     Bun.plugin({ name: "fail-v1", setup(build) {
-      build.onLoad({ filter: /caret\\.plugin\\.ts$/ }, () => { throw new Error("v1 load failed"); });
+      build.onLoad({ filter: /caret\.plugin\.ts$/ }, () => { throw new Error("v1 load failed"); });
     } });
     const { default: plugin } = await import(${JSON.stringify(ENTRY)});
     console.log(await plugin.server({}).then(() => "resolved", (e) => e.message));
   `);
   expect(out.trim()).toBe("v1 load failed");
+});
+
+test("server() resolves the v1 plugin's hooks", () => {
+  const out = inFreshBun(`
+    const { default: plugin } = await import(${JSON.stringify(ENTRY)});
+    console.log(JSON.stringify(Object.keys((await plugin.server({})).tool ?? {})));
+  `);
+  expect(JSON.parse(out)).toEqual(["caret_review_plan"]);
 });
 
 test('package.json entrypoint resolves to the OpenCode plugin so `plugin: ["@macintacos/caret"]` loads', () => {

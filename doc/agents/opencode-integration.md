@@ -664,21 +664,23 @@ no, agent switching mid-session); the `chat.message` warm hook (warms for the pl
 only — not for a build or unknown caller — even though it records every session's agent)
 and the production warm runner it hides (survives a bad binary's async spawn error, and
 runs `prewarm` with `CARET_AGENT=opencode`); the entrypoint's
-`Object.values`-single-Plugin invariant; the config-array editor (add/remove,
-comment-preserving); target selection + dispatch; the `claude` target's CLI command
-sequence; the runtime bin/version resolvers; and the update check (toasts when behind,
-silent on error / opt-out). On v2 they also cover the permission evaluator, the tool's
-registration (`codemode: false`, JSON Schema input), steer and prewarm gating,
-evaluate-then-refuse on `path`, the subagent refusal and its fail-open, the `context`-hook
-tool removal and its fail-open, the plan-agent allow and its agent-and-session skip, the
-default agent the warm and allow resolve from `ctx.agent.list()` (failing closed on an
-unreadable or empty list and on a non-plan default), the TUI half's toasts and update
-check, abort on both hosts, and v1↔v2 parity of the refusal texts. For the plugin key they
-cover the host probe's 5 s bound (a grandchild holding stdout included), key selection and
-the one-transform move, deleting `plugins` without losing comments (a trailing comma and
-CRLF included), v2 cache reads and clears, the service launcher's pick of v2's live
-generation (bash and TS against one shared fixture), and doctor's `opencode-host` and
-`opencode-caret-version` checks and their gating.
+`Object.values`-single-Plugin invariant and its lazy `server` (a v2 load never evaluates
+`@opencode-ai/plugin`; a failed import of the v1 module rejects `server()`); the
+config-array editor (add/remove, comment-preserving); target selection + dispatch; the
+`claude` target's CLI command sequence; the runtime bin/version resolvers; and the update
+check (toasts when behind, silent on error / opt-out). On v2 they also cover the
+permission evaluator, the tool's registration (`codemode: false`, JSON Schema input),
+steer and prewarm gating, evaluate-then-refuse on `path`, the subagent refusal and its
+fail-open, the `context`-hook tool removal and its fail-open, the plan-agent allow and its
+agent-and-session skip, the default agent the warm and allow resolve from
+`ctx.agent.list()` (failing closed on an unreadable or empty list and on a non-plan
+default), the TUI half's toasts and update check, abort on both hosts, and v1↔v2 parity of
+the refusal texts. For the plugin key they cover the host probe's 5 s bound (a grandchild
+holding stdout included), key selection and the one-transform move, deleting `plugins`
+without losing comments (a trailing comma and CRLF included), v2 cache reads and clears,
+the service launcher's pick of v2's live generation (bash and TS against one shared
+fixture), and doctor's `opencode-host` and `opencode-caret-version` checks and their
+gating.
 
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
 the array install's LOCAL form, which is what ties the run to that plugin version: a
@@ -750,6 +752,9 @@ update plan files unless the user explicitly asks" reminder — a mock model can
 The default-agent resolution: a user whose default agent is `plan` gets the warm and the
 allow, awaiting its live check (EXC-1535). That the allow follows a plan session switched
 to another agent was not observed directly.
+
+**v1 follow-up.** v1 loading through the lazy `server`, which imports `caret.plugin.ts` on
+its first call, awaits its live check (EXC-1535); the v1.18.29 runs above predate it.
 
 **Confirmed live for EXC-1520** (isolated `HOME` + `XDG_*`; v2.0.18 from Homebrew,
 v1.18.15 and v1.18.29 from npm):
