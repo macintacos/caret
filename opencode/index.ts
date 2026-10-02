@@ -5,9 +5,10 @@
 // namespace stays exactly `{ default }`. `server` imports the v1 plugin on its first call,
 // so a v2 load never evaluates `@opencode-ai/plugin`; v1 only checks that `server` is a
 // function (anomalyco/opencode@v1.3.4 packages/opencode/src/plugin/shared.ts:142).
-import type v1 from "./caret.plugin.ts";
+import type v1Plugin from "./caret.plugin.ts";
 import setup from "./caret.plugin.v2.ts";
 
-const server: typeof v1 = async (...args) => (await import("./caret.plugin.ts")).default(...args);
+const server: typeof v1Plugin = async (...args) =>
+  (await import("./caret.plugin.ts")).default(...args);
 
 export default { id: "caret", setup, server };

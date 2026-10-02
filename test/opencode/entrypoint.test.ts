@@ -58,12 +58,12 @@ function inFreshBun(script: string): string {
 
 test("a v2 load — index.ts plus setup() — never evaluates @opencode-ai/plugin", () => {
   const out = inFreshBun(`
-    const v1Sdk = () => Object.keys(require.cache).filter((k) => k.includes("/@opencode-ai/plugin/"));
+    const loadedV1SdkModules = () => Object.keys(require.cache).filter((k) => k.includes("/@opencode-ai/plugin/"));
     const { default: plugin } = await import(${JSON.stringify(ENTRY)});
     await plugin.setup({ tool: { transform: async () => {} }, session: { hook: async () => {} } });
-    const afterSetup = v1Sdk();
+    const afterSetup = loadedV1SdkModules();
     await import(${JSON.stringify(V1)});
-    console.log(JSON.stringify({ afterSetup, seenOnceImported: v1Sdk().length > 0 }));
+    console.log(JSON.stringify({ afterSetup, seenOnceImported: loadedV1SdkModules().length > 0 }));
   `);
   // seenOnceImported proves the probe sees the SDK at all, so an empty afterSetup is real.
   expect(JSON.parse(out)).toEqual({ afterSetup: [], seenOnceImported: true });
