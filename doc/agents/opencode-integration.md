@@ -608,11 +608,13 @@ namespace is exactly `{ default }`, and `package.json` `exports` `.` points at i
 `test/opencode/entrypoint.test.ts` asserts it.
 
 **One default serves both runtimes: `{ id: "caret", setup, server }`.** OpenCode v2
-decodes `default` as `{ id, setup }` and ignores the extra `server`; v1 runs `server` (the
-v1 plugin, `caret.plugin.ts`'s default) and ignores `setup` (the v2 plugin,
-`caret.plugin.v2.ts`'s default). `id` is a fixed whitespace-free string both loaders
-accept. The v1 floor is **1.3.4**, the first v1 loader that reads an object default's
-`server`; an older v1 sees a non-function export and fails to load the plugin.
+decodes `default` as `{ id, setup }` and ignores the extra `server`; v1 runs `server` and
+ignores `setup` (the v2 plugin, `caret.plugin.v2.ts`'s default). `id` is a fixed
+whitespace-free string both loaders accept. `server` imports `caret.plugin.ts` on its
+first call and delegates to its default, so a v2 load never evaluates
+`@opencode-ai/plugin` (or its zod); v1's loader only checks that `server` is a function
+before awaiting it. The v1 floor is **1.3.4**, the first v1 loader that reads an object
+default's `server`; an older v1 sees a non-function export and fails to load the plugin.
 
 `@opencode/plugin` (v2's plugin API) is a `devDependency`, never imported from
 `opencode/`: its runtime entry would pull Effect and OpenCode's client into the module
@@ -809,6 +811,9 @@ v1.18.15 and v1.18.29 from npm):
   (`anomalyco/opencode@v1.3.4:packages/opencode/src/config/config.ts:1093`) and rejects
   `plugins` until `compare/v1.18.15...v1.18.16` removes `topLevelExtraKeys`
   (`packages/opencode/src/config/parse.ts`).
+- v1 plugin loader (`anomalyco/opencode@v1.3.4`): `readV1Plugin`
+  `packages/opencode/src/plugin/shared.ts:127-158`; `applyPlugin` and the sequential
+  per-instance load `packages/opencode/src/plugin/index.ts:171-182, 236-257`.
 - v1 TUI plugins (`anomalyco/opencode@v1.18.29`):
   `packages/opencode/specs/tui-plugins.md`, loader
   `packages/opencode/src/plugin/shared.ts`.
