@@ -20,8 +20,9 @@
 // under v1's `plugin` config key or v2's `plugins` key (v2 reads both, legacy `plugin`
 // first). OpenCode imports the package entry, index.ts, whose default
 // `{ id, setup, server }` serves both SDKs: v2 runs `setup` (caret.plugin.v2.ts, plus
-// caret.tui.ts from `exports["./tui"]`), and v1 (1.3.4+) runs `server`, which is this
-// file's default. Its imports are node builtins, caret.core.ts, review-bridge.ts, and
+// caret.tui.ts from `exports["./tui"]`), and v1 (1.3.4+) runs `server`, which imports
+// this file on its first call and delegates to its default, so a v2 load never evaluates
+// it. Its imports are node builtins, caret.core.ts, review-bridge.ts, and
 // @opencode-ai/plugin (resolved by OpenCode at runtime). Which ctx/tool/config shapes are
 // live-verified and which are not:
 // doc/agents/opencode-integration.md § Verified vs. follow-up.
@@ -281,7 +282,7 @@ export function createCaretPlugin(
   };
 }
 
-/** caret's OpenCode v1 plugin (the `server` half of index.ts's default), wiring the
+/** caret's OpenCode v1 plugin, which index.ts's lazy `server` delegates to, wired to the
  * production update checker. */
 const CaretPlugin: Plugin = createCaretPlugin({ checkUpdate: productionUpdateCheck });
 export default CaretPlugin;
