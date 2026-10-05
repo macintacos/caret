@@ -22,16 +22,16 @@ export class DaemonAuthError extends Error {}
  * caret's challenge throws DaemonAuthError, any other 401 is returned as is. The
  * token is re-read on every call so a re-mint is picked up. */
 export async function daemonFetch(url: string, init: RequestInit = {}): Promise<Response> {
-  const file = daemonTokenFile();
-  const token = readToken(file);
+  const tokenFile = daemonTokenFile();
+  const token = readToken(tokenFile);
   const headers = new Headers(init.headers);
   if (token !== null) headers.set("Authorization", `Bearer ${token}`);
   const res = await fetch(url, { ...init, headers });
   if (res.status !== 401 || res.headers.get("www-authenticate") !== AUTH_CHALLENGE) return res;
   throw new DaemonAuthError(
     token === null
-      ? `the daemon requires a token, but ${file} does not exist or cannot be read; restart the caret daemon to mint one, or check that XDG_STATE_HOME matches the caret service's`
-      : `the daemon rejected the token in ${file}; check that XDG_STATE_HOME matches the caret service's`,
+      ? `the daemon requires a token, but ${tokenFile} does not exist or cannot be read; restart the caret daemon to mint one, or check that XDG_STATE_HOME matches the caret service's`
+      : `the daemon rejected the token in ${tokenFile}; check that XDG_STATE_HOME matches the caret service's`,
   );
 }
 

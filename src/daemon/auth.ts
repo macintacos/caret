@@ -25,7 +25,7 @@ function matches(candidate: string | null | undefined, token: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function bearer(req: Request): string | null {
+function bearerToken(req: Request): string | null {
   const header = req.headers.get("authorization");
   return header?.startsWith("Bearer ") ? header.slice(7) : null;
 }
@@ -68,7 +68,9 @@ export function authGate(
 ): Response | null {
   const presented = url.searchParams.get("token");
   if (req.method === "GET" && presented !== null) return login(url, presented, auth);
-  const cookie = new Bun.CookieMap(req.headers.get("cookie") ?? "").get(authCookieName(auth.port));
-  if (matches(bearer(req), auth.token) || matches(cookie, auth.token)) return null;
+  const cookieToken = new Bun.CookieMap(req.headers.get("cookie") ?? "").get(
+    authCookieName(auth.port),
+  );
+  if (matches(bearerToken(req), auth.token) || matches(cookieToken, auth.token)) return null;
   return reject(url);
 }

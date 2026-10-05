@@ -288,11 +288,11 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
       const url = `http://127.0.0.1:${port}`;
       const token = auth ? readToken(tokenFile) : null;
       if (auth && token === null) throw new Error(`caret daemon wrote no token to ${tokenFile}`);
-      const headers = (extra: Record<string, string> = {}): Record<string, string> =>
+      const authHeaders = (extra: Record<string, string> = {}): Record<string, string> =>
         token === null ? extra : { ...extra, Authorization: `Bearer ${token}` };
       // The same budget again, spent as probes rather than as a deadline (see
       // E2EOptions).
-      await awaitHealthy(url, headers(), Math.ceil(bootTimeoutMs / 50));
+      await awaitHealthy(url, authHeaders(), Math.ceil(bootTimeoutMs / 50));
 
       await use({
         url,
@@ -300,7 +300,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
         async seed(input?: PlanInput) {
           const res = await fetch(`${url}/api/reviews`, {
             method: "POST",
-            headers: headers({ "Content-Type": "application/json" }),
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify({
               sessionId: randomUUID(),
               cwd: "/tmp/caret-e2e",
@@ -314,27 +314,27 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
         async putDraft(id: string, body: DraftBody) {
           const res = await fetch(`${url}/api/reviews/${encodeURIComponent(id)}/draft`, {
             method: "PUT",
-            headers: headers({ "Content-Type": "application/json" }),
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify(body),
           });
           if (!res.ok) throw new Error(`putDraft failed: PUT /draft → ${res.status}`);
         },
         async getReview(id: string) {
           const res = await fetch(`${url}/api/reviews/${encodeURIComponent(id)}`, {
-            headers: headers(),
+            headers: authHeaders(),
           });
           if (!res.ok) return { status: res.status };
           return { status: res.status, body: (await res.json()) as ClientReview };
         },
         async listReviews() {
-          const res = await fetch(`${url}/api/reviews`, { headers: headers() });
+          const res = await fetch(`${url}/api/reviews`, { headers: authHeaders() });
           if (!res.ok) throw new Error(`GET /api/reviews → ${res.status}`);
           return (await res.json()) as ClientReview[];
         },
         async resolve(id: string, behavior: "allow" | "deny", feedback?: string) {
           const res = await fetch(`${url}/api/reviews/${encodeURIComponent(id)}/resolve`, {
             method: "POST",
-            headers: headers({ "Content-Type": "application/json" }),
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify({ behavior, ...(feedback === undefined ? {} : { feedback }) }),
           });
           if (!res.ok) throw new Error(`resolve failed: POST /resolve → ${res.status}`);
@@ -342,7 +342,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
         async setConfig(patch: ConfigPatch) {
           const res = await fetch(`${url}/api/config`, {
             method: "POST",
-            headers: headers({ "Content-Type": "application/json" }),
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify(patch),
           });
           if (!res.ok) throw new Error(`setConfig failed: POST /api/config → ${res.status}`);
@@ -354,7 +354,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
             if (v > 0) await this.resolve(id, "deny", "next revision");
             const res = await fetch(`${url}/api/reviews`, {
               method: "POST",
-              headers: headers({ "Content-Type": "application/json" }),
+              headers: authHeaders({ "Content-Type": "application/json" }),
               body: JSON.stringify({ sessionId, cwd, plan: plans[v] }),
             });
             if (!res.ok) throw new Error(`seedVersions failed: POST /api/reviews → ${res.status}`);
@@ -369,7 +369,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
           await this.resolve(id, "deny", "next revision");
           const res = await fetch(`${url}/api/reviews`, {
             method: "POST",
-            headers: headers({ "Content-Type": "application/json" }),
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify({ sessionId, cwd: "/tmp/caret-e2e", plan }),
           });
           if (!res.ok) throw new Error(`addVersion failed: POST /api/reviews → ${res.status}`);
