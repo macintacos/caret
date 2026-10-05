@@ -199,10 +199,10 @@ could see, which left the one deadline a genuinely slow host hits *first* as the
 deadline nobody could tune. Read it as one number spent twice rather than as a total: the
 stdout port handshake takes it as a real deadline, then the `/health` poll spends it again
 as `bootTimeoutMs / 50` probes. That second half is an **attempt count, not a clock** —
-`httpHealth` carries its own 500ms abort, so against a daemon that listens but never
-answers the poll runs well past the number and the per-test budget is what fires.
-Re-derive it like the others: it is a process spawn plus an HTTP handshake, so it moves
-with host load and with nothing in the app.
+each probe carries its own 500ms abort, so against a daemon that listens but never answers
+the poll runs well past the number and the per-test budget is what fires. Re-derive it
+like the others: it is a process spawn plus an HTTP handshake, so it moves with host load
+and with nothing in the app.
 
 Two rules follow, and both are about direction rather than magnitude:
 

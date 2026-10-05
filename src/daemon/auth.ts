@@ -10,8 +10,11 @@ const REJECTION_PAGE =
   "<!doctype html><title>caret</title><p>This caret daemon requires sign-in. " +
   "Open caret's login link to continue.</p>";
 
+/** The challenge on every gate 401; the client keys DaemonAuthError on it. */
+export const AUTH_CHALLENGE = 'Bearer realm="caret"';
+
 /** The auth cookie's name; the port keeps two daemons on one hostname apart. */
-export function authCookieName(port: number): string {
+function authCookieName(port: number): string {
   return `caret-auth-${port}`;
 }
 
@@ -28,10 +31,11 @@ function bearer(req: Request): string | null {
 }
 
 function reject(url: URL, extra?: HeadersInit): Response {
-  if (url.pathname.startsWith("/api/")) {
-    return Response.json({ error: "caret daemon token required" }, { status: 401, headers: extra });
-  }
   const headers = new Headers(extra);
+  headers.set("WWW-Authenticate", AUTH_CHALLENGE);
+  if (url.pathname.startsWith("/api/")) {
+    return Response.json({ error: "caret daemon token required" }, { status: 401, headers });
+  }
   headers.set("Content-Type", "text/html; charset=utf-8");
   return new Response(REJECTION_PAGE, { status: 401, headers });
 }

@@ -1,6 +1,5 @@
-// Unit coverage for src/daemon/client.ts: waitForHealth — the bounded health-wait
-// the out-of-process callers (the dev driver, the e2e fixture) share — and how
-// postReview reads the daemon's refusals. Driven against a real in-process server
+// Unit coverage for src/daemon/client.ts: waitForHealth (the dev driver's bounded
+// wait), postReview's refusals, and the state dir's token on every request. Driven against a real in-process server
 // so each wrapper exercises its actual fetch; waitForHealth takes an injected sleep
 // so no real time passes.
 import { afterEach, describe, expect, test } from "bun:test";
@@ -140,12 +139,14 @@ describe("daemon requests carry the state dir's token", () => {
     ["resolveReview", (b) => resolveReview(b, "r1", { behavior: "allow" })],
   ];
 
-  function serveAuth(status: number, seen: Array<string | null>): string {
+  function serveAuth(status: number, seen: Array<string | null>, challenge = true): string {
     const srv = Bun.serve({
       port: 0,
       fetch: (req) => {
         seen.push(req.headers.get("authorization"));
-        return status === 200 ? Response.json({}) : new Response(null, { status });
+        if (status === 200) return Response.json({});
+        const headers = challenge ? { "WWW-Authenticate": 'Bearer realm="caret"' } : undefined;
+        return new Response(null, { status, headers });
       },
     });
     servers.push(srv);
@@ -178,6 +179,20 @@ describe("daemon requests carry the state dir's token", () => {
     expect(err).toBeInstanceOf(DaemonAuthError);
     expect((err as Error).message).toContain(daemonTokenFile());
   });
+
+  test("httpHealth resolves null on a 401 that carries no caret challenge", async () => {
+    writeToken();
+    expect(await httpHealth(serveAuth(401, [], false))).toBeNull();
+  });
+
+  test.each(calls.slice(1))(
+    "%s treats a 401 with no caret challenge as an ordinary failure",
+    async (_, call) => {
+      writeToken();
+      const err = await call(serveAuth(401, [], false)).catch((e: unknown) => e);
+      expect(err).not.toBeInstanceOf(DaemonAuthError);
+    },
+  );
 
   test("httpHealth still resolves null when nothing answers", async () => {
     writeToken();

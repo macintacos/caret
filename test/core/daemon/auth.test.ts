@@ -70,14 +70,31 @@ describe("a token-gated daemon rejects requests without a credential", () => {
     ["OPTIONS /api/reviews", () => ({ path: "/api/reviews", method: "OPTIONS" })],
     ["an unknown path", () => ({ path: "/nope" })],
   ];
-  for (const [name, make] of cases) {
-    test(name, async () => {
-      const { d } = await bootAuthed();
-      const { path, ...init } = make(d.url);
-      const res = await fetch(`http://127.0.0.1:${d.port}${path}`, init);
-      expect(res.status).toBe(401);
-    });
-  }
+  test.each(cases)("%s", async (_, make) => {
+    const { d } = await bootAuthed();
+    const { path, ...init } = make(d.url);
+    const res = await fetch(`http://127.0.0.1:${d.port}${path}`, init);
+    expect(res.status).toBe(401);
+  });
+});
+
+test.each([
+  ["an /api rejection", "/api/reviews"],
+  ["a page rejection", "/"],
+  ["a failed login", "/?token=wrong"],
+])("%s carries the Bearer challenge", async (_, path) => {
+  const { d } = await bootAuthed();
+  const res = await fetch(`${d.url}${path}`, { redirect: "manual" });
+  expect(res.status).toBe(401);
+  expect(res.headers.get("www-authenticate")).toBe('Bearer realm="caret"');
+});
+
+test("the token under another port's cookie name fails", async () => {
+  const { d, token } = await bootAuthed();
+  const res = await fetch(`${d.url}/api/health`, {
+    headers: { Cookie: `caret-auth-${d.port + 1}=${token}` },
+  });
+  expect(res.status).toBe(401);
 });
 
 test("an /api rejection is JSON with an error field that never names the token", async () => {

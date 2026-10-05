@@ -80,16 +80,18 @@ type Served =
   | { kind: "replaced"; version?: string }
   /** A caret the service did not start holds the port. */
   | { kind: "unsupervised"; version?: string }
-  /** A caret refused this shell's token. */
+  /** A caret refused the token. */
   | { kind: "unauthorized"; message: string }
   /** Nothing, or only a non-caret squatter. */
   | { kind: "silent" };
 
 function classify(
-  health: HealthIdentity | null,
+  health: HealthIdentity | DaemonAuthError | null,
   installerVersion: string,
   replaced: string | undefined,
 ): Served {
+  // The outgoing daemon refuses a shell with no token file yet while it drains.
+  if (health instanceof DaemonAuthError) return { kind: "unauthorized", message: health.message };
   if (health?.service !== "caret") return { kind: "silent" };
   const answeringVersion = health.version;
   if (replaced !== undefined && health.instanceId === replaced) {
@@ -104,12 +106,15 @@ function classify(
     : { kind: "ready", version: answeringVersion };
 }
 
-/** The instance answering at `baseUrl`; undefined for none, or one refusing the token. */
-async function probeInstance(baseUrl: string, watch: ServiceWatch): Promise<string | undefined> {
+/** What one probe saw: caret's identity, null for nothing, or the token refusal. */
+async function probe(
+  baseUrl: string,
+  watch: ServiceWatch,
+): Promise<HealthIdentity | DaemonAuthError | null> {
   try {
-    return (await watch.health(baseUrl))?.instanceId;
+    return await watch.health(baseUrl);
   } catch (e) {
-    if (e instanceof DaemonAuthError) return undefined;
+    if (e instanceof DaemonAuthError) return e;
     throw e;
   }
 }
@@ -124,14 +129,7 @@ async function awaitServed(
 ): Promise<Served> {
   let served: Served = { kind: "silent" };
   for (let attempt = 0; attempt < SETTLE_ATTEMPTS; attempt++) {
-    served = await watch.health(baseUrl).then(
-      (h) => classify(h, watch.version, replaced),
-      (e: unknown): Served => {
-        // The outgoing daemon refuses a shell with no token file yet while it drains.
-        if (e instanceof DaemonAuthError) return { kind: "unauthorized", message: e.message };
-        throw e;
-      },
-    );
+    served = classify(await probe(baseUrl, watch), watch.version, replaced);
     if (served.kind === "ready") return served;
     await watch.sleep(SETTLE_POLL_MS);
   }
@@ -159,7 +157,7 @@ function servedWarning(served: Served, installerVersion: string, cycled: boolean
     case "unsupervised":
       return `A caret the service did not start${at(served.version)} holds the port.\nThe service takes over once it exits.`;
     case "unauthorized":
-      return `${served.message}.`;
+      return `${served.message.charAt(0).toUpperCase()}${served.message.slice(1)}.`;
     case "silent":
       return `No caret daemon answered within ${SETTLE_WINDOW_MS / 1000} seconds.\n${log}`;
   }
@@ -295,7 +293,12 @@ export async function reconcileService(
     const { watch } = deps;
     // A draining daemon keeps answering until it lets the port go, so remember which
     // instance the restart replaces.
-    const replaced = cycles && watch ? await probeInstance(baseUrl, watch) : undefined;
+    const replaced =
+      cycles && watch
+        ? await probe(baseUrl, watch).then((h) =>
+            h instanceof DaemonAuthError ? undefined : h?.instanceId,
+          )
+        : undefined;
     if (cycles) await manager.restart();
     // ponytail: a no-cycle install over an older daemon waits the full window before
     // warning; stop at the first answer when nothing cycled if that ever bites.

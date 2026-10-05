@@ -56,6 +56,8 @@ export type ErrorCode =
   | "hook-interrupted"
   /** The hook could not start or reattach to a daemon. */
   | "daemon-unreachable"
+  /** The daemon refused the hook's token (a state-dir mismatch, or a missing token file). */
+  | "daemon-unauthorized"
   /** The daemon did not create the review. */
   | "review-create-failed"
   /** No decision inside the review timeout. */
@@ -68,8 +70,6 @@ export type ErrorCode =
   | "daemon-crashed"
   /** The daemon's update check rejected. */
   | "update-check-failed"
-  /** The daemon refused this shell's token. */
-  | "daemon-unauthorized"
   /** An error the browser reported through POST /api/logs. */
   | "ui-error";
 

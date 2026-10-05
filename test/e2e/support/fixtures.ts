@@ -177,8 +177,7 @@ function awaitPortLine(
   });
 }
 
-// node-runner sleep: the Playwright fixture runs under node, so reach for
-// setTimeout rather than Bun.sleep (the src probe defaults to Bun.sleep).
+// The Playwright fixture runs under node, so no Bun.sleep.
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** Poll GET /api/health until it answers with caret's identity, `attempts` probes 50ms apart. */
@@ -260,6 +259,9 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
     // Ephemeral, isolated state: the daemon's reviews and logs all live under
     // this dir and are wiped at teardown. The user's real state is never touched.
     const stateDir = await mkdtemp(join(tmpdir(), "caret-e2e."));
+    // Chosen here rather than through daemonTokenFile(), which reads this worker's
+    // XDG_STATE_HOME — the developer's.
+    const tokenFile = join(stateDir, "daemon.token");
     // stdin is a live pipe on purpose: the daemon self-reaps when it closes,
     // so a SIGKILL'd runner can't leave an orphan daemon behind.
     const child = spawn("bun", [DAEMON_ENTRY], {
@@ -273,7 +275,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
         CARET_E2E_UPDATE_STATUS: JSON.stringify(updateStatus),
         CARET_E2E_UPDATE_INSTALL: updateInstall,
         CARET_E2E_UPDATE_CHANGES: JSON.stringify(updateChanges),
-        ...(auth ? { CARET_E2E_AUTH: "1" } : {}),
+        ...(auth ? { CARET_E2E_TOKEN_FILE: tokenFile } : {}),
       },
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -284,9 +286,8 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
     try {
       const port = await awaitPortLine(child, stderr, bootTimeoutMs);
       const url = `http://127.0.0.1:${port}`;
-      // Read from this test's own state dir, never through daemonTokenFile(): this
-      // worker's XDG_STATE_HOME is the developer's.
-      const token = auth ? readToken(join(stateDir, "caret", "daemon.token")) : null;
+      const token = auth ? readToken(tokenFile) : null;
+      if (auth && token === null) throw new Error(`caret daemon wrote no token to ${tokenFile}`);
       const headers = (extra: Record<string, string> = {}): Record<string, string> =>
         token === null ? extra : { ...extra, Authorization: `Bearer ${token}` };
       // The same budget again, spent as probes rather than as a deadline (see

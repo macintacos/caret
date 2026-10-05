@@ -3,6 +3,7 @@
 // shared piece is daemonFetch, which carries the state dir's token.
 
 import { daemonTokenFile } from "@/config/paths.ts";
+import { AUTH_CHALLENGE } from "@/daemon/auth.ts";
 import { readToken } from "@/daemon/token.ts";
 import type {
   ClientReview,
@@ -14,22 +15,23 @@ import type {
   ResolveBody,
 } from "@/lib/types.ts";
 
-/** A daemon 401: names the token file this shell read, never the token. */
+/** A daemon 401 bearing caret's challenge: names the token file, never the token. */
 export class DaemonAuthError extends Error {}
 
-/** fetch, carrying the state dir's token when its file is readable; a 401 throws
- * DaemonAuthError. The token is re-read on every call so a re-mint is picked up. */
+/** fetch, carrying the state dir's token when its file is readable; a 401 bearing
+ * caret's challenge throws DaemonAuthError, any other 401 is returned as is. The
+ * token is re-read on every call so a re-mint is picked up. */
 export async function daemonFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const file = daemonTokenFile();
   const token = readToken(file);
   const headers = new Headers(init.headers);
   if (token !== null) headers.set("Authorization", `Bearer ${token}`);
   const res = await fetch(url, { ...init, headers });
-  if (res.status !== 401) return res;
+  if (res.status !== 401 || res.headers.get("www-authenticate") !== AUTH_CHALLENGE) return res;
   throw new DaemonAuthError(
     token === null
-      ? `the caret daemon requires a token, but ${file} does not exist or cannot be read — restart the caret daemon to mint one, or check this shell's XDG_STATE_HOME`
-      : `the caret daemon rejected the token in ${file} — check this shell's XDG_STATE_HOME matches the caret service's`,
+      ? `the daemon requires a token, but ${file} does not exist or cannot be read; restart the caret daemon to mint one, or check that XDG_STATE_HOME matches the caret service's`
+      : `the daemon rejected the token in ${file}; check that XDG_STATE_HOME matches the caret service's`,
   );
 }
 
@@ -39,7 +41,7 @@ export type HealthBody = HealthIdentity;
 
 /** Probe the daemon's identity. Null on any failure (connection refused, a
  * non-ok status, a timeout) — the caller treats null as "nothing answering". A
- * DaemonAuthError rejection means a daemon holds the port but refused this shell's token. */
+ * DaemonAuthError rejection means a daemon holds the port but refused the token. */
 export async function httpHealth(baseUrl: string): Promise<HealthBody | null> {
   try {
     const res = await daemonFetch(`${baseUrl}/api/health`, {
@@ -62,9 +64,9 @@ export interface WaitForHealthOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
-/** Poll /api/health until the daemon answers with the caret identity, or throw
- * once the attempt budget is exhausted. The bounded health-wait the
- * out-of-process callers share; the in-process takeover loop in
+/** Poll /api/health until the daemon answers with the caret identity. Throws once
+ * the attempt budget is exhausted, or on the first probe a daemon refuses the token
+ * (DaemonAuthError). The dev driver's bounded wait; the in-process takeover loop in
  * daemon-lifecycle.ts drives httpHealth on its own schedule. */
 export async function waitForHealth(
   baseUrl: string,

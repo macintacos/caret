@@ -125,7 +125,8 @@ export interface CreateServerOptions {
    * managed. */
   lockPath?: string;
   /** Daemon token file. When set, auth is on: every request needs the token, which is
-   * loaded from this file at construction, or minted into it when missing. */
+   * loaded from this file at construction, or minted into it when missing. Throws at
+   * construction when the file exists but holds no readable token. */
   tokenFile?: string;
   /** Build fingerprint (paths.buildHash of the served UI) reported in
    * /api/health and recorded in the lock, so a newer caret can detect staleness. */
@@ -1143,6 +1144,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       const url = new URL(req.url);
       const path = url.pathname;
       const method = req.method;
+      // Ahead of every route (assets, HEAD, OPTIONS too); never logs or throws, so a
+      // `?token=` URL can't reach the failure log.
       if (token !== null) {
         const denied = authGate(req, url, { token, port });
         if (denied) return denied;

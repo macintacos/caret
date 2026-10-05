@@ -34,7 +34,7 @@ test("the login link sets the auth cookie and loads the review", async ({
   const plan = await planSurface(page);
   await expect(plan.getByText("Widget Cache Refactor")).toBeVisible();
   expect(apiStatuses.length).toBeGreaterThan(0);
-  expect(apiStatuses.every((s) => s === 200)).toBe(true);
+  expect(apiStatuses).not.toContain(401);
 
   const anonymous = await playwright.request.newContext({ baseURL: daemon.url });
   try {

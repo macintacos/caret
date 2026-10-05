@@ -472,7 +472,7 @@ On Claude Code, three more behaviors follow from how the server is built:
 
 ```text
 src/                tool-agnostic core, grouped by domain; the CLI entrypoint (cli.ts) sits at the root
-src/daemon/         the loopback HTTP daemon — request server, body validation, host/origin/CSRF/live-client guards, idle and drain liveness, lifecycle, and client
+src/daemon/         the loopback HTTP daemon — request server, body validation, token auth, host/origin/CSRF/live-client guards, idle and drain liveness, lifecycle, and client
 src/service/        the platform supervisor that keeps the daemon up from login — the ServiceManager seam, its launchd and systemd implementations, and the plist and unit text they install
 src/review/         plan-review orchestration and the revision-threading state machine, with their store and decision/reconcile helpers
 src/plan/           plan handling — the on-disk canonical plan, file-ref excerpts, cwd-rooted file search, fenced-block validation, and markdown reflow

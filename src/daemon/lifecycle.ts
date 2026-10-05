@@ -54,7 +54,9 @@ export interface EnsureDeps {
    * health reports a different stateDir belongs to another world and is never
    * reused or retired (EXC-461). */
   currentStateDir: string;
-  /** Returns the parsed /api/health body, or null if the connection refused. */
+  /** The parsed /api/health body; null when nothing answers. Rejects with
+   * DaemonAuthError when a daemon refuses the token — ensureDaemon lets that
+   * through, before any spawn or retire. */
   health: (baseUrl: string) => Promise<HealthBody | null>;
   /** Read the daemon lock, or null if absent/unreadable. */
   readLock: () => DaemonLock | null;
@@ -179,8 +181,9 @@ export type EnsureMode = "takeover" | "attach" | "successor";
  * (EXC-1166), for at most the call's first `timing.windowMs`. `mode` — see EnsureMode.
  * Never denies a review because takeover failed — an unretireable stale daemon, or one
  * whose service will not restart, is reused (serving its old UI) rather than left
- * unreachable. The one exception: a foreign world's daemon (EXC-461) is neither reused
- * nor retired — that's a config conflict, and cross-attaching IS the bug. */
+ * unreachable. Two exceptions are neither reused nor retired: a foreign world's daemon
+ * (EXC-461) — a config conflict, where cross-attaching IS the bug — and one that refuses
+ * the token (it rejects with DaemonAuthError). */
 export async function ensureDaemon(
   deps: EnsureDeps,
   mode: EnsureMode = "takeover",
@@ -285,8 +288,8 @@ export async function ensureDaemon(
     logDebug("spawn", "gave up waiting on a booting daemon", { bootPid: waitingOn });
   }
   // Exhausted: never deny a review on takeover failure — reuse even a stale
-  // daemon we couldn't retire. The foreign world stays the one exception
-  // (reusing it would cross-attach; EXC-461).
+  // daemon we couldn't retire. The foreign world is the exception here
+  // (reusing it would cross-attach; EXC-461); a token refusal rejected earlier.
   const final = await deps.health(deps.baseUrl);
   if (final && final.service === "caret") {
     if (isForeignWorld(final, deps.currentStateDir)) throw new Error(FOREIGN_WORLD_ERROR);
@@ -388,7 +391,8 @@ export interface VacateDeps {
 /** Free the port for a daemon about to bind it in the foreground: retire the same-world,
  * unsupervised caret holding it, and wait until nothing answers. Resolves null once the
  * port is free — or holds something that is not caret, which the bind reports — and
- * otherwise the reason it was left alone. */
+ * otherwise the reason it was left alone. A daemon refusing the token is left alone, the
+ * refusal its reason. */
 export async function vacatePort(deps: VacateDeps): Promise<string | null> {
   try {
     return await vacate(deps);
@@ -514,7 +518,9 @@ export function removeOwnDaemonLock(): void {
 }
 
 /** Ask a stale daemon to step down. Returns true if a graceful shutdown was
- * initiated; false if nothing could be done (pre-fix daemon: no route, no lock). */
+ * initiated; false if nothing could be done (pre-fix daemon: no route, no lock).
+ * Rejects with DaemonAuthError when the daemon refuses the token: it is alive and
+ * owns the port, so it is never signalled. */
 export async function retireDaemon(
   baseUrl: string,
   lock: DaemonLock | null,
@@ -529,7 +535,6 @@ export async function retireDaemon(
     });
     if (res.ok) return true;
   } catch (e) {
-    // A daemon that refused the token is alive and owns the port: never signal it.
     if (e instanceof DaemonAuthError) throw e;
     // network error / timeout → fall through to the SIGTERM fallback.
   }

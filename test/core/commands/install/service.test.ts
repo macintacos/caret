@@ -712,6 +712,6 @@ test("install warns with the token refusal when the window ends on one", async (
   const refused = new DaemonAuthError("the caret daemon rejected the token in /x/daemon.token");
   const { events } = await reconcileWatched(scriptedWatch([refused]));
 
-  expect(warning(events)).toContain(refused.message);
+  expect(warning(events)).toContain("The caret daemon rejected the token in /x/daemon.token.");
   expect(announced(events)).toBe(false);
 });

@@ -2,7 +2,7 @@
 // when missing.
 
 import { randomBytes } from "node:crypto";
-import { linkSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { linkSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 import { ensureStateDir } from "@/config/paths.ts";
@@ -32,9 +32,9 @@ export function loadOrMintToken(file: string): string {
     if ((e as { code?: string }).code !== "EEXIST") throw e;
     const winner = readToken(file);
     if (winner === null)
-      throw new Error(`caret daemon token file ${file} exists but cannot be read`);
+      throw new Error(`caret daemon token file ${file} exists but holds no readable token`);
     return winner;
   } finally {
-    unlinkSync(tmp);
+    rmSync(tmp, { force: true });
   }
 }

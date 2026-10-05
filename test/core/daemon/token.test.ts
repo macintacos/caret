@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 import { setupTempStateDir } from "@test/support/env.ts";
 import { daemonTokenFile } from "@/config/paths.ts";
@@ -35,4 +36,10 @@ test("readToken trims a trailing newline", () => {
   loadOrMintToken(daemonTokenFile());
   writeFileSync(daemonTokenFile(), "abc\n");
   expect(readToken(daemonTokenFile())).toBe("abc");
+});
+
+test("an empty token file refuses the boot, naming the file", () => {
+  mkdirSync(dirname(daemonTokenFile()), { recursive: true });
+  writeFileSync(daemonTokenFile(), "");
+  expect(() => loadOrMintToken(daemonTokenFile())).toThrow(daemonTokenFile());
 });

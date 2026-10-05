@@ -1472,7 +1472,7 @@ test("vacatePort gives up on a daemon that never lets the port go", async () => 
   expect(await vacatePort(vacateDeps([stuck], async () => true))).toEqual(expect.any(String));
 });
 
-// ---- a daemon that refuses this shell's token ----
+// ---- a daemon that refuses the token ----
 
 const refused = new DaemonAuthError("the caret daemon rejected the token in /x/daemon.token");
 const rejectAuth = async (): Promise<HealthBody | null> => {
@@ -1521,7 +1521,10 @@ test("retireDaemon sends the token and rejects a 401 without falling back to SIG
     port: 0,
     fetch: (req) => {
       seen.push(req.headers.get("authorization"));
-      return new Response(null, { status: 401 });
+      return new Response(null, {
+        status: 401,
+        headers: { "WWW-Authenticate": 'Bearer realm="caret"' },
+      });
     },
   });
   let kills = 0;

@@ -108,7 +108,8 @@ export interface DoctorDeps {
   /** Effective tunables (env > file > default), resolved by the caller. */
   effective: () => { port: number; idleMs: number; reviewTimeoutMs: number; heartbeatMs: number };
   baseUrl: string;
-  /** Parsed /api/health body or null when unreachable (httpHealth in prod; 500ms bounded). */
+  /** Parsed /api/health body or null when unreachable (httpHealth in prod; 500ms
+   * bounded); rejects when the daemon refuses the token. */
   health: (baseUrl: string) => Promise<HealthIdentity | null>;
   /** Whether this machine's install recorded a service unit — the only thing that
    * distinguishes a supervisor that should be keeping a daemon up from an on-demand
