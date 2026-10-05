@@ -26,12 +26,13 @@
 //
 // Protocol with the spawning fixture (test/e2e/support/fixtures.ts): stdout carries
 // EXACTLY ONE JSON line `{"port": N}`; all logs go to stderr so the port
-// handshake can't be corrupted. The fixture owns the ephemeral XDG_STATE_HOME
+// handshake can't be corrupted. CARET_E2E_AUTH, when set, turns token auth on with
+// the token file in that isolated state dir. The fixture owns the ephemeral XDG_STATE_HOME
 // and tears it down after the test.
 
 import { fakeDiagnostics } from "@test/support/diagnostics.ts";
 import { NEVER_IDLE_MS } from "@/config/constants.ts";
-import { configFile, reviewsDir } from "@/config/paths.ts";
+import { configFile, daemonTokenFile, reviewsDir } from "@/config/paths.ts";
 import { createSettings } from "@/config/settings.ts";
 import { createServer } from "@/daemon/server.ts";
 import { updateReportFor } from "@/daemon/update-check.ts";
@@ -101,6 +102,7 @@ const server = createServer({
   // Belt and braces: even an unexpected idle fire must not process.exit.
   onShutdown: () => {},
   assets,
+  ...(process.env.CARET_E2E_AUTH ? { tokenFile: daemonTokenFile() } : {}),
   // A synthetic build identity + self-diagnostics so the settings Advanced pane
   // (EXC-848) has real blocks to render. The prod daemon derives these from the
   // build (buildId/commit) and the live process/settings; here they are fixed so
