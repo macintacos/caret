@@ -32,7 +32,7 @@ import {
   stateDir,
 } from "@/config/paths.ts";
 import { getPort, logKeep, logMaxSize, type Settings } from "@/config/settings.ts";
-import { type HealthBody, httpHealth } from "@/daemon/client.ts";
+import { DaemonAuthError, daemonFetch, type HealthBody, httpHealth } from "@/daemon/client.ts";
 import { buildKind, currentBuildId, type DaemonLock, VERSION } from "@/lib/build-id.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
 import { logDebug, logInfo, logWarn } from "@/lib/log.ts";
@@ -390,6 +390,15 @@ export interface VacateDeps {
  * port is free — or holds something that is not caret, which the bind reports — and
  * otherwise the reason it was left alone. */
 export async function vacatePort(deps: VacateDeps): Promise<string | null> {
+  try {
+    return await vacate(deps);
+  } catch (e) {
+    if (e instanceof DaemonAuthError) return e.message;
+    throw e;
+  }
+}
+
+async function vacate(deps: VacateDeps): Promise<string | null> {
   const deadline = deps.now() + deps.deadlineMs;
   let retired: string | undefined;
   for (;;) {
@@ -514,12 +523,14 @@ export async function retireDaemon(
 ): Promise<boolean> {
   // Preferred: the daemon's own loopback retire endpoint (drains, then exits).
   try {
-    const res = await fetch(`${baseUrl}/api/retire`, {
+    const res = await daemonFetch(`${baseUrl}/api/retire`, {
       method: "POST",
       signal: AbortSignal.timeout(1000),
     });
     if (res.ok) return true;
-  } catch {
+  } catch (e) {
+    // A daemon that refused the token is alive and owns the port: never signal it.
+    if (e instanceof DaemonAuthError) throw e;
     // network error / timeout → fall through to the SIGTERM fallback.
   }
   // Fallback: a daemon without /api/retire (a pre-fix build) — SIGTERM the lock's

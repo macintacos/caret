@@ -24,13 +24,15 @@ import {
   daemonBootMarker,
   daemonLock,
   daemonStderrLogFile,
+  daemonTokenFile,
   ensureLogsDir,
   launcherPinnedRootFile,
   launcherServiceFile,
   logArchiveDir,
+  stateDir,
 } from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
-import type { HealthBody } from "@/daemon/client.ts";
+import { DaemonAuthError, type HealthBody } from "@/daemon/client.ts";
 import {
   BOOT_MARKER_TTL_MS,
   DAEMON_CWD,
@@ -1468,4 +1470,73 @@ test.each([
 test("vacatePort gives up on a daemon that never lets the port go", async () => {
   const stuck = peer("stuck", { resident: false, supervised: false });
   expect(await vacatePort(vacateDeps([stuck], async () => true))).toEqual(expect.any(String));
+});
+
+// ---- a daemon that refuses this shell's token ----
+
+const refused = new DaemonAuthError("the caret daemon rejected the token in /x/daemon.token");
+const rejectAuth = async (): Promise<HealthBody | null> => {
+  throw refused;
+};
+
+test("ensureDaemon rejects with a token refusal before spawning or retiring", async () => {
+  let spawns = 0;
+  let retires = 0;
+  const deps = ensureDeps({
+    health: rejectAuth,
+    spawn: () => ++spawns,
+    retire: async () => {
+      retires++;
+      return true;
+    },
+  });
+  await expect(ensureDaemon(deps)).rejects.toBe(refused);
+  expect(spawns).toBe(0);
+  expect(retires).toBe(0);
+});
+
+test("vacatePort gives a token refusal from the probe as its reason, never retiring", async () => {
+  let retires = 0;
+  const deps = vacateDeps([], async () => {
+    retires++;
+    return true;
+  });
+  expect(await vacatePort({ ...deps, health: rejectAuth })).toBe(refused.message);
+  expect(retires).toBe(0);
+});
+
+test("vacatePort gives a token refusal from the retire as its reason", async () => {
+  const onDemand = peer("od", { resident: false, supervised: false });
+  const deps = vacateDeps([onDemand], async () => {
+    throw refused;
+  });
+  expect(await vacatePort(deps)).toBe(refused.message);
+});
+
+test("retireDaemon sends the token and rejects a 401 without falling back to SIGTERM", async () => {
+  mkdirSync(dirname(daemonTokenFile()), { recursive: true });
+  writeFileSync(daemonTokenFile(), "tok");
+  const seen: Array<string | null> = [];
+  const srv = Bun.serve({
+    port: 0,
+    fetch: (req) => {
+      seen.push(req.headers.get("authorization"));
+      return new Response(null, { status: 401 });
+    },
+  });
+  let kills = 0;
+  try {
+    await expect(
+      retireDaemon(
+        `http://localhost:${srv.port}`,
+        { pid: process.pid, port: 1, stateDir: stateDir() },
+        stateDir(),
+        () => kills++,
+      ),
+    ).rejects.toBeInstanceOf(DaemonAuthError);
+  } finally {
+    srv.stop();
+  }
+  expect(seen).toEqual(["Bearer tok"]);
+  expect(kills).toBe(0);
 });

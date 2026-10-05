@@ -3,6 +3,7 @@ import { afterEach, expect, test } from "bun:test";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { caretLogRecords } from "@test/support/ndjson.ts";
 import { logFile } from "@/config/paths.ts";
+import { DaemonAuthError } from "@/daemon/client.ts";
 import type { EnsureMode } from "@/daemon/lifecycle.ts";
 import { logInfo, setLogLevel } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
@@ -423,6 +424,12 @@ const boom = () => Promise.reject(new Error("boom"));
 test.each<[string, string, Partial<ReviewDeps>, string]>([
   ["an unparseable hook input", "not json", {}, "hook-input-invalid"],
   ["an unreachable daemon", stdin, { ensureDaemon: boom }, "daemon-unreachable"],
+  [
+    "a daemon refusing the token",
+    stdin,
+    { ensureDaemon: () => Promise.reject(new DaemonAuthError("refused")) },
+    "daemon-unauthorized",
+  ],
   ["a review the daemon did not create", stdin, { postReview: boom }, "review-create-failed"],
   [
     "a review that outlives its timeout",

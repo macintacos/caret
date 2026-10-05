@@ -22,6 +22,7 @@ import { recordingUI } from "@/commands/install/ui.ts";
 import { SURFACES } from "@/commands/service-target.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
 import { launcherPath, launcherRecordDir, ownedRootsDir } from "@/config/paths.ts";
+import { DaemonAuthError } from "@/daemon/client.ts";
 import type { HealthIdentity } from "@/lib/types.ts";
 
 // Each test starts from a config nobody has written, so an absent key means default.
@@ -50,7 +51,7 @@ const stubLauncher = () => ({ unpinned: false });
 /** A watch for a caret at 1.0.0 whose health probes answer `answers` in call order,
  * repeating the last once the list runs out, each probe logged to `calls`. */
 function scriptedWatch(
-  answers: (HealthIdentity | null)[],
+  answers: (HealthIdentity | DaemonAuthError | null)[],
   calls: string[] = [],
 ): ServiceWatch & { probes: number } {
   const watch = {
@@ -58,7 +59,9 @@ function scriptedWatch(
     version: "1.0.0",
     health: async () => {
       calls.push("probe");
-      return answers[Math.min(watch.probes++, answers.length - 1)] ?? null;
+      const answer = answers[Math.min(watch.probes++, answers.length - 1)] ?? null;
+      if (answer instanceof DaemonAuthError) throw answer;
+      return answer;
     },
     sleep: async () => {},
   };
@@ -688,4 +691,27 @@ test("a prediction that throws never costs the restart", async () => {
 
   expect(calls).toContain("restart");
   expect(warning(events)).toBeUndefined();
+});
+
+test("a daemon refusing the token while the service cycles is waited out", async () => {
+  const refused = new DaemonAuthError("the caret daemon rejected the token in /x/daemon.token");
+  const { calls, events } = await reconcileWatched(
+    scriptedWatch([
+      refused,
+      refused,
+      { service: "caret", version: "1.0.0", instanceId: "b", supervised: true },
+    ]),
+  );
+
+  expect(calls).toContain("restart");
+  expect(warning(events)).toBeUndefined();
+  expect(announced(events)).toBe(true);
+});
+
+test("install warns with the token refusal when the window ends on one", async () => {
+  const refused = new DaemonAuthError("the caret daemon rejected the token in /x/daemon.token");
+  const { events } = await reconcileWatched(scriptedWatch([refused]));
+
+  expect(warning(events)).toContain(refused.message);
+  expect(announced(events)).toBe(false);
 });

@@ -10,8 +10,9 @@
 
 import { VANITY_HOST } from "@/config/constants.ts";
 import { logFile } from "@/config/paths.ts";
+import { DaemonAuthError } from "@/daemon/client.ts";
 // Type-only: the review core takes its daemon operations as deps and never imports
-// the daemon at runtime.
+// the daemon's lifecycle at runtime.
 import type { EnsureMode } from "@/daemon/lifecycle.ts";
 import { type ErrorCode, logDebug, logError, logInfo, setLogContext, shortId } from "@/lib/log.ts";
 import {
@@ -103,7 +104,9 @@ const REVIEW_FAILURE_CODES = {
 type ReviewStep = keyof typeof REVIEW_FAILURE_CODES;
 
 function reviewFailureCode(step: ReviewStep, err: unknown): ErrorCode {
-  return err instanceof TimeoutError ? "review-timeout" : REVIEW_FAILURE_CODES[step];
+  if (err instanceof TimeoutError) return "review-timeout";
+  if (err instanceof DaemonAuthError) return "daemon-unauthorized";
+  return REVIEW_FAILURE_CODES[step];
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {

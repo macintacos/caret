@@ -68,6 +68,8 @@ export type ErrorCode =
   | "daemon-crashed"
   /** The daemon's update check rejected. */
   | "update-check-failed"
+  /** The daemon refused this shell's token. */
+  | "daemon-unauthorized"
   /** An error the browser reported through POST /api/logs. */
   | "ui-error";
 
