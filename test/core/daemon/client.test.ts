@@ -1,7 +1,7 @@
 // Unit coverage for src/daemon/client.ts: waitForHealth (the dev driver's bounded
-// wait), postReview's refusals, and the state dir's token on every request. Driven against a real in-process server
-// so each wrapper exercises its actual fetch; waitForHealth takes an injected sleep
-// so no real time passes.
+// wait), postReview's refusals, and the state dir's token on every request. Driven
+// against a real in-process server so each wrapper exercises its actual fetch;
+// waitForHealth takes an injected sleep so no real time passes.
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
