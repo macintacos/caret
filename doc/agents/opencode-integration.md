@@ -185,7 +185,10 @@ The plugin warms caret's daemon by fire-and-forget spawning `caret prewarm` from
 `chat.message` hook whenever the message is addressed to a planning agent
 (`isPlanningAgent`). It is the counterpart to Claude Code's `PostToolUse`/`EnterPlanMode`
 prewarm hook, for which OpenCode offers no equivalent event: absent this hook the daemon
-only comes up when the first `caret_review_plan` call spawns `caret review`.
+only comes up when the first `caret_review_plan` call spawns `caret review`. The hook
+falls back from `input.agent`, the raw request field a client may omit, to
+`output.message.agent`, OpenCode's resolved default, so a default `plan` session warms and
+is steered like an explicit one.
 
 On v2 the warm hangs off `ctx.session.hook("prompt")`. That event carries no agent, so the
 hook reads it with `ctx.session.get` and calls the same production warm runner for a
