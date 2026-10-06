@@ -20,6 +20,7 @@ import {
   devSeeder,
   devStateDir,
   envOverrides,
+  FAIL_CLOSED_DEFAULTS,
   getPort,
   heartbeatMs,
   idleMs,
@@ -67,7 +68,7 @@ test("an absent file yields all defaults with no error", () => {
       max_size: DEFAULT_LOG_MAX_SIZE,
       keep: DEFAULT_LOG_KEEP,
     },
-    daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000 },
+    daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000, host: "127.0.0.1", hostnames: [] },
     review: { timeout_s: 3600 },
     opencode: {},
     updates: { check: true },
@@ -85,19 +86,19 @@ test("[opencode] plans_dir is a recognized key", async () => {
   expect(loadSettings(file).opencode.plans_dir).toBe("~/notes/plans");
 });
 
-test("malformed TOML falls back to defaults without throwing", async () => {
+test("malformed TOML falls back to the fail-closed defaults without throwing", async () => {
   await Bun.write(file, "[logging\nlevel =");
-  expect(loadSettings(file)).toEqual(DEFAULTS);
+  expect(loadSettings(file)).toEqual(FAIL_CLOSED_DEFAULTS);
 });
 
-test("a partial mid-write file falls back to defaults without throwing", async () => {
+test("a partial mid-write file falls back to the fail-closed defaults without throwing", async () => {
   await Bun.write(file, '[logging]\nlevel = "deb');
-  expect(loadSettings(file)).toEqual(DEFAULTS);
+  expect(loadSettings(file)).toEqual(FAIL_CLOSED_DEFAULTS);
 });
 
-test("an invalid value falls back to defaults and logs the key path, never the value", async () => {
+test("an invalid value falls back to the fail-closed defaults and logs the key path, never the value", async () => {
   await Bun.write(file, '[logging]\nlevel = "SENTINEL_NOT_A_LEVEL"\n');
-  expect(loadSettings(file)).toEqual(DEFAULTS);
+  expect(loadSettings(file)).toEqual(FAIL_CLOSED_DEFAULTS);
   const log = await readFile(join(dir, "state", "caret", "logs", "caret.log"), "utf-8");
   expect(log).toContain("logging.level");
   expect(log).not.toContain("SENTINEL_NOT_A_LEVEL");
@@ -334,12 +335,12 @@ test("an empty or whitespace env var counts as unset, never as 0", async () => {
 test("a file timeout_s at or above the 3900s hook budget reverts the whole file", async () => {
   await Bun.write(file, '[logging]\nlevel = "warn"\n\n[review]\ntimeout_s = 3900\n');
   // Whole-file granularity: the valid logging.level reverts along with the bad key.
-  expect(loadSettings(file)).toEqual(DEFAULTS);
+  expect(loadSettings(file)).toEqual(FAIL_CLOSED_DEFAULTS);
 });
 
 test("an out-of-bounds file value reverts the whole file for the other tunables too", async () => {
   await Bun.write(file, "[daemon]\nport = -1\n");
-  expect(loadSettings(file)).toEqual(DEFAULTS);
+  expect(loadSettings(file)).toEqual(FAIL_CLOSED_DEFAULTS);
 });
 
 test("invalidEnvVars flags an out-of-budget CARET_TIMEOUT (in-schema 3900s bound)", () => {
@@ -394,7 +395,7 @@ test("an unusable rotation env var falls through to the file value, then the def
 
 test("a file max_size below the floor reverts the whole file", async () => {
   await Bun.write(file, `[logging]\nlevel = "warn"\nmax_size = ${MIN_LOG_MAX_SIZE - 1}\n`);
-  expect(loadSettings(file)).toEqual(DEFAULTS);
+  expect(loadSettings(file)).toEqual(FAIL_CLOSED_DEFAULTS);
 });
 
 // Unbounded above, a threshold past Buffer's max length would make the archive
@@ -402,7 +403,7 @@ test("a file max_size below the floor reverts the whole file", async () => {
 // feature exists to prevent.
 test("a max_size above the ceiling is rejected, in the file and the env", async () => {
   await Bun.write(file, `[logging]\nmax_size = ${MAX_LOG_MAX_SIZE + 1}\n`);
-  expect(loadSettings(file)).toEqual(DEFAULTS);
+  expect(loadSettings(file)).toEqual(FAIL_CLOSED_DEFAULTS);
   withEnv({ ...NO_CARET, CARET_LOG_MAX_SIZE: String(MAX_LOG_MAX_SIZE + 1) }, () => {
     expect(invalidEnvVars()).toEqual(["CARET_LOG_MAX_SIZE"]);
     expect(logMaxSize(DEFAULTS)).toBe(DEFAULT_LOG_MAX_SIZE);
@@ -434,7 +435,7 @@ test("a file heartbeat_ms at or above the bound reverts the whole file", async (
     `[logging]\nlevel = "warn"\n\n[daemon]\nheartbeat_ms = ${MAX_HEARTBEAT_MS}\n`,
   );
   // Whole-file granularity: the valid logging.level reverts along with the bad key.
-  expect(loadSettings(file)).toEqual(DEFAULTS);
+  expect(loadSettings(file)).toEqual(FAIL_CLOSED_DEFAULTS);
 });
 
 test("an out-of-bound CARET_HEARTBEAT_MS falls back to the file value, then the default", async () => {
@@ -582,10 +583,10 @@ test("an absent [dev] table yields the inert dev defaults", () => {
   expect(loadSettings(file, false).dev).toEqual(DEFAULTS.dev);
 });
 
-test("a malformed [dev] value reverts the whole file to defaults", async () => {
+test("a malformed [dev] value reverts the whole file to the fail-closed defaults", async () => {
   // port must be a positive integer; -1 fails the schema → whole-file revert.
   await Bun.write(file, '[logging]\nlevel = "warn"\n\n[dev]\nport = -1\n');
-  expect(loadSettings(file, false)).toEqual(DEFAULTS);
+  expect(loadSettings(file, false)).toEqual(FAIL_CLOSED_DEFAULTS);
 });
 
 test("devPort resolves CARET_DEV_PORT > [dev].port > unset", async () => {
@@ -691,4 +692,101 @@ test("createSettings honors the prod-build gate on every current() read", async 
   await Bun.write(file, "[dev.notify]\nenabled = true\n");
   expect(createSettings(file, /* isCompiled */ true).current().dev).toEqual(DEFAULTS.dev);
   expect(createSettings(file, false).current().dev.notify.enabled).toBe(true);
+});
+
+// --- EXC-1570: [daemon] host, hostnames, auth ---
+
+/** The parsed [daemon] table for `body`, or null when the file is unusable. */
+async function daemonOf(body: string): Promise<Settings["daemon"] | null> {
+  await Bun.write(file, `[daemon]\n${body}\n`);
+  const s = loadSettings(file);
+  return s === FAIL_CLOSED_DEFAULTS ? null : s.daemon;
+}
+
+test("FAIL_CLOSED_DEFAULTS is the defaults with token auth", () => {
+  expect(FAIL_CLOSED_DEFAULTS).toEqual({
+    ...DEFAULTS,
+    daemon: { ...DEFAULTS.daemon, auth: "token" },
+  });
+});
+
+test.each(["0.0.0.0", "::", "192.168.1.5", "FE80::1", "localhost"])(
+  "host accepts %s",
+  async (h) => {
+    expect((await daemonOf(`host = "${h}"`))?.host).toBe(h);
+  },
+);
+
+test.each(["[::1]", "fe80::1%en0", "http://x", "caret.lan"])("host rejects %s", async (h) => {
+  expect(await daemonOf(`host = "${h}"`)).toBeNull();
+});
+
+test.each([
+  ["Caret.Home.LAN", "caret.home.lan"],
+  ["192.168.1.5", "192.168.1.5"],
+  ["[::1]", "[::1]"],
+  ["[FE80::1]", "[fe80::1]"],
+])("hostnames accepts %s as %s", async (raw, stored) => {
+  expect((await daemonOf(`hostnames = ["${raw}"]`))?.hostnames).toEqual([stored]);
+});
+
+test.each([
+  "http://caret.lan",
+  "caret.lan:42718",
+  "caret.lan:80",
+  "::1",
+  "user@caret.lan",
+  "caret.lan/",
+  "",
+])("hostnames rejects %p", async (raw) => {
+  expect(await daemonOf(`hostnames = ["${raw}"]`)).toBeNull();
+});
+
+test("a parsed hostnames list is frozen", async () => {
+  expect(Object.isFrozen((await daemonOf('hostnames = ["caret.lan"]'))?.hostnames)).toBe(true);
+});
+
+test.each(["token", "none"])("auth accepts %s", async (a) => {
+  expect((await daemonOf(`auth = "${a}"`))?.auth).toBe(a);
+});
+
+test("auth rejects a value outside token and none", async () => {
+  expect(await daemonOf('auth = "off"')).toBeNull();
+});
+
+test("the daemon address keys have no env override", () => {
+  withEnv(NO_CARET, () => expect(envOverrides()).toEqual([]));
+});
+
+test("watchSettings does not fire when hostnames are re-read unchanged", async () => {
+  await Bun.write(file, '[daemon]\nhostnames = ["caret.lan"]\n');
+  let fires = 0;
+  const svc = watchSettings(createSettings(file), () => fires++);
+  svc.current();
+  await Bun.write(file, '[daemon]\nhostnames = ["caret.lan"]\n\n');
+  svc.current();
+  expect(fires).toBe(0);
+});
+
+test("watchSettings reports removing daemon.auth", async () => {
+  await Bun.write(file, '[daemon]\nauth = "token"\n');
+  const fired: string[][] = [];
+  const svc = watchSettings(createSettings(file), (changes) => fired.push(changes));
+  svc.current();
+  await Bun.write(file, "[daemon]\n");
+  svc.current();
+  expect(fired).toEqual([["daemon.auth: token → undefined"]]);
+});
+
+test("current() serves token auth when the file is invalid from the start", async () => {
+  await Bun.write(file, '[daemon]\nauth = "off"\n');
+  expect(createSettings(file).current().daemon.auth).toBe("token");
+});
+
+test("current() keeps a good parse when the file turns invalid", async () => {
+  const svc = await seedWarmFile(file);
+  expect(svc.current().daemon.auth).toBeUndefined();
+  await Bun.write(file, '[daemon]\nauth = "off"\n');
+  utimesSync(file, new Date(2_000_000_000), new Date(2_000_000_000));
+  expect(svc.current()).toEqual({ ...DEFAULTS, logging: { ...DEFAULTS.logging, level: "warn" } });
 });

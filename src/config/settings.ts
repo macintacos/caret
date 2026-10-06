@@ -3,8 +3,10 @@
 // for every key. The file is user-authored; the one line caret writes itself is
 // `[updates] check`, which the Settings toggle edits in place (config-write.ts).
 //
-// Contract (EXC-429): reads NEVER throw. An absent, malformed, partial, or
-// invalid file falls back to last-known-good, then DEFAULTS. Invalid values
+// Contract (EXC-429): reads NEVER throw. An absent file yields DEFAULTS; a
+// malformed, partial, or invalid one falls back to last-known-good, then
+// FAIL_CLOSED_DEFAULTS (DEFAULTS with token auth on, EXC-1570), so a broken
+// file can never silently turn daemon auth off. Invalid values
 // fall back at whole-file granularity (one bad key reverts the entire file
 // until fixed). Unknown keys are stripped at every level for forward-compat —
 // which also means a typo'd known key (e.g. `levle`) is silently ignored.
@@ -16,6 +18,7 @@
 // default, reading through the settings service.
 
 import { readFileSync, statSync } from "node:fs";
+import { isIP } from "node:net";
 
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
@@ -60,6 +63,25 @@ const HeartbeatMs = z.number().int().positive().lt(MAX_HEARTBEAT_MS);
 // nonnegative because 0 legitimately means "rotate, archive nothing".
 const LogMaxSize = z.number().int().min(MIN_LOG_MAX_SIZE).max(MAX_LOG_MAX_SIZE);
 const LogKeep = z.number().int().nonnegative();
+// EXC-1570: a bind address — an IP literal (IPv6 unbracketed, as Bun.serve takes it) or
+// localhost. No zone id (`fe80::1%en0`): isIP accepts it, but no URL can carry it.
+const Host = z
+  .string()
+  .refine(
+    (h) => h === "localhost" || (isIP(h) !== 0 && !h.includes("%")),
+    "an IP address or localhost",
+  );
+// EXC-1570: a bare hostname or IP (IPv6 bracketed), stored lowercased — the form the Host
+// guard compares. Valid only when URL parses it back to the same hostname: a scheme, port,
+// path or userinfo changes the hostname or fails the parse.
+const Hostname = z.string().transform((raw, ctx) => {
+  const lower = raw.toLowerCase();
+  try {
+    if (lower !== "" && new URL(`http://${raw}`).hostname === lower) return lower;
+  } catch {}
+  ctx.addIssue({ code: "custom", message: "a bare hostname or IP address" });
+  return z.NEVER;
+});
 
 // EXC-558: dev-only settings ([dev]). Consumed ONLY by dev tooling
 // (scripts/tasks/dev/*, .mise/tasks/dev), which runs from source under bun;
@@ -97,6 +119,9 @@ const SettingsSchema = z.object({
       port: Port.default(DEFAULT_PORT), // EXC-430
       idle_ms: IdleMs.default(60_000), // EXC-430
       heartbeat_ms: HeartbeatMs.default(8_000), // EXC-430
+      host: Host.default("127.0.0.1"), // EXC-1570
+      hostnames: z.array(Hostname).default([]), // EXC-1570
+      auth: z.enum(["token", "none"]).optional(), // EXC-1570: unset → on exactly when exposed
     })
     .prefault({}),
   review: z
@@ -125,6 +150,7 @@ export type Settings = z.infer<typeof SettingsSchema>;
  * cache) — freeze so no consumer can mutate another's view. */
 function freeze(s: Settings): Settings {
   Object.freeze(s.logging);
+  Object.freeze(s.daemon.hostnames); // EXC-1570
   Object.freeze(s.daemon);
   Object.freeze(s.review);
   Object.freeze(s.opencode); // EXC-1340
@@ -137,6 +163,13 @@ function freeze(s: Settings): Settings {
 /** Every key at its schema default ({} has defaults for all keys, so this
  * never throws). */
 export const DEFAULTS: Settings = freeze(SettingsSchema.parse({}));
+
+/** What an existing but unusable config.toml yields: DEFAULTS with token auth on, so
+ * a broken file fails closed rather than silently turning daemon auth off (EXC-1570). */
+export const FAIL_CLOSED_DEFAULTS: Settings = freeze({
+  ...DEFAULTS,
+  daemon: { ...DEFAULTS.daemon, auth: "token" },
+});
 
 /** Log a validation failure with the offending key path and zod code ONLY —
  * never issue.message/received/expected, which can embed raw config values
@@ -169,7 +202,8 @@ function parseAndValidate(text: string, isCompiled: boolean): Settings | null {
 }
 
 /** One-shot synchronous load for the short-lived hook process. Never throws:
- * an absent/unreadable file or unusable content yields DEFAULTS. */
+ * an absent/unreadable file yields DEFAULTS; unusable content yields
+ * FAIL_CLOSED_DEFAULTS. */
 export function loadSettings(file = configFile(), isCompiled = isCompiledBinary()): Settings {
   let text: string;
   try {
@@ -177,7 +211,7 @@ export function loadSettings(file = configFile(), isCompiled = isCompiledBinary(
   } catch {
     return DEFAULTS; // absent or unreadable file (DEFAULTS.dev is already inert)
   }
-  return parseAndValidate(text, isCompiled) ?? DEFAULTS;
+  return parseAndValidate(text, isCompiled) ?? FAIL_CLOSED_DEFAULTS;
 }
 
 export interface SettingsService {
@@ -221,6 +255,7 @@ export function createSettings(
       // re-parsed (and re-logged) on every get; a later edit re-triggers.
       lastSig = { mtimeMs: st.mtimeMs, size: st.size };
       if (next !== null) lastGood = next;
+      else if (lastGood === DEFAULTS) lastGood = FAIL_CLOSED_DEFAULTS; // no good parse yet
       return lastGood;
     },
   };
@@ -240,10 +275,15 @@ function diffSettings(prev: Settings, next: Settings): string[] {
   for (const table of SETTINGS_TABLES) {
     const prevTable = prev[table];
     const nextTable = next[table];
-    for (const key of Object.keys(nextTable) as (keyof typeof nextTable)[]) {
+    // Union of keys so a removed optional key (daemon.auth) is seen; JSON so an
+    // equal array (daemon.hostnames, fresh each parse) is not.
+    const keys = new Set([...Object.keys(prevTable), ...Object.keys(nextTable)]);
+    for (const key of keys as Set<keyof typeof nextTable>) {
       const before = prevTable[key];
       const after = nextTable[key];
-      if (before !== after) changes.push(`${table}.${key}: ${before} → ${after}`);
+      if (JSON.stringify(before) !== JSON.stringify(after)) {
+        changes.push(`${table}.${key}: ${before} → ${after}`);
+      }
     }
   }
   return changes;
