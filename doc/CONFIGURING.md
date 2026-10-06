@@ -53,7 +53,7 @@ The file and every key in it are optional:
 - A missing file, or a missing key, falls back to the default.
 - An invalid file never crashes caret: it keeps the last valid parse, or, if there has
   never been one, the defaults with token auth on (see
-  [Reaching caret from another device](RUNNING.md#reaching-caret-from-another-device)).
+  [If the daemon stays on loopback](RUNNING.md#if-the-daemon-stays-on-loopback)).
 - Settings hot-reload — the file is re-read on change, with no daemon restart needed. The
   `[daemon]`, `[review]`, `[opencode]`, and `[dev]` tunables are the exceptions; see
   below.

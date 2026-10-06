@@ -109,9 +109,8 @@ your browser instead of the terminal prompt. There you:
 port, the review timeout, the log level — it reads an optional `config.toml` and `CARET_*`
 environment variables. Every key, every variable, and their defaults are in
 [`doc/CONFIGURING.md`](doc/CONFIGURING.md).
-To open the review UI from another device, such as a phone or a laptop reaching a home
-server, see
-[`doc/RUNNING.md` § Reaching caret from another device](doc/RUNNING.md#reaching-caret-from-another-device).
+To open the review UI from another device, such as a phone or a laptop, see
+[Reaching caret from another device](doc/RUNNING.md#reaching-caret-from-another-device).
 
 ## Documentation
 
