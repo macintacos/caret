@@ -602,6 +602,15 @@ test("the system-transform hook injects the planning steer for a plan-agent sess
   expect(steer).toContain(PLANS_DIR);
 });
 
+test("the system-transform hook steers a plan session whose client omitted the agent", async () => {
+  const hooks = await buildHooks(stubRunner("{}"));
+  await hooks["chat.message"]?.(
+    { sessionID: "S" } as never,
+    { message: { agent: "plan" } } as never,
+  );
+  expect((await steeredSystem(hooks, "S")).join("\n")).toContain(REVIEW_TOOL);
+});
+
 test.each([
   ["a non-planning agent's session", [{ sessionID: "S", agent: "build" }]],
   [
@@ -634,7 +643,7 @@ test("the system-transform hook pushes nothing for a session chat.message never 
 test("a chat.message with an unknown agent does not clobber the recorded one", async () => {
   const hooks = await buildHooks(stubRunner("{}"));
   await hooks["chat.message"]?.({ sessionID: "S", agent: "plan" } as never, {} as never);
-  await hooks["chat.message"]?.({ sessionID: "S" } as never, {} as never);
+  await hooks["chat.message"]?.({ sessionID: "S" } as never, { message: {} } as never);
   expect((await steeredSystem(hooks, "S")).join("\n")).toContain(REVIEW_TOOL);
 });
 
@@ -654,7 +663,7 @@ async function buildWarmHooks(warm: WarmRunner) {
   return await plugin({} as unknown as PluginInput);
 }
 
-/** A chat.message hook input addressed to `agent` (undefined ⇒ unknown caller). */
+/** A chat.message hook input addressed to `agent` (undefined ⇒ a client that omitted it). */
 function message(agent: string | undefined) {
   return { sessionID: "S", agent } as never;
 }
@@ -666,11 +675,18 @@ test("the chat.message hook warms the daemon for a plan-agent message", async ()
   expect(warmed).toEqual(["caret"]);
 });
 
-test("the chat.message hook does not warm for a non-planning or unknown agent", async () => {
+test("the chat.message hook warms for a plan session whose client omitted the agent", async () => {
+  const warmed: string[] = [];
+  const hooks = await buildWarmHooks((bin) => warmed.push(bin));
+  await hooks["chat.message"]?.(message(undefined), { message: { agent: "plan" } } as never);
+  expect(warmed).toEqual(["caret"]);
+});
+
+test("the chat.message hook does not warm for a non-planning agent, sent or defaulted", async () => {
   const warmed: string[] = [];
   const hooks = await buildWarmHooks((bin) => warmed.push(bin));
   await hooks["chat.message"]?.(message("build"), {} as never);
-  await hooks["chat.message"]?.(message(undefined), {} as never);
+  await hooks["chat.message"]?.(message(undefined), { message: { agent: "build" } } as never);
   expect(warmed).toEqual([]);
 });
 
