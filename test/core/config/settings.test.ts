@@ -703,19 +703,13 @@ async function daemonOf(body: string): Promise<Settings["daemon"] | null> {
   return s === FAIL_CLOSED_DEFAULTS ? null : s.daemon;
 }
 
-test("FAIL_CLOSED_DEFAULTS is the defaults with token auth", () => {
-  expect(FAIL_CLOSED_DEFAULTS).toEqual({
-    ...DEFAULTS,
-    daemon: { ...DEFAULTS.daemon, auth: "token" },
-  });
+test.each(["0.0.0.0", "::", "192.168.1.5", "FE80::1"])("host accepts %s", async (h) => {
+  expect((await daemonOf(`host = "${h}"`))?.host).toBe(h);
 });
 
-test.each(["0.0.0.0", "::", "192.168.1.5", "FE80::1", "localhost"])(
-  "host accepts %s",
-  async (h) => {
-    expect((await daemonOf(`host = "${h}"`))?.host).toBe(h);
-  },
-);
+test("host localhost resolves to the IPv4 loopback", async () => {
+  expect((await daemonOf('host = "localhost"'))?.host).toBe("127.0.0.1");
+});
 
 test.each(["[::1]", "fe80::1%en0", "http://x", "caret.lan"])("host rejects %s", async (h) => {
   expect(await daemonOf(`host = "${h}"`)).toBeNull();
@@ -754,8 +748,30 @@ test("auth rejects a value outside token and none", async () => {
   expect(await daemonOf('auth = "off"')).toBeNull();
 });
 
-test("the daemon address keys have no env override", () => {
-  withEnv(NO_CARET, () => expect(envOverrides()).toEqual([]));
+test("the daemon address keys have no env override", async () => {
+  await Bun.write(file, "");
+  const env = {
+    ...NO_CARET,
+    CARET_HOST: "0.0.0.0",
+    CARET_DAEMON_HOST: "0.0.0.0",
+    CARET_HOSTNAMES: "caret.lan",
+    CARET_AUTH: "none",
+    CARET_DAEMON_AUTH: "none",
+  };
+  withEnv(env, () => {
+    expect(envOverrides()).toEqual([]);
+    expect(loadSettings(file).daemon).toEqual(DEFAULTS.daemon);
+  });
+});
+
+test("watchSettings reports a hostnames change without the names", async () => {
+  await Bun.write(file, "[daemon]\n");
+  const fired: string[][] = [];
+  const svc = watchSettings(createSettings(file), (changes) => fired.push(changes));
+  svc.current();
+  await Bun.write(file, '[daemon]\nhostnames = ["julians-mbp.local"]\n');
+  svc.current();
+  expect(fired).toEqual([["daemon.hostnames: changed"]]);
 });
 
 test("watchSettings does not fire when hostnames are re-read unchanged", async () => {

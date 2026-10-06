@@ -5,6 +5,7 @@
 // logic stays unit-testable on its own.
 
 import { VANITY_HOST } from "@/config/constants.ts";
+import { isExposed } from "@/daemon/address.ts";
 
 /** How recently a UI tab must have polled GET /api/reviews to count as a live
  * client (EXC-559, EXC-562). It must comfortably exceed the browser's
@@ -51,12 +52,14 @@ const BUILT_IN_NAMES: readonly string[] = ["127.0.0.1", "localhost", VANITY_HOST
 /** The names a daemon bound to the default loopback address answers to. */
 export const LOOPBACK_NAMES: OwnNames = ownNames("127.0.0.1", []);
 
-/** Built-in names never enter `anyPort`, so listing `localhost` in `daemon.hostnames`
- * cannot make `http://localhost:3000` same-origin. */
+/** Built-in and loopback names never enter `anyPort`, so listing `localhost` or
+ * `[::1]` in `daemon.hostnames` cannot make `http://localhost:3000` same-origin. */
 export function ownNames(connectHostname: string, hostnames: readonly string[]): OwnNames {
+  const anyPortSafe = (h: string) =>
+    !BUILT_IN_NAMES.includes(h) && isExposed(h.replace(/^\[(.*)\]$/, "$1"));
   return {
     exact: new Set([...BUILT_IN_NAMES, connectHostname]),
-    anyPort: new Set(hostnames.filter((h) => !BUILT_IN_NAMES.includes(h))),
+    anyPort: new Set(hostnames.filter(anyPortSafe)),
   };
 }
 

@@ -5,8 +5,8 @@
 //
 // Contract (EXC-429): reads NEVER throw. An absent file yields DEFAULTS; a
 // malformed, partial, or invalid one falls back to last-known-good, then
-// FAIL_CLOSED_DEFAULTS (DEFAULTS with token auth on, EXC-1570), so a broken
-// file can never silently turn daemon auth off. Invalid values
+// FAIL_CLOSED_DEFAULTS (DEFAULTS with token auth on, EXC-1570), so a file
+// that fails to parse or validate never turns daemon auth off. Invalid values
 // fall back at whole-file granularity (one bad key reverts the entire file
 // until fixed). Unknown keys are stripped at every level for forward-compat —
 // which also means a typo'd known key (e.g. `levle`) is silently ignored.
@@ -42,6 +42,7 @@ import { configFile } from "@/config/paths.ts";
 import { isCompiledBinary } from "@/lib/build-id.ts";
 import { logError } from "@/lib/log.ts";
 import type { EnvOverride } from "@/lib/types.ts";
+import { DENY_KEYS } from "@/redact/core.ts";
 
 export { DEFAULT_PORT };
 
@@ -65,12 +66,15 @@ const LogMaxSize = z.number().int().min(MIN_LOG_MAX_SIZE).max(MAX_LOG_MAX_SIZE);
 const LogKeep = z.number().int().nonnegative();
 // EXC-1570: a bind address — an IP literal (IPv6 unbracketed, as Bun.serve takes it) or
 // localhost. No zone id (`fe80::1%en0`): isIP accepts it, but no URL can carry it.
+// localhost becomes 127.0.0.1: Bun binds it to ::1 alone on macOS, where the
+// caret.localhost tab (127.0.0.1) cannot reach it.
 const Host = z
   .string()
   .refine(
     (h) => h === "localhost" || (isIP(h) !== 0 && !h.includes("%")),
     "an IP address or localhost",
-  );
+  )
+  .transform((h) => (h === "localhost" ? "127.0.0.1" : h));
 // EXC-1570: a bare hostname or IP (IPv6 bracketed), stored lowercased — the form the Host
 // guard compares. Valid only when URL parses it back to the same hostname: a scheme, port,
 // path or userinfo changes the hostname or fails the parse.
@@ -268,8 +272,9 @@ export function createSettings(
 const SETTINGS_TABLES = ["logging", "daemon", "review", "updates"] as const;
 
 /** Describe value changes between two settings snapshots as
- * "table.key: old → new" lines. Validated values only (schema-constrained
- * scalars), so the output is safe for logs — raw config text never appears. */
+ * "table.key: old → new" lines. Schema-validated values only, so raw config text
+ * never appears; a DENY_KEYS key logs as "changed", since a value inside the
+ * message is out of the log redactor's reach. */
 function diffSettings(prev: Settings, next: Settings): string[] {
   const changes: string[] = [];
   for (const table of SETTINGS_TABLES) {
@@ -281,12 +286,17 @@ function diffSettings(prev: Settings, next: Settings): string[] {
     for (const key of keys as Set<keyof typeof nextTable>) {
       const before = prevTable[key];
       const after = nextTable[key];
-      if (JSON.stringify(before) !== JSON.stringify(after)) {
-        changes.push(`${table}.${key}: ${before} → ${after}`);
-      }
+      const [b, a] = [JSON.stringify(before), JSON.stringify(after)];
+      if (b === a) continue;
+      if (DENY_KEYS.has(key)) changes.push(`${table}.${key}: changed`);
+      else changes.push(`${table}.${key}: ${shown(before, b)} → ${shown(after, a)}`);
     }
   }
   return changes;
+}
+
+function shown(v: unknown, json: string | undefined): string {
+  return typeof v === "object" && v !== null ? String(json) : String(v);
 }
 
 /** Decorate a SettingsService so a hot-reload that changes values invokes

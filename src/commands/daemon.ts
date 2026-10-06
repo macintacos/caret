@@ -328,7 +328,11 @@ export async function runDaemon(opts: {
     // privileged one, an address that does not exist — so a supervisor must stop
     // rather than restart into it. Left to propagate, the CLI's fatal handler would
     // print the hook fail-safe's deny line and exit 0, which reads as a clean stop.
-    exitTerminal("cannot bind the daemon port", "daemon-bind-failed", e);
+    exitTerminal(
+      `cannot bind the daemon to ${boot.daemon.host}:${getPort(boot)}`,
+      "daemon-bind-failed",
+      e,
+    );
   }
   // The lock guards the port from here on.
   removeOwnBootMarker();

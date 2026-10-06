@@ -1,6 +1,8 @@
-// How the daemon is reached: pure address classification and URL building over the
-// [daemon] host / hostnames / auth settings (EXC-1570).
+// How the daemon is reached: address classification and URL building over the [daemon]
+// host / hostnames / auth settings; all pure except `daemonBaseUrl`, which resolves the
+// port through `getPort` (EXC-1570).
 
+import { VANITY_HOST } from "@/config/constants.ts";
 import { getPort, type Settings } from "@/config/settings.ts";
 
 /** Loopback is 127.0.0.0/8, ::1 and localhost; the wildcards and every other address
@@ -35,13 +37,21 @@ export function daemonBaseUrl(s: Settings): string {
  * connect hostname. */
 export function localHostname(host: string): string {
   const name = connectHostname(host);
-  return name === "127.0.0.1" || name === "localhost" ? "caret.localhost" : name;
+  return name === "127.0.0.1" || name === "localhost" ? VANITY_HOST : name;
 }
 
 /** The name humans elsewhere are sent to: the first daemon.hostnames entry, else
  * localHostname. */
 export function publicHostname(daemon: { host: string; hostnames: readonly string[] }): string {
   return daemon.hostnames[0] ?? localHostname(daemon.host);
+}
+
+/** The review UI's URL as humans elsewhere are sent to it. */
+export function publicUrl(
+  daemon: { host: string; hostnames: readonly string[] },
+  port: number,
+): string {
+  return `http://${publicHostname(daemon)}:${port}`;
 }
 
 /** `url` with ?token=<token> added, keeping any existing query. */

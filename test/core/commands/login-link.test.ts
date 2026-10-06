@@ -1,9 +1,10 @@
-import { afterEach, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { expect, test } from "bun:test";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { exposureWarning } from "@/commands/login-link.ts";
+import { drainProcess } from "@test/support/cli-process.ts";
+import { setupTempStateDir } from "@test/support/env.ts";
+import { exposureWarning, loginLinkOutcome } from "@/commands/login-link.ts";
 
 test.each([
   [{ host: "0.0.0.0", auth: "none" as const }, true],
@@ -19,60 +20,49 @@ test.each([
   }
 });
 
-const dirs: string[] = [];
-afterEach(async () => {
-  for (const d of dirs.splice(0)) await rm(d, { recursive: true, force: true });
-});
+const TOKEN_ON = { host: "127.0.0.1", auth: "token" as const, hostnames: ["caret.test"] };
+const TOKEN_FILE = "/state/caret/daemon.token";
 
-/** Run `caret login-link` over a temp config.toml holding `config` and a temp state home,
- * with `token` written to its token file when given. */
-async function loginLink(config: string, token?: string) {
-  const dir = await mkdtemp(join(tmpdir(), "caret-login-link-"));
-  dirs.push(dir);
-  const configFile = join(dir, "config.toml");
-  await writeFile(configFile, config);
-  const tokenFile = join(dir, "caret", "daemon.token");
-  if (token !== undefined) {
-    await mkdir(join(dir, "caret"), { recursive: true });
-    await writeFile(tokenFile, token);
-  }
-  const proc = Bun.spawn([process.execPath, "src/cli.ts", "login-link"], {
-    env: {
-      ...process.env,
-      CARET_CONFIG_FILE: configFile,
-      XDG_STATE_HOME: dir,
-      CARET_PORT: "4242",
-    },
-    stdout: "pipe",
-    stderr: "pipe",
+test("loginLinkOutcome prints the login link when auth is on and a token exists", () => {
+  expect(loginLinkOutcome(TOKEN_ON, 4242, "tok123", TOKEN_FILE)).toEqual({
+    stdout: "http://caret.test:4242/?token=tok123",
+    stderr: [],
+    code: 0,
   });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { stdout, stderr, code, tokenFile };
-}
-
-const TOKEN_ON = '[daemon]\nauth = "token"\nhostnames = ["caret.test"]\n';
-
-test("login-link prints the login link when auth is on and a token exists", async () => {
-  const r = await loginLink(TOKEN_ON, "tok123");
-  expect(r.code).toBe(0);
-  expect(r.stdout.trim()).toBe("http://caret.test:4242/?token=tok123");
 });
 
-test("login-link fails naming the token file when no daemon has minted one", async () => {
-  const r = await loginLink(TOKEN_ON);
-  expect(r.code).toBe(1);
-  expect(r.stdout).toBe("");
-  expect(r.stderr).toContain(r.tokenFile);
+test("loginLinkOutcome fails naming the token file when no daemon has minted one", () => {
+  const o = loginLinkOutcome(TOKEN_ON, 4242, null, TOKEN_FILE);
+  expect(o.code).toBe(1);
+  expect(o.stdout).toBeUndefined();
+  expect(o.stderr.join("\n")).toContain(TOKEN_FILE);
 });
 
-test("login-link fails pointing at the plain URL and warns when auth is off on an exposed bind", async () => {
-  const r = await loginLink('[daemon]\nhost = "0.0.0.0"\nauth = "none"\n', "tok123");
-  expect(r.code).toBe(1);
-  expect(r.stdout).toBe("");
-  expect(r.stderr).toContain("http://caret.localhost:4242");
-  expect(r.stderr).toContain(exposureWarning({ host: "0.0.0.0", auth: "none" }, 4242) ?? "");
+test.each([
+  [{ host: "0.0.0.0", auth: "none" as const, hostnames: [] }, true],
+  [{ host: "127.0.0.1", hostnames: [] }, false],
+])("loginLinkOutcome with auth off (%o) points at the plain URL, warning: %p", (daemon, warns) => {
+  const o = loginLinkOutcome(daemon, 4242, "tok123", TOKEN_FILE);
+  expect(o.code).toBe(1);
+  expect(o.stdout).toBeUndefined();
+  expect(o.stderr[0]).toContain("http://caret.localhost:4242");
+  expect(o.stderr.length).toBe(warns ? 2 : 1);
+});
+
+const stateDir = setupTempStateDir("caret-login-link-");
+
+test("caret login-link writes the outcome to stdout and its exit code", async () => {
+  const configFile = join(stateDir(), "config.toml");
+  await writeFile(configFile, '[daemon]\nauth = "token"\nhostnames = ["caret.test"]\n');
+  await mkdir(join(stateDir(), "caret"), { recursive: true });
+  await writeFile(join(stateDir(), "caret", "daemon.token"), "tok123");
+  const r = await drainProcess(
+    Bun.spawn([process.execPath, "src/cli.ts", "login-link"], {
+      env: { ...process.env, CARET_CONFIG_FILE: configFile, CARET_PORT: "4242" },
+      stdout: "pipe",
+      stderr: "pipe",
+    }),
+  );
+  expect(r.exit).toBe(0);
+  expect(r.stdout).toBe("http://caret.test:4242/?token=tok123\n");
 });

@@ -302,12 +302,15 @@ runs (`42718` is `[daemon].port`):
 curl -s http://127.0.0.1:42718/api/diagnostics | jq '{resident, upkeep}'
 ```
 
+With token auth on, add
+`-H "Authorization: Bearer $(cat "${XDG_STATE_HOME:-$HOME/.local/state}/caret/daemon.token")"`.
+
 While the service is stopped, the next review starts an on-demand daemon, which exits once
 it has sat idle for `[daemon].idle_ms` with no review pending and no review UI tab open.
 
-The service's daemon prints nothing a browser can use. With token auth on (see
+The service's daemon never prints its login link; with token auth on (see
 [Reaching the UI from another device](CONFIGURING.md#reaching-the-ui-from-another-device)),
-get the link that logs a device in from `caret login-link`.
+get it from `caret login-link`.
 
 ### What the service runs
 
@@ -455,8 +458,8 @@ only genuine failures sit at error.
 - `caret redact` — scrubs the three live logs, not the archives, into shareable
   `*.redacted.log` siblings (home paths become `~`, usernames in foreign home paths are
   censored). For always-on scrubbing at write time, set `redact = true` in `[logging]`.
-  Plan, prompt, and review-feedback bodies are never written to logs regardless of the
-  toggle.
+  Plan, prompt, and review-feedback bodies, and the names in `daemon.hostnames`, are never
+  written to logs regardless of the toggle.
 
 Contributors should see `agents/logging-rules.md` for the logging conventions — when to
 log, levels, and message style.

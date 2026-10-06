@@ -181,12 +181,11 @@ How long a daemon stays up, and who may replace it.
 ## Daemon trust model
 
 By default the daemon binds **loopback only** (`127.0.0.1`) and runs with **no auth**,
-sized for a single-user laptop. On that default the posture is unchanged: any local
-process can already reach the daemon and read plan content, so the daemon does not
-authenticate local callers — the one adversary it defends against is a
-**browser on another origin** that the user happens to have open. `[daemon]` `host`,
-`hostnames` and `auth` (config-only, read at boot) widen the bind and switch a token on;
-the rules below cover both shapes.
+sized for a single-user laptop. On that default any local process can already reach the
+daemon and read plan content, so the daemon does not authenticate local callers — the one
+adversary it defends against is a **browser on another origin** that the user happens to
+have open. `[daemon]` `host`, `hostnames` and `auth` (config-only, read at boot) widen the
+bind and switch a token on; the rules below cover both shapes.
 
 - **The auth switch.** `authEnabled` (`src/daemon/address.ts`): `daemon.auth` wins when
   set; unset, auth is on exactly when `isExposed(daemon.host)` — anything outside
@@ -204,11 +203,11 @@ the rules below cover both shapes.
   in once with `?token=`: `authGate` (`src/daemon/auth.ts`) checks it in constant time,
   sets a per-port cookie, and redirects with `token` stripped and every other parameter
   kept.
-- **The link is printed only by CLI processes, never the daemon.** `caret serve` prints it
-  after `runDaemon` returns, and `caret login-link` reads the token file without asking
-  the daemon or minting one. The daemon's stdout and stderr land in `daemon-stderr.log`,
-  which the `caret doctor` bundle ships unredacted, so the daemon never prints or logs the
-  token; an integration test pins that.
+- **The token is printed only to a terminal the user ran:** by `caret serve` after
+  `runDaemon` returns, and by `caret login-link`, which reads the token file without
+  asking the daemon or minting one. Never by `caret daemon`, whose stdout and stderr land
+  in `daemon-stderr.log`, which the `caret doctor` bundle ships unredacted; an integration
+  test pins that.
 - **Adapters reach the daemon only by spawning the caret CLI**, never over HTTP, so none
   bypasses the token. A new adapter that wants the daemon goes through `caret review` or
   another CLI command, which carries the token for it.
@@ -248,13 +247,19 @@ the rules below cover both shapes.
   **any-port** tier is `daemon.hostnames`: matched on any port, with an `http:` or
   `https:` Origin, because an HTTPS reverse proxy forwards its own Host (no caret port)
   and the browser's `https://` Origin — authority-exact matching would 403 everything
-  through it. That divergence is scoped to names the user listed; a built-in name never
-  joins the any-port tier, even when listed, so listing `localhost` cannot make
-  `http://localhost:3000` same-origin.
+  through it. That divergence is scoped to names the user listed; a built-in name or any
+  other loopback name (`[::1]`, `127.x`) never joins the any-port tier, even when listed,
+  so listing `localhost` cannot make `http://localhost:3000` same-origin.
 - **Residual: cross-port pages on a configured name.** A page served from another port of
   a `daemon.hostnames` name passes both guards. Modern browsers still stop its writes —
   they send `Sec-Fetch-Site: same-site`, which `isCrossOrigin` rejects — but an older
   browser that omits the header does not.
+- **Residual: the token travels in cleartext.** The login link is `http://`, and the auth
+  cookie is `httpOnly` but not `Secure`, so over plain HTTP the token and cookie are only
+  as safe as the network path and the name's resolution: a passive listener on shared
+  Wi-Fi, or any LAN peer answering an unauthenticated mDNS `.local` name, captures them
+  and gets full API access. Off a trusted network, keep the bind on loopback behind an
+  HTTPS reverse proxy.
 - **No preflight handler exists or is needed.** A same-origin request sends no `OPTIONS`
   preflight, and a cross-origin preflight would be denied by the browser before any
   request body is sent (no advertised CORS headers).

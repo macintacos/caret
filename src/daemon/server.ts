@@ -132,7 +132,9 @@ export interface CreateServerOptions {
   tokenFile?: string;
   /** Bind address (an IP literal or localhost, IPv6 unbracketed); defaults to 127.0.0.1. */
   hostname?: string;
-  /** Extra names the Host and CSRF guards admit on any port (`daemon.hostnames`). */
+  /** Extra names the Host and CSRF guards admit on any port (`daemon.hostnames`). Each
+   * must already be a lowercase URL hostname (IPv6 bracketed), as that key's schema
+   * produces: the guard compares them against `new URL(...).hostname`. */
   hostnames?: readonly string[];
   /** Build fingerprint (paths.buildHash of the served UI) reported in
    * /api/health and recorded in the lock, so a newer caret can detect staleness. */
@@ -1195,8 +1197,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     }
   }
 
-  // Loopback unless daemon.host says otherwise; runDaemon turns token auth on for any
-  // exposed bind unless daemon.auth = "none".
+  // An exposed bind is safe only behind the token gate runDaemon wires (authEnabled).
   const server = Bun.serve({
     port: opts.port ?? 0,
     hostname: cfg.hostname,

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 
+import { VANITY_HOST } from "@/config/constants.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import {
   authEnabled,
@@ -9,6 +10,7 @@ import {
   localHostname,
   loginLink,
   publicHostname,
+  publicUrl,
 } from "@/daemon/address.ts";
 
 test.each([
@@ -55,9 +57,9 @@ test("daemonBaseUrl joins the connect hostname and the port", () => {
 });
 
 test.each([
-  ["127.0.0.1", "caret.localhost"],
-  ["localhost", "caret.localhost"],
-  ["0.0.0.0", "caret.localhost"],
+  ["127.0.0.1", VANITY_HOST],
+  ["localhost", VANITY_HOST],
+  ["0.0.0.0", VANITY_HOST],
   ["192.168.1.5", "192.168.1.5"],
   ["::", "[::1]"],
 ])("localHostname(%s) is %s", (host, name) => {
@@ -71,7 +73,14 @@ test("publicHostname prefers the first configured hostname", () => {
 });
 
 test("publicHostname falls back to the local hostname", () => {
-  expect(publicHostname({ host: "0.0.0.0", hostnames: [] })).toBe("caret.localhost");
+  expect(publicHostname({ host: "0.0.0.0", hostnames: [] })).toBe(VANITY_HOST);
+});
+
+test("publicUrl joins the public hostname and the port", () => {
+  expect(publicUrl({ host: "0.0.0.0", hostnames: ["caret.lan"] }, 5000)).toBe(
+    "http://caret.lan:5000",
+  );
+  expect(publicUrl({ host: "127.0.0.1", hostnames: [] }, 5000)).toBe(`http://${VANITY_HOST}:5000`);
 });
 
 test("loginLink adds the token to a bare origin", () => {

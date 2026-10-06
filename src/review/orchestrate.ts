@@ -149,6 +149,14 @@ export async function expireAbandoned(
   }
 }
 
+/** The review's URL on `baseUrl`'s port under the named `hostname` humans reach it by;
+ * internal fetches keep using baseUrl. */
+function reviewUrl(baseUrl: string, hostname: string, id: string): string {
+  const u = new URL(baseUrl);
+  u.hostname = hostname;
+  return `${u.origin}/?review=${id}`;
+}
+
 /** Run a review end-to-end, returning the core `Decision`. Never throws — any
  * failure becomes a deny so an unreviewed plan can never ship. The command layer
  * renders the returned Decision to the agent's wire string via the adapter. */
@@ -215,24 +223,20 @@ export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Prom
     // file that moved on.
     deps.onPosted?.({ baseUrl, id, version, planFileCurrent });
     logDebug("review", `review created: ${shortId(id)}`);
-    // Humans get a named origin; internal fetches keep using baseUrl. The announced
-    // URL reaches the transcript, so only the tab opened on this machine carries the token.
-    const origin = new URL(baseUrl);
-    const reviewUrl = (hostname: string) => {
-      const u = new URL(origin);
-      u.hostname = hostname;
-      return `${u.origin}/?review=${id}`;
-    };
-    const token = deps.loginToken();
-    const local = reviewUrl(deps.localHostname);
+    // The announced URL reaches the transcript, so only the tab opened on this machine
+    // carries the token.
     // EXC-559: a live UI tab already surfaces the review and runs the notifier;
     // foregrounding the browser would make the tab focused at the poll instant,
     // pre-empting the away-gated desktop notification. An older daemon reports no
     // such field, which fails safe to opening.
-    if (!hasLiveClient) deps.openBrowser(token === null ? local : loginLink(local, token));
+    if (!hasLiveClient) {
+      const local = reviewUrl(baseUrl, deps.localHostname, id);
+      const token = deps.loginToken();
+      deps.openBrowser(token === null ? local : loginLink(local, token));
+    }
     // Unconditional: the announcement is the fallback for a browser that never
     // opened, and the handle a live tab's reader still wants.
-    deps.announceUrl(reviewUrl(deps.publicHostname));
+    deps.announceUrl(reviewUrl(baseUrl, deps.publicHostname, id));
 
     step = "longPoll";
     // Re-poll on each heartbeat (null); on a transient drop reconnect and keep going

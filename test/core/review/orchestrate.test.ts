@@ -98,6 +98,21 @@ test("does not open the browser when a live UI client is already polling (EXC-55
   expect(opened).toBe(false);
 });
 
+test("leaves the token file unread when a live UI client means no tab opens", async () => {
+  let read = false;
+  await review(
+    stdin,
+    reviewDeps({
+      postReview: async () => ({ id: "rid", hasLiveClient: true }),
+      loginToken: () => {
+        read = true;
+        return "tok";
+      },
+    }),
+  );
+  expect(read).toBe(false);
+});
+
 test("announces the review URL through the injected sink, never on stderr itself", async () => {
   let announced: string | undefined;
   await review(

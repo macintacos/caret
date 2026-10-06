@@ -8,7 +8,7 @@ import { CENSOR, DENY_KEYS, MAX_DEPTH, scrubGraph, shortId } from "@/redact/core
 
 test("exports the shared constants", () => {
   expect(CENSOR).toBe("<redacted>");
-  expect([...DENY_KEYS]).toEqual(["plan", "prompt", "feedback"]);
+  expect([...DENY_KEYS]).toEqual(["plan", "prompt", "feedback", "hostnames"]);
   expect(MAX_DEPTH).toBe(6);
 });
 
@@ -26,6 +26,12 @@ test("scrubGraph censors DENY_KEYS recursively with no string transform", () => 
     plan: "<redacted>",
     nested: { feedback: "<redacted>", keep: "ok" },
     prompt: "<redacted>",
+  });
+});
+
+test("scrubGraph censors a daemon hostnames list", () => {
+  expect(scrubGraph({ daemon: { host: "0.0.0.0", hostnames: ["julians-mbp.local"] } })).toEqual({
+    daemon: { host: "0.0.0.0", hostnames: CENSOR },
   });
 });
 

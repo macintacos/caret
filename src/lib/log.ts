@@ -117,7 +117,7 @@ const pinoOpts = {
  * EXC-399) are re-read per emit so config edits and setLogLevel/setRedact
  * hot-reload; pino's level setter re-binds every level method, so skip the
  * assignment when the level is unchanged. The redact walk runs even with the
- * switch off (plan/prompt/feedback censoring is unconditional); `step` is
+ * switch off (DENY_KEYS censoring is unconditional); `step` is
  * attached after it, raw: structural fields always win and a fixed step token is
  * never PII. Errors are serialized here (errWithCause) rather than via a pino
  * serializer so the scrub can cover message/stack/cause — pino's own `redact`

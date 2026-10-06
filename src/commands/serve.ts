@@ -1,10 +1,10 @@
 // `caret serve`: run the daemon resident in the foreground — the alternative to the service.
 
 import { runDaemon } from "@/commands/daemon.ts";
-import { exposureWarning, publicUrl } from "@/commands/login-link.ts";
+import { exposureWarning } from "@/commands/login-link.ts";
 import { daemonTokenFile, stateDir } from "@/config/paths.ts";
 import { settings } from "@/config/settings.ts";
-import { authEnabled, daemonBaseUrl, loginLink } from "@/daemon/address.ts";
+import { authEnabled, daemonBaseUrl, loginLink, publicUrl } from "@/daemon/address.ts";
 import { httpHealth } from "@/daemon/client.ts";
 import { readDaemonLock, retireDaemon, vacatePort } from "@/daemon/lifecycle.ts";
 import { DRAIN_DEADLINE_MS } from "@/daemon/server.ts";
@@ -30,12 +30,12 @@ export async function runServe(): Promise<void> {
   // ponytail: a hook can still spawn into the gap before the bind, and serve then exits as a
   // lost port race; loop vacate-and-bind if that shows up in practice.
   const { port, settings: booted } = await runDaemon({ ephemeral: false, resident: true });
-  const url = publicUrl(booted, port);
+  const url = publicUrl(booted.daemon, port);
   process.stdout.write(`caret is serving the review UI at ${url} — Ctrl+C stops it.\n`);
   const token = authEnabled(booted.daemon) ? readToken(daemonTokenFile()) : null;
   if (token !== null) {
     process.stdout.write(
-      `Open this link once on each device to log it in: ${loginLink(`${url}/`, token)}\n`,
+      `Open this link once on each device to log it in: ${loginLink(url, token)}\n`,
     );
   }
   const warning = exposureWarning(booted.daemon, port);

@@ -624,7 +624,7 @@ test("isClientLive: never-polled, fresh, and stale windows (EXC-559)", () => {
 // cannot reach are exercised here directly (EXC-1203). `fetch` always sends a
 // Host, so a missing one is only reachable through a constructed Request; and
 // the Host gate now blocks GET too, which means dropping an entry from
-// OWN_HOSTNAMES bricks the UI for that address rather than costing a mutation —
+// BUILT_IN_NAMES bricks the UI for that address rather than costing a mutation —
 // so every accepted hostname is pinned positively, not just implied by `base`.
 test("isForeignHost: authority-exact, userinfo-proof, Host required (EXC-1203)", () => {
   const req = (host?: string) =>
@@ -670,6 +670,13 @@ test("isForeignHost: built-in names stay port-exact even when listed in hostname
   expect(isForeignHost(req("localhost:42718"), 42718, names)).toBe(false);
 });
 
+test("isForeignHost: listed loopback names stay off the any-port tier", () => {
+  const req = (host: string) => new Request("http://x/", { headers: { Host: host } });
+  const names = ownNames("127.0.0.1", ["[::1]", "127.0.0.2"]);
+  expect(isForeignHost(req("[::1]:3000"), 42718, names)).toBe(true);
+  expect(isForeignHost(req("127.0.0.2:3000"), 42718, names)).toBe(true);
+});
+
 test("isForeignHost: the connect hostname is admitted on the bound port only", () => {
   const req = (host: string) => new Request("http://x/", { headers: { Host: host } });
   const names = ownNames("192.168.1.5", []);
@@ -701,6 +708,30 @@ test("a request refused at the gates leaves the idle countdown untouched", async
   const before = arms;
   const res = await fetch(`${base}/api/health`, { headers: { Host: "evil.com" } });
   expect(res.status).toBe(403);
+  const csrf = await fetch(`${base}/api/reviews`, {
+    method: "POST",
+    headers: { Origin: "http://evil.com" },
+  });
+  expect(csrf.status).toBe(403);
+  expect(arms).toBe(before);
+});
+
+test("a request refused by the token gate leaves the idle countdown untouched", async () => {
+  let arms = 0;
+  const timer = manualTimer();
+  await boot({
+    idleMs: 30,
+    onShutdown: () => {},
+    tokenFile: join(dir, "daemon.token"),
+    setIdleTimer: (fn, ms) => {
+      arms += 1;
+      return timer.setTimer(fn, ms);
+    },
+    clearIdleTimer: timer.clearTimer,
+  });
+  const before = arms;
+  const res = await fetch(`${base}/api/health`);
+  expect(res.status).toBe(401);
   expect(arms).toBe(before);
 });
 
