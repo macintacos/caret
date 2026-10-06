@@ -17,6 +17,7 @@ Find the row that matches what you came here to do, then follow the link.
 | Tell which plans arrived while you were reading another one | [`RUNNING.md` § Unread plans](RUNNING.md#unread-plans) |
 | Clear a cmux pane's unread mark from a review | [`RUNNING.md` § cmux unread marks](RUNNING.md#cmux-unread-marks) |
 | Find out what the mark on the settings button means, or stop update notices | [`RUNNING.md` § Update notices](RUNNING.md#update-notices) |
+| Open the review UI from another device, or log every device out | [`RUNNING.md` § Reaching caret from another device](RUNNING.md#reaching-caret-from-another-device) |
 | Stop caret starting with your machine, or remove it | [`RUNNING.md` § Turning caret off](RUNNING.md#turning-caret-off) |
 | Find the logs, or scrub them before sharing | [`RUNNING.md` § Logging & Debugging](RUNNING.md#logging--debugging) |
 | Work out why caret isn't working, or gather a report to share | [`RUNNING.md` § Diagnostics](RUNNING.md#diagnostics) |

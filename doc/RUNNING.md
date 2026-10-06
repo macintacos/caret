@@ -309,7 +309,7 @@ While the service is stopped, the next review starts an on-demand daemon, which 
 it has sat idle for `[daemon].idle_ms` with no review pending and no review UI tab open.
 
 The service's daemon never prints its login link; with token auth on (see
-[Reaching the UI from another device](CONFIGURING.md#reaching-the-ui-from-another-device)),
+[Reaching caret from another device](#reaching-caret-from-another-device)),
 get it from `caret login-link`.
 
 ### What the service runs
@@ -350,6 +350,102 @@ On Linux, install also runs `loginctl enable-linger` so the service outlives you
 Some distributions refuse that without admin rights; install then logs
 `lingering not enabled; caret stops at logout` and carries on, and caret stops when you
 log out.
+
+## Reaching caret from another device
+
+By default the daemon listens on `127.0.0.1` only, with no auth. These steps take a server
+running a resident daemon, [the caret service](#the-caret-service) or `caret serve`, to a
+logged-in browser on a phone, tablet or another computer. They assume a network you trust;
+otherwise see [Plain HTTP and an HTTPS proxy](#plain-http-and-an-https-proxy).
+
+1. **Set the address.** In the `[daemon]` table of
+   [`config.toml`](CONFIGURING.md#config-file) (keys in
+   [The daemon and review tables](CONFIGURING.md#the-daemon-and-review-tables)), bind the
+   daemon to the network and give it a name:
+
+   ```toml
+   [daemon]
+   host = "0.0.0.0"
+   hostnames = ["caret.home.lan"]
+   port = 42718
+   ```
+
+   An exposed `host` turns token auth on. The daemon answers only to the `hostnames`
+   entries, and to `host` when it is a specific address, and refuses any other name with
+   `403 host not recognized`, so with a wildcard bind (`0.0.0.0` or `::`), a device that
+   reaches the server by IP address needs that IP in `hostnames`. The first `hostnames`
+   entry is the name printed links use. A specific address in `host` also works, but the
+   daemon can't start while that address is missing (after a network or DHCP change, or a
+   boot that beats the network) and exits rather than waiting, so prefer a wildcard bind
+   plus `hostnames`. If the server runs a firewall, allow incoming TCP on `port`.
+2. **Point a DNS record at the server.** In your router or local DNS server, add an A or
+   AAAA record from the first `hostnames` entry to the server's LAN address; a computer
+   can use a hosts-file entry instead. Avoid an mDNS `.local` name: any device on the LAN
+   can answer a `.local` lookup and receive the token. Skip this step if devices reach the
+   server by an IP you listed.
+3. **Restart the daemon.** These keys take effect on the next start. For `caret serve`,
+   press Ctrl+C and run it again. For the caret service, use its
+   [Restart command](#the-caret-service):
+   `launchctl kickstart -k gui/$(id -u)/dev.excessive.caret` on macOS,
+   `systemctl --user restart caret.service` on Linux. `caret install --refresh` also
+   restarts it.
+4. **Open the login link once on each device.** `caret serve` prints it on every start.
+   Otherwise, run `caret login-link`:
+
+   ```sh
+   caret login-link
+   # http://caret.home.lan:42718/?token=…
+   ```
+
+   Opening the link sets a cookie that keeps the device logged in. The link is a secret:
+   anyone holding it can log in. `caret login-link` reads `config.toml` and the token
+   file, not the running daemon, so its link works only once the daemon has restarted
+   (step 3).
+
+### Logging every device out
+
+Delete the token file and restart the daemon (step 3):
+
+```sh
+rm "${XDG_STATE_HOME:-$HOME/.local/state}/caret/daemon.token"
+```
+
+The daemon mints a new token at start, so every device's cookie stops matching. Open the
+new link from `caret login-link` on each device you keep.
+
+### Plain HTTP and an HTTPS proxy
+
+caret speaks plain HTTP, so everything, the token in the link and the cookie included,
+crosses the LAN unencrypted. On a network you don't trust, put caret behind an HTTPS
+reverse proxy rather than exposing the bind. Run the proxy on the same machine, keep
+`host` on loopback, list the proxy's name in `hostnames`, and set `auth = "token"`, since
+a loopback bind leaves auth off otherwise:
+
+```toml
+[daemon]
+host = "127.0.0.1"
+hostnames = ["caret.example.com"]
+auth = "token"
+```
+
+Configured names match on any port and over `https`, so the proxy's requests pass. The
+links caret prints stay `http://<name>:<port>`; rewrite them to the proxy's
+`https://<name>/`, keeping the `?token=` part.
+
+### Turning auth off
+
+`auth = "none"` on an exposed bind turns the login off: devices open
+`http://<name>:<port>/` directly, and `caret login-link` prints that URL instead of a
+link. Anyone who can reach the port can then read plans, read files under a review's
+working directory, and approve a plan. `caret serve` and `caret login-link` warn when it
+is set.
+
+### If the daemon stays on loopback
+
+- **An invalid `config.toml`** leaves the daemon on loopback with token auth on, rather
+  than falling back to no auth. `caret serve` and `caret login-link` then print a link to
+  `caret.localhost` instead of your `hostnames` name.
+- **An older caret ignores these keys** and keeps listening on loopback only.
 
 ## Turning caret off
 
