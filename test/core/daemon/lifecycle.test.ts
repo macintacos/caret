@@ -1574,6 +1574,7 @@ function vacateDeps(answers: (HealthBody | null)[], retire: () => Promise<boolea
     // Each probe takes the next answer; the last one repeats.
     health: async () => (answers.length > 1 ? (answers.shift() ?? null) : (answers[0] ?? null)),
     retire,
+    readLock: (): DaemonLock | null => null,
     now: () => clock,
     sleep: async (ms: number) => {
       clock += ms;
@@ -1612,6 +1613,41 @@ test.each([
 test("vacatePort gives up on a daemon that never lets the port go", async () => {
   const stuck = peer("stuck", { resident: false, supervised: false });
   expect(await vacatePort(vacateDeps([stuck], async () => true))).toEqual(expect.any(String));
+});
+
+test("vacatePort retires the on-demand daemon an address edit left behind, then reports the port free", async () => {
+  const retired: string[] = [];
+  const deps = vacateDeps([null], async () => true);
+  const result = await vacatePort({
+    ...deps,
+    readLock: () => strayLock(),
+    health: async (url) =>
+      url === "http://127.0.0.1:42718" && retired.length === 0
+        ? peer("old", { resident: false, supervised: false })
+        : null,
+    retire: async (url) => {
+      retired.push(url);
+      return true;
+    },
+  });
+  expect(retired).toEqual(["http://127.0.0.1:42718"]);
+  expect(result).toBeNull();
+});
+
+test("vacatePort refuses a supervised daemon an address edit left behind", async () => {
+  let retires = 0;
+  const deps = vacateDeps([null], async () => {
+    retires++;
+    return true;
+  });
+  const result = await vacatePort({
+    ...deps,
+    readLock: () => strayLock(),
+    health: async (url) =>
+      url === "http://127.0.0.1:42718" ? peer("old", { supervised: true }) : null,
+  });
+  expect(result).toEqual(expect.any(String));
+  expect(retires).toBe(0);
 });
 
 // ---- a daemon that refuses the token ----

@@ -446,6 +446,8 @@ export interface VacateDeps {
   health: (baseUrl: string) => Promise<HealthBody | null>;
   /** Ask the daemon at `baseUrl` to step down; false when it cannot be asked. */
   retire: (baseUrl: string) => Promise<boolean>;
+  /** Read the daemon lock, or null if absent/unreadable. */
+  readLock: () => DaemonLock | null;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
 }
@@ -467,19 +469,20 @@ export async function vacatePort(deps: VacateDeps): Promise<string | null> {
 async function vacate(deps: VacateDeps): Promise<string | null> {
   const deadline = deps.now() + deps.deadlineMs;
   let retired: string | undefined;
+  const url = (await strayDaemon(deps.readLock(), deps.baseUrl, deps.health))?.url ?? deps.baseUrl;
   for (;;) {
-    const h = await deps.health(deps.baseUrl);
+    const h = await deps.health(url);
     if (h?.service !== "caret") return null;
     if (isForeignWorld(h, deps.currentStateDir)) return FOREIGN_WORLD_ERROR;
     // Retiring it would only have its supervisor start another to fight for the port.
     if ((h.supervised ?? h.resident) === true) {
-      return "caret's service already serves the review UI on this port — run `caret install` and answer \"I'll run it myself\" to serve it from a terminal instead";
+      return "caret's service already serves the review UI — run `caret install` and answer \"I'll run it myself\" to serve it from a terminal instead";
     }
-    if (deps.now() >= deadline) return "the caret daemon on this port did not stop in time";
+    if (deps.now() >= deadline) return "the caret daemon did not stop in time";
     // Once per instance: a draining daemon keeps answering until it lets the port go.
     if (h.instanceId === undefined || h.instanceId !== retired) {
-      if (!(await deps.retire(deps.baseUrl))) {
-        return "the caret daemon on this port could not be asked to stop";
+      if (!(await deps.retire(url))) {
+        return "the caret daemon could not be asked to stop";
       }
       retired = h.instanceId;
     }

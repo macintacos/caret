@@ -91,8 +91,9 @@ Every review and prewarm hook first makes sure a current daemon holds the port
 - A review hook whose long-poll drops mid-review only reattaches, to whatever daemon of
   its state directory answers, whatever its build.
 
-`caret serve` retires an unsupervised daemon on its way in, and refuses to start when the
-service holds the port.
+`caret serve` retires an unsupervised daemon on its way in, including one the lock places
+on another address after a `daemon.host` or `daemon.port` edit, and refuses to start when
+the service holds the port or runs that daemon.
 
 A daemon steps down by draining, on `POST /api/retire` or SIGTERM, which is how a
 supervisor stops it. It answers new reviews with `503`, lets in-flight writes land and

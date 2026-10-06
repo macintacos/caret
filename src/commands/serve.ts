@@ -19,6 +19,7 @@ export async function runServe(): Promise<void> {
     deadlineMs: DRAIN_DEADLINE_MS + 5_000,
     health: httpHealth,
     retire: (baseUrl) => retireDaemon(baseUrl, readDaemonLock(), world),
+    readLock: readDaemonLock,
     now: Date.now,
     sleep: Bun.sleep,
   });
