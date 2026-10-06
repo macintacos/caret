@@ -1233,6 +1233,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       const lock: DaemonLock = {
         pid: process.pid,
         port: server.port ?? 0,
+        host: cfg.hostname,
         build: buildId,
         version: IDENTITY.version,
         startedAt: Date.now(),

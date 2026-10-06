@@ -50,6 +50,7 @@ import {
   spawnDaemon,
   vacatePort,
 } from "@/daemon/lifecycle.ts";
+import type { DaemonLock } from "@/lib/build-id.ts";
 import { setLogLevel } from "@/lib/log.ts";
 import { isSupervised, type ServiceManager, SUPERVISED_VAR } from "@/service/manager.ts";
 
@@ -964,6 +965,147 @@ test("the supervisor's status is read once per call", async () => {
   );
   expect(statusReads()).toBe(1);
 });
+
+// ---- a daemon an address edit left behind (EXC-1583) ----
+
+const B1: HealthBody = { service: "caret", build: "b1", version: "v1", stateDir: "/my/world" };
+
+const strayLock = (over: Partial<DaemonLock> = {}): DaemonLock => ({
+  pid: 4_000_000,
+  port: 42718,
+  host: "127.0.0.1", // reached at http://127.0.0.1:42718, not the configured localhost
+  stateDir: "/my/world",
+  instanceId: "old",
+  ...over,
+});
+
+test.each([
+  ["host", strayLock(), "http://127.0.0.1:42718"],
+  ["port", strayLock({ host: "localhost", port: 42719 }), "http://localhost:42719"],
+] as const)(
+  "ensureDaemon retires the daemon a %s edit left behind, at its own address, then spawns",
+  async (_edit, lock, lockUrl) => {
+    const retired: string[] = [];
+    let spawns = 0;
+    await ensureDaemon(
+      ensureDeps({
+        readLock: () => lock,
+        health: async (url) => {
+          if (url === lockUrl) return peer("old", { resident: false, supervised: false });
+          return spawns > 0 ? B1 : null;
+        },
+        retire: async (baseUrl) => {
+          retired.push(baseUrl);
+          return true;
+        },
+        spawn: () => ++spawns,
+      }),
+    );
+    expect(retired).toEqual([lockUrl]);
+    expect(spawns).toBe(1);
+  },
+);
+
+test("ensureDaemon cycles the service for a supervised daemon a host edit left behind", async () => {
+  const { calls, manager: service } = supervisor();
+  let retires = 0;
+  let spawns = 0;
+  const url = await ensureDaemon(
+    ensureDeps({
+      service,
+      readLock: () => strayLock(),
+      health: async (u) => {
+        if (u === "http://127.0.0.1:42718") return calls.includes("restart") ? null : peer("old");
+        if (calls.includes("restart")) return peer("new");
+        return spawns > 0 ? B1 : null;
+      },
+      retire: async () => {
+        retires++;
+        return true;
+      },
+      spawn: () => ++spawns,
+    }),
+  );
+  expect({ calls, retires, spawns }).toEqual({ calls: ["restart"], retires: 0, spawns: 0 });
+  expect(url).toBe("http://localhost:42718");
+});
+
+test("ensureDaemon in attach mode leaves a daemon a host edit left behind alone", async () => {
+  const { calls, manager: service } = supervisor();
+  let retires = 0;
+  let spawns = 0;
+  await ensureDaemon(
+    ensureDeps({
+      service,
+      readLock: () => strayLock(),
+      health: async (u) => {
+        if (u === "http://127.0.0.1:42718") return peer("old");
+        return spawns > 0 ? B1 : null;
+      },
+      retire: async () => {
+        retires++;
+        return true;
+      },
+      spawn: () => ++spawns,
+    }),
+    "attach",
+  );
+  expect({ calls, retires }).toEqual({ calls: [], retires: 0 });
+});
+
+test.each([
+  ["the lock names the configured address", strayLock({ host: "localhost" })],
+  ["it answers at both addresses", strayLock()],
+] as const)(
+  "ensureDaemon leaves this build's daemon alone when %s, with nothing left behind",
+  async (_case, lock) => {
+    const { calls, manager: service } = supervisor();
+    let retires = 0;
+    let spawns = 0;
+    const url = await ensureDaemon(
+      ensureDeps({
+        service,
+        readLock: () => lock,
+        health: async () => ({ ...B1, instanceId: "old" }),
+        retire: async () => {
+          retires++;
+          return true;
+        },
+        spawn: () => ++spawns,
+      }),
+    );
+    expect(url).toBe("http://localhost:42718");
+    expect({ calls, retires, spawns }).toEqual({ calls: [], retires: 0, spawns: 0 });
+  },
+);
+
+test.each([
+  ["a lock without host", { pid: 4_000_000, port: 42718 } as DaemonLock, null],
+  ["a lock whose address answers as another daemon", strayLock(), "other"],
+] as const)(
+  "ensureDaemon spawns as before for %s, with nothing left behind",
+  async (_case, lock, lockPeer) => {
+    const retired: string[] = [];
+    let spawns = 0;
+    await ensureDaemon(
+      ensureDeps({
+        readLock: () => lock,
+        health: async (u) => {
+          if (u === "http://127.0.0.1:42718" && lockPeer)
+            return peer(lockPeer, { resident: false, supervised: false });
+          return spawns > 0 ? B1 : null;
+        },
+        retire: async (u) => {
+          retired.push(u);
+          return true;
+        },
+        spawn: () => ++spawns,
+      }),
+    );
+    expect(retired).not.toContain("http://127.0.0.1:42718");
+    expect(spawns).toBe(1);
+  },
+);
 
 // ---- ensureDaemon after a draining daemon refused a review ----
 

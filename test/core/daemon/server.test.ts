@@ -334,6 +334,13 @@ test("the lock file records stateDir and instanceId", async () => {
   expect(lock.instanceId).toBe("inst123");
 });
 
+test("the lock file records the bound host", async () => {
+  const lockPath = join(dir, "daemon.lock");
+  await boot({ lockPath, hostname: "::1" });
+  const lock = JSON.parse(readFileSync(lockPath, "utf-8")) as Record<string, unknown>;
+  expect(lock.host).toBe("::1");
+});
+
 test("the listen record carries instanceId but never the state dir", async () => {
   const { recs, log } = recordingLog();
   await boot({ log, stateDir: "/secret-home/caret", instanceId: "inst123" });

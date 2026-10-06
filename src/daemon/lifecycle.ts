@@ -33,7 +33,7 @@ import {
   stateDir,
 } from "@/config/paths.ts";
 import { logKeep, logMaxSize, type Settings } from "@/config/settings.ts";
-import { daemonBaseUrl } from "@/daemon/address.ts";
+import { baseUrlFor, daemonBaseUrl } from "@/daemon/address.ts";
 import { DaemonAuthError, daemonFetch, type HealthBody, httpHealth } from "@/daemon/client.ts";
 import { buildKind, currentBuildId, type DaemonLock, VERSION } from "@/lib/build-id.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
@@ -179,7 +179,8 @@ const FOREIGN_WORLD_ERROR =
  *   install that old build as the port's owner, and since it reconnects on every drop it
  *   would keep winning against the current one indefinitely. Recovery must not double as
  *   installation. Attaching costs nothing: reviews are persisted per world, so any
- *   same-world daemon can serve the decision.
+ *   same-world daemon can serve the decision. It also leaves a daemon the lock places on
+ *   another address where it is.
  * - `successor` attaches too, but first waits past the daemon on the port, which just
  *   refused work while stepping down. That wait is the call's one supervisor window; a
  *   port already empty is a cold start. */
@@ -195,7 +196,9 @@ export type EnsureMode = "takeover" | "attach" | "successor";
  * whose service will not restart, is reused (serving its old UI) rather than left
  * unreachable. Two exceptions are neither reused nor retired: a foreign world's daemon
  * (EXC-461) — a config conflict, where cross-attaching IS the bug — and one that refuses
- * the token (it rejects with DaemonAuthError). */
+ * the token (it rejects with DaemonAuthError). Outside `attach`, a same-world daemon the
+ * lock places on an address other than the configured one is cycled if supervised, or
+ * else retired, before anything spawns. */
 export async function ensureDaemon(
   deps: EnsureDeps,
   mode: EnsureMode = "takeover",
@@ -206,6 +209,7 @@ export async function ensureDaemon(
   // Past the supervisor window, attach to whatever answers and spawn into an empty port,
   // so a launcher resolving another build than this hook's is never cycled twice.
   let windowSpent = mode === "successor" ? await awaitDrained(deps, windowEnd) : false;
+  if (mode !== "attach" && (await moveStray(deps, windowEnd))) windowSpent = true;
   let supervised: boolean | undefined;
   let spawnedPid: number | undefined;
   let waitingOn: number | undefined;
@@ -239,7 +243,7 @@ export async function ensureDaemon(
         windowSpent = true;
         // A failed restart may already have stopped the daemon: probe again rather
         // than hand back a port nothing answers on.
-        if (await restartService(deps.service, h)) {
+        if (await restartService(deps.service, h, "stale daemon build")) {
           await awaitSuccessor(deps, { prev: h, step: "service", until: windowEnd });
         }
         continue;
@@ -366,9 +370,13 @@ async function awaitSuccessor(
 }
 
 /** Cycle the service for the `stale` daemon. False when the supervisor refused. */
-async function restartService(service: Supervisor, stale: HealthBody): Promise<boolean> {
+async function restartService(
+  service: Supervisor,
+  stale: HealthBody,
+  reason: string,
+): Promise<boolean> {
   const ctx = { instanceId: stale.instanceId, build: stale.build };
-  logInfo("service", "restarting service: stale daemon build", ctx);
+  logInfo("service", `restarting service: ${reason}`, ctx);
   try {
     // ponytail: the call's deadline cannot cut short a restart already running. It returns
     // once the outgoing daemon stops, which DRAIN_DEADLINE_MS (src/daemon/server.ts)
@@ -379,6 +387,48 @@ async function restartService(service: Supervisor, stale: HealthBody): Promise<b
     logWarn("service", "service restart failed", { ...ctx, reason: errorMessage(e) });
     return false;
   }
+}
+
+/** This world's daemon where its lock places it, when only there — a daemon.host or
+ * daemon.port edit the running daemon predates. Null for a lock that cannot say (no
+ * string `host`, no `instanceId`), one naming `baseUrl`, one whose daemon no longer
+ * answers there, or one also answering at `baseUrl` (a wildcard bind, or two spellings
+ * of one address). */
+async function strayDaemon(
+  lock: DaemonLock | null,
+  baseUrl: string,
+  health: (url: string) => Promise<HealthBody | null>,
+): Promise<{ url: string; health: HealthBody } | null> {
+  if (typeof lock?.host !== "string" || lock.instanceId === undefined) return null;
+  const url = baseUrlFor(lock.host, lock.port);
+  if (url === baseUrl) return null;
+  const h = await health(url);
+  if (h?.service !== "caret" || h.instanceId !== lock.instanceId) return null;
+  if ((await health(baseUrl))?.instanceId === lock.instanceId) return null;
+  return { url, health: h };
+}
+
+/** Move a stray daemon so no second one spawns beside it on this state dir: cycle the
+ * service for a supervised one — the launcher rebinds from config.toml — else retire it
+ * and let the caller spawn. True when the cycle spent the supervisor window. */
+async function moveStray(deps: EnsureDeps, windowEnd: number): Promise<boolean> {
+  const lock = deps.readLock();
+  const stray = await strayDaemon(lock, deps.baseUrl, deps.health);
+  if (!stray) return false;
+  if (deps.service && (stray.health.supervised ?? stray.health.resident) === true) {
+    // ponytail: the unit pins CARET_PORT/CARET_CONFIG_FILE/XDG_CONFIG_HOME from install, so
+    // a hook whose address drifted by env alone cycles it back onto the old address; that
+    // drift needs `caret install --refresh`.
+    if (await restartService(deps.service, stray.health, "daemon on a stale address")) {
+      await awaitSuccessor(deps, { prev: null, step: "service", until: windowEnd });
+    }
+    return true;
+  }
+  logDebug("retire", "daemon on a stale address retiring", { instanceId: stray.health.instanceId });
+  // ponytail: it drains (≤ DRAIN_DEADLINE_MS) beside the daemon the caller spawns, which
+  // a wildcard bind can lose once to it; wait it out first if that overlap ever matters.
+  await deps.retire(stray.url, lock);
+  return false;
 }
 
 /** Whether the supervisor will start a daemon on its own. A status that cannot be read
