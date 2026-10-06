@@ -14,6 +14,7 @@ import { createConfigWriter } from "@/config/config-write.ts";
 import {
   configFile,
   daemonLock,
+  daemonTokenFile,
   prefsFile,
   reviewsDir,
   stateDir,
@@ -29,6 +30,7 @@ import {
   settings,
   watchSettings,
 } from "@/config/settings.ts";
+import { authEnabled } from "@/daemon/address.ts";
 import { devUpdateIdentity, sourceGit } from "@/daemon/dev-update.ts";
 import { buildDiagnostics, prodDiagnosticsDeps } from "@/daemon/diagnostics.ts";
 import {
@@ -38,6 +40,7 @@ import {
   rotateDaemonStderr,
 } from "@/daemon/lifecycle.ts";
 import { type CaretServer, createServer } from "@/daemon/server.ts";
+import { loadOrMintToken } from "@/daemon/token.ts";
 import { createUpdateChanges } from "@/daemon/update-changes.ts";
 import {
   fileUpdateCache,
@@ -233,6 +236,17 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   // land. Read per request, so prodDiagnosticsDeps must stay inside the thunk.
   let armedUpkeep: string[] = [];
 
+  // Loaded (or minted) ahead of createServer, which repeats the read, so a bad token
+  // file is reported as itself rather than as a bind failure.
+  const tokenFile = authEnabled(boot.daemon) ? daemonTokenFile() : undefined;
+  if (tokenFile !== undefined) {
+    try {
+      loadOrMintToken(tokenFile);
+    } catch (e) {
+      exitTerminal(`cannot use the daemon token file ${tokenFile}`, "daemon-token-unusable", e);
+    }
+  }
+
   try {
     server = createServer({
       store,
@@ -242,6 +256,9 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
       resident,
       assets,
       lockPath: daemonLock(),
+      tokenFile,
+      hostname: boot.daemon.host,
+      hostnames: boot.daemon.hostnames,
       buildId,
       assetDigest,
       commit: built.commit,

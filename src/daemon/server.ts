@@ -10,6 +10,7 @@ import { createConfigWriter } from "@/config/config-write.ts";
 import { deriveIdleTimeoutSec } from "@/config/constants.ts";
 import { configFile, ensureStateDir } from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
+import { connectHostname } from "@/daemon/address.ts";
 import { authGate } from "@/daemon/auth.ts";
 import {
   isClientLive,
@@ -17,6 +18,7 @@ import {
   isForeignHost,
   isSafeMethod,
   LIVE_CLIENT_WINDOW_MS,
+  ownNames,
 } from "@/daemon/guards.ts";
 import { createLiveness, type LivenessDeps } from "@/daemon/liveness.ts";
 import {
@@ -128,6 +130,10 @@ export interface CreateServerOptions {
    * loaded from this file at construction, or minted into it when missing. Throws at
    * construction when the file exists but holds no readable token. */
   tokenFile?: string;
+  /** Bind address (an IP literal or localhost, IPv6 unbracketed); defaults to 127.0.0.1. */
+  hostname?: string;
+  /** Extra names the Host and CSRF guards admit on any port (`daemon.hostnames`). */
+  hostnames?: readonly string[];
   /** Build fingerprint (paths.buildHash of the served UI) reported in
    * /api/health and recorded in the lock, so a newer caret can detect staleness. */
   buildId?: string;
@@ -243,6 +249,8 @@ interface ResolvedOptions {
   configPath: string;
   lockPath: string | undefined;
   tokenFile: string | undefined;
+  hostname: string;
+  hostnames: readonly string[];
   buildId: string | undefined;
   assetDigest: string | undefined;
   commit: string | undefined;
@@ -276,6 +284,8 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     configPath: opts.configPath ?? configFile(),
     lockPath: opts.lockPath,
     tokenFile: opts.tokenFile,
+    hostname: opts.hostname ?? "127.0.0.1",
+    hostnames: opts.hostnames ?? [],
     buildId: opts.buildId,
     assetDigest: opts.assetDigest,
     commit: opts.commit,
@@ -375,6 +385,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
 
   const configWriter = createConfigWriter(configPath);
   const token = cfg.tokenFile === undefined ? null : loadOrMintToken(cfg.tokenFile);
+  const names = ownNames(connectHostname(cfg.hostname), cfg.hostnames);
 
   // Wait for a decision but no longer than `ms` — resolves to null on timeout so
   // the handler can return a 204 heartbeat. The pending promise is left intact
@@ -1123,7 +1134,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     req: Request,
     self: { readonly port: number | undefined },
   ): Promise<Response> {
-    const end = liveness.begin(req.method);
+    // Assigned only once the gates pass, so a refused request never touches liveness:
+    // a network peer must not keep an on-demand daemon alive with refused requests.
+    let end: (() => void) | undefined;
     // Rebound once a handler learns the owner, so a later failure groups with its records.
     let failureLog = log;
     try {
@@ -1137,7 +1150,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // rather than `url.host`: Bun derives req.url FROM Host, so a missing or
       // unparseable Host — cases this must reject — would throw out of the
       // constructor into the catch-all and 500 instead.
-      if (isForeignHost(req, port)) {
+      if (isForeignHost(req, port, names)) {
         return new Response("host not recognized", { status: 403 });
       }
 
@@ -1154,9 +1167,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // a future mutating verb is CSRF-protected by default. Safe methods (GET/HEAD)
       // fall through — the browser's same-origin policy already blocks a foreign
       // page from reading the response.
-      if (!isSafeMethod(method) && isCrossOrigin(req, port)) {
+      if (!isSafeMethod(method) && isCrossOrigin(req, port, names)) {
         return new Response("cross-origin request blocked", { status: 403 });
       }
+      end = liveness.begin(method);
 
       const idRoute = matchIdRoute(path);
       const route = idRoute && { ...idRoute, log: log.child({ reviewId: idRoute.id }) };
@@ -1177,15 +1191,15 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
       return new Response("internal error", { status: 500 });
     } finally {
-      end();
+      end?.();
     }
   }
 
-  // Bind to loopback only: the daemon serves plan content and accepts approve/
-  // deny decisions with no auth, so it must never be reachable off-host.
+  // Loopback unless daemon.host says otherwise; runDaemon turns token auth on for any
+  // exposed bind unless daemon.auth = "none".
   const server = Bun.serve({
     port: opts.port ?? 0,
-    hostname: "127.0.0.1",
+    hostname: cfg.hostname,
     // Derived from the heartbeat to sit strictly above it (and ≤ Bun's 255s
     // cap), so a long-poll's 204 heartbeat always ships before the socket can
     // idle out mid-wait — the invariant deriveIdleTimeoutSec holds by
@@ -1193,7 +1207,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     idleTimeout: deriveIdleTimeoutSec(heartbeat),
     fetch: handle,
   });
-  log.info("listen", `listening on 127.0.0.1:${server.port}`, {
+  log.info("listen", `listening on ${cfg.hostname}:${server.port}`, {
     build: buildId,
     version: IDENTITY.version,
     commit,

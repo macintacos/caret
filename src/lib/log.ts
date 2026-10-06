@@ -66,6 +66,8 @@ export type ErrorCode =
   | "request-failed"
   /** The daemon could not bind its port and exited terminally. */
   | "daemon-bind-failed"
+  /** The daemon's auth token file could not be read or minted, so it exited terminally. */
+  | "daemon-token-unusable"
   /** An uncaught exception or rejection took the daemon down. */
   | "daemon-crashed"
   /** The daemon's update check rejected. */

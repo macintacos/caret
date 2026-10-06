@@ -9,6 +9,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  drainProcess,
   runCaretCli,
   spawnCaretDaemon,
   spawnEphemeralDaemon,
@@ -811,5 +812,50 @@ test("the daemon logs the parsed settings at startup", async () => {
     await proc.exited;
     await rm(stateHome, { recursive: true, force: true });
     await rm(configHome, { recursive: true, force: true });
+  }
+});
+
+test("a daemon with token auth on never prints or logs its token", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-token-quiet-"));
+  const configPath = join(stateHome, "config.toml");
+  await writeFile(configPath, '[daemon]\nauth = "token"\n');
+  const proc = spawnCaretDaemon(
+    stateHome,
+    { CARET_CONFIG_FILE: configPath },
+    { pipeStdout: true, pipeStderr: true },
+  );
+  try {
+    await untilLockWritten(proc, join(stateHome, "caret", "daemon.lock"));
+    const token = readFileSync(join(stateHome, "caret", "daemon.token"), "utf-8").trim();
+    expect(token).not.toBe("");
+    proc.kill("SIGTERM");
+    const { stdout, stderr } = await drainProcess(proc as Parameters<typeof drainProcess>[0]);
+    for (const text of [stdout, stderr, readFileSync(daemonLog(stateHome), "utf-8")]) {
+      expect(text.includes(token)).toBe(false);
+    }
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("an unreadable token file stops the daemon terminally, naming the file", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-token-bad-"));
+  const configPath = join(stateHome, "config.toml");
+  await writeFile(configPath, '[daemon]\nauth = "token"\n');
+  const tokenFile = join(stateHome, "caret", "daemon.token");
+  await mkdir(join(stateHome, "caret"), { recursive: true });
+  await writeFile(tokenFile, "");
+  const proc = spawnCaretDaemon(stateHome, { CARET_CONFIG_FILE: configPath }, { pipeStderr: true });
+  try {
+    const stderr = await new Response(proc.stderr as ReadableStream).text();
+    expect(await proc.exited).toBe(SERVICE_TERMINAL_EXIT_STATUS);
+    expect(stderr).toContain(tokenFile);
+    expect(stderr).not.toContain("bind");
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
   }
 });
