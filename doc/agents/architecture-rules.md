@@ -180,48 +180,92 @@ How long a daemon stays up, and who may replace it.
 
 ## Daemon trust model
 
-The daemon binds **loopback only** (`127.0.0.1`) and runs with **no auth**, sized for a
-single-user laptop. The posture follows from that: any local process can already reach the
-daemon and read plan content, so the daemon does not try to authenticate local callers —
-the one adversary it defends against is a **browser on another origin** that the user
-happens to have open.
+By default the daemon binds **loopback only** (`127.0.0.1`) and runs with **no auth**,
+sized for a single-user laptop. On that default the posture is unchanged: any local
+process can already reach the daemon and read plan content, so the daemon does not
+authenticate local callers — the one adversary it defends against is a
+**browser on another origin** that the user happens to have open. `[daemon]` `host`,
+`hostnames` and `auth` (config-only, read at boot) widen the bind and switch a token on;
+the rules below cover both shapes.
 
-- **Read-confidentiality rests on the loopback bind + the absence of CORS headers, not on
-  the CSRF guard.** The daemon emits **no** `Access-Control-*` header on any route, so the
-  browser's same-origin policy blocks a foreign page from reading any response — even a
-  `GET` that reaches a handler. A regression test (`test/core/daemon/server.test.ts`, the
-  read-confidentiality block) asserts no route family ever emits an `Access-Control-*`
-  header, so a future permissive-CORS "fix" fails loudly instead of silently exposing plan
-  bodies. Never add a CORS-grant header.
-- **The Host guard gates every method, safe ones included.** `isForeignHost(req, port)`
-  (`src/daemon/guards.ts`) rejects a request whose `Host` is not the daemon's own
-  authority. That asymmetry with the CSRF guard is the point: under DNS rebinding the
-  attacker's page *is* same-origin — loopback `Origin`, `Sec-Fetch-Site: same-origin` — so
-  the SOP the read posture rests on is already defeated and only `Host` still names
-  `evil.com`. A missing `Host` is rejected too.
-- **The CSRF guard gates only non-safe methods.** `isCrossOrigin(req, port)`
+- **The auth switch.** `authEnabled` (`src/daemon/address.ts`): `daemon.auth` wins when
+  set; unset, auth is on exactly when `isExposed(daemon.host)` — anything outside
+  `127.0.0.0/8`, `::1` and `localhost`, so an unrecognized spelling errs toward auth on.
+  `runDaemon` passes `tokenFile` to `createServer` only then; with no token file there is
+  no gate.
+- **An unusable `config.toml` fails closed.** A file that exists but does not parse or
+  validate yields `FAIL_CLOSED_DEFAULTS` — the defaults with `daemon.auth = "token"` — not
+  `DEFAULTS`, so a user who set `auth = "token"` behind a reverse proxy never silently
+  loses it to one bad key. A daemon that already saw a good parse keeps it. An absent file
+  is still plain `DEFAULTS`.
+- **Token mechanics.** The daemon loads or mints the token file at boot; a file that
+  exists but holds no readable token stops it with its own terminal error, not a bind
+  failure. CLI clients send it as `Authorization: Bearer` (`daemonFetch`). A browser logs
+  in once with `?token=`: `authGate` (`src/daemon/auth.ts`) checks it in constant time,
+  sets a per-port cookie, and redirects with `token` stripped and every other parameter
+  kept.
+- **The link is printed only by CLI processes, never the daemon.** `caret serve` prints it
+  after `runDaemon` returns, and `caret login-link` reads the token file without asking
+  the daemon or minting one. The daemon's stdout and stderr land in `daemon-stderr.log`,
+  which the `caret doctor` bundle ships unredacted, so the daemon never prints or logs the
+  token; an integration test pins that.
+- **Adapters reach the daemon only by spawning the caret CLI**, never over HTTP, so none
+  bypasses the token. A new adapter that wants the daemon goes through `caret review` or
+  another CLI command, which carries the token for it.
+- **`POST /api/config` refuses `daemon.*`.** It writes `updates.check` and nothing else,
+  so a logged-in device cannot turn auth off or rebind the daemon. A test pins it.
+- **Refused requests don't touch liveness.** The Host, token and CSRF gates run before
+  `liveness.begin`, so a network peer cannot keep an on-demand daemon alive with refused
+  requests.
+- **Read-confidentiality rests on the bind (plus the token, when on) + the absence of CORS
+  headers, not on the CSRF guard.** The daemon emits **no** `Access-Control-*` header on
+  any route, so the browser's same-origin policy blocks a foreign page from reading any
+  response — even a `GET` that reaches a handler. A regression test
+  (`test/core/daemon/server.test.ts`, the read-confidentiality block) asserts no route
+  family ever emits an `Access-Control-*` header, so a future permissive-CORS "fix" fails
+  loudly instead of silently exposing plan bodies. Never add a CORS-grant header.
+- **The Host guard gates every method, safe ones included.**
+  `isForeignHost(req, port, names)` (`src/daemon/guards.ts`) rejects a request whose
+  `Host` is not one of the daemon's own names. That asymmetry with the CSRF guard is the
+  point: under DNS rebinding the attacker's page *is* same-origin — loopback `Origin`,
+  `Sec-Fetch-Site: same-origin` — so the SOP the read posture rests on is already defeated
+  and only `Host` still names `evil.com`. A missing `Host` is rejected too.
+- **The CSRF guard gates only non-safe methods.** `isCrossOrigin(req, port, names)`
   (`src/daemon/guards.ts`) rejects a state-changing request from a foreign Origin; safe
   methods (GET/HEAD, via `isSafeMethod`) are let through, because the SOP already protects
   reads and a foreign GET can't exfiltrate the response. The guard tests the verb through
   `isSafeMethod`, not a POST/PUT allowlist, so a future mutating verb (DELETE/PATCH) is
   CSRF-protected by default. A same-origin browser sends the daemon's own origin (allowed)
   and a hook/CLI sends no Origin (allowed); a foreign page's write is the only thing
-  blocked.
-- **Both comparisons are authority-exact.** An allowed hostname (`127.0.0.1`, `localhost`,
-  `VANITY_HOST`) is not enough — the port must be the daemon's bound one, so a page on
-  some other `http://localhost:<port>` (a Vite dev server, a locally-hosted app, a dev
-  server a malicious npm package started) is foreign rather than "loopback, therefore us".
-  The Vite dev proxy therefore rewrites both `Host` and `Origin` to the daemon's own
-  origin (`ui/vite.config.ts`) instead of the guard being widened to accommodate it.
+  blocked. It holds with the token on too, since a browser carries the auth cookie on a
+  cross-site write.
+- **Two tiers of names** (`ownNames`). The **exact** tier — `127.0.0.1`, `localhost`,
+  `VANITY_HOST`, and the connect hostname of the bind — needs the bound port too, so a
+  page on some other `http://localhost:<port>` (a Vite dev server, a locally-hosted app, a
+  dev server a malicious npm package started) is foreign rather than "loopback, therefore
+  us". The Vite dev proxy therefore rewrites both `Host` and `Origin` to the daemon's own
+  origin (`ui/vite.config.ts`) instead of the guard being widened to accommodate it. The
+  **any-port** tier is `daemon.hostnames`: matched on any port, with an `http:` or
+  `https:` Origin, because an HTTPS reverse proxy forwards its own Host (no caret port)
+  and the browser's `https://` Origin — authority-exact matching would 403 everything
+  through it. That divergence is scoped to names the user listed; a built-in name never
+  joins the any-port tier, even when listed, so listing `localhost` cannot make
+  `http://localhost:3000` same-origin.
+- **Residual: cross-port pages on a configured name.** A page served from another port of
+  a `daemon.hostnames` name passes both guards. Modern browsers still stop its writes —
+  they send `Sec-Fetch-Site: same-site`, which `isCrossOrigin` rejects — but an older
+  browser that omits the header does not.
 - **No preflight handler exists or is needed.** A same-origin request sends no `OPTIONS`
   preflight, and a cross-origin preflight would be denied by the browser before any
   request body is sent (no advertised CORS headers).
-- **Cross-uid local callers are out of scope, deliberately** (EXC-1203). A same-uid
-  process can already edit the plan files and `CLAUDE.md` directly, so authenticating
-  local callers would buy nothing against the adversary caret runs beside. The genuine
-  exposure is a shared dev box, a shared-netns container, or a CI runner; caret accepts
-  that limit rather than closing it with a token. Revisit only if caret is ever sized for
-  a multi-user host.
+- **Cross-uid local callers are a residual, not a closure** (EXC-1203). On the default
+  loopback bind with auth off, any local uid can call the API; a same-uid process can
+  already edit the plan files and `CLAUDE.md` directly, so authenticating local callers
+  would buy nothing against the adversary caret runs beside. `daemon.auth = "token"`
+  blocks cross-uid API calls, but not fully: the login link the review command opens on
+  the server briefly sits on the `open`/`xdg-open` argv, readable through `ps`, and on
+  Windows (`cmd /c start` splits the URL at `&`) the tab opens without it and shows the
+  login page. Revisit if caret is ever sized for a multi-user host.
 
 ## Related rules
 

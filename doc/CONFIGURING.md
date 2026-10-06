@@ -86,13 +86,17 @@ These hold the tunables the `CARET_*` environment variables also cover (see
 | `daemon.port`         | `42718` | Daemon port.                                                                                                                                                                                          |
 | `daemon.idle_ms`      | `60000` | Idle delay (ms) before the daemon auto-shuts-down with no reviews. Ignored by a resident daemon — one under a supervisor (`CARET_SUPERVISED=1`) or `caret serve`.                                    |
 | `daemon.heartbeat_ms` | `8000`  | Decision long-poll heartbeat window (ms). The daemon's socket `idleTimeout` is derived from this (heartbeat seconds + headroom), so it must stay below `250000`; values at or above that are rejected. |
+| `daemon.host` | `"127.0.0.1"` | Address the daemon binds: an IP literal or `localhost`, IPv6 unbracketed (`"::"`). Any address outside loopback (`127.0.0.0/8`, `::1`, `localhost`) exposes the daemon and turns token auth on unless `daemon.auth` says otherwise. Config-only (no `CARET_*` variable); takes effect on daemon restart. See [Reaching the UI from another device](#reaching-the-ui-from-another-device). |
+| `daemon.hostnames` | `[]` | Extra names the daemon answers to, such as `"caret.home.lan"` or `"192.168.1.5"` (IPv6 bracketed). Matched case-insensitively on any port, over `http` or `https`. The first entry is the name review links and login links use. Config-only (no `CARET_*` variable); takes effect on daemon restart. |
+| `daemon.auth` | _unset_ | `"token"` or `"none"`. Unset, token auth is on exactly when `daemon.host` is exposed. Config-only (no `CARET_*` variable); takes effect on daemon restart. |
 | `review.timeout_s`    | `3600`  | Review window in seconds before the hook fail-safe-denies (default 1 hour). The schema rejects values at or above the 3900s hook budget in `hooks/hooks.json`.                                         |
 
 > [!NOTE]
 > Unlike the `[logging]` keys, which hot-reload live, these tunables are captured at
-> startup: `port`, `idle_ms`, and `heartbeat_ms` take effect on the next daemon start, and
-> `timeout_s` on the next review. For the caret service's daemon, the next start means
-> `caret install --refresh`, which restarts it on the newest caret installed, or a
+> startup: `port`, `idle_ms`, `heartbeat_ms`, `host`, `hostnames`, and `auth` take effect
+> on the next daemon start, and `timeout_s` on the next review. For the caret service's
+> daemon, the next start means `caret install --refresh`, which restarts it on the newest
+> caret installed, or a
 > [service restart](RUNNING.md#the-caret-service).
 
 ```toml
@@ -110,6 +114,46 @@ heartbeat_ms = 8000
 [review]
 timeout_s = 3600
 ```
+
+### Reaching the UI from another device
+
+By default the daemon listens on `127.0.0.1` only, with no auth. To open the review UI
+from a phone, tablet or another computer, bind it to the network and give it a name those
+devices resolve:
+
+```toml
+[daemon]
+host = "0.0.0.0"
+hostnames = ["caret.home.lan"]
+```
+
+An exposed bind turns token auth on. Each device logs in once through a link carrying the
+daemon's token, after which a cookie keeps it logged in. `caret serve` prints that link
+every time it starts, and `caret login-link` prints it at any time:
+
+```sh
+caret login-link
+# http://caret.home.lan:42718/?token=…
+```
+
+`caret login-link` reads `config.toml` and the token file only; the daemon mints the token
+on its first start with auth on, so start it once before asking for the link.
+
+- **Name the daemon.** A wildcard bind (`0.0.0.0` or `::`) still answers only to the names
+  it knows, so another device can't reach the UI until `daemon.hostnames` lists the name
+  it uses — or `host` is the machine's own IP, which the daemon then answers to.
+- **Behind an HTTPS reverse proxy**, keep `host` on loopback, list the proxy's name in
+  `daemon.hostnames`, and set `auth = "token"` — a loopback bind leaves auth off
+  otherwise. Configured names match on any port and over `https`, so the proxy's requests
+  pass. The links caret prints stay `http://<name>:<port>`; rewrite them to the proxy's
+  `https://<name>/`, keeping the `?token=` part.
+- **`auth = "none"` on an exposed bind** lets anyone who can reach the port read plans,
+  read files under a review's working directory, and approve a plan. `caret serve` and
+  `caret login-link` print a warning when it is set.
+- **An invalid `config.toml`** leaves the daemon on loopback with token auth on, rather
+  than falling back to no auth. The login link `caret serve` then prints is the sign the
+  file was ignored.
+- **An older caret ignores these keys** and keeps listening on loopback only.
 
 ### The `[opencode]` table
 

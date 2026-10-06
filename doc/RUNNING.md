@@ -305,6 +305,10 @@ curl -s http://127.0.0.1:42718/api/diagnostics | jq '{resident, upkeep}'
 While the service is stopped, the next review starts an on-demand daemon, which exits once
 it has sat idle for `[daemon].idle_ms` with no review pending and no review UI tab open.
 
+The service's daemon prints nothing a browser can use. With token auth on (see
+[Reaching the UI from another device](CONFIGURING.md#reaching-the-ui-from-another-device)),
+get the link that logs a device in from `caret login-link`.
+
 ### What the service runs
 
 Every unit runs `$XDG_STATE_HOME/caret/bin/caret daemon`. That file is
