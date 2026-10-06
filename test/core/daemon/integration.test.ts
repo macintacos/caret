@@ -349,8 +349,37 @@ test("caret serve stays up without a supervisor and prints where it serves", asy
       resident: true,
       upkeep: ["update-check", "review-sweep"],
     });
+    const stdout = await new Response(proc.stdout as ReadableStream).text();
+    expect(stdout).toContain(`http://${VANITY_HOST}:${port}`);
+    expect(stdout).not.toContain("?token=");
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("caret serve with token auth prints a login link a CLI client's token matches", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-serve-auth-"));
+  const port = freePort();
+  const config = join(stateHome, "config.toml");
+  await writeFile(config, '[daemon]\nauth = "token"\nhostnames = ["caret.test"]\n');
+  const proc = spawnCaretDaemon(
+    stateHome,
+    { CARET_PORT: String(port), CARET_SUPERVISED: "", CARET_CONFIG_FILE: config },
+    { command: "serve", pipeStdout: true },
+  );
+  try {
+    await untilLockWritten(proc, join(stateHome, "caret", "daemon.lock"));
+    const baseUrl = `http://127.0.0.1:${port}`;
+    await withEnv({ XDG_STATE_HOME: stateHome }, async () => {
+      expect((await httpHealth(baseUrl))?.service).toBe("caret");
+    });
+    const token = readFileSync(join(stateHome, "caret", "daemon.token"), "utf8").trim();
+    proc.kill("SIGTERM");
+    await proc.exited;
     expect(await new Response(proc.stdout as ReadableStream).text()).toContain(
-      `http://${VANITY_HOST}:${port}`,
+      `http://caret.test:${port}/?token=${token}`,
     );
   } finally {
     proc.kill("SIGKILL");

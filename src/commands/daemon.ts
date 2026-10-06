@@ -27,6 +27,7 @@ import {
   idleMs,
   logKeep,
   logMaxSize,
+  type Settings,
   settings,
   watchSettings,
 } from "@/config/settings.ts";
@@ -62,9 +63,12 @@ import { createStore } from "@/review/store.ts";
 import { isSupervised, SERVICE_TERMINAL_EXIT_STATUS } from "@/service/manager.ts";
 import { loadUiAssets } from "@/ui/assets.ts";
 
-/** Boots the daemon and resolves with the port it bound. `resident` keeps it up until
- * told to stop rather than idle-exiting. */
-export async function runDaemon(opts: { ephemeral: boolean; resident: boolean }): Promise<number> {
+/** Boots the daemon and resolves with the port it bound and the settings it booted with.
+ * `resident` keeps it up until told to stop rather than idle-exiting. */
+export async function runDaemon(opts: {
+  ephemeral: boolean;
+  resident: boolean;
+}): Promise<{ port: number; settings: Settings }> {
   // The daemon's boot time, captured once for the /api/diagnostics uptime (EXC-842).
   const startedAt = Date.now();
   // Leveled NDJSON to logs/daemon.log, the path the logger owns and rotates.
@@ -358,5 +362,5 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   }
   armedUpkeep = startUpkeep({ tasks: upkeep, log });
   // Bun.serve keeps the process alive; a non-resident daemon idle-auto-shuts-down.
-  return server.port;
+  return { port: server.port, settings: boot };
 }

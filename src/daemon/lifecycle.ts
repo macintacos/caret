@@ -31,7 +31,8 @@ import {
   launcherServiceFile,
   stateDir,
 } from "@/config/paths.ts";
-import { getPort, logKeep, logMaxSize, type Settings } from "@/config/settings.ts";
+import { logKeep, logMaxSize, type Settings } from "@/config/settings.ts";
+import { daemonBaseUrl } from "@/daemon/address.ts";
 import { DaemonAuthError, daemonFetch, type HealthBody, httpHealth } from "@/daemon/client.ts";
 import { buildKind, currentBuildId, type DaemonLock, VERSION } from "@/lib/build-id.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
@@ -692,7 +693,7 @@ export async function prodEnsureDeps(
     // Not residency: a dev daemon is resident too.
     service: existsSync(launcherServiceFile()) ? service() : undefined,
     pinned: isLauncherPinned(),
-    baseUrl: `http://localhost:${getPort(s)}`,
+    baseUrl: daemonBaseUrl(s),
     currentBuild: await currentBuildId(),
     currentVersion: VERSION,
     currentStateDir: world,

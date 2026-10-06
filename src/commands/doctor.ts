@@ -36,6 +36,7 @@ import {
   reviewTimeoutMs,
   type Settings,
 } from "@/config/settings.ts";
+import { daemonBaseUrl } from "@/daemon/address.ts";
 import { httpHealth } from "@/daemon/client.ts";
 import { isPidAlive, readBootMarker, readDaemonLock } from "@/daemon/lifecycle.ts";
 import { type BundleDeps, runBundle } from "@/doctor/bundle.ts";
@@ -79,7 +80,7 @@ function prodDoctorDeps(s: Settings): DoctorDeps {
       reviewTimeoutMs: reviewTimeoutMs(s),
       heartbeatMs: heartbeatMs(s),
     }),
-    baseUrl: `http://localhost:${getPort(s)}`,
+    baseUrl: daemonBaseUrl(s),
     health: httpHealth,
     serviceInstalled: () => existsSync(launcherServiceFile()),
     // async so prodService()'s synchronous throw off darwin/linux becomes a rejection.

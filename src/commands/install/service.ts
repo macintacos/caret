@@ -19,9 +19,9 @@ import {
 } from "@/commands/install/launcher.ts";
 import type { InstallUI } from "@/commands/install/ui.ts";
 import type { ServiceTarget } from "@/commands/service-target.ts";
-import { VANITY_HOST } from "@/config/constants.ts";
 import { daemonStderrLogFile, launcherPath } from "@/config/paths.ts";
 import { getPort, loadSettings } from "@/config/settings.ts";
+import { daemonBaseUrl, publicHostname } from "@/daemon/address.ts";
 import { DaemonAuthError, httpHealth } from "@/daemon/client.ts";
 import { DAEMON_CWD } from "@/daemon/lifecycle.ts";
 import { VERSION } from "@/lib/build-id.ts";
@@ -240,9 +240,9 @@ export async function reconcileService(
   deps: ServiceStepDeps,
   ui: InstallUI,
 ): Promise<void> {
-  const port = getPort(loadSettings());
-  const reviewUrl = `http://${VANITY_HOST}:${port}`;
-  const baseUrl = `http://localhost:${port}`;
+  const s = loadSettings();
+  const reviewUrl = `http://${publicHostname(s.daemon)}:${getPort(s)}`;
+  const baseUrl = daemonBaseUrl(s);
   if (opts.choice === "run-yourself") return runYourself({ ...opts, reviewUrl }, deps, ui);
   await withService(deps, ui, async (target) => {
     const { manager, label, visibleIn, optOutSurface, visibleToggleCaveat } = target;
