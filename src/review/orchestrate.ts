@@ -8,8 +8,8 @@
 // allow. Every abnormal path (bad stdin, unreachable daemon, timeout, daemon
 // death) becomes a deny Decision — runReview never throws.
 
-import { VANITY_HOST } from "@/config/constants.ts";
 import { logFile } from "@/config/paths.ts";
+import { loginLink } from "@/daemon/address.ts";
 import { DaemonAuthError } from "@/daemon/client.ts";
 // Daemon operations arrive as deps: the core imports lifecycle's types, and only the
 // client's error class to classify a failure.
@@ -71,6 +71,12 @@ export interface ReviewDeps {
    * beside openBrowser because the core does no I/O of its own; the wording the
    * plugin parses is the command layer's (src/commands/review.ts, reviewUrlLine). */
   announceUrl: (url: string) => void;
+  /** The name a browser on this machine reaches the daemon by; the opened tab uses it. */
+  localHostname: string;
+  /** The name a reviewer elsewhere is sent to; the announced URL uses it. */
+  publicHostname: string;
+  /** The daemon token to log the opened tab in with, or null to open it bare. */
+  loginToken: () => string | null;
   /** The cmux pane this hook process runs in, so the daemon can clear its unread
    * mark once the plan is reviewed (EXC-961). Injected because the pane comes
    * from the environment, which the core never reads itself. Optional: absent
@@ -143,6 +149,14 @@ export async function expireAbandoned(
   }
 }
 
+/** The review's URL on `baseUrl`'s port under the named `hostname` humans reach it by;
+ * internal fetches keep using baseUrl. */
+function reviewUrl(baseUrl: string, hostname: string, id: string): string {
+  const u = new URL(baseUrl);
+  u.hostname = hostname;
+  return `${u.origin}/?review=${id}`;
+}
+
 /** Run a review end-to-end, returning the core `Decision`. Never throws — any
  * failure becomes a deny so an unreviewed plan can never ship. The command layer
  * renders the returned Decision to the agent's wire string via the adapter. */
@@ -209,18 +223,20 @@ export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Prom
     // file that moved on.
     deps.onPosted?.({ baseUrl, id, version, planFileCurrent });
     logDebug("review", `review created: ${shortId(id)}`);
-    // EXC-426: humans get the vanity origin; internal fetches keep using baseUrl.
-    const open = new URL(baseUrl);
-    open.hostname = VANITY_HOST;
-    const url = `${open.origin}/?review=${id}`;
+    // The announced URL reaches the transcript, so only the tab opened on this machine
+    // carries the token.
     // EXC-559: a live UI tab already surfaces the review and runs the notifier;
     // foregrounding the browser would make the tab focused at the poll instant,
     // pre-empting the away-gated desktop notification. An older daemon reports no
     // such field, which fails safe to opening.
-    if (!hasLiveClient) deps.openBrowser(url);
+    if (!hasLiveClient) {
+      const localUrl = reviewUrl(baseUrl, deps.localHostname, id);
+      const token = deps.loginToken();
+      deps.openBrowser(token === null ? localUrl : loginLink(localUrl, token));
+    }
     // Unconditional: the announcement is the fallback for a browser that never
     // opened, and the handle a live tab's reader still wants.
-    deps.announceUrl(url);
+    deps.announceUrl(reviewUrl(baseUrl, deps.publicHostname, id));
 
     step = "longPoll";
     // Re-poll on each heartbeat (null); on a transient drop reconnect and keep going

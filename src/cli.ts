@@ -20,6 +20,7 @@ import { runDoctorSubcommand } from "@/commands/doctor.ts";
 import { installExitCode, runInstallSubcommand } from "@/commands/install/index.ts";
 import { prodLauncherRoot } from "@/commands/install/launcher.ts";
 import { prodServiceWatch } from "@/commands/install/service.ts";
+import { runLoginLink } from "@/commands/login-link.ts";
 import { runPrewarm } from "@/commands/prewarm.ts";
 import { runReconcileSubcommand } from "@/commands/reconcile.ts";
 import { runRedactSubcommand } from "@/commands/redact.ts";
@@ -50,6 +51,11 @@ function buildProgram(): Command {
     .command("serve")
     .description("keep the review UI up in this terminal until Ctrl+C")
     .action(() => runServe());
+
+  program
+    .command("login-link")
+    .description("print the link that logs a browser into the review UI")
+    .action(() => runLoginLink());
 
   program
     .command("prewarm")

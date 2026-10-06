@@ -18,7 +18,7 @@
 // in scripts/tasks/dev/inject.ts.
 
 import { claudeAdapter } from "@/adapters/claude/index.ts";
-import { NEVER_IDLE_MS } from "@/config/constants.ts";
+import { NEVER_IDLE_MS, VANITY_HOST } from "@/config/constants.ts";
 import { DEFAULT_PORT, devSeeder, loadSettings, type Settings } from "@/config/settings.ts";
 import {
   expireReview,
@@ -89,6 +89,9 @@ export function devReviewDeps(base: string, sink: DriverLog = log): DevDeps {
     postReview,
     longPoll,
     openBrowser: () => {},
+    localHostname: VANITY_HOST,
+    publicHostname: VANITY_HOST,
+    loginToken: () => null,
     timeoutMs: NEVER_IDLE_MS,
     expire: expireReview,
   };

@@ -116,9 +116,10 @@ Concretely:
 
 **Never log identifiable data.**
 
-- **Plan, prompt, and feedback bodies are structurally censored.** The `DENY_KEYS` set in
-  `src/redact/core.ts` censors `plan`, `prompt`, and `feedback` values unconditionally —
-  toggle or no toggle. Never log them under any key.
+- **Plan, prompt, and feedback bodies and configured hostnames are structurally
+  censored.** The `DENY_KEYS` set in `src/redact/core.ts` censors `plan`, `prompt`,
+  `feedback`, and `hostnames` values unconditionally — toggle or no toggle. Never log them
+  under any key.
 - **New identifying keys must be added to `DENY_KEYS` explicitly.** Matching is exact-key
   only, so a hostname, user, email, or similar identifying key you introduce will leak
   until you add it to the set. `DENY_KEYS` and the censoring graph-walk live **once** in

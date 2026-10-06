@@ -11,7 +11,8 @@
 
 import { selectAdapter } from "@/adapters/index.ts";
 import { bootHookLogging } from "@/commands/boot.ts";
-import { getPort, loadSettings } from "@/config/settings.ts";
+import { loadSettings } from "@/config/settings.ts";
+import { daemonBaseUrl } from "@/daemon/address.ts";
 import { listReviews, resolveReview } from "@/daemon/client.ts";
 import { logDebug } from "@/lib/log.ts";
 import { parseHook } from "@/review/orchestrate.ts";
@@ -31,7 +32,7 @@ export async function runReconcileSubcommand(): Promise<void> {
     const loaded = loadSettings();
     bootHookLogging(loaded);
     const adapter = selectAdapter();
-    const baseUrl = `http://localhost:${getPort(loaded)}`;
+    const baseUrl = daemonBaseUrl(loaded);
     const stdin = await Bun.stdin.text();
     await runReconcile(parseHook(adapter.parseHookInput, stdin), prodReconcileDeps(baseUrl));
   } catch (err) {

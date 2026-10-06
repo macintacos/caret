@@ -38,6 +38,9 @@ function reviewDeps(over: Partial<ReviewDeps> = {}): ReviewDeps {
     longPoll: async () => allow,
     openBrowser: () => {},
     announceUrl: () => {},
+    localHostname: "caret.localhost",
+    publicHostname: "caret.localhost",
+    loginToken: () => null,
     timeoutMs: 1000,
     expire: async () => {},
     ...over,
@@ -95,6 +98,21 @@ test("does not open the browser when a live UI client is already polling (EXC-55
   expect(opened).toBe(false);
 });
 
+test("leaves the token file unread when a live UI client means no tab opens", async () => {
+  let read = false;
+  await review(
+    stdin,
+    reviewDeps({
+      postReview: async () => ({ id: "rid", hasLiveClient: true }),
+      loginToken: () => {
+        read = true;
+        return "tok";
+      },
+    }),
+  );
+  expect(read).toBe(false);
+});
+
 test("announces the review URL through the injected sink, never on stderr itself", async () => {
   let announced: string | undefined;
   await review(
@@ -107,6 +125,42 @@ test("announces the review URL through the injected sink, never on stderr itself
     }),
   );
   expect(announced).toBe("http://caret.localhost:4242/?review=rid");
+});
+
+test("opens the browser logged in on the local name and announces the public name without the token", async () => {
+  let opened: string | undefined;
+  let announced: string | undefined;
+  await review(
+    stdin,
+    reviewDeps({
+      ensureDaemon: async () => "http://127.0.0.1:4242",
+      localHostname: "caret.localhost",
+      publicHostname: "caret.home.lan",
+      loginToken: () => "tok",
+      openBrowser: (u) => {
+        opened = u;
+      },
+      announceUrl: (u) => {
+        announced = u;
+      },
+    }),
+  );
+  expect(opened).toBe("http://caret.localhost:4242/?review=rid&token=tok");
+  expect(announced).toBe("http://caret.home.lan:4242/?review=rid");
+});
+
+test("opens the browser without a token when there is no login token", async () => {
+  let opened: string | undefined;
+  await review(
+    stdin,
+    reviewDeps({
+      ensureDaemon: async () => "http://127.0.0.1:4242",
+      openBrowser: (u) => {
+        opened = u;
+      },
+    }),
+  );
+  expect(opened).toBe("http://caret.localhost:4242/?review=rid");
 });
 
 test("opens the browser when no live UI client is polling (EXC-559)", async () => {

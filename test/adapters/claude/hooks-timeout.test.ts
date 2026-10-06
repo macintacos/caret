@@ -25,7 +25,7 @@ import { join } from "node:path";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { prewarmEnsureDeps } from "@/commands/prewarm.ts";
 import { HOOK_TIMEOUT_S } from "@/config/constants.ts";
-import { DEFAULTS, loadSettings } from "@/config/settings.ts";
+import { DEFAULTS, FAIL_CLOSED_DEFAULTS, loadSettings } from "@/config/settings.ts";
 
 // hooks/hooks.json sits at the repo root, two dirs up from src/, four up from here.
 const HOOKS_JSON = join(import.meta.dir, "../../../hooks/hooks.json");
@@ -94,8 +94,8 @@ test("prewarm's ensureDaemon deadline fits inside its hook timeout", async () =>
 
 // Drive the review-timeout ceiling through its REAL load path so the assertion
 // can't be a tautology against the schema literal: write a config.toml, load it,
-// and observe whether the value survives or reverts to DEFAULTS (whole-file
-// granularity — an out-of-bounds timeout_s reverts the entire file).
+// and observe whether the value survives or falls back to the fail-closed
+// defaults (whole-file granularity — an out-of-bounds timeout_s rejects the entire file).
 let dir: string;
 let configToml: string;
 beforeEach(async () => {
@@ -106,11 +106,11 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-test("a timeout_s AT the hook budget is rejected by the schema (reverts to DEFAULTS)", async () => {
+test("a timeout_s AT the hook budget is rejected by the schema (falls back to the fail-closed defaults)", async () => {
   await writeFile(configToml, `[review]\ntimeout_s = ${HOOK_TIMEOUT_S}\n`);
   // At/above the budget is out of bounds, so the whole file reverts — proof the
   // ceiling is strictly below the hook budget, in the safe direction.
-  expect(loadSettings(configToml)).toEqual(DEFAULTS);
+  expect(loadSettings(configToml)).toEqual(FAIL_CLOSED_DEFAULTS);
 });
 
 test("a timeout_s just BELOW the hook budget is accepted", async () => {

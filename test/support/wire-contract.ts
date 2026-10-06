@@ -4,6 +4,7 @@
 // tautology.
 import { expect } from "bun:test";
 
+import { VANITY_HOST } from "@/config/constants.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
 import { parseHook, type ReviewDeps, runReview } from "@/review/orchestrate.ts";
 
@@ -22,6 +23,9 @@ export function fakeReviewDeps(overrides: Partial<ReviewDeps> = {}): ReviewDeps 
     longPoll: async () => ({ behavior: "allow", decidedAt: 1 }),
     openBrowser: () => {},
     announceUrl: () => {},
+    localHostname: VANITY_HOST,
+    publicHostname: VANITY_HOST,
+    loginToken: () => null,
     timeoutMs: 1000,
     expire: async () => {},
     ...overrides,

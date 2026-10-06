@@ -9,6 +9,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  drainProcess,
   runCaretCli,
   spawnCaretDaemon,
   spawnEphemeralDaemon,
@@ -348,8 +349,45 @@ test("caret serve stays up without a supervisor and prints where it serves", asy
       resident: true,
       upkeep: ["update-check", "review-sweep"],
     });
+    const stdout = await new Response(proc.stdout as ReadableStream).text();
+    expect(stdout).toContain(`http://${VANITY_HOST}:${port}`);
+    expect(stdout).not.toContain("?token=");
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("caret serve with token auth prints a login link a CLI client's token matches", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-serve-auth-"));
+  const port = freePort();
+  const config = join(stateHome, "config.toml");
+  await writeFile(config, '[daemon]\nauth = "token"\nhostnames = ["caret.test"]\n');
+  const proc = spawnCaretDaemon(
+    stateHome,
+    { CARET_PORT: String(port), CARET_SUPERVISED: "", CARET_CONFIG_FILE: config },
+    { command: "serve", pipeStdout: true },
+  );
+  try {
+    await untilLockWritten(proc, join(stateHome, "caret", "daemon.lock"));
+    const baseUrl = `http://127.0.0.1:${port}`;
+    await withEnv({ XDG_STATE_HOME: stateHome }, async () => {
+      expect((await httpHealth(baseUrl))?.service).toBe("caret");
+    });
+    const token = readFileSync(join(stateHome, "caret", "daemon.token"), "utf8").trim();
+    const healthAs = async (host: string) =>
+      (
+        await fetch(`${baseUrl}/api/health`, {
+          headers: { Host: host, Authorization: `Bearer ${token}` },
+        })
+      ).status;
+    expect(await healthAs("caret.test:9999")).toBe(200);
+    expect(await healthAs("evil.test:9999")).toBe(403);
+    proc.kill("SIGTERM");
+    await proc.exited;
     expect(await new Response(proc.stdout as ReadableStream).text()).toContain(
-      `http://${VANITY_HOST}:${port}`,
+      `http://caret.test:${port}/?token=${token}`,
     );
   } finally {
     proc.kill("SIGKILL");
@@ -437,8 +475,8 @@ test("a daemon that cannot bind its configured port exits the terminal status", 
     // so the reason reaches that log rather than only the daemon's NDJSON sink.
     // The specific reason, not just the `caret:` prefix — the port-race path writes its
     // own `caret: …` line, so a bare prefix match would pass on the wrong failure.
-    expect(await new Response(proc.stderr as ReadableStream).text()).toMatch(
-      /bind the daemon port/,
+    expect(await new Response(proc.stderr as ReadableStream).text()).toContain(
+      "cannot bind the daemon to 127.0.0.1:99999",
     );
   } finally {
     proc.kill("SIGKILL");
@@ -805,7 +843,11 @@ test("the daemon logs the parsed settings at startup", async () => {
     // schema default (no [dev] in this config). A prod binary gates it inert.
     // Every table but logging.redact is untouched by this config, so they ride
     // straight from DEFAULTS.
-    expect(rec?.settings).toEqual({ ...DEFAULTS, logging: { ...DEFAULTS.logging, redact: true } });
+    expect(rec?.settings).toEqual({
+      ...DEFAULTS,
+      logging: { ...DEFAULTS.logging, redact: true },
+      daemon: { ...DEFAULTS.daemon, hostnames: "<redacted>" },
+    });
   } finally {
     proc.kill("SIGKILL");
     await proc.exited;
@@ -813,3 +855,60 @@ test("the daemon logs the parsed settings at startup", async () => {
     await rm(configHome, { recursive: true, force: true });
   }
 });
+
+test("a daemon with token auth on never prints or logs its token", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-token-quiet-"));
+  const configPath = join(stateHome, "config.toml");
+  await writeFile(configPath, '[daemon]\nauth = "token"\n');
+  const proc = spawnCaretDaemon(
+    stateHome,
+    { CARET_CONFIG_FILE: configPath },
+    { pipeStdout: true, pipeStderr: true },
+  );
+  try {
+    await untilLockWritten(proc, join(stateHome, "caret", "daemon.lock"));
+    const token = readFileSync(join(stateHome, "caret", "daemon.token"), "utf-8").trim();
+    expect(token).not.toBe("");
+    proc.kill("SIGTERM");
+    const { stdout, stderr } = await drainProcess(proc as Parameters<typeof drainProcess>[0]);
+    for (const text of [stdout, stderr, readFileSync(daemonLog(stateHome), "utf-8")]) {
+      expect(text.includes(token)).toBe(false);
+    }
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+test("an unreadable token file stops the daemon terminally, naming the file", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-token-bad-"));
+  const configPath = join(stateHome, "config.toml");
+  await writeFile(configPath, '[daemon]\nauth = "token"\n');
+  const tokenFile = join(stateHome, "caret", "daemon.token");
+  await mkdir(join(stateHome, "caret"), { recursive: true });
+  await writeFile(tokenFile, "");
+  const proc = spawnCaretDaemon(stateHome, { CARET_CONFIG_FILE: configPath }, { pipeStderr: true });
+  try {
+    const stderr = await new Response(proc.stderr as ReadableStream).text();
+    expect(await proc.exited).toBe(SERVICE_TERMINAL_EXIT_STATUS);
+    expect(stderr).toContain(tokenFile);
+    const codes = fatalCodes(stateHome);
+    expect(codes).toContain("daemon-token-unusable");
+    expect(codes).not.toContain("daemon-bind-failed");
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
+/** The `code` of every `fatal` record in the world's daemon.log. */
+function fatalCodes(stateHome: string): string[] {
+  return readFileSync(daemonLog(stateHome), "utf-8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as { step?: string; code?: string })
+    .filter((r) => r.step === "fatal")
+    .map((r) => String(r.code));
+}

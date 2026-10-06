@@ -14,6 +14,7 @@ import { createConfigWriter } from "@/config/config-write.ts";
 import {
   configFile,
   daemonLock,
+  daemonTokenFile,
   prefsFile,
   reviewsDir,
   stateDir,
@@ -26,9 +27,11 @@ import {
   idleMs,
   logKeep,
   logMaxSize,
+  type Settings,
   settings,
   watchSettings,
 } from "@/config/settings.ts";
+import { authEnabled } from "@/daemon/address.ts";
 import { devUpdateIdentity, sourceGit } from "@/daemon/dev-update.ts";
 import { buildDiagnostics, prodDiagnosticsDeps } from "@/daemon/diagnostics.ts";
 import {
@@ -38,6 +41,7 @@ import {
   rotateDaemonStderr,
 } from "@/daemon/lifecycle.ts";
 import { type CaretServer, createServer } from "@/daemon/server.ts";
+import { loadOrMintToken } from "@/daemon/token.ts";
 import { createUpdateChanges } from "@/daemon/update-changes.ts";
 import {
   fileUpdateCache,
@@ -59,9 +63,12 @@ import { createStore } from "@/review/store.ts";
 import { isSupervised, SERVICE_TERMINAL_EXIT_STATUS } from "@/service/manager.ts";
 import { loadUiAssets } from "@/ui/assets.ts";
 
-/** Boots the daemon and resolves with the port it bound. `resident` keeps it up until
- * told to stop rather than idle-exiting. */
-export async function runDaemon(opts: { ephemeral: boolean; resident: boolean }): Promise<number> {
+/** Boots the daemon and resolves with the port it bound and the settings it booted with.
+ * `resident` keeps it up until told to stop rather than idle-exiting. */
+export async function runDaemon(opts: {
+  ephemeral: boolean;
+  resident: boolean;
+}): Promise<{ port: number; settings: Settings }> {
   // The daemon's boot time, captured once for the /api/diagnostics uptime (EXC-842).
   const startedAt = Date.now();
   // Leveled NDJSON to logs/daemon.log, the path the logger owns and rotates.
@@ -233,6 +240,17 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   // land. Read per request, so prodDiagnosticsDeps must stay inside the thunk.
   let armedUpkeep: string[] = [];
 
+  // Loaded (or minted) ahead of createServer, which repeats the read, so a bad token
+  // file is reported as itself rather than as a bind failure.
+  const tokenFile = authEnabled(boot.daemon) ? daemonTokenFile() : undefined;
+  if (tokenFile !== undefined) {
+    try {
+      loadOrMintToken(tokenFile);
+    } catch (e) {
+      exitTerminal(`cannot use the daemon token file ${tokenFile}`, "daemon-token-unusable", e);
+    }
+  }
+
   try {
     server = createServer({
       store,
@@ -242,6 +260,9 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
       resident,
       assets,
       lockPath: daemonLock(),
+      tokenFile,
+      hostname: boot.daemon.host,
+      hostnames: boot.daemon.hostnames,
       buildId,
       assetDigest,
       commit: built.commit,
@@ -307,7 +328,11 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
     // privileged one, an address that does not exist — so a supervisor must stop
     // rather than restart into it. Left to propagate, the CLI's fatal handler would
     // print the hook fail-safe's deny line and exit 0, which reads as a clean stop.
-    exitTerminal("cannot bind the daemon port", "daemon-bind-failed", e);
+    exitTerminal(
+      `cannot bind the daemon to ${boot.daemon.host}:${getPort(boot)}`,
+      "daemon-bind-failed",
+      e,
+    );
   }
   // The lock guards the port from here on.
   removeOwnBootMarker();
@@ -341,5 +366,5 @@ export async function runDaemon(opts: { ephemeral: boolean; resident: boolean })
   }
   armedUpkeep = startUpkeep({ tasks: upkeep, log });
   // Bun.serve keeps the process alive; a non-resident daemon idle-auto-shuts-down.
-  return server.port;
+  return { port: server.port, settings: boot };
 }

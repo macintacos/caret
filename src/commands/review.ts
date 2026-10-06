@@ -9,10 +9,12 @@
 import { selectAdapter } from "@/adapters/index.ts";
 import { bootHookLogging } from "@/commands/boot.ts";
 import { prodService } from "@/commands/service-target.ts";
-import { logFile } from "@/config/paths.ts";
+import { daemonTokenFile, logFile } from "@/config/paths.ts";
 import { loadSettings, reviewTimeoutMs, type Settings } from "@/config/settings.ts";
+import { authEnabled, localHostname, publicHostname } from "@/daemon/address.ts";
 import { expireReview, longPoll, postReview } from "@/daemon/client.ts";
 import { ensureDaemon, prodEnsureDeps, SUPERVISOR_WINDOW_MS } from "@/daemon/lifecycle.ts";
+import { readToken } from "@/daemon/token.ts";
 import { readCmuxPane } from "@/lib/cmux.ts";
 import { logError, logInfo, logWarn } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
@@ -84,6 +86,13 @@ export function prodReviewDeps(settings: Settings): ReviewDeps {
     announceUrl: (url) => {
       process.stderr.write(reviewUrlLine(url));
     },
+    localHostname: localHostname(settings.daemon.host),
+    publicHostname: publicHostname(settings.daemon),
+    // Windows' `cmd /c start` splits the URL at `&`, so the tab opens on the login page.
+    loginToken: () =>
+      authEnabled(settings.daemon) && process.platform !== "win32"
+        ? readToken(daemonTokenFile())
+        : null,
     readPane: readCmuxPane,
     timeoutMs: reviewTimeoutMs(settings),
     expire: expireReview,

@@ -144,10 +144,10 @@ test("the dev task's daemon keeps its own port and world beside a resident daemo
     port: portB,
     configFile: noConfig(devHome),
   });
-  expect(devHook).toMatchObject({ url: `http://localhost:${portB}`, built: 0 });
+  expect(devHook).toMatchObject({ url: `http://127.0.0.1:${portB}`, built: 0 });
 
   const residentHook = await runHook(resident);
-  expect(residentHook).toMatchObject({ url: `http://localhost:${portA}`, built: 1, calls: [] });
+  expect(residentHook).toMatchObject({ url: `http://127.0.0.1:${portA}`, built: 1, calls: [] });
 
   expect((await health(portA)).instanceId).toBe(before.a.instanceId);
   expect((await health(portB)).instanceId).toBe(before.b.instanceId);
