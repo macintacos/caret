@@ -19,6 +19,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { createServer } from "node:net";
 import { join, normalize } from "node:path";
 
 import {
@@ -131,6 +132,16 @@ export function isAddrInUse(e: unknown): boolean {
     return (e as { code?: string }).code === "EADDRINUSE";
   }
   return e instanceof Error && /EADDRINUSE/.test(e.message);
+}
+
+/** Whether `host` is no address of this machine's. Bun.serve reports that EADDRNOTAVAIL
+ * as EADDRINUSE; node:net reports it truthfully, and port 0 cannot be in use. */
+export function isAddrNotAvail(host: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = createServer();
+    probe.once("error", (e) => resolve((e as { code?: string }).code === "EADDRNOTAVAIL"));
+    probe.listen({ host, port: 0 }, () => probe.close(() => resolve(false)));
+  });
 }
 
 /** Pure-string path comparison for world identity: normalize() flattens
