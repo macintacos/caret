@@ -286,17 +286,18 @@ function diffSettings(prev: Settings, next: Settings): string[] {
     for (const key of keys as Set<keyof typeof nextTable>) {
       const before = prevTable[key];
       const after = nextTable[key];
-      const [b, a] = [JSON.stringify(before), JSON.stringify(after)];
-      if (b === a) continue;
+      const [beforeJson, afterJson] = [JSON.stringify(before), JSON.stringify(after)];
+      if (beforeJson === afterJson) continue;
       if (DENY_KEYS.has(key)) changes.push(`${table}.${key}: changed`);
-      else changes.push(`${table}.${key}: ${shown(before, b)} → ${shown(after, a)}`);
+      else
+        changes.push(`${table}.${key}: ${shown(before, beforeJson)} → ${shown(after, afterJson)}`);
     }
   }
   return changes;
 }
 
-function shown(v: unknown, json: string | undefined): string {
-  return typeof v === "object" && v !== null ? String(json) : String(v);
+function shown(value: unknown, json: string | undefined): string {
+  return typeof value === "object" && value !== null ? String(json) : String(value);
 }
 
 /** Decorate a SettingsService so a hot-reload that changes values invokes

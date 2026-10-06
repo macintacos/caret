@@ -32,21 +32,21 @@ test("loginLinkOutcome prints the login link when auth is on and a token exists"
 });
 
 test("loginLinkOutcome fails naming the token file when no daemon has minted one", () => {
-  const o = loginLinkOutcome(TOKEN_ON, 4242, null, TOKEN_FILE);
-  expect(o.code).toBe(1);
-  expect(o.stdout).toBeUndefined();
-  expect(o.stderr.join("\n")).toContain(TOKEN_FILE);
+  const outcome = loginLinkOutcome(TOKEN_ON, 4242, null, TOKEN_FILE);
+  expect(outcome.code).toBe(1);
+  expect(outcome.stdout).toBeUndefined();
+  expect(outcome.stderr.join("\n")).toContain(TOKEN_FILE);
 });
 
 test.each([
   [{ host: "0.0.0.0", auth: "none" as const, hostnames: [] }, true],
   [{ host: "127.0.0.1", hostnames: [] }, false],
 ])("loginLinkOutcome with auth off (%o) points at the plain URL, warning: %p", (daemon, warns) => {
-  const o = loginLinkOutcome(daemon, 4242, "tok123", TOKEN_FILE);
-  expect(o.code).toBe(1);
-  expect(o.stdout).toBeUndefined();
-  expect(o.stderr[0]).toContain("http://caret.localhost:4242");
-  expect(o.stderr.length).toBe(warns ? 2 : 1);
+  const outcome = loginLinkOutcome(daemon, 4242, "tok123", TOKEN_FILE);
+  expect(outcome.code).toBe(1);
+  expect(outcome.stdout).toBeUndefined();
+  expect(outcome.stderr[0]).toContain("http://caret.localhost:4242");
+  expect(outcome.stderr.length).toBe(warns ? 2 : 1);
 });
 
 const stateDir = setupTempStateDir("caret-login-link-");

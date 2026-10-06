@@ -48,10 +48,10 @@ export function loginLinkOutcome(
 
 export function runLoginLink(): void {
   const s = loadSettings();
-  const file = daemonTokenFile();
-  const token = authEnabled(s.daemon) ? readToken(file) : null;
-  const o = loginLinkOutcome(s.daemon, getPort(s), token, file);
-  for (const line of o.stderr) process.stderr.write(`${line}\n`);
-  if (o.stdout !== undefined) process.stdout.write(`${o.stdout}\n`);
-  process.exitCode = o.code;
+  const tokenFile = daemonTokenFile();
+  const token = authEnabled(s.daemon) ? readToken(tokenFile) : null;
+  const outcome = loginLinkOutcome(s.daemon, getPort(s), token, tokenFile);
+  for (const line of outcome.stderr) process.stderr.write(`${line}\n`);
+  if (outcome.stdout !== undefined) process.stdout.write(`${outcome.stdout}\n`);
+  process.exitCode = outcome.code;
 }

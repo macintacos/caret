@@ -230,9 +230,9 @@ export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Prom
     // pre-empting the away-gated desktop notification. An older daemon reports no
     // such field, which fails safe to opening.
     if (!hasLiveClient) {
-      const local = reviewUrl(baseUrl, deps.localHostname, id);
+      const localUrl = reviewUrl(baseUrl, deps.localHostname, id);
       const token = deps.loginToken();
-      deps.openBrowser(token === null ? local : loginLink(local, token));
+      deps.openBrowser(token === null ? localUrl : loginLink(localUrl, token));
     }
     // Unconditional: the announcement is the fallback for a browser that never
     // opened, and the handle a live tab's reader still wants.
