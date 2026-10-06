@@ -203,10 +203,12 @@ export function createCaretPlugin(
       // may call the tool: the plan agent is the one whose turn reliably ends in a review,
       // and warming on every build message would spawn a process on the session's busiest
       // traffic to save ~0.4s in the rare case.
-      "chat.message": async (input) => {
+      "chat.message": async (input, output) => {
+        // A client may omit `input.agent`; OpenCode resolves the default onto the message.
+        const agent = input.agent ?? output.message.agent;
         // A message whose agent is unknown must not clobber the recorded one.
-        if (input.sessionID && input.agent) sessionAgents.set(input.sessionID, input.agent);
-        if (!isPlanningAgent(input.agent)) return;
+        if (input.sessionID && agent) sessionAgents.set(input.sessionID, agent);
+        if (!isPlanningAgent(agent)) return;
         try {
           warm(bin);
         } catch {
