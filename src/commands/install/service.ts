@@ -22,7 +22,7 @@ import type { ServiceTarget } from "@/commands/service-target.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
 import { daemonStderrLogFile, launcherPath } from "@/config/paths.ts";
 import { getPort, loadSettings } from "@/config/settings.ts";
-import { httpHealth } from "@/daemon/client.ts";
+import { DaemonAuthError, httpHealth } from "@/daemon/client.ts";
 import { DAEMON_CWD } from "@/daemon/lifecycle.ts";
 import { VERSION } from "@/lib/build-id.ts";
 import { isNewer } from "@/lib/semver.ts";
@@ -80,14 +80,18 @@ type Served =
   | { kind: "replaced"; version?: string }
   /** A caret the service did not start holds the port. */
   | { kind: "unsupervised"; version?: string }
+  /** A caret refused the token. */
+  | { kind: "unauthorized"; message: string }
   /** Nothing, or only a non-caret squatter. */
   | { kind: "silent" };
 
 function classify(
-  health: HealthIdentity | null,
+  health: HealthIdentity | DaemonAuthError | null,
   installerVersion: string,
   replaced: string | undefined,
 ): Served {
+  // The outgoing daemon refuses a shell with no token file yet while it drains.
+  if (health instanceof DaemonAuthError) return { kind: "unauthorized", message: health.message };
   if (health?.service !== "caret") return { kind: "silent" };
   const answeringVersion = health.version;
   if (replaced !== undefined && health.instanceId === replaced) {
@@ -102,6 +106,19 @@ function classify(
     : { kind: "ready", version: answeringVersion };
 }
 
+/** What one probe saw: caret's identity, null for nothing, or the token refusal. */
+async function probe(
+  baseUrl: string,
+  watch: ServiceWatch,
+): Promise<HealthIdentity | DaemonAuthError | null> {
+  try {
+    return await watch.health(baseUrl);
+  } catch (e) {
+    if (e instanceof DaemonAuthError) return e;
+    throw e;
+  }
+}
+
 /** Poll until the service's caret, at least as new as the installer and other than the
  * `replaced` instance a restart is draining, answers. Resolves to `ready` the moment one
  * does, else to what the last probe saw. */
@@ -112,7 +129,7 @@ async function awaitServed(
 ): Promise<Served> {
   let served: Served = { kind: "silent" };
   for (let attempt = 0; attempt < SETTLE_ATTEMPTS; attempt++) {
-    served = classify(await watch.health(baseUrl), watch.version, replaced);
+    served = classify(await probe(baseUrl, watch), watch.version, replaced);
     if (served.kind === "ready") return served;
     await watch.sleep(SETTLE_POLL_MS);
   }
@@ -139,6 +156,8 @@ function servedWarning(served: Served, installerVersion: string, cycled: boolean
       return `The daemon the restart replaced${at(served.version)} is still answering.\n${log}`;
     case "unsupervised":
       return `A caret the service did not start${at(served.version)} holds the port.\nThe service takes over once it exits.`;
+    case "unauthorized":
+      return `${served.message.charAt(0).toUpperCase()}${served.message.slice(1)}.`;
     case "silent":
       return `No caret daemon answered within ${SETTLE_WINDOW_MS / 1000} seconds.\n${log}`;
   }
@@ -274,7 +293,12 @@ export async function reconcileService(
     const { watch } = deps;
     // A draining daemon keeps answering until it lets the port go, so remember which
     // instance the restart replaces.
-    const replaced = cycles && watch ? (await watch.health(baseUrl))?.instanceId : undefined;
+    const replaced =
+      cycles && watch
+        ? await probe(baseUrl, watch).then((h) =>
+            h instanceof DaemonAuthError ? undefined : h?.instanceId,
+          )
+        : undefined;
     if (cycles) await manager.restart();
     // ponytail: a no-cycle install over an older daemon waits the full window before
     // warning; stop at the first answer when nothing cycled if that ever bites.

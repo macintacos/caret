@@ -157,6 +157,11 @@ export function daemonLock(): string {
   return `${stateDir()}/daemon.lock`;
 }
 
+/** Daemon auth token: minted owner-only by a daemon that requires one, read by the CLI. */
+export function daemonTokenFile(): string {
+  return `${stateDir()}/daemon.token`;
+}
+
 /** Boot marker: claimed before a hook spawns a daemon and dropped once that daemon's lock
  * is written, so at most one daemon of this state dir boots at a time. */
 export function daemonBootMarker(): string {

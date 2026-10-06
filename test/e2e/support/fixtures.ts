@@ -19,12 +19,13 @@ import { fileURLToPath } from "node:url";
 import { test as base, expect, type Locator, type Page } from "@playwright/test";
 
 import { KEY_REPEAT_DELAY_MS } from "@ui/src/lib/keyRepeat.ts";
-import { waitForHealth } from "@/daemon/client.ts";
+import { readToken } from "@/daemon/token.ts";
 import type {
   BuildKind,
   ClientReview,
   ConfigPatch,
   DraftBody,
+  HealthIdentity,
   PlanInput,
   RouteResult,
   UpdateChanges,
@@ -37,6 +38,8 @@ import { FIXTURE_PLAN } from "./fixture-plan.ts";
 export interface Daemon {
   /** Base URL of this test's daemon (http://127.0.0.1:<os-assigned-port>). */
   url: string;
+  /** The daemon's auth token when the `auth` option is on; null otherwise. */
+  token: string | null;
   /**
    * Seed a review through the public API — the same POST /api/reviews the hook
    * makes, issued harness-side (no Origin header, so the same-origin guard is
@@ -91,7 +94,7 @@ export interface E2EOptions {
    * The daemon-boot budget, spent once per phase rather than across both: the
    * stdout port handshake takes it as a real deadline, then the `/health` poll
    * spends it again as `bootTimeoutMs / 50` probes at 50ms. The poll is an
-   * attempt count, not a clock — `httpHealth` carries its own 500ms abort, so
+   * attempt count, not a clock — each probe carries its own 500ms abort, so
    * against a daemon that listens but never answers it runs well past this
    * number and Playwright's per-test `timeout` is what fires.
    */
@@ -111,6 +114,8 @@ export interface E2EOptions {
   updateInstall: BuildKind;
   /** What GET /api/update/changes serves. Null (the default) leaves the route unwired, so it 404s. */
   updateChanges: UpdateChanges | null;
+  /** Boot the daemon with token auth on; harness requests then carry its token. Off by default. */
+  auth: boolean;
 }
 
 const DAEMON_ENTRY = fileURLToPath(new URL("./daemon-entry.ts", import.meta.url));
@@ -172,9 +177,26 @@ function awaitPortLine(
   });
 }
 
-// node-runner sleep: the Playwright fixture runs under node, so reach for
-// setTimeout rather than Bun.sleep (the src probe defaults to Bun.sleep).
+// The Playwright fixture runs under node, so no Bun.sleep.
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Poll GET /api/health until it answers with caret's identity, `attempts` probes 50ms apart. */
+async function awaitHealthy(
+  url: string,
+  headers: Record<string, string>,
+  attempts: number,
+): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const res = await fetch(`${url}/api/health`, { headers, signal: AbortSignal.timeout(500) });
+      if (res.ok && ((await res.json()) as HealthIdentity).service === "caret") return;
+    } catch {
+      // Not listening yet, or the probe timed out: try again.
+    }
+    await sleep(50);
+  }
+  throw new Error("caret daemon did not become healthy in time");
+}
 
 /** Run `cmd` and return its trimmed stdout, or "" on any failure — absent,
  * non-zero, or still running at the timeout. execFileSync blocks the node event
@@ -230,12 +252,16 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
   updateStatus: [{ kind: "unavailable", reason: "dev" }, { option: true }],
   updateInstall: ["dev", { option: true }],
   updateChanges: [null, { option: true }],
-  daemon: async ({ bootTimeoutMs, updateStatus, updateInstall, updateChanges }, use) => {
+  auth: [false, { option: true }],
+  daemon: async ({ bootTimeoutMs, updateStatus, updateInstall, updateChanges, auth }, use) => {
     // Before mkdtemp so an unresolvable rumdl can't leak a state dir.
     const rumdl = pinnedRumdl();
     // Ephemeral, isolated state: the daemon's reviews and logs all live under
     // this dir and are wiped at teardown. The user's real state is never touched.
     const stateDir = await mkdtemp(join(tmpdir(), "caret-e2e."));
+    // Chosen here rather than through daemonTokenFile(), which reads this worker's
+    // XDG_STATE_HOME — the developer's.
+    const tokenFile = join(stateDir, "daemon.token");
     // stdin is a live pipe on purpose: the daemon self-reaps when it closes,
     // so a SIGKILL'd runner can't leave an orphan daemon behind.
     const child = spawn("bun", [DAEMON_ENTRY], {
@@ -249,6 +275,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
         CARET_E2E_UPDATE_STATUS: JSON.stringify(updateStatus),
         CARET_E2E_UPDATE_INSTALL: updateInstall,
         CARET_E2E_UPDATE_CHANGES: JSON.stringify(updateChanges),
+        ...(auth ? { CARET_E2E_TOKEN_FILE: tokenFile } : {}),
       },
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -259,20 +286,21 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
     try {
       const port = await awaitPortLine(child, stderr, bootTimeoutMs);
       const url = `http://127.0.0.1:${port}`;
+      const token = auth ? readToken(tokenFile) : null;
+      if (auth && token === null) throw new Error(`caret daemon wrote no token to ${tokenFile}`);
+      const authHeaders = (extra: Record<string, string> = {}): Record<string, string> =>
+        token === null ? extra : { ...extra, Authorization: `Bearer ${token}` };
       // The same budget again, spent as probes rather than as a deadline (see
-      // E2EOptions); node-runner sleep.
-      await waitForHealth(url, {
-        attempts: Math.ceil(bootTimeoutMs / 50),
-        intervalMs: 50,
-        sleep,
-      });
+      // E2EOptions).
+      await awaitHealthy(url, authHeaders(), Math.ceil(bootTimeoutMs / 50));
 
       await use({
         url,
+        token,
         async seed(input?: PlanInput) {
           const res = await fetch(`${url}/api/reviews`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify({
               sessionId: randomUUID(),
               cwd: "/tmp/caret-e2e",
@@ -286,25 +314,27 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
         async putDraft(id: string, body: DraftBody) {
           const res = await fetch(`${url}/api/reviews/${encodeURIComponent(id)}/draft`, {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify(body),
           });
           if (!res.ok) throw new Error(`putDraft failed: PUT /draft → ${res.status}`);
         },
         async getReview(id: string) {
-          const res = await fetch(`${url}/api/reviews/${encodeURIComponent(id)}`);
+          const res = await fetch(`${url}/api/reviews/${encodeURIComponent(id)}`, {
+            headers: authHeaders(),
+          });
           if (!res.ok) return { status: res.status };
           return { status: res.status, body: (await res.json()) as ClientReview };
         },
         async listReviews() {
-          const res = await fetch(`${url}/api/reviews`);
+          const res = await fetch(`${url}/api/reviews`, { headers: authHeaders() });
           if (!res.ok) throw new Error(`GET /api/reviews → ${res.status}`);
           return (await res.json()) as ClientReview[];
         },
         async resolve(id: string, behavior: "allow" | "deny", feedback?: string) {
           const res = await fetch(`${url}/api/reviews/${encodeURIComponent(id)}/resolve`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify({ behavior, ...(feedback === undefined ? {} : { feedback }) }),
           });
           if (!res.ok) throw new Error(`resolve failed: POST /resolve → ${res.status}`);
@@ -312,7 +342,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
         async setConfig(patch: ConfigPatch) {
           const res = await fetch(`${url}/api/config`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify(patch),
           });
           if (!res.ok) throw new Error(`setConfig failed: POST /api/config → ${res.status}`);
@@ -324,7 +354,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
             if (v > 0) await this.resolve(id, "deny", "next revision");
             const res = await fetch(`${url}/api/reviews`, {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: authHeaders({ "Content-Type": "application/json" }),
               body: JSON.stringify({ sessionId, cwd, plan: plans[v] }),
             });
             if (!res.ok) throw new Error(`seedVersions failed: POST /api/reviews → ${res.status}`);
@@ -339,7 +369,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
           await this.resolve(id, "deny", "next revision");
           const res = await fetch(`${url}/api/reviews`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify({ sessionId, cwd: "/tmp/caret-e2e", plan }),
           });
           if (!res.ok) throw new Error(`addVersion failed: POST /api/reviews → ${res.status}`);

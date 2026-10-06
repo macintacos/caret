@@ -16,6 +16,7 @@ import {
 } from "@test/support/cli-process.ts";
 import { daemonClient } from "@test/support/daemon.ts";
 import { ensureDaemonNoOps } from "@test/support/ensure-daemon-deps.ts";
+import { withEnv } from "@test/support/env.ts";
 import { ndjsonRecords } from "@test/support/ndjson.ts";
 import { freePort } from "@test/support/net.ts";
 import { until, waitFor } from "@test/support/poll.ts";
@@ -23,7 +24,7 @@ import { recordingLog } from "@test/support/recording-log.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
 import { DEFAULTS } from "@/config/settings.ts";
-import { httpHealth } from "@/daemon/client.ts";
+import { DaemonAuthError, httpHealth, listReviews, postReview } from "@/daemon/client.ts";
 import { ensureDaemon } from "@/daemon/lifecycle.ts";
 import { createServer } from "@/daemon/server.ts";
 import { VERSION } from "@/lib/build-id.ts";
@@ -95,6 +96,34 @@ test("httpHealth reports the caret identity from a live daemon", async () => {
   servers.push(srv);
   const h = await httpHealth(`http://localhost:${srv.port}`);
   expect(h?.service).toBe("caret");
+});
+
+test("the CLI reaches an auth-on daemon with the token from its own state dir", async () => {
+  const state = await mkdtemp(join(tmpdir(), "caret-it-auth-"));
+  const other = await mkdtemp(join(tmpdir(), "caret-it-auth-other-"));
+  const srv = createServer({
+    store: createStore(join(state, "store")),
+    port: 0,
+    tokenFile: join(state, "caret", "daemon.token"),
+  });
+  servers.push(srv);
+  const baseUrl = `http://localhost:${srv.port}`;
+  try {
+    await withEnv({ XDG_STATE_HOME: state }, async () => {
+      expect((await httpHealth(baseUrl))?.service).toBe("caret");
+      const created = await postReview(baseUrl, { sessionId: "S", plan: "# P" });
+      const listed: string[] = (await listReviews(baseUrl)).map((r) => r.id);
+      expect(listed).toEqual([String(created?.id)]);
+    });
+    const err = await withEnv({ XDG_STATE_HOME: other }, () =>
+      httpHealth(baseUrl).catch((e: unknown) => e),
+    );
+    expect(err).toBeInstanceOf(DaemonAuthError);
+    expect((err as Error).message).toContain(join(other, "caret", "daemon.token"));
+  } finally {
+    await rm(state, { recursive: true, force: true });
+    await rm(other, { recursive: true, force: true });
+  }
 });
 
 test("concurrent ensureDaemon callers both connect to a live daemon", async () => {

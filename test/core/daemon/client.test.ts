@@ -1,11 +1,23 @@
-// Unit coverage for src/daemon/client.ts: waitForHealth — the bounded health-wait
-// the out-of-process callers (the dev driver, the e2e fixture) share — and how
-// postReview reads the daemon's refusals. Driven against a real in-process server
-// so each wrapper exercises its actual fetch; waitForHealth takes an injected sleep
-// so no real time passes.
-import { afterEach, expect, test } from "bun:test";
+// Unit coverage for src/daemon/client.ts: waitForHealth (the dev driver's bounded
+// wait), postReview's refusals, and the state dir's token on every request. Driven
+// against a real in-process server so each wrapper exercises its actual fetch;
+// waitForHealth takes an injected sleep so no real time passes.
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
-import { expireReview, longPoll, postReview, waitForHealth } from "@/daemon/client.ts";
+import { setupTempStateDir } from "@test/support/env.ts";
+import { daemonTokenFile } from "@/config/paths.ts";
+import {
+  DaemonAuthError,
+  expireReview,
+  httpHealth,
+  listReviews,
+  longPoll,
+  postReview,
+  resolveReview,
+  waitForHealth,
+} from "@/daemon/client.ts";
 
 const servers: Array<{ stop(): void }> = [];
 afterEach(() => {
@@ -109,4 +121,81 @@ test("a call without a version sends no version query", async () => {
   const seen: string[] = [];
   await expireReview(serveStatus(404, seen), "r1", undefined);
   expect(seen).toEqual([""]);
+});
+
+describe("daemon requests carry the state dir's token", () => {
+  setupTempStateDir("caret-client-");
+  const TOKEN = "s3cret-token";
+  const writeToken = () => {
+    mkdirSync(dirname(daemonTokenFile()), { recursive: true });
+    writeFileSync(daemonTokenFile(), `${TOKEN}\n`);
+  };
+  const calls: Array<[string, (base: string) => Promise<unknown>]> = [
+    ["httpHealth", (b) => httpHealth(b)],
+    ["postReview", (b) => postReview(b, { plan: "# P" })],
+    ["expireReview", (b) => expireReview(b, "r1", 1)],
+    ["longPoll", (b) => longPoll(b, "r1", 1)],
+    ["listReviews", (b) => listReviews(b)],
+    ["resolveReview", (b) => resolveReview(b, "r1", { behavior: "allow" })],
+  ];
+
+  function serveAuth(status: number, seen: Array<string | null>, challenge = true): string {
+    const srv = Bun.serve({
+      port: 0,
+      fetch: (req) => {
+        seen.push(req.headers.get("authorization"));
+        if (status === 200) return Response.json({});
+        const headers = challenge ? { "WWW-Authenticate": 'Bearer realm="caret"' } : undefined;
+        return new Response(null, { status, headers });
+      },
+    });
+    servers.push(srv);
+    return `http://localhost:${srv.port}`;
+  }
+
+  test.each(calls)("%s sends the token as a bearer header", async (_, call) => {
+    writeToken();
+    const seen: Array<string | null> = [];
+    await call(serveAuth(200, seen));
+    expect(seen).toEqual([`Bearer ${TOKEN}`]);
+  });
+
+  test.each(calls)("%s sends no Authorization header without a token file", async (_, call) => {
+    const seen: Array<string | null> = [];
+    await call(serveAuth(200, seen));
+    expect(seen).toEqual([null]);
+  });
+
+  test.each(calls)("%s rejects a 401 with an error naming the token file", async (_, call) => {
+    writeToken();
+    const err = await call(serveAuth(401, [])).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DaemonAuthError);
+    expect((err as Error).message).toContain(daemonTokenFile());
+    expect((err as Error).message).not.toContain(TOKEN);
+  });
+
+  test("a 401 without a token file names the missing file", async () => {
+    const err = await httpHealth(serveAuth(401, [])).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DaemonAuthError);
+    expect((err as Error).message).toContain(daemonTokenFile());
+  });
+
+  test("httpHealth resolves null on a 401 that carries no caret challenge", async () => {
+    writeToken();
+    expect(await httpHealth(serveAuth(401, [], false))).toBeNull();
+  });
+
+  test.each(calls.slice(1))(
+    "%s treats a 401 with no caret challenge as an ordinary failure",
+    async (_, call) => {
+      writeToken();
+      const err = await call(serveAuth(401, [], false)).catch((e: unknown) => e);
+      expect(err).not.toBeInstanceOf(DaemonAuthError);
+    },
+  );
+
+  test("httpHealth still resolves null when nothing answers", async () => {
+    writeToken();
+    expect(await httpHealth("http://127.0.0.1:1")).toBeNull();
+  });
 });

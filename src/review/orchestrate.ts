@@ -10,8 +10,9 @@
 
 import { VANITY_HOST } from "@/config/constants.ts";
 import { logFile } from "@/config/paths.ts";
-// Type-only: the review core takes its daemon operations as deps and never imports
-// the daemon at runtime.
+import { DaemonAuthError } from "@/daemon/client.ts";
+// Daemon operations arrive as deps: the core imports lifecycle's types, and only the
+// client's error class to classify a failure.
 import type { EnsureMode } from "@/daemon/lifecycle.ts";
 import { type ErrorCode, logDebug, logError, logInfo, setLogContext, shortId } from "@/lib/log.ts";
 import {
@@ -89,8 +90,8 @@ export interface ReviewDeps {
 
 class TimeoutError extends Error {}
 
-/** The code a failure at each runReview step logs under. A timeout overrides the step,
- * since it can surface from any await the deadline races. */
+/** The code a failure at each runReview step logs under. A timeout or a token refusal
+ * overrides the step, since either can surface from any daemon await the review makes. */
 const REVIEW_FAILURE_CODES = {
   parse: "hook-input-invalid",
   validatePlan: "unexpected", // validation denies; it never throws by design
@@ -103,7 +104,9 @@ const REVIEW_FAILURE_CODES = {
 type ReviewStep = keyof typeof REVIEW_FAILURE_CODES;
 
 function reviewFailureCode(step: ReviewStep, err: unknown): ErrorCode {
-  return err instanceof TimeoutError ? "review-timeout" : REVIEW_FAILURE_CODES[step];
+  if (err instanceof TimeoutError) return "review-timeout";
+  if (err instanceof DaemonAuthError) return "daemon-unauthorized";
+  return REVIEW_FAILURE_CODES[step];
 }
 
 function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {

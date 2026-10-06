@@ -101,6 +101,8 @@ const server = createServer({
   // Belt and braces: even an unexpected idle fire must not process.exit.
   onShutdown: () => {},
   assets,
+  // Token auth, staged by the fixture's `auth` option at a path in this test's own state dir.
+  ...(process.env.CARET_E2E_TOKEN_FILE ? { tokenFile: process.env.CARET_E2E_TOKEN_FILE } : {}),
   // A synthetic build identity + self-diagnostics so the settings Advanced pane
   // (EXC-848) has real blocks to render. The prod daemon derives these from the
   // build (buildId/commit) and the live process/settings; here they are fixed so

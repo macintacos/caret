@@ -1,7 +1,10 @@
 // The daemon's loopback HTTP client: the fetch wrappers the hooks use to talk to
-// a running daemon. Each is a thin wrapper over the daemon's HTTP surface, kept
-// plain (no client abstraction) so the call sites read as the requests they are.
+// a running daemon. Each is a thin wrapper over the daemon's HTTP surface; the one
+// shared piece is daemonFetch, which carries the state dir's token.
 
+import { daemonTokenFile } from "@/config/paths.ts";
+import { AUTH_CHALLENGE } from "@/daemon/auth.ts";
+import { readToken } from "@/daemon/token.ts";
 import type {
   ClientReview,
   CreatedReview,
@@ -12,20 +15,42 @@ import type {
   ResolveBody,
 } from "@/lib/types.ts";
 
+/** A daemon 401 bearing caret's challenge: names the token file, never the token. */
+export class DaemonAuthError extends Error {}
+
+/** fetch, carrying the state dir's token when its file is readable; a 401 bearing
+ * caret's challenge throws DaemonAuthError, any other 401 is returned as is. The
+ * token is re-read on every call so a re-mint is picked up. */
+export async function daemonFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const tokenFile = daemonTokenFile();
+  const token = readToken(tokenFile);
+  const headers = new Headers(init.headers);
+  if (token !== null) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(url, { ...init, headers });
+  if (res.status !== 401 || res.headers.get("www-authenticate") !== AUTH_CHALLENGE) return res;
+  throw new DaemonAuthError(
+    token === null
+      ? `the daemon requires a token, but ${tokenFile} does not exist or cannot be read; restart the caret daemon to mint one, or check that XDG_STATE_HOME matches the caret service's`
+      : `the daemon rejected the token in ${tokenFile}; check that XDG_STATE_HOME matches the caret service's`,
+  );
+}
+
 /** Parsed /api/health body — the shared HealthIdentity shape (every field
  * absent on a pre-fix daemon). */
 export type HealthBody = HealthIdentity;
 
 /** Probe the daemon's identity. Null on any failure (connection refused, a
- * non-ok status, a timeout) — the caller treats null as "nothing answering". */
+ * non-ok status, a timeout) — the caller treats null as "nothing answering". A
+ * DaemonAuthError rejection means a daemon holds the port but refused the token. */
 export async function httpHealth(baseUrl: string): Promise<HealthBody | null> {
   try {
-    const res = await fetch(`${baseUrl}/api/health`, {
+    const res = await daemonFetch(`${baseUrl}/api/health`, {
       signal: AbortSignal.timeout(500),
     });
     if (!res.ok) return null;
     return (await res.json()) as HealthBody;
-  } catch {
+  } catch (e) {
+    if (e instanceof DaemonAuthError) throw e;
     return null;
   }
 }
@@ -39,9 +64,9 @@ export interface WaitForHealthOptions {
   sleep?: (ms: number) => Promise<void>;
 }
 
-/** Poll /api/health until the daemon answers with the caret identity, or throw
- * once the attempt budget is exhausted. The bounded health-wait the
- * out-of-process callers share; the in-process takeover loop in
+/** Poll /api/health until the daemon answers with the caret identity. Throws once
+ * the attempt budget is exhausted, or on the first probe a daemon refuses the token
+ * (DaemonAuthError). The dev driver's bounded wait; the in-process takeover loop in
  * daemon-lifecycle.ts drives httpHealth on its own schedule. */
 export async function waitForHealth(
   baseUrl: string,
@@ -60,7 +85,7 @@ export async function waitForHealth(
 /** Create the review. Null on a 503, the refusal of a daemon stepping down, so the
  * caller can post to its successor; any other failure throws. */
 export async function postReview(baseUrl: string, input: PlanInput): Promise<CreatedReview | null> {
-  const res = await fetch(`${baseUrl}/api/reviews`, {
+  const res = await daemonFetch(`${baseUrl}/api/reviews`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -85,7 +110,7 @@ export async function expireReview(
   id: string,
   version: number | undefined,
 ): Promise<void> {
-  const res = await fetch(`${baseUrl}/api/reviews/${id}/expire${versionSearch(version)}`, {
+  const res = await daemonFetch(`${baseUrl}/api/reviews/${id}/expire${versionSearch(version)}`, {
     method: "POST",
     signal: AbortSignal.timeout(1000),
   });
@@ -104,7 +129,7 @@ export async function longPoll(
   id: string,
   version: number | undefined,
 ): Promise<PollResult> {
-  const res = await fetch(`${baseUrl}/api/reviews/${id}/decision${versionSearch(version)}`);
+  const res = await daemonFetch(`${baseUrl}/api/reviews/${id}/decision${versionSearch(version)}`);
   if (res.status === 204) return null;
   if (res.status === 409) return "superseded";
   if (!res.ok) throw new Error(`decision long-poll failed: ${res.status}`);
@@ -115,7 +140,7 @@ export async function longPoll(
  * post-approval reconcile hook never hangs; rejects when no daemon answers, which
  * the caller treats as "nothing to reconcile". */
 export async function listReviews(baseUrl: string): Promise<ClientReview[]> {
-  const res = await fetch(`${baseUrl}/api/reviews`, { signal: AbortSignal.timeout(1000) });
+  const res = await daemonFetch(`${baseUrl}/api/reviews`, { signal: AbortSignal.timeout(1000) });
   if (!res.ok) throw new Error(`GET /api/reviews failed: ${res.status}`);
   return (await res.json()) as ClientReview[];
 }
@@ -124,7 +149,7 @@ export async function listReviews(baseUrl: string): Promise<ClientReview[]> {
  * terminal approval into the daemon. Short-fused; a 404 (already resolved or
  * superseded) throws like any non-ok status and the best-effort caller swallows it. */
 export async function resolveReview(baseUrl: string, id: string, body: ResolveBody): Promise<void> {
-  const res = await fetch(`${baseUrl}/api/reviews/${id}/resolve`, {
+  const res = await daemonFetch(`${baseUrl}/api/reviews/${id}/resolve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

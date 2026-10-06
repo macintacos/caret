@@ -98,6 +98,7 @@ test("no terminal and no --yes refuses, naming the flag that would proceed", asy
 
 test("the archive carries the live logs and the review records, and nothing else", async () => {
   await seed();
+  await writeFile(join(tmp, "daemon.token"), "secret");
   await runBundle({ yes: true }, deps());
   expect(written?.entries.map((e) => e.name).sort()).toEqual(["logs/caret.log", "reviews/a.json"]);
 });

@@ -10,6 +10,7 @@ import { createConfigWriter } from "@/config/config-write.ts";
 import { deriveIdleTimeoutSec } from "@/config/constants.ts";
 import { configFile, ensureStateDir } from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
+import { authGate } from "@/daemon/auth.ts";
 import {
   isClientLive,
   isCrossOrigin,
@@ -30,6 +31,7 @@ import {
   ResolveBodySchema,
   VersionQuerySchema,
 } from "@/daemon/schemas.ts";
+import { loadOrMintToken } from "@/daemon/token.ts";
 import { type DaemonLock, IDENTITY, isCompiledBinary } from "@/lib/build-id.ts";
 import { markPaneRead as clearCmuxMark } from "@/lib/cmux.ts";
 import { type CaretLogger, noopLogger, shortId } from "@/lib/log.ts";
@@ -122,6 +124,10 @@ export interface CreateServerOptions {
    * successful bind and removes it on stop(); omitted (default) means no lock is
    * managed. */
   lockPath?: string;
+  /** Daemon token file. When set, auth is on: every request needs the token, which is
+   * loaded from this file at construction, or minted into it when missing. Throws at
+   * construction when the file exists but holds no readable token. */
+  tokenFile?: string;
   /** Build fingerprint (paths.buildHash of the served UI) reported in
    * /api/health and recorded in the lock, so a newer caret can detect staleness. */
   buildId?: string;
@@ -236,6 +242,7 @@ interface ResolvedOptions {
   routePlan: RoutePlan;
   configPath: string;
   lockPath: string | undefined;
+  tokenFile: string | undefined;
   buildId: string | undefined;
   assetDigest: string | undefined;
   commit: string | undefined;
@@ -268,6 +275,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     routePlan: opts.routePlan ?? routeIncomingPlan,
     configPath: opts.configPath ?? configFile(),
     lockPath: opts.lockPath,
+    tokenFile: opts.tokenFile,
     buildId: opts.buildId,
     assetDigest: opts.assetDigest,
     commit: opts.commit,
@@ -366,6 +374,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     createDecisions(log);
 
   const configWriter = createConfigWriter(configPath);
+  const token = cfg.tokenFile === undefined ? null : loadOrMintToken(cfg.tokenFile);
 
   // Wait for a decision but no longer than `ms` — resolves to null on timeout so
   // the handler can return a 204 heartbeat. The pending promise is left intact
@@ -1135,6 +1144,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       const url = new URL(req.url);
       const path = url.pathname;
       const method = req.method;
+      // Ahead of every route (assets, HEAD, OPTIONS too); never logs or throws, so a
+      // `?token=` URL can't reach the failure log.
+      if (token !== null) {
+        const denied = authGate(req, url, { token, port });
+        if (denied) return denied;
+      }
       // Gate every non-safe (state-changing) method, not a fixed POST/PUT list, so
       // a future mutating verb is CSRF-protected by default. Safe methods (GET/HEAD)
       // fall through — the browser's same-origin policy already blocks a foreign
