@@ -16,6 +16,7 @@ import {
   isClientLive,
   isCrossOrigin,
   isForeignHost,
+  isForwardedHttps,
   LIVE_CLIENT_WINDOW_MS,
   ownNames,
 } from "@/daemon/guards.ts";
@@ -637,6 +638,19 @@ test("isForeignHost: authority-exact, userinfo-proof, Host required (EXC-1203)",
   expect(isForeignHost(req("localhost:42718@evil.com"), 42718)).toBe(true); // userinfo dodge
   expect(isForeignHost(req("localhost:42718/api"), 42718)).toBe(true); // not an authority
   expect(isForeignHost(req(), 42718)).toBe(true); // no Host at all
+});
+
+test("isForwardedHttps: trusts X-Forwarded-Proto only on a loopback bind", () => {
+  const req = (proto?: string) =>
+    new Request("http://localhost/", proto ? { headers: { "X-Forwarded-Proto": proto } } : {});
+  for (const bind of ["127.0.0.1", "localhost", "::1"]) {
+    expect(isForwardedHttps(req("https"), bind)).toBe(true);
+  }
+  for (const bind of ["0.0.0.0", "::", "192.168.1.10"]) {
+    expect(isForwardedHttps(req("https"), bind)).toBe(false);
+  }
+  expect(isForwardedHttps(req("http"), "127.0.0.1")).toBe(false);
+  expect(isForwardedHttps(req(), "127.0.0.1")).toBe(false);
 });
 
 test("isCrossOrigin: scheme and authority both pinned (EXC-1203)", () => {

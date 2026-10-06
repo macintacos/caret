@@ -127,3 +127,9 @@ export function isCrossOrigin(
   if (site && site !== "same-origin" && site !== "none") return true;
   return false;
 }
+
+/** On a loopback bind only a process on this machine can send the header, and it can
+ * only tighten its own cookie. */
+export function isForwardedHttps(req: Request, bindHost: string): boolean {
+  return !isExposed(bindHost) && req.headers.get("x-forwarded-proto") === "https";
+}
