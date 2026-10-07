@@ -19,7 +19,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { createServer } from "node:net";
+import { createServer as createNetServer } from "node:net";
 import { join, normalize } from "node:path";
 
 import {
@@ -134,12 +134,12 @@ export function isAddrInUse(e: unknown): boolean {
   return e instanceof Error && /EADDRINUSE/.test(e.message);
 }
 
-/** Whether `host` is no address of this machine's. Bun.serve reports that EADDRNOTAVAIL
- * as EADDRINUSE; node:net reports it truthfully, and port 0 cannot be in use. */
+/** Whether `host` is missing from this machine: true only when a `node:net` listen on
+ * it fails with EADDRNOTAVAIL. Port 0 keeps "in use" out of the answer. */
 export function isAddrNotAvail(host: string): Promise<boolean> {
   return new Promise((resolve) => {
-    const probe = createServer();
-    probe.once("error", (e) => resolve((e as { code?: string }).code === "EADDRNOTAVAIL"));
+    const probe = createNetServer();
+    probe.once("error", (e: NodeJS.ErrnoException) => resolve(e.code === "EADDRNOTAVAIL"));
     probe.listen({ host, port: 0 }, () => probe.close(() => resolve(false)));
   });
 }
