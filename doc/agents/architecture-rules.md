@@ -250,6 +250,15 @@ bind and switch a token on; the rules below cover both shapes.
   through it. That divergence is scoped to names the user listed; a built-in name or any
   other loopback name (`[::1]`, `127.x`) never joins the any-port tier, even when listed,
   so listing `localhost` cannot make `http://localhost:3000` same-origin.
+- **`X-Forwarded-Proto` is believed only on a loopback bind.** `isForwardedHttps`
+  (`src/daemon/guards.ts`) marks the login cookie `Secure` when the header is exactly
+  `https` and `daemon.host` is loopback. A loopback socket has only local peers, so the
+  bind check needs no peer-address check beside it. Believing the header grants nothing:
+  it can only tighten the cookie on its sender's own response, since a navigation carries
+  no custom header and a cross-site `fetch` that sets one needs a preflight the daemon
+  never grants. Only the bare value counts; `Forwarded` and proxy-chain lists are not
+  parsed. `handle` passes the raw bind, not `connectHostname`'s, which maps `0.0.0.0` to
+  loopback.
 - **Residual: cross-port pages on a configured name.** A page served from another port of
   a `daemon.hostnames` name passes both guards. Modern browsers still stop its writes —
   they send `Sec-Fetch-Site: same-site`, which `isCrossOrigin` rejects — but an older
@@ -257,11 +266,8 @@ bind and switch a token on; the rules below cover both shapes.
 - **Residual: the token travels in cleartext.** Over plain HTTP the `http://` login link
   and the auth cookie are only as safe as the network path and the name's resolution: a
   passive listener on shared Wi-Fi, or any LAN peer answering an unauthenticated mDNS
-  `.local` name, captures them and gets full API access. A login that arrives with
-  `X-Forwarded-Proto: https` on a loopback bind (`isForwardedHttps`,
-  `src/daemon/guards.ts`) gets a `Secure` cookie, so behind a same-machine HTTPS proxy the
-  browser never sends it over `http://`. Off a trusted network, keep the bind on loopback
-  behind an HTTPS reverse proxy.
+  `.local` name, captures them and gets full API access. Off a trusted network, keep the
+  bind on loopback behind an HTTPS reverse proxy that sends `X-Forwarded-Proto` (above).
 - **No preflight handler exists or is needed.** A same-origin request sends no `OPTIONS`
   preflight, and a cross-origin preflight would be denied by the browser before any
   request body is sent (no advertised CORS headers).

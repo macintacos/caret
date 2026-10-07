@@ -66,7 +66,7 @@ function login(
 }
 
 /** null to let the request through; otherwise the login redirect or the 401 to send.
- * `secure`: the login arrived over HTTPS. */
+ * `secure`: the request arrived over HTTPS (a login's cookie is then `Secure`). */
 export function authGate(
   req: Request,
   url: URL,

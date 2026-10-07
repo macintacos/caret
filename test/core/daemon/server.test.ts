@@ -640,19 +640,6 @@ test("isForeignHost: authority-exact, userinfo-proof, Host required (EXC-1203)",
   expect(isForeignHost(req(), 42718)).toBe(true); // no Host at all
 });
 
-test("isForwardedHttps: trusts X-Forwarded-Proto only on a loopback bind", () => {
-  const req = (proto?: string) =>
-    new Request("http://localhost/", proto ? { headers: { "X-Forwarded-Proto": proto } } : {});
-  for (const bind of ["127.0.0.1", "localhost", "::1"]) {
-    expect(isForwardedHttps(req("https"), bind)).toBe(true);
-  }
-  for (const bind of ["0.0.0.0", "::", "192.168.1.10"]) {
-    expect(isForwardedHttps(req("https"), bind)).toBe(false);
-  }
-  expect(isForwardedHttps(req("http"), "127.0.0.1")).toBe(false);
-  expect(isForwardedHttps(req(), "127.0.0.1")).toBe(false);
-});
-
 test("isCrossOrigin: scheme and authority both pinned (EXC-1203)", () => {
   const req = (origin: string) => new Request("http://x/", { headers: { Origin: origin } });
   expect(isCrossOrigin(req(`http://${VANITY_HOST}:42718`), 42718)).toBe(false);
@@ -696,6 +683,19 @@ test("isForeignHost: the connect hostname is admitted on the bound port only", (
   const names = ownNames("192.168.1.5", []);
   expect(isForeignHost(req("192.168.1.5:42718"), 42718, names)).toBe(false);
   expect(isForeignHost(req("192.168.1.5:3000"), 42718, names)).toBe(true);
+});
+
+test("isForwardedHttps: trusts X-Forwarded-Proto only on a loopback bind", () => {
+  const req = (proto?: string) =>
+    new Request("http://localhost/", proto ? { headers: { "X-Forwarded-Proto": proto } } : {});
+  for (const bind of ["127.0.0.1", "localhost", "::1"]) {
+    expect(isForwardedHttps(req("https"), bind)).toBe(true);
+  }
+  for (const bind of ["0.0.0.0", "::", "192.168.1.10"]) {
+    expect(isForwardedHttps(req("https"), bind)).toBe(false);
+  }
+  expect(isForwardedHttps(req("http"), "127.0.0.1")).toBe(false);
+  expect(isForwardedHttps(req(), "127.0.0.1")).toBe(false);
 });
 
 test("isCrossOrigin: a configured name's origin passes over http or https on any port", () => {

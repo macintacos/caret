@@ -1166,6 +1166,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
         const denied = authGate(req, url, {
           token,
           port,
+          // The raw bind: connectHostname (as `names` uses) maps 0.0.0.0 to loopback.
           secure: isForwardedHttps(req, cfg.hostname),
         });
         if (denied) return denied;

@@ -1,8 +1,9 @@
 // HTTP request guards for the daemon: the Host check that gates every request,
 // the safe-method and cross-origin (CSRF) checks that gate state-changing ones,
 // plus the client-liveness window the create path reads to decide whether the
-// hook should foreground a browser tab. Split out of server.ts so the pure guard
-// logic stays unit-testable on its own.
+// hook should foreground a browser tab, and the forwarded-HTTPS check that
+// decides whether a login's cookie is `Secure`. Split out of server.ts so the
+// pure guard logic stays unit-testable on its own.
 
 import { VANITY_HOST } from "@/config/constants.ts";
 import { isExposed } from "@/daemon/address.ts";
@@ -128,8 +129,8 @@ export function isCrossOrigin(
   return false;
 }
 
-/** On a loopback bind only a process on this machine can send the header, and it can
- * only tighten its own cookie. */
+/** Whether a login came through a same-machine HTTPS proxy: `X-Forwarded-Proto` is
+ * believed only on a loopback bind, where every peer is a local process. */
 export function isForwardedHttps(req: Request, bindHost: string): boolean {
   return !isExposed(bindHost) && req.headers.get("x-forwarded-proto") === "https";
 }
