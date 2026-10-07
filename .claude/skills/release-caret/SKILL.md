@@ -174,6 +174,18 @@ Under the theme line, group the work into the standard keep-a-changelog categori
 (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`) as `###` sections —
 write human-readable entries derived from `commits[]`, not raw commit subjects.
 
+A subject undersells its change, so read each PR's body
+(`gh pr view <prNumber> --json title,body`, one per `commits[]` entry) for what a user now
+sees. Then judge each change by what a user of the **published package** gets:
+
+- **Gated work stays out.** A commit can keep shipped code dormant — v1.2.0's #643 kept
+  OpenCode v2 out of the npm package while its code sat on trunk — so look for one before
+  writing, and leave out everything it withholds.
+- **A fix to a feature new in this release is not a `Fixed` entry.** Users never saw the
+  bug; fold the fixed behavior into the feature's `Added` entry, or drop it.
+- **Internal-only commits are omitted** — refactors, path aliases, dev dependencies, test
+  and tooling changes — unless they change what a user sees.
+
 The notes body's last line is the **compare link**, built from `compute`'s `repoSlug`,
 `previousTag`, and `tag`:
 
@@ -185,10 +197,11 @@ The tag doesn't exist yet while you write it; `finalize` pushes it before publis
 the link resolves on the published Release.
 
 Write the whole body — theme line on top, then the category sections, then the compare
-link — to one markdown file **outside the repo**, e.g.
-`/tmp/caret-release-notes-<version>.md`. `finalize` guards on a clean working tree with no
-allowlist, so an untracked notes file inside the repo would trip `DIRTY_TREE` and abort
-the release. Phase 2 step 2 hands that path to `finalize` through `--notes-file`.
+link — to one markdown file **outside the repo**: the session's scratchpad directory when
+it has one, else `/tmp/caret-release-notes-<version>.md`. `finalize` guards on a clean
+working tree with no allowlist, so an untracked notes file inside the repo would trip
+`DIRTY_TREE` and abort the release. Phase 2 step 2 hands that path to `finalize` through
+`--notes-file`.
 
 ### 4. Run prepare
 
@@ -292,7 +305,23 @@ When `approval` is non-null, print:
 
 Note that it can be run here as `! npm stage approve <stageId> --otp=<code>`, or in any
 terminal. Then **wait for the operator to say "continue"**. This pause always stops the
-run, under plan mode too.
+run, under plan mode too. An approve the operator ran here that printed
+`approved and published successfully` counts as "continue".
+
+npm runs an automated review on a staged version before it accepts an approval, and an
+approve sent too early fails with `E409 … automated review hasn't finished`, wasting the
+operator's one-time code. `npm stage view <stageId> --json` reports
+`"status": "validating"` while that review runs (several minutes for v1.2.0) and
+`"staged"` once it can be approved. So check it before you print the approve command.
+While it reads `validating`, say so, then poll in a background Bash command
+(`run_in_background`) that exits on any other status:
+
+```sh
+bash -c 'while true; do s=$(npm stage view <stageId> --json 2>/dev/null | jq -r ".status // empty"); if [ -n "$s" ] && [ "$s" != validating ]; then echo "status: $s"; exit 0; fi; sleep 60; done'
+```
+
+On `staged`, tell the operator it is ready, with a push notification when that tool is
+available, since they have likely stepped away. On any other status, surface it and stop.
 
 ### 4. Publish the Release
 
@@ -313,20 +342,23 @@ git switch trunk && git pull --ff-only
 
 ### 5. Close the release's Linear ticket
 
-A Linear workflow automation (`botActor.type: "workflow"`, `creator: null`) mints an issue
-for the release PR — the one PR caret opens with no `EXC-` ref in its title or branch. It
-is born **In Progress**, titled `Bump caret … to <version> in … manifests`, labelled
-`chore`, and carrying the release PR as its only attachment, created in the same
-transaction. Which automation is not determinable from the API, and Linear's docs describe
-no such feature; what IS established is that it never closes itself. Across v0.11.0,
-v0.11.1 and v0.12.0 every one sat In Progress until a human noticed — 21h, 1d19h, 2d11h.
-Closing it is this skill's job.
+A Linear automation mints an issue for the release PR — the one PR caret opens with no
+`EXC-` ref in its title or branch — within a minute of `prepare`. It is born
+**In Progress**, labelled `chore`, and carries the release PR (attachment title
+`v<version>`) as its only attachment. Neither its creator nor its title identifies it: the
+Linear MCP lists the operator as its creator, and the title wording drifts
+(`Bump caret plugin version to 1.2.0`, `… to 1.1.0 in all manifests`,
+`… to 1.0.0 for the release`). Which automation is not determinable from the API, and
+Linear's docs describe no such feature; what IS established is that it never closes
+itself. Across v0.11.0, v0.11.1 and v0.12.0 every one sat In Progress until a human
+noticed — 21h, 1d19h, 2d11h. Closing it is this skill's job.
 
 Find it by version and confirm it is the right one — its attachment URL must be the
 release PR `prepare` reported — then transition it:
 
-- `list_issues` with `query: "<version> manifests"`, then check the attachment matches
-  `prUrl`.
+- `list_issues` with `query: "<version>"`, `label: "chore"` and `createdAt: "-P1D"`.
+  `list_issues` returns no attachments, so for each candidate call `get_issue` with
+  `fields: ["attachments"]` and keep the one whose attachment URL is `prUrl`.
 - `save_issue` with that id and `state: "Done"`.
 
 The version gate already authorized this; do not prompt. If no such issue exists, say so
