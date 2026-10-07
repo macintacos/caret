@@ -2,15 +2,14 @@
 // plugin via a bare `plugin: ["@macintacos/caret"]` array entry. OpenCode's loader
 // iterates a plugin module's exports (Object.values) and rejects the whole module
 // on the FIRST export that isn't a plugin, so the entrypoint must expose EXACTLY
-// one value: the object both OpenCode v1 (`server`) and v2 (`setup`) load. These
-// tests pin that invariant, that a v2 load never evaluates v1's SDK, and the
-// package.json wiring (a bare specifier resolves the package's `exports["."]`; v1's
+// the v1 plugin. These tests pin that invariant, that OpenCode v2 stays withheld, and
+// the package.json wiring (a bare specifier resolves the package's `exports["."]`; v1's
 // runtime import, `@opencode-ai/plugin`'s `tool()`, must be a real dependency so
 // OpenCode's `bun install` provides it).
 
 import { expect, test } from "bun:test";
 
-import v2Setup from "@oc/caret.plugin.v2.ts";
+import v1Plugin from "@oc/caret.plugin.ts";
 import pkgJson from "@root/package.json" with { type: "json" };
 
 // package.json arrives as a parsed module (as test/core/lib/build-id.test.ts
@@ -28,64 +27,11 @@ const pkg = pkgJson as {
   devDependencies: Record<string, string>;
 };
 
-test("the OpenCode package entrypoint exports one plugin serving both v1 (server) and v2 (setup)", async () => {
+test("the OpenCode package entrypoint exports only the v1 plugin, withholding v2's setup", async () => {
   const mod = await import("@oc/index.ts");
   const values = Object.values(mod);
   expect(values).toHaveLength(1);
-  const plugin = values[0] as Record<string, unknown>;
-  expect(plugin.id).toBe("caret");
-  expect(plugin.setup).toBe(v2Setup);
-  expect(typeof plugin.server).toBe("function");
-  // v1 rejects a default holding both `server` and `tui`; a TUI module is its own export.
-  expect(plugin.tui).toBeUndefined();
-});
-
-const ENTRY = Bun.resolveSync("@oc/index.ts", import.meta.dir);
-const V1 = Bun.resolveSync("@oc/caret.plugin.ts", import.meta.dir);
-
-/** Runs `script` in a fresh bun, whose module registry this file's imports haven't touched. */
-function inFreshBun(script: string): string {
-  const { exitCode, stdout, stderr } = Bun.spawnSync([process.execPath, "-e", script], {
-    // Bun hands a child its startup env unless given one, which drops the XDG preload's
-    // redirect; the opt-out keeps a server() that reaches the real v1 plugin offline.
-    env: { ...process.env, CARET_OPENCODE_NO_UPDATE_CHECK: "1" },
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  if (exitCode !== 0) throw new Error(stderr.toString());
-  return stdout.toString();
-}
-
-test("a v2 load — index.ts plus setup() — never evaluates @opencode-ai/plugin", () => {
-  const out = inFreshBun(`
-    const loadedV1SdkModules = () => Object.keys(require.cache).filter((k) => k.includes("/@opencode-ai/plugin/"));
-    const { default: plugin } = await import(${JSON.stringify(ENTRY)});
-    await plugin.setup({ tool: { transform: async () => {} }, session: { hook: async () => {} } });
-    const afterSetup = loadedV1SdkModules();
-    await import(${JSON.stringify(V1)});
-    console.log(JSON.stringify({ afterSetup, seenOnceImported: loadedV1SdkModules().length > 0 }));
-  `);
-  // seenOnceImported proves the probe sees the SDK at all, so an empty afterSetup is real.
-  expect(JSON.parse(out)).toEqual({ afterSetup: [], seenOnceImported: true });
-});
-
-test("server() rejects when the v1 module fails to load, never swallowing it", () => {
-  const out = inFreshBun(String.raw`
-    Bun.plugin({ name: "fail-v1", setup(build) {
-      build.onLoad({ filter: /caret\.plugin\.ts$/ }, () => { throw new Error("v1 load failed"); });
-    } });
-    const { default: plugin } = await import(${JSON.stringify(ENTRY)});
-    console.log(await plugin.server({}).then(() => "resolved", (e) => e.message));
-  `);
-  expect(out.trim()).toBe("v1 load failed");
-});
-
-test("server() resolves the v1 plugin's hooks", () => {
-  const out = inFreshBun(`
-    const { default: plugin } = await import(${JSON.stringify(ENTRY)});
-    console.log(JSON.stringify(Object.keys((await plugin.server({})).tool ?? {})));
-  `);
-  expect(JSON.parse(out)).toEqual(["caret_review_plan"]);
+  expect(values[0]).toBe(v1Plugin);
 });
 
 test('package.json entrypoint resolves to the OpenCode plugin so `plugin: ["@macintacos/caret"]` loads', () => {
@@ -93,8 +39,10 @@ test('package.json entrypoint resolves to the OpenCode plugin so `plugin: ["@mac
   expect(pkg.main).toBe("./opencode/index.ts");
 });
 
-test("package.json exposes the v2 TUI module at `./tui`", () => {
-  expect(pkg.exports?.["./tui"]).toBe("./opencode/caret.tui.ts");
+test("package.json withholds the v2 TUI module", () => {
+  // v2 loads `<pkg>/tui` from the same plugin entry, so this export alone would show
+  // caret's toasts on a host that never loads its review tool.
+  expect(pkg.exports?.["./tui"]).toBeUndefined();
 });
 
 test("the TUI module's default loads on v2 as { id, setup } and on v1 as a TUI-only plugin", async () => {

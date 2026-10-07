@@ -1,14 +1,8 @@
 // The published entrypoint OpenCode imports when `@macintacos/caret` appears in a
-// user's plugin list. One default export serves both runtimes: OpenCode v2 decodes
-// `{ id, setup }` and ignores `server`; OpenCode v1 (>= 1.3.4) runs `server` and ignores
-// `setup`. v1's loader also rejects a module on its first non-plugin export, so the
-// namespace stays exactly `{ default }`. `server` imports the v1 plugin on its first call,
-// so a v2 load never evaluates `@opencode-ai/plugin`; v1 only checks that `server` is a
-// function (anomalyco/opencode@v1.3.4 packages/opencode/src/plugin/shared.ts:142).
-import type v1Plugin from "./caret.plugin.ts";
-import setup from "./caret.plugin.v2.ts";
-
-const server: typeof v1Plugin = async (...args) =>
-  (await import("./caret.plugin.ts")).default(...args);
-
-export default { id: "caret", setup, server };
+// user's plugin list. OpenCode's loader rejects a module on its first non-plugin export,
+// and caret.plugin.ts also exports test helpers, so this re-exports only its default.
+// TODO(EXC-1600): OpenCode v2 is withheld from the published package until it is live-checked on
+// real hosts. Re-enabling it means default-exporting `{ id: "caret", setup, server }`
+// (setup from caret.plugin.v2.ts, server importing this file lazily so a v2 load never
+// evaluates @opencode-ai/plugin) and restoring package.json's `exports["./tui"]`.
+export { default } from "./caret.plugin.ts";
