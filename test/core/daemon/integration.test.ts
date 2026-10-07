@@ -485,6 +485,30 @@ test("a daemon that cannot bind its configured port exits the terminal status", 
   }
 });
 
+test("a daemon whose configured address is not on this machine exits the terminal status", async () => {
+  const stateHome = await mkdtemp(join(tmpdir(), "caret-terminal-addr-"));
+  const configPath = join(stateHome, "config.toml");
+  // TEST-NET-1 is never a host's address. Bun.serve reports that bind's EADDRNOTAVAIL
+  // as EADDRINUSE, which must not pass for a lost port race.
+  await writeFile(configPath, '[daemon]\nhost = "192.0.2.1"\n');
+  const port = String(freePort());
+  const proc = spawnCaretDaemon(
+    stateHome,
+    { CARET_CONFIG_FILE: configPath, CARET_PORT: port },
+    { pipeStderr: true },
+  );
+  try {
+    const stderr = await new Response(proc.stderr as ReadableStream).text();
+    expect(await proc.exited).toBe(SERVICE_TERMINAL_EXIT_STATUS);
+    expect(stderr).toContain(`cannot bind the daemon to 192.0.2.1:${port}`);
+    expect(fatalCodes(stateHome)).toContain("daemon-bind-failed");
+  } finally {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});
+
 test("the loser of the port race still exits 0, not the terminal status", async () => {
   const port = String(freePort());
   const winnerHome = await mkdtemp(join(tmpdir(), "caret-race-win-"));

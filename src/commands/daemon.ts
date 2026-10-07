@@ -36,6 +36,7 @@ import { devUpdateIdentity, sourceGit } from "@/daemon/dev-update.ts";
 import { buildDiagnostics, prodDiagnosticsDeps } from "@/daemon/diagnostics.ts";
 import {
   isAddrInUse,
+  isAddrNotAvail,
   removeOwnBootMarker,
   removeOwnDaemonLock,
   rotateDaemonStderr,
@@ -320,7 +321,9 @@ export async function runDaemon(opts: {
       log,
     });
   } catch (e) {
-    if (isAddrInUse(e)) {
+    // Bun.serve reports a missing address's EADDRNOTAVAIL as EADDRINUSE, so ask the
+    // kernel before reading it as a lost race.
+    if (isAddrInUse(e) && !(await isAddrNotAvail(boot.daemon.host))) {
       process.stderr.write("caret: another daemon won the port; exiting.\n");
       process.exit(0);
     }

@@ -19,6 +19,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { createServer as createNetServer } from "node:net";
 import { join, normalize } from "node:path";
 
 import {
@@ -131,6 +132,16 @@ export function isAddrInUse(e: unknown): boolean {
     return (e as { code?: string }).code === "EADDRINUSE";
   }
   return e instanceof Error && /EADDRINUSE/.test(e.message);
+}
+
+/** Whether `host` is missing from this machine: true only when a `node:net` listen on
+ * it fails with EADDRNOTAVAIL. Port 0 keeps "in use" out of the answer. */
+export function isAddrNotAvail(host: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const probe = createNetServer();
+    probe.once("error", (e: NodeJS.ErrnoException) => resolve(e.code === "EADDRNOTAVAIL"));
+    probe.listen({ host, port: 0 }, () => probe.close(() => resolve(false)));
+  });
 }
 
 /** Pure-string path comparison for world identity: normalize() flattens
