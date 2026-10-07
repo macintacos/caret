@@ -610,6 +610,12 @@ So the package's entrypoint is a tiny dedicated module, `opencode/index.ts`, who
 namespace is exactly `{ default }`, and `package.json` `exports` `.` points at it.
 `test/opencode/entrypoint.test.ts` asserts it.
 
+**v2 is withheld from the published package for now.** `index.ts` re-exports only
+`caret.plugin.ts`'s default and `package.json` has no `./tui` export, so a v2 host loads
+none of caret; `entrypoint.test.ts` pins both. The dual default below is the shape
+re-enabling v2 restores, and `test/opencode/sdk-conformance.ts` still pins
+`caret.plugin.v2.ts` against it.
+
 **One default serves both runtimes: `{ id: "caret", setup, server }`.** OpenCode v2
 decodes `default` as `{ id, setup }` and ignores the extra `server`; v1 runs `server` and
 ignores `setup` (the v2 plugin, `caret.plugin.v2.ts`'s default). `id` is a fixed

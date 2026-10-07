@@ -76,7 +76,7 @@ Turn the check off from that same pane, or by hand in
 check = false
 ```
 
-`caret` supports OpenCode v1 1.3.4 or later and v2 2.0.18 or later. See
+`caret` supports OpenCode v1 1.3.4 or later. See
 [the OpenCode adapter](doc/ARCHITECTURE.md#the-opencode-adapter) for the by-hand
 equivalents, for pinning a version in OpenCode's plugin array (`plugin` on v1, `plugins`
 on v2), and for what each agent's install touches;
