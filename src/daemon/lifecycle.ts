@@ -1,10 +1,10 @@
 // Daemon takeover + lifecycle: resolve the port for hooks and `caret serve` — reuse a
-// daemon of THIS build, cycle a stale supervised one through its service, retire a stale
-// unsupervised one, spawn the on-demand fallback, and clean orphan locks (EXC-406) —
-// never denying a review because takeover failed. This module also owns the
-// world-identity guards (EXC-461) and the lock read/write/liveness primitives the
-// takeover loop and the doctor command share, and the boot marker that lets one daemon
-// of a state dir boot at a time.
+// daemon of THIS build, cycle a stale (build or address) supervised one through its
+// service, retire a stale unsupervised one, spawn the on-demand fallback, and clean
+// orphan locks (EXC-406) — never denying a review because takeover failed. This module
+// also owns the world-identity guards (EXC-461) and the lock read/write/liveness
+// primitives the takeover loop and the doctor command share, and the boot marker that
+// lets one daemon of a state dir boot at a time.
 
 import {
   accessSync,
@@ -33,7 +33,7 @@ import {
   stateDir,
 } from "@/config/paths.ts";
 import { logKeep, logMaxSize, type Settings } from "@/config/settings.ts";
-import { daemonBaseUrl } from "@/daemon/address.ts";
+import { baseUrlFor, daemonBaseUrl } from "@/daemon/address.ts";
 import { DaemonAuthError, daemonFetch, type HealthBody, httpHealth } from "@/daemon/client.ts";
 import { buildKind, currentBuildId, type DaemonLock, VERSION } from "@/lib/build-id.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
@@ -182,7 +182,11 @@ const FOREIGN_WORLD_ERROR =
  *   same-world daemon can serve the decision.
  * - `successor` attaches too, but first waits past the daemon on the port, which just
  *   refused work while stepping down. That wait is the call's one supervisor window; a
- *   port already empty is a cold start. */
+ *   port already empty is a cold start.
+ *
+ * Neither `attach` nor `successor` moves a daemon the lock places on another address;
+ * each reattaches to it there, since its settings may predate the edit that moved it,
+ * and the review's opening `takeover` already moved any real stray. */
 export type EnsureMode = "takeover" | "attach" | "successor";
 
 /** Ensure a caret daemon owns the port and return its base URL: reuse a same-build
@@ -195,7 +199,10 @@ export type EnsureMode = "takeover" | "attach" | "successor";
  * whose service will not restart, is reused (serving its old UI) rather than left
  * unreachable. Two exceptions are neither reused nor retired: a foreign world's daemon
  * (EXC-461) — a config conflict, where cross-attaching IS the bug — and one that refuses
- * the token (it rejects with DaemonAuthError). */
+ * the token (it rejects with DaemonAuthError). A `takeover` moves a same-world daemon the
+ * lock places on an address other than the configured one — cycled through this world's
+ * service when it runs it, else retired — before anything spawns; `attach` and
+ * `successor` reattach to it instead. */
 export async function ensureDaemon(
   deps: EnsureDeps,
   mode: EnsureMode = "takeover",
@@ -205,7 +212,10 @@ export async function ensureDaemon(
   const deadline = windowEnd + timing.reserveMs;
   // Past the supervisor window, attach to whatever answers and spawn into an empty port,
   // so a launcher resolving another build than this hook's is never cycled twice.
-  let windowSpent = mode === "successor" ? await awaitDrained(deps, windowEnd) : false;
+  let windowSpent =
+    mode === "successor"
+      ? await awaitDrained(deps, windowEnd)
+      : mode === "takeover" && (await moveStray(deps, windowEnd));
   let supervised: boolean | undefined;
   let spawnedPid: number | undefined;
   let waitingOn: number | undefined;
@@ -239,7 +249,7 @@ export async function ensureDaemon(
         windowSpent = true;
         // A failed restart may already have stopped the daemon: probe again rather
         // than hand back a port nothing answers on.
-        if (await restartService(deps.service, h)) {
+        if (await restartService(deps.service, h, "stale daemon build")) {
           await awaitSuccessor(deps, { prev: h, step: "service", until: windowEnd });
         }
         continue;
@@ -255,6 +265,12 @@ export async function ensureDaemon(
     }
     if (h && h.service !== "caret") {
       throw new Error(`port is held by a non-caret process — set CARET_PORT to a free port`);
+    }
+    // This call's settings may predate a daemon.host/daemon.port edit; the lock says
+    // where this world's daemon now is.
+    if (mode !== "takeover") {
+      const stray = await strayDaemon(deps.readLock(), deps.baseUrl, deps.health);
+      if (stray) return stray.url;
     }
     // An empty port under a supervisor is its restart window: a daemon spawned into it
     // is unsupervised, and takes the port from the one that should hold it.
@@ -366,9 +382,13 @@ async function awaitSuccessor(
 }
 
 /** Cycle the service for the `stale` daemon. False when the supervisor refused. */
-async function restartService(service: Supervisor, stale: HealthBody): Promise<boolean> {
+async function restartService(
+  service: Supervisor,
+  stale: HealthBody,
+  reason: string,
+): Promise<boolean> {
   const ctx = { instanceId: stale.instanceId, build: stale.build };
-  logInfo("service", "restarting service: stale daemon build", ctx);
+  logInfo("service", `restarting service: ${reason}`, ctx);
   try {
     // ponytail: the call's deadline cannot cut short a restart already running. It returns
     // once the outgoing daemon stops, which DRAIN_DEADLINE_MS (src/daemon/server.ts)
@@ -381,6 +401,59 @@ async function restartService(service: Supervisor, stale: HealthBody): Promise<b
   }
 }
 
+/** This world's daemon where its lock places it, when only there — a daemon.host or
+ * daemon.port edit the running daemon predates. Null for a lock that cannot say (no
+ * `host` that makes a URL, no `instanceId`), one naming `baseUrl`, one whose daemon no
+ * longer answers there, or one also answering at `baseUrl` (a wildcard bind, or two
+ * spellings of one address). */
+async function strayDaemon(
+  lock: DaemonLock | null,
+  baseUrl: string,
+  health: (url: string) => Promise<HealthBody | null>,
+): Promise<{ url: string; health: HealthBody } | null> {
+  if (typeof lock?.host !== "string" || lock.instanceId === undefined) return null;
+  let lockUrl: string;
+  try {
+    lockUrl = baseUrlFor(lock.host, lock.port);
+  } catch {
+    return null;
+  }
+  if (lockUrl === baseUrl) return null;
+  const h = await health(lockUrl);
+  if (h?.service !== "caret" || h.instanceId !== lock.instanceId) return null;
+  if ((await health(baseUrl))?.instanceId === lock.instanceId) return null;
+  return { url: lockUrl, health: h };
+}
+
+/** Move a stray daemon so no second one spawns beside it on this state dir: cycle the
+ * service for a supervised one — the launcher rebinds from config.toml — else retire it
+ * and let the caller spawn. True when it cycled, or tried to cycle, the service — either
+ * way the supervisor window is spent. */
+async function moveStray(deps: EnsureDeps, windowEnd: number): Promise<boolean> {
+  const lock = deps.readLock();
+  const stray = await strayDaemon(lock, deps.baseUrl, deps.health);
+  if (!stray) return false;
+  if (deps.service && (stray.health.supervised ?? stray.health.resident) === true) {
+    // No pinned/newer guard: a cycle rebinds the build the launcher already runs.
+    // ponytail: the unit pins `WORLD_VARS` from install, so a hook whose address drifted
+    // by env alone cycles it back onto the old address; that drift needs
+    // `caret install --refresh`.
+    if (await restartService(deps.service, stray.health, "daemon on a stale address")) {
+      await awaitSuccessor(deps, { prev: null, step: "service", until: windowEnd });
+    }
+    return true;
+  }
+  // ponytail: the caller spawns while this one drains (≤ DRAIN_DEADLINE_MS); a wildcard
+  // bind on its port fails once and is respawned. Await its exit if that overlap matters.
+  const ctx = { instanceId: stray.health.instanceId };
+  if (await deps.retire(stray.url, lock)) {
+    logInfo("retire", "daemon on a stale address retiring", ctx);
+  } else {
+    logWarn("retire", "daemon on a stale address not retired", ctx);
+  }
+  return false;
+}
+
 /** Whether the supervisor will start a daemon on its own. A status that cannot be read
  * counts as no. */
 async function supervisorExpected(service: Supervisor): Promise<boolean> {
@@ -391,20 +464,23 @@ async function supervisorExpected(service: Supervisor): Promise<boolean> {
 export interface VacateDeps {
   baseUrl: string;
   currentStateDir: string;
-  /** How long the daemon on the port has to let it go once asked. */
+  /** How long the daemon being vacated has to let go once asked. */
   deadlineMs: number;
   health: (baseUrl: string) => Promise<HealthBody | null>;
   /** Ask the daemon at `baseUrl` to step down; false when it cannot be asked. */
   retire: (baseUrl: string) => Promise<boolean>;
+  /** Read the daemon lock, or null if absent/unreadable. */
+  readLock: () => DaemonLock | null;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
 }
 
 /** Free the port for a daemon about to bind it in the foreground: retire the same-world,
- * unsupervised caret holding it, and wait until nothing answers. Resolves null once the
- * port is free — or holds something that is not caret, which the bind reports — and
- * otherwise the reason it was left alone. A daemon refusing the token is left alone, the
- * refusal its reason. */
+ * unsupervised caret holding it — or the one the lock places on another address, after a
+ * `daemon.host`/`daemon.port` edit — and wait until nothing answers there. Resolves
+ * null once the port is free — or holds something that is not caret, which the bind
+ * reports — and otherwise the reason it was left alone. A daemon refusing the token is
+ * left alone, the refusal its reason. */
 export async function vacatePort(deps: VacateDeps): Promise<string | null> {
   try {
     return await vacate(deps);
@@ -417,19 +493,20 @@ export async function vacatePort(deps: VacateDeps): Promise<string | null> {
 async function vacate(deps: VacateDeps): Promise<string | null> {
   const deadline = deps.now() + deps.deadlineMs;
   let retired: string | undefined;
+  const url = (await strayDaemon(deps.readLock(), deps.baseUrl, deps.health))?.url ?? deps.baseUrl;
   for (;;) {
-    const h = await deps.health(deps.baseUrl);
+    const h = await deps.health(url);
     if (h?.service !== "caret") return null;
     if (isForeignWorld(h, deps.currentStateDir)) return FOREIGN_WORLD_ERROR;
     // Retiring it would only have its supervisor start another to fight for the port.
     if ((h.supervised ?? h.resident) === true) {
-      return "caret's service already serves the review UI on this port — run `caret install` and answer \"I'll run it myself\" to serve it from a terminal instead";
+      return "caret's service already serves the review UI — run `caret install` and answer \"I'll run it myself\" to serve it from a terminal instead";
     }
-    if (deps.now() >= deadline) return "the caret daemon on this port did not stop in time";
+    if (deps.now() >= deadline) return "the caret daemon did not stop in time";
     // Once per instance: a draining daemon keeps answering until it lets the port go.
     if (h.instanceId === undefined || h.instanceId !== retired) {
-      if (!(await deps.retire(deps.baseUrl))) {
-        return "the caret daemon on this port could not be asked to stop";
+      if (!(await deps.retire(url))) {
+        return "the caret daemon could not be asked to stop";
       }
       retired = h.instanceId;
     }

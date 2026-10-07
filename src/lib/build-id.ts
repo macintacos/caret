@@ -72,10 +72,13 @@ export async function buildHash(assets: UiAssets | undefined): Promise<string> {
  * `version` are optional so a partial/legacy lock still parses; `stateDir`/
  * `instanceId` (EXC-461) identify which world and which boot wrote the lock,
  * optional for the same reason. stateDir is identifying (contains the
- * username) — never log it; log instanceId instead. */
+ * username) — never log it; log instanceId instead. `host` is the address the
+ * daemon bound (`daemon.host` at its boot, unbracketed), so a starting caret finds it
+ * after a `daemon.host` or `daemon.port` edit; optional for a lock written before it. */
 export interface DaemonLock {
   pid: number;
   port: number;
+  host?: string;
   build?: string;
   version?: string;
   startedAt?: number;

@@ -78,6 +78,11 @@ Every review and prewarm hook first makes sure a current daemon holds the port
 - Any other stale daemon gets `POST /api/retire`, and the hook spawns its own. That covers
   an on-demand daemon, `caret serve`, and a supervised daemon whose service another state
   directory registered.
+- When the lock places this state directory's daemon on an address other than the
+  configured one — a `daemon.host` or `daemon.port` edit it predates — a takeover hook
+  restarts the service for a supervised daemon and retires any other before spawning, so
+  the old daemon does not stay up beside the new one. A hook reattaching mid-review
+  follows the lock to it instead.
 - When nothing holds the port but the service will start a daemon, the hook leaves it to
   the supervisor for `SUPERVISOR_WINDOW_MS` before spawning one.
 - A hook that finds another daemon of its state directory still booting, by the
@@ -87,8 +92,9 @@ Every review and prewarm hook first makes sure a current daemon holds the port
 - A review hook whose long-poll drops mid-review only reattaches, to whatever daemon of
   its state directory answers, whatever its build.
 
-`caret serve` retires an unsupervised daemon on its way in, and refuses to start when the
-service holds the port.
+`caret serve` retires an unsupervised daemon on its way in, including one the lock places
+on another address after a `daemon.host` or `daemon.port` edit, and refuses to start when
+the service holds the port or runs that daemon.
 
 A daemon steps down by draining, on `POST /api/retire` or SIGTERM, which is how a
 supervisor stops it. It answers new reviews with `503`, lets in-flight writes land and

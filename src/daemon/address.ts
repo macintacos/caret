@@ -27,9 +27,14 @@ export function connectHostname(host: string): string {
   return new URL(`http://${host.includes(":") ? `[${host}]` : host}`).hostname;
 }
 
+/** The base URL a local client reaches a daemon bound to `host` on `port` by. */
+export function baseUrlFor(host: string, port: number): string {
+  return `http://${connectHostname(host)}:${port}`;
+}
+
 /** The base URL every local CLI client uses. */
 export function daemonBaseUrl(s: Settings): string {
-  return `http://${connectHostname(s.daemon.host)}:${getPort(s)}`;
+  return baseUrlFor(s.daemon.host, getPort(s));
 }
 
 /** The name a browser on this machine reaches the daemon by: caret.localhost when local
