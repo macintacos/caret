@@ -148,6 +148,17 @@ test("a valid login link sets the cookie and redirects without the token", async
   expect(cookie).toContain("SameSite=Lax");
   expect(cookie).toContain("Path=/");
   expect(Number(/Max-Age=(\d+)/.exec(cookie)?.[1])).toBeGreaterThan(0);
+  expect(cookie).not.toContain("Secure");
+});
+
+test("a login through an HTTPS proxy on a loopback bind marks the cookie Secure", async () => {
+  const { d, token } = await bootAuthed();
+  const res = await fetch(`${d.url}/?token=${token}`, {
+    redirect: "manual",
+    headers: { "X-Forwarded-Proto": "https" },
+  });
+  expect(res.status).toBe(303);
+  expect(res.headers.get("set-cookie") ?? "").toContain("Secure");
 });
 
 test("a login on a protocol-relative path redirects on-site", async () => {

@@ -16,6 +16,7 @@ import {
   isClientLive,
   isCrossOrigin,
   isForeignHost,
+  isForwardedHttps,
   isSafeMethod,
   LIVE_CLIENT_WINDOW_MS,
   ownNames,
@@ -1162,7 +1163,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // Ahead of every route (assets, HEAD, OPTIONS too); never logs or throws, so a
       // `?token=` URL can't reach the failure log.
       if (token !== null) {
-        const denied = authGate(req, url, { token, port });
+        const denied = authGate(req, url, {
+          token,
+          port,
+          // The raw bind: connectHostname (as `names` uses) maps 0.0.0.0 to loopback.
+          secure: isForwardedHttps(req, cfg.hostname),
+        });
         if (denied) return denied;
       }
       // Gate every non-safe (state-changing) method, not a fixed POST/PUT list, so

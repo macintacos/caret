@@ -432,6 +432,12 @@ Configured names match on any port and over `https`, so the proxy's requests pas
 links caret prints stay `http://<name>:<port>`; rewrite them to the proxy's
 `https://<name>/`, keeping the `?token=` part.
 
+Have the proxy send `X-Forwarded-Proto: https`; Caddy does by default, and nginx needs
+`proxy_set_header X-Forwarded-Proto $scheme;`. A login through the proxy then sets a
+`Secure` cookie, which a browser never sends over plain `http://`. A device already logged
+in keeps its old cookie until it opens the `https://` login link again. caret trusts the
+header only while `host` is loopback.
+
 ### Turning auth off
 
 `auth = "none"` on an exposed bind turns the login off: devices open

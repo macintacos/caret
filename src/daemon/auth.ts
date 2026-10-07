@@ -40,7 +40,11 @@ function reject(url: URL, extra?: HeadersInit): Response {
   return new Response(REJECTION_PAGE, { status: 401, headers });
 }
 
-function login(url: URL, presented: string, auth: { token: string; port: number }): Response {
+function login(
+  url: URL,
+  presented: string,
+  auth: { token: string; port: number; secure: boolean },
+): Response {
   const noReferrer = { "Referrer-Policy": "no-referrer" };
   if (!matches(presented, auth.token)) return reject(url, noReferrer);
   const params = new URLSearchParams(url.search);
@@ -51,6 +55,7 @@ function login(url: URL, presented: string, auth: { token: string; port: number 
   const cookie = new Bun.Cookie(authCookieName(auth.port), auth.token, {
     httpOnly: true,
     sameSite: "lax",
+    secure: auth.secure,
     path: "/",
     maxAge: COOKIE_MAX_AGE_S,
   });
@@ -60,11 +65,12 @@ function login(url: URL, presented: string, auth: { token: string; port: number 
   });
 }
 
-/** null to let the request through; otherwise the login redirect or the 401 to send. */
+/** null to let the request through; otherwise the login redirect or the 401 to send.
+ * `secure`: the request arrived over HTTPS (a login's cookie is then `Secure`). */
 export function authGate(
   req: Request,
   url: URL,
-  auth: { token: string; port: number },
+  auth: { token: string; port: number; secure: boolean },
 ): Response | null {
   const presented = url.searchParams.get("token");
   if (req.method === "GET" && presented !== null) return login(url, presented, auth);

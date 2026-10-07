@@ -16,6 +16,7 @@ import {
   isClientLive,
   isCrossOrigin,
   isForeignHost,
+  isForwardedHttps,
   LIVE_CLIENT_WINDOW_MS,
   ownNames,
 } from "@/daemon/guards.ts";
@@ -682,6 +683,19 @@ test("isForeignHost: the connect hostname is admitted on the bound port only", (
   const names = ownNames("192.168.1.5", []);
   expect(isForeignHost(req("192.168.1.5:42718"), 42718, names)).toBe(false);
   expect(isForeignHost(req("192.168.1.5:3000"), 42718, names)).toBe(true);
+});
+
+test("isForwardedHttps: trusts X-Forwarded-Proto only on a loopback bind", () => {
+  const req = (proto?: string) =>
+    new Request("http://localhost/", proto ? { headers: { "X-Forwarded-Proto": proto } } : {});
+  for (const bind of ["127.0.0.1", "localhost", "::1"]) {
+    expect(isForwardedHttps(req("https"), bind)).toBe(true);
+  }
+  for (const bind of ["0.0.0.0", "::", "192.168.1.10"]) {
+    expect(isForwardedHttps(req("https"), bind)).toBe(false);
+  }
+  expect(isForwardedHttps(req("http"), "127.0.0.1")).toBe(false);
+  expect(isForwardedHttps(req(), "127.0.0.1")).toBe(false);
 });
 
 test("isCrossOrigin: a configured name's origin passes over http or https on any port", () => {
