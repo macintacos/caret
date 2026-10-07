@@ -269,8 +269,8 @@ export async function ensureDaemon(
     // This call's settings may predate a daemon.host/daemon.port edit; the lock says
     // where this world's daemon now is.
     if (mode !== "takeover") {
-      const moved = await strayDaemon(deps.readLock(), deps.baseUrl, deps.health);
-      if (moved) return moved.url;
+      const stray = await strayDaemon(deps.readLock(), deps.baseUrl, deps.health);
+      if (stray) return stray.url;
     }
     // An empty port under a supervisor is its restart window: a daemon spawned into it
     // is unsupervised, and takes the port from the one that should hold it.
@@ -412,17 +412,17 @@ async function strayDaemon(
   health: (url: string) => Promise<HealthBody | null>,
 ): Promise<{ url: string; health: HealthBody } | null> {
   if (typeof lock?.host !== "string" || lock.instanceId === undefined) return null;
-  let url: string;
+  let lockUrl: string;
   try {
-    url = baseUrlFor(lock.host, lock.port);
+    lockUrl = baseUrlFor(lock.host, lock.port);
   } catch {
     return null;
   }
-  if (url === baseUrl) return null;
-  const h = await health(url);
+  if (lockUrl === baseUrl) return null;
+  const h = await health(lockUrl);
   if (h?.service !== "caret" || h.instanceId !== lock.instanceId) return null;
   if ((await health(baseUrl))?.instanceId === lock.instanceId) return null;
-  return { url, health: h };
+  return { url: lockUrl, health: h };
 }
 
 /** Move a stray daemon so no second one spawns beside it on this state dir: cycle the
