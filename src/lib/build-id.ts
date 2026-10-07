@@ -74,7 +74,7 @@ export async function buildHash(assets: UiAssets | undefined): Promise<string> {
  * optional for the same reason. stateDir is identifying (contains the
  * username) — never log it; log instanceId instead. `host` is the address the
  * daemon bound (`daemon.host` at its boot, unbracketed), so a starting caret finds it
- * after a host edit; optional for a lock written before it. */
+ * after a `daemon.host` or `daemon.port` edit; optional for a lock written before it. */
 export interface DaemonLock {
   pid: number;
   port: number;

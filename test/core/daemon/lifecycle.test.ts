@@ -1030,28 +1030,32 @@ test("ensureDaemon cycles the service for a supervised daemon a host edit left b
   expect(url).toBe("http://localhost:42718");
 });
 
-test("ensureDaemon in attach mode leaves a daemon a host edit left behind alone", async () => {
-  const { calls, manager: service } = supervisor();
-  let retires = 0;
-  let spawns = 0;
-  await ensureDaemon(
-    ensureDeps({
-      service,
-      readLock: () => strayLock(),
-      health: async (u) => {
-        if (u === "http://127.0.0.1:42718") return peer("old");
-        return spawns > 0 ? B1 : null;
-      },
-      retire: async () => {
-        retires++;
-        return true;
-      },
-      spawn: () => ++spawns,
-    }),
-    "attach",
-  );
-  expect({ calls, retires }).toEqual({ calls: [], retires: 0 });
-});
+test.each(["attach", "successor"] as const)(
+  "ensureDaemon in %s mode reattaches to the daemon a host edit left behind, at its own address",
+  async (mode) => {
+    const { calls, manager: service } = supervisor();
+    let retires = 0;
+    let spawns = 0;
+    const url = await ensureDaemon(
+      ensureDeps({
+        service,
+        readLock: () => strayLock(),
+        health: async (u) => {
+          if (u === "http://127.0.0.1:42718") return peer("old");
+          return spawns > 0 ? B1 : null;
+        },
+        retire: async () => {
+          retires++;
+          return true;
+        },
+        spawn: () => ++spawns,
+      }),
+      mode,
+    );
+    expect(url).toBe("http://127.0.0.1:42718");
+    expect({ calls, retires, spawns }).toEqual({ calls: [], retires: 0, spawns: 0 });
+  },
+);
 
 test.each([
   ["the lock names the configured address", strayLock({ host: "localhost" })],
@@ -1082,6 +1086,7 @@ test.each([
 test.each([
   ["a lock without host", { pid: 4_000_000, port: 42718 } as DaemonLock, null],
   ["a lock whose address answers as another daemon", strayLock(), "other"],
+  ["a lock whose host is no address", strayLock({ host: "[::1]" }), null],
 ] as const)(
   "ensureDaemon spawns as before for %s, with nothing left behind",
   async (_case, lock, lockPeer) => {

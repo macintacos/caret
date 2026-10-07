@@ -78,10 +78,11 @@ Every review and prewarm hook first makes sure a current daemon holds the port
 - Any other stale daemon gets `POST /api/retire`, and the hook spawns its own. That covers
   an on-demand daemon, `caret serve`, and a supervised daemon whose service another state
   directory registered.
-- The lock may place the hook's state directory's daemon on an address other than the
-  configured one, left there by a `daemon.host` or `daemon.port` edit in `config.toml`. A
-  hook that is not just reattaching then restarts the service for a supervised daemon, and
-  otherwise retires it before spawning, so two daemons never share a state directory.
+- When the lock places this state directory's daemon on an address other than the
+  configured one — a `daemon.host` or `daemon.port` edit it predates — a takeover hook
+  restarts the service for a supervised daemon and retires any other before spawning, so
+  the old daemon does not stay up beside the new one. A hook reattaching mid-review
+  follows the lock to it instead.
 - When nothing holds the port but the service will start a daemon, the hook leaves it to
   the supervisor for `SUPERVISOR_WINDOW_MS` before spawning one.
 - A hook that finds another daemon of its state directory still booting, by the
