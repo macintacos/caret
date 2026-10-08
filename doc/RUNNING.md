@@ -402,6 +402,19 @@ otherwise see [Plain HTTP and an HTTPS proxy](#plain-http-and-an-https-proxy).
    file, not the running daemon, so its link works only once the daemon has restarted
    (step 3).
 
+### On the other devices
+
+A device that only opens the review UI needs a browser and the login link (step 4), not
+caret. Only the server runs caret as a service.
+
+If another device runs caret for its own agent, answer **I'll run it myself** when
+`caret install` asks. Keep the server's `host` and `hostnames` out of that device's
+`config.toml`. Otherwise its daemon also listens on the network and prints links to the
+server's name. Those links open the server, so you never see the device's own reviews.
+
+An agent on another device reviews its plans on that device's own daemon, at
+`caret.localhost`.
+
 ### Logging every device out
 
 Delete the token file and restart the daemon (step 3):
