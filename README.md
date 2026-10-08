@@ -111,6 +111,9 @@ environment variables. Every key, every variable, and their defaults are in
 [`doc/CONFIGURING.md`](doc/CONFIGURING.md).
 To open the review UI from another device, such as a phone or a laptop, see
 [Reaching caret from another device](doc/RUNNING.md#reaching-caret-from-another-device).
+Only the machine that serves the review UI runs caret as a service;
+[the other devices](doc/RUNNING.md#on-the-other-devices) need only a browser and the login
+link.
 
 ## Documentation
 
