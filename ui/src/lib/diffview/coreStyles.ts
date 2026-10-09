@@ -32,13 +32,13 @@ const CHECKBOX_MASKS = {
  * the deepest fade that keeps `--ink` over `--paper-sunk` at WCAG AA on EVERY
  * palette, and the palettes differ enormously in how much room they have to give
  * (`--ink` on sunk runs from 6.0:1 to 18.9:1), so the tightest one sets it for all
- * nine. Exported because a bare number in the sheet is invisible to the palette
+ * eleven. Exported because a bare number in the sheet is invisible to the palette
  * suite — `theme.test.ts` composites against this and fails if a new palette, or a
  * deeper fade, drops quoted text below the floor.
  *
  * The result is a QUIET fade by necessity: measured against unquoted prose it is a
- * ~1.3:1 step, where a fade deep enough to read at a glance (~2.2–3.4:1) puts three
- * of the nine palettes under AA. The bars are what make a quote unmistakable; this
+ * ~1.3:1 step, where a fade deep enough to read at a glance (~2.2–3.4:1) puts four
+ * of the eleven palettes under AA. The bars are what make a quote unmistakable; this
  * is the second, softer signal. Going deeper means deciding that quoted plan text
  * may sit at the tertiary tier `--ink-faint` occupies (>3:1, where the gutter's line
  * numbers live) rather than with body copy — a call for a human, not a tuning knob.
@@ -319,8 +319,8 @@ const CARET_OVERRIDES = `
      (EXC-855). inlineDecorate.ts splits each row's tokens so none straddles an element
      boundary and tags them data-md; these rules are the whole visual treatment, and the
      REAL weight and slant come from shiki (caret-theme.ts) rather than from here — which
-     matters, because EXC-858 measured bold's and italic's tints within a 1.05 contrast
-     ratio in five of the nine palettes. The tint says "this span is a chip"; the glyph
+     matters, because bold's and italic's tints composite within a 1.05 contrast ratio in
+     seven of the eleven palettes (EXC-858). The tint says "this span is a chip"; the glyph
      says which one it is.
 
      Background LAYERS rather than one background-color, because a run can carry two members
@@ -622,11 +622,12 @@ const CARET_OVERRIDES = `
      § chips carries the rule). An ordered item's 1. keeps its glyph and is merely tinted,
      so it is SUPPLEMENTARY and takes --ink-faint, the ink the fence markers and the ** / _
      emphasis markers already take. A bullet's dash goes transparent and the drawn dot
-     REPLACES it, so the dot is the only thing left saying "list item here" — that is 1.4.11's
-     test for a graphical object required to understand the content, and --ink-faint fails its
-     3:1 floor on the surface this actually renders on (2.90 on catppuccin-latte, 2.97 on
-     github-light, against --paper-sunk and the row's 2-8% ink bands). --ink-soft bottoms at
-     4.21 across the nine and theme.test.ts pins the whole replacement family there.
+     REPLACES it, so the dot is the only thing left saying "list item here" — that is
+     1.4.11's test for a graphical object required to understand the content, and
+     --ink-faint fails its 3:1 floor on the surface this actually renders on (2.90 on
+     catppuccin-latte, 2.97 on github-light, 2.92 on dawnfox, against --paper-sunk and the
+     row's 2-8% ink bands). --ink-soft bottoms at 4.21 across the eleven and theme.test.ts
+     pins the whole replacement family there.
 
      THE GLYPH IS A PSEUDO-ELEMENT, not an appended node, and that is a correctness
      requirement rather than a preference. A pass that APPENDS a node to a row is one a
@@ -746,13 +747,13 @@ const CARET_OVERRIDES = `
      The INK AND THE STATE. This is the one member of the marker family that WCAG 1.4.11
      binds, because it reports STATE rather than merely marking structure, and that is why
      it spends --ink-soft where every other marker here spends --ink-faint. The faint ink is
-     pinned above 3:1 only on --paper and --paper-raised (theme.test.ts); the diff surface is
-     --paper-sunk and its 2-8% ink mixes, where --ink-faint measures 2.90 on catppuccin-latte
-     and 2.97 on github-light — under the floor 1.4.11 sets for a non-text indicator. One
-     step up the ramp clears it everywhere, bottoming at 4.21, and theme.test.ts pins exactly
-     that on the surface the checkbox actually renders on. The faint markers around it are
-     structure rather than state and are left as they are; that gap is real but it is the
-     epic's, not this rule's.
+     pinned above 3:1 only on --paper and --paper-raised (theme.test.ts); the diff surface
+     is --paper-sunk and its 2-8% ink mixes, where --ink-faint measures 2.90 on
+     catppuccin-latte, 2.97 on github-light and 2.92 on dawnfox — under the floor 1.4.11
+     sets for a non-text indicator. One step up the ramp clears it everywhere, bottoming at
+     4.21, and theme.test.ts pins exactly that on the surface the checkbox actually renders
+     on. The faint markers around it are structure rather than state and are left as they
+     are; that gap is real but it is the epic's, not this rule's.
 
      The three states are then told apart by SHAPE — an empty square, a square with a check,
      a square with a slash — on one ink. Separating them by hue or by an opacity step
@@ -878,11 +879,12 @@ const CARET_OVERRIDES = `
      survives (svelte-rules.md § chips carries the rule), and this one does not — the glyph
      is transparent two declarations up, so the bars are the only thing carrying "this is
      quoted, and this deep", which is exactly WCAG 1.4.11's test for a graphical object
-     required to understand the content. --ink-faint measures 2.90 on
-     catppuccin-latte and 2.97 on github-light against --paper-sunk and the row's 2-8% ink
-     bands, under the 3:1 floor; --ink-soft bottoms at 4.21 across the nine. theme.test.ts
-     pins the whole replacement family — this bar, the list bullet, the task checkbox, a
-     table's column and header rules — on that surface, and it reds naming the palette if any of them is stepped back down.
+     required to understand the content. --ink-faint measures 2.90 on catppuccin-latte, 2.97
+     on github-light and 2.92 on dawnfox against --paper-sunk and the row's 2-8% ink bands,
+     under the 3:1 floor; --ink-soft bottoms at 4.21 across the eleven. theme.test.ts pins
+     the whole replacement family — this bar, the list bullet, the task checkbox, a table's
+     column and header rules — on that surface, and it reds naming the palette if any of
+     them is stepped back down.
 
      Depth reads off the BAR COUNT, and that comes free: the decoration pass gives every
      marker its own child at its own source column (data-md-quote carries the level), so a
@@ -952,7 +954,7 @@ const CARET_OVERRIDES = `
      How deep the fade goes is not a taste call and is not declared here — see
      QUOTE_SUBDUE above, which is bounded by the worst palette's contrast headroom.
      A gentler fade than the eye would choose is the price of quoted prose staying
-     readable in all nine.
+     readable in all eleven.
 
      A search highlight inside a quote fades with the line, since ::highlight() paints
      over these same tokens and no selector can lift a highlight out of an ancestor's
@@ -989,7 +991,7 @@ const CARET_OVERRIDES = `
      bars above reject the rule tokens only for a 2px mark, on the grounds that they are
      "sized for hairlines that span a whole edge", and this IS that hairline — but those
      tokens are 10% and 16% ink, and composited over --paper-sunk and the row's own 2-8%
-     bands --rule measures 1.15 to 1.37 and --rule-strong 1.24 to 1.64 across the nine
+     bands --rule measures 1.15 to 1.37 and --rule-strong 1.24 to 1.64 across the eleven
      palettes. That is barely above the 1.05 this epic treats as indistinguishable: the line
      is in the DOM and not on the screen. --ink-faint, the marker ink the chip family
      prescribes, is the other candidate and lands at 2.63 to 4.79 — under WCAG 1.4.11's 3:1
@@ -999,7 +1001,7 @@ const CARET_OVERRIDES = `
      inheriting. The glyphs above are transparent, so this line is the ONLY thing carrying
      "a section break sits here". A decoration beside a legible marker could argue it is
      ornamental; one that has replaced its marker cannot. --ink-soft bottoms at 4.21 across
-     the nine and is pinned in theme.test.ts against the banded diff surface, the same shape
+     the eleven and is pinned in theme.test.ts against the banded diff surface, the same shape
      and for the same reason as the checkbox's pin.
 
      No inset and no margin: the row must keep its height to the character, since the gutter
@@ -1427,7 +1429,7 @@ const CARET_OVERRIDES = `
      ink by a fixed amount cannot do the second half: light ink on a dark ground reads
      heavier at the same ratio, so it needs a light-dark() carrying two numbers and still
      drifts apart palette by palette. Stated the other way round, one number does it —
-     --paper-sunk stepped 12% toward --ink lands in the same place on all nine, because the
+     --paper-sunk stepped 12% toward --ink lands in the same place on all eleven, because the
      operands do the scheme-flipping themselves. That is the idiom the card fill above and
      the row bands in styles/diffview.css already use.
 
@@ -2015,7 +2017,7 @@ const CARET_OVERRIDES = `
      --chip-ref (EXC-880), the reference member of the chip family: a resolved path
      is tinted where it sits, so which spans of a plan can be opened is a glance
      rather than a pointer sweep. The tint is the derived token, never a literal,
-     which is what makes all nine palettes supply it; it rides a different source
+     which is what makes all eleven palettes supply it; it rides a different source
      hue from --chip-code, so a reference is distinct from ordinary inline code by
      construction. A file and a directory share the one tint — they are the same
      class of thing, and the glyph above is what tells them apart.

@@ -103,7 +103,7 @@
      --caret-card-lift is (lib/diffview/coreStyles.ts, the shadow-DOM half of this
      idea): the geometry is fixed and only the alpha moves — the same black reads
      much heavier over a light ground than over a dark one — so one light-dark()
-     covers all nine. */
+     covers all eleven. */
   --shadow-chip:
     0 1px 2px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.3)),
     0 2px 6px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.22));

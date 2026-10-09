@@ -420,10 +420,10 @@ describe("the fenced code-block panel (EXC-692)", () => {
 });
 
 // EXC-867: the inline emphasis chips, the first prose members of the EXC-855 chip family.
-// The real weight and slant come from shiki (caret-theme.ts) — EXC-858 measured bold's and
-// italic's tints within a 1.05 contrast ratio in five of nine palettes, so the tint alone
-// cannot be the separator. What this suite pins is the chip's shape and, above all, that it
-// costs the monospace grid nothing.
+// The real weight and slant come from shiki (caret-theme.ts) — bold's and italic's tints
+// composite within a 1.05 contrast ratio in seven of the eleven palettes (EXC-858), so the
+// tint alone cannot be the separator. What this suite pins is the chip's shape and, above
+// all, that it costs the monospace grid nothing.
 describe("the inline emphasis chips (EXC-867)", () => {
   const fillRule = overrideDecls.match(/\[data-content\][^{}]*\[data-md\]\s*\{[^}]*\}/)?.[0] ?? "";
   const startRule =
@@ -446,7 +446,7 @@ describe("the inline emphasis chips (EXC-867)", () => {
   });
 
   test("spends the family's own bold and italic tints, and declares neither", () => {
-    // Consumed, never redefined: the recipe (EXC-858) derives all five tints for all nine
+    // Consumed, never redefined: the recipe (EXC-858) derives all five tints for all eleven
     // palettes, so a literal here would be a tenth, unreviewed palette.
     expect(overrideDecls).toMatch(/\[data-md~="bold"\]\s*\{[^}]*var\(--chip-bold\)/);
     expect(overrideDecls).toMatch(/\[data-md~="italic"\]\s*\{[^}]*var\(--chip-italic\)/);
@@ -564,7 +564,7 @@ describe("the link chip (EXC-859)", () => {
   });
 
   test("spends the family's own link tint through its own layer, and declares none", () => {
-    // Consumed, never redefined: the recipe (EXC-858) derives all five tints for all nine
+    // Consumed, never redefined: the recipe (EXC-858) derives all five tints for all eleven
     // palettes, so a literal here would be a tenth, unreviewed palette. A layer rather
     // than a background-color so a bold link shows both members at once, exactly as a
     // bold-italic run does.
@@ -620,7 +620,7 @@ describe("the inline-code chip (EXC-868)", () => {
   });
 
   test("spends the family's derived code token, never a second value", () => {
-    // The tint is CONSUMED, never redefined here: --chip-code is derived for all nine
+    // The tint is CONSUMED, never redefined here: --chip-code is derived for all eleven
     // palettes by the recipe (EXC-858), so the code chip carries the same relationship to
     // whatever ground it sits on in every one of them. A literal — or a color-mix spelled
     // out here — would be a tenth palette declared by hand.
@@ -795,7 +795,7 @@ describe("the nested chip's own corners", () => {
       );
       expect(nestFill).toMatch(new RegExp(String.raw`var\(--nest-${member},\s*transparent\)`));
     }
-    // Consumed, never redefined: the recipe (EXC-858) derives all five tints for all nine
+    // Consumed, never redefined: the recipe (EXC-858) derives all five tints for all eleven
     // palettes, so a literal at this level would be a tenth, unreviewed palette.
     expect(nestFill).not.toMatch(/#[0-9a-fA-F]{3,8}\b|color-mix/);
   });
@@ -916,10 +916,11 @@ describe("the list markers (EXC-861)", () => {
     // the bullet is the construct that shows both at once. The dash it draws over is
     // transparent, so the dot is the only thing left saying "list item here" — WCAG
     // 1.4.11's 3:1 floor binds it, on the surface it really renders on. --ink-faint
-    // measures 2.90 on catppuccin-latte and 2.97 on github-light against the banded diff
-    // body; theme.test.ts owns those numbers and reds naming the palette. This pins only
-    // that the sheet spends what they chose, and that the drawn glyph and the surviving
-    // marker genuinely differ — one shared ink here would mean the rule had been dropped.
+    // measures 2.90 on catppuccin-latte, 2.97 on github-light and 2.92 on dawnfox against
+    // the banded diff body; theme.test.ts owns those numbers and reds naming the palette.
+    // This pins only that the sheet spends what they chose, and that the drawn glyph and
+    // the surviving marker genuinely differ — one shared ink here would mean the rule had
+    // been dropped.
     expect(glyphRule).toMatch(/color:\s*var\(--ink-soft\)/);
     expect(glyphRule).not.toMatch(/--ink-faint/);
   });
@@ -1038,8 +1039,8 @@ describe("the task-list checkbox (EXC-860)", () => {
     // Not the --ink-faint the structural markers spend. A checkbox reports STATE, so WCAG
     // 1.4.11's 3:1 floor for a non-text indicator binds it — and on the surface it renders
     // on (--paper-sunk and the row's ink bands, not the --paper / --paper-raised the ramp
-    // test measures) --ink-faint falls under that floor on two of the nine palettes.
-    // theme.test.ts pins the ink chosen here against all nine on that surface; this only
+    // test measures) --ink-faint falls under that floor on three of the eleven palettes.
+    // theme.test.ts pins the ink chosen here against all eleven on that surface; this only
     // holds the sheet to the same token, so the two cannot drift apart. The mask is what
     // makes the token reachable at all: background-color paints through it, so the glyph
     // rides the palette rather than whatever colour an <img> would have baked in.
@@ -1386,7 +1387,7 @@ describe("the filename-reference chip (EXC-840, tinted EXC-880)", () => {
 
   test("the chip rests in the derived reference tint, with the control radius", () => {
     // The tint is the ColorToken EXC-858 derived, never a literal — that is what
-    // makes all nine palettes supply it by construction. The radius rides the
+    // makes all eleven palettes supply it by construction. The radius rides the
     // resting rule too, so the chip is one shape the hover only re-fills.
     expect(tokenRule).toMatch(/background-color:\s*var\(--chip-ref\)/);
     expect(tokenRule).toMatch(/border-radius:\s*var\(--radius\)/);
@@ -1440,7 +1441,7 @@ test("spends no --rule token anywhere on the diff body", () => {
   // than a note: --rule and --rule-strong draw hairlines on the CHROME surfaces, where
   // they are 10% and 16% ink over --paper / --paper-raised and read correctly. The diff
   // body is --paper-sunk plus 2-8% ink row bands, and over that ground they measure
-  // 1.15-1.37 and 1.24-1.64 across the nine — a line that is in the DOM and not on the
+  // 1.15-1.37 and 1.24-1.64 across the eleven — a line that is in the DOM and not on the
   // screen. Every mark this epic draws there spends the ink ramp instead. Scanned over
   // the declarations, so the prose above (and this comment) can keep naming the tokens.
   expect(overrideDecls).not.toContain("--rule");
@@ -1474,13 +1475,13 @@ describe("blockquote level bars (EXC-863)", () => {
   });
 
   test("spends the replacement family's ink, not a chip tint and not the faint marker ink", () => {
-    // EXC-855 refuses a sixth token for marker ink, so the bar takes one of the two the
-    // ink ramp already offers rather than minting one or borrowing a chip's. WHICH one is
+    // EXC-855 refuses a sixth token for marker ink, so the bar takes one of the two the ink
+    // ramp already offers rather than minting one or borrowing a chip's. WHICH one is
     // EXC-871's epic-wide rule: the `>` above it is transparent, so the bars are the only
-    // thing carrying "quoted, and this deep", which puts them under WCAG 1.4.11's 3:1
-    // floor on the banded diff body. theme.test.ts measures that floor across the nine and
-    // reds on --ink-faint (2.90 catppuccin-latte, 2.97 github-light); this pins the
-    // declaration, including that it did not stay on the faint ink EXC-863 shipped.
+    // thing carrying "quoted, and this deep", which puts them under WCAG 1.4.11's 3:1 floor
+    // on the banded diff body. theme.test.ts measures that floor across the eleven and reds
+    // on --ink-faint (2.90 catppuccin-latte, 2.97 github-light, 2.92 dawnfox); this pins
+    // the declaration, including that it did not stay on the faint ink EXC-863 shipped.
     expect(barRule).toMatch(/background-color:\s*var\(--ink-soft\)/);
     expect(barRule).not.toContain("--ink-faint");
     expect(barRule).not.toContain("--chip-");
@@ -1552,8 +1553,8 @@ describe("thematic breaks (EXC-862)", () => {
 
   test("spends the ink that clears the non-text floor, not a rule token or a chip tint", () => {
     // The rule tokens are 10% and 16% ink and effectively vanish on the sunk diff surface
-    // (--rule 1.15-1.37, --rule-strong 1.24-1.64 across the nine palettes); --ink-faint is
-    // under 3:1 on two of them. theme.test.ts owns those measurements — this pins only that
+    // (--rule 1.15-1.37, --rule-strong 1.24-1.64 across the eleven palettes); --ink-faint is
+    // under 3:1 on three of them. theme.test.ts owns those measurements — this pins only that
     // the sheet spends what they chose.
     expect(ruleRule).toMatch(/var\(--ink-soft\)/);
     expect(ruleRule).not.toContain("--chip-");
@@ -1834,7 +1835,7 @@ describe("tables (EXC-864)", () => {
     // ONE STEP OFF THE SURFACE, NOT AN INK SOFTENED TOWARD IT. An ink softened by the same
     // amount lands in two different places on a light and a dark palette, so it needs a
     // light-dark() whose two arms carry different numbers. Stated the other way round —
-    // --paper-sunk stepped toward --ink — one number lands in the SAME place on all nine,
+    // --paper-sunk stepped toward --ink — one number lands in the SAME place on all eleven,
     // because the operands do the scheme-flipping themselves. That is the same idiom the
     // card fill above and the row bands in styles/diffview.css already use.
     expect(cardRule).toMatch(

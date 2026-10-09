@@ -123,7 +123,7 @@ export function paletteTheme(input: PaletteInput): Theme {
     // semantic, and `attention` is the trap: Catppuccin draws it eleven degrees from
     // `accentBright`, so a link and a reference would be one chip across four
     // flavors. The other three ride the neutral ramp and are told apart by weight,
-    // slant and the mono family (EXC-867), not by tint — in five of the nine palettes
+    // slant and the mono family (EXC-867), not by tint — in seven of the eleven palettes
     // bold and italic composite within a 1.05 contrast ratio. theme.test.ts pins the
     // separations and carries the full account.
     "--chip-bold": `${input.chipBoldHue ?? input.ink}${alpha.chip}`,
