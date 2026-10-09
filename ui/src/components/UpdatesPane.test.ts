@@ -36,7 +36,7 @@ const COMMIT: UpdateStatus = {
 const text = (target: HTMLElement, sel: string): string =>
   target.querySelector(sel)?.textContent?.trim() ?? "";
 const commandInput = (target: HTMLElement): HTMLInputElement | null =>
-  target.querySelector<HTMLInputElement>("input.update-command");
+  target.querySelector<HTMLInputElement>("[aria-label='Upgrade command']");
 const tone = (target: HTMLElement): string | null =>
   target.querySelector(".update-dot")?.getAttribute("data-tone") ?? null;
 

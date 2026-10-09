@@ -5,7 +5,7 @@
   // from `load`, so the compare link and the upgrade guidance survive a failed fetch.
   import type { UpdateChanges, UpdateReport } from "@core/lib/types";
   import Modal from "@/components/Modal.svelte";
-  import { Input } from "$lib/components/ui/input/index.js";
+  import UpgradeCommand from "@/components/UpgradeCommand.svelte";
   import { Spinner } from "$lib/components/ui/spinner/index.js";
   import { renderMarkdown } from "$lib/markdown.ts";
   import { topmostDialogContent } from "$lib/modalStack.ts";
@@ -121,11 +121,7 @@
         <a class="upgrade-compare" href={compareHref} target="_blank" rel="noreferrer">Compare on GitHub</a>
       {/if}
       {#if guidance}
-        <Input
-          class="upgrade-command settings-copy-box settings-copy-text"
-          readonly
-          value={guidance.command}
-          aria-label="Upgrade command" />
+        <UpgradeCommand command={guidance.command} />
         {#each guidance.lines as line}
           <p class="upgrade-line">{line}</p>
         {/each}
@@ -247,9 +243,6 @@
     gap: 0.35rem;
     width: 100%;
     font-size: var(--text-sm);
-  }
-  .upgrade :global(.upgrade-command) {
-    height: auto;
   }
   .upgrade-line {
     margin: 0;

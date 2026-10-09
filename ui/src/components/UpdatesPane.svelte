@@ -16,8 +16,8 @@
   import type { UpdateReport } from "@core/lib/types";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Field, FieldTitle } from "$lib/components/ui/field/index.js";
-  import { Input } from "$lib/components/ui/input/index.js";
   import { isUpdatePending, updatePaneCopy } from "$lib/updates.ts";
+  import UpgradeCommand from "@/components/UpgradeCommand.svelte";
 
   interface Props {
     /** The daemon's verdict, or null when it could not be read. Already reflects the
@@ -57,18 +57,8 @@
       <p class="update-detail">{copy.detail}</p>
       {#if copy.command}
         <!-- The command is the one thing anyone will select out of this pane, so it takes
-             the sunk mono block the Advanced diagnostics already read as copyable text.
-             There is no copy button here, deliberately — the reader is at a terminal, and
-             the Advanced pane's copy affordance is a click away if one is ever wanted.
-
-             A read-only field: the release command overflows the pane, and a field is
-             focusable, scrolls under the arrow keys, and selects only the command on
-             select-all, all natively. -->
-        <Input
-          class="update-command settings-copy-box settings-copy-text"
-          readonly
-          value={copy.command}
-          aria-label="Upgrade command" />
+             the sunk mono block the Advanced diagnostics already read as copyable text. -->
+        <UpgradeCommand class="update-command" command={copy.command} />
       {/if}
       {#if report && isUpdatePending(report.status)}
         <Button
@@ -135,14 +125,8 @@
     background: var(--ok);
   }
 
-  /* The copy-box padding sets the field's height, over the Input's fixed one. */
   .updates :global(.update-command) {
-    height: auto;
     margin-top: 0.35rem;
-  }
-  .updates :global(.update-command:focus-visible) {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
   }
 
   .updates :global(.update-whats-new) {
