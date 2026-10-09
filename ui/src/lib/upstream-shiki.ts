@@ -9,6 +9,8 @@
 // the @pierre/diffs one (diffview/theme.ts) — share a single loaded copy
 // through REGISTERED_SHIKI_THEMES.
 //
+// Nightfox's pair is vendored from upstream's tmThemes because shiki doesn't ship it.
+//
 // GitHub's `-default` suffix is load-bearing — the unsuffixed pair is legacy Primer.
 // caret-theme.test.ts pins the pairing by value, since the key union below catches an
 // id that doesn't exist but not one that exists and is wrong.
@@ -17,6 +19,7 @@
 // normalizeTheme mutates the rule array it is given in place, and the resolver's copy
 // is what absorbs that rather than the entry here.
 
+import type { ThemeRegistrationRaw } from "shiki/core";
 import catppuccinFrappe from "shiki/themes/catppuccin-frappe.mjs";
 import catppuccinLatte from "shiki/themes/catppuccin-latte.mjs";
 import catppuccinMacchiato from "shiki/themes/catppuccin-macchiato.mjs";
@@ -24,6 +27,9 @@ import catppuccinMocha from "shiki/themes/catppuccin-mocha.mjs";
 import dracula from "shiki/themes/dracula.mjs";
 import githubDarkDefault from "shiki/themes/github-dark-default.mjs";
 import githubLightDefault from "shiki/themes/github-light-default.mjs";
+
+import dawnfox from "@/vendor/nightfox/dawnfox.json";
+import duskfox from "@/vendor/nightfox/duskfox.json";
 
 /** Every upstream theme a caret palette may name, keyed by the theme's own shiki
  * `name`. In THEMES order, so the two registries read alike. */
@@ -35,6 +41,9 @@ export const UPSTREAM_SHIKI_THEMES = {
   dracula,
   "github-light-default": githubLightDefault,
   "github-dark-default": githubDarkDefault,
+  // A JSON import widens `type` to string, so `satisfies` can't check these.
+  dawnfox: dawnfox as ThemeRegistrationRaw,
+  duskfox: duskfox as ThemeRegistrationRaw,
 } as const;
 
 /** The upstream theme ids a palette can point at. Typing a palette's `shikiTheme`

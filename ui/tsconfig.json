@@ -5,6 +5,7 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "isolatedModules": true,
+    "resolveJsonModule": true,
     "types": ["bun", "svelte"],
     // `@/*` is the app-code alias: it resolves to this program's source root,
     // ui/src/ (the browser app). UI modules import their own siblings through it

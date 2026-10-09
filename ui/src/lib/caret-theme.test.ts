@@ -430,20 +430,24 @@ describe("markdown emphasis", () => {
 
 // The vendor half of the body assertion above: caret overrides the fence line for
 // every theme, but never the block's body. Here the body is tokenized by the
-// embedded TypeScript grammar and colored by real Dracula — `const` renders
-// Dracula's pink, a color caret's own set names nowhere.
-describe("dracula fenced-code block", () => {
-  test("colors the code body in real Dracula", async () => {
+// embedded TypeScript grammar and colored by the vendor's real theme — `const`
+// renders the vendor's keyword color, one caret's own set names nowhere.
+describe("vendor fenced-code block", () => {
+  test.each([
+    ["dracula", "#ff79c6"],
+    ["dawnfox", "#907aa9"],
+    ["duskfox", "#c4a7e7"],
+  ] as const)("%s colors the code body in its own theme", async (palette, color) => {
     const hl = await createHighlighterCore({
-      themes: [shikiThemeFor("dracula")],
+      themes: [shikiThemeFor(palette)],
       langs: [import("shiki/langs/markdown.mjs"), import("shiki/langs/typescript.mjs")],
       engine: createCaretRegexEngine(),
     });
     const md = ["```ts", "const x = 1", "```"].join("\n");
     const body = hl
-      .codeToTokensBase(md, { lang: "markdown", theme: "dracula", ...CARET_TOKENIZE_OPTIONS })[1]
+      .codeToTokensBase(md, { lang: "markdown", theme: palette, ...CARET_TOKENIZE_OPTIONS })[1]
       ?.find((t) => t.content === "const");
-    expect(body?.color?.toLowerCase()).toBe("#ff79c6");
+    expect(body?.color?.toLowerCase()).toBe(color);
   });
 });
 

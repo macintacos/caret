@@ -49,6 +49,7 @@ import {
 } from "$lib/themes/catppuccin.ts";
 import { dracula } from "$lib/themes/dracula.ts";
 import { githubDark, githubLight } from "$lib/themes/github.ts";
+import { dawnfox, duskfox } from "$lib/themes/nightfox.ts";
 import type { UpstreamShikiThemeId } from "$lib/upstream-shiki.ts";
 
 /** Every shiki theme a palette may name: the vendors' published ones (EXC-896) and
@@ -65,7 +66,9 @@ export type ThemeId =
   | "catppuccin-mocha"
   | "dracula"
   | "github-light"
-  | "github-dark";
+  | "github-dark"
+  | "dawnfox"
+  | "duskfox";
 
 /** A native color scheme. Every theme declares one, and it is what
  * `color-scheme` / `data-theme` carry and what a theme slot is keyed by. */
@@ -133,6 +136,8 @@ export const THEMES: Record<ThemeId, Theme> = {
   dracula,
   "github-light": githubLight,
   "github-dark": githubDark,
+  dawnfox,
+  duskfox,
 };
 
 /** Selectable ids in display order — caret-dark first. Drives the per-slot

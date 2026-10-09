@@ -123,6 +123,8 @@ describe("THEMES", () => {
       "dracula",
       "github-light",
       "github-dark",
+      "dawnfox",
+      "duskfox",
     ]);
   });
 
