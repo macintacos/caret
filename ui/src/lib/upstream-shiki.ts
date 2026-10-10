@@ -30,8 +30,8 @@ import dracula from "shiki/themes/dracula.mjs";
 import githubDarkDefault from "shiki/themes/github-dark-default.mjs";
 import githubLightDefault from "shiki/themes/github-light-default.mjs";
 
-import dawnfox from "@/vendor/nightfox/dawnfox.json";
-import duskfox from "@/vendor/nightfox/duskfox.json";
+import dawnfox from "@/code-themes/nightfox/dawnfox.json";
+import duskfox from "@/code-themes/nightfox/duskfox.json";
 
 /** Every upstream theme a caret palette may name, keyed by the theme's own shiki
  * `name`. In THEMES order, so the two registries read alike. */

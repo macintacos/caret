@@ -132,15 +132,15 @@ SOFTWARE.
 
 ## Nightfox
 
-[ui/src/vendor/nightfox/dawnfox.json](ui/src/vendor/nightfox/dawnfox.json) and
-[ui/src/vendor/nightfox/duskfox.json](ui/src/vendor/nightfox/duskfox.json) are
+[ui/src/code-themes/nightfox/dawnfox.json](ui/src/code-themes/nightfox/dawnfox.json) and
+[ui/src/code-themes/nightfox/duskfox.json](ui/src/code-themes/nightfox/duskfox.json) are
 `extra/dawnfox/dawnfox.tmTheme` and `extra/duskfox/duskfox.tmTheme` from
 [`EdenEast/nightfox.nvim` at `4641eaa2e9e0b37bb9195ed995aa4be431f6f77f`](https://github.com/EdenEast/nightfox.nvim/tree/4641eaa2e9e0b37bb9195ed995aa4be431f6f77f),
 converted to shiki JSON with their rules unmodified:
 
 ```bash
-curl -sL https://raw.githubusercontent.com/EdenEast/nightfox.nvim/4641eaa2e9e0b37bb9195ed995aa4be431f6f77f/extra/dawnfox/dawnfox.tmTheme | plutil -convert json -o - - | jq '{name: "dawnfox", type: "light", settings}' > ui/src/vendor/nightfox/dawnfox.json
-curl -sL https://raw.githubusercontent.com/EdenEast/nightfox.nvim/4641eaa2e9e0b37bb9195ed995aa4be431f6f77f/extra/duskfox/duskfox.tmTheme | plutil -convert json -o - - | jq '{name: "duskfox", type: "dark", settings}' > ui/src/vendor/nightfox/duskfox.json
+curl -sL https://raw.githubusercontent.com/EdenEast/nightfox.nvim/4641eaa2e9e0b37bb9195ed995aa4be431f6f77f/extra/dawnfox/dawnfox.tmTheme | plutil -convert json -o - - | jq '{name: "dawnfox", type: "light", settings}' > ui/src/code-themes/nightfox/dawnfox.json
+curl -sL https://raw.githubusercontent.com/EdenEast/nightfox.nvim/4641eaa2e9e0b37bb9195ed995aa4be431f6f77f/extra/duskfox/duskfox.tmTheme | plutil -convert json -o - - | jq '{name: "duskfox", type: "dark", settings}' > ui/src/code-themes/nightfox/duskfox.json
 ```
 
 ```text

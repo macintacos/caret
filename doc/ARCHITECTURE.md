@@ -483,7 +483,7 @@ src/config/         settings, preferences, resolved paths, and shared constants
 src/lib/            cross-cutting foundation — wire-contract types, logging, and small shared utilities
 src/commands/       per-subcommand entrypoints (one file per subcommand), plus the wiring they share
 src/adapters/       the coding-agent adapter axis — the AgentAdapter interface and registry, plus one directory per tool (claude · opencode · codex)
-ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs · src/vendor/ vendored third-party theme data (Nightfox)
+ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs · src/code-themes/ vendored third-party shiki themes (Nightfox)
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode + UserPromptSubmit) — Claude-adapter packaging
 commands/           /caret:demo · /caret:doctor · /caret:plan — Claude-adapter packaging (agent-specific behavioral prose)
 opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging; caret.core.ts is the host-neutral core the v1, v2 and TUI modules share; review-bridge.ts, its bridge to caret review, is shared with caret mcp and caret steer
