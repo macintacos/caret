@@ -123,6 +123,8 @@ describe("THEMES", () => {
       "dracula",
       "github-light",
       "github-dark",
+      "dawnfox",
+      "duskfox",
     ]);
   });
 
@@ -434,8 +436,8 @@ describe("every theme", () => {
   // surface binds --diffs-bg to --paper-sunk, styles/diffview.css).
   //
   // This is the constraint that sets QUOTE_SUBDUE, and it binds unevenly: `--ink` on sunk
-  // runs from 6.0:1 (catppuccin-latte) to 18.9:1 (github-dark), so the fade a roomy
-  // palette could easily carry is the one that would push latte under. Adding a palette
+  // has least headroom on catppuccin-latte (doc/agents/svelte-rules.md § CSS-token
+  // discipline), so the fade a roomy palette could carry would push latte under. Adding a palette
   // with a compressed ink ramp fails HERE, which is the point — the alternative is
   // discovering it as unreadable quoted text in that flavor.
   test("keeps a subdued blockquote's ink at AA on every palette", () => {
@@ -473,9 +475,8 @@ describe("every theme", () => {
   //
   // That gap is why every member spends --ink-soft and not the --ink-faint markers take
   // generally. Falsifiable, and it really does bite: swap MARKER_INK to "--ink-faint" and
-  // this reds on the FIRST band it reaches, catppuccin-latte at 2.99 with github-light
-  // behind it at 2.97; the ink bottoms at 2.63 across the nine and --ink-soft at 4.21.
-  // doc/agents/svelte-rules.md § chips carries the full ranges.
+  // this reds on the FIRST band it reaches, catppuccin-latte at 2.99.
+  // doc/agents/svelte-rules.md § CSS-token discipline carries the full ranges.
   //
   // The membership is closed by a rule rather than by inspection: a marker whose glyph
   // SURVIVES is supplementary and stays on --ink-faint (the fence markers, the ** / _
@@ -524,11 +525,10 @@ describe("every theme", () => {
   //
   // Both tokens a divider suggests first fail there, which is the whole reason this case
   // exists. --rule and --rule-strong are 10% and 16% ink; composited over these grounds
-  // they measure 1.15-1.37 and 1.24-1.64 across the nine — barely above the 1.05 this
-  // epic treats as indistinguishable, so the line renders as nothing at all. --ink-faint,
-  // the marker ink, lands at 2.63-4.79 and misses the floor on catppuccin-latte and
-  // github-light, the same two EXC-860 found. Swap RULE_INK to any of the three and this
-  // reds naming the palette.
+  // they sit barely above the 1.05 this epic treats as indistinguishable, so the line
+  // renders as nothing at all. --ink-faint, the marker ink, misses the floor on the
+  // lightest palettes (doc/agents/svelte-rules.md § CSS-token discipline). Swap RULE_INK
+  // to any of the three and this reds naming the palette.
   test("keeps the thematic-break rule above the non-text floor on every palette", () => {
     const RULE_INK = "--ink-soft" as const;
     // What the line PAINTS, not what its token names. channels() drops an alpha suffix
@@ -570,7 +570,7 @@ describe("every theme", () => {
   //   bug — a step that resolves to the same colour as the ground it is drawn on, which is
   //   what a palette bump or a changed card fill could silently produce.
   //
-  //   CONSISTENT — the spread across the nine stays inside a narrow band, which is the
+  //   CONSISTENT — the spread across palettes stays inside a narrow band, which is the
   //   property the design call actually asked for. Softening --ink-soft by a fixed amount
   //   would land in two different places on a light and a dark palette and need a
   //   light-dark() with two numbers; stating the colour the other way round — --paper-sunk
@@ -608,12 +608,12 @@ describe("every theme", () => {
   //
   // THE FLOOR HERE IS 3:1 AND THAT IS A DELIBERATE, NARROW EXEMPTION. A header cell is
   // text, so 1.4.3's 4.5:1 would ordinarily bind, and the ink-ramp case further up holds
-  // --ink-soft to exactly that on the two CHROME surfaces. On this ground it does not
-  // clear it everywhere: catppuccin-latte binds at 4.34, 0.16 short, and it is the only
-  // one that misses. 3:1 ships on the reasoning that the row is uppercase, short, and sits
-  // directly above body copy at full --ink. Soften the ink at all and latte drops below
-  // 4 — measure before touching it. doc/agents/svelte-rules.md § chips carries the range
-  // and the rest of the argument.
+  // --ink-soft to exactly that on the two CHROME surfaces. On this ground it does not clear
+  // it everywhere: catppuccin-latte binds at 4.34, 0.16 short. 3:1 ships on the reasoning
+  // that the row is uppercase, short, and sits directly above body copy at full --ink.
+  // Soften the ink at all and latte drops below 4 — measure before touching it.
+  // doc/agents/svelte-rules.md § CSS-token discipline carries the range and the rest of
+  // the argument.
   test("keeps a table header above the non-text floor on the card's own fill", () => {
     for (const [id, theme] of themeEntries()) {
       const ground = banded(theme.tokens["--paper-sunk"], theme.tokens["--ink"], TABLE_CARD_FILL);
@@ -655,15 +655,17 @@ describe("every theme", () => {
   // eleven degrees apart, so the obvious "link rides accentBright, ref rides
   // attention" mapping collapses into one chip across four flavors while every
   // key-set and contrast test above still passes. 60 degrees is a wide floor
-  // deliberately — the surviving `accentBright` x `ok` pairing clears 76 in the
-  // tightest palette (github-light), so this fires on a mapping mistake, not on a
-  // palette's taste. `accentBright` x `ok` is not the only pairing that would clear
-  // it — `accent` x `ok` bottoms at 75 and `danger` x `ok` at 97 — it is the one
-  // left once `accent` stays reserved for selection and `danger` for semantics.
+  // deliberately — among palettes that keep the default `chipRefHue`, the surviving
+  // `accentBright` x `ok` pairing clears 76 in the tightest (github-light), so this
+  // fires on a mapping mistake, not on a palette's taste. `accentBright` x `ok` is not
+  // the only pairing that would clear it — `accent` x `ok` bottoms at 75 and `danger` x
+  // `ok` at 97 — it is the one left once `accent` stays reserved for selection and
+  // `danger` for semantics. Dawnfox's green sits 47 degrees from its link blue, one
+  // reason it overrides `chipRefHue`.
   //
   // Only the hued pair is pinned. The three neutral chips are a lightness ramp, and
   // a vendor's own ink-to-inkSoft step decides how wide it is: bold and italic
-  // composite within a 1.05 contrast ratio in five of the nine palettes. A floor
+  // composite within a 1.05 contrast ratio in most palettes. A floor
   // there would fail on those palettes' taste rather than on a mistake, and the
   // tint is not what separates those three anyway — EXC-867's weight, slant, and
   // mono family are.
@@ -684,11 +686,11 @@ describe("every theme", () => {
   // the whole reason the second tint exists — so this is the same floor and the same
   // reasoning as the pin above, on the pairing that actually shares a surface.
   //
-  // The recipe's default hue for --chip-skill is `attention`, which clears this
-  // comfortably in all seven vendor palettes (88 degrees at the tightest). caret's own
-  // two do NOT clear it that way — verdigris is about 46 degrees off carrot-top — so
-  // caret.ts routes them to woad instead, and they land near 72. Without that override
-  // this is the test that fails.
+  // The recipe's default hue for --chip-skill is `attention`, which clears this in every
+  // vendor palette (66 degrees at the tightest, dawnfox's yellow attention against its
+  // pink chip-ref). caret's own two do NOT clear it that way — verdigris is about 46
+  // degrees off carrot-top — so caret.ts routes them to woad instead, and they land near
+  // 72. Without that override this is the test that fails.
   //
   // NOT pinned: --chip-skill against --chip-link. Catppuccin draws those about 15
   // degrees apart, and no surface renders both — a link chip is the rendered plan's,
@@ -711,7 +713,7 @@ describe("every theme", () => {
   // are two percentage points apart
   // (ALPHA.chip vs ALPHA.wash in recipe.ts), so a palette whose accent drifted toward
   // --chip-ref's green would quietly reduce hover to that alpha nudge. Only the e2e's two
-  // palettes are ever rendered in a browser; the other seven are held here or nowhere.
+  // palettes are ever rendered in a browser; every other is held here or nowhere.
   // Same 60-degree floor and same reasoning as the pin above; github-light is tightest at
   // roughly 75 degrees, so this fires on a palette mistake rather than on a palette's taste.
   test("keeps the resting reference chip at least 60 degrees from its hover wash", () => {
@@ -850,7 +852,7 @@ describe("paintTheme", () => {
 });
 
 // EXC-905: a palette token nothing reads is the opposite of a system, and the recipe
-// plus the full-token pins above will happily carry one for all nine palettes without
+// plus the full-token pins above will happily carry one for every palette without
 // noticing. This walks ui/src and asserts every ColorToken is read by something, so
 // "declared for nobody" fails the suite. It is a floor, not proof a token reaches a
 // rendered surface: the reader may be plumbing rather than paint — --accent-ink is

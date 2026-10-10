@@ -57,7 +57,9 @@ describe("vendored icon set", () => {
   // (doc/agents/icon-rules.md step 4): keep its rows in bijection with the registry.
   test("THIRD_PARTY_LICENSES.md itemizes every vendored icon", () => {
     const doc = readFileSync(join(import.meta.dir, "../../../THIRD_PARTY_LICENSES.md"), "utf8");
-    const rows = [...doc.matchAll(/^\| `([a-z0-9-]+)`\s+\|/gm)].map((m) => m[1]);
+    const lucide = doc.split(/^## /m).find((section) => section.startsWith("Lucide\n"));
+    if (lucide === undefined) throw new Error("THIRD_PARTY_LICENSES.md has no `## Lucide` section");
+    const rows = [...lucide.matchAll(/^\| `([a-z0-9-]+)`\s+\|/gm)].map((m) => m[1]);
     expect(rows.sort()).toEqual([...ICON_NAMES].sort());
   });
 

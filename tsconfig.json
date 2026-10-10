@@ -8,7 +8,6 @@
   // Shared options live in tsconfig.base.json.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "resolveJsonModule": true,
     "types": ["bun"],
     // `@/*` is the app-code alias: it resolves to this program's source root,
     // src/ (the daemon core). Every module the app owns imports its siblings

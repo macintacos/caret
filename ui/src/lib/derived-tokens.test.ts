@@ -14,7 +14,7 @@ import { THEMES } from "$lib/theme.ts";
 //
 // WELL-FORMEDNESS. Every value is a color-mix(in lab, …) whose only inputs are
 // palette tokens. theme.test.ts's registry-wide "covers caret-dark's full token set"
-// already pins that key set for all nine palettes, so a tier built solely from those
+// already pins that key set for every palette, so a tier built solely from those
 // names derives correctly for every one by construction — rather than by this suite
 // sampling caret's and hoping.
 
@@ -68,7 +68,7 @@ describe("the derived-token tier", () => {
     expect(decls).not.toContain("oklch");
   });
 
-  test("mixes only palette tokens, so all nine palettes derive the tier", () => {
+  test("mixes only palette tokens, so every palette derives the tier", () => {
     const palette = new Set(Object.keys(THEMES["caret-dark"].tokens));
     const referenced = [...new Set([...decls.matchAll(/var\((--[\w-]+)\)/g)].map((m) => m[1]!))];
     expect(referenced.length).toBeGreaterThan(0);

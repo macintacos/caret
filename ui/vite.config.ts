@@ -101,7 +101,7 @@ export default defineConfig({
       // learn. upstream-shiki.ts imports seven of those modules ITSELF as
       // `shiki/themes/<name>.mjs`, one-line re-exports of `@shikijs/themes/<name>` in
       // shiki 4.x, so the stub would replace caret's own vendor palette data (EXC-896:
-      // dracula, github-*, catppuccin-*) and every vendor palette a reviewer picks
+      // dracula, github-*, catppuccin-*) and every shiki-shipped vendor palette
       // renders unthemed. Nothing caret ships is named pierre-*, which is why the entry
       // below is safe where that one is not.
       {
