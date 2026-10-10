@@ -437,20 +437,20 @@ describe("vendor fenced-code block", () => {
     ["dracula", "#ff79c6"],
     ["dawnfox", "#907aa9"],
     ["duskfox", "#c4a7e7"],
-  ] as const)("%s colors the code body in its own theme", async (palette, color) => {
+  ] as const)("%s colors the code body in its own theme", async (palette, keywordColor) => {
     const hl = await createHighlighterCore({
       themes: [shikiThemeFor(palette)],
       langs: [import("shiki/langs/markdown.mjs"), import("shiki/langs/typescript.mjs")],
       engine: createCaretRegexEngine(),
     });
     const md = ["```ts", "const x = 1", "```"].join("\n");
-    const body = hl
+    const constKeyword = hl
       .codeToTokensBase(md, { lang: "markdown", theme: palette, ...CARET_TOKENIZE_OPTIONS })[1]
       ?.find((t) => t.content === "const");
-    expect(body?.color?.toLowerCase()).toBe(color);
+    expect(constKeyword?.color?.toLowerCase()).toBe(keywordColor);
     // caret's fence-language rule is bold and the vendor keyword rule is not, which
     // separates the two where the colors coincide (Duskfox).
-    expect((body?.fontStyle ?? 0) & 2).toBe(0);
+    expect((constKeyword?.fontStyle ?? 0) & 2).toBe(0);
   });
 });
 
