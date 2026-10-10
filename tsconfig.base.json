@@ -19,6 +19,7 @@
     "noUncheckedIndexedAccess": true,
     "noFallthroughCasesInSwitch": true,
     "noImplicitReturns": true, // EXC-504
-    "noImplicitOverride": true // EXC-504
+    "noImplicitOverride": true, // EXC-504
+    "resolveJsonModule": true
   }
 }
