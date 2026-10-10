@@ -448,6 +448,9 @@ describe("vendor fenced-code block", () => {
       .codeToTokensBase(md, { lang: "markdown", theme: palette, ...CARET_TOKENIZE_OPTIONS })[1]
       ?.find((t) => t.content === "const");
     expect(body?.color?.toLowerCase()).toBe(color);
+    // caret's fence-language rule is bold and the vendor keyword rule is not, which
+    // separates the two where the colors coincide (Duskfox).
+    expect((body?.fontStyle ?? 0) & 2).toBe(0);
   });
 });
 

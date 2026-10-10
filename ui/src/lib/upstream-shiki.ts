@@ -9,7 +9,9 @@
 // the @pierre/diffs one (diffview/theme.ts) — share a single loaded copy
 // through REGISTERED_SHIKI_THEMES.
 //
-// Nightfox's pair is vendored from upstream's tmThemes because shiki doesn't ship it.
+// Nightfox's pair is vendored as shiki JSON from upstream's tmThemes because shiki
+// doesn't ship it; THIRD_PARTY_LICENSES.md records the pinned source and the command
+// that regenerates them.
 //
 // GitHub's `-default` suffix is load-bearing — the unsuffixed pair is legacy Primer.
 // caret-theme.test.ts pins the pairing by value, since the key union below catches an
@@ -41,7 +43,9 @@ export const UPSTREAM_SHIKI_THEMES = {
   dracula,
   "github-light-default": githubLightDefault,
   "github-dark-default": githubDarkDefault,
-  // A JSON import widens `type` to string, so `satisfies` can't check these.
+  // A JSON import widens `type` to string, so these are cast rather than
+  // `satisfies`-checked; caret-theme.test.ts pins each resolved theme's `type` to its
+  // palette's scheme.
   dawnfox: dawnfox as ThemeRegistrationRaw,
   duskfox: duskfox as ThemeRegistrationRaw,
 } as const;

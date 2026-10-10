@@ -447,7 +447,7 @@ describe("the inline emphasis chips (EXC-867)", () => {
 
   test("spends the family's own bold and italic tints, and declares neither", () => {
     // Consumed, never redefined: the recipe (EXC-858) derives all five tints for all eleven
-    // palettes, so a literal here would be a tenth, unreviewed palette.
+    // palettes, so a literal here would be one more, unreviewed palette.
     expect(overrideDecls).toMatch(/\[data-md~="bold"\]\s*\{[^}]*var\(--chip-bold\)/);
     expect(overrideDecls).toMatch(/\[data-md~="italic"\]\s*\{[^}]*var\(--chip-italic\)/);
     expect(fillRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
@@ -565,7 +565,7 @@ describe("the link chip (EXC-859)", () => {
 
   test("spends the family's own link tint through its own layer, and declares none", () => {
     // Consumed, never redefined: the recipe (EXC-858) derives all five tints for all eleven
-    // palettes, so a literal here would be a tenth, unreviewed palette. A layer rather
+    // palettes, so a literal here would be one more, unreviewed palette. A layer rather
     // than a background-color so a bold link shows both members at once, exactly as a
     // bold-italic run does.
     expect(linkTint).toMatch(/--md-link:\s*var\(--chip-link\)/);
@@ -623,7 +623,7 @@ describe("the inline-code chip (EXC-868)", () => {
     // The tint is CONSUMED, never redefined here: --chip-code is derived for all eleven
     // palettes by the recipe (EXC-858), so the code chip carries the same relationship to
     // whatever ground it sits on in every one of them. A literal — or a color-mix spelled
-    // out here — would be a tenth palette declared by hand.
+    // out here — would be one more palette declared by hand.
     expect(tintRule("code")).toMatch(/var\(--chip-code\)/);
     expect(tintRule("code")).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(tintRule("code")).not.toMatch(/color-mix/);
@@ -796,7 +796,7 @@ describe("the nested chip's own corners", () => {
       expect(nestFill).toMatch(new RegExp(String.raw`var\(--nest-${member},\s*transparent\)`));
     }
     // Consumed, never redefined: the recipe (EXC-858) derives all five tints for all eleven
-    // palettes, so a literal at this level would be a tenth, unreviewed palette.
+    // palettes, so a literal at this level would be one more, unreviewed palette.
     expect(nestFill).not.toMatch(/#[0-9a-fA-F]{3,8}\b|color-mix/);
   });
 

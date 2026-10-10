@@ -657,11 +657,13 @@ describe("every theme", () => {
   // eleven degrees apart, so the obvious "link rides accentBright, ref rides
   // attention" mapping collapses into one chip across four flavors while every
   // key-set and contrast test above still passes. 60 degrees is a wide floor
-  // deliberately — the surviving `accentBright` x `ok` pairing clears 76 in the
-  // tightest palette (github-light), so this fires on a mapping mistake, not on a
-  // palette's taste. `accentBright` x `ok` is not the only pairing that would clear
-  // it — `accent` x `ok` bottoms at 75 and `danger` x `ok` at 97 — it is the one
-  // left once `accent` stays reserved for selection and `danger` for semantics.
+  // deliberately — among palettes that keep the default `chipRefHue`, the surviving
+  // `accentBright` x `ok` pairing clears 76 in the tightest (github-light), so this
+  // fires on a mapping mistake, not on a palette's taste. `accentBright` x `ok` is not
+  // the only pairing that would clear it — `accent` x `ok` bottoms at 75 and `danger` x
+  // `ok` at 97 — it is the one left once `accent` stays reserved for selection and
+  // `danger` for semantics. Dawnfox's green sits 47 degrees from its link blue, one
+  // reason it overrides `chipRefHue`.
   //
   // Only the hued pair is pinned. The three neutral chips are a lightness ramp, and
   // a vendor's own ink-to-inkSoft step decides how wide it is: bold and italic
@@ -713,7 +715,7 @@ describe("every theme", () => {
   // are two percentage points apart
   // (ALPHA.chip vs ALPHA.wash in recipe.ts), so a palette whose accent drifted toward
   // --chip-ref's green would quietly reduce hover to that alpha nudge. Only the e2e's two
-  // palettes are ever rendered in a browser; the other seven are held here or nowhere.
+  // palettes are ever rendered in a browser; the other nine are held here or nowhere.
   // Same 60-degree floor and same reasoning as the pin above; github-light is tightest at
   // roughly 75 degrees, so this fires on a palette mistake rather than on a palette's taste.
   test("keeps the resting reference chip at least 60 degrees from its hover wash", () => {

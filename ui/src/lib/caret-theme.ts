@@ -107,12 +107,11 @@ function caretMarkdownRules(p: Palette): NonNullable<ThemeRegistrationRaw["setti
 }
 
 /** Re-key a source theme to caret's palette id and append the structural marker
- * rules. Upstream themes carry their rules as `tokenColors` and caret's own pair
- * as `settings`; shiki accepts either — normalizing to one keeps the appended rules
- * last, which is what makes them win (shiki is last-match-wins). The `settings ??
- * tokenColors` order matches shiki's own `normalizeTheme`: `settings` is the branch
- * TypeScript believes is always taken, `tokenColors` the one every real upstream theme
- * actually uses. */
+ * rules. A source carries its rules as `settings` (tmTheme-derived: caret's own pair
+ * and the vendored Nightfox themes) or `tokenColors` (the VS Code themes shiki ships);
+ * normalizing to one keeps the appended rules last, which is what makes them win
+ * (shiki is last-match-wins). The `settings ?? tokenColors` order matches shiki's own
+ * `normalizeTheme`. */
 function withStructuralOverrides(theme: Theme, source: ThemeRegistrationRaw): ThemeRegistrationRaw {
   const { tokenColors, settings, ...rest } = source;
   return {
