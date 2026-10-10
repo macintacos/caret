@@ -138,6 +138,5 @@ Two more live at the repo root:
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Vendored third-party assets (the Lucide icons, ISC; the
-Nightfox code themes, MIT) are itemized in
-[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+MIT — see [LICENSE](LICENSE). Vendored third-party code and assets are itemized, with
+their licenses, in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
