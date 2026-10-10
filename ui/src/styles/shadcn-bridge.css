@@ -167,7 +167,7 @@
 
    The scrim is a black at an alpha rather than a caret token, deliberately:
    ColorToken in lib/theme.ts is a closed union every palette must supply, so minting
-   a --scrim is an eleven-theme change — and a scrim is a shadow cast OVER the app rather
+   a --scrim is a change to every palette — and a scrim is a shadow cast OVER the app rather
    than a surface of it, so it should not flip with the scheme the way a bridged token
    would. It is the one non-token color the bridge declares; its weight was judged by
    eye on both caret schemes, with the blur doing the separation work. */

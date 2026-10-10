@@ -2393,8 +2393,8 @@ for (const colorScheme of ["light", "dark"] as const) {
     expect(boldMarker).toBeDefined();
     expect(italicContent).toBeDefined();
 
-    // The bold and italic TINTS composite within a 1.05 contrast ratio in seven of
-    // the eleven palettes (EXC-858), so the tint cannot be the separator — the weight and
+    // The bold and italic TINTS composite within a 1.05 contrast ratio in most palettes
+    // (EXC-858), so the tint cannot be the separator — the weight and
     // slant are, and they come from shiki. This is that assertion.
     expect(Number(boldContent!.weight)).toBeGreaterThanOrEqual(700);
     expect(italicContent!.style).toBe("italic");
@@ -2596,7 +2596,7 @@ test("compare mode never reaches the decoration pass (EXC-867)", async ({ daemon
 //
 // One scheme rather than the two the emphasis test above loops, and the asymmetry is
 // deliberate: that loop exists because --chip-bold and --chip-italic composite within a
-// 1.05 contrast ratio in seven of eleven palettes, so its tint had to be seen resolving in
+// 1.05 contrast ratio in most palettes, so its tint had to be seen resolving in
 // both. --chip-code rides the same recipe path that loop already proves resolves, and
 // what is new here is shape, not colour — so a second scheme would re-prove the cascade
 // and nothing else. The per-scheme look is checked by hand against the committed
@@ -2745,7 +2745,7 @@ test("the inline-code chip draws one pill per span (EXC-868)", async ({ daemon, 
 // EXC-863: blockquote level bars. The pure halves are already pinned as units — the depth
 // scan in ui/src/lib/diffview/inlineSpans.test.ts, the row tag and the per-level marker
 // elements in inlineDecorate.test.ts, the selectors in coreStyles.test.ts, and the subdue's
-// contrast floor across all eleven palettes in ui/src/lib/theme.test.ts. What only a browser
+// contrast floor across every palette in ui/src/lib/theme.test.ts. What only a browser
 // can answer is whether any of it PAINTS: the bar is a pseudo-element whose fill and radius
 // are custom properties, so a token that failed to derive leaves a box with no background
 // rather than a missing rule; the subdue is a computed opacity that no stylesheet regex can
@@ -2855,7 +2855,7 @@ for (const colorScheme of ["light", "dark"] as const) {
     // token is. The child combinator is what keeps the fade from compounding on nested
     // elements — a descendant selector would square it.
     // The depth of the fade is not asserted here — ui/src/lib/theme.test.ts owns that,
-    // where it can composite QUOTE_SUBDUE against all eleven palettes rather than the one
+    // where it can composite QUOTE_SUBDUE against every palette rather than the one
     // this browser happens to be showing. What is asserted is its SHAPE, which only the
     // live cascade has: one value, on the right elements.
     const quotedRow = await readQuoteRow(page, 5);
@@ -2905,7 +2905,7 @@ for (const colorScheme of ["light", "dark"] as const) {
 
 // EXC-862: thematic breaks. The pure halves are already pinned as units — which lines are
 // breaks in ui/src/lib/diffview/thematicBreaks.test.ts (including every look-alike), the
-// selectors in coreStyles.test.ts, and the ink's floor across all eleven palettes in
+// selectors in coreStyles.test.ts, and the ink's floor across every palette in
 // ui/src/lib/theme.test.ts. What only a browser can answer is whether the line PAINTS: the
 // rule is a background-image built from a custom property, so a token that failed to derive
 // leaves the declaration invalid and the row simply has no line — indistinguishable from a
@@ -3058,7 +3058,7 @@ test("the rule's ink follows the colour scheme (EXC-862)", async ({ daemon, page
   // whichever scheme it ran under, so a token that resolved to one fixed colour would
   // satisfy both runs. The line has to be drawn in the ink of the scheme it is read in,
   // and the resolved gradient stop is where that is visible. theme.test.ts owns whether
-  // the ink CLEARS its contrast floor in all eleven palettes; this owns only that the live
+  // the ink CLEARS its contrast floor in every palette; this owns only that the live
   // cascade delivers the scheme's own value rather than a frozen one.
   const stop = async () => {
     const background = await page.evaluate(() => {

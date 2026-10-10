@@ -479,8 +479,8 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
   await openShowcase(page, daemon);
   // Catppuccin Latte is the palette the epic's contrast measurements bind on — it is
   // where --ink-faint falls under WCAG 1.4.11's floor on the diff body, which is why the
-  // replacement markers moved to --ink-soft (theme.test.ts owns those numbers across all
-  // eleven). What a browser adds is the half arithmetic cannot reach: that a DERIVED
+  // replacement markers moved to --ink-soft (theme.test.ts owns those numbers across every
+  // palette). What a browser adds is the half arithmetic cannot reach: that a DERIVED
   // vendor token actually resolves through the shadow boundary and into the sheet.
   // `exact`, unlike the rest of the e2e suite, because this is the one spec seeding
   // `cwd: REPO_ROOT` rather than the fixture's `/tmp/caret-e2e` — so the breadcrumb

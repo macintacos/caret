@@ -259,7 +259,7 @@ imports it — stays green under any invocation.
   **The floor binds on the surface the decoration actually renders on**, and that is the
   trap the rule exists to close. `theme.test.ts`'s ink-ramp case measures `--paper` and
   `--paper-raised`, the two chrome surfaces, while the diff view binds `--diffs-bg` to
-  `--paper-sunk` and bands its rows with 2–8% ink over it. Across the eleven palettes
+  `--paper-sunk` and bands its rows with 2–8% ink over it. Across the palettes
   `--ink-faint` measures 2.63–5.81 there and **fails 3:1** on catppuccin-latte
   (2.66–2.99), github-light (2.63–3.07) and dawnfox (2.68–3.00); `--ink-soft` measures
   4.21–9.84 and clears everywhere. `theme.test.ts` pins the replacement family against
@@ -270,11 +270,11 @@ imports it — stays green under any invocation.
   **the surface stepped toward it**,
   `color-mix(in lab, var(--paper-sunk), var(--ink) 12%)`, the same idiom as the table
   card's own fill and the row bands in `styles/diffview.css`. It measures **1.05–1.37**
-  across the eleven, against the three grounds a carded table actually has (the card fill,
-  and the two banded states a row can be in — never bare `--paper-sunk`, which a card
-  covers). The bottom of that range is real: on the lightest palettes a divider under a
-  hovered row is at the edge of perceptible, which is the look this was tuned to and not a
-  defect to fix. **That is below 1.4.11's 3:1, deliberately, and it is the only
+  across the palettes, against the three grounds a carded table actually has (the card
+  fill, and the two banded states a row can be in — never bare `--paper-sunk`, which a
+  card covers). The bottom of that range is real: on the lightest palettes a divider under
+  a hovered row is at the edge of perceptible, which is the look this was tuned to and not
+  a defect to fix. **That is below 1.4.11's 3:1, deliberately, and it is the only
   replacement decoration that does not clear it.** EXC-864 originally held it there on the
   argument that the pipes go transparent and the rule is then the sole carrier of a column
   boundary; EXC-1136 overrode that on an explicit design call for a low-contrast style, on
@@ -326,12 +326,23 @@ imports it — stays green under any invocation.
   instead of being overpainted by it — and because opacity composites at paint time, no
   token assertion can see it. `QUOTE_SUBDUE` in `diffview/coreStyles.ts` is therefore
   exported and pinned by `theme.test.ts` against every palette: `--ink` on `--paper-sunk`
-  ranges from 6:1 to 19:1 across the eleven, so the flattest ink ramp sets how far any of
-  them may fade. Any future paint-time effect on body copy owes the same pin. A decoration
-  that indicates **state** owes one thing more: tell the states apart by SHAPE, not by hue
-  or by an opacity step, which fails outright for a colour-blind reader whatever a
-  contrast ratio says. The task-list checkbox is the worked example — an empty ballot box
-  against a ticked one, on one ink, so it needs no subdue constant.
+  ranges from 6.0:1 (catppuccin-latte) to 18.9:1 (github-dark) across the palettes, so the
+  flattest ink ramp sets how far any of them may fade. `QUOTE_SUBDUE` is a ~1.3:1 step; a
+  fade deep enough to read at a glance (~2.2–3.4:1) puts the lightest palettes under AA,
+  so the bars carry the quote and the fade only supports them. Any future paint-time
+  effect on body copy owes the same pin. A decoration that indicates **state** owes one
+  thing more: tell the states apart by SHAPE, not by hue or by an opacity step, which
+  fails outright for a colour-blind reader whatever a contrast ratio says. The task-list
+  checkbox is the worked example — an empty ballot box against a ticked one, on one ink,
+  so it needs no subdue constant.
+- **No comment states how many palettes there are, or restates a figure measured across
+  them.** Write "every palette" or "the lightest palettes"; a count goes stale with each
+  new palette. Cross-palette ratios, ranges and lists of which palettes miss a floor live
+  in this section alone: a code comment states the claim and points at
+  `doc/agents/svelte-rules.md § CSS-token discipline`. `theme.test.ts`, the suite that
+  measures, may keep a pin's own falsifiability note — the palette and value it reds on.
+  Design constants (a 12% step, the 1.05 threshold) and one palette's facts in its own
+  module are not covered.
 - **An overdrawn glyph belongs on the run's FIRST token, not on every tagged one.**
   `inlineDecorate.ts` tags every shiki token a run covers, and shiki does not always hand
   a multi-character run over as one token — an uppercase `[X]` comes back cut into three.
