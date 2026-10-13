@@ -5,6 +5,7 @@ import type {
   Annotation,
   ClientReview,
   ConfigPatch,
+  CustomThemes,
   DaemonDiagnostics,
   DirListing,
   FileExcerpt,
@@ -78,6 +79,17 @@ export async function getUpdate(): Promise<UpdateReport> {
       uiLog.warn("request", "update report read failed", { reason: String(err) });
     }
     throw err;
+  }
+}
+
+/** The user's custom themes and the files that failed to load.
+ * `null` on any failure, which leaves Appearance with the built-ins. */
+export async function getThemes(): Promise<CustomThemes | null> {
+  try {
+    return await json(await fetch("/api/themes"));
+  } catch (err) {
+    uiLog.warn("request", "themes read failed", { reason: String(err) });
+    return null;
   }
 }
 

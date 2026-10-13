@@ -8,12 +8,14 @@
   // presence beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
   // holds them together and lays out the TopBar + DiffPlanView.
   import { untrack } from "svelte";
-  import { getHealth, getUpdate, getUpdateChanges, markSeen } from "$lib/api.ts";
+  import { getHealth, getThemes, getUpdate, getUpdateChanges, markSeen } from "$lib/api.ts";
   import { approveVariants, pickApproveMode } from "$lib/approve.ts";
   import { readApproveMode } from "$lib/approveModePref.ts";
+  import { uiLog } from "$lib/log.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
   import { withPlanHandoff } from "$lib/planHandoff.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
+  import { registerCustomThemes } from "$lib/registerTheme.ts";
   import { createSafeModeGuard } from "$lib/safeMode.ts";
   import { createSeenWatcher } from "$lib/seen.ts";
   import {
@@ -65,6 +67,7 @@
     ApproveVariantId,
     Annotation,
     PersistedScratch,
+    ThemeFileError,
     UpdateReport,
   } from "@core/lib/types";
 
@@ -122,6 +125,9 @@
   // thunk 404s the route — and every surface then stays quiet. The `updates.check`
   // opt-out is folded in daemon-side (EXC-1210), so this is their whole truth.
   let updateReport = $state<UpdateReport | null>(null);
+  // Theme files the daemon could not load, listed in Appearance. Empty until the read
+  // lands, and when it fails.
+  let themeErrors = $state<readonly ThemeFileError[]>([]);
   let work = $state<{
     annotations: Annotation[];
     generalCommentDraft: string;
@@ -420,6 +426,20 @@
         if (report) seedUpdatesCheck(report.checkEnabled);
         updateReport = report;
       });
+  });
+
+  // ----- Custom themes -----
+  // Read once on mount: registers each served theme and settles the boot stand-in; a
+  // failed read degrades to the built-ins. A re-run of this effect (dev HMR) re-registers
+  // taken ids and throws, so the failure is logged rather than left unhandled.
+  $effect(() => {
+    void getThemes()
+      .then((served) => {
+        themeErrors = registerCustomThemes(served);
+      })
+      .catch((err: unknown) =>
+        uiLog.warn("ui", "custom themes failed to register", { reason: String(err) }),
+      );
   });
 
   // The once-per-version nudge, fired only when this browser has not already toasted
@@ -932,6 +952,7 @@
       onCopyDiagnostic={copyDiagnostics}
       {updatePending}
       {updateReport}
+      {themeErrors}
       onWhatsNew={openWhatsNew}
     />
   {/snippet}

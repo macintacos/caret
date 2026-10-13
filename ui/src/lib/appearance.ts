@@ -10,9 +10,19 @@
 // key, so all of it is unit-testable with no matchMedia and no paint. Nothing
 // here holds the resolved answer or repaints — @/state/appearance.svelte.ts owns
 // the live appearance, and it is the surface callers use (EXC-883).
+//
+// It also keeps a per-slot cache of the selected custom theme's built palette, so
+// the boot paint can show it before the daemon's themes have registered.
 
 import { definePref, registerPrefKey } from "$lib/definePref.ts";
-import { type BuiltinThemeId, type Scheme, type ThemeId, themesForScheme } from "$lib/theme.ts";
+import {
+  type BuiltinThemeId,
+  type RuntimeTheme,
+  type Scheme,
+  THEMES,
+  type ThemeId,
+  themesForScheme,
+} from "$lib/theme.ts";
 
 /** When each scheme applies: pinned to one, or following the OS. */
 export type ThemeMode = "light" | "dark" | "system";
@@ -34,6 +44,12 @@ export const DEFAULT_SLOT_THEME: Record<Scheme, BuiltinThemeId> = {
 export const MODE_KEY = "caret.theme.mode";
 export const LIGHT_SLOT_KEY = "caret.theme.light";
 export const DARK_SLOT_KEY = "caret.theme.dark";
+
+/** Each slot's cached custom palette. */
+export const LIGHT_CACHE_KEY = "caret.theme.cache.light";
+export const DARK_CACHE_KEY = "caret.theme.cache.dark";
+registerPrefKey(LIGHT_CACHE_KEY);
+registerPrefKey(DARK_CACHE_KEY);
 
 /** The pre-mode key, holding a single ThemeId. Only `migrateLegacyTheme` reads
  * it, and it erases the key on the way through — but it stays registered so the
@@ -102,6 +118,63 @@ export function readSlotTheme(scheme: Scheme): ThemeId {
 /** Persist a scheme's theme. Painting is the live appearance's next step. */
 export function writeSlotTheme(scheme: Scheme, id: ThemeId): void {
   slotPrefs[scheme].write(id);
+}
+
+/** A slot's custom theme as boot paints it before the daemon's themes arrive. */
+export type CachedTheme = { id: string } & Pick<RuntimeTheme, "scheme" | "tokens">;
+
+const SLOT_KEYS: Record<Scheme, string> = { light: LIGHT_SLOT_KEY, dark: DARK_SLOT_KEY };
+const CACHE_KEYS: Record<Scheme, string> = { light: LIGHT_CACHE_KEY, dark: DARK_CACHE_KEY };
+// Every palette carries exactly the `ColorToken` set (theme.test.ts pins it);
+// caret-dark stands for all.
+const TOKEN_NAMES = Object.keys(THEMES["caret-dark"].tokens).sort().join();
+
+/** Read a slot's cached palette. The blob is hand-editable and may come from an
+ * older build, so anything short of a full, well-typed palette for this slot reads
+ * as nothing. */
+export function readCachedTheme(scheme: Scheme): CachedTheme | undefined {
+  try {
+    const raw = localStorage.getItem(CACHE_KEYS[scheme]);
+    if (raw === null) return undefined;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return undefined;
+    const { id, scheme: storedScheme, tokens } = parsed as Record<string, unknown>;
+    if (typeof id !== "string" || storedScheme !== scheme) return undefined;
+    if (typeof tokens !== "object" || tokens === null) return undefined;
+    if (Object.keys(tokens).sort().join() !== TOKEN_NAMES) return undefined;
+    if (!Object.values(tokens).every((v) => typeof v === "string")) return undefined;
+    return { id, scheme, tokens: tokens as CachedTheme["tokens"] };
+  } catch {
+    return undefined;
+  }
+}
+
+/** Cache a palette under its own scheme's slot. */
+export function writeCachedTheme(theme: CachedTheme): void {
+  try {
+    const { id, scheme, tokens } = theme;
+    localStorage.setItem(CACHE_KEYS[scheme], JSON.stringify({ id, scheme, tokens }));
+  } catch {
+    // Storage unavailable — the next load paints the slot's default until it registers.
+  }
+}
+
+/** Forget a slot's cached palette. */
+export function clearCachedTheme(scheme: Scheme): void {
+  try {
+    localStorage.removeItem(CACHE_KEYS[scheme]);
+  } catch {
+    // Storage unavailable — a stale entry is ignored unless it names the saved id.
+  }
+}
+
+/** The slot's stored id as written, registered or not; null when unset or unreadable. */
+export function readSavedSlotId(scheme: Scheme): string | null {
+  try {
+    return localStorage.getItem(SLOT_KEYS[scheme]);
+  } catch {
+    return null;
+  }
 }
 
 // ----- Effects ---------------------------------------------------------------

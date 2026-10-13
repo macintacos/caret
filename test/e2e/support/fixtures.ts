@@ -11,7 +11,7 @@
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +40,9 @@ export interface Daemon {
   url: string;
   /** The daemon's auth token when the `auth` option is on; null otherwise. */
   token: string | null;
+  /** The folder this test's daemon serves GET /api/themes from, re-read per request, so a
+   * spec writes or deletes theme files here and then reloads. */
+  themesDir: string;
   /**
    * Seed a review through the public API — the same POST /api/reviews the hook
    * makes, issued harness-side (no Origin header, so the same-origin guard is
@@ -262,6 +265,8 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
     // Chosen here rather than through daemonTokenFile(), which reads this worker's
     // XDG_STATE_HOME — the developer's.
     const tokenFile = join(stateDir, "daemon.token");
+    const themesDir = join(stateDir, "themes");
+    await mkdir(themesDir);
     // stdin is a live pipe on purpose: the daemon self-reaps when it closes,
     // so a SIGKILL'd runner can't leave an orphan daemon behind.
     const child = spawn("bun", [DAEMON_ENTRY], {
@@ -272,6 +277,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
         // otherwise a spec would edit the developer's own config.toml.
         CARET_CONFIG_FILE: join(stateDir, "config.toml"),
         CARET_RUMDL_BIN: rumdl,
+        CARET_E2E_THEMES_DIR: themesDir,
         CARET_E2E_UPDATE_STATUS: JSON.stringify(updateStatus),
         CARET_E2E_UPDATE_INSTALL: updateInstall,
         CARET_E2E_UPDATE_CHANGES: JSON.stringify(updateChanges),
@@ -297,6 +303,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
       await use({
         url,
         token,
+        themesDir,
         async seed(input?: PlanInput) {
           const res = await fetch(`${url}/api/reviews`, {
             method: "POST",

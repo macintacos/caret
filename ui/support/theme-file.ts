@@ -15,15 +15,20 @@ export async function readThemeFile(name: string): Promise<ThemeFile> {
   return parsed.file;
 }
 
-/** A theme file built from caret's own pair under a new id, with a keyword and accent
- * no built-in uses, so an assertion can tell it apart from caret's. */
-export async function customThemeFile(id: string, scheme: Scheme): Promise<FileTheme> {
+/** caret's own theme file under a new id, with a keyword and accent no built-in uses,
+ * so an assertion can tell it apart from caret's — as the daemon serves it. */
+export async function customThemeSource(id: string, scheme: Scheme): Promise<ThemeFile> {
   const file = await readThemeFile(`caret-${scheme}.json`);
-  return buildFileTheme({
+  return {
     ...file,
     id,
     label: `Custom ${id}`,
     palette: { ...file.palette, accent: CUSTOM_ACCENT },
     syntax: { ...file.syntax, keyword: { color: CUSTOM_KEYWORD } },
-  });
+  };
+}
+
+/** `customThemeSource`, built. */
+export async function customThemeFile(id: string, scheme: Scheme): Promise<FileTheme> {
+  return buildFileTheme(await customThemeSource(id, scheme));
 }

@@ -5,7 +5,13 @@ import { fakeMediaQuery } from "@ui/support/media-query.ts";
 import { withThrowingStorage } from "@ui/support/storage.ts";
 import { CUSTOM_ACCENT, customThemeFile } from "@ui/support/theme-file.ts";
 import { type AppearanceDeps, createAppearance } from "@/state/appearance.svelte.ts";
-import { DARK_SLOT_KEY, LIGHT_SLOT_KEY, MODE_KEY } from "$lib/appearance.ts";
+import {
+  DARK_SLOT_KEY,
+  LIGHT_SLOT_KEY,
+  MODE_KEY,
+  readCachedTheme,
+  writeCachedTheme,
+} from "$lib/appearance.ts";
 import { addTheme, THEMES } from "$lib/theme.ts";
 
 afterEach(() => {
@@ -250,5 +256,117 @@ describe("refresh", () => {
     });
     expect(appearance.themeId).toBe("dracula");
     expect(wipes()).toBe(1);
+  });
+});
+
+/** Dark mode with the dark slot saved as `id`, unregistered, and that id's palette
+ * cached — the boot state of a reload before the daemon's themes arrive. */
+async function darkStandIn(id: string) {
+  const file = await customThemeFile(id, "dark");
+  localStorage.setItem(MODE_KEY, "dark");
+  localStorage.setItem(DARK_SLOT_KEY, id);
+  writeCachedTheme({ id, scheme: "dark", tokens: file.tokens });
+  const h = harness();
+  h.appearance.boot();
+  return { ...h, file };
+}
+
+const accent = () => document.documentElement.style.getPropertyValue("--accent");
+const caretDarkAccent = THEMES["caret-dark"].tokens["--accent"];
+
+describe("the boot stand-in", () => {
+  test("boot paints the saved slot's cached palette until its theme registers", async () => {
+    const { appearance } = await darkStandIn("standin-boot");
+    expect(accent()).toBe(CUSTOM_ACCENT);
+    expect(appearance.themeId).toBe("caret-dark");
+    expect(localStorage.getItem(DARK_SLOT_KEY)).toBe("standin-boot");
+  });
+
+  test("boot ignores a cached palette naming a different id", async () => {
+    const file = await customThemeFile("standin-other", "dark");
+    localStorage.setItem(MODE_KEY, "dark");
+    localStorage.setItem(DARK_SLOT_KEY, "standin-saved");
+    writeCachedTheme({ id: "standin-other", scheme: "dark", tokens: file.tokens });
+    harness().appearance.boot();
+    expect(accent()).toBe(caretDarkAccent);
+  });
+
+  test("the theme registering with identical tokens takes over without a wipe", async () => {
+    const { appearance, wipes, file } = await darkStandIn("standin-same");
+    const id = addTheme(file);
+    appearance.refresh();
+    expect(appearance.themeId).toBe(id);
+    expect(wipes()).toBe(0);
+  });
+
+  test("the theme registering with changed tokens wipes once to them", async () => {
+    const { appearance, wipes, file } = await darkStandIn("standin-changed");
+    addTheme({ ...file, tokens: { ...file.tokens, "--accent": "#123456" } });
+    appearance.refresh();
+    expect(wipes()).toBe(1);
+    expect(accent()).toBe("#123456");
+  });
+
+  test("settle drops a stand-in whose theme never registered, and its cache", async () => {
+    const { appearance, wipes } = await darkStandIn("standin-gone");
+    appearance.settle();
+    expect(wipes()).toBe(1);
+    expect(accent()).toBe(caretDarkAccent);
+    expect(readCachedTheme("dark")).toBeUndefined();
+    expect(localStorage.getItem(DARK_SLOT_KEY)).toBe("standin-gone");
+    expect(localStorage.getItem(MODE_KEY)).toBe("dark");
+  });
+
+  test("dropStandIn repaints the slot's default and keeps the cache", async () => {
+    const { appearance, wipes } = await darkStandIn("standin-unread");
+    appearance.dropStandIn();
+    expect(wipes()).toBe(1);
+    expect(accent()).toBe(caretDarkAccent);
+    expect(readCachedTheme("dark")?.id).toBe("standin-unread");
+    expect(localStorage.getItem(DARK_SLOT_KEY)).toBe("standin-unread");
+    expect(localStorage.getItem(MODE_KEY)).toBe("dark");
+  });
+
+  test("picking caret's default on the stand-in's slot wipes once to it", async () => {
+    const { appearance, wipes } = await darkStandIn("standin-repick");
+    appearance.setSlot("dark", "caret-dark");
+    expect(wipes()).toBe(1);
+    expect(accent()).toBe(caretDarkAccent);
+  });
+
+  test("a mode change drops the stand-in, and a later settle adds no wipe", async () => {
+    const { appearance, wipes } = await darkStandIn("standin-mode");
+    appearance.setMode("light");
+    expect(wipes()).toBe(1);
+    appearance.settle();
+    expect(wipes()).toBe(1);
+  });
+});
+
+describe("the palette cache", () => {
+  test("settle caches both slots' registered custom palettes", async () => {
+    const dark = addTheme(await customThemeFile("settle-dark", "dark"));
+    const light = addTheme(await customThemeFile("settle-light", "light"));
+    const { appearance } = harness();
+    appearance.setSlot("dark", dark);
+    appearance.setSlot("light", light);
+    localStorage.clear();
+    appearance.settle();
+    expect(readCachedTheme("dark")?.id).toBe(dark);
+    expect(readCachedTheme("light")?.id).toBe(light);
+  });
+
+  test("setSlot caches a custom pick even for the slot not showing", async () => {
+    const id = addTheme(await customThemeFile("pick-dark-hidden", "dark"));
+    const { appearance } = harness(false);
+    appearance.setSlot("dark", id);
+    expect(readCachedTheme("dark")?.id).toBe(id);
+  });
+
+  test("settle with only built-ins does not wipe", () => {
+    const { appearance, wipes } = harness();
+    appearance.boot();
+    appearance.settle();
+    expect(wipes()).toBe(0);
   });
 });

@@ -34,11 +34,7 @@ const THEME_FIELDS: StagedField[] = SETTINGS_REGISTRY.filter(isStagedField).filt
 function props(over: Record<string, unknown> = {}) {
   return {
     fields: THEME_FIELDS,
-    values: {
-      [THEME_FIELD.mode]: "dark",
-      [THEME_FIELD.light]: "caret-light",
-      [THEME_FIELD.dark]: "caret-dark",
-    },
+    errors: [],
     onApply: () => {},
     ...over,
   };
@@ -115,7 +111,7 @@ describe("the IN USE marker", () => {
 
   test("lands on the light slot under a manual light mode", () => {
     appearance.setMode("light");
-    render(ThemeSection, props({ values: { ...props().values, [THEME_FIELD.mode]: "light" } }));
+    render(ThemeSection, props());
     expect(q(`[data-field='${THEME_FIELD.light}']`)?.textContent).toContain("In use");
     expect(q(`[data-field='${THEME_FIELD.dark}']`)?.textContent).not.toContain("In use");
   });
@@ -139,7 +135,7 @@ describe("the resolved-state line", () => {
 
   test("system mode explains that it is following the system", () => {
     appearance.setMode("system");
-    render(ThemeSection, props({ values: { ...props().values, [THEME_FIELD.mode]: "system" } }));
+    render(ThemeSection, props());
     expect(text("[data-theme-summary]")).toContain("system");
   });
 });
@@ -158,5 +154,48 @@ describe("ThemeSection apply wiring", () => {
     light.click();
     flush();
     expect(calls).toEqual([{ key: THEME_FIELD.mode, value: "light" }]);
+  });
+});
+
+describe("the live slots", () => {
+  test("a slot changed while mounted updates its trigger's label", () => {
+    const { flush } = render(ThemeSection, props());
+    appearance.setSlot("dark", "dracula");
+    flush();
+    expect(text(`button#setting-${THEME_FIELD.dark}`)).toContain("Dracula");
+  });
+});
+
+describe("theme file errors", () => {
+  test("lists each failed file with each of its messages", () => {
+    render(
+      ThemeSection,
+      props({
+        errors: [
+          { file: "neon.json", messages: ["is not valid JSON"] },
+          { file: "dup.json", messages: ["shares its id", "colors.ink is missing"] },
+        ],
+      }),
+    );
+    const block = text("[data-theme-errors]");
+    for (const part of [
+      "neon.json",
+      "is not valid JSON",
+      "dup.json",
+      "shares its id",
+      "colors.ink is missing",
+    ]) {
+      expect(block).toContain(part);
+    }
+  });
+
+  test("the error list is a static note, not a live region", () => {
+    render(ThemeSection, props({ errors: [{ file: "neon.json", messages: ["bad"] }] }));
+    expect(document.querySelector("[data-theme-errors]")?.getAttribute("role")).toBe("note");
+  });
+
+  test("renders no error block when every file loaded", () => {
+    render(ThemeSection, props());
+    expect(has("[data-theme-errors]")).toBe(false);
   });
 });
