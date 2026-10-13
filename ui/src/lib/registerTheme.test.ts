@@ -44,14 +44,14 @@ const rootToken = (name: string) => document.documentElement.style.getPropertyVa
 describe("a registered theme is selectable in its scheme's slot", () => {
   test("the dark slot offers it after the built-ins, with its swatch and preview", async () => {
     const file = await customThemeFile(uniqueId(), "dark");
-    const builtins = slotOptionsOf(THEME_FIELD.dark).length;
+    const builtinCount = slotOptionsOf(THEME_FIELD.dark).length;
     const lightBefore = slotOptionsOf(THEME_FIELD.light).map((o) => o.value);
 
     const id = registerTheme(file);
 
     const options = slotOptionsOf(THEME_FIELD.dark);
-    expect(options.length).toBe(builtins + 1);
-    expect(options[builtins]).toEqual({
+    expect(options.length).toBe(builtinCount + 1);
+    expect(options[builtinCount]).toEqual({
       value: id,
       label: file.label,
       swatch: SWATCH_TOKENS.map((token) => file.tokens[token]),
@@ -94,17 +94,17 @@ describe("a registered theme is selectable in its scheme's slot", () => {
     const file = await customThemeFile(id, "dark");
     const field = SETTINGS_REGISTRY.find((entry) => entry.key === THEME_FIELD.dark);
     if (field === undefined || !("control" in field)) throw new Error("no dark slot field");
-    const rows = () => document.body.querySelectorAll("[data-setting-option]").length;
+    const rowCount = () => document.body.querySelectorAll("[data-setting-option]").length;
 
     const { flush } = render(SettingControl, { field, value: "caret-dark", onApply: () => {} });
     flush();
     await openSelect(flush);
-    const before = rows();
+    const before = rowCount();
 
     registerTheme(file);
-    await flushUntil(flush, () => rows() === before + 1);
+    await flushUntil(flush, () => rowCount() === before + 1);
 
-    expect(rows()).toBe(before + 1);
+    expect(rowCount()).toBe(before + 1);
     expect(document.body.querySelector(`[data-setting-option='${id}']`) !== null).toBe(true);
     await closeSelect(flush);
   });

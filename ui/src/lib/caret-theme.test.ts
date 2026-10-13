@@ -651,13 +651,13 @@ describe("shikiThemeFor a runtime theme", () => {
     expect(theme.name).toBe(id);
     const fileRules = file.shikiTheme.settings ?? [];
     expect(theme.settings?.slice(0, fileRules.length)).toEqual(fileRules);
-    const appended = theme.settings?.slice(fileRules.length) ?? [];
+    const appendedRules = theme.settings?.slice(fileRules.length) ?? [];
     const caretRules = shikiThemeFor("caret-dark").settings ?? [];
-    expect(appended.map((r) => r.scope)).toEqual(
-      caretRules.slice(-appended.length).map((r) => r.scope),
+    expect(appendedRules.map((r) => r.scope)).toEqual(
+      caretRules.slice(-appendedRules.length).map((r) => r.scope),
     );
     expect(
-      appended.find((r) => String(r.scope).includes(FENCE_LANGUAGE))?.settings.foreground,
+      appendedRules.find((r) => String(r.scope).includes(FENCE_LANGUAGE))?.settings.foreground,
     ).toBe(file.tokens["--accent"]);
     expect(file.shikiTheme).toEqual(original);
   });

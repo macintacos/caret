@@ -21,9 +21,9 @@ export function enumLocalStoragePref<T extends string>(
   allowed: readonly T[] | (() => readonly T[]),
   fallback: T,
 ): EnumLocalStoragePref<T> {
-  const current = typeof allowed === "function" ? allowed : () => allowed;
+  const allowedNow = typeof allowed === "function" ? allowed : () => allowed;
   const isAllowed = (value: unknown): value is T =>
-    typeof value === "string" && (current() as readonly string[]).includes(value);
+    typeof value === "string" && (allowedNow() as readonly string[]).includes(value);
   return {
     read() {
       try {

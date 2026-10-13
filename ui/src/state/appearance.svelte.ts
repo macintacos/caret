@@ -141,8 +141,8 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
       // Only a slot showing its default can hold a saved id that was unknown until
       // now; any other slot is the in-session pick, which storage may have failed to keep.
       commit(() => {
-        for (const s of ["light", "dark"] as const) {
-          if (live.slots[s] === DEFAULT_SLOT_THEME[s]) live.slots[s] = readSlotTheme(s);
+        for (const slot of ["light", "dark"] as const) {
+          if (live.slots[slot] === DEFAULT_SLOT_THEME[slot]) live.slots[slot] = readSlotTheme(slot);
         }
       });
     },

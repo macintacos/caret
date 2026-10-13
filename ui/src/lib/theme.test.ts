@@ -895,9 +895,9 @@ describe("every ColorToken is read somewhere in ui/src", () => {
 describe("runtime themes", () => {
   test("themesForScheme lists a registered theme after the built-ins, in its own scheme only", async () => {
     const id = addTheme(await customThemeFile("runtime-list", "light"));
-    const light = themesForScheme("light").map((t) => t.id);
-    expect(light.at(-1)).toBe(id);
-    expect(light.slice(0, -1)).toEqual(THEME_IDS.filter((t) => THEMES[t].scheme === "light"));
+    const lightIds = themesForScheme("light").map((t) => t.id);
+    expect(lightIds.at(-1)).toBe(id);
+    expect(lightIds.slice(0, -1)).toEqual(THEME_IDS.filter((t) => THEMES[t].scheme === "light"));
     expect(themesForScheme("dark").map((t) => t.id)).not.toContain(id);
   });
 
@@ -911,13 +911,13 @@ describe("runtime themes", () => {
 
   test("addTheme refuses a built-in or already-registered id", async () => {
     addTheme(await customThemeFile("runtime-twice", "dark"));
-    const dark = themesForScheme("dark");
+    const darkBefore = themesForScheme("dark");
     for (const id of ["caret-dark", "dracula", "runtime-twice"]) {
       const file = await customThemeFile(id, "dark");
       expect(() => addTheme(file)).toThrow(id);
     }
     expect(themeFor("caret-dark")).toBe(THEMES["caret-dark"]);
-    expect(themesForScheme("dark")).toEqual(dark);
+    expect(themesForScheme("dark")).toEqual(darkBefore);
   });
 
   test("an unregistered string is not a ThemeId", () => {
