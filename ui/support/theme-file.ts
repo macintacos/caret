@@ -21,8 +21,8 @@ export async function themeFileColors(
   name: string,
 ): Promise<ThemeFile["palette"] & Record<SyntaxRole, string>> {
   const file = await readThemeFile(name);
-  const roles = Object.entries(file.syntax).map(([role, style]) => [role, style.color]);
-  return { ...file.palette, ...(Object.fromEntries(roles) as Record<SyntaxRole, string>) };
+  const roleColors = Object.entries(file.syntax).map(([role, style]) => [role, style.color]);
+  return { ...file.palette, ...(Object.fromEntries(roleColors) as Record<SyntaxRole, string>) };
 }
 
 /** caret's own theme file under a new id, with a keyword and accent no built-in uses,

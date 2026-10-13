@@ -64,7 +64,7 @@ const ITALIC_MARKERS = "punctuation.definition.italic.markdown";
 /** The scopes the three structural rules own, in the order the resolver appends them. */
 const STRUCTURAL_SCOPES = [FENCE_MARKERS, FENCE_LANGUAGE, INLINE_RAW];
 
-const ROLES = Object.keys(ROLE_SCOPES) as SyntaxRole[];
+const SYNTAX_ROLES = Object.keys(ROLE_SCOPES) as SyntaxRole[];
 
 /** The expected color for each Palette field, sourced from a theme's tokens. The
  * ColorToken-keyed tokens map guarantees each lookup resolves. */
@@ -127,8 +127,8 @@ describe("caret's own shiki themes", () => {
         // The reverse direction: a role color no rule actually names is a color
         // nothing paints.
         const emitted = themeColors(theme);
-        for (const color of ROLES) {
-          expect(emitted, `${id}.${color} (${record[color]})`).toContain(record[color]);
+        for (const role of SYNTAX_ROLES) {
+          expect(emitted, `${id}.${role} (${record[role]})`).toContain(record[role]);
         }
       });
 

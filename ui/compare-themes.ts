@@ -167,8 +167,11 @@ async function main(): Promise<void> {
   const ids = Object.keys(UPSTREAM_SHIKI_THEMES) as VendorThemeId[];
   const results = [];
   for (const id of ids) {
-    const name = UPSTREAM_SHIKI_THEMES[id].name ?? id;
-    results.push({ id: name, ...(await themeDrift(highlighter, vendorPair(id), THEME_SAMPLES)) });
+    const upstreamName = UPSTREAM_SHIKI_THEMES[id].name ?? id;
+    results.push({
+      id: upstreamName,
+      ...(await themeDrift(highlighter, vendorPair(id), THEME_SAMPLES)),
+    });
   }
   writeFileSync(REPORT, renderDriftReport(results));
 }

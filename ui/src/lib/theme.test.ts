@@ -277,7 +277,7 @@ const CARET_RECORDS = [
   ["caret-dark", await themeFileColors("caret-dark.json")],
   ["caret-light", await themeFileColors("caret-light.json")],
 ] as const;
-const CARET_ROLES = Object.keys(ROLE_SCOPES) as SyntaxRole[];
+const SYNTAX_ROLES = Object.keys(ROLE_SCOPES) as SyntaxRole[];
 
 describe("caret's theme file colors", () => {
   // The syntax hues render on --paper-sunk (the code body and the diff surface), which
@@ -290,12 +290,12 @@ describe("caret's theme file colors", () => {
 
   test("clears caret's contrast floors for every syntax role, on --paper-sunk", () => {
     for (const [id, record] of CARET_RECORDS) {
-      for (const color of CARET_ROLES) {
-        const ratio = contrast(record[color], record.sunk);
-        if (RECESSIVE.includes(color)) {
-          expect(ratio, `${id} ${color} on sunk (recessive)`).toBeGreaterThan(3);
+      for (const role of SYNTAX_ROLES) {
+        const ratio = contrast(record[role], record.sunk);
+        if (RECESSIVE.includes(role)) {
+          expect(ratio, `${id} ${role} on sunk (recessive)`).toBeGreaterThan(3);
         } else {
-          expect(ratio, `${id} ${color} on sunk`).toBeGreaterThanOrEqual(4.5);
+          expect(ratio, `${id} ${role} on sunk`).toBeGreaterThanOrEqual(4.5);
         }
       }
     }
