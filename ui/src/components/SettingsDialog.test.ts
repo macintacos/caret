@@ -4,6 +4,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import type { UpdateReport } from "@core/lib/types";
 import { flushUntil, render } from "@ui/support/mount.ts";
+import { installRoutedFetch, jsonResponse } from "@ui/support/routed-fetch.ts";
+import { customThemeSource } from "@ui/support/theme-file.ts";
 import SettingsDialog from "@/components/SettingsDialog.svelte";
 import { writeDiffStyle } from "$lib/diffStylePref.ts";
 import {
@@ -503,5 +505,26 @@ describe("SettingsDialog Appearance pane", () => {
     );
     await flushUntil(flush, mounted);
     expect(document.body.querySelector("[data-theme-errors]")?.textContent).toContain("neon.json");
+  });
+
+  test("hands an upload's refreshed load errors to onThemeErrors", async () => {
+    const theme = await customThemeSource("dialog-upload", "dark");
+    const errors = [{ file: "old.json", messages: ["bad"] }];
+    const cap = installRoutedFetch(() => () => Promise.resolve(jsonResponse({ theme, errors })));
+    const seen: unknown[] = [];
+    try {
+      const { flush } = render(
+        SettingsDialog,
+        props({ onThemeErrors: (e: unknown) => seen.push(e) }),
+      );
+      await flushUntil(flush, mounted);
+      const input = document.body.querySelector("[data-theme-upload] input") as HTMLInputElement;
+      Object.defineProperty(input, "files", { value: [new File(["{}"], "x.json")] });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      await flushUntil(flush, () => seen.length > 0);
+      expect(seen).toEqual([errors]);
+    } finally {
+      cap.restore();
+    }
   });
 });

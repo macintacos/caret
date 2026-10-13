@@ -17,6 +17,8 @@ import type {
   ResolveBody,
   SkillDescriptionResponse,
   SkillRef,
+  ThemeUpload,
+  ThemeUploadRefusal,
   UpdateChanges,
   UpdateReport,
 } from "@core/lib/types";
@@ -136,6 +138,38 @@ function configSaveMessage(err: unknown): string {
     return "caret couldn't edit config.toml safely — set the [updates] check line there by hand.";
   }
   return `The daemon couldn't save the change (HTTP ${err.status}).`;
+}
+
+export type ThemeUploadResult = ({ ok: true } & ThemeUpload) | ({ ok: false } & ThemeUploadRefusal);
+
+/** Save a theme file's text through the daemon. Never throws: a refusal carries the
+ * daemon's own lines, any other failure one sentence of ours. */
+export async function uploadTheme(text: string): Promise<ThemeUploadResult> {
+  const result = await postTheme(text);
+  if (!result.ok) uiLog.warn("request", "theme upload failed", { errors: result.errors.length });
+  return result;
+}
+
+async function postTheme(text: string): Promise<ThemeUploadResult> {
+  let res: Response;
+  try {
+    res = await fetch("/api/themes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: text,
+    });
+  } catch {
+    return { ok: false, errors: ["The caret daemon isn't reachable, so the theme wasn't saved."] };
+  }
+  const body: unknown = await res.json().catch(() => undefined);
+  if (res.ok && body !== undefined) return { ok: true, ...(body as ThemeUpload) };
+  if (!res.ok && isRefusal(body)) return { ok: false, errors: body.errors };
+  return { ok: false, errors: [`The daemon couldn't save the theme (HTTP ${res.status}).`] };
+}
+
+function isRefusal(body: unknown): body is ThemeUploadRefusal {
+  const errors = (body as { errors?: unknown } | null | undefined)?.errors;
+  return Array.isArray(errors) && errors.every((line) => typeof line === "string");
 }
 
 export async function listReviews(): Promise<ClientReview[]> {

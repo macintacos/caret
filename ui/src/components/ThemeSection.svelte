@@ -2,7 +2,7 @@
   // The Appearance pane's theme block (EXC-773): the Mode segmented control, then
   // BOTH theme slots — always visible, never hidden behind the current mode —
   // then one line saying which palette is showing and why, then the list of theme
-  // files that failed to load.
+  // files that failed to load, then the theme upload control and its last outcome.
   //
   // Both slots stay on screen because they are persistent settings, not a function
   // of the current mode; showing both is what teaches that the pairing exists. The
@@ -28,6 +28,10 @@
   import { appearance } from "@/state/appearance.svelte.ts";
   import * as Alert from "$lib/components/ui/alert/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import { uploadTheme } from "$lib/api.ts";
+  import { registerUploadedTheme } from "$lib/registerTheme.ts";
+  import { buildFileTheme } from "$lib/theme-file.ts";
   import {
     Field,
     FieldContent,
@@ -52,8 +56,42 @@
     /** Apply a field's new value now (the shell persists + confirms with a toast).
      * The shell's own `apply` owns the await; these call sites just hand it off. */
     onApply: (field: StagedField, value: unknown) => void | Promise<void>;
+    /** The folder's load errors as they stand after a successful upload. */
+    onThemeErrors: (errors: readonly ThemeFileError[]) => void;
   }
-  let { fields, errors, onApply }: Props = $props();
+  let { fields, errors, onApply, onThemeErrors }: Props = $props();
+
+  type Outcome = { ok: true; message: string } | { ok: false; file: string; errors: string[] };
+  let picker: HTMLInputElement | undefined = $state();
+  let uploading = $state(false);
+  let outcome: Outcome | null = $state(null);
+
+  async function upload(input: HTMLInputElement): Promise<void> {
+    const file = input.files?.[0];
+    if (file === undefined) return;
+    uploading = true;
+    outcome = await uploadOutcome(file);
+    uploading = false;
+    // Cleared so picking the same file again still fires `change`.
+    input.value = "";
+  }
+
+  async function uploadOutcome(file: File): Promise<Outcome> {
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      return { ok: false, file: file.name, errors: ["The file couldn't be read."] };
+    }
+    const result = await uploadTheme(text);
+    if (!result.ok) return { ok: false, file: file.name, errors: result.errors };
+    const { label, scheme } = result.theme;
+    const how = registerUploadedTheme(buildFileTheme(result.theme));
+    onThemeErrors(result.errors);
+    const message =
+      how === "added" ? `Added "${label}" to the ${scheme} themes.` : `Replaced "${label}".`;
+    return { ok: true, message };
+  }
 
   // Which slot wears the pill: the live resolved scheme, so an OS flip moves it.
   const liveKey = $derived(appearance.scheme === "light" ? THEME_FIELD.light : THEME_FIELD.dark);
@@ -124,6 +162,37 @@
       </Alert.Description>
     </Alert.Root>
   {/if}
+
+  <div class="theme-upload" data-theme-upload>
+    <div class="upload-row">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={uploading}
+        onclick={() => picker?.click()}>Upload theme file…</Button
+      >
+      <p class="upload-hint">Adds a .json theme file, or replaces the theme with the same id.</p>
+    </div>
+    <input
+      bind:this={picker}
+      type="file"
+      accept=".json,application/json"
+      hidden
+      onchange={(e) => upload(e.currentTarget)}
+    />
+    {#if outcome?.ok}
+      <p class="upload-status" role="status" data-theme-upload-status>{outcome.message}</p>
+    {:else if outcome}
+      <Alert.Root variant="destructive" class="theme-errors" data-theme-upload-errors>
+        <Alert.Title>{outcome.file} wasn't added</Alert.Title>
+        <Alert.Description>
+          <ul class="error-list">
+            {#each outcome.errors as message, i (i)}<li>{message}</li>{/each}
+          </ul>
+        </Alert.Description>
+      </Alert.Root>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -158,6 +227,28 @@
     margin: 0;
     font-size: var(--text-xs);
     color: var(--ink-faint);
+  }
+
+  .theme-upload {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
+  .upload-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .upload-hint,
+  .upload-status {
+    margin: 0;
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+  .upload-status {
+    color: var(--ink);
   }
 
   .theme-section :global(.theme-errors) {

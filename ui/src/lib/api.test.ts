@@ -37,6 +37,7 @@ import {
   resolveReview,
   searchFiles,
   setConfig,
+  uploadTheme,
 } from "$lib/api.ts";
 import { flush } from "$lib/log.ts";
 
@@ -695,6 +696,65 @@ describe("setConfig", () => {
 
     // The daemon logs the write; a second UI line would only restate it.
     expectNoRecords();
+  });
+});
+
+describe("uploadTheme", () => {
+  const refusal = (status: number, errors: string[]) => () =>
+    Promise.resolve(Response.json({ errors }, { status }));
+
+  test("a saved theme returns the daemon's theme and load errors", async () => {
+    let seen: { url: string; options: RequestInit | undefined } | undefined;
+    const body = { theme: { id: "nightly" }, errors: [{ file: "x.json", messages: ["bad"] }] };
+    respond = (url, options) => {
+      seen = { url, options };
+      return Promise.resolve(jsonResponse(body));
+    };
+    const text = '{ "id": "nightly" }\n';
+
+    expect(await uploadTheme(text)).toEqual({ ok: true, ...body } as never);
+    expect(seen?.url).toBe("/api/themes");
+    expect(seen?.options?.method).toBe("POST");
+    expect(seen?.options?.body).toBe(text);
+  });
+
+  test("a refusal carries the daemon's own lines", async () => {
+    for (const status of [400, 413]) {
+      respond = refusal(status, ["upload: id is missing"]);
+      expect(await uploadTheme("{}")).toEqual({ ok: false, errors: ["upload: id is missing"] });
+    }
+  });
+
+  test("a refusal the daemon did not explain names its status", async () => {
+    respond = () => Promise.resolve(new Response("Forbidden", { status: 403 }));
+    expect(await uploadTheme("{}")).toEqual({
+      ok: false,
+      errors: ["The daemon couldn't save the theme (HTTP 403)."],
+    });
+  });
+
+  test("a JSON refusal without an errors list names its status", async () => {
+    respond = () =>
+      Promise.resolve(Response.json({ error: "caret daemon token required" }, { status: 401 }));
+    expect(await uploadTheme("{}")).toEqual({
+      ok: false,
+      errors: ["The daemon couldn't save the theme (HTTP 401)."],
+    });
+  });
+
+  test("an unreachable daemon says nothing was saved", async () => {
+    respond = () => Promise.reject(new Error("offline"));
+    expect(await uploadTheme("{}")).toEqual({
+      ok: false,
+      errors: ["The caret daemon isn't reachable, so the theme wasn't saved."],
+    });
+  });
+
+  test("a refused upload warns at step request", async () => {
+    respond = refusal(400, ["bad"]);
+    await uploadTheme("{}");
+    await flush();
+    expectLoggedAt("warn", "request");
   });
 });
 

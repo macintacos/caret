@@ -953,6 +953,7 @@
       {updatePending}
       {updateReport}
       {themeErrors}
+      onThemeErrors={(errors) => (themeErrors = errors)}
       onWhatsNew={openWhatsNew}
     />
   {/snippet}

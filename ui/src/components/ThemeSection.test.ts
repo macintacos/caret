@@ -2,7 +2,9 @@ import "@ui/support/mount.ts";
 
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { render } from "@ui/support/mount.ts";
+import { flushUntil, render } from "@ui/support/mount.ts";
+import { installRoutedFetch, jsonResponse, type Respond } from "@ui/support/routed-fetch.ts";
+import { customThemeSource } from "@ui/support/theme-file.ts";
 import ThemeSection from "@/components/ThemeSection.svelte";
 import { appearance } from "@/state/appearance.svelte.ts";
 import {
@@ -12,6 +14,7 @@ import {
   THEME_FIELD,
   THEME_SECTION,
 } from "$lib/settingsRegistry.ts";
+import { themesForScheme } from "$lib/theme.ts";
 
 // The section reads the live appearance singleton, so a seeded mode/slot must be
 // wound back or it leaks into the next test — clear storage, then boot() re-seeds
@@ -36,6 +39,7 @@ function props(over: Record<string, unknown> = {}) {
     fields: THEME_FIELDS,
     errors: [],
     onApply: () => {},
+    onThemeErrors: () => {},
     ...over,
   };
 }
@@ -197,5 +201,59 @@ describe("theme file errors", () => {
   test("renders no error block when every file loaded", () => {
     render(ThemeSection, props());
     expect(has("[data-theme-errors]")).toBe(false);
+  });
+});
+
+describe("theme upload", () => {
+  let respond: Respond;
+  const cap = { restore: () => {} };
+  afterEach(() => cap.restore());
+
+  function pick(text: string) {
+    const input = q("[data-theme-upload] input[type=file]") as HTMLInputElement;
+    Object.defineProperty(input, "files", { value: [new File([text], "nightly.json")] });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  test("offers a button that opens a hidden .json file input", () => {
+    render(ThemeSection, props());
+    expect(has("[data-theme-upload] button")).toBe(true);
+    const input = q("[data-theme-upload] input[type=file]") as HTMLInputElement;
+    expect(input.accept).toContain(".json");
+  });
+
+  test("a saved theme confirms, refreshes the load errors, and joins its slot", async () => {
+    const theme = await customThemeSource("upload-nightly", "dark");
+    const errors = [{ file: "old.json", messages: ["bad"] }];
+    respond = () => Promise.resolve(jsonResponse({ theme, errors }));
+    cap.restore = installRoutedFetch(() => respond).restore;
+    const seen: unknown[] = [];
+    const { flush } = render(ThemeSection, props({ onThemeErrors: (e: unknown) => seen.push(e) }));
+
+    pick(JSON.stringify(theme));
+    await flushUntil(flush, () => has("[data-theme-upload-status]"));
+
+    expect(text("[data-theme-upload-status]")).toContain(theme.label);
+    expect(seen).toEqual([errors]);
+    expect(themesForScheme("dark").some((t) => t.id === theme.id)).toBe(true);
+  });
+
+  test("a refusal lists each line and leaves the load errors alone", async () => {
+    respond = () =>
+      Promise.resolve(
+        Response.json({ errors: ["upload: id is missing", "upload: x"] }, { status: 400 }),
+      );
+    cap.restore = installRoutedFetch(() => respond).restore;
+    const seen: unknown[] = [];
+    const { flush } = render(ThemeSection, props({ onThemeErrors: (e: unknown) => seen.push(e) }));
+
+    pick("{}");
+    await flushUntil(flush, () => has("[data-theme-upload-errors]"));
+
+    const block = text("[data-theme-upload-errors]");
+    expect(block).toContain("nightly.json");
+    expect(block).toContain("upload: id is missing");
+    expect(block).toContain("upload: x");
+    expect(seen).toEqual([]);
   });
 });
