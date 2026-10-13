@@ -1,17 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
-import type { ThemeRegistrationRaw } from "shiki/core";
+import type { HighlighterCore, ThemeRegistrationRaw } from "shiki/core";
 
-import { createHighlighter } from "$lib/diffview/shiki-bundle.ts";
+import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
+import { CARET_TOKENIZE_OPTIONS, createHighlighter } from "$lib/diffview/shiki-bundle.ts";
 
 import { renderDriftReport, themeDrift } from "./compare-themes.ts";
+import { THEME_SAMPLES } from "./theme-sample.ts";
 
-function fixtureTheme(
-  name: string,
-  keyword: { foreground: string; fontStyle?: string },
-): ThemeRegistrationRaw {
+function fixtureTheme(keyword: { foreground: string; fontStyle?: string }): ThemeRegistrationRaw {
   return {
-    name,
+    name: "fixture",
     type: "dark",
     settings: [{ settings: { foreground: "#cccccc" } }, { scope: ["storage"], settings: keyword }],
   };
@@ -24,8 +23,10 @@ describe("themeDrift", () => {
   test("identical themes give no drift", async () => {
     const result = await themeDrift(
       highlighter,
-      fixtureTheme("a", { foreground: "#ff0000" }),
-      fixtureTheme("b", { foreground: "#ff0000" }),
+      {
+        original: fixtureTheme({ foreground: "#ff0000" }),
+        converted: fixtureTheme({ foreground: "#ff0000" }),
+      },
       SAMPLE,
     );
     expect(result.drift).toEqual([]);
@@ -35,8 +36,10 @@ describe("themeDrift", () => {
   test("a differing keyword color is reported with its place and both colors", async () => {
     const result = await themeDrift(
       highlighter,
-      fixtureTheme("c", { foreground: "#ff0000" }),
-      fixtureTheme("d", { foreground: "#00ff00" }),
+      {
+        original: fixtureTheme({ foreground: "#ff0000" }),
+        converted: fixtureTheme({ foreground: "#00ff00" }),
+      },
       SAMPLE,
     );
     expect(result.drift).toEqual([
@@ -53,8 +56,10 @@ describe("themeDrift", () => {
   test("a font-style-only difference is reported", async () => {
     const result = await themeDrift(
       highlighter,
-      fixtureTheme("e", { foreground: "#ff0000", fontStyle: "italic" }),
-      fixtureTheme("f", { foreground: "#ff0000" }),
+      {
+        original: fixtureTheme({ foreground: "#ff0000", fontStyle: "italic" }),
+        converted: fixtureTheme({ foreground: "#ff0000" }),
+      },
       SAMPLE,
     );
     expect(result.drift.map((d) => [d.text, d.original.fontStyle, d.converted.fontStyle])).toEqual([
@@ -63,19 +68,47 @@ describe("themeDrift", () => {
   });
 
   test("whitespace-only tokens are never reported", async () => {
-    const whitespace = (name: string, fg: string): ThemeRegistrationRaw => ({
-      name,
+    const whitespace = (fg: string): ThemeRegistrationRaw => ({
+      name: "fixture",
       type: "dark",
       settings: [{ settings: { foreground: fg } }],
     });
     const result = await themeDrift(
       highlighter,
-      whitespace("g", "#111111"),
-      whitespace("h", "#222222"),
+      { original: whitespace("#111111"), converted: whitespace("#222222") },
       [{ lang: "typescript", code: "x\n   \ny" }],
     );
     expect(result.drift.map((d) => d.line)).toEqual([1, 3]);
   });
+});
+
+test("the sample reaches every role's canonical scope", async () => {
+  const roles = Object.entries(ROLE_SCOPES);
+  const color = (i: number) => `#0000${i.toString(16).padStart(2, "0")}`;
+  const probe: ThemeRegistrationRaw = {
+    name: "role-probe",
+    type: "dark",
+    settings: [
+      { settings: { foreground: "#ffffff" } },
+      ...roles.map(([, [canonical]], i) => ({
+        scope: canonical,
+        settings: { foreground: color(i) },
+      })),
+    ],
+  };
+  const h: HighlighterCore = await createHighlighter({
+    themes: [probe],
+    langs: THEME_SAMPLES.map((s) => s.lang),
+  });
+  const seen = new Set(
+    THEME_SAMPLES.flatMap(({ lang, code }) =>
+      h
+        .codeToTokensBase(code, { lang, theme: "role-probe", ...CARET_TOKENIZE_OPTIONS })
+        .flat()
+        .map((t) => t.color?.toLowerCase()),
+    ),
+  );
+  expect(roles.filter((_, i) => !seen.has(color(i))).map(([role]) => role)).toEqual([]);
 });
 
 describe("renderDriftReport", () => {

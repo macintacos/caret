@@ -25,7 +25,7 @@ type FlatRule = { selector: string; settings: VsCodeTokenRule["settings"] };
 function flattenRules(rules: readonly VsCodeTokenRule[]): FlatRule[] {
   return rules.flatMap(({ scope, settings }) => {
     if (scope === undefined) return [{ selector: "", settings }];
-    const selectors = typeof scope === "string" ? scope.split(",") : scope;
+    const selectors = typeof scope === "string" ? scope.replace(/^,+|,+$/g, "").split(",") : scope;
     return selectors.map((selector) => ({ selector: selector.trim(), settings }));
   });
 }
@@ -45,6 +45,7 @@ function resolve(rules: readonly FlatRule[], scope: string, key: Setting): strin
   for (const { selector, settings } of rules) {
     const value = settings[key];
     const rank = specificity(selector, scope);
+    // An equal rank falls through, so a later rule wins a tie, as TextMate's does.
     if (value === undefined || rank < 0 || rank < bestRank) continue;
     best = value;
     bestRank = rank;
@@ -73,9 +74,9 @@ function parseFontStyle(fontStyle: string | undefined): RoleStyle["fontStyle"] {
 function roleStyle(
   rules: readonly FlatRule[],
   role: SyntaxRole,
+  scope: string,
   defaultColor: string | undefined,
 ): RoleStyle {
-  const scope = ROLE_SCOPES[role][0] ?? role;
   const color = resolve(rules, scope, "foreground") ?? defaultColor;
   if (color === undefined) throw new Error(`the theme sets no color for the ${role} role`);
   const fontStyle = parseFontStyle(resolve(rules, scope, "fontStyle"));
@@ -88,9 +89,9 @@ export function syntaxFromVsCodeTheme(theme: VsCodeTheme): ThemeSyntax {
   const rules = flattenRules(theme.settings ?? theme.tokenColors ?? []);
   const defaultColor = theme.colors?.["editor.foreground"];
   return Object.fromEntries(
-    Object.keys(ROLE_SCOPES).map((role) => [
+    Object.entries(ROLE_SCOPES).map(([role, [scope]]) => [
       role,
-      roleStyle(rules, role as SyntaxRole, defaultColor),
+      roleStyle(rules, role as SyntaxRole, scope, defaultColor),
     ]),
   ) as ThemeSyntax;
 }

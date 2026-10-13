@@ -1,13 +1,13 @@
 import type { SyntaxRole } from "./schema.ts";
 
+/** The TextMate scopes each syntax role paints, its canonical scope first — the one
+ * `syntaxFromVsCodeTheme` reads a theme's style from. */
 // TextMate resolves the longest matching selector, so specificity does the ordering
 // work and the groups below read top-down by role rather than by precedence:
 // `keyword.operator` lands with the punctuation it looks like, `variable.other.property`
 // takes the key hue over the identifier one, and `punctuation.definition.string` stays
 // with its string.
-// Each list leads with the role's canonical scope, the one `syntaxFromVsCodeTheme` reads a
-// theme's style from.
-export const ROLE_SCOPES: Record<SyntaxRole, readonly string[]> = {
+export const ROLE_SCOPES: Record<SyntaxRole, readonly [canonical: string, ...more: string[]]> = {
   comment: ["comment", "punctuation.definition.comment", "string.comment"],
   punctuation: [
     "punctuation",

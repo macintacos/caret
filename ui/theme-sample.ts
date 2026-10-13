@@ -1,6 +1,6 @@
-// The code ui/compare-themes.ts highlights. Across the five languages it exercises every
-// syntax role's canonical scope (role-scopes.ts), so a role the conversion gets wrong shows
-// up as drift.
+// The code ui/compare-themes.ts highlights. Across the six languages it exercises every
+// syntax role's canonical scope (compare-themes.test.ts pins it), so a role the conversion
+// gets wrong shows up as drift.
 
 export interface ThemeSample {
   lang: string;
@@ -88,10 +88,14 @@ const DIFF = `--- a/src/review.ts
  }
 `;
 
+const HTML = `<p>Press <kbd class="key" title="Enter">Enter</kbd> to approve.</p>
+`;
+
 export const THEME_SAMPLES: readonly ThemeSample[] = [
   { lang: "typescript", code: TYPESCRIPT },
   { lang: "markdown", code: MARKDOWN },
   { lang: "json", code: JSON_SAMPLE },
   { lang: "shellscript", code: SHELL },
   { lang: "diff", code: DIFF },
+  { lang: "html", code: HTML },
 ];

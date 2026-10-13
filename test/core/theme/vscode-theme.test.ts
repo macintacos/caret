@@ -43,6 +43,11 @@ describe("syntaxFromVsCodeTheme selector matching", () => {
     expect(syntax.function.color).toBe("#222222");
   });
 
+  test("an edge comma in a string scope adds no default selector", () => {
+    const syntax = convert([{ scope: ",keyword,", settings: { foreground: "#ff0000" } }]);
+    expect(syntax.variable.color).toBe("#000000");
+  });
+
   test("a later rule wins a specificity tie", () => {
     const syntax = convert([
       { scope: "string", settings: { foreground: "#111111" } },
