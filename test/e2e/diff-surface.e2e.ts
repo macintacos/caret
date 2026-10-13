@@ -41,6 +41,7 @@ import {
   lineCenterY,
   PLAN_SURFACE,
   planSurface,
+  probeColor,
   revealGutterPlus,
   rowHeights,
   SEAM_STRIP,
@@ -48,6 +49,7 @@ import {
   settledMutations,
   submitComposer,
 } from "@test/e2e/support/source-view.ts";
+import { caretThemeVariant, selectThemeFile } from "@test/e2e/support/themes.ts";
 
 // A plan tall enough to scroll the source view past one viewport.
 const TALL_PLAN = `# Tall Plan\n\n${Array.from({ length: 120 }, (_, i) => `Line ${i + 1} of the plan body, long enough to overflow the viewport.`).join("\n\n")}\n`;
@@ -2806,15 +2808,25 @@ function readQuoteRow(page: Page, n: number) {
   }, n);
 }
 
+const UNSTYLED_ACCENT = "#00c2a8";
+const UNSTYLED_ACCENT_RGB = "rgb(0, 194, 168)";
+
 for (const colorScheme of ["light", "dark"] as const) {
   test(`blockquote level bars paint one bar per level in ${colorScheme} (EXC-863)`, async ({
     daemon,
     page,
   }) => {
     await page.emulateMedia({ colorScheme });
+    // caret's own themes style a quote, which drops the subdue asserted below.
+    await selectThemeFile(
+      page,
+      daemon,
+      caretThemeVariant("unstyled", colorScheme, { accent: UNSTYLED_ACCENT }),
+    );
     await daemon.seed({ plan: QUOTE_PLAN });
     await page.goto("/");
     await planSurface(page);
+    await expect.poll(() => probeColor(page, "--accent")).toBe(UNSTYLED_ACCENT_RGB);
     await expect.poll(async () => (await readQuoteRow(page, 5)).depth).toBe("1");
 
     const rows = [

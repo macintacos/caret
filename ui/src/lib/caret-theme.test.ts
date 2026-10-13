@@ -34,13 +34,11 @@ import { buildFileTheme } from "$lib/theme-file.ts";
 // rules, added last for every registered theme. caret's own pair's themes are pinned
 // alongside — they spend their file's colors and nothing else.
 
-// The tokens these tests read: the two the fence line's own rules paint with, plus
-// the one a fenced block's body takes under caret's own themes. (The third structural
-// rule's token, --ink-soft, is asserted directly where it is read.)
+// The tokens these tests read: the two the fence line's own rules paint with. (The third
+// structural rule's token, --ink-soft, is asserted directly where it is read.)
 const FIELD_TO_TOKEN: Record<string, ColorToken> = {
   comment: "--ink-faint",
   keyword: "--accent",
-  fenceBody: "--accent-bright",
 };
 
 /** caret's two palettes paired with the colors of the theme file each is built from. */
@@ -247,12 +245,11 @@ describe("fenced-code fence line", () => {
   }
 
   // The body is the half caret does NOT override, so it is the theme's own: under
-  // caret's pair the fence body takes --accent-bright (theme files carry no
-  // inline-code role — that is EXC-858's), and the Dracula block below is the same
-  // assertion from the vendor side.
-  test("leaves the code body to caret's own theme (--accent-bright)", async () => {
+  // caret's pair the fence body takes the file's inline-code style, which it shares, and
+  // the Dracula block below is the same assertion from the vendor side.
+  test("leaves the code body to the theme's own inline-code style", async () => {
     const code = (await tokenizeFence("caret-light"))[1]?.find((t) => t.content === "code");
-    expect(code?.color?.toLowerCase()).toBe(expectedPalette("caret-light").fenceBody);
+    expect(code?.color?.toLowerCase()).toBe(THEMES["caret-light"].markdown.code?.color);
   });
 });
 

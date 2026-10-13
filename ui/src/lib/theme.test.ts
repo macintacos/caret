@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { BUILTIN_THEME_IDS } from "@core/theme/builtin-ids.ts";
 import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
-import type { SyntaxRole } from "@core/theme/schema.ts";
+import type { MarkdownElement, SyntaxRole } from "@core/theme/schema.ts";
 import { customThemeFile, readThemeFile, themeFileColors } from "@ui/support/theme-file.ts";
 import { shikiThemeName } from "$lib/caret-theme.ts";
 import { QUOTE_SUBDUE } from "$lib/diffview/coreStyles.ts";
@@ -124,6 +124,38 @@ const TABLE_GROUNDS = [0.02, TABLE_CARD_FILL, 0.08] as const;
 const themeEntries = () =>
   Object.entries(THEMES) as [BuiltinThemeId, (typeof THEMES)[BuiltinThemeId]][];
 
+/** A color's CIELAB coordinates (D65), so "can a reader tell these two apart" weighs
+ * lightness alongside hue, as the eye does. */
+function lab(hex: string): [number, number, number] {
+  const linear = channels(hex).map((c) =>
+    c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+  );
+  const [r, g, b] = linear as [number, number, number];
+  const f = (t: number) => (t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116);
+  const fx = f((0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047);
+  const fy = f(0.2126 * r + 0.7152 * g + 0.0722 * b);
+  const fz = f((0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883);
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+
+/** The CIE76 distance between two colors. */
+function deltaE(a: string, b: string): number {
+  const [p, q] = [lab(a), lab(b)];
+  return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+}
+
+/** The shorter way round the hue circle between two colors, in degrees. */
+function hueGap(a: string, b: string): number {
+  const gap = Math.abs(hue(a) - hue(b));
+  return Math.min(gap, 360 - gap);
+}
+
+/** A translucent token composited over `ground`, as the browser paints it. */
+function over(fg: string, ground: string): string {
+  const alpha = /^#[0-9a-f]{6}([0-9a-f]{2})$/i.exec(fg)?.[1];
+  return banded(ground, fg.slice(0, 7), alpha === undefined ? 1 : Number.parseInt(alpha, 16) / 255);
+}
+
 describe("THEMES", () => {
   test("THEME_IDS lists caret's palettes first, then each vendor family", () => {
     expect(THEME_IDS).toEqual([
@@ -228,7 +260,7 @@ describe("THEMES", () => {
       "--chip-bold": "#f7f2ea24",
       "--chip-italic": "#bcb0a124",
       "--chip-code": "#9a8c7e24",
-      "--chip-link": "#ffb27724",
+      "--chip-link": "#f56f8e24",
       "--chip-ref": "#4ed05624",
       "--chip-skill": "#6ec4e424",
       "--ok": "#4ed056",
@@ -258,7 +290,7 @@ describe("THEMES", () => {
       "--chip-bold": "#1913101c",
       "--chip-italic": "#544b431c",
       "--chip-code": "#7a6f631c",
-      "--chip-link": "#e06a241c",
+      "--chip-link": "#ab1f431c",
       "--chip-ref": "#1d802a1c",
       "--chip-skill": "#145d8f1c",
       "--ok": "#1d802a",
@@ -724,6 +756,120 @@ describe("every theme", () => {
       expect(saturation(theme.tokens["--chip-code"]), `${id} --chip-code`).toBeLessThan(
         CHROMA_FLOOR,
       );
+    }
+  });
+
+  // A theme file's markdown styles color the plan's body copy, so each is text held to
+  // WCAG AA on the plan surface, as the syntax roles are. An element drawn on a chip is
+  // measured on the chip's tint as well: a link chip riding the link's own hue moves the
+  // ground toward the text. Which palettes the floor pushes back onto their ink ramp is
+  // in doc/agents/svelte-rules.md § CSS-token discipline.
+  const MARKDOWN_CHIPS: Partial<Record<MarkdownElement, ColorToken>> = {
+    code: "--chip-code",
+    link: "--chip-link",
+    bold: "--chip-bold",
+    italic: "--chip-italic",
+  };
+  test("keeps every markdown text style at AA on the ground it renders on", () => {
+    for (const [id, theme] of themeEntries()) {
+      const sunk = theme.tokens["--paper-sunk"];
+      for (const [element, style] of Object.entries(theme.markdown)) {
+        if (element === "listMarker") continue;
+        const chip = MARKDOWN_CHIPS[element as MarkdownElement];
+        for (const ground of chip ? [sunk, over(theme.tokens[chip], sunk)] : [sunk]) {
+          expect(
+            contrast(style.color, ground),
+            `${id} ${element} on ${ground}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  });
+
+  // The bullet replaces its dash, so a list-marker style joins the replacement family
+  // above and owes the same non-text floor on the same grounds.
+  test("keeps a list-marker style above the non-text floor on every palette", () => {
+    expectAboveNonTextFloor(
+      (theme) => theme.markdown.listMarker?.color ?? theme.tokens["--ink-soft"],
+      "list marker",
+    );
+  });
+
+  // The hue rules below exempt a style that spends the palette's own ink ramp: those
+  // colors carry no hue to confuse, and the weight, slant, chip and underline tell the
+  // elements apart as they did before a theme could style them.
+  const onInkRamp = (theme: (typeof THEMES)[BuiltinThemeId], color: string) =>
+    [theme.tokens["--ink"], theme.tokens["--ink-soft"], theme.tokens["--ink-faint"]].includes(
+      color,
+    );
+
+  // The accent marks the current selection, so a markdown element in its hue reads as
+  // selected. Falsifiable: Dracula's headings in its purple accent red here.
+  test("keeps every hued markdown style off the accent's hue", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const [element, style] of Object.entries(theme.markdown)) {
+        if (onInkRamp(theme, style.color)) continue;
+        expect(
+          hueGap(style.color, theme.tokens["--accent"]),
+          `${id} ${element}`,
+        ).toBeGreaterThanOrEqual(15);
+      }
+    }
+  });
+
+  // A resolved reference shares its sentence with the inline elements, and a skill chip
+  // shares the comment editor's with a link, so neither may borrow its hue. 30 degrees,
+  // half the chip pins' floor, because a text color is a smaller patch than a tint.
+  // Falsifiable: caret-dark italics in its string green sit 23 degrees from --chip-ref.
+  test("keeps inline markdown styles off the reference chip's hue, and a link off the skill chip's", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const element of ["code", "link", "bold", "italic"] as const) {
+        const style = theme.markdown[element];
+        if (style === undefined || onInkRamp(theme, style.color)) continue;
+        const near = [
+          "--chip-ref",
+          ...(element === "link" ? (["--chip-skill"] as const) : []),
+        ] as const;
+        for (const chip of near) {
+          expect(
+            hueGap(style.color, theme.tokens[chip]),
+            `${id} ${element} vs ${chip}`,
+          ).toBeGreaterThanOrEqual(30);
+        }
+      }
+    }
+  });
+
+  // The elements that share a line have to read as different colors where both spend a
+  // hue: the four inline ones among themselves, a heading against the code and links in
+  // it, a quote against everything nested in it, and a list marker against what starts
+  // its item. A heading never shares a line with a list marker or a quote, which is what
+  // lets a palette spend one hue on its structure. 20 is a large step on the CIE76 scale
+  // — a glance, not a comparison. Falsifiable: Dracula's link in its italic yellow.
+  const SHARE_A_LINE: [MarkdownElement, MarkdownElement][] = [
+    ["code", "link"],
+    ["code", "bold"],
+    ["code", "italic"],
+    ["link", "bold"],
+    ["link", "italic"],
+    ["bold", "italic"],
+    ["heading", "code"],
+    ["heading", "link"],
+    ...(["code", "link", "bold", "italic", "listMarker"] as const).map(
+      (e): [MarkdownElement, MarkdownElement] => ["quote", e],
+    ),
+    ...(["code", "link", "bold", "italic"] as const).map(
+      (e): [MarkdownElement, MarkdownElement] => ["listMarker", e],
+    ),
+  ];
+  test("keeps the hued markdown styles that share a line apart", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const [a, b] of SHARE_A_LINE) {
+        const [ca, cb] = [theme.markdown[a]?.color, theme.markdown[b]?.color];
+        if (ca === undefined || cb === undefined) continue;
+        if (onInkRamp(theme, ca) || onInkRamp(theme, cb)) continue;
+        expect(deltaE(ca, cb), `${id} ${a} vs ${b}`).toBeGreaterThanOrEqual(20);
+      }
     }
   });
 

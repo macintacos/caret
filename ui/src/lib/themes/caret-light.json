@@ -19,6 +19,7 @@
     "ruleHue": "#2a2018",
     "washHue": "#e07a2e",
     "markHue": "#e8882e",
+    "chipLinkHue": "#ab1f43",
     "chipSkillHue": "#145d8f"
   },
   "syntax": {
@@ -33,5 +34,14 @@
     "string": { "color": "#2c7331" },
     "escape": { "color": "#ab1f43" },
     "number": { "color": "#14717b" }
+  },
+  "markdown": {
+    "heading": { "color": "#7d5a05", "fontStyle": ["bold"] },
+    "code": { "color": "#35617e" },
+    "link": { "color": "#ab1f43" },
+    "bold": { "color": "#191310" },
+    "italic": { "color": "#0a5f57" },
+    "listMarker": { "color": "#7d5a05" },
+    "quote": { "color": "#2c7331", "fontStyle": ["italic"] }
   }
 }

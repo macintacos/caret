@@ -15,7 +15,8 @@
     "neutral": "#9ca0b0",
     "ok": "#40a02b",
     "danger": "#d20f39",
-    "attention": "#1e66f5"
+    "attention": "#1e66f5",
+    "chipLinkHue": "#ea76cb"
   },
   "syntax": {
     "comment": { "color": "#7c7f93", "fontStyle": ["italic"] },
@@ -38,5 +39,14 @@
     "escape": { "color": "#ea76cb" },
     "interpolation": { "color": "#7c7f93" },
     "number": { "color": "#fe640b" }
+  },
+  "markdown": {
+    "heading": { "color": "#4c4f69", "fontStyle": ["bold"] },
+    "code": { "color": "#4c4f69" },
+    "link": { "color": "#4c4f69" },
+    "bold": { "color": "#4c4f69" },
+    "italic": { "color": "#4c4f69" },
+    "listMarker": { "color": "#1e66f5" },
+    "quote": { "color": "#5c5f77", "fontStyle": ["italic"] }
   }
 }

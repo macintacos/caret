@@ -3,21 +3,18 @@
 // caret's own ink. This needs a real browser: the plan's colors resolve through shiki's
 // token variables and the override sheet inside the diff view's shadow DOM, the bullet is
 // a pseudo-element, and both surfaces' font styles ride declarations whose cascade only a
-// real engine settles. The pure
-// halves are unit-tested — the schema in test/core/theme/schema.test.ts, the painted
-// custom properties in ui/src/lib/theme.test.ts, the shiki rules in
-// ui/src/lib/caret-theme.test.ts, and the heading rows in
-// ui/src/lib/diffview/headings.test.ts.
-
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
+// real engine settles. The pure halves are unit-tested — the schema in
+// test/core/theme/schema.test.ts, the painted custom properties in
+// ui/src/lib/theme.test.ts, the shiki rules in ui/src/lib/caret-theme.test.ts, and the
+// heading rows in ui/src/lib/diffview/headings.test.ts.
 
 import type { Page } from "@playwright/test";
 
+import type { ThemeMarkdown } from "@core/theme/schema.ts";
 import { goToTop } from "@test/e2e/support/cursor.ts";
-import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
+import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { openPlan, openPlanForKeys, probeColor } from "@test/e2e/support/source-view.ts";
-import { caretThemeFile } from "@test/support/theme.ts";
+import { caretThemeVariant, selectThemeFile } from "@test/e2e/support/themes.ts";
 
 const PLAN = `# Styled heading
 
@@ -40,29 +37,13 @@ const STYLES = {
   italic: { color: "#ffff80" },
   listMarker: { color: "#80ffea" },
   quote: { color: "#ffff80", fontStyle: ["italic"] },
-};
+} satisfies ThemeMarkdown;
+
+// No built-in theme uses it, so a spec can tell when its own theme has painted.
+const ACCENT = "#00c2a8";
 
 const rgb = (hex: string) =>
   `rgb(${[1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
-
-/** Put a dark theme file named `id` in the themes folder and select it before the page
- * loads. Its accent is its own so the spec can tell when it has been painted. */
-async function useTheme(
-  page: Page,
-  daemon: Daemon,
-  id: string,
-  markdown: typeof STYLES | undefined,
-): Promise<string> {
-  const accent = "#00c2a8";
-  const { markdown: _caretStyles, ...caret } = caretThemeFile("dark");
-  const file = { ...caret, id, label: id, palette: { ...caret.palette, accent }, markdown };
-  await writeFile(join(daemon.themesDir, `${id}.json`), JSON.stringify(file));
-  await page.addInitScript((slot) => {
-    localStorage.setItem("caret.theme.mode", "dark");
-    localStorage.setItem("caret.theme.dark", slot);
-  }, id);
-  return accent;
-}
 
 /** The computed paint of each element in PLAN, read off its content token. */
 function paint(page: Page) {
@@ -102,7 +83,11 @@ test("a theme's markdown styles paint each element in its own color and font sty
   daemon,
   page,
 }) => {
-  await useTheme(page, daemon, "styled", STYLES);
+  await selectThemeFile(
+    page,
+    daemon,
+    caretThemeVariant("styled", "dark", { accent: ACCENT, markdown: STYLES }),
+  );
   await openPlan(page, daemon, PLAN);
 
   await expect
@@ -129,9 +114,9 @@ test("a theme that styles no markdown element paints each in caret's own ink", a
   daemon,
   page,
 }) => {
-  const accent = await useTheme(page, daemon, "unstyled", undefined);
+  await selectThemeFile(page, daemon, caretThemeVariant("unstyled", "dark", { accent: ACCENT }));
   await openPlan(page, daemon, PLAN);
-  await expect.poll(() => probeColor(page, "--accent")).toBe(rgb(accent));
+  await expect.poll(() => probeColor(page, "--accent")).toBe(rgb(ACCENT));
 
   const [ink, inkSoft, inkFaint, accentBright, linkInk] = await Promise.all(
     [
@@ -145,7 +130,7 @@ test("a theme that styles no markdown element paints each in caret's own ink", a
   await expect
     .poll(() => paint(page))
     .toEqual({
-      heading: { color: rgb(accent), weight: "400", slant: "normal" },
+      heading: { color: rgb(ACCENT), weight: "400", slant: "normal" },
       code: { color: accentBright, weight: "400", slant: "normal" },
       link: { color: linkInk, weight: "400", slant: "normal", underline: "underline dotted" },
       bold: { color: ink, weight: "700", slant: "normal" },
@@ -196,7 +181,11 @@ test("the feedback editor paints a theme's heading, link, quote and list-marker 
   daemon,
   page,
 }) => {
-  await useTheme(page, daemon, "styled", STYLES);
+  await selectThemeFile(
+    page,
+    daemon,
+    caretThemeVariant("styled", "dark", { accent: ACCENT, markdown: STYLES }),
+  );
   await openPlanForKeys(page, daemon, PLAN);
   await expect
     .poll(() => probeColor(page, "--markdown-heading-color"))
@@ -214,16 +203,16 @@ test("the feedback editor keeps its own look under a theme that styles no markdo
   daemon,
   page,
 }) => {
-  const accent = await useTheme(page, daemon, "unstyled", undefined);
+  await selectThemeFile(page, daemon, caretThemeVariant("unstyled", "dark", { accent: ACCENT }));
   await openPlanForKeys(page, daemon, PLAN);
-  await expect.poll(() => probeColor(page, "--accent")).toBe(rgb(accent));
+  await expect.poll(() => probeColor(page, "--accent")).toBe(rgb(ACCENT));
 
   const [ink, inkSoft, inkFaint] = await Promise.all(
     ["--ink", "--ink-soft", "--ink-faint"].map((value) => probeColor(page, value)),
   );
   expect(await editorPaint(page)).toEqual({
     heading: { color: ink, weight: "700", slant: "normal" },
-    link: { color: rgb(accent), underline: "underline" },
+    link: { color: rgb(ACCENT), underline: "underline" },
     quote: { color: inkSoft, slant: "normal" },
     listMarker: inkFaint,
   });

@@ -459,6 +459,7 @@ This is caret's own dark theme as a theme file:
     "ruleHue": "#f2e7d5",
     "washHue": "#f2842f",
     "markHue": "#ffa64d",
+    "chipLinkHue": "#f56f8e",
     "chipSkillHue": "#6ec4e4"
   },
   "syntax": {
@@ -473,6 +474,15 @@ This is caret's own dark theme as a theme file:
     "string": { "color": "#92d474" },
     "escape": { "color": "#f56f8e" },
     "number": { "color": "#4cbbc8" }
+  },
+  "markdown": {
+    "heading": { "color": "#ecc25c", "fontStyle": ["bold"] },
+    "code": { "color": "#a3d4ec" },
+    "link": { "color": "#f56f8e" },
+    "bold": { "color": "#dd7a6c" },
+    "italic": { "color": "#3fbda9" },
+    "listMarker": { "color": "#ecc25c" },
+    "quote": { "color": "#92d474", "fontStyle": ["italic"] }
   }
 }
 ```

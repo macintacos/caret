@@ -168,15 +168,21 @@ export const THEMES: Record<BuiltinThemeId, BuiltinTheme> = {
   duskfox: builtin("duskfox", duskfox),
 };
 
-// A JSON import is the schema's unvalidated input — `scheme` widens to string and the
-// optional roles may be absent — so the fallbacks are filled as the schema's transform
-// fills them. theme-file.test.ts pins the result to the validated build.
+// A JSON import is the schema's unvalidated input — `scheme` and each `fontStyle` widen to
+// strings and the optional roles may be absent — so the fallbacks are filled as the
+// schema's transform fills them. theme-file.test.ts pins the result to the validated build.
 function builtin(
   id: BuiltinThemeId,
-  json: Omit<ThemeFile, "scheme" | "syntax"> & { scheme: string; syntax: object },
+  json: Omit<ThemeFile, "scheme" | "syntax" | "markdown"> & {
+    scheme: string;
+    syntax: object;
+    markdown?: object;
+  },
 ): BuiltinTheme {
   const syntax = fillFallbackRoles(json.syntax as Parameters<typeof fillFallbackRoles>[0]);
-  return { ...buildFileTheme({ ...json, scheme: json.scheme as ThemeFile["scheme"], syntax }), id };
+  const scheme = json.scheme as ThemeFile["scheme"];
+  const markdown = json.markdown as ThemeFile["markdown"];
+  return { ...buildFileTheme({ ...json, scheme, syntax, markdown }), id };
 }
 
 /** The built-in ids in display order — caret-dark first. Runtime themes are not
