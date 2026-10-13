@@ -518,6 +518,9 @@ export interface CustomThemes {
 export interface ThemeUpload {
   theme: ThemeFile;
   errors: ThemeFileError[];
+  /** Files that also declare the id and could not be removed. While they remain, the folder
+   * loads neither the saved theme nor them. */
+  unremoved: string[];
 }
 
 /** POST /api/themes 400, 409, 413 or 500: why nothing was saved, one line per problem. */

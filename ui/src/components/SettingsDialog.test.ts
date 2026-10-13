@@ -511,7 +511,9 @@ describe("SettingsDialog Appearance pane", () => {
   test("hands an upload's refreshed load errors to onThemeErrors", async () => {
     const theme = await customThemeSource("dialog-upload", "dark");
     const errors = [{ file: "old.json", messages: ["bad"] }];
-    const cap = installRoutedFetch(() => () => Promise.resolve(jsonResponse({ theme, errors })));
+    const cap = installRoutedFetch(
+      () => () => Promise.resolve(jsonResponse({ theme, errors, unremoved: [] })),
+    );
     const seen: unknown[] = [];
     try {
       const { flush } = render(

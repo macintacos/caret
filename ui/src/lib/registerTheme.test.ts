@@ -242,14 +242,14 @@ describe("registerUploadedTheme", () => {
 
   test("adds a new id to its scheme's slot", async () => {
     const id = uniqueId();
-    expect(registerUploadedTheme(await customThemeFile(id, "dark"))).toBe("added");
+    expect(registerUploadedTheme(await customThemeSource(id, "dark"))).toBe("added");
     expect(darkIds()).toContain(id);
   });
 
   test("replaces a registered id, offering it once under its new label", async () => {
     const id = uniqueId();
     registerTheme(await customThemeFile(id, "dark"));
-    const next = { ...(await customThemeFile(id, "dark")), label: "Renamed" };
+    const next = { ...(await customThemeSource(id, "dark")), label: "Renamed" };
 
     expect(registerUploadedTheme(next)).toBe("replaced");
 
@@ -261,10 +261,10 @@ describe("registerUploadedTheme", () => {
     const id = registerTheme(await customThemeFile(uniqueId(), "dark"));
     appearance.setMode("dark");
     appearance.setSlot("dark", id);
-    const file = await customThemeFile(id, "dark");
+    const source = await customThemeSource(id, "dark");
     const accent = "#123456";
 
-    registerUploadedTheme({ ...file, tokens: { ...file.tokens, "--accent": accent } });
+    registerUploadedTheme({ ...source, palette: { ...source.palette, accent } });
 
     expect(rootToken("--accent")).toBe(accent);
     expect(readCachedTheme("dark")?.tokens["--accent"]).toBe(accent);

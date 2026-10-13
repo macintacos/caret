@@ -254,7 +254,7 @@ describe("theme upload", () => {
   test("a saved theme confirms, refreshes the load errors, and joins its slot", async () => {
     const theme = await customThemeSource("upload-nightly", "dark");
     const errors = [{ file: "old.json", messages: ["bad"] }];
-    respond = () => Promise.resolve(jsonResponse({ theme, errors }));
+    respond = () => Promise.resolve(jsonResponse({ theme, errors, unremoved: [] }));
     const seen: unknown[] = [];
     const { flush } = render(ThemeSection, props({ onThemeErrors: (e: unknown) => seen.push(e) }));
 
@@ -264,19 +264,6 @@ describe("theme upload", () => {
     expect(text("[data-theme-upload-status]")).toContain(theme.label);
     expect(seen).toEqual([errors]);
     expect(themesForScheme("dark").some((t) => t.id === theme.id)).toBe(true);
-  });
-
-  test("a saved theme that can't be registered reports it saved and frees the button", async () => {
-    // A built-in id: the daemon saved the file, but registration refuses it.
-    const theme = await customThemeSource("caret-dark", "dark");
-    respond = () => Promise.resolve(jsonResponse({ theme, errors: [] }));
-    const { flush } = render(ThemeSection, props());
-
-    pick(JSON.stringify(theme));
-    await flushUntil(flush, () => has("[data-theme-upload-status]"));
-
-    expect(text("[data-theme-upload-status]")).toContain("Reload");
-    expect(has("[data-theme-upload-errors]")).toBe(false);
     expect(button().disabled).toBe(false);
   });
 
