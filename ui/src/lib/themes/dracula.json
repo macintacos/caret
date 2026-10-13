@@ -1,0 +1,42 @@
+{
+  "id": "dracula",
+  "label": "Dracula",
+  "scheme": "dark",
+  "palette": {
+    "paper": "#21222c",
+    "raised": "#343746",
+    "sunk": "#282a36",
+    "ink": "#f8f8f2",
+    "inkSoft": "#b5bccf",
+    "inkFaint": "#808db4",
+    "accent": "#bd93f9",
+    "accentBright": "#d6acff",
+    "accentInk": "#21222c",
+    "neutral": "#6272a4",
+    "ok": "#50fa7b",
+    "danger": "#ff5555",
+    "attention": "#ffb86c"
+  },
+  "syntax": {
+    "comment": { "color": "#6272a4" },
+    "punctuation": { "color": "#f8f8f2" },
+    "operator": { "color": "#ff79c6" },
+    "bracket": { "color": "#f8f8f2" },
+    "variable": { "color": "#f8f8f2" },
+    "parameter": { "color": "#ffb86c", "fontStyle": ["italic"] },
+    "property": { "color": "#f8f8f2" },
+    "attribute": { "color": "#50fa7b", "fontStyle": ["italic"] },
+    "keyword": { "color": "#ff79c6" },
+    "languageVariable": { "color": "#bd93f9", "fontStyle": ["italic"] },
+    "tag": { "color": "#ff79c6" },
+    "tagPunctuation": { "color": "#f8f8f2" },
+    "function": { "color": "#50fa7b" },
+    "builtinFunction": { "color": "#8be9fd" },
+    "type": { "color": "#8be9fd", "fontStyle": ["italic"] },
+    "builtinType": { "color": "#8be9fd", "fontStyle": ["italic"] },
+    "string": { "color": "#f1fa8c" },
+    "escape": { "color": "#ff79c6" },
+    "interpolation": { "color": "#f8f8f2" },
+    "number": { "color": "#bd93f9" }
+  }
+}

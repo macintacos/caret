@@ -1,0 +1,42 @@
+{
+  "id": "github-dark",
+  "label": "GitHub Dark",
+  "scheme": "dark",
+  "palette": {
+    "paper": "#0d1117",
+    "raised": "#151b23",
+    "sunk": "#010409",
+    "ink": "#f0f6fc",
+    "inkSoft": "#9198a1",
+    "inkFaint": "#656c76",
+    "accent": "#4493f8",
+    "accentBright": "#79c0ff",
+    "accentInk": "#010409",
+    "neutral": "#656c76",
+    "ok": "#3fb950",
+    "danger": "#f85149",
+    "attention": "#d29922"
+  },
+  "syntax": {
+    "comment": { "color": "#8b949e" },
+    "punctuation": { "color": "#e6edf3" },
+    "operator": { "color": "#ff7b72" },
+    "bracket": { "color": "#e6edf3" },
+    "variable": { "color": "#e6edf3" },
+    "parameter": { "color": "#ffa657" },
+    "property": { "color": "#e6edf3" },
+    "attribute": { "color": "#79c0ff" },
+    "keyword": { "color": "#ff7b72" },
+    "languageVariable": { "color": "#79c0ff" },
+    "tag": { "color": "#7ee787" },
+    "tagPunctuation": { "color": "#e6edf3" },
+    "function": { "color": "#d2a8ff" },
+    "builtinFunction": { "color": "#79c0ff" },
+    "type": { "color": "#ffa657" },
+    "builtinType": { "color": "#79c0ff" },
+    "string": { "color": "#a5d6ff" },
+    "escape": { "color": "#ff7b72" },
+    "interpolation": { "color": "#e6edf3" },
+    "number": { "color": "#79c0ff" }
+  }
+}

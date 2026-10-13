@@ -4,12 +4,12 @@ import { readThemeFile } from "@ui/support/theme-file.ts";
 import { CARET_SHIKI_THEMES } from "$lib/caret-shiki.ts";
 import { shikiThemeFor } from "$lib/caret-theme.ts";
 import { CARET_TOKENIZE_OPTIONS, createHighlighter } from "$lib/diffview/shiki-bundle.ts";
-import { addTheme, type CustomThemeId, THEMES } from "$lib/theme.ts";
+import { addTheme, type CustomThemeId, THEME_IDS, THEMES } from "$lib/theme.ts";
 import { buildFileTheme } from "$lib/theme-file.ts";
 
 describe("buildFileTheme", () => {
-  for (const id of ["caret-dark", "caret-light"] as const) {
-    test(`${id}.json builds the bundled ${id} tokens and shiki theme`, async () => {
+  for (const id of THEME_IDS) {
+    test(`${id}.json builds the bundled ${id} tokens`, async () => {
       const built = buildFileTheme(await readThemeFile(`${id}.json`));
       const bundled = THEMES[id];
       expect({
@@ -23,6 +23,12 @@ describe("buildFileTheme", () => {
         scheme: bundled.scheme,
         tokens: bundled.tokens,
       });
+    });
+  }
+
+  for (const id of ["caret-dark", "caret-light"] as const) {
+    test(`${id}.json builds the bundled ${id} shiki theme`, async () => {
+      const built = buildFileTheme(await readThemeFile(`${id}.json`));
       expect(built.shikiTheme).toEqual(CARET_SHIKI_THEMES[id]);
     });
   }

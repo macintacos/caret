@@ -1,0 +1,43 @@
+{
+  "id": "duskfox",
+  "label": "Duskfox",
+  "scheme": "dark",
+  "palette": {
+    "paper": "#191726",
+    "raised": "#2d2a45",
+    "sunk": "#232136",
+    "ink": "#e0def4",
+    "inkSoft": "#cdcbe0",
+    "inkFaint": "#817c9c",
+    "accent": "#c4a7e7",
+    "accentBright": "#ccb1ed",
+    "accentInk": "#191726",
+    "neutral": "#817c9c",
+    "ok": "#a3be8c",
+    "danger": "#eb6f92",
+    "attention": "#f6c177",
+    "chipRefHue": "#9ccfd8"
+  },
+  "syntax": {
+    "comment": { "color": "#4b4673", "fontStyle": ["italic"] },
+    "punctuation": { "color": "#eae8ff" },
+    "operator": { "color": "#9ccfd8" },
+    "bracket": { "color": "#eae8ff" },
+    "variable": { "color": "#eae8ff" },
+    "parameter": { "color": "#d871a6", "fontStyle": ["italic"] },
+    "property": { "color": "#eae8ff" },
+    "attribute": { "color": "#f6c177" },
+    "keyword": { "color": "#c4a7e7" },
+    "languageVariable": { "color": "#eae8ff" },
+    "tag": { "color": "#4a869c" },
+    "tagPunctuation": { "color": "#9ccfd8" },
+    "function": { "color": "#4a869c", "fontStyle": ["italic"] },
+    "builtinFunction": { "color": "#eb6f92", "fontStyle": ["italic"] },
+    "type": { "color": "#f6c177", "fontStyle": ["italic"] },
+    "builtinType": { "color": "#c4a7e7" },
+    "string": { "color": "#a3be8c" },
+    "escape": { "color": "#cdcbe0" },
+    "interpolation": { "color": "#eae8ff" },
+    "number": { "color": "#f6c177" }
+  }
+}
