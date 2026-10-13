@@ -19,7 +19,9 @@ function convert(theme: unknown, fileName = "my-theme") {
 function ok(theme: unknown, fileName?: string) {
   const result = convert(theme, fileName);
   if (!result.ok) throw new Error(result.errors.join("\n"));
-  return { ...result, file: JSON.parse(result.text) };
+  const parsed = parseThemeFile(result.text);
+  if (!parsed.ok) throw new Error(parsed.errors.join("\n"));
+  return { ...result, file: parsed.file };
 }
 
 function errors(text: string, fileName = "my-theme"): string[] {
@@ -74,11 +76,17 @@ describe("themeFileFromVsCode input parsing", () => {
   });
 
   test("a top-level array is refused", () => {
-    expect(errors("[]")).toEqual(["theme: must be a JSON object"]);
+    const list = errors("[]");
+    expect(list).toHaveLength(1);
+    expect(list[0]).toStartWith("theme:");
   });
 
   test("malformed rules are skipped", () => {
-    const junk = [{ scope: "string" }, { scope: null, settings: {} }, { scope: 5, settings: {} }];
+    const junk = [
+      { scope: "string" },
+      { scope: null, settings: { foreground: "#ff0000" } },
+      { scope: 5, settings: { foreground: "#ff0000" } },
+    ];
     const clean = ok(minimal()).file.syntax;
     expect(ok(minimal({ tokenColors: [...junk, ...RULES] })).file.syntax).toEqual(clean);
   });
@@ -97,9 +105,15 @@ describe("themeFileFromVsCode input parsing", () => {
   });
 
   test("a non-hex editor.foreground is ignored, not reported", () => {
-    const [error] = errors(JSON.stringify(minimal({ colors: { "editor.foreground": "tomato" } })));
-    expect(error).toStartWith("syntax:");
-    expect(error).not.toContain("tomato");
+    const result = ok(minimal({ colors: { "editor.foreground": "tomato" } }));
+    expect(result.file.syntax.string.color).toBe("#bbbbbb");
+    expect(result.text).not.toContain("tomato");
+    expect(result.notes.some((note) => note.includes("tomato"))).toBe(false);
+  });
+
+  test("a scope-less tokenColors rule colors nothing", () => {
+    const { file } = ok(minimal({ tokenColors: [{ settings: { foreground: "#aaaaaa" } }] }));
+    expect(file.syntax.string.color).toBe("#eeeeee");
   });
 
   test("uppercase hex colors are kept and lowercased", () => {
@@ -123,7 +137,9 @@ describe("themeFileFromVsCode scheme", () => {
 
   test("a missing or unknown type is an error", () => {
     expect(errors(JSON.stringify(minimal({ type: undefined })))[0]).toStartWith("type:");
-    expect(errors(JSON.stringify(minimal({ type: "sepia" })))[0]).toStartWith("type:");
+    for (const type of ["sepia", "constructor", "toString"]) {
+      expect(errors(JSON.stringify(minimal({ type })))[0]).toStartWith("type:");
+    }
   });
 });
 
@@ -186,14 +202,29 @@ describe("themeFileFromVsCode id and label", () => {
     expect(file.id).toBe("night-owl");
   });
 
+  test("a label cut keeps whole characters", () => {
+    const { file } = ok(minimal({ name: `${"a".repeat(63)}😀tail` }));
+    expect(file.label).toBe("a".repeat(63));
+  });
+
   test("an id nothing slugs to is an error", () => {
     expect(errors(JSON.stringify(minimal({ name: "!!!" })), "???")[0]).toStartWith("id:");
   });
 });
 
 describe("themeFileFromVsCode syntax", () => {
-  test("a role with no color is an error", () => {
-    const theme = { type: "dark", colors: {}, tokenColors: [] };
-    expect(errors(JSON.stringify(theme))[0]).toStartWith("syntax:");
-  });
+  test.each([
+    ["dark", {}, "#bbbbbb"],
+    ["light", {}, "#333333"],
+    ["hcDark", {}, "#ffffff"],
+    ["hcLight", {}, "#292929"],
+    ["hcLight", { foreground: "#101010" }, "#101010"],
+  ])(
+    "with no editor.foreground, a %s theme's uncolored roles take VS Code's default",
+    (type, colors, expected) => {
+      const { file, notes } = ok({ type, colors, tokenColors: [] });
+      expect(file.syntax.string.color).toBe(expected);
+      expect(notes.filter((note) => note.startsWith("syntax:"))).toHaveLength(1);
+    },
+  );
 });

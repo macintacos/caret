@@ -1,21 +1,19 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import dracula from "shiki/themes/dracula.mjs";
 
 import { drainProcess } from "@test/support/cli-process.ts";
+import { setupTempStateDir } from "@test/support/env.ts";
 import { parseThemeFile } from "@/theme/schema.ts";
 
+const tempDir = setupTempStateDir("caret-convert-theme-");
 let dir: string;
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "caret-convert-theme-"));
+  dir = tempDir();
   await writeFile(join(dir, "dracula.json"), JSON.stringify(dracula));
-});
-afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
 });
 
 function convert(...args: string[]) {
@@ -62,4 +60,13 @@ test("a missing input exits 1 naming the path", async () => {
   const r = await convert(missing);
   expect(r.exit).toBe(1);
   expect(r.stderr).toContain(missing);
+});
+
+test("--out naming a directory exits 1 and writes nothing into it", async () => {
+  const out = join(dir, "themes");
+  await mkdir(out);
+  const r = await convert(join(dir, "dracula.json"), "--out", out);
+  expect(r.exit).toBe(1);
+  expect(r.stderr).toContain("is a directory");
+  expect(await readdir(out)).toEqual([]);
 });

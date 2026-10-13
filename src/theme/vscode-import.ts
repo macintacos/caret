@@ -1,10 +1,9 @@
 // Converts a VS Code color theme's text into caret theme file text.
-// CLI-only: never import it from ui/, it pulls zod, jsonc-parser, and caret's palette JSON.
+// CLI-only: never import it from ui/; zod and jsonc-parser must stay out of the UI bundle.
 import { type ParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser";
 import { z } from "zod";
 
-import { errorMessage } from "@/lib/types.ts";
-import { parseThemeFile, REQUIRED_COLORS } from "@/theme/schema.ts";
+import { MAX_LENGTH, parseThemeFile, REQUIRED_COLORS } from "@/theme/schema.ts";
 import {
   HEX_COLOR,
   normalizeColor,
@@ -16,12 +15,17 @@ import caretDark from "../../ui/src/lib/themes/caret-dark.json" with { type: "js
 import caretLight from "../../ui/src/lib/themes/caret-light.json" with { type: "json" };
 
 const SCHEMA_URL = "https://raw.githubusercontent.com/macintacos/caret/trunk/doc/theme.schema.json";
-const MAX_LENGTH = 64;
+
+const VS_CODE_TYPES = ["dark", "hcDark", "light", "hcLight"] as const;
 
 type RequiredColor = (typeof REQUIRED_COLORS)[number];
 type Scheme = "dark" | "light";
+type VsCodeType = (typeof VS_CODE_TYPES)[number];
 type Result<T> = { ok: true; value: T } | { ok: false; errors: string[] };
 
+// First opaque candidate wins: a translucent wash is no source for an opaque surface.
+// `sunk` is the plan document, which caret-shiki paints as `editor.background`;
+// `accent`/`accentInk` take the button pair so text on the accent keeps its contrast.
 const CHROME_SOURCES = {
   paper: ["sideBar.background", "panel.background"],
   raised: ["editorWidget.background", "dropdown.background", "quickInput.background"],
@@ -53,15 +57,23 @@ const CHROME_SOURCES = {
 
 const CARET_THEMES = { dark: caretDark, light: caretLight } as const;
 
-const SCHEMES: Record<string, Scheme> = {
+const SCHEMES = {
   dark: "dark",
   hcDark: "dark",
   light: "light",
   hcLight: "light",
-};
+} as const satisfies Record<VsCodeType, Scheme>;
+
+// VS Code's registered `editor.foreground` defaults; hcLight's is the theme's `foreground`.
+const EDITOR_FOREGROUNDS = {
+  dark: "#bbbbbb",
+  hcDark: "#ffffff",
+  light: "#333333",
+  hcLight: "#292929",
+} as const satisfies Record<VsCodeType, string>;
 
 // VS Code skips a malformed rule, or a color it can't parse, rather than rejecting the theme.
-const RuleSchema = z.object({
+const rule = z.object({
   scope: z.union([z.string(), z.array(z.string())]).optional(),
   settings: z.object({
     foreground: z.string().regex(HEX_COLOR).optional().catch(undefined),
@@ -70,13 +82,13 @@ const RuleSchema = z.object({
 });
 const rules = z.array(z.unknown()).transform((items) =>
   items.flatMap((item) => {
-    const rule = RuleSchema.safeParse(item);
-    return rule.success ? [rule.data] : [];
+    const parsed = rule.safeParse(item);
+    return parsed.success ? [parsed.data] : [];
   }),
 );
-const VsCodeThemeFileSchema = z.object({
+const vsCodeThemeFile = z.object({
   name: z.string().optional().catch(undefined),
-  type: z.string().optional().catch(undefined),
+  type: z.enum(VS_CODE_TYPES).optional().catch(undefined),
   include: z.string().optional().catch(undefined),
   colors: z
     .record(z.string(), z.unknown())
@@ -92,7 +104,7 @@ const VsCodeThemeFileSchema = z.object({
   tokenColors: z.union([z.string(), rules]).optional().catch(undefined),
   settings: rules.optional().catch(undefined),
 });
-type VsCodeThemeFile = z.output<typeof VsCodeThemeFileSchema>;
+type VsCodeThemeFile = z.output<typeof vsCodeThemeFile>;
 
 function lineOf(text: string, offset: number): number {
   return text.slice(0, offset).split("\n").length;
@@ -109,7 +121,7 @@ function parseInput(text: string): Result<VsCodeThemeFile> {
       errors: [`theme: is not valid JSON (${reason} at line ${lineOf(text, first.offset)})`],
     };
   }
-  const theme = VsCodeThemeFileSchema.safeParse(json);
+  const theme = vsCodeThemeFile.safeParse(json);
   return theme.success
     ? { ok: true, value: theme.data }
     : { ok: false, errors: ["theme: must be a JSON object"] };
@@ -130,18 +142,16 @@ function refusals(theme: VsCodeThemeFile): string[] {
   return errors;
 }
 
-function schemeOf(type: string | undefined): Result<Scheme> {
-  const scheme = type === undefined ? undefined : SCHEMES[type];
-  return scheme
-    ? { ok: true, value: scheme }
+function schemeOf(type: VsCodeType | undefined): Result<Scheme> {
+  return type
+    ? { ok: true, value: SCHEMES[type] }
     : {
         ok: false,
         errors: [`type: must be "dark" or "light" (VS Code's theme type); add it to the theme`],
       };
 }
 
-const isOpaque = (color: string) =>
-  [3, 6].includes(color.length - 1) || /^#(.{3}f|.{6}ff)$/i.test(color);
+const OPAQUE_HEX = /^#([0-9a-f]{3}f?|[0-9a-f]{6}(ff)?)$/i;
 
 function pickChrome(
   colors: Readonly<Record<string, string>>,
@@ -149,19 +159,20 @@ function pickChrome(
 ): { palette: Record<RequiredColor, string>; notes: string[] } {
   const notes: string[] = [];
   const fallback = CARET_THEMES[scheme];
-  const palette = Object.fromEntries(
-    REQUIRED_COLORS.map((key) => {
-      const candidates: readonly string[] = CHROME_SOURCES[key];
-      const source = candidates.map((name) => colors[name]).find((c) => c && isOpaque(c));
-      if (source) return [key, normalizeColor(source)];
-      const value = fallback.palette[key];
-      notes.push(
-        `palette.${key}: no clear source in colors (tried ${candidates.join(", ")}); used ${fallback.label}'s ${value}`,
-      );
-      return [key, value];
-    }),
-  ) as Record<RequiredColor, string>;
-  return { palette, notes };
+  const palette: Partial<Record<RequiredColor, string>> = {};
+  for (const key of REQUIRED_COLORS) {
+    const candidates: readonly string[] = CHROME_SOURCES[key];
+    const source = candidates.map((name) => colors[name]).find((c) => c && OPAQUE_HEX.test(c));
+    if (source) {
+      palette[key] = normalizeColor(source);
+      continue;
+    }
+    palette[key] = fallback.palette[key];
+    notes.push(
+      `palette.${key}: no clear source in colors (tried ${candidates.join(", ")}); used ${fallback.label}'s ${palette[key]}`,
+    );
+  }
+  return { palette: palette as Record<RequiredColor, string>, notes };
 }
 
 function slug(text: string): string {
@@ -175,13 +186,13 @@ function slug(text: string): string {
     .replace(/-+$/, "");
 }
 
-function identity(
+function idAndLabel(
   name: string | undefined,
   fileName: string,
   builtinIds: readonly string[],
 ): Result<{ id: string; label: string; notes: string[] }> {
   const trimmed = name?.trim() || undefined;
-  const label = (trimmed ?? fileName).slice(0, MAX_LENGTH);
+  const label = (trimmed ?? fileName).slice(0, MAX_LENGTH).replace(/[\uD800-\uDBFF]$/, "");
   const base = (trimmed && slug(trimmed)) || slug(fileName);
   if (!base) {
     return {
@@ -197,17 +208,28 @@ function identity(
   };
 }
 
-function syntaxOf(theme: VsCodeTheme): Result<ReturnType<typeof syntaxFromVsCodeTheme>> {
-  try {
-    return { ok: true, value: syntaxFromVsCodeTheme(theme) };
-  } catch (error) {
-    return { ok: false, errors: [`syntax: ${errorMessage(error)}`] };
-  }
+function withEditorForeground(
+  colors: Readonly<Record<string, string>>,
+  type: VsCodeType,
+): { colors: Record<string, string>; notes: string[] } {
+  if (colors["editor.foreground"]) return { colors: { ...colors }, notes: [] };
+  const fallback =
+    type === "hcLight"
+      ? (colors.foreground ?? EDITOR_FOREGROUNDS.hcLight)
+      : EDITOR_FOREGROUNDS[type];
+  return {
+    colors: { ...colors, "editor.foreground": fallback },
+    notes: [
+      `syntax: colors has no editor.foreground; tokens no rule colors use VS Code's default for a ${type} theme, ${fallback}`,
+    ],
+  };
 }
 
 /** Converts a VS Code theme's JSONC text into theme file text caret accepts, with a note
- * per guess it made, or one error line per problem. `fileName` is the input's base name
- * without its extension, used when the theme has no `name`. */
+ * per guess it made, or the error lines that stopped it: every `type` and refusal problem
+ * at once, else the first later failure. `fileName` is the input's base name without its
+ * extension, used when the theme has no `name`. An id in `builtinIds` takes a "-custom"
+ * suffix. */
 export function themeFileFromVsCode(
   text: string,
   fileName: string,
@@ -218,20 +240,26 @@ export function themeFileFromVsCode(
   const input = parsed.value;
   const scheme = schemeOf(input.type);
   const errors = [...(scheme.ok ? [] : scheme.errors), ...refusals(input)];
-  if (!scheme.ok || errors.length > 0) return { ok: false, errors };
+  if (!scheme.ok || input.type === undefined || errors.length > 0) return { ok: false, errors };
 
-  const ident = identity(input.name, fileName, builtinIds);
+  const ident = idAndLabel(input.name, fileName, builtinIds);
   if (!ident.ok) return ident;
-  const tokenColors = typeof input.tokenColors === "string" ? undefined : input.tokenColors;
-  const theme: VsCodeTheme = { colors: input.colors, tokenColors, settings: input.settings };
-  const syntax = syntaxOf(theme);
-  if (!syntax.ok) return syntax;
+  // VS Code ignores a scope-less tokenColors rule; only the legacy `settings` array's is the default.
+  const tokenColors =
+    typeof input.tokenColors === "string" ? undefined : input.tokenColors?.filter((r) => r.scope);
+  const editor = withEditorForeground(input.colors, input.type);
+  const theme: VsCodeTheme = { colors: editor.colors, tokenColors, settings: input.settings };
+  const syntax = syntaxFromVsCodeTheme(theme);
 
   const { id, label } = ident.value;
   const chrome = pickChrome(input.colors, scheme.value);
   const file = { $schema: SCHEMA_URL, id, label, scheme: scheme.value, palette: chrome.palette };
-  const output = `${JSON.stringify({ ...file, syntax: syntax.value }, null, 2)}\n`;
+  const output = `${JSON.stringify({ ...file, syntax }, null, 2)}\n`;
   const valid = parseThemeFile(output);
   if (!valid.ok) return valid;
-  return { ok: true, text: output, notes: [...ident.value.notes, ...chrome.notes] };
+  return {
+    ok: true,
+    text: output,
+    notes: [...ident.value.notes, ...editor.notes, ...chrome.notes],
+  };
 }

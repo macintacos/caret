@@ -57,6 +57,7 @@ function resolveSetting(
   return best;
 }
 
+/** Any hex form VS Code accepts (#rgb, #rgba, #rrggbb, #rrggbbaa, either case), wider than a theme file's #rrggbb. */
 export const HEX_COLOR = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 /** Expands a hex color to lowercase `#rrggbb`, dropping any alpha. Throws on a non-hex color. */
