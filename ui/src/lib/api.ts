@@ -82,7 +82,7 @@ export async function getUpdate(): Promise<UpdateReport> {
   }
 }
 
-/** The user's custom themes and the files that failed to load, read once per page load.
+/** The user's custom themes and the files that failed to load.
  * `null` on any failure, which leaves Appearance with the built-ins. */
 export async function getThemes(): Promise<CustomThemes | null> {
   try {

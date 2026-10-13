@@ -17,7 +17,8 @@
 //      read here comes from the throwaway CARET_CONFIG_FILE the fixture points at,
 //      so the user's ~/.config/caret/config.toml can never leak into a test run;
 //      GET /api/themes likewise reads the fixture's CARET_E2E_THEMES_DIR, never
-//      ~/.config/caret/themes. The production boot resolves the whole settings graph (and hot-reloads).
+//      ~/.config/caret/themes. The production boot resolves the whole settings
+//      graph (and hot-reloads).
 //   3. NEVER_IDLE_MS + a no-op onShutdown. The daemon must never idle-shut-down
 //      mid-test, and even an unexpected shutdown must not process.exit out from
 //      under the runner; the production boot's onShutdown exits the process.

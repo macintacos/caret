@@ -262,9 +262,9 @@ restoring the file brings it back.
 ### Where caret finds theme files
 
 caret reads theme files from `$XDG_CONFIG_HOME/caret/themes`, or `~/.config/caret/themes`
-when `XDG_CONFIG_HOME` is unset. The page reads the folder once per load, so adding,
-editing, or deleting a file takes effect on the next page load, without a restart. A
-missing or empty folder is fine.
+when `XDG_CONFIG_HOME` is unset. caret rereads the folder each time a page loads, so
+adding, editing, or deleting a file takes effect on the next page load, without a restart.
+A missing or empty folder is fine.
 
 caret reads only the `*.json` files directly in the folder, including symlinks to files.
 It ignores everything else: subfolders, other extensions, and names that start with `.`.

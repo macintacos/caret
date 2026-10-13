@@ -13,8 +13,8 @@
 // The one exception is the boot stand-in: a slot whose saved custom theme has not
 // registered yet boots on that theme's cached palette instead of its default. The
 // theme registering with the same tokens takes over without a wipe; any other move
-// of the resolved theme, `dropStandIn`, or `settle` replaces it with what the slots
-// resolve to.
+// of the resolved theme, `setSlot` on the stand-in's slot, `dropStandIn`, or `settle`
+// replaces it with what the slots resolve to.
 //
 // A module singleton (the `shortcuts` registry's shape): there is exactly one
 // appearance per document — paintTheme writes `document.documentElement`, and the
@@ -58,7 +58,8 @@ export interface Appearance {
   readonly mode: ThemeMode;
   /** The persisted theme per scheme; the resolved scheme picks one. */
   readonly slots: Record<Scheme, ThemeId>;
-  /** The palette actually showing: the resolved scheme's slot. */
+  /** The resolved scheme's slot — the palette showing, except while a boot
+   * stand-in is up, when this is still the slot's default. */
   readonly themeId: ThemeId;
   /** The scheme actually showing — the mode, or the OS under `system`. */
   readonly scheme: Scheme;
@@ -67,12 +68,14 @@ export interface Appearance {
 
   /** Pin a scheme, or follow the OS. Persists, then repaints as a wipe. */
   setMode(mode: ThemeMode): void;
-  /** Choose a scheme's palette. Persists, then repaints as a wipe. */
+  /** Choose a scheme's palette. Persists, then repaints as a wipe — and caches a
+   * custom pick's palette for the next boot. */
   setSlot(scheme: Scheme, id: ThemeId): void;
   /** Re-seed from storage and paint instantly, with no wipe — boot (which runs
    * after `migrateLegacyTheme` may have rewritten storage behind this instance)
    * and the dev `--fresh` reset, neither of which has a previous frame to wipe
-   * from. */
+   * from. Paints the showing slot's cached custom palette when its saved theme
+   * has not registered yet. */
   boot(): void;
   /** Re-resolve after the theme registry changed, so a saved slot naming a theme
    * that just registered takes effect — repainting as a wipe only if the palette
@@ -83,8 +86,8 @@ export interface Appearance {
    * the next load. */
   dropStandIn(): void;
   /** The one call after the daemon's served themes have registered: caches each
-   * slot's custom palette (clearing a slot holding a built-in), then drops any
-   * stand-in whose theme never arrived. */
+   * slot's custom palette (clearing the cache of a slot that holds a built-in),
+   * then drops any stand-in whose theme never arrived. */
   settle(): void;
   /** Follow OS appearance flips for as long as the returned disposer is unused.
    * The media query defaults to the live one; a no-op where none is available. */
@@ -174,6 +177,8 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
         writeSlotTheme(target, id);
         live.slots[target] = id;
       });
+      // Picking the slot's default leaves the resolved id unchanged, so `commit`
+      // alone would leave the cached palette up.
       if (standIn?.scheme === target) dropStandIn();
       if (!isBuiltinThemeId(id)) {
         const { scheme, tokens } = themeFor(id);
@@ -189,6 +194,7 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
       standIn =
         cached !== undefined &&
         cached.id === readSavedSlotId(showing) &&
+        // False only when boot re-runs after registration — the dev `--fresh` reset.
         live.slots[showing] !== cached.id
           ? cached
           : undefined;

@@ -125,6 +125,8 @@ export type CachedTheme = { id: string } & Pick<RuntimeTheme, "scheme" | "tokens
 
 const SLOT_KEYS: Record<Scheme, string> = { light: LIGHT_SLOT_KEY, dark: DARK_SLOT_KEY };
 const CACHE_KEYS: Record<Scheme, string> = { light: LIGHT_CACHE_KEY, dark: DARK_CACHE_KEY };
+// Every palette carries exactly the `ColorToken` set (theme.test.ts pins it);
+// caret-dark stands for all.
 const TOKEN_NAMES = Object.keys(THEMES["caret-dark"].tokens).sort().join();
 
 /** Read a slot's cached palette. The blob is hand-editable and may come from an
@@ -157,6 +159,7 @@ export function writeCachedTheme(theme: CachedTheme): void {
   }
 }
 
+/** Forget a slot's cached palette. */
 export function clearCachedTheme(scheme: Scheme): void {
   try {
     localStorage.removeItem(CACHE_KEYS[scheme]);

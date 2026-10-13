@@ -1,15 +1,16 @@
 <script lang="ts">
   // The Appearance pane's theme block (EXC-773): the Mode segmented control, then
   // BOTH theme slots — always visible, never hidden behind the current mode —
-  // then one line saying which palette is showing and why.
+  // then one line saying which palette is showing and why, then the list of theme
+  // files that failed to load.
   //
   // Both slots stay on screen because they are persistent settings, not a function
   // of the current mode; showing both is what teaches that the pairing exists. The
   // live one wears an IN USE pill, the block's single amber mark. Which one that is
   // comes from the live appearance module, so the pill and the summary line track an
   // OS flip while the modal is open without a subscription of this section's own. The
-  // slot rows read the live appearance too, so a slot settled by a late-loading custom
-  // theme shows its real selection.
+  // slot rows read the live appearance too, so a slot that a late-registering custom
+  // theme resolves shows its real selection.
   //
   // The shell renders this in place of the generic field rows for the Theme
   // section, and hands it that section's fields — which the /-search may have
@@ -108,7 +109,8 @@
   <p class="resolved" data-theme-summary>{appearance.summary}</p>
 
   {#if errors.length > 0}
-    <Alert.Root variant="destructive" class="theme-errors" data-theme-errors>
+    <!-- Static content, not an event: a live region would announce it over the dialog title. -->
+    <Alert.Root variant="destructive" class="theme-errors" role="note" data-theme-errors>
       <Alert.Title>These theme files didn't load</Alert.Title>
       <Alert.Description>
         <ul class="error-list">

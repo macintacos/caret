@@ -4,7 +4,8 @@
 // the boot paint from localStorage across a reload, a held GET /api/themes, the portalled
 // bits-ui picker, and shiki's colours inside the diff view's shadow DOM. The pure halves —
 // building a theme from a file, registering it, the cached palette — are unit-tested in
-// ui/src/lib/registerTheme.test.ts and ui/src/lib/appearance.test.ts.
+// ui/src/lib/registerTheme.test.ts and ui/src/lib/appearance.test.ts, and the stand-in
+// reconcile rules in ui/src/state/appearance.test.ts.
 
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -13,12 +14,13 @@ import type { Page, Route } from "@playwright/test";
 
 import { openSettings } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
-import { seedAndOpen } from "@test/e2e/support/source-view.ts";
+import { rowColors, seedAndOpen } from "@test/e2e/support/source-view.ts";
 import { themeFileText } from "@test/support/theme.ts";
 
 const CARET_DARK_ACCENT = "#ff8f3d";
 const NIGHTLY_ACCENT = "#00c2a8";
 const NIGHTLY_KEYWORD = "#12ab34";
+// NIGHTLY_KEYWORD as getComputedStyle reports it.
 const NIGHTLY_KEYWORD_RGB = "rgb(18, 171, 52)";
 const EDITED_ACCENT = "#c20078";
 
@@ -65,18 +67,6 @@ function accent(page: Page): Promise<string> {
   return page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue("--accent").trim().toLowerCase(),
   );
-}
-
-function rowColors(page: Page, text: string): Promise<string[]> {
-  return page.evaluate((needle) => {
-    const shadow = document.querySelector(".diffview")?.shadowRoot;
-    for (const row of shadow?.querySelectorAll("[data-line]") ?? []) {
-      if ((row.textContent ?? "").includes(needle)) {
-        return [...row.querySelectorAll("span")].map((s) => getComputedStyle(s).color);
-      }
-    }
-    return [];
-  }, text);
 }
 
 const darkTrigger = (page: Page) => page.getByRole("button", { name: "Dark theme" });

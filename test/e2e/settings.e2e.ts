@@ -22,7 +22,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import { openSettings } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { planSurface, seedAndOpen } from "@test/e2e/support/source-view.ts";
+import { planSurface, rowColors, seedAndOpen } from "@test/e2e/support/source-view.ts";
 
 const topbarHints = ".topbar [data-slot='kbd']";
 const keyboardButton = "button[aria-label='Keyboard shortcuts']";
@@ -274,21 +274,6 @@ test("picking a slot's palette applies it immediately when that slot is live", a
   await expect(page.locator("html")).toHaveAttribute("style", /--paper:\s*#0d1117/i);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
-
-// The distinct computed colors of the plan row carrying `text`, read inside the diff
-// view's shadow root — where the shiki tokens live, so this is the rendered syntax
-// color rather than a token value read back out of the registry.
-function rowColors(page: Page, text: string): Promise<string[]> {
-  return page.evaluate((needle) => {
-    const shadow = document.querySelector(".diffview")?.shadowRoot;
-    for (const row of shadow?.querySelectorAll("[data-line]") ?? []) {
-      if ((row.textContent ?? "").includes(needle)) {
-        return [...row.querySelectorAll("span")].map((s) => getComputedStyle(s).color);
-      }
-    }
-    return [];
-  }, text);
-}
 
 // EXC-752: a palette from outside caret's own pair has to land on BOTH halves of the
 // app — the chrome repaints from its tokens, and the code the reviewer is reading

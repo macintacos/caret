@@ -189,6 +189,11 @@ describe("theme file errors", () => {
     }
   });
 
+  test("the error list is a static note, not a live region", () => {
+    render(ThemeSection, props({ errors: [{ file: "neon.json", messages: ["bad"] }] }));
+    expect(document.querySelector("[data-theme-errors]")?.getAttribute("role")).toBe("note");
+  });
+
   test("renders no error block when every file loaded", () => {
     render(ThemeSection, props());
     expect(has("[data-theme-errors]")).toBe(false);

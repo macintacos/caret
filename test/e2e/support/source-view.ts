@@ -516,3 +516,20 @@ export async function expectNoComposerOpens(page: Page): Promise<void> {
   await page.waitForFunction((t) => performance.now() > t + 300, t0);
   await expect(composer).toHaveCount(0);
 }
+
+/**
+ * The distinct computed colors of the plan row carrying `text`, read inside the diff
+ * view's shadow root — where the shiki tokens live, so this is the rendered syntax
+ * color rather than a token value read back out of the registry.
+ */
+export function rowColors(page: Page, text: string): Promise<string[]> {
+  return page.evaluate((needle) => {
+    const shadow = document.querySelector(".diffview")?.shadowRoot;
+    for (const row of shadow?.querySelectorAll("[data-line]") ?? []) {
+      if ((row.textContent ?? "").includes(needle)) {
+        return [...row.querySelectorAll("span")].map((s) => getComputedStyle(s).color);
+      }
+    }
+    return [];
+  }, text);
+}
