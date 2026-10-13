@@ -329,22 +329,34 @@ caret still decides how strong it is.
 
 ### `syntax`
 
-All 11 roles are required. Each is an object with a `color` and an optional `fontStyle`, a
-list of any of `"italic"`, `"bold"`, `"underline"`, and `"strikethrough"`.
+The first eleven roles are required. The others are optional, and a file that omits one
+paints it with the role it falls back to, so a file written for the eleven still works and
+an author adds a role only to set it apart. Each role is an object with a `color` and an
+optional `fontStyle`, a list of any of `"italic"`, `"bold"`, `"underline"`, and
+`"strikethrough"`.
 
-| Role          | What it colors                                                     |
-| ------------- | ------------------------------------------------------------------ |
-| `comment`     | Comments                                                           |
-| `punctuation` | Punctuation, brackets, and operators                               |
-| `variable`    | Variables, parameters, and constants                               |
-| `property`    | Object properties and keys                                         |
-| `attribute`   | Markup attributes                                                  |
-| `keyword`     | Keywords, storage modifiers, `this`/`self`, and markup tags        |
-| `function`    | Function names and calls                                           |
-| `type`        | Types, classes, and namespaces                                     |
-| `string`      | Strings                                                            |
-| `escape`      | String escapes, regular expressions, and template interpolations   |
-| `number`      | Numbers and language constants such as `true` and `null`           |
+| Role | What it colors | Scopes | Falls back to |
+| --- | --- | --- | --- |
+| `comment` | Comments | `comment`, `punctuation.definition.comment`, `string.comment` | required |
+| `punctuation` | Punctuation and separators | `punctuation`, `punctuation.separator`, `punctuation.terminator`, `punctuation.accessor` | required |
+| `operator` | Operators | `keyword.operator` | `punctuation` |
+| `bracket` | Braces | `meta.brace` | `punctuation` |
+| `variable` | Variables and constants | `variable.other.readwrite`, `variable`, `variable.other`, `variable.other.constant`, `meta.definition.variable`, `support.variable` | required |
+| `parameter` | Function parameters | `variable.parameter` | `variable` |
+| `property` | Object properties and keys | `variable.other.property`, `variable.other.object.property`, `meta.object-literal.key`, `support.type.property-name` | required |
+| `attribute` | Markup attributes | `entity.other.attribute-name`, `meta.attribute` | required |
+| `keyword` | Keywords and storage modifiers | `keyword`, `keyword.control`, `keyword.operator.new`, `keyword.operator.expression`, `storage`, `storage.type`, `storage.modifier` | required |
+| `languageVariable` | `this`, `self`, and similar | `variable.language` | `keyword` |
+| `tag` | Markup tag names | `entity.name.tag` | `keyword` |
+| `tagPunctuation` | Markup tag brackets | `punctuation.definition.tag` | `keyword` |
+| `function` | Function names and calls | `entity.name.function`, `support.function`, `meta.function-call`, `variable.function` | required |
+| `builtinFunction` | Built-in functions | `support.function.builtin` | `function` |
+| `type` | Types, classes, and namespaces | `entity.name.type`, `entity.name.class`, `entity.other.inherited-class`, `entity.name.namespace`, `support.type`, `support.class` | required |
+| `builtinType` | Built-in and primitive types | `support.type.primitive`, `support.type.builtin` | `type` |
+| `string` | Strings | `string`, `string.quoted`, `string.template`, `punctuation.definition.string`, `constant.other.symbol` | required |
+| `escape` | String escapes and regular expressions | `constant.character.escape`, `string.regexp` | required |
+| `interpolation` | Template interpolation delimiters | `punctuation.definition.template-expression` | `escape` |
+| `number` | Numbers and language constants such as `true` and `null` | `constant.numeric`, `constant.language`, `support.constant` | required |
 
 ### Colors and errors
 

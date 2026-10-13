@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { SYNTAX_ROLE_FALLBACKS } from "@/theme/role-scopes.ts";
+import { ROLE_SCOPES, SYNTAX_ROLE_FALLBACKS } from "@/theme/role-scopes.ts";
 import { parseThemeFile, SYNTAX_ROLES, themeFileJsonSchema } from "@/theme/schema.ts";
 
 import { themeFileText } from "../../support/theme.ts";
@@ -256,5 +256,16 @@ describe("doc/CONFIGURING.md", () => {
     expect(example).toEqual(
       JSON.parse(readFileSync(join(REPO_ROOT, "ui/src/lib/themes/caret-dark.json"), "utf8")),
     );
+  });
+
+  test("its syntax table lists every role with its scopes and fallback", () => {
+    const doc = readFileSync(join(REPO_ROOT, "doc/CONFIGURING.md"), "utf8");
+    const section = doc.split("\n### `syntax`\n")[1]?.split("\n### ")[0] ?? "";
+    const fallbacks: Record<string, string> = SYNTAX_ROLE_FALLBACKS;
+    for (const [role, scopes] of Object.entries(ROLE_SCOPES)) {
+      const row = section.split("\n").find((line) => line.startsWith(`| \`${role}\``)) ?? "";
+      const cells = [...scopes, ...(role in fallbacks ? [fallbacks[role]] : [])];
+      for (const cell of cells) expect(row).toContain(`\`${cell}\``);
+    }
   });
 });
