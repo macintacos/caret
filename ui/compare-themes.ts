@@ -1,0 +1,193 @@
+#!/usr/bin/env bun
+// Highlights THEME_SAMPLES with each bundled vendor theme and with its conversion onto
+// syntax roles, and writes every token whose style differs to ui/theme-drift.md.
+//
+// It lives at the ui/ root rather than under scripts/ because its module graph resolves
+// $lib, an alias only ui/tsconfig.json carries. Its output is committed: a re-run's
+// `git diff` is how drift is reviewed. Regenerate with
+// `bun ui/compare-themes.ts && mise run format`.
+
+import { writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+import type { HighlighterCore, ThemeRegistrationRaw } from "shiki/core";
+
+import { syntaxFromVsCodeTheme } from "@core/theme/vscode-theme.ts";
+import { syntaxShikiTheme } from "$lib/caret-shiki.ts";
+import { withStructuralOverrides } from "$lib/caret-theme.ts";
+import { CARET_TOKENIZE_OPTIONS, createHighlighter } from "$lib/diffview/shiki-bundle.ts";
+import { THEME_IDS, THEMES } from "$lib/theme.ts";
+import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
+
+import { THEME_SAMPLES, type ThemeSample } from "./theme-sample.ts";
+
+const REPORT = fileURLToPath(new URL("./theme-drift.md", import.meta.url));
+
+export interface TokenStyle {
+  color: string;
+  fontStyle: string[];
+}
+
+export interface TokenDrift {
+  lang: string;
+  /** 1-based within its own sample. */
+  line: number;
+  /** The raw token, untrimmed; the renderer trims it. */
+  text: string;
+  original: TokenStyle;
+  converted: TokenStyle;
+}
+
+export interface ThemeDrift {
+  /** How many non-whitespace tokens were compared. */
+  tokens: number;
+  drift: TokenDrift[];
+}
+
+// vscode-textmate's FontStyle bits; shiki re-exports that enum as a type only, and its
+// home package is a transitive dependency.
+const FONT_STYLE_NAMES = [
+  [1, "italic"],
+  [2, "bold"],
+  [4, "underline"],
+  [8, "strikethrough"],
+] as const;
+
+function tokenStyle(variant: { color?: string; fontStyle?: number } | undefined): TokenStyle {
+  const bits = variant?.fontStyle ?? 0;
+  return {
+    color: (variant?.color ?? "").toLowerCase(),
+    fontStyle: FONT_STYLE_NAMES.filter(([bit]) => bits & bit).map(([, name]) => name),
+  };
+}
+
+const sameStyle = (a: TokenStyle, b: TokenStyle) =>
+  a.color === b.color && a.fontStyle.join(" ") === b.fontStyle.join(" ");
+
+/** Tokenize every sample once under both themes and list the non-whitespace tokens whose
+ * color or font style differs. Loads both themes into `highlighter`. */
+export async function themeDrift(
+  highlighter: HighlighterCore,
+  pair: { original: ThemeRegistrationRaw; converted: ThemeRegistrationRaw },
+  samples: readonly ThemeSample[],
+): Promise<ThemeDrift> {
+  // shiki keys loaded themes by name; a shared name would make both variants one theme.
+  await highlighter.loadTheme(
+    { ...pair.original, name: "original" },
+    { ...pair.converted, name: "converted" },
+  );
+  const result: ThemeDrift = { tokens: 0, drift: [] };
+  for (const { lang, code } of samples) {
+    const lines = highlighter.codeToTokensWithThemes(code, {
+      lang,
+      themes: { original: "original", converted: "converted" },
+      ...CARET_TOKENIZE_OPTIONS,
+    });
+    lines.forEach((tokens, lineIndex) => {
+      for (const token of tokens) {
+        if (token.content.trim() === "") continue;
+        result.tokens++;
+        const originalStyle = tokenStyle(token.variants.original);
+        const convertedStyle = tokenStyle(token.variants.converted);
+        if (!sameStyle(originalStyle, convertedStyle)) {
+          result.drift.push({
+            lang,
+            line: lineIndex + 1,
+            text: token.content,
+            original: originalStyle,
+            converted: convertedStyle,
+          });
+        }
+      }
+    });
+  }
+  return result;
+}
+
+function codeSpan(text: string): string {
+  const trimmed = text.trim().replaceAll("|", "\\|");
+  return trimmed.includes("`") ? `\`\` ${trimmed} \`\`` : `\`${trimmed}\``;
+}
+
+const styleCell = (s: TokenStyle) => [s.color, ...s.fontStyle].join(" ");
+
+function themeSection({ id, drift }: ThemeDrift & { id: string }): string {
+  if (drift.length === 0) return `## ${id}\n\nNo differing tokens.\n`;
+  const rows = drift.map(
+    (token) =>
+      `| ${token.lang} | ${token.line} | ${codeSpan(token.text)} | ${styleCell(token.original)} | ${styleCell(token.converted)} |`,
+  );
+  return [
+    `## ${id}`,
+    "",
+    "| Language | Line | Token | Original | Converted |",
+    "| --- | --- | --- | --- | --- |",
+    ...rows,
+    "",
+  ].join("\n");
+}
+
+/** Render the drift report. Pure, and nothing in it varies between runs, so an unchanged
+ * tree regenerates the committed report byte for byte once `mise run format` has run. */
+export function renderDriftReport(results: readonly (ThemeDrift & { id: string })[]): string {
+  const summary = results.map(
+    (theme) => `| ${theme.id} | ${theme.drift.length} | ${theme.tokens} |`,
+  );
+  return [
+    "# Theme conversion drift",
+    "",
+    "Generated by `ui/compare-themes.ts`; do not edit by hand. " +
+      "Each bundled vendor theme against its conversion onto caret's syntax roles, over the " +
+      "sample in `ui/theme-sample.ts`. Regenerate with `bun ui/compare-themes.ts && mise run format`. " +
+      "On the converted side, Markdown structure (headings, inline code, fences) and diff lines " +
+      "take `syntaxShikiTheme`'s fixed markdown and diff rules, which paint from chrome colors " +
+      "(and, for diff headers, the comment role) rather than from the theme's own rules, so " +
+      "those rows show drift no role change removes.",
+    "",
+    "| Theme | Differing tokens | Tokens |",
+    "| --- | --- | --- |",
+    ...summary,
+    "",
+    ...results.map(themeSection),
+  ].join("\n");
+}
+
+function vendorPair(id: keyof typeof UPSTREAM_SHIKI_THEMES) {
+  const theme = THEME_IDS.map((themeId) => THEMES[themeId]).find(
+    (palette) => palette.shikiTheme === id,
+  );
+  if (!theme) throw new Error(`no palette names the shiki theme ${id}`);
+  const vendorTheme = UPSTREAM_SHIKI_THEMES[id];
+  const tokens = theme.tokens;
+  const chrome = {
+    sunk: tokens["--paper-sunk"],
+    ink: tokens["--ink"],
+    accent: tokens["--accent"],
+    accentBright: tokens["--accent-bright"],
+    ok: tokens["--ok"],
+    danger: tokens["--danger"],
+  };
+  const roles = syntaxFromVsCodeTheme(vendorTheme);
+  return {
+    original: withStructuralOverrides(theme, vendorTheme),
+    converted: withStructuralOverrides(
+      theme,
+      syntaxShikiTheme(theme.id, theme.scheme, chrome, roles),
+    ),
+  };
+}
+
+async function main(): Promise<void> {
+  const highlighter = await createHighlighter({
+    themes: [],
+    langs: THEME_SAMPLES.map((s) => s.lang),
+  });
+  const ids = Object.keys(UPSTREAM_SHIKI_THEMES) as (keyof typeof UPSTREAM_SHIKI_THEMES)[];
+  const results = [];
+  for (const id of ids) {
+    results.push({ id, ...(await themeDrift(highlighter, vendorPair(id), THEME_SAMPLES)) });
+  }
+  writeFileSync(REPORT, renderDriftReport(results));
+}
+
+if (import.meta.main) await main();

@@ -175,6 +175,20 @@ and `mise run setup`. Lint and format need it because hk's Tailwind step loads `
 as its theme and resolves that `@import`. So does the git pre-commit hook, which runs hk
 directly — and is therefore the one path that expects the partial to already exist.
 
+### Comparing converted themes
+
+`ui/compare-themes.ts` highlights a fixed TypeScript, Markdown, JSON, shell, diff, and
+HTML sample with each bundled vendor theme and with its conversion onto caret's syntax
+roles, then lists every token whose color or font style differs, with both values. The
+converter it runs lives in `src/theme/`.
+
+The report, `ui/theme-drift.md`, is generated but committed, unlike the files above.
+Regenerate it with `bun ui/compare-themes.ts && mise run format`;
+`git diff ui/theme-drift.md` is the drift a role or converter change causes. Markdown
+structure and diff rows take `syntaxShikiTheme`'s fixed markdown and diff rules, which
+paint from chrome colors (and, for diff headers, the comment role) rather than from the
+theme's own rules, so no role change removes them.
+
 ### `mise run dev`
 
 The development loop. It is self-contained: no separate `bin/caret daemon` needed.

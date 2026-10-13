@@ -121,7 +121,10 @@ function caretMarkdownRules(p: Palette): NonNullable<ThemeRegistrationRaw["setti
  * normalizing to one keeps the appended rules last, which is what makes them win
  * (shiki is last-match-wins). The `settings ?? tokenColors` order matches shiki's own
  * `normalizeTheme`. */
-function withStructuralOverrides(theme: Theme, source: ThemeRegistrationRaw): ThemeRegistrationRaw {
+export function withStructuralOverrides(
+  theme: Theme,
+  source: ThemeRegistrationRaw,
+): ThemeRegistrationRaw {
   const { tokenColors, settings, ...rest } = source;
   return {
     ...rest,
