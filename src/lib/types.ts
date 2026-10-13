@@ -2,6 +2,7 @@
 // directly through the @core/* alias). The single wire contract — pure TS with
 // no node imports, so the browser bundle stays clean.
 
+// Top-level `import type` only: schema.ts imports zod, and the UI imports this file at runtime.
 // Relative, not @/: the UI's svelte-check reaches this file via @core, where @/ is ui/src.
 import type { ThemeFile } from "../theme/schema.ts";
 
@@ -500,7 +501,8 @@ export interface EnvOverride {
  */
 export type BuildKind = "binary" | "bundle" | "dev";
 
-/** One theme file the daemon could not serve: its base name, and one line per problem. */
+/** A theme file the daemon could not serve, or the themes folder itself when it cannot
+ * be listed: its base name, and one line per problem. */
 export interface ThemeFileError {
   file: string;
   messages: string[];

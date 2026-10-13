@@ -2,16 +2,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const CARET_DARK = join(
-  import.meta.dir,
-  "..",
-  "..",
-  "ui",
-  "src",
-  "lib",
-  "themes",
-  "caret-dark.json",
-);
+const CARET_DARK = join(import.meta.dir, "..", "..", "ui/src/lib/themes/caret-dark.json");
 
 /** The text of a valid theme file with `id`: caret-dark's file, renamed. */
 export function themeFileText(id: string): string {

@@ -499,18 +499,18 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return Response.json(await cfg.updateReport());
   }
 
-  // GET /api/themes — the user's custom themes plus a per-file error for each file
-  // that fails, read fresh from the folder on every request.
-  async function handleThemes(): Promise<Response> {
-    return Response.json(await loadCustomThemes(cfg.themesDir));
-  }
-
   // GET /api/update/changes — what the skipped releases or trunk commits bring
   // (EXC-1452). Unlike /api/update this may reach GitHub; the thunk caches.
   async function handleUpdateChanges(): Promise<Response> {
     if (!cfg.updateChanges) return notFound();
     const changes = await cfg.updateChanges();
     return changes ? Response.json(changes) : new Response("upstream unavailable", { status: 502 });
+  }
+
+  // GET /api/themes — the user's custom themes plus a per-file error for each file
+  // that fails, read fresh from the folder on every request (EXC-1980).
+  async function handleThemes(): Promise<Response> {
+    return Response.json(await loadCustomThemes(cfg.themesDir));
   }
 
   // POST /api/retire — graceful single-instance retire (EXC-406): a newer caret

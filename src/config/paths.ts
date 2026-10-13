@@ -94,8 +94,7 @@ export function configFile(): string {
   return process.env.CARET_CONFIG_FILE || `${configDir()}/config.toml`;
 }
 
-/** Custom theme files: <configDir()>/themes. Read fresh per request by GET /api/themes;
- * caret never writes here. */
+/** Custom theme files: <configDir()>/themes. */
 export function themesDir(): string {
   return `${configDir()}/themes`;
 }

@@ -1,13 +1,17 @@
 // Loads the user's custom themes from caret's themes folder, validating each file.
+import type { Stats } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 
+import { compareCodeUnits } from "@/lib/compare.ts";
 import type { CustomThemes, ThemeFileError } from "@/lib/types.ts";
 import { BUILTIN_THEME_IDS } from "@/theme/builtin-ids.ts";
 import { parseThemeFile, type ThemeFile } from "@/theme/schema.ts";
 
+/** Every request reads the whole folder; a real theme file is about 1 KiB. */
 export const MAX_THEME_FILE_BYTES = 64 * 1024;
 
+/** A file to parse, or a wire-ready error line for it: fixed text, never an fs message (those embed absolute paths). */
 export type ThemeSource = { file: string; text: string } | { file: string; error: string };
 
 /** Reads `dir` fresh on every call; a missing folder yields no themes and no errors. */
@@ -15,7 +19,7 @@ export async function loadCustomThemes(dir: string): Promise<CustomThemes> {
   return collectThemes(await readThemeSources(dir), BUILTIN_THEME_IDS);
 }
 
-/** Pure: parse each source, reject built-in ids, then reject every file of a duplicated id. */
+/** Pure: parse each source, reject built-in ids, then reject every file of a duplicated id: file names are no basis for choosing which one loads. */
 export function collectThemes(
   sources: readonly ThemeSource[],
   builtinIds: readonly string[],
@@ -49,14 +53,11 @@ export function collectThemes(
     for (const file of files) errors.push({ file, messages: [message] });
   }
   return {
-    themes: themes.sort((a, b) => compare(a.file, b.file)).map((entry) => entry.theme),
-    errors: errors.sort((a, b) => compare(a.file, b.file)),
+    themes: themes.sort((a, b) => compareCodeUnits(a.file, b.file)).map((entry) => entry.theme),
+    errors: errors.sort((a, b) => compareCodeUnits(a.file, b.file)),
   };
 }
 
-const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-
-// Node's fs errors embed the absolute path, so every failure below is fixed text.
 async function readThemeSources(dir: string): Promise<ThemeSource[]> {
   let names: string[];
   try {
@@ -68,7 +69,7 @@ async function readThemeSources(dir: string): Promise<ThemeSource[]> {
   const sources: ThemeSource[] = [];
   for (const file of names
     .filter((name) => name.endsWith(".json") && !name.startsWith("."))
-    .sort(compare)) {
+    .sort()) {
     const source = await readThemeSource(join(dir, file), file);
     if (source) sources.push(source);
   }
@@ -76,9 +77,17 @@ async function readThemeSources(dir: string): Promise<ThemeSource[]> {
 }
 
 async function readThemeSource(path: string, file: string): Promise<ThemeSource | undefined> {
-  const info = await stat(path).catch(() => undefined);
-  if (!info?.isFile()) return undefined;
-  if (info.size > MAX_THEME_FILE_BYTES) return { file, error: "theme file: is larger than 64 KiB" };
+  let info: Stats;
+  try {
+    info = await stat(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    return { file, error: "theme file: could not be read" };
+  }
+  if (!info.isFile()) return undefined;
+  if (info.size > MAX_THEME_FILE_BYTES) {
+    return { file, error: `theme file: is larger than ${MAX_THEME_FILE_BYTES / 1024} KiB` };
+  }
   try {
     // Bun.file strips a UTF-8 BOM; readFile keeps it and JSON.parse then rejects the text.
     return { file, text: await Bun.file(path).text() };

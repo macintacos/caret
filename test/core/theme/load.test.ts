@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
+import { fakeDistDir } from "@test/support/fs-tree.ts";
 import { themeFileText } from "@test/support/theme.ts";
+import { BUILTIN_THEME_IDS } from "@/theme/builtin-ids.ts";
 import { collectThemes, loadCustomThemes, MAX_THEME_FILE_BYTES } from "@/theme/load.ts";
 import { parseThemeFile } from "@/theme/schema.ts";
 
@@ -12,15 +13,12 @@ afterEach(() => {
   for (const dir of temps.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-function tempDir(): string {
-  const dir = mkdtempSync(join(tmpdir(), "caret-themes-"));
-  temps.push(dir);
-  return dir;
-}
+const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
+const asRoot = process.getuid?.() === 0;
 
-function themesDir(files: Record<string, string>): string {
-  const dir = tempDir();
-  for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text);
+function tempDir(files: Record<string, string> = {}): string {
+  const dir = fakeDistDir("caret-themes-", files);
+  temps.push(dir);
   return dir;
 }
 
@@ -30,10 +28,13 @@ const theme = (id: string) => {
   return parsed.file;
 };
 
-const BAD_INK = JSON.stringify({
-  ...JSON.parse(themeFileText("bad")),
-  palette: { ...JSON.parse(themeFileText("bad")).palette, ink: "red" },
-});
+const BAD = JSON.parse(themeFileText("bad"));
+const BAD_INK = JSON.stringify({ ...BAD, palette: { ...BAD.palette, ink: "red" } });
+
+function lockedFile(dir: string): void {
+  writeFileSync(join(dir, "locked.json"), themeFileText("locked"));
+  chmodSync(join(dir, "locked.json"), 0o000);
+}
 
 describe("loadCustomThemes", () => {
   test("a missing folder yields no themes and no errors", async () => {
@@ -45,7 +46,7 @@ describe("loadCustomThemes", () => {
   });
 
   test("loads valid files in file-name order", async () => {
-    const dir = themesDir({ "b.json": themeFileText("zeta"), "a.json": themeFileText("alpha") });
+    const dir = tempDir({ "b.json": themeFileText("zeta"), "a.json": themeFileText("alpha") });
     expect(await loadCustomThemes(dir)).toEqual({
       themes: [theme("alpha"), theme("zeta")],
       errors: [],
@@ -53,7 +54,7 @@ describe("loadCustomThemes", () => {
   });
 
   test("ignores non-json names, dotfiles, folders, and dangling links", async () => {
-    const dir = themesDir({
+    const dir = tempDir({
       "notes.txt": "x",
       "README.md": "x",
       ".hidden.json": "x",
@@ -66,20 +67,20 @@ describe("loadCustomThemes", () => {
   });
 
   test("follows a symlink to a file outside the folder", async () => {
-    const outside = themesDir({ "real.json": themeFileText("linked") });
+    const outside = tempDir({ "real.json": themeFileText("linked") });
     const dir = tempDir();
     symlinkSync(join(outside, "real.json"), join(dir, "linked.json"));
     expect(await loadCustomThemes(dir)).toEqual({ themes: [theme("linked")], errors: [] });
   });
 
   test("loads a file that starts with a UTF-8 BOM", async () => {
-    const dir = themesDir({ "bom.json": `﻿${themeFileText("bom")}` });
+    const dir = tempDir({ "bom.json": `\uFEFF${themeFileText("bom")}` });
     expect(await loadCustomThemes(dir)).toEqual({ themes: [theme("bom")], errors: [] });
   });
 
   test("rejects a file over the size cap without blocking its siblings", async () => {
     const text = themeFileText("big");
-    const dir = themesDir({
+    const dir = tempDir({
       "big.json": text.padEnd(MAX_THEME_FILE_BYTES + 1, " "),
       "ok.json": themeFileText("ok"),
     });
@@ -90,7 +91,7 @@ describe("loadCustomThemes", () => {
   });
 
   test("reports invalid JSON and schema failures beside a valid sibling", async () => {
-    const dir = themesDir({
+    const dir = tempDir({
       "broken.json": "{",
       "ink.json": BAD_INK,
       "ok.json": themeFileText("ok"),
@@ -107,7 +108,7 @@ describe("loadCustomThemes", () => {
   });
 
   test("rejects a built-in theme's id", async () => {
-    const dir = themesDir({ "d.json": themeFileText("dracula") });
+    const dir = tempDir({ "d.json": themeFileText("dracula") });
     expect(await loadCustomThemes(dir)).toEqual({
       themes: [],
       errors: [{ file: "d.json", messages: ['id: "dracula" is a built-in theme'] }],
@@ -115,7 +116,7 @@ describe("loadCustomThemes", () => {
   });
 
   test("rejects every file that declares a shared id", async () => {
-    const dir = themesDir({
+    const dir = tempDir({
       "a.json": themeFileText("dup"),
       "b.json": themeFileText("dup"),
       "c.json": themeFileText("solo"),
@@ -130,6 +131,24 @@ describe("loadCustomThemes", () => {
     });
   });
 
+  test.skipIf(asRoot)("reports a file that cannot be read", async () => {
+    const dir = tempDir();
+    lockedFile(dir);
+    expect(await loadCustomThemes(dir)).toEqual({
+      themes: [],
+      errors: [{ file: "locked.json", messages: ["theme file: could not be read"] }],
+    });
+  });
+
+  test("reports a symlink loop as unreadable", async () => {
+    const dir = tempDir();
+    symlinkSync("loop.json", join(dir, "loop.json"));
+    expect(await loadCustomThemes(dir)).toEqual({
+      themes: [],
+      errors: [{ file: "loop.json", messages: ["theme file: could not be read"] }],
+    });
+  });
+
   test("reports a folder that cannot be listed by its base name", async () => {
     const path = join(tempDir(), "themes");
     writeFileSync(path, "not a folder");
@@ -140,7 +159,7 @@ describe("loadCustomThemes", () => {
   });
 
   test("never reveals the folder's absolute path", async () => {
-    const dir = themesDir({
+    const dir = tempDir({
       "big.json": " ".repeat(MAX_THEME_FILE_BYTES + 1),
       "broken.json": "{",
       "ink.json": BAD_INK,
@@ -148,9 +167,11 @@ describe("loadCustomThemes", () => {
       "a.json": themeFileText("dup"),
       "b.json": themeFileText("dup"),
     });
+    if (!asRoot) lockedFile(dir);
+    symlinkSync("loop.json", join(dir, "loop.json"));
     const notFolder = join(dir, "big.json");
     const json = JSON.stringify([await loadCustomThemes(dir), await loadCustomThemes(notFolder)]);
-    expect(json.includes(dir)).toBe(false);
+    expect(json).not.toContain(dir);
   });
 });
 
@@ -165,4 +186,11 @@ describe("collectThemes", () => {
       errors: [{ file: "x.json", messages: ['id: "builtin-x" is a built-in theme'] }],
     });
   });
+});
+
+test("doc/CONFIGURING.md names every built-in theme id", () => {
+  const doc = readFileSync(join(REPO_ROOT, "doc/CONFIGURING.md"), "utf8");
+  const section = doc.split("\n### Where caret finds theme files\n")[1]?.split("\n### ")[0] ?? "";
+  const named = [...section.matchAll(/`([a-z0-9-]+)`/g)].map((m) => m[1]);
+  for (const id of BUILTIN_THEME_IDS) expect(named).toContain(id);
 });

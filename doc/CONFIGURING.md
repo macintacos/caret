@@ -260,9 +260,9 @@ offer them yet.
 ### Where caret finds theme files
 
 caret reads theme files from `$XDG_CONFIG_HOME/caret/themes`, or `~/.config/caret/themes`
-when `XDG_CONFIG_HOME` is unset. It reads the folder fresh on each page load, so adding,
-editing, or deleting a file takes effect without a restart. A missing or empty folder is
-fine.
+when `XDG_CONFIG_HOME` is unset. It reads the folder each time caret is asked for its
+themes, so adding, editing, or deleting a file takes effect without a restart. A missing
+or empty folder is fine.
 
 caret reads only the `*.json` files directly in the folder, including symlinks to files.
 It ignores everything else: subfolders, other extensions, and names that start with `.`.
@@ -275,6 +275,15 @@ caret skips a file, and reports an error that names it, when the file:
   `catppuccin-frappe`, `catppuccin-macchiato`, `catppuccin-mocha`, `dracula`,
   `github-light`, `github-dark`, `dawnfox`, or `duskfox`;
 - shares its `id` with another file. caret skips every file with that `id`.
+
+The daemon lists those errors (`42718` is `[daemon].port`):
+
+```sh
+curl -s http://127.0.0.1:42718/api/themes | jq .errors
+```
+
+With token auth on, add
+`-H "Authorization: Bearer $(cat "${XDG_STATE_HOME:-$HOME/.local/state}/caret/daemon.token")"`.
 
 ### Top-level fields
 

@@ -23,7 +23,7 @@ import {
 } from "@/daemon/guards.ts";
 import { VERSION } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
-import type { UpdateChanges, UpdateReport } from "@/lib/types.ts";
+import type { CustomThemes, UpdateChanges, UpdateReport } from "@/lib/types.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
@@ -40,9 +40,13 @@ let srv: { port: number; stop(): void };
 let base: string;
 
 async function boot(opts: BootOptions = {}) {
-  // Default config.toml into the temp dir so the settings tests never touch the
-  // developer's real one.
-  d = await bootDaemon(dir, { configPath: join(dir, "config.toml"), ...opts });
+  // Default config.toml and the themes folder into the temp dir so no test touches
+  // the developer's real ones.
+  d = await bootDaemon(dir, {
+    configPath: join(dir, "config.toml"),
+    themesDir: join(dir, "themes"),
+    ...opts,
+  });
   store = d.store;
   srv = { port: d.port, stop: d.stop };
   base = d.url;
@@ -268,11 +272,7 @@ describe("GET /api/themes", () => {
     writeFileSync(join(themes, "a.json"), themeFileText("theme-a"));
     writeFileSync(join(themes, "bad.json"), "{");
     await boot({ themesDir: themes });
-    const get = async () =>
-      (await (await fetch(`${base}/api/themes`)).json()) as {
-        themes: { id: string }[];
-        errors: { file: string }[];
-      };
+    const get = async () => (await (await fetch(`${base}/api/themes`)).json()) as CustomThemes;
 
     const first = await get();
     expect(first.themes.map((t) => t.id)).toEqual(["theme-a"]);
