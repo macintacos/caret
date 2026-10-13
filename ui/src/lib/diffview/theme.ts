@@ -13,7 +13,7 @@
 import { registerCustomTheme } from "@pierre/diffs";
 
 import { REGISTERED_SHIKI_THEMES } from "$lib/caret-theme.ts";
-import { THEMES, type ThemeId } from "$lib/theme.ts";
+import { type ThemeId, themeFor } from "$lib/theme.ts";
 
 /** Registers a named theme into the library's shared highlighter. Derived from
  * the library's own signature so the loader's resolved theme type stays in
@@ -36,7 +36,7 @@ export function caretDiffTheme(id?: ThemeId): {
   if (id === undefined) {
     return { theme: { light: "caret-light", dark: "caret-dark" }, themeType: "system" };
   }
-  return { theme: { light: id, dark: id }, themeType: THEMES[id].scheme };
+  return { theme: { light: id, dark: id }, themeType: themeFor(id).scheme };
 }
 
 // The name is duplicated onto the theme object because the library resolves a

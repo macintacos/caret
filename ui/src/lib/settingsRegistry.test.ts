@@ -25,7 +25,7 @@ import {
   SOUND_VOLUME_KEY,
   writeSoundVolume,
 } from "$lib/soundPref.ts";
-import { THEME_IDS, THEMES, type ThemeId } from "$lib/theme.ts";
+import { isBuiltinThemeId, THEMES, type ThemeId } from "$lib/theme.ts";
 import { seedUpdatesCheck } from "$lib/updatesPref.ts";
 
 afterEach(() => localStorage.clear());
@@ -386,7 +386,7 @@ describe("theme options carry a palette preview (EXC-753)", () => {
         // The preview is the option's own theme id — the card paints from the registry
         // (EXC-884), so the option carries the key, not a copy of the palette.
         expect(opt.preview).toBe(opt.value as ThemeId);
-        expect(THEME_IDS).toContain(opt.preview!);
+        expect(isBuiltinThemeId(opt.preview!)).toBe(true);
       }
     }
     const layout = staged.find((f) => f.key === "diffStyle");

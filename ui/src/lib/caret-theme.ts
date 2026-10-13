@@ -1,7 +1,16 @@
 import type { ThemeRegistrationRaw } from "shiki/core";
 
 import { CARET_SHIKI_THEMES } from "$lib/caret-shiki.ts";
-import { type ShikiThemeId, THEME_IDS, THEMES, type Theme, type ThemeId } from "$lib/theme.ts";
+import {
+  type BuiltinThemeId,
+  isBuiltinThemeId,
+  type ShikiThemeId,
+  THEME_IDS,
+  THEMES,
+  type Theme,
+  type ThemeId,
+  themeFor,
+} from "$lib/theme.ts";
 import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 
 // One shiki theme per registered palette (EXC-752), so the code a reviewer reads
@@ -132,21 +141,24 @@ const SHIKI_THEME_SOURCES: Record<ShikiThemeId, ThemeRegistrationRaw> = {
 /** The shiki theme one palette highlights code with, wearing caret's structural
  * marker rules. */
 export function shikiThemeForPalette(theme: Theme): ThemeRegistrationRaw {
-  return withStructuralOverrides(theme, SHIKI_THEME_SOURCES[theme.shikiTheme]);
+  const source =
+    typeof theme.shikiTheme === "string" ? SHIKI_THEME_SOURCES[theme.shikiTheme] : theme.shikiTheme;
+  return withStructuralOverrides(theme, source);
 }
 
 // Built once at module load, keyed by theme id: they are plain objects, and both
 // highlighters (the library's and the excerpt preview's) want the whole set up front.
 const SHIKI_THEMES = Object.fromEntries(
   THEME_IDS.map((id) => [id, shikiThemeForPalette(THEMES[id])]),
-) as Record<ThemeId, ThemeRegistrationRaw>;
+) as Record<BuiltinThemeId, ThemeRegistrationRaw>;
 
 /** The shiki theme for one caret palette. It is named by the palette's id, so a
- * highlighter resolves it by the same handle appearance.ts paints with. */
+ * highlighter resolves it by the same handle appearance.ts paints with. A runtime
+ * theme's is built per call. */
 export function shikiThemeFor(id: ThemeId): ThemeRegistrationRaw {
-  return SHIKI_THEMES[id];
+  return isBuiltinThemeId(id) ? SHIKI_THEMES[id] : shikiThemeForPalette(themeFor(id));
 }
 
-/** One resolved theme per registered palette, in THEME_IDS order — what a highlighter
- * registers. */
+/** One resolved theme per built-in palette, in THEME_IDS order — what a highlighter
+ * registers at creation. Runtime themes are not here. */
 export const REGISTERED_SHIKI_THEMES: ThemeRegistrationRaw[] = THEME_IDS.map(shikiThemeFor);

@@ -12,7 +12,7 @@
 // the live appearance, and it is the surface callers use (EXC-883).
 
 import { definePref, registerPrefKey } from "$lib/definePref.ts";
-import { type Scheme, type ThemeId, themesForScheme } from "$lib/theme.ts";
+import { type BuiltinThemeId, type Scheme, type ThemeId, themesForScheme } from "$lib/theme.ts";
 
 /** When each scheme applies: pinned to one, or following the OS. */
 export type ThemeMode = "light" | "dark" | "system";
@@ -24,7 +24,7 @@ export const THEME_MODES: readonly ThemeMode[] = ["light", "dark", "system"];
 export const DEFAULT_MODE: ThemeMode = "system";
 
 /** Each slot defaults to the caret palette of its own scheme. */
-export const DEFAULT_SLOT_THEME: Record<Scheme, ThemeId> = {
+export const DEFAULT_SLOT_THEME: Record<Scheme, BuiltinThemeId> = {
   light: "caret-light",
   dark: "caret-dark",
 };

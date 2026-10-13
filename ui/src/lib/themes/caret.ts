@@ -14,7 +14,7 @@
 // verdigris.
 
 import type { CaretShikiThemeId } from "$lib/caret-shiki.ts";
-import type { Scheme, Theme, ThemeId } from "$lib/theme.ts";
+import type { BuiltinThemeId, Scheme, Theme } from "$lib/theme.ts";
 import { paletteTheme } from "$lib/themes/recipe.ts";
 
 /** Every color caret's own palettes name: the thirteen `PaletteInput` values, the three
@@ -213,7 +213,7 @@ export const CARET_COLOR_PLACEMENT: Record<keyof CaretPalette, ColorPlacement> =
  * compile error to break rather than a coincidence to rely on — the same shape
  * catppuccin.ts's `flavor` uses for the vendor half. */
 function caretTheme(
-  id: ThemeId & CaretShikiThemeId,
+  id: BuiltinThemeId & CaretShikiThemeId,
   label: string,
   scheme: Scheme,
   p: CaretPalette,

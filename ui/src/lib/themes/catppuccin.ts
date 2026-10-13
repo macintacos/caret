@@ -19,7 +19,7 @@
 // entities in the diff view as well as filling gutter bars. They stay as published —
 // reading Latte's own colors is the point of picking Latte.
 
-import type { Theme, ThemeId } from "$lib/theme.ts";
+import type { BuiltinThemeId, Theme } from "$lib/theme.ts";
 import { type PaletteInput, paletteTheme } from "$lib/themes/recipe.ts";
 import type { UpstreamShikiThemeId } from "$lib/upstream-shiki.ts";
 
@@ -111,7 +111,7 @@ const MOCHA: Flavor = {
  * names both the palette and its upstream theme. The intersection makes that
  * identity a compile error to break rather than a coincidence to rely on. */
 function flavor(
-  id: ThemeId & UpstreamShikiThemeId,
+  id: BuiltinThemeId & UpstreamShikiThemeId,
   label: string,
   f: Flavor,
   dark: boolean,

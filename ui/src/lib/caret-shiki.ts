@@ -26,7 +26,7 @@ import type { SyntaxRole, ThemeSyntax } from "@core/theme/schema.ts";
 // from here and this module takes its two types from there. `verbatimModuleSyntax`
 // erases both, so the cycle is a source-graph artifact rather than a load order — keep
 // it that way, and never reach for a runtime value across it.
-import type { Scheme, ThemeId } from "$lib/theme.ts";
+import type { BuiltinThemeId, Scheme } from "$lib/theme.ts";
 import { CARET_DARK, CARET_LIGHT, type CaretPalette } from "$lib/themes/caret.ts";
 
 // TextMate resolves the longest matching selector, so specificity does the ordering
@@ -178,11 +178,15 @@ function caretRoles(p: CaretPalette): ThemeSyntax {
 /** Build one scheme's theme from its record.
  *
  * @param id - The theme's shiki name, which is also its palette id — a highlighter
- * resolves it by the same handle appearance.ts paints with. Typing it `ThemeId` keeps a
+ * resolves it by the same handle appearance.ts paints with. Typing it `BuiltinThemeId` keeps a
  * theme from naming a palette that does not exist; that its key and its `name` agree is
- * pinned by caret-theme.test.ts, and `caretTheme`'s `ThemeId & CaretShikiThemeId`
+ * pinned by caret-theme.test.ts, and `caretTheme`'s `BuiltinThemeId & CaretShikiThemeId`
  * parameter closes the loop from the palette side. */
-function caretShikiTheme(id: ThemeId, scheme: Scheme, p: CaretPalette): ThemeRegistrationRaw {
+function caretShikiTheme(
+  id: BuiltinThemeId,
+  scheme: Scheme,
+  p: CaretPalette,
+): ThemeRegistrationRaw {
   return syntaxShikiTheme(id, scheme, p, caretRoles(p));
 }
 

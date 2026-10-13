@@ -10,12 +10,12 @@
 // wants a derived wash on some other hue says so through the nine optional
 // overrides below rather than by writing its tokens out by hand.
 
-import type { ColorToken, Scheme, ShikiThemeId, Theme, ThemeId } from "$lib/theme.ts";
+import type { BuiltinThemeId, ColorToken, Scheme, ShikiThemeId, Theme } from "$lib/theme.ts";
 
 /** The colors a palette decides for itself, plus the shiki theme it names.
  * Everything else in a `Theme` is derived from these by `paletteTheme`. */
 export interface PaletteInput {
-  id: ThemeId;
+  id: BuiltinThemeId;
   /** Human label shown in the Settings dropdown. */
   label: string;
   scheme: Scheme;

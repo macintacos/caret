@@ -28,7 +28,7 @@ import {
   writeSlotTheme,
   writeThemeMode,
 } from "$lib/appearance.ts";
-import { paintTheme, type Scheme, THEMES, type ThemeId } from "$lib/theme.ts";
+import { paintTheme, type Scheme, type ThemeId, themeFor } from "$lib/theme.ts";
 import { type ThemeWipeDeps, withWipe } from "$lib/themeWipe.ts";
 
 /** The live appearance: the resolved reads every surface follows, plus the
@@ -111,7 +111,7 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
       return scheme();
     },
     get summary() {
-      return appearanceSummary(live.mode, scheme(), THEMES[resolved()].label);
+      return appearanceSummary(live.mode, scheme(), themeFor(resolved()).label);
     },
     setMode(mode) {
       commit(() => {
