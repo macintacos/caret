@@ -141,8 +141,9 @@ export interface BuiltinTheme extends ThemeFields {
 /** A theme built from a theme file, carrying its shiki theme inline. */
 export interface RuntimeTheme extends ThemeFields {
   id: CustomThemeId;
-  /** Its `name` is both highlighters' cache key: the id, then `<id>~<n>` after a
-   * replace. A rebuild must not reset it. */
+  /** Bumped by each replace; `shikiThemeName` folds it into both highlighters' cache
+   * key, so a rebuild must not reset it. */
+  revision: number;
   shikiTheme: ThemeRegistrationRaw;
 }
 
@@ -185,10 +186,6 @@ export const THEME_IDS = Object.keys(THEMES) as BuiltinThemeId[];
 // registering test uses an id no other test in its file uses.
 const runtimeThemes = new SvelteMap<CustomThemeId, RuntimeTheme>();
 
-// ponytail: every replace leaves the previous name's theme registered in both
-// highlighters for the page's life (~1 KiB each); evict there if replaces get frequent.
-let replaceCount = 0;
-
 /** Whether an id names a compiled-in palette (an own key of THEMES). */
 export function isBuiltinThemeId(id: string): id is BuiltinThemeId {
   return Object.hasOwn(THEMES, id);
@@ -212,23 +209,22 @@ export function addTheme(file: FileTheme): CustomThemeId {
   if (isBuiltinThemeId(id) || runtimeThemes.has(id)) {
     throw new Error(`theme id "${id}" is already taken`);
   }
-  runtimeThemes.set(id, { ...file, id });
+  runtimeThemes.set(id, { ...file, id, revision: 0 });
   return id;
 }
 
 /** Swap a registered runtime theme for a new file declaring its id, keeping its place
- * in the picker. Its shiki theme takes a fresh name (`<id>~<n>`; `~` never appears in
- * an id), since both highlighters and shiki cache a theme by name for the page's life.
+ * in the picker. Its revision bumps, so `shikiThemeName` names it afresh: both
+ * highlighters and shiki cache a theme by name for the page's life.
  *
  * @throws When the id is not a registered runtime theme. */
+// ponytail: every replace leaves the previous name's theme registered in both
+// highlighters for the page's life (~1 KiB each); evict there if replaces get frequent.
 export function replaceTheme(file: FileTheme): CustomThemeId {
-  if (!isCustomThemeId(file.id)) throw new Error(`theme id "${file.id}" is not registered`);
-  const id = file.id;
-  runtimeThemes.set(id, {
-    ...file,
-    id,
-    shikiTheme: { ...file.shikiTheme, name: `${id}~${++replaceCount}` },
-  });
+  const id = file.id as CustomThemeId;
+  const previous = runtimeThemes.get(id);
+  if (previous === undefined) throw new Error(`theme id "${file.id}" is not registered`);
+  runtimeThemes.set(id, { ...file, id, revision: previous.revision + 1 });
   return id;
 }
 

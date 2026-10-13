@@ -107,10 +107,11 @@ function caretMarkdownRules(p: Palette): NonNullable<ThemeRegistrationRaw["setti
   ];
 }
 
-/** The name both highlighters know a theme by: its inline shiki theme's name — the id,
- * until a replace names a runtime theme afresh. */
+/** The name both highlighters know a theme by: its id, then `<id>~<revision>` once a
+ * replace bumps a runtime theme's revision (`~` never appears in an id). Runtime entries
+ * are never removed, so a replace never yields a name the page already used. */
 export function shikiThemeName(theme: Theme): string {
-  return theme.shikiTheme.name ?? theme.id;
+  return "revision" in theme && theme.revision > 0 ? `${theme.id}~${theme.revision}` : theme.id;
 }
 
 /** Re-key a source theme to the name `shikiThemeName` gives it and append the structural

@@ -4,7 +4,7 @@ import type { RuntimeTheme } from "$lib/theme.ts";
 import { type PaletteInput, paletteTokens } from "$lib/themes/recipe.ts";
 
 /** Not a `Theme`: its id is a plain string until `addTheme` mints it a `CustomThemeId` or `THEMES` narrows it to a `BuiltinThemeId`. */
-export type FileTheme = Omit<RuntimeTheme, "id"> & { id: string };
+export type FileTheme = Omit<RuntimeTheme, "id" | "revision"> & { id: string };
 
 type RecipeColors = Omit<PaletteInput, "scheme">;
 type Palette = ThemeFile["palette"];

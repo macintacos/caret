@@ -589,5 +589,9 @@ describe("shikiThemeName", () => {
     expect(renamed).not.toBe(id);
     expect(renamed.startsWith(`${id}~`)).toBe(true);
     expect(shikiThemeFor(id).name).toBe(renamed);
+
+    replaceTheme(file);
+    expect(shikiThemeName(themeFor(id))).not.toBe(renamed);
+    expect(themeFor(id).shikiTheme.name).toBe(id);
   });
 });

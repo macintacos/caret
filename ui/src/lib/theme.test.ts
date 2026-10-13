@@ -7,6 +7,7 @@ import { BUILTIN_THEME_IDS } from "@core/theme/builtin-ids.ts";
 import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
 import type { SyntaxRole } from "@core/theme/schema.ts";
 import { customThemeFile, readThemeFile, themeFileColors } from "@ui/support/theme-file.ts";
+import { shikiThemeName } from "$lib/caret-theme.ts";
 import { QUOTE_SUBDUE } from "$lib/diffview/coreStyles.ts";
 import {
   addTheme,
@@ -907,13 +908,14 @@ describe("runtime themes", () => {
   test("replaceTheme names the shiki theme afresh on every replace", async () => {
     const file = await customThemeFile("replace-name", "dark");
     const id = addTheme(file);
-    const nameOf = () => String((themeFor(id) as RuntimeTheme).shikiTheme.name);
+    const revisionOf = () => (themeFor(id) as RuntimeTheme).revision;
     replaceTheme(file);
-    const first = nameOf();
+    const first = shikiThemeName(themeFor(id));
+    expect(revisionOf()).toBe(1);
     replaceTheme(file);
-    expect(first).toMatch(/^replace-name~\d+$/);
-    expect(nameOf()).toMatch(/^replace-name~\d+$/);
-    expect(nameOf()).not.toBe(first);
+    expect(revisionOf()).toBe(2);
+    expect(shikiThemeName(themeFor(id))).not.toBe(first);
+    expect(first).not.toBe(id);
   });
 
   test("replaceTheme refuses an unregistered or built-in id", async () => {
