@@ -38,6 +38,30 @@ describe("planThemeWrite", () => {
     },
   );
 
+  test("overwrites a nightly.json declaring a built-in id", () => {
+    expect(
+      planThemeWrite("nightly", [{ file: "nightly.json", text: themeFileText("dracula") }]),
+    ).toEqual({
+      remove: [],
+    });
+  });
+
+  test("removes a case variant of <id>.json declaring a built-in id", () => {
+    expect(
+      planThemeWrite("nightly", [{ file: "NIGHTLY.json", text: themeFileText("dracula") }]),
+    ).toEqual({
+      remove: ["NIGHTLY.json"],
+    });
+  });
+
+  test("overwrites a nightly.json whose id another file also declares", () => {
+    const plan = planThemeWrite("nightly", [
+      { file: "nightly.json", text: themeFileText("foo") },
+      { file: "a.json", text: themeFileText("foo") },
+    ]);
+    expect(plan).toEqual({ remove: [] });
+  });
+
   test("leaves invalid files and error sources alone", () => {
     const plan = planThemeWrite("twin", [
       { file: "bad.json", text: "{ not json" },
@@ -139,6 +163,12 @@ describe("createThemeWriter", () => {
     expect(saved).toMatchObject({ ok: false, reason: "conflict" });
     expect(listing()).toEqual(["nightly.json"]);
     expect(readFileSync(join(dir, "nightly.json"), "utf-8")).toBe(held);
+  });
+
+  test("replaces a nightly.json caret skips for its built-in id", async () => {
+    writeFileSync(join(dir, "nightly.json"), themeFileText("dracula"));
+    expect(await createThemeWriter(dir).save(themeFileText("nightly"))).toMatchObject({ ok: true });
+    expect(readFileSync(join(dir, "nightly.json"), "utf-8")).toBe(themeFileText("nightly"));
   });
 
   test("overwrites an invalid <id>.json", async () => {

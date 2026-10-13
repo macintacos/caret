@@ -13,7 +13,9 @@ import { parseThemeFile, type ThemeFile } from "@/theme/schema.ts";
  * Pure: what saving theme `id` as `<id>.json` removes from a folder holding `sources`, or why it must not.
  * Ids are lowercase slugs, so `<id>.json` is lowercase. The conflict check folds case because on a
  * case-insensitive filesystem `Nightly.json` is the target itself. A file that fails validation
- * declares nothing and is left alone; when it is the target, the write replaces it.
+ * declares nothing and is left alone; when it is the target, the write replaces it. Only an
+ * `<id>.json` holding a theme caret loads is a conflict; one caret skips (a built-in or duplicated
+ * id) is overwritten, or removed when it is a case variant.
  */
 export function planThemeWrite(
   id: string,
@@ -21,13 +23,15 @@ export function planThemeWrite(
 ): { remove: string[] } | { conflict: string } {
   const target = `${id}.json`;
   const remove: string[] = [];
+  const loaded = new Set(collectThemes(sources, BUILTIN_THEME_IDS).themes.map((t) => t.id));
   for (const source of sources) {
     if ("error" in source) continue;
     const parsed = parseThemeFile(source.text);
     if (!parsed.ok) continue;
-    if (parsed.file.id === id) {
+    const occupiesTarget = source.file.toLowerCase() === target;
+    if (parsed.file.id === id || (occupiesTarget && !loaded.has(parsed.file.id))) {
       if (source.file !== target) remove.push(source.file);
-    } else if (source.file.toLowerCase() === target) {
+    } else if (occupiesTarget) {
       return {
         conflict: `${source.file} already holds the theme "${parsed.file.id}"; rename or delete it, then upload again`,
       };
