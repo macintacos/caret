@@ -15,6 +15,8 @@ When to edit it:
   [`settings-rules.md`](../settings-rules.md).
 - The supported-platform story changes, or plan formatting changes (the pinned rumdl
   version, the reflow shape, the opt-out).
+- The theme file format changes (fields, roles, validation) — § Theme files lands with its
+  schema change.
 - Keep `README.md` the lean front door — when configuration depth grows, it lands here,
   not there.
 

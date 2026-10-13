@@ -1,0 +1,351 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "scheme": {
+      "type": "string",
+      "enum": ["light", "dark"]
+    },
+    "palette": {
+      "type": "object",
+      "properties": {
+        "paper": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "raised": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "sunk": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "ink": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "inkSoft": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "inkFaint": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "accent": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "accentBright": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "accentInk": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "neutral": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "ok": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "danger": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "attention": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "ruleHue": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "washHue": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "markHue": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "chipBoldHue": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "chipItalicHue": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "chipCodeHue": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "chipLinkHue": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "chipRefHue": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "chipSkillHue": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        }
+      },
+      "required": [
+        "paper",
+        "raised",
+        "sunk",
+        "ink",
+        "inkSoft",
+        "inkFaint",
+        "accent",
+        "accentBright",
+        "accentInk",
+        "neutral",
+        "ok",
+        "danger",
+        "attention"
+      ],
+      "additionalProperties": false
+    },
+    "syntax": {
+      "type": "object",
+      "properties": {
+        "comment": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "punctuation": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "variable": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "property": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "attribute": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "keyword": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "function": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "type": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "string": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "escape": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "number": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "comment",
+        "punctuation",
+        "variable",
+        "property",
+        "attribute",
+        "keyword",
+        "function",
+        "type",
+        "string",
+        "escape",
+        "number"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": ["id", "label", "scheme", "palette", "syntax"],
+  "additionalProperties": false
+}

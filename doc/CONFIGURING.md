@@ -248,6 +248,140 @@ or stacked host.
 | `CARET_PREFLIGHT_JOBS` | —          | CPU count      | Max `mise run preflight` tasks in flight; a positive int. Set it to `1` to serialize the gate. Invalid/unset → the host's CPU count. |
 | `CARET_E2E_WORKERS`    | —          | `50%` of cores | Playwright e2e worker count (each drives a browser tree + daemon); a positive int. Unset → half the cores.                           |
 
+## Theme files
+
+A theme file is a JSON file that describes one caret theme: its name, whether it is light
+or dark, the colors of caret's interface, and the colors used to highlight code. A theme
+file is self-contained. caret derives everything else it needs, such as hairline rules,
+selection washes, and chip tints, from the colors the file names. caret does not load
+theme files yet; this section is the format they will use.
+
+### Top-level fields
+
+| Field     | Required | Value                                                                                    |
+| --------- | -------- | ---------------------------------------------------------------------------------------- |
+| `$schema` | No       | A URL to the JSON Schema, for editor support. caret ignores it.                          |
+| `id`      | Yes      | A lowercase slug of letters, digits, and single dashes, like `my-theme`. At most 64 characters. |
+| `label`   | Yes      | The name shown in Settings. 1 to 64 characters.                                          |
+| `scheme`  | Yes      | `"light"` or `"dark"`.                                                                   |
+| `palette` | Yes      | The interface colors, below.                                                             |
+| `syntax`  | Yes      | The code highlighting roles, below.                                                      |
+
+### `palette`
+
+These 13 colors are required:
+
+| Field          | What it colors                                                                      |
+| -------------- | ----------------------------------------------------------------------------------- |
+| `paper`        | The page surface. In dark it is the darkest of the three surfaces; in light it sits between `raised` and `sunk`. |
+| `raised`       | The lightest surface in either scheme: cards, dialogs, the plan pane.               |
+| `sunk`         | Code blocks and the diff body: lifted off `paper` in dark, recessed in light.       |
+| `ink`          | Body text.                                                                          |
+| `inkSoft`      | Secondary text.                                                                     |
+| `inkFaint`     | Metadata.                                                                           |
+| `accent`       | The current selection.                                                              |
+| `accentBright` | The accent's lighter sibling: hovers, links, inline code.                           |
+| `accentInk`    | Text drawn on top of `accent`.                                                      |
+| `neutral`      | A mid-tone neutral, used for the mark on an orphaned comment.                       |
+| `ok`           | Success and additions.                                                              |
+| `danger`       | Errors and deletions.                                                               |
+| `attention`    | The "look here" hue: the notification dot and the version-count badge.              |
+
+These 9 hue overrides are optional. Each one moves a derived color onto a different hue;
+caret still decides how strong it is.
+
+| Field           | What it colors                       | Default            |
+| --------------- | ------------------------------------ | ------------------ |
+| `ruleHue`       | The two hairline rules               | `ink`              |
+| `washHue`       | The selection wash                   | `accent`           |
+| `markHue`       | The two highlight marks              | `washHue`, then `accent` |
+| `chipBoldHue`   | The bold chip in the plan view       | `ink`              |
+| `chipItalicHue` | The italic chip in the plan view     | `inkSoft`          |
+| `chipCodeHue`   | The inline-code chip in the plan view | `neutral`         |
+| `chipLinkHue`   | The link chip in the plan view       | `accentBright`     |
+| `chipRefHue`    | The file-reference chip in the plan view | `ok`           |
+| `chipSkillHue`  | The skill chip in the plan view      | `attention`        |
+
+### `syntax`
+
+All 11 roles are required. Each is an object with a `color` and an optional `fontStyle`, a
+list of any of `"italic"`, `"bold"`, `"underline"`, and `"strikethrough"`.
+
+| Role          | What it colors                                                     |
+| ------------- | ------------------------------------------------------------------ |
+| `comment`     | Comments                                                           |
+| `punctuation` | Punctuation, brackets, and operators                               |
+| `variable`    | Variables, parameters, and constants                               |
+| `property`    | Object properties and keys                                         |
+| `attribute`   | Markup attributes                                                  |
+| `keyword`     | Keywords, storage modifiers, `this`/`self`, and markup tags        |
+| `function`    | Function names and calls                                           |
+| `type`        | Types, classes, and namespaces                                     |
+| `string`      | Strings                                                            |
+| `escape`      | String escapes, regular expressions, and template interpolations   |
+| `number`      | Numbers and language constants such as `true` and `null`           |
+
+### Colors and errors
+
+Every color is a six-digit hex color, `#rrggbb`, in either case. Shorthand (`#fff`), alpha
+(`#rrggbbaa`), and color names are rejected.
+
+caret rejects a file with any unknown field. For an invalid file, it reports one line per
+failing field, as `path: message`, for example
+`palette.paper: must be a hex color like #1a2b3c`.
+
+### Example
+
+This is caret's own dark theme as a theme file:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/macintacos/caret/trunk/doc/theme.schema.json",
+  "id": "caret-dark",
+  "label": "caret dark",
+  "scheme": "dark",
+  "palette": {
+    "paper": "#0a0806",
+    "raised": "#15110d",
+    "sunk": "#100d0a",
+    "ink": "#f7f2ea",
+    "inkSoft": "#bcb0a1",
+    "inkFaint": "#918576",
+    "accent": "#ff8f3d",
+    "accentBright": "#ffb277",
+    "accentInk": "#0a0806",
+    "neutral": "#9a8c7e",
+    "ok": "#4ed056",
+    "danger": "#f65a6f",
+    "attention": "#3fbda9",
+    "ruleHue": "#f2e7d5",
+    "washHue": "#f2842f",
+    "markHue": "#ffa64d",
+    "chipSkillHue": "#6ec4e4"
+  },
+  "syntax": {
+    "comment": { "color": "#7f7466", "fontStyle": ["italic"] },
+    "punctuation": { "color": "#b0a094" },
+    "variable": { "color": "#ece2d4" },
+    "property": { "color": "#a3d4ec" },
+    "attribute": { "color": "#f5834f" },
+    "keyword": { "color": "#dd7a6c" },
+    "function": { "color": "#ecc25c" },
+    "type": { "color": "#6ec4e4" },
+    "string": { "color": "#92d474" },
+    "escape": { "color": "#f56f8e" },
+    "number": { "color": "#4cbbc8" }
+  }
+}
+```
+
+### Editor support
+
+Set `$schema` to
+`https://raw.githubusercontent.com/macintacos/caret/trunk/doc/theme.schema.json`, as the
+example does. An editor that understands JSON Schema, such as VS Code, then completes
+field names and flags invalid values as you type.
+
 ## Plan formatting (rumdl)
 
 caret canonicalizes every incoming plan by reflowing it to a 90-column MD013 shape with

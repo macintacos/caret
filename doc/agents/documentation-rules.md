@@ -32,7 +32,7 @@ digraph caret_docs_router {
 
     "Changing documentation" -> "Which doc does the change affect?";
     "Which doc does the change affect?" -> "Edit README.md" [label="user-facing front door: what caret is, install, basic usage, pointers onward"];
-    "Which doc does the change affect?" -> "Edit doc/CONFIGURING.md" [label="configuration reference: platform support, config.toml, the CARET_* tables, plan formatting"];
+    "Which doc does the change affect?" -> "Edit doc/CONFIGURING.md" [label="configuration reference: platform support, config.toml, the CARET_* tables, plan formatting, theme files"];
     "Which doc does the change affect?" -> "Edit doc/RUNNING.md" [label="runtime behavior a user sees: desktop notifications, cmux unread marks, logging and debugging"];
     "Which doc does the change affect?" -> "Edit doc/ARCHITECTURE.md" [label="how caret works: the core/adapter boundary, adapter internals, the review tool, the source layout"];
     "Which doc does the change affect?" -> "Edit doc/DEVELOPMENT.md" [label="developing caret: build-from-source, the mise task catalog and dev workflow, the tasks CLI, icons"];
@@ -51,8 +51,8 @@ digraph caret_docs_router {
   to directly or reaches through [`doc/README.md`](../README.md). How to edit it:
   [`references/readme.md`](references/readme.md).
 - **`doc/CONFIGURING.md`** — the configuration reference behind `README.md`: platform
-  support, the `config.toml` file, the full `CARET_*` tables, and plan formatting. How to
-  edit it: [`references/configuring.md`](references/configuring.md).
+  support, the `config.toml` file, the full `CARET_*` tables, plan formatting, and theme
+  files. How to edit it: [`references/configuring.md`](references/configuring.md).
 - **`doc/RUNNING.md`** — caret in use: desktop notifications, cmux unread marks, and
   logging & debugging. How to edit it: [`references/running.md`](references/running.md).
 - **`doc/ARCHITECTURE.md`** — how caret works: the tool-agnostic core / agent-adapter

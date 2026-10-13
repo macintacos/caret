@@ -365,8 +365,8 @@ async function spawnedFor(paths: readonly string[] | null): Promise<string[]> {
 }
 
 test("a Markdown-only diff narrows the gate to lint alone", async () => {
-  expect(await spawnedFor(["doc/CONFIGURING.md", "README.md"])).toEqual(["lint"]);
-  expect(selectTasks(["doc/CONFIGURING.md", "README.md"]).narrowed).toBe(true);
+  expect(await spawnedFor(["doc/RUNNING.md", "README.md"])).toEqual(["lint"]);
+  expect(selectTasks(["doc/RUNNING.md", "README.md"]).narrowed).toBe(true);
 });
 
 // The shell lane covers three scripts and reads no Markdown, so it has no stake
@@ -390,9 +390,9 @@ test("Markdown a test reads from disk keeps `test unit` in the narrowed gate", a
     // `test unit` is the claim here; a path an e2e spec ALSO reads brings its own
     // suite along (asserted below), so this checks membership rather than the
     // exact set.
-    expect(await spawnedFor(["doc/CONFIGURING.md", path])).toContain("test unit");
-    expect(await spawnedFor(["doc/CONFIGURING.md", path])).toContain("lint");
-    expect(selectTasks(["doc/CONFIGURING.md", path]).narrowed).toBe(true);
+    expect(await spawnedFor(["doc/RUNNING.md", path])).toContain("test unit");
+    expect(await spawnedFor(["doc/RUNNING.md", path])).toContain("lint");
+    expect(selectTasks(["doc/RUNNING.md", path]).narrowed).toBe(true);
   }
 });
 
@@ -419,12 +419,12 @@ test("a docs-only diff touching the fake plan or the dev guide still runs `test 
 // passes, and a set holding the dependent without the gate would never finish.
 test("Markdown an e2e spec reads keeps `test e2e` and its gate in the narrowed set", async () => {
   for (const path of MARKDOWN_READ_BY_E2E) {
-    const spawned = await spawnedFor(["doc/CONFIGURING.md", path]);
+    const spawned = await spawnedFor(["doc/RUNNING.md", path]);
     expect(spawned).toContain("test e2e");
     expect(spawned).toContain("build ui");
     // Still narrowed — `build bin` and `smoke` have no stake in a Markdown diff.
     expect(spawned).not.toContain("smoke");
-    expect(selectTasks(["doc/CONFIGURING.md", path]).narrowed).toBe(true);
+    expect(selectTasks(["doc/RUNNING.md", path]).narrowed).toBe(true);
   }
 });
 
@@ -457,8 +457,8 @@ test("every MARKDOWN_READ_BY_TESTS entry still exists on disk", () => {
 });
 
 test("a single non-Markdown path runs the full seven-task gate", async () => {
-  expect(await spawnedFor(["doc/CONFIGURING.md", "src/daemon.ts"])).toEqual(ALL_TASKS);
-  expect(selectTasks(["doc/CONFIGURING.md", "src/daemon.ts"]).narrowed).toBe(false);
+  expect(await spawnedFor(["doc/RUNNING.md", "src/daemon.ts"])).toEqual(ALL_TASKS);
+  expect(selectTasks(["doc/RUNNING.md", "src/daemon.ts"]).narrowed).toBe(false);
 });
 
 // The two conservative defaults. An empty list satisfies "every changed path is
@@ -563,7 +563,7 @@ test("buildStartReport: unset filters render as null/zero", () => {
 // A scoped run must never read as a full green run, so the start doc carries both
 // the shortened task list and an explicit narrowed flag + reason.
 test("buildStartReport surfaces a narrowed selection and why", () => {
-  const selection = selectTasks(["doc/CONFIGURING.md"]);
+  const selection = selectTasks(["doc/RUNNING.md"]);
   const start = buildStartReport({ json: true, verbosity: 0, full: false, tasks: [] }, selection);
 
   expect(start.tasks).toEqual(["lint"]);
