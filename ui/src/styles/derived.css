@@ -1,5 +1,5 @@
 /* The derived tier — the colors a palette implies rather than decides. A palette
-   names its surfaces, ink, and accent in lib/themes/recipe.ts; these fall out of
+   names its surfaces, ink, and accent in its theme file under lib/themes/; these fall out of
    that choice, so they are mixed once here instead of at each call site, and a new
    palette inherits every one of them for free.
 

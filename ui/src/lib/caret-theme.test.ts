@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { createHighlighterCore } from "shiki/core";
 
-import { customThemeFile } from "@ui/support/theme-file.ts";
-import { CARET_SHIKI_THEMES, type CaretShikiThemeId } from "$lib/caret-shiki.ts";
+import type { SyntaxRole } from "@core/theme/schema.ts";
+import { customThemeFile, readThemeFile, themeFileColors } from "@ui/support/theme-file.ts";
 import {
   REGISTERED_SHIKI_THEMES,
   shikiThemeFor,
@@ -16,27 +16,21 @@ import {
   type BuiltinThemeId,
   type ColorToken,
   replaceTheme,
-  type ShikiThemeId,
   THEME_IDS,
   THEMES,
   type ThemeId,
   themeFor,
 } from "$lib/theme.ts";
-import { CARET_COLOR_PLACEMENT, CARET_DARK, CARET_LIGHT } from "$lib/themes/caret.ts";
-import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 
-// caret-theme.ts resolves one shiki theme per registered palette through a single
-// lookup: every palette names a theme, either the vendor's own published one
-// (EXC-896) or one of the two caret authors for itself (EXC-903). shiki resolves
-// token colors at highlight time and can't read CSS custom properties, so the hex
-// is read out of THEMES — the single source of truth for every color the UI paints
-// (EXC-730) — at module load.
+// caret-theme.ts resolves one shiki theme per registered palette: every theme carries
+// its own, built from its theme file's syntax roles. shiki resolves token colors at
+// highlight time and can't read CSS custom properties, so the hex is read out of
+// THEMES — the single source of truth for every color the UI paints (EXC-730) — at
+// module load.
 //
-// These tests pin what the resolver adds on top of that lookup: caret's three
-// appended markdown rules, added last for every registered theme. The two
-// halves' own contracts sit either side of it — caret's own pair spends the named
-// color set and nothing else, and a vendor palette carries its upstream rule set
-// whole.
+// These tests pin what the resolver adds on top of that: caret's appended markdown
+// rules, added last for every registered theme. caret's own pair's themes are pinned
+// alongside — they spend their file's colors and nothing else.
 
 // The tokens these tests read: the two the fence line's own rules paint with, plus
 // the one a fenced block's body takes under caret's own themes. (The third structural
@@ -47,26 +41,11 @@ const FIELD_TO_TOKEN: Record<string, ColorToken> = {
   fenceBody: "--accent-bright",
 };
 
-/** caret's two palettes paired with the record each caret shiki theme is built from. */
+/** caret's two palettes paired with the colors of the theme file each is built from. */
 const CARET_RECORDS = [
-  ["caret-dark", CARET_DARK],
-  ["caret-light", CARET_LIGHT],
+  ["caret-dark", await themeFileColors("caret-dark.json")],
+  ["caret-light", await themeFileColors("caret-light.json")],
 ] as const;
-
-/** caret's own palettes name a theme this repo authors; every other palette names a
- * vendor's published one. Narrowing through this predicate rather than a cast is what
- * keeps a caret id from ever being handed to `UPSTREAM_SHIKI_THEMES`. */
-function isCaretOwn(shikiTheme: ShikiThemeId): shikiTheme is CaretShikiThemeId {
-  return shikiTheme in CARET_SHIKI_THEMES;
-}
-
-/** The two halves of the registry, partitioned by which map holds the id a palette
- * names — vendor entries paired with that id, so the upstream lookup stays typed. */
-const CARET_IDS = THEME_IDS.filter((id) => isCaretOwn(THEMES[id].shikiTheme));
-const VENDOR_PALETTES = THEME_IDS.flatMap((id) => {
-  const shikiTheme = THEMES[id].shikiTheme;
-  return isCaretOwn(shikiTheme) ? [] : [{ id, shikiTheme }];
-});
 
 /** How many rules caret appends over the theme a palette names — the three structural
  * markers plus the four emphasis rules (caret-theme.ts's `caretMarkdownRules`). */
@@ -84,12 +63,8 @@ const ITALIC_MARKERS = "punctuation.definition.italic.markdown";
 /** The scopes the three structural rules own, in the order the resolver appends them. */
 const STRUCTURAL_SCOPES = [FENCE_MARKERS, FENCE_LANGUAGE, INLINE_RAW];
 
-/** The half of the named color set nothing but the highlighter spends (EXC-902).
- * Read off the placement map rather than re-listed, so a color reclassified there
- * changes what caret's shiki themes are held to. */
-const SHIKI_ONLY = Object.entries(CARET_COLOR_PLACEMENT)
-  .filter(([, placement]) => placement === "shiki-only")
-  .map(([color]) => color as keyof typeof CARET_DARK);
+/** The syntax roles, whose colors nothing but the highlighter spends. */
+const SHIKI_ONLY = Object.keys((await readThemeFile("caret-dark.json")).syntax) as SyntaxRole[];
 
 /** The expected color for each Palette field, sourced from a theme's tokens. The
  * ColorToken-keyed tokens map guarantees each lookup resolves. */
@@ -118,62 +93,21 @@ function themeColors(theme: ThemeLike): Set<string> {
   return colors;
 }
 
-// EXC-896: a vendor palette names that vendor's published shiki theme, so picking
-// Dracula highlights code in real Dracula rather than in caret's own hues wearing
-// Dracula's name.
-describe("upstream shiki theme declarations", () => {
-  test("every registry key is that theme's own upstream name", () => {
-    for (const [id, theme] of Object.entries(UPSTREAM_SHIKI_THEMES)) {
-      // A mis-wired import (`dracula: githubDarkDefault`) would otherwise render
-      // the wrong theme with nothing to catch it.
-      expect(theme.name, id).toBe(id);
-    }
-  });
-
-  test("caret's own pair is the half that names a caret shiki theme", () => {
-    // Pinned rather than merely counted: which half a palette lands in is a
-    // deliberate choice, and this is where a vendor palette quietly pointed at
-    // caret's own theme (or the reverse) surfaces. That a named id resolves to a
-    // registered theme needs no assertion — `shikiTheme` is typed `ShikiThemeId` and
-    // required, so an unregistered id, or none at all, cannot compile.
-    expect(CARET_IDS).toEqual(["caret-dark", "caret-light"]);
-  });
-
-  // GitHub publishes two pairs. The unsuffixed `github-light` / `github-dark` are
-  // the legacy Primer themes (dark background #24292e); caret's GitHub palettes are
-  // built from current Primer, which matches the `-default` pair (#0d1117). The key
-  // union catches a nonexistent id but not a valid-yet-wrong-vintage one, so pin the
-  // choice by value.
-  test("the GitHub palettes name current Primer, not the legacy pair", () => {
-    expect(THEMES["github-dark"].shikiTheme).toBe("github-dark-default");
-    expect(THEMES["github-light"].shikiTheme).toBe("github-light-default");
-    expect(UPSTREAM_SHIKI_THEMES["github-dark-default"].colors?.["editor.background"]).toBe(
-      "#0d1117",
-    );
-  });
-});
-
-// EXC-903: caret's own pair has no vendor to point at, so it AUTHORS its two themes
-// from the named color set in themes/caret.ts (EXC-902) — the eleven shiki-only hues
-// spent across a scope set wide enough to tell a type from a function. These pin the
-// asset map's own contract; how a palette reaches it is the resolver's, below.
+// caret's own pair's themes, built from caret-{dark,light}.json's syntax roles — spent
+// across a scope set wide enough to tell a type from a function. These pin the built
+// theme's own contract; what the resolver adds is below.
 describe("caret's own shiki themes", () => {
-  test("registers one theme per caret palette, named by its key", () => {
-    // Same pin the upstream registry carries: a mis-wired entry (`caret-light`
-    // holding the dark theme) would otherwise resolve by the wrong handle.
-    expect(Object.keys(CARET_SHIKI_THEMES)).toEqual(["caret-dark", "caret-light"]);
-    for (const [id, theme] of Object.entries(CARET_SHIKI_THEMES)) {
-      expect(theme.name, id).toBe(id);
-    }
-  });
-
   for (const [id, record] of CARET_RECORDS) {
     describe(id, () => {
-      const theme = CARET_SHIKI_THEMES[id];
+      const theme = THEMES[id].shikiTheme;
 
-      test("paints the editor on the record's sunk surface, in its ink", () => {
-        // The same two values --paper-sunk / --ink carry, read from the record
-        // rather than through the tokens: the record is the source both halves share.
+      test("is named by its palette id", () => {
+        expect(theme.name).toBe(id);
+      });
+
+      test("paints the editor on the file's sunk surface, in its ink", () => {
+        // The same two values --paper-sunk / --ink carry, read from the file
+        // rather than through the tokens: the file is the source both halves share.
         expect(theme.colors?.["editor.background"]).toBe(record.sunk);
         expect(theme.colors?.["editor.foreground"]).toBe(record.ink);
       });
@@ -182,16 +116,16 @@ describe("caret's own shiki themes", () => {
         expect(theme.type).toBe(THEMES[id].scheme);
       });
 
-      test("emits no color the named set does not name", () => {
-        // Closure over the record: a hex typed into the theme by hand, or a hue
-        // that drifted from the set, fails here rather than shipping.
+      test("emits no color the file does not name", () => {
+        // Closure over the file: a hex typed into the theme by hand fails here
+        // rather than shipping.
         const named = new Set<string>(Object.values(record));
         for (const color of themeColors(theme)) expect(named, color).toContain(color);
       });
 
-      test("spends every shiki-only hue", () => {
-        // The reverse direction, and the point of EXC-902's set: a hue classified
-        // shiki-only that no rule actually names is a color nothing paints.
+      test("spends every syntax role's color", () => {
+        // The reverse direction: a role color no rule actually names is a color
+        // nothing paints.
         const emitted = themeColors(theme);
         for (const color of SHIKI_ONLY) {
           expect(emitted, `${id}.${color} (${record[color]})`).toContain(record[color]);
@@ -230,38 +164,6 @@ describe("caret-theme ↔ THEMES palette sync", () => {
     });
   }
 
-  for (const { id, shikiTheme } of VENDOR_PALETTES) {
-    describe(id, () => {
-      // Resolved fresh rather than read off shikiThemeFor's cached object: shiki's
-      // normalizeTheme unshifts a default fg/bg rule into the `settings` array it
-      // is handed, in place, so the cached theme's rule count grows by one the
-      // first time any highlighter registers it. The resolver's output is the
-      // contract; the extra rule is shiki's bookkeeping, and harmless — it carries
-      // no scope, which textmate reads as the theme's default fg/bg rather than as
-      // a rule competing with the others.
-      const theme = shikiThemeForPalette(THEMES[id]);
-
-      test("carries the whole upstream rule set, plus caret's structural markers", () => {
-        const upstream = UPSTREAM_SHIKI_THEMES[shikiTheme];
-        // Same precedence withStructuralOverrides applies, so the expected length is
-        // computed the way production computes it rather than paraphrasing it.
-        const upstreamRules = upstream.settings ?? upstream.tokenColors ?? [];
-        expect(theme.settings).toHaveLength(upstreamRules.length + APPENDED_RULES);
-      });
-
-      test("emits colors caret's own set does not name", () => {
-        const named = new Set([...Object.values(CARET_DARK), ...Object.values(CARET_LIGHT)]);
-        const unnamed = (theme.settings ?? []).filter((rule) => {
-          const fg = rule.settings?.foreground?.toLowerCase();
-          return fg !== undefined && !named.has(fg);
-        });
-        // The point of the swap: Dracula's pink keyword is a color caret's own
-        // twenty-seven have no way to name.
-        expect(unnamed.length).toBeGreaterThan(0);
-      });
-    });
-  }
-
   test("the two caret themes use distinct palettes (light vs dark do not collapse)", () => {
     expect(shikiThemeFor("caret-light").colors?.["editor.background"]).not.toBe(
       shikiThemeFor("caret-dark").colors?.["editor.background"],
@@ -274,9 +176,9 @@ describe("caret-theme ↔ THEMES palette sync", () => {
 // makes them beat whatever the theme underneath says about those scopes.
 describe("caret's appended markdown rules", () => {
   for (const id of THEME_IDS) {
-    // Resolved fresh rather than read off the cached object, for the reason the
-    // vendor block above spells out: shiki's normalizeTheme mutates the array it is
-    // handed, so a registered theme's rule count no longer matches the resolver's.
+    // Resolved fresh rather than read off the cached object: shiki's normalizeTheme
+    // unshifts a scope-less default fg/bg rule into the array it is handed, in place,
+    // so a registered theme's rule count no longer matches the resolver's.
     test(`${id} carries them last, in order`, () => {
       const tokens = THEMES[id].tokens;
       const rules = shikiThemeForPalette(THEMES[id]).settings ?? [];
@@ -511,7 +413,7 @@ describe("caret themes over a real TypeScript sample", () => {
       test("colors a type apart from a function", async () => {
         const lines = await tokenizeSample(id);
         expect(colorAt(lines, 0, "Row")).toBe(p.type);
-        expect(colorAt(lines, 0, "build")).toBe(p.func);
+        expect(colorAt(lines, 0, "build")).toBe(p.function);
       });
 
       test("colors a number apart from a string escape", async () => {

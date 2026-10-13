@@ -1,4 +1,4 @@
-import { parseThemeFile, type ThemeFile } from "@core/theme/schema.ts";
+import { parseThemeFile, type SyntaxRole, type ThemeFile } from "@core/theme/schema.ts";
 import type { Scheme } from "$lib/theme.ts";
 import { buildFileTheme, type FileTheme } from "$lib/theme-file.ts";
 
@@ -13,6 +13,16 @@ export async function readThemeFile(name: string): Promise<ThemeFile> {
   );
   if (!parsed.ok) throw new Error(parsed.errors.join("\n"));
   return parsed.file;
+}
+
+/** A bundled theme file's colors in one record: its palette, plus each syntax role's color
+ * keyed by role. */
+export async function themeFileColors(
+  name: string,
+): Promise<ThemeFile["palette"] & Record<SyntaxRole, string>> {
+  const file = await readThemeFile(name);
+  const roles = Object.entries(file.syntax).map(([role, style]) => [role, style.color]);
+  return { ...file.palette, ...(Object.fromEntries(roles) as Record<SyntaxRole, string>) };
 }
 
 /** caret's own theme file under a new id, with a keyword and accent no built-in uses,

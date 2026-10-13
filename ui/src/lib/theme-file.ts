@@ -6,7 +6,7 @@ import { type PaletteInput, paletteTokens } from "$lib/themes/recipe.ts";
 /** Not a `Theme`: its id is a plain string until `addTheme` mints it a `CustomThemeId`. */
 export type FileTheme = Omit<RuntimeTheme, "id"> & { id: string };
 
-type RecipeColors = Omit<PaletteInput, "id" | "label" | "scheme" | "shikiTheme">;
+type RecipeColors = Omit<PaletteInput, "scheme">;
 type Palette = ThemeFile["palette"];
 
 // `never` unless the schema's palette keys equal the recipe's: the spread into

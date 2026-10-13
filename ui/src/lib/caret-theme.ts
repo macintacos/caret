@@ -1,31 +1,23 @@
 import type { ThemeRegistrationRaw } from "shiki/core";
 
-import { CARET_SHIKI_THEMES } from "$lib/caret-shiki.ts";
 import {
   type BuiltinThemeId,
   isBuiltinThemeId,
-  type ShikiThemeId,
   THEME_IDS,
   THEMES,
   type Theme,
   type ThemeId,
   themeFor,
 } from "$lib/theme.ts";
-import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 
 // One shiki theme per registered palette (EXC-752), so the code a reviewer reads
 // is colored by the theme they picked rather than by caret's own pair at the
 // matching scheme. Registered into both highlighters: the source view's
 // (diffview/theme.ts) and the excerpt preview's (diffview/highlight.ts).
 //
-// A built-in palette names a theme one of the two asset maps below holds; a runtime
-// theme carries its own inline. Either way it goes through `withStructuralOverrides`.
-// A vendor palette names that vendor's OWN published theme (EXC-896), so picking
-// Dracula gets Dracula — its full rule set, including the pink keyword caret's own
-// color set cannot name. caret's pair names the theme authored for it out of that
-// set (EXC-903; caret-shiki.ts). Either object is carried whole, `colors`
-// included: an upstream theme's code background is inert on every caret surface,
-// so overwriting it with --paper-sunk would be a deviation that buys nothing.
+// Every theme, built-in or runtime, carries its shiki theme inline — built from its
+// theme file's syntax roles by caret-shiki.ts — and goes through
+// `withStructuralOverrides`.
 //
 // What the resolver adds is caret's own markdown rules — three structural markers and
 // four for emphasis — appended last, because last-match-wins is what makes them beat
@@ -139,20 +131,10 @@ export function withStructuralOverrides(
   };
 }
 
-/** Every theme a palette can name, in one map — the vendors' published themes and
- * caret's own pair. Keyed by `ShikiThemeId`, the union a built-in palette names, so a
- * built-in's lookup is total. */
-const SHIKI_THEME_SOURCES: Record<ShikiThemeId, ThemeRegistrationRaw> = {
-  ...UPSTREAM_SHIKI_THEMES,
-  ...CARET_SHIKI_THEMES,
-};
-
 /** The shiki theme one palette highlights code with, wearing caret's structural
  * marker rules. */
 export function shikiThemeForPalette(theme: Theme): ThemeRegistrationRaw {
-  const source =
-    typeof theme.shikiTheme === "string" ? SHIKI_THEME_SOURCES[theme.shikiTheme] : theme.shikiTheme;
-  return withStructuralOverrides(theme, source);
+  return withStructuralOverrides(theme, theme.shikiTheme);
 }
 
 // Built once at module load, keyed by theme id: they are plain objects, and both
