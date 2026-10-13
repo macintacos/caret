@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import catppuccinFrappe from "shiki/themes/catppuccin-frappe.mjs";
 import catppuccinLatte from "shiki/themes/catppuccin-latte.mjs";
@@ -10,14 +8,15 @@ import dracula from "shiki/themes/dracula.mjs";
 import githubDarkDefault from "shiki/themes/github-dark-default.mjs";
 import githubLightDefault from "shiki/themes/github-light-default.mjs";
 
+import dawnfox from "@ui/src/code-themes/nightfox/dawnfox.json" with { type: "json" };
+import duskfox from "@ui/src/code-themes/nightfox/duskfox.json" with { type: "json" };
 import { ROLE_SCOPES } from "@/theme/role-scopes.ts";
 import { syntaxFromVsCodeTheme, type VsCodeTheme } from "@/theme/vscode-theme.ts";
 
-const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 const BASE = { colors: { "editor.foreground": "#000000" } };
 
-function convert(tokenColors: VsCodeTheme["tokenColors"], colors = BASE.colors) {
-  return syntaxFromVsCodeTheme({ colors, tokenColors });
+function convert(tokenColors: VsCodeTheme["tokenColors"]) {
+  return syntaxFromVsCodeTheme({ ...BASE, tokenColors });
 }
 
 describe("syntaxFromVsCodeTheme selector matching", () => {
@@ -148,11 +147,6 @@ describe("syntaxFromVsCodeTheme on vendor themes", () => {
     expect(syntax.string.color).toBe("#f1fa8c");
   });
 
-  const nightfox = (name: string): VsCodeTheme =>
-    JSON.parse(
-      readFileSync(join(REPO_ROOT, "ui/src/code-themes/nightfox", `${name}.json`), "utf8"),
-    );
-
   test.each([
     ["catppuccin-latte", catppuccinLatte],
     ["catppuccin-frappe", catppuccinFrappe],
@@ -161,8 +155,8 @@ describe("syntaxFromVsCodeTheme on vendor themes", () => {
     ["dracula", dracula],
     ["github-light-default", githubLightDefault],
     ["github-dark-default", githubDarkDefault],
-    ["dawnfox", nightfox("dawnfox")],
-    ["duskfox", nightfox("duskfox")],
+    ["dawnfox", dawnfox],
+    ["duskfox", duskfox],
   ] as const)("%s converts every role to a #rrggbb color", (_, theme) => {
     const syntax = syntaxFromVsCodeTheme(theme);
     expect(Object.keys(syntax).sort()).toEqual(Object.keys(ROLE_SCOPES).sort());

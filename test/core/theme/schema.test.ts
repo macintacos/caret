@@ -117,6 +117,10 @@ describe("parseThemeFile", () => {
     expect(errorsFor(withField(["label"], ""))).toEqual(["label: must not be empty"]);
   });
 
+  test("rejects a whitespace-only label", () => {
+    expect(errorsFor(withField(["label"], "   "))).toEqual(["label: must not be only whitespace"]);
+  });
+
   test("rejects a 65-character label", () => {
     expect(errorsFor(withField(["label"], "a".repeat(65)))).toEqual([
       "label: must be at most 64 characters",

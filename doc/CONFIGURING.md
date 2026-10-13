@@ -277,6 +277,7 @@ It ignores everything else: subfolders, other extensions, and names that start w
 
 caret skips a file, and reports an error that names it, when the file:
 
+- cannot be read, for example because of its permissions;
 - is larger than 64 KiB;
 - is not valid JSON, or fails the validation described below;
 - uses the `id` of a built-in theme: `caret-dark`, `caret-light`, `catppuccin-latte`,
@@ -306,7 +307,7 @@ There is no delete control. To remove a theme, delete its file from the folder.
 | --------- | -------- | ---------------------------------------------------------------------------------------- |
 | `$schema` | No       | A URL to the JSON Schema, for editor support. caret ignores it.                          |
 | `id`      | Yes      | A lowercase slug of letters, digits, and single dashes, like `my-theme`. At most 64 characters. |
-| `label`   | Yes      | The name shown in Settings. 1 to 64 characters.                                          |
+| `label`   | Yes      | The name shown in Settings. 1 to 64 characters, not all whitespace.                      |
 | `scheme`  | Yes      | `"light"` or `"dark"`.                                                                   |
 | `palette` | Yes      | The interface colors, below.                                                             |
 | `syntax`  | Yes      | The code highlighting roles, below.                                                      |

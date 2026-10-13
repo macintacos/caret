@@ -10,9 +10,9 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import type { HighlighterCore, ThemeRegistrationRaw } from "shiki/core";
+import type { HighlighterCore, ThemeRegistrationRaw, TokenStyles } from "shiki/core";
 
-import { shikiThemeFor, withStructuralOverrides } from "$lib/caret-theme.ts";
+import { shikiThemeFor, shikiThemeForPalette } from "$lib/caret-theme.ts";
 import { CARET_TOKENIZE_OPTIONS, createHighlighter } from "$lib/diffview/shiki-bundle.ts";
 import { THEMES } from "$lib/theme.ts";
 
@@ -44,6 +44,11 @@ export interface ThemeDrift {
   drift: TokenDrift[];
 }
 
+export interface NamedThemeDrift extends ThemeDrift {
+  /** The theme's heading in the report. */
+  id: string;
+}
+
 // vscode-textmate's FontStyle bits; shiki re-exports that enum as a type only, and its
 // home package is a transitive dependency.
 const FONT_STYLE_NAMES = [
@@ -53,7 +58,7 @@ const FONT_STYLE_NAMES = [
   [8, "strikethrough"],
 ] as const;
 
-function tokenStyle(variant: { color?: string; fontStyle?: number } | undefined): TokenStyle {
+function tokenStyle(variant: TokenStyles | undefined): TokenStyle {
   const bits = variant?.fontStyle ?? 0;
   return {
     color: (variant?.color ?? "").toLowerCase(),
@@ -111,7 +116,7 @@ function codeSpan(text: string): string {
 
 const styleCell = (s: TokenStyle) => [s.color, ...s.fontStyle].join(" ");
 
-function themeSection({ id, drift }: ThemeDrift & { id: string }): string {
+function themeSection({ id, drift }: NamedThemeDrift): string {
   if (drift.length === 0) return `## ${id}\n\nNo differing tokens.\n`;
   const rows = drift.map(
     (token) =>
@@ -129,7 +134,7 @@ function themeSection({ id, drift }: ThemeDrift & { id: string }): string {
 
 /** Render the drift report. Pure, and nothing in it varies between runs, so an unchanged
  * tree regenerates the committed report byte for byte once `mise run format` has run. */
-export function renderDriftReport(results: readonly (ThemeDrift & { id: string })[]): string {
+export function renderDriftReport(results: readonly NamedThemeDrift[]): string {
   const summary = results.map(
     (theme) => `| ${theme.id} | ${theme.drift.length} | ${theme.tokens} |`,
   );
@@ -154,7 +159,7 @@ export function renderDriftReport(results: readonly (ThemeDrift & { id: string }
 
 function vendorPair(id: VendorThemeId) {
   return {
-    original: withStructuralOverrides(THEMES[id], UPSTREAM_SHIKI_THEMES[id]),
+    original: shikiThemeForPalette({ ...THEMES[id], shikiTheme: UPSTREAM_SHIKI_THEMES[id] }),
     converted: shikiThemeFor(id),
   };
 }

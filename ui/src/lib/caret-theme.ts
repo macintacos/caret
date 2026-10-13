@@ -113,17 +113,13 @@ export function shikiThemeName(theme: Theme): string {
   return theme.shikiTheme.name ?? theme.id;
 }
 
-/** Re-key a source theme to the name `shikiThemeName` gives it and append the structural marker
- * rules. A source carries its rules as `settings` (`syntaxShikiTheme`'s
- * output, and the tmTheme-derived Nightfox references) or `tokenColors` (the VS Code
- * themes ui/compare-themes.ts compares against);
- * normalizing to one keeps the appended rules last, which is what makes them win
- * (shiki is last-match-wins). The `settings ?? tokenColors` order matches shiki's own
- * `normalizeTheme`. */
-export function withStructuralOverrides(
-  theme: Theme,
-  source: ThemeRegistrationRaw,
-): ThemeRegistrationRaw {
+/** Re-key a source theme to the name `shikiThemeName` gives it and append the structural
+ * marker rules. A source carries its rules as `settings` (`syntaxShikiTheme`'s output, and
+ * the tmTheme-derived Nightfox references) or `tokenColors` (the VS Code themes
+ * ui/compare-themes.ts compares against); normalizing to one keeps the appended rules last,
+ * which is what makes them win (shiki is last-match-wins). The `settings ?? tokenColors`
+ * order matches shiki's own `normalizeTheme`. */
+function withStructuralOverrides(theme: Theme, source: ThemeRegistrationRaw): ThemeRegistrationRaw {
   const { tokenColors, settings, ...rest } = source;
   return {
     ...rest,
