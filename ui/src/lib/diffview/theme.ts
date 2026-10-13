@@ -13,7 +13,7 @@
 import { registerCustomTheme } from "@pierre/diffs";
 import type { ThemeRegistrationRaw } from "shiki/core";
 
-import { REGISTERED_SHIKI_THEMES, shikiThemeFor, shikiThemeName } from "$lib/caret-theme.ts";
+import { BUILTIN_SHIKI_THEMES, shikiThemeFor, shikiThemeName } from "$lib/caret-theme.ts";
 import { type CustomThemeId, type ThemeId, themeFor } from "$lib/theme.ts";
 
 /** Registers a named theme into the library's shared highlighter. Derived from
@@ -52,7 +52,7 @@ function themeLoader(theme: ThemeRegistrationRaw): {
   return { name, load: async () => ({ ...theme, name }) };
 }
 
-const caretThemeLoaders = REGISTERED_SHIKI_THEMES.map(themeLoader);
+const caretThemeLoaders = BUILTIN_SHIKI_THEMES.map(themeLoader);
 
 let registered = false;
 

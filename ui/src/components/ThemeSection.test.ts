@@ -200,6 +200,22 @@ describe("theme file errors", () => {
     }
   });
 
+  test("lists two errors for the same file", () => {
+    render(
+      ThemeSection,
+      props({
+        errors: [
+          { file: "dup.json", messages: ["first"] },
+          { file: "dup.json", messages: ["second"] },
+        ],
+      }),
+    );
+    expect(document.querySelectorAll("[data-theme-errors] li").length).toBe(2);
+    const block = text("[data-theme-errors]");
+    expect(block).toContain("first");
+    expect(block).toContain("second");
+  });
+
   test("the error list is a static note, not a live region", () => {
     render(ThemeSection, props({ errors: [{ file: "neon.json", messages: ["bad"] }] }));
     expect(document.querySelector("[data-theme-errors]")?.getAttribute("role")).toBe("note");
