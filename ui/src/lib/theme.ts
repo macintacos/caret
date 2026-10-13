@@ -134,6 +134,7 @@ interface ThemeFields {
 /** A compiled-in palette. */
 export interface BuiltinTheme extends ThemeFields {
   id: BuiltinThemeId;
+  /** The shiki theme its code is highlighted with, built from its theme file's syntax roles. */
   shikiTheme: ThemeRegistrationRaw;
 }
 
@@ -166,9 +167,12 @@ export const THEMES: Record<BuiltinThemeId, BuiltinTheme> = {
 // A JSON import is the schema's unvalidated input — `scheme` widens to string and the
 // optional roles may be absent — so the fallbacks are filled as the schema's transform
 // fills them. theme-file.test.ts pins the result to the validated build.
-function builtin(id: BuiltinThemeId, json: { syntax: object }): BuiltinTheme {
+function builtin(
+  id: BuiltinThemeId,
+  json: Omit<ThemeFile, "scheme" | "syntax"> & { scheme: string; syntax: object },
+): BuiltinTheme {
   const syntax = fillFallbackRoles(json.syntax as Parameters<typeof fillFallbackRoles>[0]);
-  return { ...buildFileTheme({ ...json, syntax } as ThemeFile), id };
+  return { ...buildFileTheme({ ...json, scheme: json.scheme as ThemeFile["scheme"], syntax }), id };
 }
 
 /** The built-in ids in display order — caret-dark first. Runtime themes are not

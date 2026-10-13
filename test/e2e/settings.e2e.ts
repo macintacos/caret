@@ -309,10 +309,9 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
   expect(retinted.length).toBeGreaterThan(0);
   expect(retinted).not.toContain("rgb(255, 143, 61)");
 
-  // EXC-896: the fenced block is highlighted by Dracula's theme file, not caret's
-  // own theme wearing Dracula's hues. Dracula paints `function` its pink
-  // (#ff79c6) — a hue caret's own theme files do not carry, so caret's pair
-  // cannot produce it at any scope.
+  // The fenced block is highlighted with Dracula's syntax roles: it paints `function`
+  // its pink (#ff79c6), a hue neither caret theme file carries, so caret's pair cannot
+  // produce it at any scope.
   await expect.poll(() => rowColors(page, "function warm")).toContain("rgb(255, 121, 198)");
 });
 

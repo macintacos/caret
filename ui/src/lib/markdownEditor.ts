@@ -66,7 +66,7 @@ export interface MarkdownEditorOptions {
 }
 
 // The editor's own scheme, NOT the diff view's: the shiki themes there paint from
-// eleven shiki-only hues that are not ColorTokens, so a `var(--x)` highlight style
+// each theme file's `syntax` roles, which are not ColorTokens, so a `var(--x)` highlight style
 // has no way to name them. Tokens only (hex/var, never oklch).
 const highlightStyle = HighlightStyle.define([
   // Markdown structure.

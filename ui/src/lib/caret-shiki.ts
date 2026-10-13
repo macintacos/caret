@@ -52,8 +52,8 @@ export function syntaxShikiTheme(
       },
       { scope: ["markup.bold"], settings: { fontStyle: "bold" } },
       { scope: ["markup.italic"], settings: { fontStyle: "italic" } },
-      // Inline code and a fence's body ride the accent's lighter sibling: the set names
-      // no hue of their own, and giving them one is EXC-858's.
+      // Inline code and a fence's body ride the accent's lighter sibling: theme files name
+      // no inline-code role, and giving them one is EXC-858's.
       {
         scope: ["markup.inline.raw", "markup.fenced_code"],
         settings: { foreground: chrome.accentBright },

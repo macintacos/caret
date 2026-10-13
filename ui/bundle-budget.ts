@@ -32,7 +32,7 @@ export const MEASURED_BYTES = {
   /** Added by un-aliasing the `@shikijs/themes/*` entry alone — every theme shiki ships,
    * none of which caret renders: its vendor themes are built from theme files. */
   shikiThemesBreak: 1_326_604,
-  /** Added by un-aliasing the bare `/^shiki$/` entry alone. Two orders of magnitude
+  /** Added by un-aliasing the bare `/^shiki$/` entry alone. About thirty times
    * smaller than the others, and the reason the constant below is explicit about what
    * it does not cover. */
   shikiBarrelBreak: 11_163,

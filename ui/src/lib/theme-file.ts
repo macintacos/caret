@@ -3,7 +3,7 @@ import { syntaxShikiTheme } from "$lib/caret-shiki.ts";
 import type { RuntimeTheme } from "$lib/theme.ts";
 import { type PaletteInput, paletteTokens } from "$lib/themes/recipe.ts";
 
-/** Not a `Theme`: its id is a plain string until `addTheme` mints it a `CustomThemeId`. */
+/** Not a `Theme`: its id is a plain string until `addTheme` mints it a `CustomThemeId` or `THEMES` narrows it to a `BuiltinThemeId`. */
 export type FileTheme = Omit<RuntimeTheme, "id"> & { id: string };
 
 type RecipeColors = Omit<PaletteInput, "scheme">;
@@ -18,7 +18,8 @@ type PaletteCheckedThemeFile = [keyof Palette, keyof RecipeColors] extends [
   ? ThemeFile
   : never;
 
-/** Build a validated theme file's token set and shiki theme, the way caret's own pair is built. */
+/** Build a theme file's token set and shiki theme — the one path every theme caret paints,
+ * built-in or custom, goes through. */
 export function buildFileTheme(file: PaletteCheckedThemeFile): FileTheme {
   return {
     id: file.id,

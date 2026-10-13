@@ -8,20 +8,8 @@ import { buildFileTheme } from "$lib/theme-file.ts";
 
 describe("buildFileTheme", () => {
   for (const id of THEME_IDS) {
-    test(`${id}.json builds the bundled ${id} tokens`, async () => {
-      const built = buildFileTheme(await readThemeFile(`${id}.json`));
-      const bundled = THEMES[id];
-      expect({
-        id: built.id,
-        label: built.label,
-        scheme: built.scheme,
-        tokens: built.tokens,
-      }).toEqual({
-        id: bundled.id,
-        label: bundled.label,
-        scheme: bundled.scheme,
-        tokens: bundled.tokens,
-      });
+    test(`${id}.json builds the bundled ${id} theme`, async () => {
+      expect(buildFileTheme(await readThemeFile(`${id}.json`))).toEqual(THEMES[id]);
     });
   }
 

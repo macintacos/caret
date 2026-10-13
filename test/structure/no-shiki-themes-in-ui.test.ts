@@ -1,6 +1,7 @@
-// ui/vite.config.ts stubs every `@shikijs/themes/*` specifier out of the build, which is
-// safe only while no app module imports a shiki theme: the vendor themes live in theme
-// files. `shiki/themes/<name>` re-exports `@shikijs/themes/<name>`, so it is stubbed too.
+// ui/vite.config.ts stubs every `@shikijs/themes/*` specifier out of the build. The stub's
+// default export is a throwing function, so such an import would build and silently yield
+// it in place of a theme — and the bundle budget cannot see it, because the bundle shrinks.
+// `shiki/themes/<name>` re-exports `@shikijs/themes/<name>`, so it is stubbed too.
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 
@@ -12,8 +13,10 @@ const isShikiThemeSpecifier = (spec: string) => /^(?:shiki\/themes\/|@shikijs\/t
 
 test("no UI module imports a shiki-shipped theme", async () => {
   const themeImports: string[] = [];
+  let scanned = 0;
   for await (const path of new Bun.Glob("**/*.{ts,svelte}").scan(UI_SRC)) {
     if (path.endsWith(".test.ts")) continue;
+    scanned++;
     const text = await Bun.file(join(UI_SRC, path)).text();
     themeImports.push(
       ...importSpecifiers(text)
@@ -21,5 +24,6 @@ test("no UI module imports a shiki-shipped theme", async () => {
         .map((spec) => `${path}: ${spec}`),
     );
   }
+  expect(scanned).toBeGreaterThan(0);
   expect(themeImports).toEqual([]);
 });

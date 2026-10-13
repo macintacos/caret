@@ -44,7 +44,8 @@ describe("SourceView rendering", () => {
     // selects them through the view options, so the library highlights with
     // caret's palette rather than its own. A keyword token must carry caret's
     // keyword hue in both color schemes (light #9a2f22 / dark #dd7a6c, the red ochre
-    // ui/src/lib/themes/caret-{light,dark}.json name) — proof the registration reached the renderer.
+    // ui/src/lib/themes/caret-{light,dark}.json name) — proof the registration reached
+    // the renderer.
     const code: SourceDocument = { name: "code.ts", text: "const x = 1\n" };
     const { target } = render(SourceView, { doc: code, contentKey: "c1:v1" });
     await until(() => shadow(target)?.textContent?.includes("const") ?? false);

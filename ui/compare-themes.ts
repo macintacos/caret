@@ -16,8 +16,8 @@ import { shikiThemeFor, withStructuralOverrides } from "$lib/caret-theme.ts";
 import { CARET_TOKENIZE_OPTIONS, createHighlighter } from "$lib/diffview/shiki-bundle.ts";
 import { THEMES } from "$lib/theme.ts";
 
-import { UPSTREAM_SHIKI_THEMES } from "./support/upstream-shiki.ts";
 import { THEME_SAMPLES, type ThemeSample } from "./theme-sample.ts";
+import { UPSTREAM_SHIKI_THEMES } from "./upstream-shiki.ts";
 
 type VendorThemeId = keyof typeof UPSTREAM_SHIKI_THEMES;
 

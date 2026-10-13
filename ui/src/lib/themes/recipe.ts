@@ -1,7 +1,8 @@
-// The shared shape every theme file's palette is mapped through (EXC-752): name the thirteen colors a palette actually decides, and
-// the thirteen that are always derived (the two rules, the accent wash, the two
-// marks, the orphan mark, the six chip tints, the shadow) come out consistent for
-// every theme instead of being re-typed once per palette.
+// The shared shape every theme file's palette is mapped through (EXC-752): name the
+// thirteen colors a palette actually decides, and the thirteen that are always derived
+// (the two rules, the accent wash, the two marks, the orphan mark, the six chip tints,
+// the shadow) come out consistent for every theme instead of being re-typed once per
+// palette.
 //
 // The alpha suffixes and the two shadows are caret-dark's and caret-light's own
 // values, so a vendor theme's hairlines and highlight marks sit at exactly the

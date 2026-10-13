@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import { createHighlighterCore } from "shiki/core";
 
+import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
 import type { SyntaxRole } from "@core/theme/schema.ts";
-import { customThemeFile, readThemeFile, themeFileColors } from "@ui/support/theme-file.ts";
+import { customThemeFile, themeFileColors } from "@ui/support/theme-file.ts";
 import {
   REGISTERED_SHIKI_THEMES,
   shikiThemeFor,
@@ -63,8 +64,8 @@ const ITALIC_MARKERS = "punctuation.definition.italic.markdown";
 /** The scopes the three structural rules own, in the order the resolver appends them. */
 const STRUCTURAL_SCOPES = [FENCE_MARKERS, FENCE_LANGUAGE, INLINE_RAW];
 
-/** The syntax roles, whose colors nothing but the highlighter spends. */
-const SHIKI_ONLY = Object.keys((await readThemeFile("caret-dark.json")).syntax) as SyntaxRole[];
+/** Every syntax role. */
+const ROLES = Object.keys(ROLE_SCOPES) as SyntaxRole[];
 
 /** The expected color for each Palette field, sourced from a theme's tokens. The
  * ColorToken-keyed tokens map guarantees each lookup resolves. */
@@ -127,7 +128,7 @@ describe("caret's own shiki themes", () => {
         // The reverse direction: a role color no rule actually names is a color
         // nothing paints.
         const emitted = themeColors(theme);
-        for (const color of SHIKI_ONLY) {
+        for (const color of ROLES) {
           expect(emitted, `${id}.${color} (${record[color]})`).toContain(record[color]);
         }
       });
@@ -246,8 +247,8 @@ describe("fenced-code fence line", () => {
   }
 
   // The body is the half caret does NOT override, so it is the theme's own: under
-  // caret's pair the fence body takes --accent-bright (the named set holds no
-  // inline-code hue — that is EXC-858's), and the Dracula block below is the same
+  // caret's pair the fence body takes --accent-bright (theme files carry no
+  // inline-code role — that is EXC-858's), and the Dracula block below is the same
   // assertion from the vendor side.
   test("leaves the code body to caret's own theme (--accent-bright)", async () => {
     const code = (await tokenizeFence("caret-light"))[1]?.find((t) => t.content === "code");
@@ -520,7 +521,7 @@ describe("the shipped engine tokenizes TypeScript to the grammar's real scopes",
 
 // A rendered patch takes the semantic pair rather than two more syntax hues, so it
 // agrees with the diff view's own addition and deletion tints. Pinned because these
-// three are `token`-placed rather than `shiki-only`, which puts them outside the
+// three are palette colors rather than syntax roles, which puts them outside the
 // coverage check above — and because the deletion hue is the one color decision this
 // theme pair makes that no other surface already asserts.
 describe("caret themes over a diff fence", () => {

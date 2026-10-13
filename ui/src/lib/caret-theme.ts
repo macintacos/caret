@@ -107,15 +107,16 @@ function caretMarkdownRules(p: Palette): NonNullable<ThemeRegistrationRaw["setti
   ];
 }
 
-/** The name both highlighters know a theme by: a built-in's id, a runtime theme's
- * inline shiki theme name — its id until a replace names it afresh. */
+/** The name both highlighters know a theme by: its inline shiki theme's name — the id,
+ * until a replace names a runtime theme afresh. */
 export function shikiThemeName(theme: Theme): string {
-  return typeof theme.shikiTheme === "string" ? theme.id : (theme.shikiTheme.name ?? theme.id);
+  return theme.shikiTheme.name ?? theme.id;
 }
 
 /** Re-key a source theme to the name `shikiThemeName` gives it and append the structural marker
- * rules. A source carries its rules as `settings` (tmTheme-derived: caret's own pair
- * and the vendored Nightfox themes) or `tokenColors` (the VS Code themes shiki ships);
+ * rules. A source carries its rules as `settings` (`syntaxShikiTheme`'s
+ * output, and the tmTheme-derived Nightfox references) or `tokenColors` (the VS Code
+ * themes ui/compare-themes.ts compares against);
  * normalizing to one keeps the appended rules last, which is what makes them win
  * (shiki is last-match-wins). The `settings ?? tokenColors` order matches shiki's own
  * `normalizeTheme`. */

@@ -180,9 +180,9 @@ directly — and is therefore the one path that expects the partial to already e
 
 `ui/compare-themes.ts` highlights a fixed TypeScript, Markdown, JSON, shell, diff, and
 HTML sample with each vendor's upstream theme, kept as a dev-only reference in
-`ui/support/upstream-shiki.ts`, and with its conversion onto caret's syntax roles, then
-lists every token whose color or font style differs, with both values. The converter it
-runs lives in `src/theme/`.
+`ui/upstream-shiki.ts`, and with its conversion onto caret's syntax roles, then lists
+every token whose color or font style differs, with both values. The converter it runs
+lives in `src/theme/`.
 
 The report, `ui/theme-drift.md`, is generated but committed, unlike the files above.
 Regenerate it with `bun ui/compare-themes.ts && mise run format`;

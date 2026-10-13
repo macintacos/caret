@@ -496,25 +496,30 @@ bin/                the caret entrypoint shim (bin/caret) and the service launch
 
 The polished diff/compare viewer for plan versions is a planned fast-follow.
 
-### Built-in themes
+## Built-in themes
 
 The built-in themes are theme files in `ui/src/lib/themes/`, built into `THEMES` at module
 load rather than through `addTheme`. `ui/theme-drift.md` measures each vendor file against
-the original it was converted from, held in `ui/support/upstream-shiki.ts`. The mapping
-decisions a file's colors don't explain:
+the original it was converted from, held in `ui/upstream-shiki.ts`. The mapping decisions
+a file's colors don't explain:
 
 - **caret dark / caret light** name their own colors, an earth-pigment set for a proofing
   desk: nothing at full chroma and nothing on the violet arc, so keyword takes red ochre.
   The skill chip rides the syntax `type` hue, because no semantic color sits far enough
-  from `ok` to separate it from the path chip.
+  from `ok` to separate it from the path chip. Type and function, number and escape, and
+  attribute and property are held at least 130° apart in OKLCH in both schemes, and the
+  eight colored syntax roles sit in one narrow, high-chroma band.
 - **Catppuccin** follows its own editor convention — chrome on `mantle`, code on `base`,
   panels on `surface0` — shifted down a step in Latte, which has nothing above `base`. The
   ink ramp takes the deeper `subtext1` / `overlay2` so it holds on raised surfaces.
+  Latte's low-contrast `green` and `lavender` stay as published: reading Latte's own
+  colors is the point of picking it.
 - **Dracula** publishes only two text neutrals, so `inkSoft` and `inkFaint` are mixed
   along its Foreground↔Comment ramp.
 - **GitHub** uses Primer functional tokens throughout: the page on GitHub's own canvas
   (`bgColor.muted` light, `bgColor.default` dark), cards on the brightest, code on the
-  recessed one.
+  recessed one. GitHub Light's `accentBright` is the deeper prettylights blue `#0550ae`,
+  not a lighter one, since it paints inline code and fence bodies on a white code surface.
 - **Nightfox** bends Dawnfox: `sunk` is bg2 since bg1 must be `raised`; `ink` is fg0
   because fg1 fails 4.5:1 once quoted text fades it; `inkFaint` is mixed fg2 → comment;
   and `accent` is blue, since no neutral reads on magenta. Neither flavor's ref chip is

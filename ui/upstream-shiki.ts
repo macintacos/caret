@@ -17,10 +17,9 @@ import dracula from "shiki/themes/dracula.mjs";
 import githubDarkDefault from "shiki/themes/github-dark-default.mjs";
 import githubLightDefault from "shiki/themes/github-light-default.mjs";
 
+import dawnfox from "@/code-themes/nightfox/dawnfox.json";
+import duskfox from "@/code-themes/nightfox/duskfox.json";
 import type { BuiltinThemeId } from "$lib/theme.ts";
-
-import dawnfox from "../src/code-themes/nightfox/dawnfox.json";
-import duskfox from "../src/code-themes/nightfox/duskfox.json";
 
 /** Every vendor palette's upstream theme, in THEMES order. */
 export const UPSTREAM_SHIKI_THEMES: Record<

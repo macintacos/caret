@@ -1,6 +1,6 @@
-// Stub for shiki/wasm, the @pierre/theme/* bundles, and shiki's @shikijs/themes/*
-// that @pierre/diffs and shiki statically reference but caret never uses. vite.config.ts aliases those
-// specifiers here so their payloads stay out of the build.
+// Stub for shiki/wasm, the @pierre/theme/* bundles, and shiki's @shikijs/themes/* that
+// @pierre/diffs and shiki statically reference but caret never uses. vite.config.ts aliases
+// those specifiers here so their payloads stay out of the build.
 //
 // caret highlights with shiki's pure-JS regex engine (diffview/shiki-bundle.ts),
 // so the Oniguruma WASM binary the `shiki-wasm` engine would lazy-load (~600 KB) is

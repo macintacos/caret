@@ -263,7 +263,7 @@ restoring the file brings it back.
 
 caret's built-in themes ship as theme files in
 [`ui/src/lib/themes/`](../ui/src/lib/themes/); copying one is a good starting point for
-your own.
+your own — give the copy its own `id`.
 
 ### Where caret finds theme files
 
