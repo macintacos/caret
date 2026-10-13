@@ -1,7 +1,15 @@
-// Each syntax role's TextMate scopes and each optional role's fallback.
-import type { BaseSyntaxRole, RoleStyle, SyntaxRole } from "./schema.ts";
+// Each syntax role's TextMate scopes and each optional role's fallback. The UI imports this
+// at runtime, so it stays zod-free: take only types from ./schema.ts.
+import type {
+  OptionalSyntaxRole,
+  RequiredSyntaxRole,
+  RoleStyle,
+  SyntaxRole,
+  ThemeSyntax,
+} from "./schema.ts";
 
-/** Each optional syntax role, mapped to the required role whose style it takes when a file omits it. */
+/** Each optional syntax role, mapped to the required role whose style it takes when a theme
+ * omits it — the role whose scopes it took, so a theme without it paints as before. */
 export const SYNTAX_ROLE_FALLBACKS = {
   operator: "punctuation",
   bracket: "punctuation",
@@ -12,18 +20,20 @@ export const SYNTAX_ROLE_FALLBACKS = {
   builtinFunction: "function",
   builtinType: "type",
   interpolation: "escape",
-} as const satisfies Readonly<Record<string, BaseSyntaxRole>>;
+} as const satisfies Readonly<Record<string, RequiredSyntaxRole>>;
 
-/** Fills each optional role the file omitted with its fallback role's style. */
-export function fillFallbackRoles<Base extends string, Optional extends string>(
-  syntax: NoInfer<Record<Base, RoleStyle> & Partial<Record<Optional, RoleStyle>>>,
-  fallbacks: Readonly<Record<Optional, Base>>,
-): Record<Base | Optional, RoleStyle> {
-  const filled: Partial<Record<Base | Optional, RoleStyle>> = { ...syntax };
-  for (const [role, base] of Object.entries(fallbacks) as [Optional, Base][]) {
+/** Fills each optional role the syntax omits with its fallback role's style. */
+export function fillFallbackRoles(
+  syntax: Record<RequiredSyntaxRole, RoleStyle> & Partial<Record<OptionalSyntaxRole, RoleStyle>>,
+): ThemeSyntax {
+  const filled: Partial<ThemeSyntax> = { ...syntax };
+  for (const [role, base] of Object.entries(SYNTAX_ROLE_FALLBACKS) as [
+    OptionalSyntaxRole,
+    RequiredSyntaxRole,
+  ][]) {
     filled[role] ??= syntax[base];
   }
-  return filled as Record<Base | Optional, RoleStyle>;
+  return filled as ThemeSyntax;
 }
 
 /** The TextMate scopes each syntax role paints, its canonical scope first — the one
@@ -40,7 +50,7 @@ export const ROLE_SCOPES: Record<SyntaxRole, readonly [canonical: string, ...mor
     "punctuation.terminator",
     "punctuation.accessor",
   ],
-  // `keyword.operator.new` / `.expression` stay in `keyword`, which out-specifies these.
+  // `keyword.operator.new` / `.expression` stay in `keyword`: the longer selector beats `keyword.operator`.
   operator: ["keyword.operator"],
   bracket: ["meta.brace"],
   // A theme's bare `variable` rule is not what an identifier wears; grammars scope one

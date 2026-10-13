@@ -35,9 +35,9 @@ show drift no role change removes.
 | typescript | 21 | `EXC-` | #4c4f69 | #ea76cb |
 | typescript | 21 | `/` | #ea76cb | #40a02b |
 | typescript | 22 | `new` | #8839ef bold | #8839ef |
-| typescript | 23 | `.` | #179299 | #7c7f93 italic |
-| typescript | 23 | `.` | #179299 | #7c7f93 italic |
-| typescript | 23 | `.` | #179299 | #7c7f93 italic |
+| typescript | 23 | `.` | #179299 | #7c7f93 |
+| typescript | 23 | `.` | #179299 | #7c7f93 |
+| typescript | 23 | `.` | #179299 | #7c7f93 |
 | typescript | 23 | `null` | #8839ef | #fe640b |
 | markdown | 1 | `# Review notes` | #d20f39 | #8839ef bold |
 | markdown | 3 | `*` | #7c7f93 | #7c7f93 italic |
@@ -94,9 +94,9 @@ show drift no role change removes.
 | typescript | 21 | `EXC-` | #c6d0f5 | #f4b8e4 |
 | typescript | 21 | `/` | #f4b8e4 | #a6d189 |
 | typescript | 22 | `new` | #ca9ee6 bold | #ca9ee6 |
-| typescript | 23 | `.` | #81c8be | #949cbb italic |
-| typescript | 23 | `.` | #81c8be | #949cbb italic |
-| typescript | 23 | `.` | #81c8be | #949cbb italic |
+| typescript | 23 | `.` | #81c8be | #949cbb |
+| typescript | 23 | `.` | #81c8be | #949cbb |
+| typescript | 23 | `.` | #81c8be | #949cbb |
 | typescript | 23 | `null` | #ca9ee6 | #ef9f76 |
 | markdown | 1 | `# Review notes` | #e78284 | #ca9ee6 bold |
 | markdown | 3 | `*` | #949cbb | #949cbb italic |
@@ -153,9 +153,9 @@ show drift no role change removes.
 | typescript | 21 | `EXC-` | #cad3f5 | #f5bde6 |
 | typescript | 21 | `/` | #f5bde6 | #a6da95 |
 | typescript | 22 | `new` | #c6a0f6 bold | #c6a0f6 |
-| typescript | 23 | `.` | #8bd5ca | #939ab7 italic |
-| typescript | 23 | `.` | #8bd5ca | #939ab7 italic |
-| typescript | 23 | `.` | #8bd5ca | #939ab7 italic |
+| typescript | 23 | `.` | #8bd5ca | #939ab7 |
+| typescript | 23 | `.` | #8bd5ca | #939ab7 |
+| typescript | 23 | `.` | #8bd5ca | #939ab7 |
 | typescript | 23 | `null` | #c6a0f6 | #f5a97f |
 | markdown | 1 | `# Review notes` | #ed8796 | #c6a0f6 bold |
 | markdown | 3 | `*` | #939ab7 | #939ab7 italic |
@@ -212,9 +212,9 @@ show drift no role change removes.
 | typescript | 21 | `EXC-` | #cdd6f4 | #f5c2e7 |
 | typescript | 21 | `/` | #f5c2e7 | #a6e3a1 |
 | typescript | 22 | `new` | #cba6f7 bold | #cba6f7 |
-| typescript | 23 | `.` | #94e2d5 | #9399b2 italic |
-| typescript | 23 | `.` | #94e2d5 | #9399b2 italic |
-| typescript | 23 | `.` | #94e2d5 | #9399b2 italic |
+| typescript | 23 | `.` | #94e2d5 | #9399b2 |
+| typescript | 23 | `.` | #94e2d5 | #9399b2 |
+| typescript | 23 | `.` | #94e2d5 | #9399b2 |
 | typescript | 23 | `null` | #cba6f7 | #fab387 |
 | markdown | 1 | `# Review notes` | #f38ba8 | #cba6f7 bold |
 | markdown | 3 | `*` | #9399b2 | #9399b2 italic |
@@ -354,10 +354,10 @@ show drift no role change removes.
 | diff | 2 | `+++` | #6272a4 | #f8f8f2 italic |
 | diff | 2 | `b/src/review.ts` | #6272a4 | #50fa7b italic |
 | diff | 3 | `@@ -1,6 +1,7 @@` | #6272a4 | #6272a4 italic |
-| html | 1 | `=` | #ff79c6 | #f8f8f2 italic |
+| html | 1 | `=` | #ff79c6 | #f8f8f2 |
 | html | 1 | `"` | #e9f284 | #f1fa8c |
 | html | 1 | `"` | #e9f284 | #f1fa8c |
-| html | 1 | `=` | #ff79c6 | #f8f8f2 italic |
+| html | 1 | `=` | #ff79c6 | #f8f8f2 |
 | html | 1 | `"` | #e9f284 | #f1fa8c |
 | html | 1 | `"` | #e9f284 | #f1fa8c |
 
@@ -482,9 +482,9 @@ show drift no role change removes.
 | typescript | 21 | `EXC-` | #4c4769 | #625c87 |
 | typescript | 21 | `/` | #625c87 | #618774 |
 | typescript | 22 | `new` | #907aa9 bold | #907aa9 |
-| typescript | 23 | `.` | #56949f | #4c4769 italic |
-| typescript | 23 | `.` | #56949f | #4c4769 italic |
-| typescript | 23 | `.` | #56949f | #4c4769 italic |
+| typescript | 23 | `.` | #56949f | #4c4769 |
+| typescript | 23 | `.` | #56949f | #4c4769 |
+| typescript | 23 | `.` | #56949f | #4c4769 |
 | typescript | 23 | `null` | #907aa9 | #ea9d34 |
 | markdown | 1 | `# Review notes` | #b4637a | #286983 bold |
 | markdown | 3 | `*` | #837e9a | #837e9a italic |
@@ -537,9 +537,9 @@ show drift no role change removes.
 | typescript | 21 | `EXC-` | #eae8ff | #cdcbe0 |
 | typescript | 21 | `/` | #cdcbe0 | #a3be8c |
 | typescript | 22 | `new` | #c4a7e7 bold | #c4a7e7 |
-| typescript | 23 | `.` | #9ccfd8 | #eae8ff italic |
-| typescript | 23 | `.` | #9ccfd8 | #eae8ff italic |
-| typescript | 23 | `.` | #9ccfd8 | #eae8ff italic |
+| typescript | 23 | `.` | #9ccfd8 | #eae8ff |
+| typescript | 23 | `.` | #9ccfd8 | #eae8ff |
+| typescript | 23 | `.` | #9ccfd8 | #eae8ff |
 | typescript | 23 | `null` | #c4a7e7 | #f6c177 |
 | markdown | 1 | `# Review notes` | #eb6f92 | #c4a7e7 bold |
 | markdown | 3 | `Some` | #eae8ff | #e0def4 |

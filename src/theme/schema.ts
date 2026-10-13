@@ -8,7 +8,7 @@ import { errorMessage } from "../lib/types.ts";
 import { fillFallbackRoles, SYNTAX_ROLE_FALLBACKS } from "./role-scopes.ts";
 
 /** The syntax roles every theme file must define. */
-export const SYNTAX_ROLES = [
+export const REQUIRED_SYNTAX_ROLES = [
   "comment",
   "punctuation",
   "variable",
@@ -22,12 +22,13 @@ export const SYNTAX_ROLES = [
   "number",
 ] as const;
 
-export type BaseSyntaxRole = (typeof SYNTAX_ROLES)[number];
+export type RequiredSyntaxRole = (typeof REQUIRED_SYNTAX_ROLES)[number];
 
 export const FONT_STYLES = ["italic", "bold", "underline", "strikethrough"] as const;
 
 type FontStyle = (typeof FONT_STYLES)[number];
-export type SyntaxRole = BaseSyntaxRole | keyof typeof SYNTAX_ROLE_FALLBACKS;
+export type OptionalSyntaxRole = keyof typeof SYNTAX_ROLE_FALLBACKS;
+export type SyntaxRole = RequiredSyntaxRole | OptionalSyntaxRole;
 export type RoleStyle = { color: string; fontStyle?: FontStyle[] };
 export type ThemeSyntax = Record<SyntaxRole, RoleStyle>;
 
@@ -82,21 +83,15 @@ const palette = z.strictObject({
 
 const syntax = z
   .strictObject({
-    ...(Object.fromEntries(SYNTAX_ROLES.map((role) => [role, roleStyle])) as Record<
-      BaseSyntaxRole,
+    ...(Object.fromEntries(REQUIRED_SYNTAX_ROLES.map((role) => [role, roleStyle])) as Record<
+      RequiredSyntaxRole,
       typeof roleStyle
     >),
     ...(Object.fromEntries(
       Object.keys(SYNTAX_ROLE_FALLBACKS).map((role) => [role, roleStyle.optional()]),
-    ) as Record<keyof typeof SYNTAX_ROLE_FALLBACKS, z.ZodOptional<typeof roleStyle>>),
+    ) as Record<OptionalSyntaxRole, z.ZodOptional<typeof roleStyle>>),
   })
-  .transform(
-    (roles): ThemeSyntax =>
-      fillFallbackRoles<BaseSyntaxRole, keyof typeof SYNTAX_ROLE_FALLBACKS>(
-        roles,
-        SYNTAX_ROLE_FALLBACKS,
-      ),
-  );
+  .transform((roles) => fillFallbackRoles(roles));
 
 export const ThemeFileSchema = z.strictObject({
   $schema: z.string().optional(),

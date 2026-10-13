@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { fillFallbackRoles, ROLE_SCOPES } from "@/theme/role-scopes.ts";
+import { REQUIRED_SYNTAX_ROLES, type RequiredSyntaxRole, type RoleStyle } from "@/theme/schema.ts";
 
 describe("ROLE_SCOPES", () => {
   test("gives each scope to one role", () => {
@@ -10,15 +11,19 @@ describe("ROLE_SCOPES", () => {
 });
 
 describe("fillFallbackRoles", () => {
-  const fallbacks = { tag: "keyword" } as const;
-  const keyword = { color: "#111111", fontStyle: ["bold" as const] };
+  const required = Object.fromEntries(
+    REQUIRED_SYNTAX_ROLES.map((role, i) => [
+      role,
+      { color: `#0000${i.toString(16).padStart(2, "0")}` },
+    ]),
+  ) as Record<RequiredSyntaxRole, RoleStyle>;
 
   test("gives an absent optional role its fallback's style", () => {
-    expect(fillFallbackRoles({ keyword }, fallbacks)).toEqual({ keyword, tag: keyword });
+    expect(fillFallbackRoles(required).tag).toEqual(required.keyword);
   });
 
   test("keeps a present optional role's own style", () => {
     const tag = { color: "#222222" };
-    expect(fillFallbackRoles({ keyword, tag }, fallbacks)).toEqual({ keyword, tag });
+    expect(fillFallbackRoles({ ...required, tag }).tag).toEqual(tag);
   });
 });
