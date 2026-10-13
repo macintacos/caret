@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,11 +23,18 @@ import {
 } from "@/daemon/guards.ts";
 import { VERSION } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
-import type { CustomThemes, UpdateChanges, UpdateReport } from "@/lib/types.ts";
+import type {
+  CustomThemes,
+  ThemeUpload,
+  ThemeUploadRefusal,
+  UpdateChanges,
+  UpdateReport,
+} from "@/lib/types.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
 import { SUPERVISED_VAR } from "@/service/manager.ts";
+import { MAX_THEME_FILE_BYTES, THEME_FILE_TOO_LARGE } from "@/theme/load.ts";
 
 // Resolver injected as a dep — the core daemon stays tool-agnostic and never
 // reaches into src/ui/assets.ts.
@@ -284,6 +291,80 @@ describe("GET /api/themes", () => {
 
     rmSync(join(themes, "a.json"));
     expect((await fetchThemes()).themes.map((t) => t.id)).toEqual(["theme-b"]);
+  });
+});
+
+describe("POST /api/themes", () => {
+  const themes = () => join(dir, "themes");
+  const listing = () => (existsSync(themes()) ? readdirSync(themes()).sort() : []);
+  const upload = (body: string, headers: Record<string, string> = {}) =>
+    fetch(`${base}/api/themes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body,
+    });
+
+  test("saves <id>.json and answers the theme plus the folder's errors", async () => {
+    mkdirSync(themes());
+    writeFileSync(join(themes(), "broken.json"), "{");
+    await boot();
+    const res = await upload(themeFileText("nightly"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as ThemeUpload;
+    expect(body.theme.id).toBe("nightly");
+    expect(body.errors.map((e) => e.file)).toEqual(["broken.json"]);
+    expect(listing()).toEqual(["broken.json", "nightly.json"]);
+  });
+
+  test("an upload replacing a duplicated id leaves GET serving it cleanly", async () => {
+    mkdirSync(themes());
+    writeFileSync(join(themes(), "a.json"), themeFileText("twin"));
+    writeFileSync(join(themes(), "b.json"), themeFileText("twin"));
+    await boot();
+    expect((await upload(themeFileText("twin"))).status).toBe(200);
+    const served = (await (await fetch(`${base}/api/themes`)).json()) as CustomThemes;
+    expect(served.themes.map((t) => t.id)).toEqual(["twin"]);
+    expect(served.errors).toEqual([]);
+  });
+
+  test("an invalid upload is a 400 carrying its errors and writes nothing", async () => {
+    await boot();
+    const res = await upload("{ not json");
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as ThemeUploadRefusal;
+    expect(body.errors.length).toBeGreaterThan(0);
+    expect(listing()).toEqual([]);
+  });
+
+  test("an oversized body is a 413 by declared and by measured length", async () => {
+    await boot();
+    const big = `${themeFileText("nightly")}${" ".repeat(MAX_THEME_FILE_BYTES)}`;
+    const declared = await upload(big);
+    expect(declared.status).toBe(413);
+    expect(await declared.json()).toEqual({ errors: [THEME_FILE_TOO_LARGE] });
+    const streamed = await fetch(`${base}/api/themes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: new Blob([big]).stream(),
+    });
+    expect(streamed.status).toBe(413);
+    expect(await streamed.json()).toEqual({ errors: [THEME_FILE_TOO_LARGE] });
+    expect(listing()).toEqual([]);
+  });
+
+  test("a BOM-prefixed body uploads", async () => {
+    await boot();
+    expect((await upload(`﻿${themeFileText("nightly")}`)).status).toBe(200);
+    expect(listing()).toEqual(["nightly.json"]);
+  });
+
+  test("is CSRF-guarded and Host-guarded", async () => {
+    await boot();
+    expect((await upload(themeFileText("nightly"), { Origin: "http://evil.com" })).status).toBe(
+      403,
+    );
+    expect((await upload(themeFileText("nightly"), { Host: "evil.com" })).status).toBe(403);
+    expect(listing()).toEqual([]);
   });
 });
 
@@ -1398,6 +1479,15 @@ describe("read-confidentiality posture", () => {
       ],
       ["GET /api/diagnostics", () => fetch(`${base}/api/diagnostics`)],
       ["GET /api/themes", () => fetch(`${base}/api/themes`)],
+      [
+        "POST /api/themes",
+        () =>
+          fetch(`${base}/api/themes`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: themeFileText("nightly"),
+          }),
+      ],
       ["GET /api/update", () => fetch(`${base}/api/update`)],
       ["GET /api/update/changes", () => fetch(`${base}/api/update/changes`)],
       ["GET / (index)", () => fetch(`${base}/`)],
@@ -1745,7 +1835,7 @@ describe("routing fallthrough", () => {
       ["POST", "/api/diagnostics"], // /api/diagnostics is GET-only
       ["POST", "/api/update"], // /api/update is GET-only
       ["POST", "/api/update/changes"],
-      ["POST", "/api/themes"],
+      ["PUT", "/api/themes"],
       ["DELETE", "/api/config"],
       ["PUT", `/api/reviews/${id}/resolve`], // /resolve is POST-only
       ["GET", `/api/reviews/${id}/resolve`],

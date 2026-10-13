@@ -11,6 +11,9 @@ import { parseThemeFile, type ThemeFile } from "@/theme/schema.ts";
 /** Every request reads the whole folder; a real theme file is about 1 KiB. */
 export const MAX_THEME_FILE_BYTES = 64 * 1024;
 
+/** The error line for a theme file over `MAX_THEME_FILE_BYTES`, on the folder and on upload. */
+export const THEME_FILE_TOO_LARGE = `theme file: is larger than ${MAX_THEME_FILE_BYTES / 1024} KiB`;
+
 /** A file to parse, or a wire-ready error line for it: fixed text, never an fs message (those embed absolute paths). */
 export type ThemeSource = { file: string; text: string } | { file: string; error: string };
 
@@ -58,7 +61,8 @@ export function collectThemes(
   };
 }
 
-async function readThemeSources(dir: string): Promise<ThemeSource[]> {
+/** The folder scan the load and the upload writer share: each `*.json` file, in name order. */
+export async function readThemeSources(dir: string): Promise<ThemeSource[]> {
   let names: string[];
   try {
     names = await readdir(dir);
@@ -86,7 +90,7 @@ async function readThemeSource(path: string, file: string): Promise<ThemeSource 
   }
   if (!stats.isFile()) return undefined;
   if (stats.size > MAX_THEME_FILE_BYTES) {
-    return { file, error: `theme file: is larger than ${MAX_THEME_FILE_BYTES / 1024} KiB` };
+    return { file, error: THEME_FILE_TOO_LARGE };
   }
   try {
     // Bun.file strips a UTF-8 BOM; readFile keeps it and JSON.parse then rejects the text.

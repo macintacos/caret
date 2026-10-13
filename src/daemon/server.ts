@@ -54,6 +54,7 @@ import {
   type RouteResult,
   type SkillDescriptionResponse,
   type SkillRef,
+  type ThemeUpload,
   toClientReview,
   type UpdateChanges,
   type UpdateReport,
@@ -65,7 +66,8 @@ import { createDecisions } from "@/review/decisions.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
 import { isSupervised } from "@/service/manager.ts";
-import { loadCustomThemes } from "@/theme/load.ts";
+import { loadCustomThemes, MAX_THEME_FILE_BYTES, THEME_FILE_TOO_LARGE } from "@/theme/load.ts";
+import { createThemeWriter } from "@/theme/save.ts";
 import type { UiAssets } from "@/ui/assets.ts";
 import { MAX_BODY_BYTES, parseUiLogBatch } from "@/ui/log-bridge.ts";
 
@@ -392,6 +394,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     createDecisions(log);
 
   const configWriter = createConfigWriter(configPath);
+  const themeWriter = createThemeWriter(cfg.themesDir);
   const token = cfg.tokenFile === undefined ? null : loadOrMintToken(cfg.tokenFile);
   const names = ownNames(connectHostname(cfg.hostname), cfg.hostnames);
 
@@ -511,6 +514,29 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // that fails, read fresh from the folder on every request (EXC-1980).
   async function handleThemes(): Promise<Response> {
     return Response.json(await loadCustomThemes(cfg.themesDir));
+  }
+
+  // POST /api/themes — save an uploaded theme file as `<id>.json`, validated as the
+  // folder load validates (EXC-1982). Every refusal is JSON `{ errors }`, the 413
+  // included, so the UI renders one shape.
+  async function handleUploadTheme(req: Request): Promise<Response> {
+    const refuse = (status: number, errors: string[]) => {
+      log.warn("themes", "theme upload refused", { status });
+      return Response.json({ errors }, { status });
+    };
+    const declared = Number(req.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > MAX_THEME_FILE_BYTES) {
+      return refuse(413, [THEME_FILE_TOO_LARGE]);
+    }
+    const text = await req.text();
+    if (Buffer.byteLength(text, "utf-8") > MAX_THEME_FILE_BYTES) {
+      return refuse(413, [THEME_FILE_TOO_LARGE]);
+    }
+    const saved = await themeWriter.save(text);
+    if (!saved.ok) return refuse(saved.status, saved.errors);
+    log.debug("themes", "theme saved");
+    const { errors } = await loadCustomThemes(cfg.themesDir);
+    return Response.json({ theme: saved.theme, errors } satisfies ThemeUpload);
   }
 
   // POST /api/retire — graceful single-instance retire (EXC-406): a newer caret
@@ -1101,6 +1127,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "GET" && path === "/api/update") return handleUpdate();
     if (method === "GET" && path === "/api/update/changes") return handleUpdateChanges();
     if (method === "GET" && path === "/api/themes") return handleThemes();
+    if (method === "POST" && path === "/api/themes") return handleUploadTheme(req);
     if (method === "POST" && path === "/api/retire") return handleRetire();
     if (readsUi && (path === "/" || path === INDEX_PATH)) return handleIndex(req);
     if (method === "POST" && path === "/api/reviews")
