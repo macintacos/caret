@@ -1,13 +1,14 @@
 // Custom themes end to end: theme files in the daemon's themes folder reach the
 // Appearance pickers, a picked one repaints the chrome and the highlighted code, and a
-// reload paints it from the first frame. A file uploaded from Appearance is saved under its
-// id and offered, or replaces the theme it names in place, without a reload. This needs a real browser and a real daemon:
-// the boot paint from localStorage across a reload, a held GET /api/themes, the portalled
-// bits-ui picker, a native file input, and shiki's colours inside the diff view's shadow DOM. The pure halves —
-// building a theme from a file, registering it, the cached palette — are unit-tested in
+// reload paints it from the first frame. A file uploaded from Appearance is saved under
+// its id and offered, or replaces the theme it names in place, without a reload. This
+// needs a real browser and a real daemon: the boot paint from localStorage across a
+// reload, a held GET /api/themes, the portalled bits-ui picker, a native file input, and
+// shiki's colours inside the diff view's shadow DOM. The pure halves — building a theme
+// from a file, registering it, the cached palette — are unit-tested in
 // ui/src/lib/registerTheme.test.ts and ui/src/lib/appearance.test.ts, and the stand-in
-// reconcile rules in ui/src/state/appearance.test.ts; the upload's daemon half is unit-tested
-// in test/core/theme/ and test/core/daemon/server.test.ts.
+// reconcile rules in ui/src/state/appearance.test.ts; the upload's daemon half is
+// unit-tested in test/core/theme/ and test/core/daemon/server.test.ts.
 
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";

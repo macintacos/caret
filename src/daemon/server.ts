@@ -67,7 +67,7 @@ import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
 import { isSupervised } from "@/service/manager.ts";
 import { loadCustomThemes, MAX_THEME_FILE_BYTES, THEME_FILE_TOO_LARGE } from "@/theme/load.ts";
-import { createThemeWriter } from "@/theme/save.ts";
+import { createThemeWriter, type ThemeSaveRefusal } from "@/theme/save.ts";
 import type { UiAssets } from "@/ui/assets.ts";
 import { MAX_BODY_BYTES, parseUiLogBatch } from "@/ui/log-bridge.ts";
 
@@ -85,6 +85,11 @@ const INDEX_PATH = "/index.html";
  * hundreds; small enough that the burst of open file descriptors stays ordinary
  * even at MAX_FILE_REFS. */
 const FILE_REF_BATCH = 64;
+
+const REFUSAL_STATUS = { invalid: 400, conflict: 409, unwritable: 500 } as const satisfies Record<
+  ThemeSaveRefusal,
+  number
+>;
 
 /** How long a stepping-down daemon waits for in-flight writes and unread decisions
  * before it releases the port anyway. Must stay under the supervisors'
@@ -126,7 +131,7 @@ export interface CreateServerOptions {
   /** Path to the user's config.toml, the file POST /api/config edits; defaults to
    * paths.configFile(). */
   configPath?: string;
-  /** The folder GET /api/themes reads; defaults to paths.themesDir(). */
+  /** The folder /api/themes reads and writes; defaults to paths.themesDir(). */
   themesDir?: string;
   /** Single-instance lock file path. When set, the daemon writes the lock on a
    * successful bind and removes it on stop(); omitted (default) means no lock is
@@ -520,20 +525,26 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // folder load validates (EXC-1982). Every refusal is JSON `{ errors }`, the 413
   // included, so the UI renders one shape.
   async function handleUploadTheme(req: Request): Promise<Response> {
-    const refuse = (status: number, errors: string[]) => {
-      log.warn("themes", "theme upload refused", { status });
-      return Response.json({ errors }, { status });
-    };
+    const refuse = (status: number, errors: string[]) => Response.json({ errors }, { status });
     const declared = Number(req.headers.get("content-length"));
     if (Number.isFinite(declared) && declared > MAX_THEME_FILE_BYTES) {
+      log.warn("themes", "theme upload refused", { reason: "too large" });
       return refuse(413, [THEME_FILE_TOO_LARGE]);
     }
     const text = await req.text();
     if (Buffer.byteLength(text, "utf-8") > MAX_THEME_FILE_BYTES) {
+      log.warn("themes", "theme upload refused", { reason: "too large" });
       return refuse(413, [THEME_FILE_TOO_LARGE]);
     }
     const saved = await themeWriter.save(text);
-    if (!saved.ok) return refuse(saved.status, saved.errors);
+    if (!saved.ok) {
+      if (saved.reason === "unwritable") {
+        log.warn("themes", "theme folder write failed", { errno: saved.code });
+      } else {
+        log.warn("themes", "theme upload refused", { reason: saved.reason });
+      }
+      return refuse(REFUSAL_STATUS[saved.reason], saved.errors);
+    }
     log.debug("themes", "theme saved");
     const { errors } = await loadCustomThemes(cfg.themesDir);
     return Response.json({ theme: saved.theme, errors } satisfies ThemeUpload);

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { customThemeFile } from "@ui/support/theme-file.ts";
 import { caretDiffTheme, registerCaretDiffThemes, registerDiffTheme } from "$lib/diffview/theme.ts";
-import { addTheme, replaceTheme, THEME_IDS } from "$lib/theme.ts";
+import { addTheme, type CustomThemeId, replaceTheme, THEME_IDS } from "$lib/theme.ts";
 
 // The bridge selects caret's own Shiki themes for the diff view so its
 // highlighting matches caret's code blocks exactly, and registers them into
@@ -72,12 +72,17 @@ describe("registerCaretDiffThemes", () => {
 });
 
 describe("registerDiffTheme", () => {
-  test("registers one runtime theme under its id, ending in caret's markdown rules", async () => {
-    const id = addTheme(await customThemeFile("diff-runtime", "light"));
+  function captured(id: CustomThemeId): [string, () => Promise<unknown>][] {
     const calls: [string, () => Promise<unknown>][] = [];
     registerDiffTheme(id, (name, load) => {
       calls.push([name, load]);
     });
+    return calls;
+  }
+
+  test("registers one runtime theme under its id, ending in caret's markdown rules", async () => {
+    const id = addTheme(await customThemeFile("diff-runtime", "light"));
+    const calls = captured(id);
 
     expect(calls.map(([name]) => name)).toEqual([id]);
     const loaded = (await calls[0]?.[1]()) as {
@@ -97,10 +102,7 @@ describe("registerDiffTheme", () => {
     expect(light).not.toBe(id);
     expect(dark).toBe(light);
 
-    const calls: [string, () => Promise<unknown>][] = [];
-    registerDiffTheme(id, (name, load) => {
-      calls.push([name, load]);
-    });
+    const calls = captured(id);
     expect(calls.map(([name]) => name)).toEqual([light]);
     const loaded = (await calls[0]?.[1]()) as { name: string } | undefined;
     expect(loaded?.name).toBe(light);

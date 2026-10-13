@@ -76,8 +76,8 @@ export function registerCaretDiffThemes(register?: RegisterTheme): void {
 }
 
 /** Registers one runtime theme, added after boot, into the @pierre/diffs
- * highlighter so the diff view can select it by its id. A replaced theme registers
- * again, under the fresh name the replace gave it. */
+ * highlighter so the diff view can select it by `shikiThemeName`: its id, or the
+ * fresh name a replace gave it. */
 export function registerDiffTheme(
   id: CustomThemeId,
   register: RegisterTheme = registerCustomTheme,

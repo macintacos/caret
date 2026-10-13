@@ -19,6 +19,7 @@ import {
   jsonResponse,
   type Respond,
 } from "@ui/support/routed-fetch.ts";
+import { customThemeSource } from "@ui/support/theme-file.ts";
 import {
   getDiagnostics,
   getDirListing,
@@ -705,14 +706,15 @@ describe("uploadTheme", () => {
 
   test("a saved theme returns the daemon's theme and load errors", async () => {
     let seen: { url: string; options: RequestInit | undefined } | undefined;
-    const body = { theme: { id: "nightly" }, errors: [{ file: "x.json", messages: ["bad"] }] };
+    const theme = await customThemeSource("nightly", "dark");
+    const body = { theme, errors: [{ file: "x.json", messages: ["bad"] }] };
     respond = (url, options) => {
       seen = { url, options };
       return Promise.resolve(jsonResponse(body));
     };
     const text = '{ "id": "nightly" }\n';
 
-    expect(await uploadTheme(text)).toEqual({ ok: true, ...body } as never);
+    expect(await uploadTheme(text)).toEqual({ ok: true, ...body });
     expect(seen?.url).toBe("/api/themes");
     expect(seen?.options?.method).toBe("POST");
     expect(seen?.options?.body).toBe(text);
@@ -750,11 +752,25 @@ describe("uploadTheme", () => {
     });
   });
 
-  test("a refused upload warns at step request", async () => {
-    respond = refusal(400, ["bad"]);
+  test("a failure the daemon did not explain warns at step request with its status", async () => {
+    respond = () => Promise.resolve(new Response("Forbidden", { status: 403 }));
+    await uploadTheme("{}");
+    await flush();
+    expect(expectLoggedAt("warn", "request").extra).toMatchObject({ status: 403 });
+  });
+
+  test("an unreachable daemon warns at step request", async () => {
+    respond = () => Promise.reject(new Error("offline"));
     await uploadTheme("{}");
     await flush();
     expectLoggedAt("warn", "request");
+  });
+
+  test("a refusal the daemon explained is left to the daemon's own log", async () => {
+    respond = refusal(400, ["bad"]);
+    await uploadTheme("{}");
+    await flush();
+    expect(cap.events().some((r) => r.level === "warn")).toBe(false);
   });
 });
 

@@ -197,3 +197,13 @@ test("highlights in a replaced theme's new colors, not its first", async () => {
     expect(html).not.toContain(CUSTOM_KEYWORD);
   }
 });
+
+test("a state from before its theme was replaced still yields rows", async () => {
+  const source = await customThemeSource("highlight-replaced-state", "dark");
+  const id = addTheme(buildFileTheme(source));
+  const { state } = await highlightChunk("const x = 1;", "typescript", id);
+  replaceTheme(buildFileTheme(source));
+
+  const chunk = await highlightChunk("const y = 2;", "typescript", id, state);
+  expect(chunk.rows).toHaveLength(1);
+});

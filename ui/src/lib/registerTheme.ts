@@ -24,7 +24,8 @@ export function registerUploadedTheme(file: FileTheme): "added" | "replaced" {
     registerTheme(file);
     return "added";
   }
-  // The diff loader before `reapply`, for `registerTheme`'s reason.
+  // The diff loader before reapply: a showing theme retints the diff view at once,
+  // and the view must already resolve the fresh name.
   const id = replaceTheme(file);
   registerDiffTheme(id);
   appearance.reapply(id);

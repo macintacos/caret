@@ -78,23 +78,23 @@ describe("createThemeWriter", () => {
   });
 
   test.each(["{ not json", JSON.stringify({ id: "x" })])(
-    "an invalid upload is a 400 with the parser's lines and writes nothing",
+    "an invalid upload is invalid with the parser's lines and writes nothing",
     async (text) => {
       writeFileSync(join(dir, "keep.json"), themeFileText("keep"));
       const parsed = parseThemeFile(text) as { errors: string[] };
       expect(await createThemeWriter(dir).save(text)).toEqual({
         ok: false,
-        status: 400,
+        reason: "invalid",
         errors: parsed.errors,
       });
       expect(listing()).toEqual(["keep.json"]);
     },
   );
 
-  test("a built-in id is a 400", async () => {
+  test("a built-in id is invalid", async () => {
     expect(await createThemeWriter(dir).save(themeFileText("dracula"))).toEqual({
       ok: false,
-      status: 400,
+      reason: "invalid",
       errors: ['id: "dracula" is a built-in theme'],
     });
     expect(listing()).toEqual([]);
@@ -112,11 +112,11 @@ describe("createThemeWriter", () => {
     expect(loaded.errors).toEqual([]);
   });
 
-  test("a conflict is a 409 and writes nothing", async () => {
+  test("a conflict is refused and writes nothing", async () => {
     const held = themeFileText("foo");
     writeFileSync(join(dir, "nightly.json"), held);
     const saved = await createThemeWriter(dir).save(themeFileText("nightly"));
-    expect(saved).toMatchObject({ ok: false, status: 409 });
+    expect(saved).toMatchObject({ ok: false, reason: "conflict" });
     expect(listing()).toEqual(["nightly.json"]);
     expect(readFileSync(join(dir, "nightly.json"), "utf-8")).toBe(held);
   });
@@ -128,14 +128,43 @@ describe("createThemeWriter", () => {
     expect(readFileSync(join(dir, "nightly.json"), "utf-8")).toBe(text);
   });
 
-  test("a folder path that is a file is a 500 with fixed text", async () => {
+  test("a folder path that is a file is unwritable with fixed text and the fs code", async () => {
     const file = join(dir, "not-a-dir");
     writeFileSync(file, "");
     expect(await createThemeWriter(file).save(themeFileText("nightly"))).toEqual({
       ok: false,
-      status: 500,
+      reason: "unwritable",
       errors: ["theme folder: could not be written"],
+      code: "EEXIST",
     });
+  });
+
+  test("a case-variant twin leaves one file holding the new text", async () => {
+    writeFileSync(join(dir, "Twin.json"), themeFileText("twin"));
+    const text = themeFileText("twin", { accent: "#123456" });
+    expect((await createThemeWriter(dir).save(text)).ok).toBe(true);
+    const files = listing();
+    expect(files.map((f) => f.toLowerCase())).toEqual(["twin.json"]);
+    expect(readFileSync(join(dir, files[0] ?? ""), "utf-8")).toBe(text);
+  });
+
+  test("a failed write keeps the file that declared the id", async () => {
+    writeFileSync(join(dir, "nightly.json"), themeFileText("foo"));
+    mkdirSync(join(dir, "foo.json"));
+    expect(await createThemeWriter(dir).save(themeFileText("foo"))).toMatchObject({
+      ok: false,
+      reason: "unwritable",
+    });
+    expect(listing()).toEqual(["foo.json", "nightly.json"]);
+  });
+
+  test.each(["a/b", "../x"])("a non-slug id %s is invalid and writes nothing", async (id) => {
+    expect(await createThemeWriter(dir).save(themeFileText(id))).toMatchObject({
+      ok: false,
+      reason: "invalid",
+    });
+    expect(listing()).toEqual([]);
+    expect(readdirSync(root)).toEqual(["themes"]);
   });
 
   test("two concurrent saves of one id both resolve and leave one file", async () => {

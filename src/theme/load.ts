@@ -61,7 +61,7 @@ export function collectThemes(
   };
 }
 
-/** The folder scan the load and the upload writer share: each `*.json` file, in name order. */
+/** Each `*.json` file directly in `dir`, in name order, as text or a fixed-text error; a missing folder yields none. */
 export async function readThemeSources(dir: string): Promise<ThemeSource[]> {
   let names: string[];
   try {

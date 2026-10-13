@@ -3,6 +3,7 @@ import "@ui/support/mount.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import type { UpdateReport } from "@core/lib/types";
+import { pickFile } from "@ui/support/file-pick.ts";
 import { flushUntil, render } from "@ui/support/mount.ts";
 import { installRoutedFetch, jsonResponse } from "@ui/support/routed-fetch.ts";
 import { customThemeSource } from "@ui/support/theme-file.ts";
@@ -519,8 +520,7 @@ describe("SettingsDialog Appearance pane", () => {
       );
       await flushUntil(flush, mounted);
       const input = document.body.querySelector("[data-theme-upload] input") as HTMLInputElement;
-      Object.defineProperty(input, "files", { value: [new File(["{}"], "x.json")] });
-      input.dispatchEvent(new Event("change", { bubbles: true }));
+      pickFile(input, new File(["{}"], "x.json"));
       await flushUntil(flush, () => seen.length > 0);
       expect(seen).toEqual([errors]);
     } finally {

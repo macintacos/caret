@@ -42,6 +42,7 @@ import {
   writeThemeMode,
 } from "$lib/appearance.ts";
 import {
+  type CustomThemeId,
   isBuiltinThemeId,
   paintPalette,
   paintTheme,
@@ -94,7 +95,7 @@ export interface Appearance {
    * no longer matches falls back to its default in-session (storage keeps the saved
    * id), the palette repaints as a wipe if it is showing, and each slot's cache is
    * rewritten. A no-op when no slot holds the id. */
-  reapply(id: ThemeId): void;
+  reapply(id: CustomThemeId): void;
   /** Follow OS appearance flips for as long as the returned disposer is unused.
    * The media query defaults to the live one; a no-op where none is available. */
   watch(media?: SchemeMediaQuery): () => void;
@@ -221,7 +222,7 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
       // Only a slot showing its default can hold a saved id that was unknown until
       // now; any other slot is the in-session pick, which storage may have failed to keep.
       commit(() => {
-        for (const slot of ["light", "dark"] as const) {
+        for (const slot of SCHEMES) {
           if (live.slots[slot] === DEFAULT_SLOT_THEME[slot]) live.slots[slot] = readSlotTheme(slot);
         }
       });

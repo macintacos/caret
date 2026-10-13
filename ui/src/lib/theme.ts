@@ -6,7 +6,8 @@
 // reads `var(--token)`: dialogs, the .diffview bridge — retints in realtime with no
 // per-component change. A compiled-in palette is one more entry in THEMES; a theme
 // built from a theme file joins at runtime through `registerTheme`
-// (registerTheme.ts), whose registry half is `addTheme`.
+// (registerTheme.ts), whose registry half is `addTheme`; an uploaded file whose id
+// is already registered swaps it in place through `replaceTheme`.
 //
 // A caller may pass any element instead, painting the palette onto that subtree
 // rather than the page (EXC-884) — the scoped preview card previews a palette the
@@ -147,6 +148,8 @@ export interface BuiltinTheme extends ThemeFields {
 /** A theme built from a theme file, carrying its shiki theme inline. */
 export interface RuntimeTheme extends ThemeFields {
   id: CustomThemeId;
+  /** Its `name` is both highlighters' cache key: the id, then `<id>~<n>` after a
+   * replace. A rebuild must not reset it. */
   shikiTheme: ThemeRegistrationRaw;
 }
 
@@ -198,7 +201,8 @@ export function isCustomThemeId(id: string): id is CustomThemeId {
  * slots.
  *
  * @throws When the id is a built-in or already registered: both highlighters key
- * themes by this id, so a collision would shadow or half-replace a theme. */
+ * themes by their shiki name, which is this id until a replace, so a collision would
+ * shadow or half-replace a theme; a deliberate swap goes through `replaceTheme`. */
 export function addTheme(file: FileTheme): CustomThemeId {
   const id = file.id as CustomThemeId; // the one place a CustomThemeId is minted
   if (isBuiltinThemeId(id) || runtimeThemes.has(id)) {

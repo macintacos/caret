@@ -36,7 +36,8 @@
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { Spinner } from "$lib/components/ui/spinner/index.js";
   import { rowWindow } from "$lib/previewWindow.ts";
-  import type { ThemeId } from "$lib/theme.ts";
+  import { shikiThemeName } from "$lib/caret-theme.ts";
+  import { type ThemeId, themeFor } from "$lib/theme.ts";
 
   interface Props {
     reviewId: string;
@@ -69,7 +70,8 @@
   // text — kept so a theme switch can recolour without refetching a byte — and
   // `rows` its rendered form, one entry per line. `state` is the grammar state
   // the region's last line ended on, which is where the next chunk below it
-  // starts from; `themeId` is the palette `rows` were coloured in.
+  // starts from; `palette` is the shiki name `rows` were coloured in, which a
+  // replace changes while the id stays put.
   interface Ready {
     kind: "ready";
     path: string;
@@ -78,7 +80,7 @@
     startLine: number;
     lines: string[];
     rows: Row[];
-    themeId: ThemeId;
+    palette: string;
     state?: ChunkState;
   }
   type Preview = { kind: "loading" } | { kind: "error" } | { kind: "too-large" } | Ready;
@@ -121,6 +123,8 @@
     const visible = Math.ceil(region.clientHeight / Math.max(1, rowHeight));
     return { threshold: region.clientHeight / 4, chunk: Math.max(MIN_CHUNK, visible * 2) };
   }
+
+  const paletteOf = (themeId: ThemeId) => shikiThemeName(themeFor(themeId));
 
   // Colour a contiguous span beginning at `startLine` and pair each line with its
   // real file line number. Line numbers always come from the span
@@ -242,7 +246,7 @@
           totalLines: excerpt.totalLines,
           startLine: excerpt.startLine,
           lines: excerpt.lines,
-          themeId,
+          palette: paletteOf(themeId),
           ...painted,
         });
       } catch (err) {
@@ -259,7 +263,7 @@
     };
   });
 
-  // A theme switch recolours every line already loaded, so the panel is never
+  // A theme switch or replace recolours every line already loaded, so the panel is never
   // part one palette and part another, and never left in a palette the app has
   // moved off. Nothing is refetched — the raw text is already here. Both inputs
   // are tracked, so this reconciles whichever moves: a switch, or a write that
@@ -268,15 +272,16 @@
   // than looping.
   $effect(() => {
     const themeId = appearance.themeId;
+    const palette = paletteOf(themeId);
     const loaded = preview;
-    if (loaded.kind !== "ready" || loaded.themeId === themeId) return;
+    if (loaded.kind !== "ready" || loaded.palette === palette) return;
     void (async () => {
       const painted = await paint(loaded.lines, loaded.startLine, loaded.language, themeId);
       // A later switch or an expansion landed first, and painted in the theme
       // showing now; this pass is stale either way.
       const live = untrack(() => preview);
-      if (live !== loaded || untrack(() => appearance.themeId) !== themeId) return;
-      preview = { ...loaded, themeId, ...painted };
+      if (live !== loaded || untrack(() => paletteOf(appearance.themeId)) !== palette) return;
+      preview = { ...loaded, palette, ...painted };
     })();
   });
 
@@ -331,7 +336,8 @@
           ? [...excerpt.lines, ...loaded.lines]
           : [...loaded.lines, ...excerpt.lines];
       let painted: { rows: Row[]; state?: ChunkState };
-      if (direction === "down" && themeId === loaded.themeId) {
+      const palette = untrack(() => paletteOf(themeId));
+      if (direction === "down" && palette === loaded.palette) {
         const chunk = await paint(
           excerpt.lines,
           excerpt.startLine,
@@ -352,7 +358,7 @@
         totalLines: excerpt.totalLines,
         startLine,
         lines,
-        themeId,
+        palette,
         ...painted,
       };
       if (direction === "up") {

@@ -70,10 +70,13 @@
     const file = input.files?.[0];
     if (file === undefined) return;
     uploading = true;
-    outcome = await uploadOutcome(file);
-    uploading = false;
-    // Cleared so picking the same file again still fires `change`.
-    input.value = "";
+    try {
+      outcome = await uploadOutcome(file);
+    } finally {
+      uploading = false;
+      // Cleared so picking the same file again still fires `change`.
+      input.value = "";
+    }
   }
 
   async function uploadOutcome(file: File): Promise<Outcome> {
@@ -86,8 +89,14 @@
     const result = await uploadTheme(text);
     if (!result.ok) return { ok: false, file: file.name, errors: result.errors };
     const { label, scheme } = result.theme;
-    const how = registerUploadedTheme(buildFileTheme(result.theme));
     onThemeErrors(result.errors);
+    let how: "added" | "replaced";
+    try {
+      how = registerUploadedTheme(buildFileTheme(result.theme));
+    } catch {
+      // The daemon has already saved the file, so this is not a refusal.
+      return { ok: true, message: `Saved "${label}". Reload the page to use it.` };
+    }
     const message =
       how === "added" ? `Added "${label}" to the ${scheme} themes.` : `Replaced "${label}".`;
     return { ok: true, message };
@@ -166,8 +175,8 @@
   <div class="theme-upload" data-theme-upload>
     <div class="upload-row">
       <Button
-        variant="outline"
-        size="sm"
+        variant="secondary"
+        class="float-chip"
         disabled={uploading}
         onclick={() => picker?.click()}>Upload theme file…</Button
       >
@@ -183,6 +192,7 @@
     {#if outcome?.ok}
       <p class="upload-status" role="status" data-theme-upload-status>{outcome.message}</p>
     {:else if outcome}
+      <!-- An outcome the user just triggered, so the vendored role="alert" announces it. -->
       <Alert.Root variant="destructive" class="theme-errors" data-theme-upload-errors>
         <Alert.Title>{outcome.file} wasn't added</Alert.Title>
         <Alert.Description>
@@ -223,7 +233,8 @@
     text-transform: uppercase;
     animation: in-use-in var(--dur-micro) var(--ease-out);
   }
-  .resolved {
+  .resolved,
+  .upload-hint {
     margin: 0;
     font-size: var(--text-xs);
     color: var(--ink-faint);
@@ -241,13 +252,9 @@
     align-items: center;
     gap: 0.6rem;
   }
-  .upload-hint,
   .upload-status {
     margin: 0;
     font-size: var(--text-xs);
-    color: var(--ink-faint);
-  }
-  .upload-status {
     color: var(--ink);
   }
 

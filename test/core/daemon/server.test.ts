@@ -345,7 +345,12 @@ describe("POST /api/themes", () => {
     const streamed = await fetch(`${base}/api/themes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: new Blob([big]).stream(),
+      body: new ReadableStream({
+        start(c) {
+          c.enqueue(new TextEncoder().encode(big));
+          c.close();
+        },
+      }),
     });
     expect(streamed.status).toBe(413);
     expect(await streamed.json()).toEqual({ errors: [THEME_FILE_TOO_LARGE] });

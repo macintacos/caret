@@ -161,9 +161,8 @@ const SHIKI_THEMES = Object.fromEntries(
   THEME_IDS.map((id) => [id, shikiThemeForPalette(THEMES[id])]),
 ) as Record<BuiltinThemeId, ThemeRegistrationRaw>;
 
-/** The shiki theme for one caret palette, named by `shikiThemeName`: the palette's
- * id, the handle appearance.ts paints with, until a replace gives a runtime theme a
- * fresh name. A runtime theme's is built per call. */
+/** The shiki theme for one caret palette, named by `shikiThemeName`. A runtime
+ * theme's is built per call. */
 export function shikiThemeFor(id: ThemeId): ThemeRegistrationRaw {
   return isBuiltinThemeId(id) ? SHIKI_THEMES[id] : shikiThemeForPalette(themeFor(id));
 }

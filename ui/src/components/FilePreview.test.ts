@@ -7,9 +7,12 @@ import { until } from "@test/support/poll.ts";
 import { type LogCapture, logCapture } from "@ui/support/helpers.ts";
 import { render } from "@ui/support/mount.ts";
 import { reactiveProps } from "@ui/support/props.svelte.ts";
+import { customThemeSource } from "@ui/support/theme-file.ts";
 import FilePreview from "@/components/FilePreview.svelte";
 import { appearance } from "@/state/appearance.svelte.ts";
 import { highlightChunk, MAX_HIGHLIGHT_LINE_CHARS } from "$lib/diffview/highlight.ts";
+import { addTheme, replaceTheme } from "$lib/theme.ts";
+import { buildFileTheme } from "$lib/theme-file.ts";
 
 // The filename preview (EXC-687) shows an excerpt of a referenced file. These
 // pin the reader affordances layered on top of the highlighted code: per-line
@@ -759,6 +762,24 @@ describe("FilePreview theme changes", () => {
     for (const [i, colours] of after.entries()) expect(colours).not.toBe(before[i]);
     // The raw text was already here; recolouring it costs no round trip.
     expect(served.urls).toHaveLength(fetches);
+  });
+
+  test("replacing the showing theme repaints the loaded rows in its new colors", async () => {
+    const source = await customThemeSource("preview-replaced", "light");
+    appearance.setMode("light");
+    appearance.setSlot("light", addTheme(buildFileTheme(source)));
+    cap = serveWindowed(300, 60, "json");
+    const { target } = render(FilePreview, props());
+    await until(() => target.querySelector(".fp-lcode span") != null);
+    const before = rowColours(target);
+
+    const recolored = Object.fromEntries(
+      Object.keys(source.syntax).map((key) => [key, { color: "#aa11cc" }]),
+    );
+    replaceTheme(buildFileTheme({ ...source, syntax: { ...source.syntax, ...recolored } }));
+    await until(() => rowColours(target)[0] !== before[0]);
+
+    for (const [i, colours] of rowColours(target).entries()) expect(colours).not.toBe(before[i]);
   });
 });
 
