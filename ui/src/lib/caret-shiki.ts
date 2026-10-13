@@ -93,19 +93,21 @@ export function syntaxShikiTheme(
  * comment's style is exempt, so the doc tags inside one keep it. */
 function fontStyleResets(roles: ThemeSyntax): NonNullable<ThemeRegistrationRaw["settings"]> {
   const entries = Object.entries(ROLE_SCOPES) as [SyntaxRole, readonly string[]][];
-  const styled = entries.flatMap(([role, scopes]) =>
+  const styledScopes = entries.flatMap(([role, scopes]) =>
     role !== "comment" && roles[role].fontStyle?.length ? scopes : [],
   );
-  if (styled.length === 0) return [];
+  if (styledScopes.length === 0) return [];
   const unset = entries.flatMap(([role, scopes]) => (roles[role].fontStyle ? [] : scopes));
   // An unset font style is filled from a broader scope in the theme...
-  const nested = unset.filter((scope) => styled.some((outer) => scope.startsWith(`${outer}.`)));
+  const nested = unset.filter((scope) =>
+    styledScopes.some((outer) => scope.startsWith(`${outer}.`)),
+  );
   return [
     ...(nested.length > 0 ? [{ scope: nested, settings: { fontStyle: "" } }] : []),
     // ...or from the enclosing token. Every role is restated, not only the style-less ones:
     // a parent-scoped rule is copied down to the longer scopes beneath it, color included.
     ...entries.map(([role, scopes]) => ({
-      scope: styled.flatMap((outer) => scopes.map((scope) => `${outer} ${scope}`)),
+      scope: styledScopes.flatMap((outer) => scopes.map((scope) => `${outer} ${scope}`)),
       settings: {
         foreground: roles[role].color,
         fontStyle: roles[role].fontStyle?.join(" ") ?? "",

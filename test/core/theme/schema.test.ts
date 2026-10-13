@@ -85,8 +85,8 @@ describe("parseThemeFile", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const { syntax } = result.file;
-    for (const [role, base] of Object.entries(SYNTAX_ROLE_FALLBACKS)) {
-      expect(syntax[role as keyof typeof syntax]).toEqual(syntax[base]);
+    for (const [role, fallback] of Object.entries(SYNTAX_ROLE_FALLBACKS)) {
+      expect(syntax[role as keyof typeof syntax]).toEqual(syntax[fallback]);
     }
   });
 
@@ -265,7 +265,7 @@ describe("doc/CONFIGURING.md", () => {
   test("its syntax tables list every role with its scopes and fallback", () => {
     const doc = readFileSync(join(REPO_ROOT, "doc/CONFIGURING.md"), "utf8");
     const section = doc.split("\n### `syntax`\n")[1]?.split("\n### ")[0] ?? "";
-    const code = (s: string) => `\`${s}\``;
+    const codeSpan = (s: string) => `\`${s}\``;
     const fallbacks: Record<string, string> = SYNTAX_ROLE_FALLBACKS;
     const documented = section
       .split("\n")
@@ -273,10 +273,10 @@ describe("doc/CONFIGURING.md", () => {
       .map((line) => line.split("|").map((cell) => cell.trim()))
       .map(([, role, , ...rest]) => [role, rest.filter(Boolean).join(" | ")]);
     const expected = Object.entries(ROLE_SCOPES).map(([role, scopes]) => [
-      code(role),
+      codeSpan(role),
       [
-        scopes.map(code).join(", "),
-        ...(role in fallbacks ? [code(fallbacks[role] ?? "")] : []),
+        scopes.map(codeSpan).join(", "),
+        ...(role in fallbacks ? [codeSpan(fallbacks[role] ?? "")] : []),
       ].join(" | "),
     ]);
     expect(Object.fromEntries(documented)).toEqual(Object.fromEntries(expected));

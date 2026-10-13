@@ -11,7 +11,7 @@ describe("ROLE_SCOPES", () => {
 });
 
 describe("fillFallbackRoles", () => {
-  const required = Object.fromEntries(
+  const requiredStyles = Object.fromEntries(
     REQUIRED_SYNTAX_ROLES.map((role, i) => [
       role,
       { color: `#0000${i.toString(16).padStart(2, "0")}` },
@@ -19,11 +19,11 @@ describe("fillFallbackRoles", () => {
   ) as Record<RequiredSyntaxRole, RoleStyle>;
 
   test("gives an absent optional role its fallback's style", () => {
-    expect(fillFallbackRoles(required).tag).toEqual(required.keyword);
+    expect(fillFallbackRoles(requiredStyles).tag).toEqual(requiredStyles.keyword);
   });
 
   test("keeps a present optional role's own style", () => {
     const tag = { color: "#222222" };
-    expect(fillFallbackRoles({ ...required, tag }).tag).toEqual(tag);
+    expect(fillFallbackRoles({ ...requiredStyles, tag }).tag).toEqual(tag);
   });
 });

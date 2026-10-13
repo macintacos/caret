@@ -27,11 +27,11 @@ export function fillFallbackRoles(
   syntax: Record<RequiredSyntaxRole, RoleStyle> & Partial<Record<OptionalSyntaxRole, RoleStyle>>,
 ): ThemeSyntax {
   const filled: Partial<ThemeSyntax> = { ...syntax };
-  for (const [role, base] of Object.entries(SYNTAX_ROLE_FALLBACKS) as [
+  for (const [role, fallback] of Object.entries(SYNTAX_ROLE_FALLBACKS) as [
     OptionalSyntaxRole,
     RequiredSyntaxRole,
   ][]) {
-    filled[role] ??= syntax[base];
+    filled[role] ??= syntax[fallback];
   }
   return filled as ThemeSyntax;
 }

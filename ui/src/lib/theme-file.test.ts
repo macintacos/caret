@@ -71,7 +71,9 @@ describe("a syntax role without a font style", () => {
 
   beforeAll(async () => {
     const file = await readThemeFile("caret-dark.json");
-    const plain = (role: keyof typeof file.syntax) => ({ color: file.syntax[role].color });
+    const withoutFontStyle = (role: keyof typeof file.syntax) => ({
+      color: file.syntax[role].color,
+    });
     probe = addTheme(
       buildFileTheme({
         ...file,
@@ -80,9 +82,9 @@ describe("a syntax role without a font style", () => {
           ...file.syntax,
           type: { ...file.syntax.type, fontStyle: ["italic"] },
           function: { ...file.syntax.function, fontStyle: ["italic"] },
-          property: plain("property"),
-          variable: plain("variable"),
-          punctuation: plain("punctuation"),
+          property: withoutFontStyle("property"),
+          variable: withoutFontStyle("variable"),
+          punctuation: withoutFontStyle("punctuation"),
         },
       }),
     );
