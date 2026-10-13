@@ -3,7 +3,9 @@ import "@ui/support/mount.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { flushUntil, render } from "@ui/support/mount.ts";
-import { customThemeFile } from "@ui/support/theme-file.ts";
+import { closeSelect, openSelect, pointer } from "@ui/support/select.ts";
+import { CUSTOM_ACCENT, CUSTOM_KEYWORD, customThemeFile } from "@ui/support/theme-file.ts";
+import SettingControl from "@/components/SettingControl.svelte";
 import SettingSelect from "@/components/SettingSelect.svelte";
 import { appearance } from "@/state/appearance.svelte.ts";
 import { DARK_SLOT_KEY, MODE_KEY } from "$lib/appearance.ts";
@@ -63,19 +65,7 @@ describe("a registered theme is selectable in its scheme's slot", () => {
     const file = await customThemeFile(id, "dark");
     registerTheme(file);
 
-    const body = document.body;
-    const trigger = () => body.querySelector<HTMLElement>("[data-slot='select-trigger']");
-    const content = () => body.querySelector<HTMLElement>("[data-slot='select-content']");
-    const card = () => body.querySelector<HTMLElement>("[data-slot='theme-preview']");
-    const pointer = (el: Element | null, type: string) =>
-      el?.dispatchEvent(
-        new PointerEvent(type, {
-          bubbles: true,
-          cancelable: true,
-          button: 0,
-          pointerType: "mouse",
-        }),
-      );
+    const card = () => document.body.querySelector<HTMLElement>("[data-slot='theme-preview']");
 
     const { flush } = render(SettingSelect, {
       value: "caret-dark",
@@ -84,22 +74,39 @@ describe("a registered theme is selectable in its scheme's slot", () => {
       id: "setting-theme-dark",
     });
     flush();
-    pointer(trigger(), "pointerdown");
-    await flushUntil(flush, () => content() !== null);
+    await openSelect(flush);
 
-    const row = body.querySelector(`[data-setting-option='${id}']`);
+    const row = document.body.querySelector(`[data-setting-option='${id}']`);
     expect(row?.textContent?.trim()).toBe(file.label);
     expect(row?.querySelectorAll(".chip-dot").length).toBe(5);
 
     pointer(row, "pointermove");
-    await flushUntil(flush, () => card()?.style.getPropertyValue("--accent") === "#ff00aa");
+    await flushUntil(flush, () => card()?.style.getPropertyValue("--accent") === CUSTOM_ACCENT);
     for (const [name, value] of Object.entries(file.tokens)) {
       expect(card()?.style.getPropertyValue(name), name).toBe(value);
     }
 
-    pointer(trigger(), "pointerdown");
-    await flushUntil(flush, () => content() === null);
-    expect(content() === null).toBe(true);
+    await closeSelect(flush);
+  });
+
+  test("an open picker gains the row of a theme registered while it is open", async () => {
+    const id = uniqueId();
+    const file = await customThemeFile(id, "dark");
+    const field = SETTINGS_REGISTRY.find((entry) => entry.key === THEME_FIELD.dark);
+    if (field === undefined || !("control" in field)) throw new Error("no dark slot field");
+    const rows = () => document.body.querySelectorAll("[data-setting-option]").length;
+
+    const { flush } = render(SettingControl, { field, value: "caret-dark", onApply: () => {} });
+    flush();
+    await openSelect(flush);
+    const before = rows();
+
+    registerTheme(file);
+    await flushUntil(flush, () => rows() === before + 1);
+
+    expect(rows()).toBe(before + 1);
+    expect(document.body.querySelector(`[data-setting-option='${id}']`) !== null).toBe(true);
+    await closeSelect(flush);
   });
 });
 
@@ -111,13 +118,13 @@ describe("a registered theme selected in its slot", () => {
     appearance.setSlot("dark", id);
 
     expect(appearance.themeId).toBe(id);
-    expect(rootToken("--accent")).toBe("#ff00aa");
+    expect(rootToken("--accent")).toBe(CUSTOM_ACCENT);
     expect(caretDiffTheme(appearance.themeId)).toEqual({
       theme: { light: id, dark: id },
       themeType: "dark",
     });
     const html = await highlightExcerpt("const x = 1;", "ts", appearance.themeId);
-    expect(html.toLowerCase()).toContain("#00ffaa");
+    expect(html.toLowerCase()).toContain(CUSTOM_KEYWORD);
   });
 });
 
@@ -135,7 +142,7 @@ describe("a slot saved before its theme registers", () => {
     const registered = registerTheme(await customThemeFile(id, "dark"));
 
     expect(appearance.themeId).toBe(registered);
-    expect(rootToken("--accent")).toBe("#ff00aa");
+    expect(rootToken("--accent")).toBe(CUSTOM_ACCENT);
     expect(localStorage.getItem(DARK_SLOT_KEY)).toBe(id);
   });
 });

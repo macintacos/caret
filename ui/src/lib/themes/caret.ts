@@ -14,7 +14,7 @@
 // verdigris.
 
 import type { CaretShikiThemeId } from "$lib/caret-shiki.ts";
-import type { BuiltinThemeId, Scheme, Theme } from "$lib/theme.ts";
+import type { BuiltinTheme, BuiltinThemeId, Scheme } from "$lib/theme.ts";
 import { paletteTheme } from "$lib/themes/recipe.ts";
 
 /** Every color caret's own palettes name: the thirteen `PaletteInput` values, the three
@@ -217,7 +217,7 @@ function caretTheme(
   label: string,
   scheme: Scheme,
   p: CaretPalette,
-): Theme {
+): BuiltinTheme {
   return paletteTheme({
     id,
     label,

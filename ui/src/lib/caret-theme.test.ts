@@ -10,9 +10,9 @@ import {
   addTheme,
   type BuiltinThemeId,
   type ColorToken,
+  type ShikiThemeId,
   THEME_IDS,
   THEMES,
-  type Theme,
   type ThemeId,
 } from "$lib/theme.ts";
 import { CARET_COLOR_PLACEMENT, CARET_DARK, CARET_LIGHT } from "$lib/themes/caret.ts";
@@ -49,8 +49,8 @@ const CARET_RECORDS = [
 /** caret's own palettes name a theme this repo authors; every other palette names a
  * vendor's published one. Narrowing through this predicate rather than a cast is what
  * keeps a caret id from ever being handed to `UPSTREAM_SHIKI_THEMES`. */
-function isCaretOwn(shikiTheme: Theme["shikiTheme"]): shikiTheme is CaretShikiThemeId {
-  return typeof shikiTheme === "string" && shikiTheme in CARET_SHIKI_THEMES;
+function isCaretOwn(shikiTheme: ShikiThemeId): shikiTheme is CaretShikiThemeId {
+  return shikiTheme in CARET_SHIKI_THEMES;
 }
 
 /** The two halves of the registry, partitioned by which map holds the id a palette
@@ -58,7 +58,7 @@ function isCaretOwn(shikiTheme: Theme["shikiTheme"]): shikiTheme is CaretShikiTh
 const CARET_IDS = THEME_IDS.filter((id) => isCaretOwn(THEMES[id].shikiTheme));
 const VENDOR_PALETTES = THEME_IDS.flatMap((id) => {
   const shikiTheme = THEMES[id].shikiTheme;
-  return typeof shikiTheme !== "string" || isCaretOwn(shikiTheme) ? [] : [{ id, shikiTheme }];
+  return isCaretOwn(shikiTheme) ? [] : [{ id, shikiTheme }];
 });
 
 /** How many rules caret appends over the theme a palette names — the three structural
@@ -657,9 +657,8 @@ describe("shikiThemeFor a runtime theme", () => {
       caretRules.slice(-appended.length).map((r) => r.scope),
     );
     expect(
-      appended.find((r) => r.settings.fontStyle === "bold" && r.settings.foreground)?.settings
-        .foreground,
-    ).toBe("#ff00aa");
+      appended.find((r) => String(r.scope).includes(FENCE_LANGUAGE))?.settings.foreground,
+    ).toBe(file.tokens["--accent"]);
     expect(file.shikiTheme).toEqual(original);
   });
 });

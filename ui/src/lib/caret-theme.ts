@@ -18,8 +18,8 @@ import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
 // matching scheme. Registered into both highlighters: the source view's
 // (diffview/theme.ts) and the excerpt preview's (diffview/highlight.ts).
 //
-// Every palette names the theme it highlights with, and the two asset maps below
-// hold them all, so shikiThemeForPalette is one total lookup rather than a fork.
+// A built-in palette names a theme one of the two asset maps below holds; a runtime
+// theme carries its own inline. Either way it goes through `withStructuralOverrides`.
 // A vendor palette names that vendor's OWN published theme (EXC-896), so picking
 // Dracula gets Dracula — its full rule set, including the pink keyword caret's own
 // color set cannot name. caret's pair names the theme authored for it out of that
@@ -131,8 +131,8 @@ function withStructuralOverrides(theme: Theme, source: ThemeRegistrationRaw): Th
 }
 
 /** Every theme a palette can name, in one map — the vendors' published themes and
- * caret's own pair. Keyed by `ShikiThemeId`, the same union a palette's `shikiTheme`
- * is, so the lookup below is total with no unresolved case to branch on. */
+ * caret's own pair. Keyed by `ShikiThemeId`, the union a built-in palette names, so a
+ * built-in's lookup is total. */
 const SHIKI_THEME_SOURCES: Record<ShikiThemeId, ThemeRegistrationRaw> = {
   ...UPSTREAM_SHIKI_THEMES,
   ...CARET_SHIKI_THEMES,

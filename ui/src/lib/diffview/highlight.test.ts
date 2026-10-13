@@ -1,6 +1,6 @@
 import { beforeAll, expect, test } from "bun:test";
 
-import { customThemeFile } from "@ui/support/theme-file.ts";
+import { CUSTOM_KEYWORD, customThemeFile } from "@ui/support/theme-file.ts";
 import {
   type ChunkState,
   highlightChunk,
@@ -166,7 +166,7 @@ test("highlights in a theme registered after boot, and built-ins still highlight
   const id = addTheme(await customThemeFile("highlight-runtime", "dark"));
 
   const html = await highlightExcerpt("const x = 1;", "typescript", id);
-  expect(html.toLowerCase()).toContain("#00ffaa");
+  expect(html.toLowerCase()).toContain(CUSTOM_KEYWORD);
   const chunk = await highlightChunk("const x = 1;", "typescript", id);
   expect(chunk.rows.length).toBe(1);
 

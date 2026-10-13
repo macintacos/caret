@@ -53,7 +53,9 @@ export interface SettingOption {
  * scale. A field whose preference is stored in another unit converts inside its own
  * read/write — sound volume stores a 0–1 multiplier — which keeps the conversion
  * beside the pref that needs it rather than spreading min/max/step/unit config
- * through a registry holding exactly one continuous setting. */
+ * through a registry holding exactly one continuous setting.
+ *
+ * `options` may be a live getter, so read it where it renders. */
 export type SettingControl =
   | { kind: "select"; options: readonly SettingOption[] }
   | { kind: "segmented"; options: readonly SettingOption[] }
@@ -192,6 +194,16 @@ function slotOptions(scheme: Scheme): SettingOption[] {
   }));
 }
 
+// A getter, so the slot picker lists themes registered after load.
+function slotControl(scheme: Scheme): SettingControl {
+  return {
+    kind: "select",
+    get options() {
+      return slotOptions(scheme);
+    },
+  };
+}
+
 const MODE_ICONS: Record<ThemeMode, IconName> = {
   light: "sun",
   dark: "moon",
@@ -268,12 +280,7 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     section: THEME_SECTION,
     label: "Light theme",
     description: "Color palette used while the light scheme is showing.",
-    control: {
-      kind: "select",
-      get options() {
-        return slotOptions("light");
-      },
-    },
+    control: slotControl("light"),
     read: () => appearance.slots.light,
     write: (id) => appearance.setSlot("light", id),
   }),
@@ -283,12 +290,7 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     section: THEME_SECTION,
     label: "Dark theme",
     description: "Color palette used while the dark scheme is showing.",
-    control: {
-      kind: "select",
-      get options() {
-        return slotOptions("dark");
-      },
-    },
+    control: slotControl("dark"),
     read: () => appearance.slots.dark,
     write: (id) => appearance.setSlot("dark", id),
   }),

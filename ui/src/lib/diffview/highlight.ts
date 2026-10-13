@@ -1,9 +1,8 @@
 // Standalone syntax highlighting for the filename-hover excerpt (EXC-687). The
 // @pierre/diffs library keeps its own private highlighter, so this builds a small
-// dedicated one bound to shiki's full grammar bundle and caret's themes — built-ins
-// up front, runtime themes loaded on first use — then
-// highlights an excerpt to the caret theme in effect — so the preview reads like
-// the plan view's own code. Two entry points share it: highlightExcerpt colours a
+// dedicated one bound to shiki's full grammar bundle and caret's themes (built-ins
+// up front, a runtime theme on first use), then highlights an excerpt to the caret
+// theme in effect, so the preview reads like the plan view's own code. Two entry points share it: highlightExcerpt colours a
 // whole window in one pass, highlightChunk colours a file a piece at a time and
 // hands back the grammar state each piece ended on, so a construct that opens in
 // one chunk still colours the next. Grammars load lazily and cache; anything that

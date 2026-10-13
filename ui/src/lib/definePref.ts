@@ -37,7 +37,7 @@ export function knownPrefKeys(): readonly string[] {
   return [...PREF_KEYS];
 }
 
-/** An enum preference over a fixed set of string values, keyed in localStorage.
+/** An enum preference over a set of string values (an array, or a getter for a set that grows after load), keyed in localStorage.
  * Reuses enumLocalStoragePref for the never-throw allow-list fail-safe (a
  * missing, unrecognized, or unreadable value degrades to `fallback`) and
  * registers the key. */

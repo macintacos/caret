@@ -12,7 +12,7 @@ export interface EnumLocalStoragePref<T extends string> {
   write(value: T): void;
 }
 
-/** Build a localStorage-backed preference over a fixed set of string values.
+/** Build a localStorage-backed preference over a set of string values.
  * `allowed` is the exhaustive set of valid stored values; anything else — or an
  * unreadable store — degrades to `fallback`. Pass a getter for a set that grows
  * after load; it is re-read on every `read()`. */

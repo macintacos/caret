@@ -19,7 +19,7 @@
 // entities in the diff view as well as filling gutter bars. They stay as published —
 // reading Latte's own colors is the point of picking Latte.
 
-import type { BuiltinThemeId, Theme } from "$lib/theme.ts";
+import type { BuiltinTheme, BuiltinThemeId } from "$lib/theme.ts";
 import { type PaletteInput, paletteTheme } from "$lib/themes/recipe.ts";
 import type { UpstreamShikiThemeId } from "$lib/upstream-shiki.ts";
 
@@ -115,7 +115,7 @@ function flavor(
   label: string,
   f: Flavor,
   dark: boolean,
-): Theme {
+): BuiltinTheme {
   const surfaces: Pick<PaletteInput, "paper" | "raised" | "sunk"> = dark
     ? { paper: f.mantle, raised: f.surface0, sunk: f.base }
     : { paper: f.mantle, raised: f.base, sunk: f.crust };

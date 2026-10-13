@@ -158,9 +158,10 @@ in exactly one place — the shadcn semantic `:root` block plus the `@theme inli
 `ui/src/app.css` — mapping each shadcn var onto a caret token with `var(--caret-token)`
 (the same pattern the `.diffview` → `--diffs-*` bridge uses).
 
-- **`theme.ts`'s `THEMES` registry stays the single color source.** `paintTheme` writes
-  caret's tokens inline on `:root`, and because the shadcn vars are `var()`-bridged to
-  them, shadcn components retint on theme switch with no per-component change.
+- **`theme.ts`'s theme registry (`THEMES` plus the themes `registerTheme` adds at runtime)
+  stays the single color source.** `paintTheme` writes caret's tokens inline on `:root`,
+  and because the shadcn vars are `var()`-bridged to them, shadcn components retint on
+  theme switch with no per-component change.
 - **No raw hex or oklch in a component.** A color belongs in a caret token, bridged to a
   shadcn var; a literal in a component bypasses both. `shadcn-bridge.test.ts` pins the
   mapping (every semantic var → a caret token, no hex/oklch, amber reaches shadcn only via
@@ -243,9 +244,10 @@ consistent with it rather than inventing a per-component treatment.
   it — no caret surface composes a Sheet today, though the vendored tree is live on the
   import graph; see § What stays custom. Fold it in when something reaches for one.)
 - **Palette-derived affordances read the registry.** Anything that visualizes a theme (the
-  Settings theme swatch) derives its colors from the `THEMES` token set in
-  [`lib/theme.ts`](../../ui/src/lib/theme.ts), not literals — so any future palette works
-  with zero per-theme wiring (a token every theme must supply is safe to index).
+  Settings theme swatch) derives its colors from the theme's tokens, resolved through
+  `themeFor` in [`lib/theme.ts`](../../ui/src/lib/theme.ts), not literals — so any future
+  palette works with zero per-theme wiring (a token every theme must supply is safe to
+  index).
 
 ## Icon-swap convention
 

@@ -1,12 +1,12 @@
 // The live appearance (EXC-883). `$lib/appearance.ts` owns the selection POLICY —
 // the mode, the two persisted slots, and the pure resolvers over them; this owns
-// the RESOLVED ANSWER and the two commands that move it, so no caller re-derives
+// the RESOLVED ANSWER and the commands that move it, so no caller re-derives
 // it. A caller reads `themeId` / `scheme` / `summary` and issues `setMode` /
 // `setSlot`; the persist → repaint sequence lives here once instead of being
 // reproduced at four call sites.
 //
 // A repaint runs only when the resolved ThemeId actually changes — uniformly
-// across setMode, setSlot, and the OS-flip watcher. Pinning light while the
+// across setMode, setSlot, refresh, and the OS-flip watcher. Pinning light while the
 // system is already light, or moving the off-scheme slot, would otherwise wipe
 // the whole UI between two identical frames.
 //
@@ -17,6 +17,7 @@
 
 import {
   appearanceSummary,
+  DEFAULT_SLOT_THEME,
   readSlotTheme,
   readThemeMode,
   resolveScheme,
@@ -80,9 +81,10 @@ export interface AppearanceDeps {
  */
 export function createAppearance(deps: AppearanceDeps = {}): Appearance {
   const probe = deps.prefersDark ?? systemPrefersDark;
+  const readSlots = () => ({ light: readSlotTheme("light"), dark: readSlotTheme("dark") });
   const live = $state({
     mode: readThemeMode(),
-    slots: { light: readSlotTheme("light"), dark: readSlotTheme("dark") },
+    slots: readSlots(),
     prefersDark: probe(),
   });
 
@@ -131,13 +133,17 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
     },
     boot() {
       live.mode = readThemeMode();
-      live.slots = { light: readSlotTheme("light"), dark: readSlotTheme("dark") };
+      live.slots = readSlots();
       live.prefersDark = probe();
       paintTheme(resolved());
     },
     refresh() {
+      // Only a slot showing its default can hold a saved id that was unknown until
+      // now; any other slot is the in-session pick, which storage may have failed to keep.
       commit(() => {
-        live.slots = { light: readSlotTheme("light"), dark: readSlotTheme("dark") };
+        for (const s of ["light", "dark"] as const) {
+          if (live.slots[s] === DEFAULT_SLOT_THEME[s]) live.slots[s] = readSlotTheme(s);
+        }
       });
     },
     watch(media) {

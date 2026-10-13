@@ -11,9 +11,10 @@
 // highlighters use the same pure-JS regex engine, so this duplicates a theme
 // registration, never the WASM engine.
 import { registerCustomTheme } from "@pierre/diffs";
+import type { ThemeRegistrationRaw } from "shiki/core";
 
 import { REGISTERED_SHIKI_THEMES, shikiThemeFor } from "$lib/caret-theme.ts";
-import { type ThemeId, themeFor } from "$lib/theme.ts";
+import { type CustomThemeId, type ThemeId, themeFor } from "$lib/theme.ts";
 
 /** Registers a named theme into the library's shared highlighter. Derived from
  * the library's own signature so the loader's resolved theme type stays in
@@ -41,7 +42,7 @@ export function caretDiffTheme(id?: ThemeId): {
 
 // The name is duplicated onto the theme object because the library resolves a
 // theme by the name it was registered under.
-function themeLoader(theme: (typeof REGISTERED_SHIKI_THEMES)[number]): {
+function themeLoader(theme: ThemeRegistrationRaw): {
   name: string;
   load: ThemeLoader;
 } {
@@ -55,7 +56,7 @@ let registered = false;
 
 /**
  * Register caret's Shiki themes into the @pierre/diffs highlighter — every
- * palette, so whichever theme the reviewer picks can be selected by name.
+ * built-in palette; a runtime theme arrives through `registerDiffTheme`.
  *
  * The shared production highlighter is a process singleton, so a module-level
  * guard skips repeat production registrations (the wrapper calls this on every
@@ -72,12 +73,12 @@ export function registerCaretDiffThemes(register?: RegisterTheme): void {
   for (const { name, load } of caretThemeLoaders) registerCustomTheme(name, load);
 }
 
-/** Registers one theme — typically a runtime one, added after boot — into the
- * @pierre/diffs highlighter so the diff view can select it by its id. */
+/** Registers one runtime theme, added after boot, into the @pierre/diffs
+ * highlighter so the diff view can select it by its id. */
 export function registerDiffTheme(
-  id: ThemeId,
+  id: CustomThemeId,
   register: RegisterTheme = registerCustomTheme,
 ): void {
-  const { load } = themeLoader({ ...shikiThemeFor(id), name: id });
-  register(id, load);
+  const { name, load } = themeLoader(shikiThemeFor(id));
+  register(name, load);
 }

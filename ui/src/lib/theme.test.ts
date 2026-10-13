@@ -902,9 +902,11 @@ describe("runtime themes", () => {
   });
 
   test("paintTheme paints a registered theme's tokens", async () => {
-    const id = addTheme(await customThemeFile("runtime-paint", "dark"));
-    paintTheme(id);
-    expect(document.documentElement.style.getPropertyValue("--accent")).toBe("#ff00aa");
+    const file = await customThemeFile("runtime-paint", "dark");
+    paintTheme(addTheme(file));
+    expect(document.documentElement.style.getPropertyValue("--accent")).toBe(
+      file.tokens["--accent"],
+    );
   });
 
   test("addTheme refuses a built-in or already-registered id", async () => {

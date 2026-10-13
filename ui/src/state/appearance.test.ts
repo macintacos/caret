@@ -2,7 +2,8 @@ import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { fakeMediaQuery } from "@ui/support/media-query.ts";
-import { customThemeFile } from "@ui/support/theme-file.ts";
+import { withThrowingStorage } from "@ui/support/storage.ts";
+import { CUSTOM_ACCENT, customThemeFile } from "@ui/support/theme-file.ts";
 import { type AppearanceDeps, createAppearance } from "@/state/appearance.svelte.ts";
 import { DARK_SLOT_KEY, LIGHT_SLOT_KEY, MODE_KEY } from "$lib/appearance.ts";
 import { addTheme, THEMES } from "$lib/theme.ts";
@@ -224,7 +225,7 @@ describe("refresh", () => {
     appearance.refresh();
 
     expect(appearance.themeId).toBe(id);
-    expect(document.documentElement.style.getPropertyValue("--accent")).toBe("#ff00aa");
+    expect(document.documentElement.style.getPropertyValue("--accent")).toBe(CUSTOM_ACCENT);
     expect(wipes()).toBe(1);
     expect(localStorage.getItem(DARK_SLOT_KEY)).toBe("refresh-late-dark");
   });
@@ -237,5 +238,17 @@ describe("refresh", () => {
     expect(appearance.themeId).toBe("caret-dark");
     expect(wipes()).toBe(0);
     expect(localStorage.getItem(DARK_SLOT_KEY)).toBe("refresh-never-registered");
+  });
+
+  test("keeps an in-session pick that storage failed to persist", async () => {
+    const file = await customThemeFile("refresh-unrelated", "dark");
+    const { appearance, wipes } = harness(true);
+    withThrowingStorage(() => {
+      appearance.setSlot("dark", "dracula");
+      addTheme(file);
+      appearance.refresh();
+    });
+    expect(appearance.themeId).toBe("dracula");
+    expect(wipes()).toBe(1);
   });
 });

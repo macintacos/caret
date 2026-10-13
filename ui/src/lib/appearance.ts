@@ -43,10 +43,10 @@ registerPrefKey(LEGACY_THEME_KEY);
 
 const modePref = definePref<ThemeMode>(MODE_KEY, THEME_MODES, DEFAULT_MODE);
 
-// Each slot's allow-list is its OWN scheme's ids, read live so a theme registered
-// after load becomes selectable, and so a hand-edited wrong-scheme value degrades
-// to the slot's default rather than painting a dark palette while the resolved
-// scheme (and `data-theme`) say light.
+// Each slot's allow-list is its OWN scheme's ids, so a hand-edited wrong-scheme
+// value degrades to the slot's default rather than painting a dark palette while
+// the resolved scheme (and `data-theme`) say light. It is read live, so a saved id
+// resolves once its theme registers.
 const slotPrefs: Record<Scheme, ReturnType<typeof definePref<ThemeId>>> = {
   light: definePref<ThemeId>(
     LIGHT_SLOT_KEY,
