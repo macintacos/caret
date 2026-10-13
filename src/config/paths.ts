@@ -94,6 +94,12 @@ export function configFile(): string {
   return process.env.CARET_CONFIG_FILE || `${configDir()}/config.toml`;
 }
 
+/** Custom theme files: <configDir()>/themes. Read fresh per request by GET /api/themes;
+ * caret never writes here. */
+export function themesDir(): string {
+  return `${configDir()}/themes`;
+}
+
 /** Dev-only settings file: $XDG_CONFIG_HOME/caret/config.dev.toml. The dev task
  * points CARET_CONFIG_FILE here so `mise run dev` reads its own config, never the
  * user's production config.toml (EXC-781). */

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { join } from "node:path";
 
 import { setupTempStateDir, withEnv } from "@test/support/env.ts";
 import {
@@ -17,6 +18,7 @@ import {
   logsDir,
   reviewsDir,
   stateDir,
+  themesDir,
   updateCheckFile,
 } from "@/config/paths.ts";
 
@@ -89,6 +91,15 @@ test("configFile honors CARET_CONFIG_FILE, treating a blank value as unset", () 
 test("devConfigFile resolves config.dev.toml under configDir", () => {
   withEnv({ XDG_CONFIG_HOME: "/tmp/caret-xdg-config-test" }, () => {
     expect(devConfigFile()).toBe("/tmp/caret-xdg-config-test/caret/config.dev.toml");
+  });
+});
+
+test("themesDir resolves themes under configDir", () => {
+  withEnv({ XDG_CONFIG_HOME: "/tmp/caret-xdg-config-test" }, () => {
+    expect(themesDir()).toBe("/tmp/caret-xdg-config-test/caret/themes");
+  });
+  withEnv({ XDG_CONFIG_HOME: undefined }, () => {
+    expect(themesDir()).toBe(join(homedir(), ".config", "caret", "themes"));
   });
 });
 
