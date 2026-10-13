@@ -54,12 +54,12 @@ async function pinDark(page: Page): Promise<void> {
 /** Record each distinct `--accent` the page paints on `<html>`, from the first frame. */
 async function recordAccents(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    const w = window as unknown as AccentLog;
-    w.__accents = [];
+    const accentLog = window as unknown as AccentLog;
+    accentLog.__accents = [];
     // An init script runs before <html> is parsed, so observe the document instead.
     new MutationObserver(() => {
       const value = document.documentElement?.style.getPropertyValue("--accent") ?? "";
-      if (value && value !== w.__accents.at(-1)) w.__accents.push(value);
+      if (value && value !== accentLog.__accents.at(-1)) accentLog.__accents.push(value);
     }).observe(document, { attributes: true, attributeFilter: ["style"], subtree: true });
   });
 }

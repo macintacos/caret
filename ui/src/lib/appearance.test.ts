@@ -244,8 +244,8 @@ describe("sameTokens", () => {
   });
 
   test("is false when the key counts differ", () => {
-    const { "--paper": _, ...fewer } = tokens;
-    expect(sameTokens(tokens, fewer as typeof tokens)).toBe(false);
+    const { "--paper": _, ...withoutPaper } = tokens;
+    expect(sameTokens(tokens, withoutPaper as typeof tokens)).toBe(false);
   });
 });
 
