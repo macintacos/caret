@@ -12,9 +12,9 @@ import { expect } from "bun:test";
 
 import { flushUntil } from "@ui/support/mount.ts";
 
-export const selectTrigger = () =>
+const selectTrigger = () =>
   document.body.querySelector<HTMLElement>("[data-slot='select-trigger']");
-export const selectContent = () =>
+const selectContent = () =>
   document.body.querySelector<HTMLElement>("[data-slot='select-content']");
 
 export function pointer(el: Element | null, type: string): void {
