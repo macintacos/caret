@@ -268,7 +268,12 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     section: THEME_SECTION,
     label: "Light theme",
     description: "Color palette used while the light scheme is showing.",
-    control: { kind: "select", options: slotOptions("light") },
+    control: {
+      kind: "select",
+      get options() {
+        return slotOptions("light");
+      },
+    },
     read: () => appearance.slots.light,
     write: (id) => appearance.setSlot("light", id),
   }),
@@ -278,7 +283,12 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     section: THEME_SECTION,
     label: "Dark theme",
     description: "Color palette used while the dark scheme is showing.",
-    control: { kind: "select", options: slotOptions("dark") },
+    control: {
+      kind: "select",
+      get options() {
+        return slotOptions("dark");
+      },
+    },
     read: () => appearance.slots.dark,
     write: (id) => appearance.setSlot("dark", id),
   }),
