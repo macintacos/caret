@@ -50,9 +50,13 @@ export function syntaxShikiTheme(
         const { color, fontStyle } = roles[role as SyntaxRole];
         return {
           scope: [...scopes],
+          // An unset font style is filled from the nearest scope that has one; punctuation
+          // stays unset so emphasis and diff-header markers keep the style they sit inside.
           settings: fontStyle
             ? { foreground: color, fontStyle: fontStyle.join(" ") }
-            : { foreground: color },
+            : role === "punctuation"
+              ? { foreground: color }
+              : { foreground: color, fontStyle: "" },
         };
       }),
       // Markdown. The plan view renders the plan as a markdown document, so these are

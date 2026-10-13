@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 
 import { readThemeFile } from "@ui/support/theme-file.ts";
 import { CARET_SHIKI_THEMES } from "$lib/caret-shiki.ts";
-import { THEMES } from "$lib/theme.ts";
+import { shikiThemeFor } from "$lib/caret-theme.ts";
+import { CARET_TOKENIZE_OPTIONS, createHighlighter } from "$lib/diffview/shiki-bundle.ts";
+import { addTheme, THEMES } from "$lib/theme.ts";
 import { buildFileTheme } from "$lib/theme-file.ts";
 
 describe("buildFileTheme", () => {
@@ -57,5 +59,50 @@ describe("buildFileTheme", () => {
         `${token} ${hue}`,
       );
     }
+  });
+});
+
+describe("a syntax role without a font style", async () => {
+  const file = await readThemeFile("caret-dark.json");
+  const plain = (role: keyof typeof file.syntax) => ({ color: file.syntax[role].color });
+  const theme = shikiThemeFor(
+    addTheme(
+      buildFileTheme({
+        ...file,
+        id: "italic-probe",
+        syntax: {
+          ...file.syntax,
+          type: { ...file.syntax.type, fontStyle: ["italic"] },
+          function: { ...file.syntax.function, fontStyle: ["italic"] },
+          property: plain("property"),
+          variable: plain("variable"),
+          punctuation: plain("punctuation"),
+        },
+      }),
+    ),
+  );
+  const highlighter = await createHighlighter({
+    themes: [theme],
+    langs: ["json", "javascript", "markdown"],
+  });
+  const ITALIC = 1;
+  const isItalic = (lang: "json" | "javascript" | "markdown", code: string, content: string) =>
+    ((highlighter
+      .codeToTokensBase(code, { lang, theme: theme.name ?? "", ...CARET_TOKENIZE_OPTIONS })
+      .flat()
+      .find((t) => t.content === content)?.fontStyle ?? 0) &
+      ITALIC) !==
+    0;
+
+  test("does not take a broader role's italic through the theme's scopes", () => {
+    expect(isItalic("json", '{"a": 1}', "a")).toBe(false);
+  });
+
+  test("does not take an enclosing scope's italic", () => {
+    expect(isItalic("javascript", "console.log(1)", "console")).toBe(false);
+  });
+
+  test("punctuation keeps the emphasis it sits inside", () => {
+    expect(isItalic("markdown", "*em*", "*")).toBe(true);
   });
 });

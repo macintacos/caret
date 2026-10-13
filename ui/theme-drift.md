@@ -10,15 +10,15 @@ show drift no role change removes.
 
 | Theme | Differing tokens | Tokens |
 | --- | --- | --- |
-| catppuccin-latte | 135 | 335 |
-| catppuccin-frappe | 135 | 335 |
-| catppuccin-macchiato | 135 | 335 |
-| catppuccin-mocha | 135 | 335 |
-| dracula | 138 | 325 |
+| catppuccin-latte | 114 | 335 |
+| catppuccin-frappe | 114 | 335 |
+| catppuccin-macchiato | 114 | 335 |
+| catppuccin-mocha | 114 | 335 |
+| dracula | 136 | 325 |
 | github-light-default | 101 | 296 |
 | github-dark-default | 117 | 303 |
-| dawnfox | 120 | 315 |
-| duskfox | 134 | 323 |
+| dawnfox | 99 | 313 |
+| duskfox | 113 | 322 |
 
 ## catppuccin-latte
 
@@ -67,13 +67,10 @@ show drift no role change removes.
 | typescript | 22 | `new` | #8839ef bold | #8839ef |
 | typescript | 22 | `(` | #4c4f69 | #7c7f93 |
 | typescript | 22 | `)` | #4c4f69 | #7c7f93 |
-| typescript | 23 | `console` | #4c4f69 | #4c4f69 italic |
 | typescript | 23 | `.` | #179299 | #7c7f93 italic |
 | typescript | 23 | `(` | #4c4f69 | #7c7f93 |
-| typescript | 23 | `reviewer` | #4c4f69 | #4c4f69 italic |
 | typescript | 23 | `.` | #179299 | #7c7f93 italic |
 | typescript | 23 | `()` | #4c4f69 | #7c7f93 |
-| typescript | 23 | `pattern` | #4c4f69 | #4c4f69 italic |
 | typescript | 23 | `.` | #179299 | #7c7f93 italic |
 | typescript | 23 | `(` | #4c4f69 | #7c7f93 |
 | typescript | 23 | `)` | #4c4f69 | #7c7f93 |
@@ -97,33 +94,15 @@ show drift no role change removes.
 | markdown | 11 | `:` | #179299 | #7c7f93 |
 | markdown | 11 | `number` | #8839ef | #df8e1d italic |
 | markdown | 11 | `=` | #179299 | #7c7f93 |
-| json | 2 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 2 | `name` | #1e66f5 | #4c4f69 italic |
-| json | 2 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 3 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 3 | `version` | #1e66f5 | #4c4f69 italic |
-| json | 3 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 4 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 4 | `private` | #1e66f5 | #4c4f69 italic |
-| json | 4 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 5 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 5 | `workers` | #1e66f5 | #4c4f69 italic |
-| json | 5 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 6 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 6 | `ratio` | #1e66f5 | #4c4f69 italic |
-| json | 6 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 7 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 7 | `parent` | #1e66f5 | #4c4f69 italic |
-| json | 7 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 8 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 8 | `tags` | #1e66f5 | #4c4f69 italic |
-| json | 8 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 9 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 9 | `engines` | #1e66f5 | #4c4f69 italic |
-| json | 9 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 9 | `"` | #7c7f93 | #7c7f93 italic |
-| json | 9 | `bun` | #1e66f5 | #4c4f69 italic |
-| json | 9 | `"` | #7c7f93 | #7c7f93 italic |
+| json | 2 | `name` | #1e66f5 | #4c4f69 |
+| json | 3 | `version` | #1e66f5 | #4c4f69 |
+| json | 4 | `private` | #1e66f5 | #4c4f69 |
+| json | 5 | `workers` | #1e66f5 | #4c4f69 |
+| json | 6 | `ratio` | #1e66f5 | #4c4f69 |
+| json | 7 | `parent` | #1e66f5 | #4c4f69 |
+| json | 8 | `tags` | #1e66f5 | #4c4f69 |
+| json | 9 | `engines` | #1e66f5 | #4c4f69 |
+| json | 9 | `bun` | #1e66f5 | #4c4f69 |
 | shellscript | 1 | `#!/usr/bin/env bash` | #ea76cb italic | #7c7f93 italic |
 | shellscript | 3 | `set` | #d20f39 italic | #1e66f5 italic |
 | shellscript | 6 | `=` | #179299 | #7c7f93 |
@@ -207,13 +186,10 @@ show drift no role change removes.
 | typescript | 22 | `new` | #ca9ee6 bold | #ca9ee6 |
 | typescript | 22 | `(` | #c6d0f5 | #949cbb |
 | typescript | 22 | `)` | #c6d0f5 | #949cbb |
-| typescript | 23 | `console` | #c6d0f5 | #c6d0f5 italic |
 | typescript | 23 | `.` | #81c8be | #949cbb italic |
 | typescript | 23 | `(` | #c6d0f5 | #949cbb |
-| typescript | 23 | `reviewer` | #c6d0f5 | #c6d0f5 italic |
 | typescript | 23 | `.` | #81c8be | #949cbb italic |
 | typescript | 23 | `()` | #c6d0f5 | #949cbb |
-| typescript | 23 | `pattern` | #c6d0f5 | #c6d0f5 italic |
 | typescript | 23 | `.` | #81c8be | #949cbb italic |
 | typescript | 23 | `(` | #c6d0f5 | #949cbb |
 | typescript | 23 | `)` | #c6d0f5 | #949cbb |
@@ -237,33 +213,15 @@ show drift no role change removes.
 | markdown | 11 | `:` | #81c8be | #949cbb |
 | markdown | 11 | `number` | #ca9ee6 | #e5c890 italic |
 | markdown | 11 | `=` | #81c8be | #949cbb |
-| json | 2 | `"` | #949cbb | #949cbb italic |
-| json | 2 | `name` | #8caaee | #c6d0f5 italic |
-| json | 2 | `"` | #949cbb | #949cbb italic |
-| json | 3 | `"` | #949cbb | #949cbb italic |
-| json | 3 | `version` | #8caaee | #c6d0f5 italic |
-| json | 3 | `"` | #949cbb | #949cbb italic |
-| json | 4 | `"` | #949cbb | #949cbb italic |
-| json | 4 | `private` | #8caaee | #c6d0f5 italic |
-| json | 4 | `"` | #949cbb | #949cbb italic |
-| json | 5 | `"` | #949cbb | #949cbb italic |
-| json | 5 | `workers` | #8caaee | #c6d0f5 italic |
-| json | 5 | `"` | #949cbb | #949cbb italic |
-| json | 6 | `"` | #949cbb | #949cbb italic |
-| json | 6 | `ratio` | #8caaee | #c6d0f5 italic |
-| json | 6 | `"` | #949cbb | #949cbb italic |
-| json | 7 | `"` | #949cbb | #949cbb italic |
-| json | 7 | `parent` | #8caaee | #c6d0f5 italic |
-| json | 7 | `"` | #949cbb | #949cbb italic |
-| json | 8 | `"` | #949cbb | #949cbb italic |
-| json | 8 | `tags` | #8caaee | #c6d0f5 italic |
-| json | 8 | `"` | #949cbb | #949cbb italic |
-| json | 9 | `"` | #949cbb | #949cbb italic |
-| json | 9 | `engines` | #8caaee | #c6d0f5 italic |
-| json | 9 | `"` | #949cbb | #949cbb italic |
-| json | 9 | `"` | #949cbb | #949cbb italic |
-| json | 9 | `bun` | #8caaee | #c6d0f5 italic |
-| json | 9 | `"` | #949cbb | #949cbb italic |
+| json | 2 | `name` | #8caaee | #c6d0f5 |
+| json | 3 | `version` | #8caaee | #c6d0f5 |
+| json | 4 | `private` | #8caaee | #c6d0f5 |
+| json | 5 | `workers` | #8caaee | #c6d0f5 |
+| json | 6 | `ratio` | #8caaee | #c6d0f5 |
+| json | 7 | `parent` | #8caaee | #c6d0f5 |
+| json | 8 | `tags` | #8caaee | #c6d0f5 |
+| json | 9 | `engines` | #8caaee | #c6d0f5 |
+| json | 9 | `bun` | #8caaee | #c6d0f5 |
 | shellscript | 1 | `#!/usr/bin/env bash` | #f4b8e4 italic | #949cbb italic |
 | shellscript | 3 | `set` | #e78284 italic | #8caaee italic |
 | shellscript | 6 | `=` | #81c8be | #949cbb |
@@ -347,13 +305,10 @@ show drift no role change removes.
 | typescript | 22 | `new` | #c6a0f6 bold | #c6a0f6 |
 | typescript | 22 | `(` | #cad3f5 | #939ab7 |
 | typescript | 22 | `)` | #cad3f5 | #939ab7 |
-| typescript | 23 | `console` | #cad3f5 | #cad3f5 italic |
 | typescript | 23 | `.` | #8bd5ca | #939ab7 italic |
 | typescript | 23 | `(` | #cad3f5 | #939ab7 |
-| typescript | 23 | `reviewer` | #cad3f5 | #cad3f5 italic |
 | typescript | 23 | `.` | #8bd5ca | #939ab7 italic |
 | typescript | 23 | `()` | #cad3f5 | #939ab7 |
-| typescript | 23 | `pattern` | #cad3f5 | #cad3f5 italic |
 | typescript | 23 | `.` | #8bd5ca | #939ab7 italic |
 | typescript | 23 | `(` | #cad3f5 | #939ab7 |
 | typescript | 23 | `)` | #cad3f5 | #939ab7 |
@@ -377,33 +332,15 @@ show drift no role change removes.
 | markdown | 11 | `:` | #8bd5ca | #939ab7 |
 | markdown | 11 | `number` | #c6a0f6 | #eed49f italic |
 | markdown | 11 | `=` | #8bd5ca | #939ab7 |
-| json | 2 | `"` | #939ab7 | #939ab7 italic |
-| json | 2 | `name` | #8aadf4 | #cad3f5 italic |
-| json | 2 | `"` | #939ab7 | #939ab7 italic |
-| json | 3 | `"` | #939ab7 | #939ab7 italic |
-| json | 3 | `version` | #8aadf4 | #cad3f5 italic |
-| json | 3 | `"` | #939ab7 | #939ab7 italic |
-| json | 4 | `"` | #939ab7 | #939ab7 italic |
-| json | 4 | `private` | #8aadf4 | #cad3f5 italic |
-| json | 4 | `"` | #939ab7 | #939ab7 italic |
-| json | 5 | `"` | #939ab7 | #939ab7 italic |
-| json | 5 | `workers` | #8aadf4 | #cad3f5 italic |
-| json | 5 | `"` | #939ab7 | #939ab7 italic |
-| json | 6 | `"` | #939ab7 | #939ab7 italic |
-| json | 6 | `ratio` | #8aadf4 | #cad3f5 italic |
-| json | 6 | `"` | #939ab7 | #939ab7 italic |
-| json | 7 | `"` | #939ab7 | #939ab7 italic |
-| json | 7 | `parent` | #8aadf4 | #cad3f5 italic |
-| json | 7 | `"` | #939ab7 | #939ab7 italic |
-| json | 8 | `"` | #939ab7 | #939ab7 italic |
-| json | 8 | `tags` | #8aadf4 | #cad3f5 italic |
-| json | 8 | `"` | #939ab7 | #939ab7 italic |
-| json | 9 | `"` | #939ab7 | #939ab7 italic |
-| json | 9 | `engines` | #8aadf4 | #cad3f5 italic |
-| json | 9 | `"` | #939ab7 | #939ab7 italic |
-| json | 9 | `"` | #939ab7 | #939ab7 italic |
-| json | 9 | `bun` | #8aadf4 | #cad3f5 italic |
-| json | 9 | `"` | #939ab7 | #939ab7 italic |
+| json | 2 | `name` | #8aadf4 | #cad3f5 |
+| json | 3 | `version` | #8aadf4 | #cad3f5 |
+| json | 4 | `private` | #8aadf4 | #cad3f5 |
+| json | 5 | `workers` | #8aadf4 | #cad3f5 |
+| json | 6 | `ratio` | #8aadf4 | #cad3f5 |
+| json | 7 | `parent` | #8aadf4 | #cad3f5 |
+| json | 8 | `tags` | #8aadf4 | #cad3f5 |
+| json | 9 | `engines` | #8aadf4 | #cad3f5 |
+| json | 9 | `bun` | #8aadf4 | #cad3f5 |
 | shellscript | 1 | `#!/usr/bin/env bash` | #f5bde6 italic | #939ab7 italic |
 | shellscript | 3 | `set` | #ed8796 italic | #8aadf4 italic |
 | shellscript | 6 | `=` | #8bd5ca | #939ab7 |
@@ -487,13 +424,10 @@ show drift no role change removes.
 | typescript | 22 | `new` | #cba6f7 bold | #cba6f7 |
 | typescript | 22 | `(` | #cdd6f4 | #9399b2 |
 | typescript | 22 | `)` | #cdd6f4 | #9399b2 |
-| typescript | 23 | `console` | #cdd6f4 | #cdd6f4 italic |
 | typescript | 23 | `.` | #94e2d5 | #9399b2 italic |
 | typescript | 23 | `(` | #cdd6f4 | #9399b2 |
-| typescript | 23 | `reviewer` | #cdd6f4 | #cdd6f4 italic |
 | typescript | 23 | `.` | #94e2d5 | #9399b2 italic |
 | typescript | 23 | `()` | #cdd6f4 | #9399b2 |
-| typescript | 23 | `pattern` | #cdd6f4 | #cdd6f4 italic |
 | typescript | 23 | `.` | #94e2d5 | #9399b2 italic |
 | typescript | 23 | `(` | #cdd6f4 | #9399b2 |
 | typescript | 23 | `)` | #cdd6f4 | #9399b2 |
@@ -517,33 +451,15 @@ show drift no role change removes.
 | markdown | 11 | `:` | #94e2d5 | #9399b2 |
 | markdown | 11 | `number` | #cba6f7 | #f9e2af italic |
 | markdown | 11 | `=` | #94e2d5 | #9399b2 |
-| json | 2 | `"` | #9399b2 | #9399b2 italic |
-| json | 2 | `name` | #89b4fa | #cdd6f4 italic |
-| json | 2 | `"` | #9399b2 | #9399b2 italic |
-| json | 3 | `"` | #9399b2 | #9399b2 italic |
-| json | 3 | `version` | #89b4fa | #cdd6f4 italic |
-| json | 3 | `"` | #9399b2 | #9399b2 italic |
-| json | 4 | `"` | #9399b2 | #9399b2 italic |
-| json | 4 | `private` | #89b4fa | #cdd6f4 italic |
-| json | 4 | `"` | #9399b2 | #9399b2 italic |
-| json | 5 | `"` | #9399b2 | #9399b2 italic |
-| json | 5 | `workers` | #89b4fa | #cdd6f4 italic |
-| json | 5 | `"` | #9399b2 | #9399b2 italic |
-| json | 6 | `"` | #9399b2 | #9399b2 italic |
-| json | 6 | `ratio` | #89b4fa | #cdd6f4 italic |
-| json | 6 | `"` | #9399b2 | #9399b2 italic |
-| json | 7 | `"` | #9399b2 | #9399b2 italic |
-| json | 7 | `parent` | #89b4fa | #cdd6f4 italic |
-| json | 7 | `"` | #9399b2 | #9399b2 italic |
-| json | 8 | `"` | #9399b2 | #9399b2 italic |
-| json | 8 | `tags` | #89b4fa | #cdd6f4 italic |
-| json | 8 | `"` | #9399b2 | #9399b2 italic |
-| json | 9 | `"` | #9399b2 | #9399b2 italic |
-| json | 9 | `engines` | #89b4fa | #cdd6f4 italic |
-| json | 9 | `"` | #9399b2 | #9399b2 italic |
-| json | 9 | `"` | #9399b2 | #9399b2 italic |
-| json | 9 | `bun` | #89b4fa | #cdd6f4 italic |
-| json | 9 | `"` | #9399b2 | #9399b2 italic |
+| json | 2 | `name` | #89b4fa | #cdd6f4 |
+| json | 3 | `version` | #89b4fa | #cdd6f4 |
+| json | 4 | `private` | #89b4fa | #cdd6f4 |
+| json | 5 | `workers` | #89b4fa | #cdd6f4 |
+| json | 6 | `ratio` | #89b4fa | #cdd6f4 |
+| json | 7 | `parent` | #89b4fa | #cdd6f4 |
+| json | 8 | `tags` | #89b4fa | #cdd6f4 |
+| json | 9 | `engines` | #89b4fa | #cdd6f4 |
+| json | 9 | `bun` | #89b4fa | #cdd6f4 |
 | shellscript | 1 | `#!/usr/bin/env bash` | #f5c2e7 italic | #9399b2 italic |
 | shellscript | 3 | `set` | #f38ba8 italic | #89b4fa italic |
 | shellscript | 6 | `=` | #94e2d5 | #9399b2 |
@@ -621,49 +537,49 @@ show drift no role change removes.
 | markdown | 5 | `https://example.com/plan` | #8be9fd underline | #f8f8f2 |
 | markdown | 11 | `:` | #ff79c6 | #f8f8f2 |
 | markdown | 11 | `=` | #ff79c6 | #f8f8f2 |
-| json | 2 | `"` | #8be9fe | #f8f8f2 italic |
-| json | 2 | `name` | #8be9fd | #f8f8f2 italic |
-| json | 2 | `"` | #8be9fe | #f8f8f2 italic |
+| json | 2 | `"` | #8be9fe | #f8f8f2 |
+| json | 2 | `name` | #8be9fd | #f8f8f2 |
+| json | 2 | `"` | #8be9fe | #f8f8f2 |
 | json | 2 | `:` | #ff79c6 | #f8f8f2 |
 | json | 2 | `"` | #e9f284 | #f1fa8c |
 | json | 2 | `"` | #e9f284 | #f1fa8c |
-| json | 3 | `"` | #8be9fe | #f8f8f2 italic |
-| json | 3 | `version` | #8be9fd | #f8f8f2 italic |
-| json | 3 | `"` | #8be9fe | #f8f8f2 italic |
+| json | 3 | `"` | #8be9fe | #f8f8f2 |
+| json | 3 | `version` | #8be9fd | #f8f8f2 |
+| json | 3 | `"` | #8be9fe | #f8f8f2 |
 | json | 3 | `:` | #ff79c6 | #f8f8f2 |
 | json | 3 | `"` | #e9f284 | #f1fa8c |
 | json | 3 | `"` | #e9f284 | #f1fa8c |
-| json | 4 | `"` | #8be9fe | #f8f8f2 italic |
-| json | 4 | `private` | #8be9fd | #f8f8f2 italic |
-| json | 4 | `"` | #8be9fe | #f8f8f2 italic |
+| json | 4 | `"` | #8be9fe | #f8f8f2 |
+| json | 4 | `private` | #8be9fd | #f8f8f2 |
+| json | 4 | `"` | #8be9fe | #f8f8f2 |
 | json | 4 | `:` | #ff79c6 | #f8f8f2 |
-| json | 5 | `"` | #8be9fe | #f8f8f2 italic |
-| json | 5 | `workers` | #8be9fd | #f8f8f2 italic |
-| json | 5 | `"` | #8be9fe | #f8f8f2 italic |
+| json | 5 | `"` | #8be9fe | #f8f8f2 |
+| json | 5 | `workers` | #8be9fd | #f8f8f2 |
+| json | 5 | `"` | #8be9fe | #f8f8f2 |
 | json | 5 | `:` | #ff79c6 | #f8f8f2 |
-| json | 6 | `"` | #8be9fe | #f8f8f2 italic |
-| json | 6 | `ratio` | #8be9fd | #f8f8f2 italic |
-| json | 6 | `"` | #8be9fe | #f8f8f2 italic |
+| json | 6 | `"` | #8be9fe | #f8f8f2 |
+| json | 6 | `ratio` | #8be9fd | #f8f8f2 |
+| json | 6 | `"` | #8be9fe | #f8f8f2 |
 | json | 6 | `:` | #ff79c6 | #f8f8f2 |
-| json | 7 | `"` | #8be9fe | #f8f8f2 italic |
-| json | 7 | `parent` | #8be9fd | #f8f8f2 italic |
-| json | 7 | `"` | #8be9fe | #f8f8f2 italic |
+| json | 7 | `"` | #8be9fe | #f8f8f2 |
+| json | 7 | `parent` | #8be9fd | #f8f8f2 |
+| json | 7 | `"` | #8be9fe | #f8f8f2 |
 | json | 7 | `:` | #ff79c6 | #f8f8f2 |
-| json | 8 | `"` | #8be9fe | #f8f8f2 italic |
-| json | 8 | `tags` | #8be9fd | #f8f8f2 italic |
-| json | 8 | `"` | #8be9fe | #f8f8f2 italic |
+| json | 8 | `"` | #8be9fe | #f8f8f2 |
+| json | 8 | `tags` | #8be9fd | #f8f8f2 |
+| json | 8 | `"` | #8be9fe | #f8f8f2 |
 | json | 8 | `:` | #ff79c6 | #f8f8f2 |
 | json | 8 | `"` | #e9f284 | #f1fa8c |
 | json | 8 | `"` | #e9f284 | #f1fa8c |
 | json | 8 | `"` | #e9f284 | #f1fa8c |
 | json | 8 | `"` | #e9f284 | #f1fa8c |
-| json | 9 | `"` | #8be9fe | #f8f8f2 italic |
-| json | 9 | `engines` | #8be9fd | #f8f8f2 italic |
-| json | 9 | `"` | #8be9fe | #f8f8f2 italic |
+| json | 9 | `"` | #8be9fe | #f8f8f2 |
+| json | 9 | `engines` | #8be9fd | #f8f8f2 |
+| json | 9 | `"` | #8be9fe | #f8f8f2 |
 | json | 9 | `:` | #ff79c6 | #f8f8f2 |
-| json | 9 | `"` | #8be9fe | #f8f8f2 italic |
-| json | 9 | `bun` | #8be9fd | #f8f8f2 italic |
-| json | 9 | `"` | #8be9fe | #f8f8f2 italic |
+| json | 9 | `"` | #8be9fe | #f8f8f2 |
+| json | 9 | `bun` | #8be9fd | #f8f8f2 |
+| json | 9 | `"` | #8be9fe | #f8f8f2 |
 | json | 9 | `:` | #ff79c6 | #f8f8f2 |
 | json | 9 | `"` | #e9f284 | #f1fa8c |
 | json | 9 | `"` | #e9f284 | #f1fa8c |
@@ -710,13 +626,11 @@ show drift no role change removes.
 | html | 1 | `>` | #f8f8f2 | #ff79c6 |
 | html | 1 | `<` | #f8f8f2 | #ff79c6 |
 | html | 1 | `=` | #ff79c6 | #f8f8f2 italic |
-| html | 1 | `"` | #e9f284 | #f1fa8c italic |
-| html | 1 | `key` | #f1fa8c | #f1fa8c italic |
-| html | 1 | `"` | #e9f284 | #f1fa8c italic |
+| html | 1 | `"` | #e9f284 | #f1fa8c |
+| html | 1 | `"` | #e9f284 | #f1fa8c |
 | html | 1 | `=` | #ff79c6 | #f8f8f2 italic |
-| html | 1 | `"` | #e9f284 | #f1fa8c italic |
-| html | 1 | `Enter` | #f1fa8c | #f1fa8c italic |
-| html | 1 | `"` | #e9f284 | #f1fa8c italic |
+| html | 1 | `"` | #e9f284 | #f1fa8c |
+| html | 1 | `"` | #e9f284 | #f1fa8c |
 | html | 1 | `>` | #f8f8f2 | #ff79c6 |
 | html | 1 | `</` | #f8f8f2 | #ff79c6 |
 | html | 1 | `>` | #f8f8f2 | #ff79c6 |
@@ -992,11 +906,8 @@ show drift no role change removes.
 | typescript | 21 | `/` | #625c87 | #618774 |
 | typescript | 22 | `=` | #56949f | #4c4769 |
 | typescript | 22 | `new` | #907aa9 bold | #907aa9 |
-| typescript | 23 | `console` | #4c4769 | #4c4769 italic |
 | typescript | 23 | `.` | #56949f | #4c4769 italic |
-| typescript | 23 | `reviewer` | #4c4769 | #4c4769 italic |
 | typescript | 23 | `.` | #56949f | #4c4769 italic |
-| typescript | 23 | `pattern` | #4c4769 | #4c4769 italic |
 | typescript | 23 | `.` | #56949f | #4c4769 italic |
 | typescript | 23 | `null` | #907aa9 | #ea9d34 |
 | markdown | 1 | `# Review notes` | #b4637a | #286983 bold |
@@ -1017,33 +928,15 @@ show drift no role change removes.
 | markdown | 11 | `:` | #56949f | #4c4769 |
 | markdown | 11 | `number` | #907aa9 | #ea9d34 italic |
 | markdown | 11 | `=` | #56949f | #4c4769 |
-| json | 2 | `"` | #4c4769 | #4c4769 italic |
-| json | 2 | `name` | #295e73 | #4c4769 italic |
-| json | 2 | `"` | #4c4769 | #4c4769 italic |
-| json | 3 | `"` | #4c4769 | #4c4769 italic |
-| json | 3 | `version` | #295e73 | #4c4769 italic |
-| json | 3 | `"` | #4c4769 | #4c4769 italic |
-| json | 4 | `"` | #4c4769 | #4c4769 italic |
-| json | 4 | `private` | #295e73 | #4c4769 italic |
-| json | 4 | `"` | #4c4769 | #4c4769 italic |
-| json | 5 | `"` | #4c4769 | #4c4769 italic |
-| json | 5 | `workers` | #295e73 | #4c4769 italic |
-| json | 5 | `"` | #4c4769 | #4c4769 italic |
-| json | 6 | `"` | #4c4769 | #4c4769 italic |
-| json | 6 | `ratio` | #295e73 | #4c4769 italic |
-| json | 6 | `"` | #4c4769 | #4c4769 italic |
-| json | 7 | `"` | #4c4769 | #4c4769 italic |
-| json | 7 | `parent` | #295e73 | #4c4769 italic |
-| json | 7 | `"` | #4c4769 | #4c4769 italic |
-| json | 8 | `"` | #4c4769 | #4c4769 italic |
-| json | 8 | `tags` | #295e73 | #4c4769 italic |
-| json | 8 | `"` | #4c4769 | #4c4769 italic |
-| json | 9 | `"` | #4c4769 | #4c4769 italic |
-| json | 9 | `engines` | #295e73 | #4c4769 italic |
-| json | 9 | `"` | #4c4769 | #4c4769 italic |
-| json | 9 | `"` | #4c4769 | #4c4769 italic |
-| json | 9 | `bun` | #295e73 | #4c4769 italic |
-| json | 9 | `"` | #4c4769 | #4c4769 italic |
+| json | 2 | `name` | #295e73 | #4c4769 |
+| json | 3 | `version` | #295e73 | #4c4769 |
+| json | 4 | `private` | #295e73 | #4c4769 |
+| json | 5 | `workers` | #295e73 | #4c4769 |
+| json | 6 | `ratio` | #295e73 | #4c4769 |
+| json | 7 | `parent` | #295e73 | #4c4769 |
+| json | 8 | `tags` | #295e73 | #4c4769 |
+| json | 9 | `engines` | #295e73 | #4c4769 |
+| json | 9 | `bun` | #295e73 | #4c4769 |
 | shellscript | 1 | `#!/usr/bin/env bash` | #625c87 italic | #bdbfc9 italic |
 | shellscript | 3 | `set` | #b4637a italic | #295e73 italic |
 | shellscript | 6 | `=` | #56949f | #4c4769 |
@@ -1117,11 +1010,8 @@ show drift no role change removes.
 | typescript | 21 | `/` | #cdcbe0 | #a3be8c |
 | typescript | 22 | `=` | #9ccfd8 | #eae8ff |
 | typescript | 22 | `new` | #c4a7e7 bold | #c4a7e7 |
-| typescript | 23 | `console` | #eae8ff | #eae8ff italic |
 | typescript | 23 | `.` | #9ccfd8 | #eae8ff italic |
-| typescript | 23 | `reviewer` | #eae8ff | #eae8ff italic |
 | typescript | 23 | `.` | #9ccfd8 | #eae8ff italic |
-| typescript | 23 | `pattern` | #eae8ff | #eae8ff italic |
 | typescript | 23 | `.` | #9ccfd8 | #eae8ff italic |
 | typescript | 23 | `null` | #c4a7e7 | #f6c177 |
 | markdown | 1 | `# Review notes` | #eb6f92 | #c4a7e7 bold |
@@ -1149,33 +1039,15 @@ show drift no role change removes.
 | markdown | 11 | `:` | #9ccfd8 | #eae8ff |
 | markdown | 11 | `number` | #c4a7e7 | #f6c177 italic |
 | markdown | 11 | `=` | #9ccfd8 | #eae8ff |
-| json | 2 | `"` | #eae8ff | #eae8ff italic |
-| json | 2 | `name` | #4a869c | #eae8ff italic |
-| json | 2 | `"` | #eae8ff | #eae8ff italic |
-| json | 3 | `"` | #eae8ff | #eae8ff italic |
-| json | 3 | `version` | #4a869c | #eae8ff italic |
-| json | 3 | `"` | #eae8ff | #eae8ff italic |
-| json | 4 | `"` | #eae8ff | #eae8ff italic |
-| json | 4 | `private` | #4a869c | #eae8ff italic |
-| json | 4 | `"` | #eae8ff | #eae8ff italic |
-| json | 5 | `"` | #eae8ff | #eae8ff italic |
-| json | 5 | `workers` | #4a869c | #eae8ff italic |
-| json | 5 | `"` | #eae8ff | #eae8ff italic |
-| json | 6 | `"` | #eae8ff | #eae8ff italic |
-| json | 6 | `ratio` | #4a869c | #eae8ff italic |
-| json | 6 | `"` | #eae8ff | #eae8ff italic |
-| json | 7 | `"` | #eae8ff | #eae8ff italic |
-| json | 7 | `parent` | #4a869c | #eae8ff italic |
-| json | 7 | `"` | #eae8ff | #eae8ff italic |
-| json | 8 | `"` | #eae8ff | #eae8ff italic |
-| json | 8 | `tags` | #4a869c | #eae8ff italic |
-| json | 8 | `"` | #eae8ff | #eae8ff italic |
-| json | 9 | `"` | #eae8ff | #eae8ff italic |
-| json | 9 | `engines` | #4a869c | #eae8ff italic |
-| json | 9 | `"` | #eae8ff | #eae8ff italic |
-| json | 9 | `"` | #eae8ff | #eae8ff italic |
-| json | 9 | `bun` | #4a869c | #eae8ff italic |
-| json | 9 | `"` | #eae8ff | #eae8ff italic |
+| json | 2 | `name` | #4a869c | #eae8ff |
+| json | 3 | `version` | #4a869c | #eae8ff |
+| json | 4 | `private` | #4a869c | #eae8ff |
+| json | 5 | `workers` | #4a869c | #eae8ff |
+| json | 6 | `ratio` | #4a869c | #eae8ff |
+| json | 7 | `parent` | #4a869c | #eae8ff |
+| json | 8 | `tags` | #4a869c | #eae8ff |
+| json | 9 | `engines` | #4a869c | #eae8ff |
+| json | 9 | `bun` | #4a869c | #eae8ff |
 | shellscript | 1 | `#!/usr/bin/env bash` | #cdcbe0 italic | #4b4673 italic |
 | shellscript | 3 | `set` | #eb6f92 italic | #4a869c italic |
 | shellscript | 6 | `=` | #9ccfd8 | #eae8ff |
