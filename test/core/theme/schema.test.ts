@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { SYNTAX_ROLE_FALLBACKS } from "@/theme/role-scopes.ts";
 import { parseThemeFile, SYNTAX_ROLES, themeFileJsonSchema } from "@/theme/schema.ts";
+
+import { themeFileText } from "../../support/theme.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 
@@ -70,6 +73,25 @@ describe("parseThemeFile", () => {
     const result = parseThemeFile(JSON.stringify(validFile()));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.file.syntax.comment.fontStyle).toEqual(["italic"]);
+  });
+
+  test("fills each optional role a file omits with its fallback role's style", () => {
+    const result = parseThemeFile(themeFileText("base-roles-only"));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const { syntax } = result.file;
+    expect(syntax.operator).toEqual(syntax.punctuation);
+    for (const [role, base] of Object.entries(SYNTAX_ROLE_FALLBACKS)) {
+      expect(syntax[role as keyof typeof syntax]).toEqual(syntax[base]);
+    }
+  });
+
+  test("keeps an optional role's own style", () => {
+    const result = parseThemeFile(
+      JSON.stringify(withField(["syntax", "operator"], { color: "#123456" })),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.file.syntax.operator).toEqual({ color: "#123456" });
   });
 
   test("accepts a slug id", () => {
@@ -205,7 +227,7 @@ describe("themeFileJsonSchema", () => {
     expect(schema.required).toEqual(["id", "label", "scheme", "palette", "syntax"]);
   });
 
-  test("requires every syntax role and rejects unknown top-level keys", () => {
+  test("requires every base syntax role and rejects unknown top-level keys", () => {
     const schema = themeFileJsonSchema();
     const syntax = schema.properties?.syntax as { required?: string[] };
     expect([...(syntax.required ?? [])].sort()).toEqual([...SYNTAX_ROLES].sort());

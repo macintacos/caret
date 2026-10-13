@@ -328,6 +328,168 @@
           },
           "required": ["color"],
           "additionalProperties": false
+        },
+        "operator": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "bracket": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "parameter": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "languageVariable": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "tag": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "tagPunctuation": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "builtinFunction": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "builtinType": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "interpolation": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
         }
       },
       "required": [
