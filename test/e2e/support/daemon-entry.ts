@@ -16,7 +16,8 @@
 //   2. Config hermeticity. createServer takes explicit opts, and the one setting
 //      read here comes from the throwaway CARET_CONFIG_FILE the fixture points at,
 //      so the user's ~/.config/caret/config.toml can never leak into a test run;
-//      the production boot resolves the whole settings graph (and hot-reloads).
+//      GET /api/themes likewise reads the fixture's CARET_E2E_THEMES_DIR, never
+//      ~/.config/caret/themes. The production boot resolves the whole settings graph (and hot-reloads).
 //   3. NEVER_IDLE_MS + a no-op onShutdown. The daemon must never idle-shut-down
 //      mid-test, and even an unexpected shutdown must not process.exit out from
 //      under the runner; the production boot's onShutdown exits the process.
@@ -52,6 +53,12 @@ if (!process.env.XDG_STATE_HOME) {
 // isolated path the toggle specs would edit the developer's own config.
 if (!process.env.CARET_CONFIG_FILE) {
   console.error("caret e2e daemon: CARET_CONFIG_FILE must be set to an isolated config path");
+  process.exit(1);
+}
+
+// Without it GET /api/themes would serve the developer's own themes folder.
+if (!process.env.CARET_E2E_THEMES_DIR) {
+  console.error("caret e2e daemon: CARET_E2E_THEMES_DIR must be set to an isolated themes dir");
   process.exit(1);
 }
 
@@ -101,6 +108,7 @@ const server = createServer({
   // Belt and braces: even an unexpected idle fire must not process.exit.
   onShutdown: () => {},
   assets,
+  themesDir: process.env.CARET_E2E_THEMES_DIR,
   // Token auth, staged by the fixture's `auth` option at a path in this test's own state dir.
   ...(process.env.CARET_E2E_TOKEN_FILE ? { tokenFile: process.env.CARET_E2E_TOKEN_FILE } : {}),
   // A synthetic build identity + self-diagnostics so the settings Advanced pane
