@@ -6,8 +6,9 @@
 // preview reads like the plan view's own code. Two entry points share it:
 // highlightExcerpt colours a whole window in one pass, highlightChunk colours a
 // file a piece at a time and hands back the grammar state each piece ended on, so
-// a construct that opens in one chunk still colours the next. Grammars load lazily and cache; anything that
-// can't highlight falls back to plain text. Never throws.
+// a construct that opens in one chunk still colours the next. Grammars load
+// lazily and cache; anything that can't highlight falls back to plain text.
+// Never throws.
 
 import { type GrammarState, hastToHtml } from "shiki/core";
 
