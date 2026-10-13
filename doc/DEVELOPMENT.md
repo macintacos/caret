@@ -165,8 +165,9 @@ the full reasoning.
 Two files in the tree are generated, gitignored, and never hand-edited:
 
 - `ui/src/styles/palette.generated.css` — emitted by `ui/generate-palette-css.ts` from
-  `THEMES["caret-dark"]`, so the palette lives in exactly one place. `app.css` imports it
-  for the caret-dark first-paint fallback.
+  `THEMES["caret-dark"]`, which is built from `ui/src/lib/themes/caret-dark.json`, so the
+  palette lives in exactly one place. `app.css` imports it for the caret-dark first-paint
+  fallback.
 - `src/ui-manifest.generated.ts` — the build-generated asset manifest.
 
 Every task that consumes `app.css` runs the palette generator first: the Vite config (both
@@ -178,9 +179,10 @@ directly — and is therefore the one path that expects the partial to already e
 ### Comparing converted themes
 
 `ui/compare-themes.ts` highlights a fixed TypeScript, Markdown, JSON, shell, diff, and
-HTML sample with each bundled vendor theme and with its conversion onto caret's syntax
-roles, then lists every token whose color or font style differs, with both values. The
-converter it runs lives in `src/theme/`.
+HTML sample with each vendor's upstream theme, kept as a dev-only reference in
+`ui/support/upstream-shiki.ts`, and with its conversion onto caret's syntax roles, then
+lists every token whose color or font style differs, with both values. The converter it
+runs lives in `src/theme/`.
 
 The report, `ui/theme-drift.md`, is generated but committed, unlike the files above.
 Regenerate it with `bun ui/compare-themes.ts && mise run format`;
