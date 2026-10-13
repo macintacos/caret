@@ -103,9 +103,9 @@ test("each custom theme is offered in its scheme's picker, and a broken file is 
   await expect(page.getByRole("option", { name: "nightly", exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
-  const broken = page.locator("[data-theme-errors] li", { hasText: "broken.json" });
-  await expect(broken).toBeVisible();
-  await expect(broken.locator("p").first()).not.toBeEmpty();
+  const brokenFileRow = page.locator("[data-theme-errors] li", { hasText: "broken.json" });
+  await expect(brokenFileRow).toBeVisible();
+  await expect(brokenFileRow.locator("p").first()).not.toBeEmpty();
 });
 
 test("a picked custom theme paints the chrome and the code, and survives a reload", async ({

@@ -19,12 +19,12 @@ export function registerTheme(file: FileTheme): CustomThemeId {
 /** Registers the daemon's custom themes and settles the appearance, returning the files
  * that failed to load. `null` (a failed read) only drops a boot stand-in. Call once per
  * page load: a second call would re-register the same ids and throw. */
-export function registerCustomThemes(list: CustomThemes | null): readonly ThemeFileError[] {
-  if (list === null) {
+export function registerCustomThemes(served: CustomThemes | null): readonly ThemeFileError[] {
+  if (served === null) {
     appearance.dropStandIn();
     return [];
   }
-  for (const file of list.themes) registerTheme(buildFileTheme(file));
+  for (const file of served.themes) registerTheme(buildFileTheme(file));
   appearance.settle();
-  return list.errors;
+  return served.errors;
 }

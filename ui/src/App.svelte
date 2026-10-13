@@ -434,8 +434,8 @@
   // taken ids and throws, so the failure is logged rather than left unhandled.
   $effect(() => {
     void getThemes()
-      .then((list) => {
-        themeErrors = registerCustomThemes(list);
+      .then((served) => {
+        themeErrors = registerCustomThemes(served);
       })
       .catch((err: unknown) =>
         uiLog.warn("ui", "custom themes failed to register", { reason: String(err) }),

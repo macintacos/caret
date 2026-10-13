@@ -136,10 +136,10 @@ export function readCachedTheme(scheme: Scheme): CachedTheme | undefined {
   try {
     const raw = localStorage.getItem(CACHE_KEYS[scheme]);
     if (raw === null) return undefined;
-    const value: unknown = JSON.parse(raw);
-    if (typeof value !== "object" || value === null) return undefined;
-    const { id, scheme: stored, tokens } = value as Record<string, unknown>;
-    if (typeof id !== "string" || stored !== scheme) return undefined;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return undefined;
+    const { id, scheme: storedScheme, tokens } = parsed as Record<string, unknown>;
+    if (typeof id !== "string" || storedScheme !== scheme) return undefined;
     if (typeof tokens !== "object" || tokens === null) return undefined;
     if (Object.keys(tokens).sort().join() !== TOKEN_NAMES) return undefined;
     if (!Object.values(tokens).every((v) => typeof v === "string")) return undefined;
