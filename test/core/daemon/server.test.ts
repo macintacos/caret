@@ -272,17 +272,18 @@ describe("GET /api/themes", () => {
     writeFileSync(join(themes, "a.json"), themeFileText("theme-a"));
     writeFileSync(join(themes, "bad.json"), "{");
     await boot({ themesDir: themes });
-    const get = async () => (await (await fetch(`${base}/api/themes`)).json()) as CustomThemes;
+    const fetchThemes = async () =>
+      (await (await fetch(`${base}/api/themes`)).json()) as CustomThemes;
 
-    const first = await get();
+    const first = await fetchThemes();
     expect(first.themes.map((t) => t.id)).toEqual(["theme-a"]);
     expect(first.errors.map((e) => e.file)).toEqual(["bad.json"]);
 
     writeFileSync(join(themes, "b.json"), themeFileText("theme-b"));
-    expect((await get()).themes.map((t) => t.id)).toEqual(["theme-a", "theme-b"]);
+    expect((await fetchThemes()).themes.map((t) => t.id)).toEqual(["theme-a", "theme-b"]);
 
     rmSync(join(themes, "a.json"));
-    expect((await get()).themes.map((t) => t.id)).toEqual(["theme-b"]);
+    expect((await fetchThemes()).themes.map((t) => t.id)).toEqual(["theme-b"]);
   });
 });
 

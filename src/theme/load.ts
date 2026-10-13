@@ -77,15 +77,15 @@ async function readThemeSources(dir: string): Promise<ThemeSource[]> {
 }
 
 async function readThemeSource(path: string, file: string): Promise<ThemeSource | undefined> {
-  let info: Stats;
+  let stats: Stats;
   try {
-    info = await stat(path);
+    stats = await stat(path);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     return { file, error: "theme file: could not be read" };
   }
-  if (!info.isFile()) return undefined;
-  if (info.size > MAX_THEME_FILE_BYTES) {
+  if (!stats.isFile()) return undefined;
+  if (stats.size > MAX_THEME_FILE_BYTES) {
     return { file, error: `theme file: is larger than ${MAX_THEME_FILE_BYTES / 1024} KiB` };
   }
   try {
