@@ -296,11 +296,13 @@ uploaded file's name. A file that fails shows its errors, and caret saves nothin
 rejects the `id` of a built-in theme.
 
 Uploading an `id` that another file already declares replaces that theme: caret writes
-`<id>.json` and removes the other files. caret refuses the upload when `<id>.json` already
-holds a different theme that caret loads; one whose theme caret skips, because its `id` is
-built in or declared by another file, is replaced. If caret can't remove one of those
-other files, it still saves the upload and names the file it left; caret loads neither
-until you delete that file.
+`<id>.json` and removes the other files. If caret can't remove one of those other files,
+it still saves the upload and names the file it left; caret loads neither until you delete
+that file.
+
+caret refuses the upload when `<id>.json` already holds a different theme that caret
+loads. If caret skips that file, because its `id` is built in or another file declares it
+too, the upload replaces it.
 
 There is no delete control. To remove a theme, delete its file from the folder.
 

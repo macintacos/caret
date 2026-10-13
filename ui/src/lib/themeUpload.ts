@@ -1,7 +1,9 @@
+// Saving a theme file the user picked, and the status line the theme picker shows for it.
 import type { ThemeFileError } from "@core/lib/types";
 import { uploadTheme } from "$lib/api.ts";
 import { registerUploadedTheme } from "$lib/registerTheme.ts";
 
+/** A save's status line plus the folder's refreshed load errors, or a refusal: the picked file's name and one line per problem. */
 export type ThemeUploadOutcome =
   | { ok: true; message: string; loadErrors: readonly ThemeFileError[] }
   | { ok: false; file: string; errors: string[] };
@@ -18,8 +20,8 @@ export async function uploadThemeFile(file: File): Promise<ThemeUploadOutcome> {
   const result = await uploadTheme(text);
   if (!result.ok) return { ok: false, file: file.name, errors: result.errors };
   const { theme, errors: loadErrors, unremoved } = result;
-  const saved = (message: string) => ({ ok: true as const, message, loadErrors });
-  // The folder drops every file declaring a shared id, so registering would show a theme
+  const saved = (message: string): ThemeUploadOutcome => ({ ok: true, message, loadErrors });
+  // The folder skips every file declaring a shared id, so registering would show a theme
   // the next load refuses.
   if (unremoved.length > 0) {
     const names = unremoved.map((name) => `"${name}"`).join(", ");

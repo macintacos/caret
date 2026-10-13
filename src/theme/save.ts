@@ -14,8 +14,8 @@ import { parseThemeFile, type ThemeFile } from "@/theme/schema.ts";
  * Ids are lowercase slugs, so `<id>.json` is lowercase. The conflict check folds case because on a
  * case-insensitive filesystem `Nightly.json` is the target itself. A file that fails validation
  * declares nothing and is left alone; when it is the target, the write replaces it. Only an
- * `<id>.json` holding a theme caret loads is a conflict; one caret skips (a built-in or duplicated
- * id) is overwritten, or removed when it is a case variant.
+ * `<id>.json` holding another id that caret loads is a conflict; one caret skips (a built-in or
+ * duplicated id) is left to the write, like an invalid file.
  */
 export function planThemeWrite(
   id: string,
@@ -29,9 +29,9 @@ export function planThemeWrite(
     const parsed = parseThemeFile(source.text);
     if (!parsed.ok) continue;
     const occupiesTarget = source.file.toLowerCase() === target;
-    if (parsed.file.id === id || (occupiesTarget && !loaded.has(parsed.file.id))) {
+    if (parsed.file.id === id) {
       if (source.file !== target) remove.push(source.file);
-    } else if (occupiesTarget) {
+    } else if (occupiesTarget && loaded.has(parsed.file.id)) {
       return {
         conflict: `${source.file} already holds the theme "${parsed.file.id}"; rename or delete it, then upload again`,
       };
@@ -43,8 +43,9 @@ export function planThemeWrite(
 export interface ThemeWriter {
   /**
    * Validate `text` and write it as `<id>.json` verbatim; re-serializing the parsed file would bake
-   * in schema defaults and drop the user's formatting. Never throws: refusals and fs failures come
-   * back as `ok: false`.
+   * in schema defaults and drop the user's formatting. Never throws: refusals and write failures
+   * come back as `ok: false`; a removal that fails after the write is still `ok: true`, naming the
+   * file in `unremoved`.
    */
   save(text: string): Promise<ThemeSave>;
 }
@@ -60,7 +61,11 @@ export type ThemeSave =
   | { ok: true; theme: ThemeFile; unremoved: string[]; code?: string }
   | { ok: false; reason: ThemeSaveRefusal; errors: string[]; code?: string };
 
-/** Writes queue on the folder, so two uploads cannot interleave one's removals with the other's write. */
+/**
+ * Writes queue on the folder, so two uploads cannot interleave one's removals with the other's write.
+ * @param remove - Deletes one file. Injectable so a test can fail a removal while the folder stays
+ * writable.
+ */
 export function createThemeWriter(
   dir: string,
   remove = (path: string) => rm(path, { force: true }),
@@ -109,10 +114,7 @@ export function createThemeWriter(
             code ??= (error as NodeJS.ErrnoException).code;
           }
         }
-        result =
-          code === undefined
-            ? { ok: true, theme, unremoved }
-            : { ok: true, theme, unremoved, code };
+        result = { ok: true, theme, unremoved, code };
       });
       return result;
     },

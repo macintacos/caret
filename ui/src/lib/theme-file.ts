@@ -3,7 +3,7 @@ import { syntaxShikiTheme } from "$lib/caret-shiki.ts";
 import type { RuntimeTheme } from "$lib/theme.ts";
 import { type PaletteInput, paletteTokens } from "$lib/themes/recipe.ts";
 
-/** Not a `Theme`: its id is a plain string until `addTheme` mints it a `CustomThemeId` or `THEMES` narrows it to a `BuiltinThemeId`. */
+/** Not a `Theme`: its id is a plain string until `addTheme` mints it a `CustomThemeId` or `THEMES` narrows it to a `BuiltinThemeId`, and it carries no `revision` until `addTheme` sets one. */
 export type FileTheme = Omit<RuntimeTheme, "id" | "revision"> & { id: string };
 
 type RecipeColors = Omit<PaletteInput, "scheme">;

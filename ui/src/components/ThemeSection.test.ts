@@ -264,6 +264,7 @@ describe("theme upload", () => {
     expect(text("[data-theme-upload-status]")).toContain(theme.label);
     expect(seen).toEqual([errors]);
     expect(themesForScheme("dark").some((t) => t.id === theme.id)).toBe(true);
+    expect(button().disabled).toBe(false);
   });
 
   test("a refusal lists each line and leaves the load errors alone", async () => {

@@ -342,7 +342,10 @@ describe("POST /api/themes", () => {
     const res = await upload(themeFileText("nightly"));
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ theme, unremoved: ["old.json"] });
-    expect(recs.some((r) => r.step === "themes" && r.level === "warn")).toBe(true);
+    expect(recs.find((r) => r.level === "warn" && r.step === "themes")?.extra).toEqual({
+      errno: "EPERM",
+      count: 1,
+    });
   });
 
   test("an invalid upload is a 400 carrying its errors and writes nothing", async () => {

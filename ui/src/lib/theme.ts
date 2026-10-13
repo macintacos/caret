@@ -141,9 +141,10 @@ export interface BuiltinTheme extends ThemeFields {
 /** A theme built from a theme file, carrying its shiki theme inline. */
 export interface RuntimeTheme extends ThemeFields {
   id: CustomThemeId;
-  /** Bumped by each replace; `shikiThemeName` folds it into both highlighters' cache
-   * key, so a rebuild must not reset it. */
+  /** Bumped by each replace and never reset: `shikiThemeName` folds it into both
+   * highlighters' cache key, and a reused key would serve the old theme. */
   revision: number;
+  /** Named by its id; select it by `shikiThemeName`, never by this name. */
   shikiTheme: ThemeRegistrationRaw;
 }
 
@@ -218,13 +219,13 @@ export function addTheme(file: FileTheme): CustomThemeId {
  * highlighters and shiki cache a theme by name for the page's life.
  *
  * @throws When the id is not a registered runtime theme. */
-// ponytail: every replace leaves the previous name's theme registered in both
-// highlighters for the page's life (~1 KiB each); evict there if replaces get frequent.
 export function replaceTheme(file: FileTheme): CustomThemeId {
-  const id = file.id as CustomThemeId;
-  const previous = runtimeThemes.get(id);
+  const previous = isCustomThemeId(file.id) ? runtimeThemes.get(file.id) : undefined;
   if (previous === undefined) throw new Error(`theme id "${file.id}" is not registered`);
-  runtimeThemes.set(id, { ...file, id, revision: previous.revision + 1 });
+  const { id, revision } = previous;
+  // ponytail: every replace leaves the previous name's theme registered in both
+  // highlighters for the page's life (~1 KiB each); evict there if replaces get frequent.
+  runtimeThemes.set(id, { ...file, id, revision: revision + 1 });
   return id;
 }
 

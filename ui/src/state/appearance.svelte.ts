@@ -91,11 +91,11 @@ export interface Appearance {
    * (clearing the cache of a slot that holds a built-in), then drops any stand-in
    * whose theme never arrived. */
   themesLoaded(): void;
-  /** Re-apply a theme just replaced under the same id: a slot holding it whose scheme
+  /** Re-apply a theme just replaced under the same id. A slot holding it whose scheme
    * no longer matches falls back to its default in-session (storage keeps the saved
-   * id), a slot at its default whose saved id is this theme takes it back once the
-   * scheme matches again, the palette repaints as a wipe if it is showing, and each
-   * slot's cache is rewritten. */
+   * id); a slot at its default whose saved id is this theme takes it back once the
+   * scheme matches again. The palette then repaints as a wipe if it is showing, and
+   * each slot's cache is rewritten. A no-op when no slot holds the id or takes it back. */
   reapply(id: CustomThemeId): void;
   /** Follow OS appearance flips for as long as the returned disposer is unused.
    * The media query defaults to the live one; a no-op where none is available. */
@@ -220,18 +220,17 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
       dropStandIn();
     },
     reapply(id) {
-      const reclaims = (slot: Scheme) =>
-        live.slots[slot] === DEFAULT_SLOT_THEME[slot] && readSlotTheme(slot) === id;
-      if (!SCHEMES.some((slot) => live.slots[slot] === id || reclaims(slot))) return;
+      const touched = SCHEMES.filter(
+        (slot) =>
+          live.slots[slot] === id ||
+          (live.slots[slot] === DEFAULT_SLOT_THEME[slot] && readSlotTheme(slot) === id),
+      );
+      if (touched.length === 0) return;
+      const { scheme } = themeFor(id);
       const showing = resolved() === id;
       commit(() => {
-        for (const slot of SCHEMES) {
-          if (live.slots[slot] === id) {
-            if (themeFor(id).scheme !== slot) live.slots[slot] = DEFAULT_SLOT_THEME[slot];
-          } else if (reclaims(slot)) {
-            live.slots[slot] = id;
-          }
-        }
+        for (const slot of touched)
+          live.slots[slot] = scheme === slot ? id : DEFAULT_SLOT_THEME[slot];
       });
       if (showing && resolved() === id) withWipe(() => paintTheme(id), deps.wipe);
       for (const slot of SCHEMES) syncCache(slot);

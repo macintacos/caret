@@ -46,11 +46,11 @@ describe("planThemeWrite", () => {
     });
   });
 
-  test("removes a case variant of <id>.json declaring a built-in id", () => {
+  test("leaves a case variant of <id>.json declaring a built-in id to the write", () => {
     expect(
       planThemeWrite("nightly", [{ file: "NIGHTLY.json", text: themeFileText("dracula") }]),
     ).toEqual({
-      remove: ["NIGHTLY.json"],
+      remove: [],
     });
   });
 
