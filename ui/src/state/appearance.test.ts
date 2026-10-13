@@ -3,7 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { fakeMediaQuery } from "@ui/support/media-query.ts";
 import { withThrowingStorage } from "@ui/support/storage.ts";
-import { CUSTOM_ACCENT, customThemeFile } from "@ui/support/theme-file.ts";
+import { CUSTOM_ACCENT, customThemeFile, seedDarkStandIn } from "@ui/support/theme-file.ts";
 import { type AppearanceDeps, createAppearance } from "@/state/appearance.svelte.ts";
 import {
   DARK_SLOT_KEY,
@@ -263,10 +263,7 @@ describe("refresh", () => {
 /** Dark mode with the dark slot saved as `id`, unregistered, and that id's palette
  * cached — the boot state of a reload before the daemon's themes arrive. */
 async function darkStandIn(id: string) {
-  const file = await customThemeFile(id, "dark");
-  localStorage.setItem(MODE_KEY, "dark");
-  localStorage.setItem(DARK_SLOT_KEY, id);
-  writeCachedTheme({ id, scheme: "dark", tokens: file.tokens });
+  const file = await seedDarkStandIn(id);
   const h = harness();
   h.appearance.boot();
   return { ...h, file };

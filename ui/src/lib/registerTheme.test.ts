@@ -9,11 +9,12 @@ import {
   CUSTOM_KEYWORD,
   customThemeFile,
   customThemeSource,
+  seedDarkStandIn,
 } from "@ui/support/theme-file.ts";
 import SettingControl from "@/components/SettingControl.svelte";
 import SettingSelect from "@/components/SettingSelect.svelte";
 import { appearance } from "@/state/appearance.svelte.ts";
-import { DARK_SLOT_KEY, MODE_KEY, readCachedTheme, writeCachedTheme } from "$lib/appearance.ts";
+import { DARK_SLOT_KEY, MODE_KEY, readCachedTheme } from "$lib/appearance.ts";
 import { highlightExcerpt } from "$lib/diffview/highlight.ts";
 import { caretDiffTheme } from "$lib/diffview/theme.ts";
 import { registerCustomThemes, registerTheme, registerUploadedTheme } from "$lib/registerTheme.ts";
@@ -156,14 +157,6 @@ describe("registerCustomThemes", () => {
   const caretDarkAccent = THEMES["caret-dark"].tokens["--accent"];
   const errors = [{ file: "broken.json", messages: ["palette: required"] }];
 
-  async function darkStandIn(id: string): Promise<void> {
-    const file = await customThemeFile(id, "dark");
-    localStorage.setItem(MODE_KEY, "dark");
-    localStorage.setItem(DARK_SLOT_KEY, id);
-    writeCachedTheme({ id, scheme: "dark", tokens: file.tokens });
-    appearance.boot();
-  }
-
   test("offers each theme in its own scheme's slot after the built-ins and returns the errors", async () => {
     const dark = await customThemeSource("served-dark", "dark");
     const light = await customThemeSource("served-light", "light");
@@ -186,7 +179,8 @@ describe("registerCustomThemes", () => {
   });
 
   test("a failed read repaints the default over a stand-in and keeps its cache", async () => {
-    await darkStandIn("served-unread");
+    await seedDarkStandIn("served-unread");
+    appearance.boot();
     expect(rootToken("--accent")).toBe(CUSTOM_ACCENT);
 
     registerCustomThemes(null);
@@ -210,7 +204,8 @@ describe("registerCustomThemes", () => {
   });
 
   test("a cached theme no longer served falls back to the default and keeps the saved id", async () => {
-    await darkStandIn("served-deleted");
+    await seedDarkStandIn("served-deleted");
+    appearance.boot();
 
     registerCustomThemes({ themes: [], errors: [] });
 
