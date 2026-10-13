@@ -57,8 +57,11 @@ function resolveSetting(
   return best;
 }
 
-function normalizeColor(color: string): string {
-  const hex = color.toLowerCase().match(/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/)?.[1];
+export const HEX_COLOR = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+/** Expands a hex color to lowercase `#rrggbb`, dropping any alpha. Throws on a non-hex color. */
+export function normalizeColor(color: string): string {
+  const hex = color.toLowerCase().match(HEX_COLOR)?.[1];
   if (hex === undefined) throw new Error(`"${color}" is not a hex color`);
   const full = hex.length <= 4 ? [...hex].map((digit) => digit + digit).join("") : hex;
   // ponytail: alpha is dropped, not blended over the background; blend if a theme relies

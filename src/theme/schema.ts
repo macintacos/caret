@@ -42,7 +42,7 @@ const roleStyle = z.strictObject({
   fontStyle: z.array(z.enum(FONT_STYLES, `must be one of ${FONT_STYLES.join(", ")}`)).optional(),
 });
 
-const REQUIRED_COLORS = [
+export const REQUIRED_COLORS = [
   "paper",
   "raised",
   "sunk",
