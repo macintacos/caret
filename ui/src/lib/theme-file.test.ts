@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 
+import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
 import { readThemeFile } from "@ui/support/theme-file.ts";
 import { shikiThemeFor } from "$lib/caret-theme.ts";
 import { CARET_TOKENIZE_OPTIONS, createHighlighter } from "$lib/diffview/shiki-bundle.ts";
@@ -13,8 +14,22 @@ describe("buildFileTheme", () => {
     });
   }
 
-  test("every palette hue override reaches its derived token", async () => {
+  test("a multi-style fontStyle reaches its shiki rule space-joined", async () => {
     const file = await readThemeFile("caret-dark.json");
+    const { shikiTheme } = buildFileTheme({
+      ...file,
+      syntax: {
+        ...file.syntax,
+        keyword: { ...file.syntax.keyword, fontStyle: ["bold", "italic"] },
+      },
+    });
+    const rule = shikiTheme.settings?.find(
+      (r) => JSON.stringify(r.scope) === JSON.stringify([...ROLE_SCOPES.keyword]),
+    );
+    expect(rule?.settings.fontStyle).toBe("bold italic");
+  });
+
+  describe("every palette hue override reaches its derived token", () => {
     const hues = {
       ruleHue: "#000001",
       washHue: "#000002",
@@ -26,25 +41,29 @@ describe("buildFileTheme", () => {
       chipRefHue: "#000008",
       chipSkillHue: "#000009",
     };
-    const { tokens } = buildFileTheme({ ...file, palette: { ...file.palette, ...hues } });
-    const expected = {
-      "--rule": hues.ruleHue,
-      "--rule-strong": hues.ruleHue,
-      "--accent-wash": hues.washHue,
-      "--mark": hues.markHue,
-      "--mark-active": hues.markHue,
-      "--chip-bold": hues.chipBoldHue,
-      "--chip-italic": hues.chipItalicHue,
-      "--chip-code": hues.chipCodeHue,
-      "--chip-link": hues.chipLinkHue,
-      "--chip-ref": hues.chipRefHue,
-      "--chip-skill": hues.chipSkillHue,
-    } as const;
-    for (const [token, hue] of Object.entries(expected)) {
-      expect(`${token} ${tokens[token as keyof typeof expected].slice(0, 7)}`).toBe(
-        `${token} ${hue}`,
-      );
-    }
+    const expected = [
+      ["--rule", hues.ruleHue],
+      ["--rule-strong", hues.ruleHue],
+      ["--accent-wash", hues.washHue],
+      ["--mark", hues.markHue],
+      ["--mark-active", hues.markHue],
+      ["--chip-bold", hues.chipBoldHue],
+      ["--chip-italic", hues.chipItalicHue],
+      ["--chip-code", hues.chipCodeHue],
+      ["--chip-link", hues.chipLinkHue],
+      ["--chip-ref", hues.chipRefHue],
+      ["--chip-skill", hues.chipSkillHue],
+    ] as const;
+    let tokens: ReturnType<typeof buildFileTheme>["tokens"];
+
+    beforeAll(async () => {
+      const file = await readThemeFile("caret-dark.json");
+      ({ tokens } = buildFileTheme({ ...file, palette: { ...file.palette, ...hues } }));
+    });
+
+    test.each(expected)("%s", (token, hue) => {
+      expect(tokens[token].slice(0, 7)).toBe(hue);
+    });
   });
 });
 
