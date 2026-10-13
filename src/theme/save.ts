@@ -23,7 +23,7 @@ export function planThemeWrite(
 ): { remove: string[] } | { conflict: string } {
   const target = `${id}.json`;
   const remove: string[] = [];
-  const loaded = new Set(collectThemes(sources, BUILTIN_THEME_IDS).themes.map((t) => t.id));
+  const loadedIds = new Set(collectThemes(sources, BUILTIN_THEME_IDS).themes.map((t) => t.id));
   for (const source of sources) {
     if ("error" in source) continue;
     const parsed = parseThemeFile(source.text);
@@ -31,7 +31,7 @@ export function planThemeWrite(
     const occupiesTarget = source.file.toLowerCase() === target;
     if (parsed.file.id === id) {
       if (source.file !== target) remove.push(source.file);
-    } else if (occupiesTarget && loaded.has(parsed.file.id)) {
+    } else if (occupiesTarget && loadedIds.has(parsed.file.id)) {
       return {
         conflict: `${source.file} already holds the theme "${parsed.file.id}"; rename or delete it, then upload again`,
       };
