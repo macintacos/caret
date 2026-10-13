@@ -1,13 +1,15 @@
 // Custom themes end to end: theme files in the daemon's themes folder reach the
 // Appearance pickers, a picked one repaints the chrome and the highlighted code, and a
-// reload paints it from the first frame. This needs a real browser and a real daemon:
+// reload paints it from the first frame. A file uploaded from Appearance is saved under its
+// id and offered, or replaces the theme it names in place, without a reload. This needs a real browser and a real daemon:
 // the boot paint from localStorage across a reload, a held GET /api/themes, the portalled
-// bits-ui picker, and shiki's colours inside the diff view's shadow DOM. The pure halves —
+// bits-ui picker, a native file input, and shiki's colours inside the diff view's shadow DOM. The pure halves —
 // building a theme from a file, registering it, the cached palette — are unit-tested in
 // ui/src/lib/registerTheme.test.ts and ui/src/lib/appearance.test.ts, and the stand-in
-// reconcile rules in ui/src/state/appearance.test.ts.
+// reconcile rules in ui/src/state/appearance.test.ts; the upload's daemon half is unit-tested
+// in test/core/theme/ and test/core/daemon/server.test.ts.
 
-import { rm, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { Page, Route } from "@playwright/test";
@@ -23,6 +25,8 @@ const NIGHTLY_KEYWORD = "#12ab34";
 // NIGHTLY_KEYWORD as getComputedStyle reports it.
 const NIGHTLY_KEYWORD_RGB = "rgb(18, 171, 52)";
 const EDITED_ACCENT = "#c20078";
+const EDITED_KEYWORD = "#ab1234";
+const EDITED_KEYWORD_RGB = "rgb(171, 18, 52)";
 
 declare global {
   interface Window {
@@ -67,6 +71,20 @@ function accent(page: Page): Promise<string> {
   return page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue("--accent").trim().toLowerCase(),
   );
+}
+
+async function uploadTheme(page: Page, name: string, text: string): Promise<void> {
+  await page.locator("[data-theme-upload] input[type=file]").setInputFiles({
+    name,
+    mimeType: "application/json",
+    buffer: Buffer.from(text),
+  });
+}
+
+async function expectDarkOption(page: Page, name: string): Promise<void> {
+  await darkTrigger(page).click();
+  await expect(page.getByRole("option", { name, exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
 }
 
 const darkTrigger = (page: Page) => page.getByRole("button", { name: "Dark theme" });
@@ -186,4 +204,66 @@ test("a failed themes read leaves the built-in themes working", async ({ daemon,
   await page.getByRole("option", { name: "Dracula" }).click();
   await expect(page.locator("[data-theme-summary]")).toContainText("Dracula");
   await expect(page.locator("[data-theme-errors]")).toHaveCount(0);
+});
+
+test("an uploaded theme is saved under its id and offered without a reload", async ({
+  daemon,
+  page,
+}) => {
+  await pinDark(page);
+  await seedAndOpen(page, daemon);
+  await openSettings(page);
+
+  await uploadTheme(page, "my upload.json", themeFileText("uploaded"));
+  await expect(page.locator("[data-theme-upload-status]")).toBeVisible();
+  await expectDarkOption(page, "uploaded");
+  expect(await readdir(daemon.themesDir)).toContain("uploaded.json");
+  expect(await readdir(daemon.themesDir)).not.toContain("my upload.json");
+});
+
+test("an invalid upload lists its errors and saves nothing", async ({ daemon, page }) => {
+  await writeThemes(daemon);
+  const before = (await readdir(daemon.themesDir)).sort();
+  await pinDark(page);
+  await seedAndOpen(page, daemon);
+  await openSettings(page);
+
+  await uploadTheme(page, "bad.json", "{ not json");
+  const refusal = page.locator("[data-theme-upload-errors]");
+  await expect(refusal).toContainText("bad.json");
+  await expect(refusal.locator("li").first()).not.toBeEmpty();
+  expect((await readdir(daemon.themesDir)).sort()).toEqual(before);
+});
+
+test("uploading a duplicated id leaves one file and clears the load error", async ({
+  daemon,
+  page,
+}) => {
+  await writeFile(join(daemon.themesDir, "a.json"), themeFileText("twin"));
+  await writeFile(join(daemon.themesDir, "b.json"), themeFileText("twin"));
+  await pinDark(page);
+  await seedAndOpen(page, daemon);
+  await openSettings(page);
+  await expect(page.locator("[data-theme-errors]")).toContainText("twin");
+
+  await uploadTheme(page, "twin.json", themeFileText("twin"));
+  await expect(page.locator("[data-theme-upload-status]")).toBeVisible();
+  await expect(page.locator("[data-theme-errors]")).toHaveCount(0);
+  await expectDarkOption(page, "twin");
+  const names = await readdir(daemon.themesDir);
+  expect(["a.json", "b.json", "twin.json"].filter((n) => names.includes(n))).toEqual(["twin.json"]);
+});
+
+test("replacing the selected theme repaints the chrome and the code", async ({ daemon, page }) => {
+  await pickNightly(page, daemon);
+  await expect.poll(() => rowColors(page, "return Cache")).toContain(NIGHTLY_KEYWORD_RGB);
+
+  const edited = themeFileText("nightly", { accent: EDITED_ACCENT, keyword: EDITED_KEYWORD });
+  await uploadTheme(page, "nightly.json", edited);
+  await expect.poll(() => accent(page)).toBe(EDITED_ACCENT);
+  await expect.poll(() => rowColors(page, "return Cache")).toContain(EDITED_KEYWORD_RGB);
+  expect(await page.evaluate(() => localStorage.getItem("caret.theme.cache.dark"))).toContain(
+    EDITED_ACCENT,
+  );
+  expect(await readFile(join(daemon.themesDir, "nightly.json"), "utf8")).toContain(EDITED_ACCENT);
 });
