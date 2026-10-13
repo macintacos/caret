@@ -260,7 +260,6 @@ export interface TaskSelection {
  */
 export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "scripts/tasks/dev/fake-plan.md", // test/scripts/dev-driver.test.ts reads it and asserts on its content
-  "doc/CONFIGURING.md", // test/core/theme/schema.test.ts parses its example theme file
   "scripts/tasks/dev/short-plan-a.md", // test/scripts/dev-driver.test.ts resolves its DEV_FIXTURES edits against it
   "scripts/tasks/dev/short-plan-b.md", // test/scripts/dev-driver.test.ts resolves its DEV_FIXTURES edits against it
   "scripts/tasks/dev/demo-plan.md", // test/scripts/assets.test.ts pins the anchor the assets task resolves against it
@@ -274,6 +273,7 @@ export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "doc/ARCHITECTURE.md",
   "THIRD_PARTY_LICENSES.md", // ui/src/lib/icons.test.ts checks its table against the icon registry
   "doc/DEVELOPMENT.md", // test/scripts/dev-driver.test.ts checks fake-plan.md's line citations into it
+  "doc/CONFIGURING.md", // test/core/theme/schema.test.ts parses its example theme file
 ];
 
 /**
