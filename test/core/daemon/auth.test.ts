@@ -58,6 +58,15 @@ describe("a token-gated daemon rejects requests without a credential", () => {
         body: JSON.stringify({ sessionId: "S", cwd: "/tmp/p", plan: "# T" }),
       }),
     ],
+    [
+      "same-origin POST /api/themes",
+      (url) => ({
+        path: "/api/themes",
+        method: "POST",
+        headers: { ...json, Origin: url },
+        body: "{}",
+      }),
+    ],
     ["GET file", () => ({ path: "/api/reviews/abc/file?path=x" })],
     ["GET dir", () => ({ path: "/api/reviews/abc/dir" })],
     [

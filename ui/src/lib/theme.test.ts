@@ -11,8 +11,11 @@ import {
   type BuiltinThemeId,
   type ColorToken,
   isBuiltinThemeId,
+  isCustomThemeId,
   paintPalette,
   paintTheme,
+  type RuntimeTheme,
+  replaceTheme,
   type Scheme,
   THEME_IDS,
   THEMES,
@@ -932,6 +935,48 @@ describe("runtime themes", () => {
     }
     expect(themeFor("caret-dark")).toBe(THEMES["caret-dark"]);
     expect(themesForScheme("dark")).toEqual(darkBefore);
+  });
+
+  test("replaceTheme swaps the entry in place, keeping the slot's order", async () => {
+    const id = addTheme(await customThemeFile("replace-swap", "dark"));
+    addTheme(await customThemeFile("replace-swap-after", "dark"));
+    const orderBefore = themesForScheme("dark").map((t) => t.id);
+    const next = { ...(await customThemeFile("replace-swap", "dark")), label: "Swapped" };
+    next.tokens = { ...next.tokens, "--accent": "#123456" };
+
+    expect(replaceTheme(next)).toBe(id);
+
+    expect(themeFor(id).label).toBe("Swapped");
+    expect(themeFor(id).tokens["--accent"]).toBe("#123456");
+    expect(themesForScheme("dark").map((t) => t.id)).toEqual(orderBefore);
+  });
+
+  test("replaceTheme names the shiki theme afresh on every replace", async () => {
+    const file = await customThemeFile("replace-name", "dark");
+    const id = addTheme(file);
+    const nameOf = () => String((themeFor(id) as RuntimeTheme).shikiTheme.name);
+    replaceTheme(file);
+    const first = nameOf();
+    replaceTheme(file);
+    expect(first).toMatch(/^replace-name~\d+$/);
+    expect(nameOf()).toMatch(/^replace-name~\d+$/);
+    expect(nameOf()).not.toBe(first);
+  });
+
+  test("replaceTheme refuses an unregistered or built-in id", async () => {
+    for (const id of ["replace-unknown", "caret-dark"]) {
+      const file = await customThemeFile(id, "dark");
+      expect(() => replaceTheme(file)).toThrow(id);
+    }
+    expect(themeFor("caret-dark")).toBe(THEMES["caret-dark"]);
+  });
+
+  test("isCustomThemeId holds only once addTheme registered the id", async () => {
+    const file = await customThemeFile("custom-check", "dark");
+    expect(isCustomThemeId("custom-check")).toBe(false);
+    addTheme(file);
+    expect(isCustomThemeId("custom-check")).toBe(true);
+    expect(isCustomThemeId("caret-dark")).toBe(false);
   });
 
   test("an unregistered string is not a ThemeId", () => {

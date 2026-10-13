@@ -253,10 +253,12 @@ or stacked host.
 A theme file is a JSON file that describes one caret theme: its name, whether it is light
 or dark, the colors of caret's interface, and the colors used to highlight code. A theme
 file is self-contained. caret derives everything else it needs, such as hairline rules,
-selection washes, and chip tints, from the colors the file names. caret reads theme files
-from its [themes folder](#where-caret-finds-theme-files), and after a page reload each
-theme appears in the Appearance theme picker for its scheme. When a slot's selected theme
-stops loading, the slot shows caret's theme for that scheme and keeps the selection, so
+selection washes, and chip tints, from the colors the file names. A theme reaches caret
+either from its [themes folder](#where-caret-finds-theme-files) or by
+[uploading it](#uploading-a-theme) in the Appearance settings, which writes it into the
+folder. Each theme appears in the Appearance theme picker for its scheme: a dropped file
+after a page reload, an uploaded one straight away. When a slot's selected theme stops
+loading, the slot shows caret's theme for that scheme and keeps the selection, so
 restoring the file brings it back.
 
 ### Where caret finds theme files
@@ -280,6 +282,19 @@ caret skips a file, and reports an error that names it, when the file:
 
 The Appearance settings list each file that didn't load, with its errors, under the theme
 pickers.
+
+### Uploading a theme
+
+The upload control in the Appearance settings checks a file against the same rules and
+saves it into the themes folder as `<id>.json`, named from its `id`, never from the
+uploaded file's name. A file that fails shows its errors, and caret saves nothing. caret
+rejects the `id` of a built-in theme.
+
+Uploading an `id` that another file already declares replaces that theme: caret writes
+`<id>.json` and removes the other files. caret refuses the upload when `<id>.json` already
+holds a different theme.
+
+There is no delete control. To remove a theme, delete its file from the folder.
 
 ### Top-level fields
 

@@ -6,7 +6,8 @@
 // reads `var(--token)`: dialogs, the .diffview bridge — retints in realtime with no
 // per-component change. A compiled-in palette is one more entry in THEMES; a theme
 // built from a theme file joins at runtime through `registerTheme`
-// (registerTheme.ts), whose registry half is `addTheme`.
+// (registerTheme.ts), whose registry half is `addTheme`; an uploaded file whose id
+// is already registered swaps it in place through `replaceTheme`.
 //
 // A caller may pass any element instead, painting the palette onto that subtree
 // rather than the page (EXC-884) — the scoped preview card previews a palette the
@@ -147,6 +148,8 @@ export interface BuiltinTheme extends ThemeFields {
 /** A theme built from a theme file, carrying its shiki theme inline. */
 export interface RuntimeTheme extends ThemeFields {
   id: CustomThemeId;
+  /** Its `name` is both highlighters' cache key: the id, then `<id>~<n>` after a
+   * replace. A rebuild must not reset it. */
   shikiTheme: ThemeRegistrationRaw;
 }
 
@@ -174,13 +177,22 @@ export const THEME_IDS = Object.keys(THEMES) as BuiltinThemeId[];
 
 // A SvelteMap so a template reading `themesForScheme` re-runs when a theme registers.
 // Module-level, like THEMES: one registry per document, and every consumer calls
-// functions on it. Entries are never removed, so a registering test uses an id no
-// other test in its file uses.
+// functions on it. Entries are never removed — a replace swaps one in place — so a
+// registering test uses an id no other test in its file uses.
 const runtimeThemes = new SvelteMap<CustomThemeId, RuntimeTheme>();
+
+// ponytail: every replace leaves the previous name's theme registered in both
+// highlighters for the page's life (~1 KiB each); evict there if replaces get frequent.
+let replaceCount = 0;
 
 /** Whether an id names a compiled-in palette (an own key of THEMES). */
 export function isBuiltinThemeId(id: string): id is BuiltinThemeId {
   return Object.hasOwn(THEMES, id);
+}
+
+/** Whether an id names a registered runtime theme. */
+export function isCustomThemeId(id: string): id is CustomThemeId {
+  return runtimeThemes.has(id as CustomThemeId);
 }
 
 /** Add a theme built from a theme file to the registry, returning its minted id.
@@ -189,13 +201,30 @@ export function isBuiltinThemeId(id: string): id is BuiltinThemeId {
  * slots.
  *
  * @throws When the id is a built-in or already registered: both highlighters key
- * themes by this id, so a collision would shadow or half-replace a theme. */
+ * themes by their shiki name, which is this id until a replace, so a collision would
+ * shadow or half-replace a theme; a deliberate swap goes through `replaceTheme`. */
 export function addTheme(file: FileTheme): CustomThemeId {
   const id = file.id as CustomThemeId; // the one place a CustomThemeId is minted
   if (isBuiltinThemeId(id) || runtimeThemes.has(id)) {
     throw new Error(`theme id "${id}" is already taken`);
   }
   runtimeThemes.set(id, { ...file, id });
+  return id;
+}
+
+/** Swap a registered runtime theme for a new file declaring its id, keeping its place
+ * in the picker. Its shiki theme takes a fresh name (`<id>~<n>`; `~` never appears in
+ * an id), since both highlighters and shiki cache a theme by name for the page's life.
+ *
+ * @throws When the id is not a registered runtime theme. */
+export function replaceTheme(file: FileTheme): CustomThemeId {
+  if (!isCustomThemeId(file.id)) throw new Error(`theme id "${file.id}" is not registered`);
+  const id = file.id;
+  runtimeThemes.set(id, {
+    ...file,
+    id,
+    shikiTheme: { ...file.shikiTheme, name: `${id}~${++replaceCount}` },
+  });
   return id;
 }
 

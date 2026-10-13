@@ -91,6 +91,8 @@
     /** The custom theme files that failed to load, listed in the Appearance pane. Empty
      * until the daemon's themes arrive, and when its read fails. */
     themeErrors?: readonly ThemeFileError[];
+    /** Receives the folder's load errors as they stand after a theme upload saves. */
+    onThemeErrors?: (errors: readonly ThemeFileError[]) => void;
   }
   let {
     open,
@@ -103,6 +105,7 @@
     updatePending = false,
     updateReport = null,
     themeErrors = [],
+    onThemeErrors = () => {},
   }: Props = $props();
 
   // EXC-849: while Settings owns the view, publish its keyboard affordances into the shared
@@ -300,7 +303,12 @@
                 <!-- The composite theme block carries no section header of its own — the
                      pane's "Appearance" header is that header. -->
                 <div class="section">
-                  <ThemeSection fields={section.fields} errors={themeErrors} onApply={apply} />
+                  <ThemeSection
+                    fields={section.fields}
+                    errors={themeErrors}
+                    onApply={apply}
+                    {onThemeErrors}
+                  />
                 </div>
               {:else if section.label}
                 <!-- Only a LABELLED section becomes a fieldset: a fieldset with no legend is

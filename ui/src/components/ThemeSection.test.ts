@@ -1,8 +1,17 @@
 import "@ui/support/mount.ts";
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { render } from "@ui/support/mount.ts";
+import { pickFile } from "@ui/support/file-pick.ts";
+import type { LogCapture } from "@ui/support/helpers.ts";
+import { flushUntil, render } from "@ui/support/mount.ts";
+import {
+  emptyResponse,
+  installRoutedFetch,
+  jsonResponse,
+  type Respond,
+} from "@ui/support/routed-fetch.ts";
+import { customThemeSource } from "@ui/support/theme-file.ts";
 import ThemeSection from "@/components/ThemeSection.svelte";
 import { appearance } from "@/state/appearance.svelte.ts";
 import {
@@ -12,6 +21,7 @@ import {
   THEME_FIELD,
   THEME_SECTION,
 } from "$lib/settingsRegistry.ts";
+import { themesForScheme } from "$lib/theme.ts";
 
 // The section reads the live appearance singleton, so a seeded mode/slot must be
 // wound back or it leaks into the next test — clear storage, then boot() re-seeds
@@ -36,6 +46,7 @@ function props(over: Record<string, unknown> = {}) {
     fields: THEME_FIELDS,
     errors: [],
     onApply: () => {},
+    onThemeErrors: () => {},
     ...over,
   };
 }
@@ -197,5 +208,77 @@ describe("theme file errors", () => {
   test("renders no error block when every file loaded", () => {
     render(ThemeSection, props());
     expect(has("[data-theme-errors]")).toBe(false);
+  });
+});
+
+describe("theme upload", () => {
+  let respond: Respond;
+  let cap: LogCapture;
+  beforeEach(() => {
+    respond = emptyResponse;
+    cap = installRoutedFetch(() => respond);
+  });
+  afterEach(() => cap.restore());
+
+  const input = () => q("[data-theme-upload] input[type=file]") as HTMLInputElement;
+  const button = () => q("[data-theme-upload] button") as HTMLButtonElement;
+  const pick = (text: string) => pickFile(input(), new File([text], "nightly.json"));
+
+  test("the upload button opens the hidden .json file input", () => {
+    render(ThemeSection, props()).flush();
+    let opened = false;
+    input().click = () => {
+      opened = true;
+    };
+    button().click();
+    expect(opened).toBe(true);
+    expect(input().accept).toContain(".json");
+  });
+
+  test("a saved theme confirms, refreshes the load errors, and joins its slot", async () => {
+    const theme = await customThemeSource("upload-nightly", "dark");
+    const errors = [{ file: "old.json", messages: ["bad"] }];
+    respond = () => Promise.resolve(jsonResponse({ theme, errors }));
+    const seen: unknown[] = [];
+    const { flush } = render(ThemeSection, props({ onThemeErrors: (e: unknown) => seen.push(e) }));
+
+    pick(JSON.stringify(theme));
+    await flushUntil(flush, () => has("[data-theme-upload-status]"));
+
+    expect(text("[data-theme-upload-status]")).toContain(theme.label);
+    expect(seen).toEqual([errors]);
+    expect(themesForScheme("dark").some((t) => t.id === theme.id)).toBe(true);
+  });
+
+  test("a saved theme that can't be registered reports it saved and frees the button", async () => {
+    // A built-in id: the daemon saved the file, but registration refuses it.
+    const theme = await customThemeSource("caret-dark", "dark");
+    respond = () => Promise.resolve(jsonResponse({ theme, errors: [] }));
+    const { flush } = render(ThemeSection, props());
+
+    pick(JSON.stringify(theme));
+    await flushUntil(flush, () => has("[data-theme-upload-status]"));
+
+    expect(text("[data-theme-upload-status]")).toContain("Reload");
+    expect(has("[data-theme-upload-errors]")).toBe(false);
+    expect(button().disabled).toBe(false);
+  });
+
+  test("a refusal lists each line and leaves the load errors alone", async () => {
+    respond = () =>
+      Promise.resolve(
+        Response.json({ errors: ["upload: id is missing", "upload: x"] }, { status: 400 }),
+      );
+    const seen: unknown[] = [];
+    const { flush } = render(ThemeSection, props({ onThemeErrors: (e: unknown) => seen.push(e) }));
+
+    pick("{}");
+    await flushUntil(flush, () => has("[data-theme-upload-errors]"));
+
+    const block = text("[data-theme-upload-errors]");
+    expect(block).toContain("nightly.json");
+    expect(block).toContain("upload: id is missing");
+    expect(block).toContain("upload: x");
+    expect(seen).toEqual([]);
   });
 });

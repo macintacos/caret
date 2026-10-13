@@ -1,13 +1,14 @@
 import { beforeAll, expect, test } from "bun:test";
 
-import { CUSTOM_KEYWORD, customThemeFile } from "@ui/support/theme-file.ts";
+import { CUSTOM_KEYWORD, customThemeFile, customThemeSource } from "@ui/support/theme-file.ts";
 import {
   type ChunkState,
   highlightChunk,
   highlightExcerpt,
   MAX_HIGHLIGHT_LINE_CHARS,
 } from "$lib/diffview/highlight.ts";
-import { addTheme } from "$lib/theme.ts";
+import { addTheme, replaceTheme } from "$lib/theme.ts";
+import { buildFileTheme } from "$lib/theme-file.ts";
 
 // Thin glue over shiki; the full visual render is covered by e2e. These pin the
 // contract: highlighted HTML for a known grammar, plain fallback otherwise.
@@ -173,4 +174,36 @@ test("highlights in a theme registered after boot, and built-ins still highlight
   expect((await highlightExcerpt("const x = 1;", "typescript", "dracula")).toLowerCase()).toContain(
     "#ff79c6",
   );
+});
+
+// Both highlighters and shiki itself cache a theme by name, so this pins that a
+// replaced theme's new token colors reach the excerpt rather than the first ones.
+test("highlights in a replaced theme's new colors, not its first", async () => {
+  const source = await customThemeSource("highlight-replaced", "dark");
+  const id = addTheme(buildFileTheme(source));
+  const lower = async () => [
+    (await highlightExcerpt("const x = 1;", "typescript", id)).toLowerCase(),
+    (await highlightChunk("const x = 1;", "typescript", id)).rows.join("").toLowerCase(),
+  ];
+  for (const html of await lower()) expect(html).toContain(CUSTOM_KEYWORD);
+
+  const replacement = "#aa11cc";
+  replaceTheme(
+    buildFileTheme({ ...source, syntax: { ...source.syntax, keyword: { color: replacement } } }),
+  );
+
+  for (const html of await lower()) {
+    expect(html).toContain(replacement);
+    expect(html).not.toContain(CUSTOM_KEYWORD);
+  }
+});
+
+test("a state from before its theme was replaced still yields rows", async () => {
+  const source = await customThemeSource("highlight-replaced-state", "dark");
+  const id = addTheme(buildFileTheme(source));
+  const { state } = await highlightChunk("const x = 1;", "typescript", id);
+  replaceTheme(buildFileTheme(source));
+
+  const chunk = await highlightChunk("const y = 2;", "typescript", id, state);
+  expect(chunk.rows).toHaveLength(1);
 });

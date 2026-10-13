@@ -16,7 +16,7 @@ import { appearance } from "@/state/appearance.svelte.ts";
 import { DARK_SLOT_KEY, MODE_KEY, readCachedTheme, writeCachedTheme } from "$lib/appearance.ts";
 import { highlightExcerpt } from "$lib/diffview/highlight.ts";
 import { caretDiffTheme } from "$lib/diffview/theme.ts";
-import { registerCustomThemes, registerTheme } from "$lib/registerTheme.ts";
+import { registerCustomThemes, registerTheme, registerUploadedTheme } from "$lib/registerTheme.ts";
 import {
   SETTINGS_REGISTRY,
   type SettingOption,
@@ -240,4 +240,38 @@ describe("registering over a built-in id", () => {
       expect(rootToken("--accent")).toBe(before.accent);
     });
   }
+});
+
+describe("registerUploadedTheme", () => {
+  const darkIds = () => slotOptionsOf(THEME_FIELD.dark).map((o) => o.value);
+
+  test("adds a new id to its scheme's slot", async () => {
+    const id = uniqueId();
+    expect(registerUploadedTheme(await customThemeFile(id, "dark"))).toBe("added");
+    expect(darkIds()).toContain(id);
+  });
+
+  test("replaces a registered id, offering it once under its new label", async () => {
+    const id = uniqueId();
+    registerTheme(await customThemeFile(id, "dark"));
+    const next = { ...(await customThemeFile(id, "dark")), label: "Renamed" };
+
+    expect(registerUploadedTheme(next)).toBe("replaced");
+
+    const rows = slotOptionsOf(THEME_FIELD.dark).filter((o) => o.value === id);
+    expect(rows.map((o) => o.label)).toEqual(["Renamed"]);
+  });
+
+  test("repaints and recaches the showing theme it replaces", async () => {
+    const id = registerTheme(await customThemeFile(uniqueId(), "dark"));
+    appearance.setMode("dark");
+    appearance.setSlot("dark", id);
+    const file = await customThemeFile(id, "dark");
+    const accent = "#123456";
+
+    registerUploadedTheme({ ...file, tokens: { ...file.tokens, "--accent": accent } });
+
+    expect(rootToken("--accent")).toBe(accent);
+    expect(readCachedTheme("dark")?.tokens["--accent"]).toBe(accent);
+  });
 });

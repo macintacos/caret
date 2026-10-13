@@ -8,7 +8,8 @@
 // A repaint runs only when the resolved ThemeId actually changes — uniformly
 // across setMode, setSlot, refresh, and the OS-flip watcher. Pinning light while the
 // system is already light, or moving the off-scheme slot, would otherwise wipe
-// the whole UI between two identical frames.
+// the whole UI between two identical frames. A replaced theme (`reapply`) is the
+// other case that repaints: its id stays put while its tokens change.
 //
 // The one exception is the boot stand-in: a slot whose saved custom theme has not
 // registered yet boots on that theme's cached palette instead of its default. The
@@ -41,6 +42,7 @@ import {
   writeThemeMode,
 } from "$lib/appearance.ts";
 import {
+  type CustomThemeId,
   isBuiltinThemeId,
   paintPalette,
   paintTheme,
@@ -89,6 +91,11 @@ export interface Appearance {
    * slot's custom palette (clearing the cache of a slot that holds a built-in),
    * then drops any stand-in whose theme never arrived. */
   settle(): void;
+  /** Re-apply a theme just replaced under the same id: a slot holding it whose scheme
+   * no longer matches falls back to its default in-session (storage keeps the saved
+   * id), the palette repaints as a wipe if it is showing, and each slot's cache is
+   * rewritten. A no-op when no slot holds the id. */
+  reapply(id: CustomThemeId): void;
   /** Follow OS appearance flips for as long as the returned disposer is unused.
    * The media query defaults to the live one; a no-op where none is available. */
   watch(media?: SchemeMediaQuery): () => void;
@@ -104,6 +111,8 @@ export interface AppearanceDeps {
    * document's View Transitions support and motion preference. */
   wipe?: ThemeWipeDeps;
 }
+
+const SCHEMES = ["light", "dark"] as const;
 
 function sameTokens(a: Theme["tokens"], b: Theme["tokens"]): boolean {
   const names = Object.keys(a) as (keyof Theme["tokens"])[];
@@ -133,6 +142,14 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
     if (standIn === undefined) return;
     standIn = undefined;
     withWipe(() => paintTheme(resolved()), deps.wipe);
+  };
+
+  const cacheSlots = (): void => {
+    for (const slot of SCHEMES) {
+      const id = live.slots[slot];
+      if (isBuiltinThemeId(id)) clearCachedTheme(slot);
+      else writeCachedTheme({ id, scheme: slot, tokens: themeFor(id).tokens });
+    }
   };
 
   // Persist and update state first, then repaint — but only when the resolved
@@ -205,19 +222,27 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
       // Only a slot showing its default can hold a saved id that was unknown until
       // now; any other slot is the in-session pick, which storage may have failed to keep.
       commit(() => {
-        for (const slot of ["light", "dark"] as const) {
+        for (const slot of SCHEMES) {
           if (live.slots[slot] === DEFAULT_SLOT_THEME[slot]) live.slots[slot] = readSlotTheme(slot);
         }
       });
     },
     dropStandIn,
     settle() {
-      for (const slot of ["light", "dark"] as const) {
-        const id = live.slots[slot];
-        if (isBuiltinThemeId(id)) clearCachedTheme(slot);
-        else writeCachedTheme({ id, scheme: slot, tokens: themeFor(id).tokens });
-      }
+      cacheSlots();
       dropStandIn();
+    },
+    reapply(id) {
+      const holders = SCHEMES.filter((slot) => live.slots[slot] === id);
+      if (holders.length === 0) return;
+      const showing = resolved() === id;
+      commit(() => {
+        for (const slot of holders) {
+          if (themeFor(id).scheme !== slot) live.slots[slot] = DEFAULT_SLOT_THEME[slot];
+        }
+      });
+      if (showing && resolved() === id) withWipe(() => paintTheme(id), deps.wipe);
+      cacheSlots();
     },
     watch(media) {
       return watchSystemScheme((prefersDark) => {

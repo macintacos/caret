@@ -514,6 +514,17 @@ export interface CustomThemes {
   errors: ThemeFileError[];
 }
 
+/** POST /api/themes 200: the saved theme as parsed, and the folder's load errors after the write. */
+export interface ThemeUpload {
+  theme: ThemeFile;
+  errors: ThemeFileError[];
+}
+
+/** POST /api/themes 400, 409, 413 or 500: why nothing was saved, one line per problem. */
+export interface ThemeUploadRefusal {
+  errors: string[];
+}
+
 /**
  * GET /api/update body — whether the running caret is behind, and what to do about
  * it (EXC-1205). The envelope carries the identity of the caret that was judged; the

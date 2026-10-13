@@ -214,6 +214,11 @@ bind and switch a token on; the rules below cover both shapes.
   another CLI command, which carries the token for it.
 - **`POST /api/config` refuses `daemon.*`.** It writes `updates.check` and nothing else,
   so a logged-in device cannot turn auth off or rebind the daemon. A test pins it.
+- **`POST /api/themes` writes only `<id>.json` directly in `themesDir`.** The name comes
+  from the schema's slug, never from client input, and the writer removes only `*.json`
+  files in that folder declaring the same id. The path stays inside the folder only
+  because the id regex in `src/theme/schema.ts` forbids `/` and `.`; a `save.test.ts` case
+  pins that a non-slug id writes nothing.
 - **Refused requests don't touch liveness.** The Host, token and CSRF gates run before
   `liveness.begin`, so a network peer cannot keep an on-demand daemon alive with refused
   requests.

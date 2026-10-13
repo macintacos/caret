@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { customThemeFile } from "@ui/support/theme-file.ts";
 import { caretDiffTheme, registerCaretDiffThemes, registerDiffTheme } from "$lib/diffview/theme.ts";
-import { addTheme, THEME_IDS } from "$lib/theme.ts";
+import { addTheme, type CustomThemeId, replaceTheme, THEME_IDS } from "$lib/theme.ts";
 
 // The bridge selects caret's own Shiki themes for the diff view so its
 // highlighting matches caret's code blocks exactly, and registers them into
@@ -72,12 +72,17 @@ describe("registerCaretDiffThemes", () => {
 });
 
 describe("registerDiffTheme", () => {
-  test("registers one runtime theme under its id, ending in caret's markdown rules", async () => {
-    const id = addTheme(await customThemeFile("diff-runtime", "light"));
+  function captured(id: CustomThemeId): [string, () => Promise<unknown>][] {
     const calls: [string, () => Promise<unknown>][] = [];
     registerDiffTheme(id, (name, load) => {
       calls.push([name, load]);
     });
+    return calls;
+  }
+
+  test("registers one runtime theme under its id, ending in caret's markdown rules", async () => {
+    const id = addTheme(await customThemeFile("diff-runtime", "light"));
+    const calls = captured(id);
 
     expect(calls.map(([name]) => name)).toEqual([id]);
     const loaded = (await calls[0]?.[1]()) as {
@@ -87,5 +92,19 @@ describe("registerDiffTheme", () => {
     expect(loaded.name).toBe(id);
     expect(String(loaded.settings.at(-1)?.scope)).toContain("markdown");
     expect(caretDiffTheme(id)).toEqual({ theme: { light: id, dark: id }, themeType: "light" });
+  });
+
+  test("a replaced theme is selected and registered under its fresh name", async () => {
+    const file = await customThemeFile("diff-replaced", "dark");
+    const id = addTheme(file);
+    replaceTheme(file);
+    const { light, dark } = caretDiffTheme(id).theme;
+    expect(light).not.toBe(id);
+    expect(dark).toBe(light);
+
+    const calls = captured(id);
+    expect(calls.map(([name]) => name)).toEqual([light]);
+    const loaded = (await calls[0]?.[1]()) as { name: string } | undefined;
+    expect(loaded?.name).toBe(light);
   });
 });
