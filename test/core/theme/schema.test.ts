@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   fillFallbackRoles,
@@ -214,5 +216,22 @@ describe("themeFileJsonSchema", () => {
     const schema = themeFileJsonSchema();
     expect(schema.$schema).toBe("http://json-schema.org/draft-07/schema#");
     expect(schema.required).toEqual(["id", "label", "scheme", "palette", "syntax"]);
+  });
+
+  test("requires every syntax role and rejects unknown top-level keys", () => {
+    const schema = themeFileJsonSchema();
+    const syntax = schema.properties?.syntax as { required?: string[] };
+    expect([...(syntax.required ?? [])].sort()).toEqual([...SYNTAX_ROLES].sort());
+    expect(schema.additionalProperties).toBe(false);
+  });
+
+  test("matches the committed doc/theme.schema.json", () => {
+    const committed: unknown = JSON.parse(
+      readFileSync(join(import.meta.dir, "../../../doc/theme.schema.json"), "utf8"),
+    );
+    expect(
+      committed,
+      "doc/theme.schema.json is stale: run `bun scripts/generate-theme-schema.ts && mise run format`",
+    ).toEqual(themeFileJsonSchema());
   });
 });
