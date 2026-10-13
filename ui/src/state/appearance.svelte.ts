@@ -93,8 +93,9 @@ export interface Appearance {
   themesLoaded(): void;
   /** Re-apply a theme just replaced under the same id: a slot holding it whose scheme
    * no longer matches falls back to its default in-session (storage keeps the saved
-   * id), the palette repaints as a wipe if it is showing, and each slot's cache is
-   * rewritten. A no-op when no slot holds the id. */
+   * id), a slot at its default whose saved id is this theme takes it back once the
+   * scheme matches again, the palette repaints as a wipe if it is showing, and each
+   * slot's cache is rewritten. */
   reapply(id: CustomThemeId): void;
   /** Follow OS appearance flips for as long as the returned disposer is unused.
    * The media query defaults to the live one; a no-op where none is available. */
@@ -219,12 +220,17 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
       dropStandIn();
     },
     reapply(id) {
-      const holders = SCHEMES.filter((slot) => live.slots[slot] === id);
-      if (holders.length === 0) return;
+      const reclaims = (slot: Scheme) =>
+        live.slots[slot] === DEFAULT_SLOT_THEME[slot] && readSlotTheme(slot) === id;
+      if (!SCHEMES.some((slot) => live.slots[slot] === id || reclaims(slot))) return;
       const showing = resolved() === id;
       commit(() => {
-        for (const slot of holders) {
-          if (themeFor(id).scheme !== slot) live.slots[slot] = DEFAULT_SLOT_THEME[slot];
+        for (const slot of SCHEMES) {
+          if (live.slots[slot] === id) {
+            if (themeFor(id).scheme !== slot) live.slots[slot] = DEFAULT_SLOT_THEME[slot];
+          } else if (reclaims(slot)) {
+            live.slots[slot] = id;
+          }
         }
       });
       if (showing && resolved() === id) withWipe(() => paintTheme(id), deps.wipe);
