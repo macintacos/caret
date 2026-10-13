@@ -3,19 +3,25 @@
 import { expect, test } from "bun:test";
 import { join } from "node:path";
 
+import { importSpecifiers, runtimeImportSpecifiers } from "@test/support/import-specifiers.ts";
+
 const UI_SRC = join(import.meta.dir, "..", "..", "ui", "src");
 
-const SCHEMA_IMPORT = /^\s*import\b([^;]*?)\bfrom\s*["']@core\/theme\/schema(?:\.ts)?["']/gm;
+const isSchema = (spec: string) => /^@core\/theme\/schema(?:\.ts)?$/.test(spec);
 
 test("the UI imports the theme file schema with top-level `import type` only", async () => {
-  const imports: string[] = [];
+  let seen = 0;
+  const runtime: string[] = [];
   for await (const path of new Bun.Glob("**/*.{ts,svelte}").scan(UI_SRC)) {
     if (path.endsWith(".test.ts")) continue;
     const text = await Bun.file(join(UI_SRC, path)).text();
-    for (const match of text.matchAll(SCHEMA_IMPORT)) {
-      imports.push(`${path}: ${match[0].trim()}`);
-    }
+    seen += importSpecifiers(text).filter(isSchema).length;
+    runtime.push(
+      ...runtimeImportSpecifiers(text)
+        .filter(isSchema)
+        .map((s) => `${path}: ${s}`),
+    );
   }
-  expect(imports.length).toBeGreaterThan(0);
-  expect(imports.filter((line) => !/:\s*import\s+type\s/.test(line))).toEqual([]);
+  expect(seen).toBeGreaterThan(0);
+  expect(runtime).toEqual([]);
 });

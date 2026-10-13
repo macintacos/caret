@@ -9,6 +9,8 @@ import {
   themeFileJsonSchema,
 } from "@/theme/schema.ts";
 
+const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
+
 const REQUIRED_PALETTE = [
   "paper",
   "raised",
@@ -102,6 +104,10 @@ describe("parseThemeFile", () => {
 
   test("rejects an unknown scheme", () => {
     expect(errorsFor(withField(["scheme"], "dim"))).toEqual(['scheme: must be "light" or "dark"']);
+  });
+
+  test("requires scheme", () => {
+    expect(errorsFor(withField(["scheme"], undefined))).toEqual(["scheme: is required"]);
   });
 
   const colorPaths = [
@@ -227,7 +233,7 @@ describe("themeFileJsonSchema", () => {
 
   test("matches the committed doc/theme.schema.json", () => {
     const committed: unknown = JSON.parse(
-      readFileSync(join(import.meta.dir, "../../../doc/theme.schema.json"), "utf8"),
+      readFileSync(join(REPO_ROOT, "doc/theme.schema.json"), "utf8"),
     );
     expect(
       committed,
@@ -237,10 +243,15 @@ describe("themeFileJsonSchema", () => {
 });
 
 describe("doc/CONFIGURING.md", () => {
-  test("its example theme file is valid", () => {
-    const doc = readFileSync(join(import.meta.dir, "..", "..", "..", "doc/CONFIGURING.md"), "utf8");
+  test("its example theme file is valid and is caret-dark", () => {
+    const doc = readFileSync(join(REPO_ROOT, "doc/CONFIGURING.md"), "utf8");
     const section = doc.split("\n## Theme files\n")[1]?.split("\n## ")[0] ?? "";
     const block = section.match(/```json\n([\s\S]*?)\n```/)?.[1] ?? "";
     expect(parseThemeFile(block).ok).toBe(true);
+    const example = JSON.parse(block);
+    delete example.$schema;
+    expect(example).toEqual(
+      JSON.parse(readFileSync(join(REPO_ROOT, "ui/src/lib/themes/caret-dark.json"), "utf8")),
+    );
   });
 });

@@ -2,6 +2,8 @@
 // set in ./themes/caret.ts (EXC-902) are spent here, across a TextMate scope set wide
 // enough to tell a type from a function, a number from a string escape, and an attribute
 // from a property — the three pairs that set holds apart by hue.
+// `syntaxShikiTheme` maps any theme's syntax roles onto the scope table below; caret's
+// pair reaches it by mapping its record onto those roles (`caretRoles`).
 //
 // A theme is a plain `ThemeRegistrationRaw` object (shiki's load-theme guide), the same
 // shape ./upstream-shiki.ts's vendor themes carry, so caret-theme.ts resolves the whole
@@ -99,7 +101,8 @@ const ROLE_SCOPES: Record<SyntaxRole, readonly string[]> = {
   number: ["constant.numeric", "constant.language", "support.constant"],
 };
 
-/** Build a shiki theme from a scheme's chrome colors and its syntax roles. */
+/** Build a shiki theme from a scheme's syntax roles, plus caret's fixed markdown and diff
+ * rules, which paint from the six chrome colors and the comment role. */
 export function syntaxShikiTheme(
   name: string,
   scheme: Scheme,

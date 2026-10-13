@@ -1,6 +1,12 @@
+// The theme file format: its schema, user-worded errors, and JSON Schema. Strict at every
+// level, unlike the daemon's lenient body schemas, so a typo like `pallete` fails rather
+// than vanishes. The UI imports it type-only to keep zod out of the bundle.
 import { z } from "zod";
 
-/** The required syntax roles, in caret-shiki's rule order. */
+// Relative, not @/: the UI's svelte-check reaches this file via @core, where @/ is ui/src.
+import { errorMessage } from "../lib/types.ts";
+
+/** The syntax roles every theme file must define. */
 export const SYNTAX_ROLES = [
   "comment",
   "punctuation",
@@ -27,7 +33,7 @@ export type SyntaxRole = BaseSyntaxRole | keyof typeof SYNTAX_ROLE_FALLBACKS;
 export type RoleStyle = { color: string; fontStyle?: FontStyle[] };
 export type ThemeSyntax = Record<SyntaxRole, RoleStyle>;
 
-/** Gives every optional role a file omitted the style of the required role it falls back to. */
+/** Fills each optional role the file omitted with its fallback role's style. */
 export function fillFallbackRoles<Base extends string, Optional extends string>(
   syntax: NoInfer<Record<Base, RoleStyle> & Partial<Record<Optional, RoleStyle>>>,
   fallbacks: Readonly<Record<Optional, Base>>,
@@ -116,11 +122,14 @@ export const ThemeFileSchema = z.strictObject({
       "must be a lowercase slug of letters, digits, and single dashes, like my-theme",
     ),
   label: z.string().min(1, "must not be empty").max(LONGEST, TOO_LONG),
-  scheme: z.enum(["light", "dark"], 'must be "light" or "dark"'),
+  scheme: z.enum(["light", "dark"], {
+    error: (issue) => (issue.input === undefined ? "is required" : 'must be "light" or "dark"'),
+  }),
   palette,
   syntax,
 });
 
+/** A validated theme file; every optional syntax role is already filled from its fallback. */
 export type ThemeFile = z.output<typeof ThemeFileSchema>;
 
 const ARTICLE: Record<string, string> = { array: "an array", object: "an object" };
@@ -147,14 +156,14 @@ export function parseThemeFile(
   try {
     json = JSON.parse(text);
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    return { ok: false, errors: [`theme file: is not valid JSON (${reason})`] };
+    return { ok: false, errors: [`theme file: is not valid JSON (${errorMessage(error)})`] };
   }
   const result = ThemeFileSchema.safeParse(json, { error: userMessage });
   if (result.success) return { ok: true, file: result.data };
   return { ok: false, errors: result.error.issues.flatMap(issueLines) };
 }
 
+/** The JSON Schema editors check a theme file with: the input side, so optional roles stay optional, at draft-7 for the widest editor support. */
 export function themeFileJsonSchema(): z.core.JSONSchema.BaseSchema {
   return z.toJSONSchema(ThemeFileSchema, { target: "draft-7", io: "input" });
 }

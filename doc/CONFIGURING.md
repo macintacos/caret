@@ -253,7 +253,8 @@ or stacked host.
 A theme file is a JSON file that describes one caret theme: its name, whether it is light
 or dark, the colors of caret's interface, and the colors used to highlight code. A theme
 file is self-contained. caret derives everything else it needs, such as hairline rules,
-selection washes, and chip tints, from the colors the file names.
+selection washes, and chip tints, from the colors the file names. caret does not load
+theme files yet; this section is the format they will use.
 
 ### Top-level fields
 
