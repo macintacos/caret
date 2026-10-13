@@ -15,6 +15,7 @@
 import type { Command } from "@commander-js/extra-typings";
 
 import { fatalDeny } from "@/adapters/index.ts";
+import { runConvertTheme } from "@/commands/convert-theme.ts";
 import { runDaemon } from "@/commands/daemon.ts";
 import { runDoctorSubcommand } from "@/commands/doctor.ts";
 import { installExitCode, runInstallSubcommand } from "@/commands/install/index.ts";
@@ -90,6 +91,13 @@ function buildProgram(): Command {
     .command("redact")
     .description("write redacted copies of the logs")
     .action(() => runRedactSubcommand());
+
+  program
+    .command("convert-theme")
+    .description("convert a VS Code color theme into a caret theme file")
+    .argument("<file>", "the VS Code theme JSON to convert")
+    .option("-o, --out <file>", "write the theme file here instead of to stdout")
+    .action((file, opts) => runConvertTheme(file, { out: opts.out }));
 
   program
     .command("doctor")
