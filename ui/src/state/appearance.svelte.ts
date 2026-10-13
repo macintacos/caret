@@ -10,6 +10,12 @@
 // system is already light, or moving the off-scheme slot, would otherwise wipe
 // the whole UI between two identical frames.
 //
+// The one exception is the boot stand-in: a slot whose saved custom theme has not
+// registered yet boots on that theme's cached palette instead of its default. The
+// theme registering with the same tokens takes over without a wipe; any other move
+// of the resolved theme, `dropStandIn`, or `settle` replaces it with what the slots
+// resolve to.
+//
 // A module singleton (the `shortcuts` registry's shape): there is exactly one
 // appearance per document — paintTheme writes `document.documentElement`, and the
 // persisted truth is origin-scoped localStorage — so a per-mount instance would be
@@ -17,7 +23,11 @@
 
 import {
   appearanceSummary,
+  type CachedTheme,
+  clearCachedTheme,
   DEFAULT_SLOT_THEME,
+  readCachedTheme,
+  readSavedSlotId,
   readSlotTheme,
   readThemeMode,
   resolveScheme,
@@ -26,10 +36,19 @@ import {
   systemPrefersDark,
   type ThemeMode,
   watchSystemScheme,
+  writeCachedTheme,
   writeSlotTheme,
   writeThemeMode,
 } from "$lib/appearance.ts";
-import { paintTheme, type Scheme, type ThemeId, themeFor } from "$lib/theme.ts";
+import {
+  isBuiltinThemeId,
+  paintPalette,
+  paintTheme,
+  type Scheme,
+  type Theme,
+  type ThemeId,
+  themeFor,
+} from "$lib/theme.ts";
 import { type ThemeWipeDeps, withWipe } from "$lib/themeWipe.ts";
 
 /** The live appearance: the resolved reads every surface follows, plus the
@@ -59,6 +78,14 @@ export interface Appearance {
    * that just registered takes effect — repainting as a wipe only if the palette
    * showing moved. */
   refresh(): void;
+  /** The call for when the daemon's themes could not be read: replaces a boot
+   * stand-in with what the slots resolve to, as a wipe, and leaves the cache for
+   * the next load. */
+  dropStandIn(): void;
+  /** The one call after the daemon's served themes have registered: caches each
+   * slot's custom palette (clearing a slot holding a built-in), then drops any
+   * stand-in whose theme never arrived. */
+  settle(): void;
   /** Follow OS appearance flips for as long as the returned disposer is unused.
    * The media query defaults to the live one; a no-op where none is available. */
   watch(media?: SchemeMediaQuery): () => void;
@@ -73,6 +100,11 @@ export interface AppearanceDeps {
   /** How a repaint runs as a whole-UI wipe. Defaults to probing the real
    * document's View Transitions support and motion preference. */
   wipe?: ThemeWipeDeps;
+}
+
+function sameTokens(a: Theme["tokens"], b: Theme["tokens"]): boolean {
+  const names = Object.keys(a) as (keyof Theme["tokens"])[];
+  return names.length === Object.keys(b).length && names.every((name) => a[name] === b[name]);
 }
 
 /**
@@ -90,6 +122,15 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
 
   const resolved = () => resolveThemeId(live.mode, live.slots, live.prefersDark);
   const scheme = () => resolveScheme(live.mode, live.prefersDark);
+  // ponytail: chrome tokens only, for the scheme showing at boot; syntax colors
+  // follow once the theme registers. Cache the whole FileTheme if that gap matters.
+  let standIn: CachedTheme | undefined;
+
+  const dropStandIn = (): void => {
+    if (standIn === undefined) return;
+    standIn = undefined;
+    withWipe(() => paintTheme(resolved()), deps.wipe);
+  };
 
   // Persist and update state first, then repaint — but only when the resolved
   // theme moved, so a change that leaves the same palette showing costs no wipe.
@@ -98,6 +139,9 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
     change();
     const after = resolved();
     if (after === before) return;
+    const shown = standIn;
+    standIn = undefined;
+    if (shown?.id === after && sameTokens(shown.tokens, themeFor(after).tokens)) return;
     withWipe(() => {
       paintTheme(after);
     }, deps.wipe);
@@ -130,12 +174,26 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
         writeSlotTheme(target, id);
         live.slots[target] = id;
       });
+      if (standIn?.scheme === target) dropStandIn();
+      if (!isBuiltinThemeId(id)) {
+        const { scheme, tokens } = themeFor(id);
+        writeCachedTheme({ id, scheme, tokens });
+      }
     },
     boot() {
       live.mode = readThemeMode();
       live.slots = readSlots();
       live.prefersDark = probe();
-      paintTheme(resolved());
+      const showing = scheme();
+      const cached = readCachedTheme(showing);
+      standIn =
+        cached !== undefined &&
+        cached.id === readSavedSlotId(showing) &&
+        live.slots[showing] !== cached.id
+          ? cached
+          : undefined;
+      if (standIn) paintPalette(standIn);
+      else paintTheme(resolved());
     },
     refresh() {
       // Only a slot showing its default can hold a saved id that was unknown until
@@ -145,6 +203,15 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
           if (live.slots[slot] === DEFAULT_SLOT_THEME[slot]) live.slots[slot] = readSlotTheme(slot);
         }
       });
+    },
+    dropStandIn,
+    settle() {
+      for (const slot of ["light", "dark"] as const) {
+        const id = live.slots[slot];
+        if (isBuiltinThemeId(id)) clearCachedTheme(slot);
+        else writeCachedTheme({ id, scheme: slot, tokens: themeFor(id).tokens });
+      }
+      dropStandIn();
     },
     watch(media) {
       return watchSystemScheme((prefersDark) => {

@@ -11,6 +11,7 @@ import {
   type BuiltinThemeId,
   type ColorToken,
   isBuiltinThemeId,
+  paintPalette,
   paintTheme,
   type Scheme,
   THEME_IDS,
@@ -800,6 +801,19 @@ describe("themesForScheme", () => {
   test("partitions THEMES exactly — every theme lands in one scheme's list", () => {
     const partitioned = [...themesForScheme("light"), ...themesForScheme("dark")].map((t) => t.id);
     expect(partitioned.sort()).toEqual([...THEME_IDS].sort());
+  });
+});
+
+describe("paintPalette", () => {
+  test("paints a palette's tokens, color-scheme and data-theme onto a target", () => {
+    const node = document.createElement("div");
+    const tokens = { ...THEMES["caret-light"].tokens, "--accent": "#ff00aa" };
+    paintPalette({ scheme: "light", tokens }, node);
+    for (const [name, value] of Object.entries(tokens)) {
+      expect(node.style.getPropertyValue(name), name).toBe(value);
+    }
+    expect(node.style.getPropertyValue("color-scheme")).toBe("light");
+    expect(node.dataset.theme).toBe("light");
   });
 });
 

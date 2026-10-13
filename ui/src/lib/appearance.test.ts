@@ -2,10 +2,12 @@ import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { fakeMediaQuery } from "@ui/support/media-query.ts";
-import { withBlockedStorage } from "@ui/support/storage.ts";
+import { withBlockedStorage, withThrowingStorage } from "@ui/support/storage.ts";
 import { customThemeFile } from "@ui/support/theme-file.ts";
 import {
   appearanceSummary,
+  clearCachedTheme,
+  DARK_CACHE_KEY,
   DARK_SLOT_KEY,
   DEFAULT_MODE,
   DEFAULT_SLOT_THEME,
@@ -13,6 +15,8 @@ import {
   LIGHT_SLOT_KEY,
   MODE_KEY,
   migrateLegacyTheme,
+  readCachedTheme,
+  readSavedSlotId,
   readSlotTheme,
   readThemeMode,
   resolveScheme,
@@ -20,6 +24,7 @@ import {
   THEME_MODES,
   type ThemeMode,
   watchSystemScheme,
+  writeCachedTheme,
   writeSlotTheme,
   writeThemeMode,
 } from "$lib/appearance.ts";
@@ -137,6 +142,71 @@ describe("readSlotTheme / writeSlotTheme", () => {
     addTheme(await customThemeFile("slot-wrong-scheme-light", "light"));
     localStorage.setItem(DARK_SLOT_KEY, "slot-wrong-scheme-light");
     expect(readSlotTheme("dark")).toBe("caret-dark");
+  });
+});
+
+describe("the cached custom palette", () => {
+  const dark = { id: "cache-dark", scheme: "dark", tokens: THEMES["caret-dark"].tokens } as const;
+  const light = {
+    id: "cache-light",
+    scheme: "light",
+    tokens: THEMES["caret-light"].tokens,
+  } as const;
+  const store = (value: unknown) => localStorage.setItem(DARK_CACHE_KEY, JSON.stringify(value));
+
+  test("round-trips per slot", () => {
+    writeCachedTheme(dark);
+    writeCachedTheme(light);
+    expect(readCachedTheme("dark")).toEqual(dark);
+    expect(readCachedTheme("light")).toEqual(light);
+
+    clearCachedTheme("dark");
+    expect(readCachedTheme("dark")).toBeUndefined();
+    expect(readCachedTheme("light")).toEqual(light);
+  });
+
+  test("reads nothing from a missing key or bad JSON", () => {
+    expect(readCachedTheme("dark")).toBeUndefined();
+    localStorage.setItem(DARK_CACHE_KEY, "{not json");
+    expect(readCachedTheme("dark")).toBeUndefined();
+  });
+
+  test("reads nothing for a non-string id or a wrong scheme", () => {
+    store({ ...dark, id: 7 });
+    expect(readCachedTheme("dark")).toBeUndefined();
+    store({ ...dark, scheme: "light" });
+    expect(readCachedTheme("dark")).toBeUndefined();
+  });
+
+  test("reads nothing when a token is missing or not a string", () => {
+    const { "--accent": _, ...missing } = dark.tokens;
+    store({ ...dark, tokens: missing });
+    expect(readCachedTheme("dark")).toBeUndefined();
+    store({ ...dark, tokens: { ...dark.tokens, "--accent": 1 } });
+    expect(readCachedTheme("dark")).toBeUndefined();
+  });
+
+  test("reads nothing, and writes and clears nothing, under throwing storage", () => {
+    store(dark);
+    withThrowingStorage(() => {
+      expect(readCachedTheme("dark")).toBeUndefined();
+      writeCachedTheme(light);
+      clearCachedTheme("dark");
+    });
+    expect(readCachedTheme("dark")).toEqual(dark);
+  });
+});
+
+describe("readSavedSlotId", () => {
+  test("returns a stored id verbatim, registered or not", () => {
+    localStorage.setItem(DARK_SLOT_KEY, "saved-never-registered");
+    expect(readSavedSlotId("dark")).toBe("saved-never-registered");
+  });
+
+  test("returns null when unset or unreadable", () => {
+    expect(readSavedSlotId("light")).toBeNull();
+    localStorage.setItem(LIGHT_SLOT_KEY, "caret-light");
+    withThrowingStorage(() => expect(readSavedSlotId("light")).toBeNull());
   });
 });
 

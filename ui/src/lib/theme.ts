@@ -230,10 +230,19 @@ export function themesForScheme(scheme: Scheme): Theme[] {
  * insulate). */
 export function paintTheme(id: ThemeId, target: HTMLElement = document.documentElement): Theme {
   const theme = themeFor(id);
-  for (const [name, value] of Object.entries(theme.tokens)) {
+  paintPalette(theme, target);
+  return theme;
+}
+
+/** Paint a palette that need not be registered — `paintTheme`'s painting half, for
+ * the boot paint of a cached custom palette. */
+export function paintPalette(
+  palette: Pick<Theme, "tokens" | "scheme">,
+  target: HTMLElement = document.documentElement,
+): void {
+  for (const [name, value] of Object.entries(palette.tokens)) {
     target.style.setProperty(name, value);
   }
-  target.style.setProperty("color-scheme", theme.scheme);
-  target.dataset.theme = theme.scheme;
-  return theme;
+  target.style.setProperty("color-scheme", palette.scheme);
+  target.dataset.theme = palette.scheme;
 }
