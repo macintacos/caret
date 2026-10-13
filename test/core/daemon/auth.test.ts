@@ -48,6 +48,7 @@ describe("a token-gated daemon rejects requests without a credential", () => {
     ["a hashed asset", () => ({ path: "/assets/app-abc123.js" })],
     ["GET /api/health", () => ({ path: "/api/health" })],
     ["GET /api/reviews", () => ({ path: "/api/reviews" })],
+    ["GET /api/themes", () => ({ path: "/api/themes" })],
     [
       "same-origin POST /api/reviews",
       (url) => ({

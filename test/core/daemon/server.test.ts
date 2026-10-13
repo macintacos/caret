@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +11,7 @@ import { makeFakeUiAssets } from "@test/support/fake-ui-assets.ts";
 import { manualTimer } from "@test/support/manual-timer.ts";
 import { type RecordedEmit, recordingLog } from "@test/support/recording-log.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
+import { themeFileText } from "@test/support/theme.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
 import {
   isClientLive,
@@ -22,7 +23,7 @@ import {
 } from "@/daemon/guards.ts";
 import { VERSION } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
-import type { UpdateChanges, UpdateReport } from "@/lib/types.ts";
+import type { CustomThemes, UpdateChanges, UpdateReport } from "@/lib/types.ts";
 import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
@@ -39,9 +40,13 @@ let srv: { port: number; stop(): void };
 let base: string;
 
 async function boot(opts: BootOptions = {}) {
-  // Default config.toml into the temp dir so the settings tests never touch the
-  // developer's real one.
-  d = await bootDaemon(dir, { configPath: join(dir, "config.toml"), ...opts });
+  // Default config.toml and the themes folder into the temp dir so no test touches
+  // the developer's real ones.
+  d = await bootDaemon(dir, {
+    configPath: join(dir, "config.toml"),
+    themesDir: join(dir, "themes"),
+    ...opts,
+  });
   store = d.store;
   srv = { port: d.port, stop: d.stop };
   base = d.url;
@@ -256,6 +261,30 @@ test("GET /api/diagnostics is 404 when the daemon wires no diagnostics thunk", a
   await boot();
   const res = await fetch(`${base}/api/diagnostics`);
   expect(res.status).toBe(404);
+});
+
+// ---- custom themes endpoint ----
+
+describe("GET /api/themes", () => {
+  test("serves the folder's valid themes and per-file errors, read fresh per request", async () => {
+    const themes = join(dir, "themes");
+    mkdirSync(themes);
+    writeFileSync(join(themes, "a.json"), themeFileText("theme-a"));
+    writeFileSync(join(themes, "bad.json"), "{");
+    await boot({ themesDir: themes });
+    const fetchThemes = async () =>
+      (await (await fetch(`${base}/api/themes`)).json()) as CustomThemes;
+
+    const first = await fetchThemes();
+    expect(first.themes.map((t) => t.id)).toEqual(["theme-a"]);
+    expect(first.errors.map((e) => e.file)).toEqual(["bad.json"]);
+
+    writeFileSync(join(themes, "b.json"), themeFileText("theme-b"));
+    expect((await fetchThemes()).themes.map((t) => t.id)).toEqual(["theme-a", "theme-b"]);
+
+    rmSync(join(themes, "a.json"));
+    expect((await fetchThemes()).themes.map((t) => t.id)).toEqual(["theme-b"]);
+  });
 });
 
 // ---- update report endpoint (EXC-1205) ----
@@ -1368,6 +1397,7 @@ describe("read-confidentiality posture", () => {
           }),
       ],
       ["GET /api/diagnostics", () => fetch(`${base}/api/diagnostics`)],
+      ["GET /api/themes", () => fetch(`${base}/api/themes`)],
       ["GET /api/update", () => fetch(`${base}/api/update`)],
       ["GET /api/update/changes", () => fetch(`${base}/api/update/changes`)],
       ["GET / (index)", () => fetch(`${base}/`)],
@@ -1715,6 +1745,7 @@ describe("routing fallthrough", () => {
       ["POST", "/api/diagnostics"], // /api/diagnostics is GET-only
       ["POST", "/api/update"], // /api/update is GET-only
       ["POST", "/api/update/changes"],
+      ["POST", "/api/themes"],
       ["DELETE", "/api/config"],
       ["PUT", `/api/reviews/${id}/resolve`], // /resolve is POST-only
       ["GET", `/api/reviews/${id}/resolve`],

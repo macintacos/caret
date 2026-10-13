@@ -2,6 +2,10 @@
 // directly through the @core/* alias). The single wire contract — pure TS with
 // no node imports, so the browser bundle stays clean.
 
+// Top-level `import type` only: schema.ts imports zod, and the UI imports this file at runtime.
+// Relative, not @/: the UI's svelte-check reaches this file via @core, where @/ is ui/src.
+import type { ThemeFile } from "../theme/schema.ts";
+
 /** A thrown value as a string: an Error's message, or String() of anything else.
  * The one coercion for rendering a caught value. */
 export function errorMessage(err: unknown): string {
@@ -496,6 +500,19 @@ export interface EnvOverride {
  * `UpdateReport` and the browser reaches it through `@core`.
  */
 export type BuildKind = "binary" | "bundle" | "dev";
+
+/** A theme file the daemon could not serve, or the themes folder itself when it cannot
+ * be listed: its base name, and one line per problem. */
+export interface ThemeFileError {
+  file: string;
+  messages: string[];
+}
+
+/** GET /api/themes: the valid custom themes and the files that failed, both in file-name order. */
+export interface CustomThemes {
+  themes: ThemeFile[];
+  errors: ThemeFileError[];
+}
 
 /**
  * GET /api/update body — whether the running caret is behind, and what to do about

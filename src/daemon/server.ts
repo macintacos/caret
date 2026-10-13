@@ -8,7 +8,7 @@ import { dirname } from "node:path";
 
 import { createConfigWriter } from "@/config/config-write.ts";
 import { deriveIdleTimeoutSec } from "@/config/constants.ts";
-import { configFile, ensureStateDir } from "@/config/paths.ts";
+import { configFile, ensureStateDir, themesDir } from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
 import { connectHostname } from "@/daemon/address.ts";
 import { authGate } from "@/daemon/auth.ts";
@@ -65,6 +65,7 @@ import { createDecisions } from "@/review/decisions.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
 import { isSupervised } from "@/service/manager.ts";
+import { loadCustomThemes } from "@/theme/load.ts";
 import type { UiAssets } from "@/ui/assets.ts";
 import { MAX_BODY_BYTES, parseUiLogBatch } from "@/ui/log-bridge.ts";
 
@@ -123,6 +124,8 @@ export interface CreateServerOptions {
   /** Path to the user's config.toml, the file POST /api/config edits; defaults to
    * paths.configFile(). */
   configPath?: string;
+  /** The folder GET /api/themes reads; defaults to paths.themesDir(). */
+  themesDir?: string;
   /** Single-instance lock file path. When set, the daemon writes the lock on a
    * successful bind and removes it on stop(); omitted (default) means no lock is
    * managed. */
@@ -250,6 +253,7 @@ interface ResolvedOptions {
   onShutdown: () => void;
   routePlan: RoutePlan;
   configPath: string;
+  themesDir: string;
   lockPath: string | undefined;
   tokenFile: string | undefined;
   hostname: string;
@@ -285,6 +289,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     onShutdown: opts.onShutdown ?? (() => process.exit(0)),
     routePlan: opts.routePlan ?? routeIncomingPlan,
     configPath: opts.configPath ?? configFile(),
+    themesDir: opts.themesDir ?? themesDir(),
     lockPath: opts.lockPath,
     tokenFile: opts.tokenFile,
     hostname: opts.hostname ?? "127.0.0.1",
@@ -500,6 +505,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (!cfg.updateChanges) return notFound();
     const changes = await cfg.updateChanges();
     return changes ? Response.json(changes) : new Response("upstream unavailable", { status: 502 });
+  }
+
+  // GET /api/themes — the user's custom themes plus a per-file error for each file
+  // that fails, read fresh from the folder on every request (EXC-1980).
+  async function handleThemes(): Promise<Response> {
+    return Response.json(await loadCustomThemes(cfg.themesDir));
   }
 
   // POST /api/retire — graceful single-instance retire (EXC-406): a newer caret
@@ -1089,6 +1100,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "GET" && path === "/api/diagnostics") return handleDiagnostics();
     if (method === "GET" && path === "/api/update") return handleUpdate();
     if (method === "GET" && path === "/api/update/changes") return handleUpdateChanges();
+    if (method === "GET" && path === "/api/themes") return handleThemes();
     if (method === "POST" && path === "/api/retire") return handleRetire();
     if (readsUi && (path === "/" || path === INDEX_PATH)) return handleIndex(req);
     if (method === "POST" && path === "/api/reviews")

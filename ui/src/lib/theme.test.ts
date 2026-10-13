@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { BUILTIN_THEME_IDS } from "@core/theme/builtin-ids.ts";
 import { QUOTE_SUBDUE } from "$lib/diffview/coreStyles.ts";
 import {
   type ColorToken,
@@ -126,6 +127,11 @@ describe("THEMES", () => {
       "dawnfox",
       "duskfox",
     ]);
+  });
+
+  test("the daemon's built-in id list matches THEME_IDS", () => {
+    expect(new Set(BUILTIN_THEME_IDS)).toEqual(new Set(THEME_IDS));
+    expect(BUILTIN_THEME_IDS.length).toBe(THEME_IDS.length);
   });
 
   test("every theme carries a human label and a scheme matching its id", () => {
