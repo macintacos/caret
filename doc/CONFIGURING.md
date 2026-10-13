@@ -253,8 +253,28 @@ or stacked host.
 A theme file is a JSON file that describes one caret theme: its name, whether it is light
 or dark, the colors of caret's interface, and the colors used to highlight code. A theme
 file is self-contained. caret derives everything else it needs, such as hairline rules,
-selection washes, and chip tints, from the colors the file names. caret does not load
-theme files yet; this section is the format they will use.
+selection washes, and chip tints, from the colors the file names. caret reads theme files
+from its [themes folder](#where-caret-finds-theme-files); the Appearance settings do not
+offer them yet.
+
+### Where caret finds theme files
+
+caret reads theme files from `$XDG_CONFIG_HOME/caret/themes`, or `~/.config/caret/themes`
+when `XDG_CONFIG_HOME` is unset. It reads the folder fresh on each page load, so adding,
+editing, or deleting a file takes effect without a restart. A missing or empty folder is
+fine.
+
+caret reads only the `*.json` files directly in the folder, including symlinks to files.
+It ignores everything else: subfolders, other extensions, and names that start with `.`.
+
+caret skips a file, and reports an error that names it, when the file:
+
+- is larger than 64 KiB;
+- is not valid JSON, or fails the validation described below;
+- uses the `id` of a built-in theme: `caret-dark`, `caret-light`, `catppuccin-latte`,
+  `catppuccin-frappe`, `catppuccin-macchiato`, `catppuccin-mocha`, `dracula`,
+  `github-light`, `github-dark`, `dawnfox`, or `duskfox`;
+- shares its `id` with another file. caret skips every file with that `id`.
 
 ### Top-level fields
 

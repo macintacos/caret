@@ -16,7 +16,8 @@ When to edit it:
 - The supported-platform story changes, or plan formatting changes (the pinned rumdl
   version, the reflow shape, the opt-out).
 - The theme file format changes (fields, roles, validation) — § Theme files lands with its
-  schema change.
+  schema change. So does a change to how caret loads theme files (the folder, the size
+  cap, which files it reads or skips).
 - Keep `README.md` the lean front door — when configuration depth grows, it lands here,
   not there.
 
