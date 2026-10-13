@@ -32,7 +32,7 @@ export type SyntaxRole = RequiredSyntaxRole | OptionalSyntaxRole;
 export type RoleStyle = { color: string; fontStyle?: FontStyle[] };
 export type ThemeSyntax = Record<SyntaxRole, RoleStyle>;
 
-const MAX_LENGTH = 64;
+export const MAX_LENGTH = 64;
 const TOO_LONG = `must be at most ${MAX_LENGTH} characters`;
 
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be a hex color like #1a2b3c");
@@ -42,7 +42,8 @@ const roleStyle = z.strictObject({
   fontStyle: z.array(z.enum(FONT_STYLES, `must be one of ${FONT_STYLES.join(", ")}`)).optional(),
 });
 
-const REQUIRED_COLORS = [
+/** The palette colors every theme file must define. */
+export const REQUIRED_COLORS = [
   "paper",
   "raised",
   "sunk",
