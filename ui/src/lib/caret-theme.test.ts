@@ -64,7 +64,6 @@ const ITALIC_MARKERS = "punctuation.definition.italic.markdown";
 /** The scopes the three structural rules own, in the order the resolver appends them. */
 const STRUCTURAL_SCOPES = [FENCE_MARKERS, FENCE_LANGUAGE, INLINE_RAW];
 
-/** Every syntax role. */
 const ROLES = Object.keys(ROLE_SCOPES) as SyntaxRole[];
 
 /** The expected color for each Palette field, sourced from a theme's tokens. The
