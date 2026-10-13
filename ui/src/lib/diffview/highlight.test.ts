@@ -1,11 +1,13 @@
 import { beforeAll, expect, test } from "bun:test";
 
+import { customThemeFile } from "@ui/support/theme-file.ts";
 import {
   type ChunkState,
   highlightChunk,
   highlightExcerpt,
   MAX_HIGHLIGHT_LINE_CHARS,
 } from "$lib/diffview/highlight.ts";
+import { addTheme } from "$lib/theme.ts";
 
 // Thin glue over shiki; the full visual render is covered by e2e. These pin the
 // contract: highlighted HTML for a known grammar, plain fallback otherwise.
@@ -158,4 +160,17 @@ test("a line at the limit still highlights", async () => {
   expect(atLimit).toHaveLength(MAX_HIGHLIGHT_LINE_CHARS);
   const chunk = await highlightChunk(atLimit, "typescript", "caret-dark");
   expect(chunk.rows).toHaveLength(1);
+});
+
+test("highlights in a theme registered after boot, and built-ins still highlight", async () => {
+  const id = addTheme(await customThemeFile("highlight-runtime", "dark"));
+
+  const html = await highlightExcerpt("const x = 1;", "typescript", id);
+  expect(html.toLowerCase()).toContain("#00ffaa");
+  const chunk = await highlightChunk("const x = 1;", "typescript", id);
+  expect(chunk.rows.length).toBe(1);
+
+  expect((await highlightExcerpt("const x = 1;", "typescript", "dracula")).toLowerCase()).toContain(
+    "#ff79c6",
+  );
 });
