@@ -329,22 +329,41 @@ caret still decides how strong it is.
 
 ### `syntax`
 
-All 11 roles are required. Each is an object with a `color` and an optional `fontStyle`, a
-list of any of `"italic"`, `"bold"`, `"underline"`, and `"strikethrough"`.
+Each role is an object with a `color` and an optional `fontStyle`, a list of any of
+`"italic"`, `"bold"`, `"underline"`, and `"strikethrough"`. A role without `fontStyle`
+takes none from another role, but keeps the style of a comment or emphasized text it sits
+in.
 
-| Role          | What it colors                                                     |
-| ------------- | ------------------------------------------------------------------ |
-| `comment`     | Comments                                                           |
-| `punctuation` | Punctuation, brackets, and operators                               |
-| `variable`    | Variables, parameters, and constants                               |
-| `property`    | Object properties and keys                                         |
-| `attribute`   | Markup attributes                                                  |
-| `keyword`     | Keywords, storage modifiers, `this`/`self`, and markup tags        |
-| `function`    | Function names and calls                                           |
-| `type`        | Types, classes, and namespaces                                     |
-| `string`      | Strings                                                            |
-| `escape`      | String escapes, regular expressions, and template interpolations   |
-| `number`      | Numbers and language constants such as `true` and `null`           |
+These 11 roles are required:
+
+| Role | What it colors | Scopes |
+| --- | --- | --- |
+| `comment` | Comments | `comment`, `punctuation.definition.comment`, `string.comment` |
+| `punctuation` | Punctuation and separators | `punctuation`, `punctuation.separator`, `punctuation.terminator`, `punctuation.accessor` |
+| `variable` | Variables and constants | `variable.other.readwrite`, `variable`, `variable.other`, `variable.other.constant`, `meta.definition.variable`, `support.variable` |
+| `property` | Object properties and keys | `variable.other.property`, `variable.other.object.property`, `meta.object-literal.key`, `support.type.property-name` |
+| `attribute` | Markup attributes | `entity.other.attribute-name`, `meta.attribute` |
+| `keyword` | Keywords and storage modifiers | `keyword`, `keyword.control`, `keyword.operator.new`, `keyword.operator.expression`, `storage`, `storage.type`, `storage.modifier` |
+| `function` | Function names and calls | `entity.name.function`, `support.function`, `meta.function-call`, `variable.function` |
+| `type` | Types, classes, and namespaces | `entity.name.type`, `entity.name.class`, `entity.other.inherited-class`, `entity.name.namespace`, `support.type`, `support.class` |
+| `string` | Strings | `string`, `string.quoted`, `string.template`, `punctuation.definition.string`, `constant.other.symbol` |
+| `escape` | String escapes and regular expressions | `constant.character.escape`, `string.regexp` |
+| `number` | Numbers and language constants such as `true` and `null` | `constant.numeric`, `constant.language`, `support.constant` |
+
+These 9 roles are optional. A file that omits one paints it with the role it falls back
+to, so add one only to set it apart.
+
+| Role | What it colors | Scopes | Falls back to |
+| --- | --- | --- | --- |
+| `operator` | Operators | `keyword.operator` | `punctuation` |
+| `bracket` | Braces | `meta.brace` | `punctuation` |
+| `parameter` | Function parameters | `variable.parameter` | `variable` |
+| `languageVariable` | `this`, `self`, and similar | `variable.language` | `keyword` |
+| `tag` | Markup tag names | `entity.name.tag` | `keyword` |
+| `tagPunctuation` | Markup tag brackets | `punctuation.definition.tag` | `keyword` |
+| `builtinFunction` | Built-in functions | `support.function.builtin` | `function` |
+| `builtinType` | Built-in and primitive types | `support.type.primitive`, `support.type.builtin` | `type` |
+| `interpolation` | Template interpolation delimiters | `punctuation.definition.template-expression` | `escape` |
 
 ### Colors and errors
 

@@ -2,12 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  fillFallbackRoles,
-  parseThemeFile,
-  SYNTAX_ROLES,
-  themeFileJsonSchema,
-} from "@/theme/schema.ts";
+import { ROLE_SCOPES, SYNTAX_ROLE_FALLBACKS } from "@/theme/role-scopes.ts";
+import { parseThemeFile, REQUIRED_SYNTAX_ROLES, themeFileJsonSchema } from "@/theme/schema.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 
@@ -49,7 +45,7 @@ function validFile(): Json {
     scheme: "dark",
     palette: Object.fromEntries(REQUIRED_PALETTE.map((key) => [key, "#1a2b3c"])),
     syntax: {
-      ...Object.fromEntries(SYNTAX_ROLES.map((role) => [role, { color: "#445566" }])),
+      ...Object.fromEntries(REQUIRED_SYNTAX_ROLES.map((role) => [role, { color: "#445566" }])),
       comment: { color: "#778899", fontStyle: ["italic"] },
     },
   };
@@ -75,6 +71,31 @@ describe("parseThemeFile", () => {
     const result = parseThemeFile(JSON.stringify(validFile()));
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.file.syntax.comment.fontStyle).toEqual(["italic"]);
+  });
+
+  test("fills each optional role a file omits with its fallback role's style", () => {
+    const file = validFile();
+    file.syntax = Object.fromEntries(
+      REQUIRED_SYNTAX_ROLES.map((role, i) => [
+        role,
+        { color: `#0000${i.toString(16).padStart(2, "0")}` },
+      ]),
+    );
+    const result = parseThemeFile(JSON.stringify(file));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const { syntax } = result.file;
+    for (const [role, fallback] of Object.entries(SYNTAX_ROLE_FALLBACKS)) {
+      expect(syntax[role as keyof typeof syntax]).toEqual(syntax[fallback]);
+    }
+  });
+
+  test("keeps an optional role's own style", () => {
+    const result = parseThemeFile(
+      JSON.stringify(withField(["syntax", "operator"], { color: "#123456" })),
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.file.syntax.operator).toEqual({ color: "#123456" });
   });
 
   test("accepts a slug id", () => {
@@ -112,7 +133,7 @@ describe("parseThemeFile", () => {
 
   const colorPaths = [
     ...[...REQUIRED_PALETTE, ...OPTIONAL_HUES].map((key) => ["palette", key]),
-    ...SYNTAX_ROLES.map((role) => ["syntax", role, "color"]),
+    ...REQUIRED_SYNTAX_ROLES.map((role) => ["syntax", role, "color"]),
   ];
 
   for (const path of colorPaths) {
@@ -149,7 +170,7 @@ describe("parseThemeFile", () => {
     );
   });
 
-  test.each([...SYNTAX_ROLES])("requires syntax.%s", (role) => {
+  test.each([...REQUIRED_SYNTAX_ROLES])("requires syntax.%s", (role) => {
     expect(errorsFor(withField(["syntax", role], undefined))).toEqual([
       `syntax.${role}: is required`,
     ]);
@@ -203,20 +224,6 @@ describe("parseThemeFile", () => {
   });
 });
 
-describe("fillFallbackRoles", () => {
-  const fallbacks = { tag: "keyword" } as const;
-  const keyword = { color: "#111111", fontStyle: ["bold" as const] };
-
-  test("gives an absent optional role its fallback's style", () => {
-    expect(fillFallbackRoles({ keyword }, fallbacks)).toEqual({ keyword, tag: keyword });
-  });
-
-  test("keeps a present optional role's own style", () => {
-    const tag = { color: "#222222" };
-    expect(fillFallbackRoles({ keyword, tag }, fallbacks)).toEqual({ keyword, tag });
-  });
-});
-
 describe("themeFileJsonSchema", () => {
   test("is a draft-7 schema of the input side", () => {
     const schema = themeFileJsonSchema();
@@ -224,10 +231,10 @@ describe("themeFileJsonSchema", () => {
     expect(schema.required).toEqual(["id", "label", "scheme", "palette", "syntax"]);
   });
 
-  test("requires every syntax role and rejects unknown top-level keys", () => {
+  test("requires every required syntax role and rejects unknown top-level keys", () => {
     const schema = themeFileJsonSchema();
     const syntax = schema.properties?.syntax as { required?: string[] };
-    expect([...(syntax.required ?? [])].sort()).toEqual([...SYNTAX_ROLES].sort());
+    expect([...(syntax.required ?? [])].sort()).toEqual([...REQUIRED_SYNTAX_ROLES].sort());
     expect(schema.additionalProperties).toBe(false);
   });
 
@@ -253,5 +260,25 @@ describe("doc/CONFIGURING.md", () => {
     expect(example).toEqual(
       JSON.parse(readFileSync(join(REPO_ROOT, "ui/src/lib/themes/caret-dark.json"), "utf8")),
     );
+  });
+
+  test("its syntax tables list every role with its scopes and fallback", () => {
+    const doc = readFileSync(join(REPO_ROOT, "doc/CONFIGURING.md"), "utf8");
+    const section = doc.split("\n### `syntax`\n")[1]?.split("\n### ")[0] ?? "";
+    const codeSpan = (s: string) => `\`${s}\``;
+    const fallbacks: Record<string, string> = SYNTAX_ROLE_FALLBACKS;
+    const documented = section
+      .split("\n")
+      .filter((line) => line.startsWith("| `"))
+      .map((line) => line.split("|").map((cell) => cell.trim()))
+      .map(([, role, , ...rest]) => [role, rest.filter(Boolean).join(" | ")]);
+    const expected = Object.entries(ROLE_SCOPES).map(([role, scopes]) => [
+      codeSpan(role),
+      [
+        scopes.map(codeSpan).join(", "),
+        ...(role in fallbacks ? [codeSpan(fallbacks[role] ?? "")] : []),
+      ].join(" | "),
+    ]);
+    expect(Object.fromEntries(documented)).toEqual(Object.fromEntries(expected));
   });
 });

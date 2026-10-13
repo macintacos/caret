@@ -10,7 +10,7 @@ import dracula from "shiki/themes/dracula.mjs";
 import githubDarkDefault from "shiki/themes/github-dark-default.mjs";
 import githubLightDefault from "shiki/themes/github-light-default.mjs";
 
-import { SYNTAX_ROLES } from "@/theme/schema.ts";
+import { ROLE_SCOPES } from "@/theme/role-scopes.ts";
 import { syntaxFromVsCodeTheme, type VsCodeTheme } from "@/theme/vscode-theme.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
@@ -165,7 +165,7 @@ describe("syntaxFromVsCodeTheme on vendor themes", () => {
     ["duskfox", nightfox("duskfox")],
   ] as const)("%s converts every role to a #rrggbb color", (_, theme) => {
     const syntax = syntaxFromVsCodeTheme(theme);
-    expect(Object.keys(syntax).sort()).toEqual([...SYNTAX_ROLES].sort());
+    expect(Object.keys(syntax).sort()).toEqual(Object.keys(ROLE_SCOPES).sort());
     for (const style of Object.values(syntax)) expect(style.color).toMatch(/^#[0-9a-f]{6}$/);
   });
 });

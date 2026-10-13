@@ -21,7 +21,7 @@
 
 import type { ThemeRegistrationRaw } from "shiki/core";
 
-import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
+import { fillFallbackRoles, ROLE_SCOPES } from "@core/theme/role-scopes.ts";
 import type { SyntaxRole, ThemeSyntax } from "@core/theme/schema.ts";
 // Both imports are type-only in one direction: theme.ts takes `CaretShikiThemeId`
 // from here and this module takes its two types from there. `verbatimModuleSyntax`
@@ -55,6 +55,7 @@ export function syntaxShikiTheme(
             : { foreground: color },
         };
       }),
+      ...fontStyleResets(roles),
       // Markdown. The plan view renders the plan as a markdown document, so these are
       // the rules a reviewer reads most.
       {
@@ -88,8 +89,35 @@ export function syntaxShikiTheme(
   };
 }
 
+/** Resets a style-less role's font style wherever a styled role's would leak into it. A
+ * comment's style is exempt, so the doc tags inside one keep it. */
+function fontStyleResets(roles: ThemeSyntax): NonNullable<ThemeRegistrationRaw["settings"]> {
+  const entries = Object.entries(ROLE_SCOPES) as [SyntaxRole, readonly string[]][];
+  const styledScopes = entries.flatMap(([role, scopes]) =>
+    role !== "comment" && roles[role].fontStyle?.length ? scopes : [],
+  );
+  if (styledScopes.length === 0) return [];
+  const unset = entries.flatMap(([role, scopes]) => (roles[role].fontStyle ? [] : scopes));
+  // An unset font style is filled from a broader scope in the theme...
+  const nested = unset.filter((scope) =>
+    styledScopes.some((outer) => scope.startsWith(`${outer}.`)),
+  );
+  return [
+    ...(nested.length > 0 ? [{ scope: nested, settings: { fontStyle: "" } }] : []),
+    // ...or from the enclosing token. Every role is restated, not only the style-less ones:
+    // a parent-scoped rule is copied down to the longer scopes beneath it, color included.
+    ...entries.map(([role, scopes]) => ({
+      scope: styledScopes.flatMap((outer) => scopes.map((scope) => `${outer} ${scope}`)),
+      settings: {
+        foreground: roles[role].color,
+        fontStyle: roles[role].fontStyle?.join(" ") ?? "",
+      },
+    })),
+  ];
+}
+
 function caretRoles(p: CaretPalette): ThemeSyntax {
-  return {
+  return fillFallbackRoles({
     comment: { color: p.comment, fontStyle: ["italic"] },
     punctuation: { color: p.punctuation },
     variable: { color: p.variable },
@@ -101,7 +129,7 @@ function caretRoles(p: CaretPalette): ThemeSyntax {
     string: { color: p.string },
     escape: { color: p.escape },
     number: { color: p.number },
-  };
+  });
 }
 
 /** Build one scheme's theme from its record.
