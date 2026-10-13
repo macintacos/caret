@@ -22,7 +22,7 @@ import {
   ViewPlugin,
   type ViewUpdate,
 } from "@codemirror/view";
-import { tags } from "@lezer/highlight";
+import { styleTags, Tag, tags } from "@lezer/highlight";
 
 import {
   completionListOpen,
@@ -65,19 +65,44 @@ export interface MarkdownEditorOptions {
   refDeps?: RefRecognitionDeps;
 }
 
+// A list item's marker, apart from the other markdown markers, so a theme can color it.
+const listMark = Tag.define(tags.processingInstruction);
+
 // The editor's own scheme, NOT the diff view's: the shiki themes there paint from
 // each theme file's `syntax` roles, which are not ColorTokens, so a `var(--x)` highlight style
 // has no way to name them. Tokens only (hex/var, never oklch).
+//
+// A theme's markdown styles do reach it, as the --markdown-* properties theme.ts paints,
+// for the elements this scheme colors itself; each falls back to the editor's own look.
+// Order is load-bearing: a span nested in several elements carries all their classes, so
+// the later rule wins each property. Strong and emphasis come after the elements that
+// declare a weight or slant, and strikethrough between heading and link, so a theme that
+// styles nothing resolves every nesting as before.
 const highlightStyle = HighlightStyle.define([
   // Markdown structure.
+  {
+    tag: tags.heading,
+    color: "var(--markdown-heading-color, var(--ink))",
+    fontWeight: "var(--markdown-heading-font-weight, 700)",
+    fontStyle: "var(--markdown-heading-font-style, normal)",
+    textDecoration: "var(--markdown-heading-text-decoration, none)",
+  },
+  { tag: tags.strikethrough, textDecoration: "line-through" },
+  {
+    tag: [tags.link, tags.url],
+    color: "var(--markdown-link-color, var(--accent))",
+    textDecoration: "var(--markdown-link-text-decoration, underline)",
+  },
+  {
+    tag: tags.quote,
+    color: "var(--markdown-quote-color, var(--ink-soft))",
+    fontStyle: "var(--markdown-quote-font-style, normal)",
+  },
   { tag: tags.strong, fontWeight: "700" },
   { tag: tags.emphasis, fontStyle: "italic" },
-  { tag: tags.strikethrough, textDecoration: "line-through" },
-  { tag: tags.heading, fontWeight: "700", color: "var(--ink)" },
-  { tag: [tags.link, tags.url], color: "var(--accent)", textDecoration: "underline" },
-  { tag: tags.quote, color: "var(--ink-soft)" },
   // The literal markdown markers (**, `, #, >, -, ```): kept visible but receded.
   { tag: tags.meta, color: "var(--ink-faint)" },
+  { tag: listMark, color: "var(--markdown-list-marker-color, var(--ink-faint))" },
   // Fenced-code syntax.
   {
     tag: [
@@ -445,7 +470,10 @@ export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
     // codeLanguages: the full @codemirror/language-data set (~140 languages),
     // each lazy-loaded on demand when a fenced block declares it — so the initial
     // bundle stays lean and new languages need no code change here.
-    markdown({ codeLanguages: languages }),
+    markdown({
+      codeLanguages: languages,
+      extensions: { props: [styleTags({ ListMark: listMark })] },
+    }),
     syntaxHighlighting(highlightStyle),
     codeHighlighter,
     // What codeHighlighter reads to chip a reference. Contributes nothing —

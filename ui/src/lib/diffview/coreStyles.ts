@@ -381,6 +381,45 @@ const CARET_OVERRIDES = `
      these chips on a drag-selected row sits on the per-member tint variables below
      rather than on the shared fill, so the link chip can keep the opposite policy; see
      the note there. */
+  /* A theme file's markdown styles, as the --markdown-* properties theme.ts paints. Their
+     colors mostly arrive through shiki; their font styles cannot, for the light-dark()
+     reason the next block gives, so each element's tagged box reads them here. A heading
+     and a quote style their whole row, which their tokens inherit.
+
+     An unset property leaves its declaration invalid at computed-value time, and for these
+     properties that means inherit (or none, for a decoration) — what the library's own
+     dropped declaration already gave. So a theme that styles nothing renders as before,
+     with no fallback written out. These sit BEFORE the bold and italic rules below on
+     purpose: on a token carrying both, what the markup means wins over a style. A list
+     marker never shares a token with emphasis, so its font rides its ink rule further
+     down. */
+  [data-content] [data-line][data-md-heading] {
+    font-weight: var(--markdown-heading-font-weight);
+    font-style: var(--markdown-heading-font-style);
+    text-decoration: var(--markdown-heading-text-decoration);
+  }
+  [data-content] [data-line][data-quote-depth] {
+    font-weight: var(--markdown-quote-font-weight);
+    font-style: var(--markdown-quote-font-style);
+    text-decoration: var(--markdown-quote-text-decoration);
+  }
+  [data-content] [data-line] [data-md~="code"] {
+    font-weight: var(--markdown-code-font-weight);
+    font-style: var(--markdown-code-font-style);
+    text-decoration: var(--markdown-code-text-decoration);
+  }
+  [data-content] [data-line] [data-md~="link"] {
+    font-weight: var(--markdown-link-font-weight);
+    font-style: var(--markdown-link-font-style);
+  }
+  [data-content] [data-line] [data-md~="bold"] {
+    font-style: var(--markdown-bold-font-style);
+    text-decoration: var(--markdown-bold-text-decoration);
+  }
+  [data-content] [data-line] [data-md~="italic"] {
+    font-weight: var(--markdown-italic-font-weight);
+    text-decoration: var(--markdown-italic-text-decoration);
+  }
   /* The weight and slant themselves, which have to be declared HERE rather than coming
      from shiki, and this is the one surprise in the whole ticket. shiki does resolve the
      emphasis font style (caret-theme.ts appends the rules, and they win), and @pierre/diffs
@@ -422,8 +461,9 @@ const CARET_OVERRIDES = `
      library's own [data-line] span color rule sits in @layer base, so this wins on layer
      order rather than on specificity. */
   [data-content] [data-line] [data-md~="link"] {
-    color: color-mix(in lab, var(--ink), var(--accent) 45%);
+    color: var(--markdown-link-color, color-mix(in lab, var(--ink), var(--accent) 45%));
     text-decoration: underline dotted;
+    text-decoration-line: var(--markdown-link-text-decoration, underline);
     text-underline-offset: 0.22em;
   }
 
@@ -676,7 +716,10 @@ const CARET_OVERRIDES = `
 
      No transition — the diff surface swaps state instantly (svelte-rules § Motion). */
   [data-content] [data-line] [data-md-list] {
-    color: var(--ink-faint);
+    color: var(--markdown-list-marker-color, var(--ink-faint));
+    font-weight: var(--markdown-list-marker-font-weight);
+    font-style: var(--markdown-list-marker-font-style);
+    text-decoration: var(--markdown-list-marker-text-decoration);
   }
   [data-content] [data-line] [data-md-list="bullet"] {
     color: transparent;
@@ -687,7 +730,7 @@ const CARET_OVERRIDES = `
   [data-content] [data-line] [data-md-list="bullet"]::before {
     content: "•";
     position: absolute;
-    color: var(--ink-soft);
+    color: var(--markdown-list-marker-color, var(--ink-soft));
     user-select: none;
   }
 
@@ -962,7 +1005,7 @@ const CARET_OVERRIDES = `
      action and has to stay constant. Both marks keep their full alpha relative to the
      ink they sit on either way. */
   [data-content] [data-line][data-quote-depth] > :not([data-md-quote]) {
-    opacity: ${QUOTE_SUBDUE};
+    opacity: var(--markdown-quote-opacity, ${QUOTE_SUBDUE});
   }
 
   /* EXC-862: a thematic break — three dashes, asterisks or underscores alone on a line —

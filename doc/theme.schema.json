@@ -507,6 +507,138 @@
         "number"
       ],
       "additionalProperties": false
+    },
+    "markdown": {
+      "type": "object",
+      "properties": {
+        "heading": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "code": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "link": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "bold": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "italic": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "listMarker": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        },
+        "quote": {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "string",
+              "pattern": "^#[0-9a-fA-F]{6}$"
+            },
+            "fontStyle": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["italic", "bold", "underline", "strikethrough"]
+              }
+            }
+          },
+          "required": ["color"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     }
   },
   "required": ["id", "label", "scheme", "palette", "syntax"],

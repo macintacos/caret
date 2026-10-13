@@ -3,7 +3,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { ROLE_SCOPES, SYNTAX_ROLE_FALLBACKS } from "@/theme/role-scopes.ts";
-import { parseThemeFile, REQUIRED_SYNTAX_ROLES, themeFileJsonSchema } from "@/theme/schema.ts";
+import {
+  parseThemeFile,
+  REQUIRED_SYNTAX_ROLES,
+  type ThemeMarkdown,
+  themeFileJsonSchema,
+} from "@/theme/schema.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 
@@ -216,6 +221,47 @@ describe("parseThemeFile", () => {
         "extra: is not a theme file field",
       ].sort(),
     );
+  });
+
+  describe("markdown styles", () => {
+    const MARKDOWN: ThemeMarkdown = {
+      heading: { color: "#bd93f9", fontStyle: ["bold"] },
+      code: { color: "#50fa7b" },
+      link: { color: "#ff79c6" },
+      bold: { color: "#ffb86c" },
+      italic: { color: "#f1fa8c" },
+      listMarker: { color: "#8be9fd" },
+      quote: { color: "#f1fa8c", fontStyle: ["italic"] },
+    };
+
+    test("accepts a style for every element", () => {
+      const result = parseThemeFile(JSON.stringify({ ...validFile(), markdown: MARKDOWN }));
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.file.markdown).toEqual(MARKDOWN);
+    });
+
+    test("accepts a subset of elements", () => {
+      expect(errorsFor({ ...validFile(), markdown: { link: { color: "#ff79c6" } } })).toEqual([]);
+    });
+
+    test("rejects an element caret does not style", () => {
+      expect(errorsFor({ ...validFile(), markdown: { headline: { color: "#bd93f9" } } })).toEqual([
+        "markdown.headline: is not a theme file field",
+      ]);
+    });
+
+    test("rejects a malformed color", () => {
+      expect(errorsFor({ ...validFile(), markdown: { link: { color: "pink" } } })).toEqual([
+        "markdown.link.color: must be a hex color like #1a2b3c",
+      ]);
+    });
+
+    test("rejects an unknown fontStyle item", () => {
+      const quote = { color: "#f1fa8c", fontStyle: ["oblique"] };
+      expect(errorsFor({ ...validFile(), markdown: { quote } })).toEqual([
+        "markdown.quote.fontStyle[0]: must be one of italic, bold, underline, strikethrough",
+      ]);
+    });
   });
 
   test("reports malformed JSON as one error", () => {

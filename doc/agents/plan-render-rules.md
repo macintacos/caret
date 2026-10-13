@@ -62,10 +62,10 @@ digraph plan_render {
 - **`coreStyles.ts`** turns each attribute into one CSS rule. The ink and chip vocabulary
   it draws from is `svelte-rules.md`'s, not this file's.
 
-The block classifiers — `codeBlocks.ts`, `tables.ts`, `thematicBreaks.ts` — and the
-reference scanner `fileRefs.ts` run alongside, each answering "which lines are this
-construct" and tagging the rows the library painted. Their DOM tagging lives in the module
-rather than the component so it is unit-testable against a constructed fixture.
+The block classifiers — `codeBlocks.ts`, `tables.ts`, `thematicBreaks.ts`, `headings.ts` —
+and the reference scanner `fileRefs.ts` run alongside, each answering "which lines are
+this construct" and tagging the rows the library painted. Their DOM tagging lives in the
+module rather than the component so it is unit-testable against a constructed fixture.
 
 ## Line parity
 

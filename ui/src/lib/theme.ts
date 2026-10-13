@@ -46,7 +46,7 @@ import type { ThemeRegistrationRaw } from "shiki/core";
 import { SvelteMap } from "svelte/reactivity";
 
 import { fillFallbackRoles } from "@core/theme/role-scopes.ts";
-import type { ThemeFile } from "@core/theme/schema.ts";
+import type { MarkdownElement, RoleStyle, ThemeFile, ThemeMarkdown } from "@core/theme/schema.ts";
 // theme-file.ts takes only types from here, so this runtime import is not a load-order
 // cycle — never reach for a runtime value in that direction.
 import { buildFileTheme, type FileTheme } from "$lib/theme-file.ts";
@@ -129,6 +129,8 @@ interface ThemeFields {
   scheme: Scheme;
   /** CSS custom property → value, covering every color token app.css declares. */
   tokens: Record<ColorToken, string>;
+  /** The markdown elements the theme styles itself; an element it omits keeps caret's look. */
+  markdown: ThemeMarkdown;
 }
 
 /** A compiled-in palette. */
@@ -267,12 +269,41 @@ export function paintTheme(id: ThemeId, target: HTMLElement = document.documentE
 /** Paint a palette that need not be registered — `paintTheme`'s painting half, for
  * the boot paint of a cached custom palette. */
 export function paintPalette(
-  palette: Pick<Theme, "tokens" | "scheme">,
+  palette: Pick<Theme, "tokens" | "scheme"> & { markdown?: ThemeMarkdown },
   target: HTMLElement = document.documentElement,
 ): void {
-  for (const [name, value] of Object.entries(palette.tokens)) {
+  for (const name of Array.from(target.style)) {
+    if (name.startsWith("--markdown-")) target.style.removeProperty(name);
+  }
+  const markdown = markdownProperties(palette.markdown ?? {});
+  for (const [name, value] of Object.entries({ ...palette.tokens, ...markdown })) {
     target.style.setProperty(name, value);
   }
   target.style.setProperty("color-scheme", palette.scheme);
   target.dataset.theme = palette.scheme;
+}
+
+/** The `--markdown-<element>-*` custom properties a theme's markdown styles paint. A
+ * font property is painted only where the style sets it, so an element inherits the
+ * weight and slant of what it sits in, as shiki's own resolution does. */
+function markdownProperties(markdown: ThemeMarkdown): Record<string, string> {
+  const properties: Record<string, string> = {};
+  for (const [element, style] of Object.entries(markdown) as [MarkdownElement, RoleStyle][]) {
+    const name = `--markdown-${element.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
+    const font = new Set(style.fontStyle);
+    properties[`${name}-color`] = style.color;
+    // caret's own heading is bold, so a heading style replaces that rather than adding to it.
+    if (font.has("bold") || element === "heading") {
+      properties[`${name}-font-weight`] = font.has("bold") ? "bold" : "normal";
+    }
+    if (font.has("italic")) properties[`${name}-font-style`] = "italic";
+    const lines = [
+      ...(font.has("underline") || element === "link" ? ["underline"] : []),
+      ...(font.has("strikethrough") ? ["line-through"] : []),
+    ];
+    if (lines.length > 0) properties[`${name}-text-decoration`] = lines.join(" ");
+  }
+  // The subdue tells quoted prose apart from body text, which a quote's own color already does.
+  if (markdown.quote) properties["--markdown-quote-opacity"] = "1";
+  return properties;
 }

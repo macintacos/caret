@@ -26,6 +26,8 @@ export type RequiredSyntaxRole = (typeof REQUIRED_SYNTAX_ROLES)[number];
 
 export const FONT_STYLES = ["italic", "bold", "underline", "strikethrough"] as const;
 
+export type FontStyle = (typeof FONT_STYLES)[number];
+
 export type OptionalSyntaxRole = keyof typeof SYNTAX_ROLE_FALLBACKS;
 export type SyntaxRole = RequiredSyntaxRole | OptionalSyntaxRole;
 
@@ -41,6 +43,20 @@ const RoleStyleSchema = z.strictObject({
 
 export type RoleStyle = z.output<typeof RoleStyleSchema>;
 export type ThemeSyntax = Record<SyntaxRole, RoleStyle>;
+
+/** The markdown elements a theme file may style in the plan view. */
+export const MARKDOWN_ELEMENTS = [
+  "heading",
+  "code",
+  "link",
+  "bold",
+  "italic",
+  "listMarker",
+  "quote",
+] as const;
+
+export type MarkdownElement = (typeof MARKDOWN_ELEMENTS)[number];
+export type ThemeMarkdown = Partial<Record<MarkdownElement, RoleStyle>>;
 
 /** The palette colors every theme file must define. */
 export const REQUIRED_COLORS = [
@@ -91,6 +107,8 @@ const SyntaxSchema = z
   })
   .transform((roles) => fillFallbackRoles(roles));
 
+const MarkdownSchema = z.strictObject(fieldsFor(MARKDOWN_ELEMENTS, RoleStyleSchema.optional()));
+
 export const ThemeFileSchema = z.strictObject({
   $schema: z.string().optional(),
   id: z
@@ -110,6 +128,7 @@ export const ThemeFileSchema = z.strictObject({
   }),
   palette: PaletteSchema,
   syntax: SyntaxSchema,
+  markdown: MarkdownSchema.optional(),
 });
 
 /** A validated theme file; every optional syntax role is already filled from its fallback. */

@@ -3,9 +3,10 @@
 // enough to tell a type from a function, a number from a string escape, and an attribute
 // from a property.
 //
-// The colors come from the file's palette and syntax rather than from `Theme.tokens`. The
-// syntax half never becomes a `ColorToken`, so the tokens map has nowhere to put it; the
-// palette's `sunk` / `ink` are the same values `--paper-sunk` / `--ink` carry.
+// The colors come from the file's palette, syntax and markdown styles rather than from
+// `Theme.tokens`. The syntax half never becomes a `ColorToken`, so the tokens map has
+// nowhere to put it; the palette's `sunk` / `ink` are the same values `--paper-sunk` /
+// `--ink` carry.
 //
 // caret's appended markdown rules — the structural markers and EXC-867's emphasis set —
 // are deliberately ABSENT. caret-theme.ts appends them to every theme it resolves, and
@@ -15,20 +16,18 @@
 import type { ThemeRegistrationRaw } from "shiki/core";
 
 import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
-import type { SyntaxRole, ThemeFile, ThemeSyntax } from "@core/theme/schema.ts";
-import type { Scheme } from "$lib/theme.ts";
+import type { RoleStyle, SyntaxRole, ThemeFile, ThemeSyntax } from "@core/theme/schema.ts";
 
-/** Build a shiki theme from a scheme's syntax roles, plus caret's fixed markdown and diff
- * rules, which paint from the six chrome colors and the comment role. */
+/** Build a shiki theme from a file's syntax roles, plus caret's markdown and diff rules,
+ * which paint from six of its palette colors, its comment role, and the markdown styles
+ * it names. */
 export function syntaxShikiTheme(
-  name: string,
-  scheme: Scheme,
-  chrome: Pick<ThemeFile["palette"], "sunk" | "ink" | "accent" | "accentBright" | "ok" | "danger">,
-  roles: ThemeSyntax,
+  file: Pick<ThemeFile, "id" | "scheme" | "palette" | "syntax" | "markdown">,
 ): ThemeRegistrationRaw {
+  const { palette: chrome, syntax: roles, markdown = {} } = file;
   return {
-    name,
-    type: scheme,
+    name: file.id,
+    type: file.scheme,
     colors: {
       "editor.background": chrome.sunk,
       "editor.foreground": chrome.ink,
@@ -45,19 +44,32 @@ export function syntaxShikiTheme(
       }),
       ...fontStyleResets(roles),
       // Markdown. The plan view renders the plan as a markdown document, so these are
-      // the rules a reviewer reads most.
+      // the rules a reviewer reads most. An element the file styles takes its style; the
+      // rest paint from the chrome.
       {
         scope: ["markup.heading", "markup.heading entity.name", "punctuation.definition.heading"],
-        settings: { foreground: chrome.accent, fontStyle: "bold" },
+        // A heading style replaces caret's bold rather than adding to it.
+        settings: markdown.heading
+          ? { foreground: markdown.heading.color, fontStyle: fontStyle(markdown.heading) ?? "" }
+          : { foreground: chrome.accent, fontStyle: "bold" },
       },
-      { scope: ["markup.bold"], settings: { fontStyle: "bold" } },
-      { scope: ["markup.italic"], settings: { fontStyle: "italic" } },
-      // Inline code and a fence's body ride the accent's lighter sibling: theme files name
-      // no inline-code role, and giving them one is EXC-858's.
+      // Whatever a bold or italic style adds to the font rides caret-theme.ts's emphasis rules.
+      { scope: ["markup.bold"], settings: { fontStyle: "bold", ...foreground(markdown.bold) } },
+      {
+        scope: ["markup.italic"],
+        settings: { fontStyle: "italic", ...foreground(markdown.italic) },
+      },
+      // A fence's body shares inline code's color, but not its font style.
       {
         scope: ["markup.inline.raw", "markup.fenced_code"],
-        settings: { foreground: chrome.accentBright },
+        settings: { foreground: markdown.code?.color ?? chrome.accentBright },
       },
+      ...(markdown.code?.fontStyle
+        ? [{ scope: ["markup.inline.raw"], settings: { fontStyle: fontStyle(markdown.code) } }]
+        : []),
+      ...styledScope(["string.other.link.title.markdown"], markdown.link),
+      ...styledScope(["punctuation.definition.list.begin.markdown"], markdown.listMarker),
+      ...styledScope(["markup.quote"], markdown.quote),
       // Diff. The semantic pair, so a rendered patch agrees with the diff view's own
       // addition and deletion tints rather than reading them as two more syntax hues.
       {
@@ -75,6 +87,26 @@ export function syntaxShikiTheme(
       { scope: ["invalid", "invalid.illegal"], settings: { foreground: chrome.danger } },
     ],
   };
+}
+
+function fontStyle(style: RoleStyle | undefined): string | undefined {
+  return style?.fontStyle?.join(" ");
+}
+
+function foreground(style: RoleStyle | undefined): { foreground?: string } {
+  return style ? { foreground: style.color } : {};
+}
+
+/** One rule painting `scopes` with a markdown style, or none for an element the file
+ * leaves to caret. With no font style the rule sets none, so the element keeps the weight
+ * and slant of what it sits in. */
+function styledScope(
+  scopes: string[],
+  style: RoleStyle | undefined,
+): NonNullable<ThemeRegistrationRaw["settings"]> {
+  if (style === undefined) return [];
+  const font = fontStyle(style);
+  return [{ scope: scopes, settings: { ...foreground(style), ...(font && { fontStyle: font }) } }];
 }
 
 /** Resets a style-less role's font style wherever a styled role's would leak into it. A

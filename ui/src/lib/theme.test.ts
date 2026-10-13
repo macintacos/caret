@@ -772,6 +772,60 @@ describe("paintPalette", () => {
     expect(node.style.getPropertyValue("color-scheme")).toBe("light");
     expect(node.dataset.theme).toBe("light");
   });
+
+  // The plan view and the feedback editor read these; shiki carries the same styles to
+  // the highlighted code. Each surface falls back to its own look where one is unset.
+  test("paints each markdown style as the element's custom properties", () => {
+    const node = document.createElement("div");
+    const { tokens } = THEMES["caret-dark"];
+    paintPalette(
+      {
+        scheme: "dark",
+        tokens,
+        markdown: {
+          heading: { color: "#bd93f9", fontStyle: ["bold", "underline"] },
+          link: { color: "#ff79c6", fontStyle: ["strikethrough"] },
+          listMarker: { color: "#8be9fd" },
+          quote: { color: "#f1fa8c", fontStyle: ["italic"] },
+        },
+      },
+      node,
+    );
+    const painted = Object.fromEntries(
+      Array.from(node.style)
+        .filter((name) => name.startsWith("--markdown-"))
+        .map((name) => [name, node.style.getPropertyValue(name)]),
+    );
+    expect(painted).toEqual({
+      "--markdown-heading-color": "#bd93f9",
+      "--markdown-heading-font-weight": "bold",
+      "--markdown-heading-text-decoration": "underline",
+      // A link is always underlined; its style adds to that rather than replacing it.
+      "--markdown-link-color": "#ff79c6",
+      "--markdown-link-text-decoration": "underline line-through",
+      "--markdown-list-marker-color": "#8be9fd",
+      "--markdown-quote-color": "#f1fa8c",
+      "--markdown-quote-font-style": "italic",
+      // A quote with a color of its own is told apart by it, so it drops the subdue.
+      "--markdown-quote-opacity": "1",
+    });
+  });
+
+  // caret's own heading is bold, so a heading style that names no bold replaces it.
+  test("paints a heading style without bold at normal weight", () => {
+    const node = document.createElement("div");
+    const { tokens } = THEMES["caret-dark"];
+    paintPalette({ scheme: "dark", tokens, markdown: { heading: { color: "#bd93f9" } } }, node);
+    expect(node.style.getPropertyValue("--markdown-heading-font-weight")).toBe("normal");
+  });
+
+  test("clears the markdown styles a previous palette painted", () => {
+    const node = document.createElement("div");
+    const { tokens } = THEMES["caret-dark"];
+    paintPalette({ scheme: "dark", tokens, markdown: { link: { color: "#ff79c6" } } }, node);
+    paintPalette({ scheme: "dark", tokens, markdown: {} }, node);
+    expect(Array.from(node.style).filter((name) => name.startsWith("--markdown-"))).toEqual([]);
+  });
 });
 
 describe("paintTheme", () => {
