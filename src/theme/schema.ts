@@ -26,21 +26,21 @@ export type RequiredSyntaxRole = (typeof REQUIRED_SYNTAX_ROLES)[number];
 
 export const FONT_STYLES = ["italic", "bold", "underline", "strikethrough"] as const;
 
-type FontStyle = (typeof FONT_STYLES)[number];
 export type OptionalSyntaxRole = keyof typeof SYNTAX_ROLE_FALLBACKS;
 export type SyntaxRole = RequiredSyntaxRole | OptionalSyntaxRole;
-export type RoleStyle = { color: string; fontStyle?: FontStyle[] };
-export type ThemeSyntax = Record<SyntaxRole, RoleStyle>;
 
 export const MAX_LENGTH = 64;
 const TOO_LONG = `must be at most ${MAX_LENGTH} characters`;
 
-const color = z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be a hex color like #1a2b3c");
+const ColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be a hex color like #1a2b3c");
 
-const roleStyle = z.strictObject({
-  color,
+const RoleStyleSchema = z.strictObject({
+  color: ColorSchema,
   fontStyle: z.array(z.enum(FONT_STYLES, `must be one of ${FONT_STYLES.join(", ")}`)).optional(),
 });
+
+export type RoleStyle = z.output<typeof RoleStyleSchema>;
+export type ThemeSyntax = Record<SyntaxRole, RoleStyle>;
 
 /** The palette colors every theme file must define. */
 export const REQUIRED_COLORS = [
@@ -71,26 +71,23 @@ const OPTIONAL_HUES = [
   "chipSkillHue",
 ] as const;
 
-const palette = z.strictObject({
-  ...(Object.fromEntries(REQUIRED_COLORS.map((key) => [key, color])) as Record<
-    (typeof REQUIRED_COLORS)[number],
-    typeof color
-  >),
-  ...(Object.fromEntries(OPTIONAL_HUES.map((key) => [key, color.optional()])) as Record<
-    (typeof OPTIONAL_HUES)[number],
-    z.ZodOptional<typeof color>
-  >),
+/** A zod shape that gives each of `keys` the same schema. */
+function fieldsFor<K extends string, S>(keys: readonly K[], schema: S): Record<K, S> {
+  return Object.fromEntries(keys.map((key) => [key, schema])) as Record<K, S>;
+}
+
+const PaletteSchema = z.strictObject({
+  ...fieldsFor(REQUIRED_COLORS, ColorSchema),
+  ...fieldsFor(OPTIONAL_HUES, ColorSchema.optional()),
 });
 
-const syntax = z
+const SyntaxSchema = z
   .strictObject({
-    ...(Object.fromEntries(REQUIRED_SYNTAX_ROLES.map((role) => [role, roleStyle])) as Record<
-      RequiredSyntaxRole,
-      typeof roleStyle
-    >),
-    ...(Object.fromEntries(
-      Object.keys(SYNTAX_ROLE_FALLBACKS).map((role) => [role, roleStyle.optional()]),
-    ) as Record<OptionalSyntaxRole, z.ZodOptional<typeof roleStyle>>),
+    ...fieldsFor(REQUIRED_SYNTAX_ROLES, RoleStyleSchema),
+    ...fieldsFor(
+      Object.keys(SYNTAX_ROLE_FALLBACKS) as OptionalSyntaxRole[],
+      RoleStyleSchema.optional(),
+    ),
   })
   .transform((roles) => fillFallbackRoles(roles));
 
@@ -107,8 +104,8 @@ export const ThemeFileSchema = z.strictObject({
   scheme: z.enum(["light", "dark"], {
     error: (issue) => (issue.input === undefined ? "is required" : 'must be "light" or "dark"'),
   }),
-  palette,
-  syntax,
+  palette: PaletteSchema,
+  syntax: SyntaxSchema,
 });
 
 /** A validated theme file; every optional syntax role is already filled from its fallback. */
