@@ -14,14 +14,16 @@ export interface EnumLocalStoragePref<T extends string> {
 
 /** Build a localStorage-backed preference over a fixed set of string values.
  * `allowed` is the exhaustive set of valid stored values; anything else — or an
- * unreadable store — degrades to `fallback`. */
+ * unreadable store — degrades to `fallback`. Pass a getter for a set that grows
+ * after load; it is re-read on every `read()`. */
 export function enumLocalStoragePref<T extends string>(
   key: string,
-  allowed: readonly T[],
+  allowed: readonly T[] | (() => readonly T[]),
   fallback: T,
 ): EnumLocalStoragePref<T> {
+  const current = typeof allowed === "function" ? allowed : () => allowed;
   const isAllowed = (value: unknown): value is T =>
-    typeof value === "string" && (allowed as readonly string[]).includes(value);
+    typeof value === "string" && (current() as readonly string[]).includes(value);
   return {
     read() {
       try {

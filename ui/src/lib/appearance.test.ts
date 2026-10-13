@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { fakeMediaQuery } from "@ui/support/media-query.ts";
 import { withBlockedStorage } from "@ui/support/storage.ts";
+import { customThemeFile } from "@ui/support/theme-file.ts";
 import {
   appearanceSummary,
   DARK_SLOT_KEY,
@@ -22,7 +23,7 @@ import {
   writeSlotTheme,
   writeThemeMode,
 } from "$lib/appearance.ts";
-import { THEMES } from "$lib/theme.ts";
+import { addTheme, THEMES } from "$lib/theme.ts";
 
 afterEach(() => localStorage.clear());
 
@@ -120,6 +121,21 @@ describe("readSlotTheme / writeSlotTheme", () => {
     expect(readSlotTheme("light")).toBe("caret-light");
 
     localStorage.setItem(DARK_SLOT_KEY, "caret-light");
+    expect(readSlotTheme("dark")).toBe("caret-dark");
+  });
+
+  test("a saved id resolves once a theme registers under it", async () => {
+    localStorage.setItem(DARK_SLOT_KEY, "slot-late-dark");
+    expect(readSlotTheme("dark")).toBe("caret-dark");
+    expect(localStorage.getItem(DARK_SLOT_KEY)).toBe("slot-late-dark");
+
+    const id = addTheme(await customThemeFile("slot-late-dark", "dark"));
+    expect(readSlotTheme("dark")).toBe(id);
+  });
+
+  test("a registered light theme saved in the dark slot still degrades", async () => {
+    addTheme(await customThemeFile("slot-wrong-scheme-light", "light"));
+    localStorage.setItem(DARK_SLOT_KEY, "slot-wrong-scheme-light");
     expect(readSlotTheme("dark")).toBe("caret-dark");
   });
 });

@@ -43,18 +43,19 @@ registerPrefKey(LEGACY_THEME_KEY);
 
 const modePref = definePref<ThemeMode>(MODE_KEY, THEME_MODES, DEFAULT_MODE);
 
-// Each slot's allow-list is its OWN scheme's ids, so a hand-edited wrong-scheme
-// value degrades to the slot's default rather than painting a dark palette while
-// the resolved scheme (and `data-theme`) say light.
+// Each slot's allow-list is its OWN scheme's ids, read live so a theme registered
+// after load becomes selectable, and so a hand-edited wrong-scheme value degrades
+// to the slot's default rather than painting a dark palette while the resolved
+// scheme (and `data-theme`) say light.
 const slotPrefs: Record<Scheme, ReturnType<typeof definePref<ThemeId>>> = {
   light: definePref<ThemeId>(
     LIGHT_SLOT_KEY,
-    themesForScheme("light").map((t) => t.id),
+    () => themesForScheme("light").map((t) => t.id),
     DEFAULT_SLOT_THEME.light,
   ),
   dark: definePref<ThemeId>(
     DARK_SLOT_KEY,
-    themesForScheme("dark").map((t) => t.id),
+    () => themesForScheme("dark").map((t) => t.id),
     DEFAULT_SLOT_THEME.dark,
   ),
 };

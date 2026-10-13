@@ -43,7 +43,7 @@ export function knownPrefKeys(): readonly string[] {
  * registers the key. */
 export function definePref<T extends string>(
   key: string,
-  allowed: readonly T[],
+  allowed: readonly T[] | (() => readonly T[]),
   fallback: T,
 ): Pref<T> {
   registerPrefKey(key);

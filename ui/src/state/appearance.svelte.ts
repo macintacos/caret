@@ -54,6 +54,10 @@ export interface Appearance {
    * and the dev `--fresh` reset, neither of which has a previous frame to wipe
    * from. */
   boot(): void;
+  /** Re-resolve after the theme registry changed, so a saved slot naming a theme
+   * that just registered takes effect — repainting as a wipe only if the palette
+   * showing moved. */
+  refresh(): void;
   /** Follow OS appearance flips for as long as the returned disposer is unused.
    * The media query defaults to the live one; a no-op where none is available. */
   watch(media?: SchemeMediaQuery): () => void;
@@ -130,6 +134,11 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
       live.slots = { light: readSlotTheme("light"), dark: readSlotTheme("dark") };
       live.prefersDark = probe();
       paintTheme(resolved());
+    },
+    refresh() {
+      commit(() => {
+        live.slots = { light: readSlotTheme("light"), dark: readSlotTheme("dark") };
+      });
     },
     watch(media) {
       return watchSystemScheme((prefersDark) => {
