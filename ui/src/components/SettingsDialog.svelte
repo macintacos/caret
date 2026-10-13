@@ -152,8 +152,7 @@
   // once from read() (the registry is static within a mount, so capturing the initial
   // `entries` is intentional) and re-seeded per field after each change: on success it
   // reflects the new value, on a failed write it snaps the control back to unchanged.
-  // ThemeSection reads its fields live instead — the three theme fields read the
-  // appearance's `$state` — so it takes no `values`.
+  // ThemeSection reads the appearance's `$state` live instead, so it takes no `values`.
   // svelte-ignore state_referenced_locally
   let values = $state<Record<string, unknown>>(
     Object.fromEntries(entries.filter(isStagedField).map((f) => [f.key, f.read()])),
