@@ -158,18 +158,20 @@ function pickChrome(
   scheme: Scheme,
 ): { palette: Record<RequiredColor, string>; notes: string[] } {
   const notes: string[] = [];
-  const fallback = CARET_THEMES[scheme];
+  const fallbackTheme = CARET_THEMES[scheme];
   const palette: Partial<Record<RequiredColor, string>> = {};
   for (const key of REQUIRED_COLORS) {
     const candidates: readonly string[] = CHROME_SOURCES[key];
-    const source = candidates.map((name) => colors[name]).find((c) => c && OPAQUE_HEX.test(c));
+    const source = candidates
+      .map((name) => colors[name])
+      .find((color) => color && OPAQUE_HEX.test(color));
     if (source) {
       palette[key] = normalizeColor(source);
       continue;
     }
-    palette[key] = fallback.palette[key];
+    palette[key] = fallbackTheme.palette[key];
     notes.push(
-      `palette.${key}: no clear source in colors (tried ${candidates.join(", ")}); used ${fallback.label}'s ${palette[key]}`,
+      `palette.${key}: no clear source in colors (tried ${candidates.join(", ")}); used ${fallbackTheme.label}'s ${palette[key]}`,
     );
   }
   return { palette: palette as Record<RequiredColor, string>, notes };
@@ -193,18 +195,18 @@ function idAndLabel(
 ): Result<{ id: string; label: string; notes: string[] }> {
   const trimmed = name?.trim() || undefined;
   const label = (trimmed ?? fileName).slice(0, MAX_LENGTH).replace(/[\uD800-\uDBFF]$/, "");
-  const base = (trimmed && slug(trimmed)) || slug(fileName);
-  if (!base) {
+  const slugId = (trimmed && slug(trimmed)) || slug(fileName);
+  if (!slugId) {
     return {
       ok: false,
       errors: ["id: can't derive one from the theme's name or file name; rename the file"],
     };
   }
-  if (!builtinIds.includes(base)) return { ok: true, value: { id: base, label, notes: [] } };
-  const id = `${base}-custom`;
+  if (!builtinIds.includes(slugId)) return { ok: true, value: { id: slugId, label, notes: [] } };
+  const id = `${slugId}-custom`;
   return {
     ok: true,
-    value: { id, label, notes: [`id: "${base}" is a built-in theme, so this one is "${id}"`] },
+    value: { id, label, notes: [`id: "${slugId}" is a built-in theme, so this one is "${id}"`] },
   };
 }
 
@@ -213,14 +215,14 @@ function withEditorForeground(
   type: VsCodeType,
 ): { colors: Record<string, string>; notes: string[] } {
   if (colors["editor.foreground"]) return { colors: { ...colors }, notes: [] };
-  const fallback =
+  const defaultForeground =
     type === "hcLight"
       ? (colors.foreground ?? EDITOR_FOREGROUNDS.hcLight)
       : EDITOR_FOREGROUNDS[type];
   return {
-    colors: { ...colors, "editor.foreground": fallback },
+    colors: { ...colors, "editor.foreground": defaultForeground },
     notes: [
-      `syntax: colors has no editor.foreground; tokens no rule colors use VS Code's default for a ${type} theme, ${fallback}`,
+      `syntax: colors has no editor.foreground; tokens no rule colors use VS Code's default for a ${type} theme, ${defaultForeground}`,
     ],
   };
 }
@@ -254,12 +256,12 @@ export function themeFileFromVsCode(
   const { id, label } = ident.value;
   const chrome = pickChrome(input.colors, scheme.value);
   const file = { $schema: SCHEMA_URL, id, label, scheme: scheme.value, palette: chrome.palette };
-  const output = `${JSON.stringify({ ...file, syntax }, null, 2)}\n`;
-  const valid = parseThemeFile(output);
+  const fileText = `${JSON.stringify({ ...file, syntax }, null, 2)}\n`;
+  const valid = parseThemeFile(fileText);
   if (!valid.ok) return valid;
   return {
     ok: true,
-    text: output,
+    text: fileText,
     notes: [...ident.value.notes, ...editor.notes, ...chrome.notes],
   };
 }

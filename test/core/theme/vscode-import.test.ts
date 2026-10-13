@@ -82,13 +82,13 @@ describe("themeFileFromVsCode input parsing", () => {
   });
 
   test("malformed rules are skipped", () => {
-    const junk = [
+    const malformed = [
       { scope: "string" },
       { scope: null, settings: { foreground: "#ff0000" } },
       { scope: 5, settings: { foreground: "#ff0000" } },
     ];
     const clean = ok(minimal()).file.syntax;
-    expect(ok(minimal({ tokenColors: [...junk, ...RULES] })).file.syntax).toEqual(clean);
+    expect(ok(minimal({ tokenColors: [...malformed, ...RULES] })).file.syntax).toEqual(clean);
   });
 
   test("a non-hex rule color is skipped for the next matching rule", () => {
