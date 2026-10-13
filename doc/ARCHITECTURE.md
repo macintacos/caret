@@ -480,6 +480,7 @@ src/redact/         log redaction — the browser-safe key walk and the node-sid
 src/doctor/         `caret doctor` — the state the report collects, the checks read off it, and the --bundle archive with the zip writer behind it
 src/ui/             the daemon's bridge to the embedded Svelte UI — asset resolution and the log endpoint
 src/config/         settings, preferences, resolved paths, and shared constants
+src/theme/          theme files — the schema caret validates a theme file against, and its JSON Schema export
 src/lib/            cross-cutting foundation — wire-contract types, logging, and small shared utilities
 src/commands/       per-subcommand entrypoints (one file per subcommand), plus the wiring they share
 src/adapters/       the coding-agent adapter axis — the AgentAdapter interface and registry, plus one directory per tool (claude · opencode · codex)

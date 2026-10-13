@@ -235,3 +235,12 @@ describe("themeFileJsonSchema", () => {
     ).toEqual(themeFileJsonSchema());
   });
 });
+
+describe("doc/CONFIGURING.md", () => {
+  test("its example theme file is valid", () => {
+    const doc = readFileSync(join(import.meta.dir, "..", "..", "..", "doc/CONFIGURING.md"), "utf8");
+    const section = doc.split("\n## Theme files\n")[1]?.split("\n## ")[0] ?? "";
+    const block = section.match(/```json\n([\s\S]*?)\n```/)?.[1] ?? "";
+    expect(parseThemeFile(block).ok).toBe(true);
+  });
+});

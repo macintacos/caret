@@ -124,7 +124,7 @@ Two more live at the repo root:
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — develop `caret` locally: setup, the `mise`
   workflow, and where tests live.
-- [CLAUDE.md](CLAUDE.md) — for coding agents: routes a change to the rules-of-the-road
+- [AGENTS.md](AGENTS.md) — for coding agents: routes a change to the rules-of-the-road
   that govern it.
 
 ## Diagnostics
