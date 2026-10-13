@@ -66,7 +66,11 @@ describe("createThemeWriter", () => {
     const text = `${themeFileText("nightly")}\n`;
     const parsed = parseThemeFile(text);
     if (!parsed.ok) throw new Error("fixture must parse");
-    expect(await createThemeWriter(dir).save(text)).toEqual({ ok: true, theme: parsed.file });
+    expect(await createThemeWriter(dir).save(text)).toEqual({
+      ok: true,
+      theme: parsed.file,
+      unremoved: [],
+    });
     expect(listing()).toEqual(["nightly.json"]);
     expect(readFileSync(join(dir, "nightly.json"), "utf-8")).toBe(text);
   });
@@ -118,7 +122,7 @@ describe("createThemeWriter", () => {
     const parsed = parseThemeFile(text);
     if (!parsed.ok) throw new Error("fixture must parse");
     const remove = () => Promise.reject(Object.assign(new Error("denied"), { code: "EPERM" }));
-    const saved: unknown = await createThemeWriter(dir, remove).save(text);
+    const saved = await createThemeWriter(dir, remove).save(text);
     expect(saved).toEqual({
       ok: true,
       theme: parsed.file,

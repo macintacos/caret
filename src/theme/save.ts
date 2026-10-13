@@ -1,4 +1,5 @@
 // Saves an uploaded theme file into caret's themes folder as `<id>.json`.
+import type { Stats } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -47,8 +48,12 @@ export interface ThemeWriter {
 /** Why an upload did not land. */
 export type ThemeSaveRefusal = "invalid" | "conflict" | "unwritable";
 
+/**
+ * A save's `unremoved` names the files (inside the folder) that also declare the id but could
+ * not be removed; `code` is the first such failure's errno, for the log.
+ */
 export type ThemeSave =
-  | { ok: true; theme: ThemeFile }
+  | { ok: true; theme: ThemeFile; unremoved: string[]; code?: string }
   | { ok: false; reason: ThemeSaveRefusal; errors: string[]; code?: string };
 
 /** Writes queue on the folder, so two uploads cannot interleave one's removals with the other's write. */
@@ -63,26 +68,20 @@ export function createThemeWriter(
       const theme = themes[0];
       if (!theme)
         return { ok: false, reason: "invalid", errors: errors.flatMap((e) => e.messages) };
-      let result: ThemeSave = { ok: true, theme };
+      let result: ThemeSave = { ok: true, theme, unremoved: [] };
       await writes.run(dir, async () => {
         const plan = planThemeWrite(theme.id, await readThemeSources(dir));
         if ("conflict" in plan) {
           result = { ok: false, reason: "conflict", errors: [plan.conflict] };
           return;
         }
+        let written: Stats;
         try {
           await mkdir(dir, { recursive: true });
           // id is a schema slug, so it names no path outside dir.
           const target = join(dir, `${theme.id}.json`);
           await writeFileAtomic(target, text, { mode: 0o644 });
-          const written = await stat(target);
-          for (const file of plan.remove) {
-            // On a case-insensitive filesystem `Twin.json` is the file just written.
-            const existing = await stat(join(dir, file)).catch(() => undefined);
-            if (existing && !(existing.ino === written.ino && existing.dev === written.dev)) {
-              await remove(join(dir, file));
-            }
-          }
+          written = await stat(target);
         } catch (error) {
           // Fixed text: fs messages embed absolute paths. The code is a closed token, for the log.
           result = {
@@ -91,7 +90,25 @@ export function createThemeWriter(
             errors: ["theme folder: could not be written"],
             code: (error as NodeJS.ErrnoException).code,
           };
+          return;
         }
+        const unremoved: string[] = [];
+        let code: string | undefined;
+        for (const file of plan.remove) {
+          // On a case-insensitive filesystem `Twin.json` is the file just written.
+          const existing = await stat(join(dir, file)).catch(() => undefined);
+          if (!existing || (existing.ino === written.ino && existing.dev === written.dev)) continue;
+          try {
+            await remove(join(dir, file));
+          } catch (error) {
+            unremoved.push(file);
+            code ??= (error as NodeJS.ErrnoException).code;
+          }
+        }
+        result =
+          code === undefined
+            ? { ok: true, theme, unremoved }
+            : { ok: true, theme, unremoved, code };
       });
       return result;
     },

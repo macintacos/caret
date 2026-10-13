@@ -35,6 +35,7 @@ import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
 import { SUPERVISED_VAR } from "@/service/manager.ts";
 import { MAX_THEME_FILE_BYTES, THEME_FILE_TOO_LARGE } from "@/theme/load.ts";
+import { parseThemeFile } from "@/theme/schema.ts";
 
 // Resolver injected as a dep — the core daemon stays tool-agnostic and never
 // reaches into src/ui/assets.ts.
@@ -325,6 +326,23 @@ describe("POST /api/themes", () => {
     const served = (await (await fetch(`${base}/api/themes`)).json()) as CustomThemes;
     expect(served.themes.map((t) => t.id)).toEqual(["twin"]);
     expect(served.errors).toEqual([]);
+  });
+
+  test("a save that left a file behind is a 200 naming it, logged as a warn", async () => {
+    const { recs, log } = recordingLog();
+    const parsed = parseThemeFile(themeFileText("nightly"));
+    if (!parsed.ok) throw new Error("fixture must parse");
+    const theme = parsed.file;
+    await boot({
+      log,
+      themeWriter: {
+        save: async () => ({ ok: true, theme, unremoved: ["old.json"], code: "EPERM" }),
+      },
+    });
+    const res = await upload(themeFileText("nightly"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ theme, unremoved: ["old.json"] });
+    expect(recs.some((r) => r.step === "themes" && r.level === "warn")).toBe(true);
   });
 
   test("an invalid upload is a 400 carrying its errors and writes nothing", async () => {

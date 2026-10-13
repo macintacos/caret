@@ -67,7 +67,7 @@ import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
 import { isSupervised } from "@/service/manager.ts";
 import { loadCustomThemes, MAX_THEME_FILE_BYTES, THEME_FILE_TOO_LARGE } from "@/theme/load.ts";
-import { createThemeWriter, type ThemeSaveRefusal } from "@/theme/save.ts";
+import { createThemeWriter, type ThemeSaveRefusal, type ThemeWriter } from "@/theme/save.ts";
 import type { UiAssets } from "@/ui/assets.ts";
 import { MAX_BODY_BYTES, parseUiLogBatch } from "@/ui/log-bridge.ts";
 
@@ -133,6 +133,8 @@ export interface CreateServerOptions {
   configPath?: string;
   /** The folder /api/themes reads and writes; defaults to paths.themesDir(). */
   themesDir?: string;
+  /** Saves POST /api/themes uploads; defaults to createThemeWriter(themesDir). A test seam. */
+  themeWriter?: ThemeWriter;
   /** Single-instance lock file path. When set, the daemon writes the lock on a
    * successful bind and removes it on stop(); omitted (default) means no lock is
    * managed. */
@@ -261,6 +263,7 @@ interface ResolvedOptions {
   routePlan: RoutePlan;
   configPath: string;
   themesDir: string;
+  themeWriter: ThemeWriter;
   lockPath: string | undefined;
   tokenFile: string | undefined;
   hostname: string;
@@ -285,6 +288,7 @@ interface ResolvedOptions {
 }
 
 function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
+  const dir = opts.themesDir ?? themesDir();
   return {
     store: opts.store,
     idle: opts.idleMs ?? DEFAULTS.daemon.idle_ms,
@@ -296,7 +300,8 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     onShutdown: opts.onShutdown ?? (() => process.exit(0)),
     routePlan: opts.routePlan ?? routeIncomingPlan,
     configPath: opts.configPath ?? configFile(),
-    themesDir: opts.themesDir ?? themesDir(),
+    themesDir: dir,
+    themeWriter: opts.themeWriter ?? createThemeWriter(dir),
     lockPath: opts.lockPath,
     tokenFile: opts.tokenFile,
     hostname: opts.hostname ?? "127.0.0.1",
@@ -399,7 +404,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     createDecisions(log);
 
   const configWriter = createConfigWriter(configPath);
-  const themeWriter = createThemeWriter(cfg.themesDir);
+  const { themeWriter } = cfg;
   const token = cfg.tokenFile === undefined ? null : loadOrMintToken(cfg.tokenFile);
   const names = ownNames(connectHostname(cfg.hostname), cfg.hostnames);
 
@@ -545,9 +550,17 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       }
       return refuse(REFUSAL_STATUS[saved.reason], saved.errors);
     }
-    log.debug("themes", "theme saved");
+    const { theme, unremoved } = saved;
+    if (unremoved.length > 0) {
+      log.warn("themes", "theme saved, old files left", {
+        errno: saved.code,
+        count: unremoved.length,
+      });
+    } else {
+      log.debug("themes", "theme saved");
+    }
     const { errors } = await loadCustomThemes(cfg.themesDir);
-    return Response.json({ theme: saved.theme, errors } satisfies ThemeUpload);
+    return Response.json({ theme, errors, unremoved } satisfies ThemeUpload);
   }
 
   // POST /api/retire — graceful single-instance retire (EXC-406): a newer caret
