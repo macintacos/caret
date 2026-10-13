@@ -11,6 +11,7 @@ import {
   DARK_SLOT_KEY,
   DEFAULT_MODE,
   DEFAULT_SLOT_THEME,
+  isStandIn,
   LEGACY_THEME_KEY,
   LIGHT_SLOT_KEY,
   MODE_KEY,
@@ -21,6 +22,7 @@ import {
   readThemeMode,
   resolveScheme,
   resolveThemeId,
+  sameTokens,
   THEME_MODES,
   type ThemeMode,
   watchSystemScheme,
@@ -28,7 +30,7 @@ import {
   writeSlotTheme,
   writeThemeMode,
 } from "$lib/appearance.ts";
-import { addTheme, THEMES } from "$lib/theme.ts";
+import { addTheme, type CustomThemeId, THEMES } from "$lib/theme.ts";
 
 afterEach(() => localStorage.clear());
 
@@ -203,10 +205,47 @@ describe("readSavedSlotId", () => {
     expect(readSavedSlotId("dark")).toBe("saved-never-registered");
   });
 
-  test("returns null when unset or unreadable", () => {
-    expect(readSavedSlotId("light")).toBeNull();
+  test("returns undefined when unset or unreadable", () => {
+    expect(readSavedSlotId("light")).toBeUndefined();
     localStorage.setItem(LIGHT_SLOT_KEY, "caret-light");
-    withThrowingStorage(() => expect(readSavedSlotId("light")).toBeNull());
+    withThrowingStorage(() => expect(readSavedSlotId("light")).toBeUndefined());
+  });
+});
+
+describe("isStandIn", () => {
+  const cached = { id: "saved", scheme: "dark", tokens: THEMES["caret-dark"].tokens } as const;
+
+  test("is false with no cache", () => {
+    expect(isStandIn(undefined, "saved", "caret-dark")).toBe(false);
+  });
+
+  test("is false when the cache names another id", () => {
+    expect(isStandIn(cached, "other", "caret-dark")).toBe(false);
+  });
+
+  test("is true when the cache names the saved id and the live slot holds the default", () => {
+    expect(isStandIn(cached, "saved", "caret-dark")).toBe(true);
+  });
+
+  test("is false when the live slot already holds the cached id", () => {
+    expect(isStandIn(cached, "saved", "saved" as CustomThemeId)).toBe(false);
+  });
+});
+
+describe("sameTokens", () => {
+  const tokens = THEMES["caret-dark"].tokens;
+
+  test("is true for equal token sets", () => {
+    expect(sameTokens(tokens, { ...tokens })).toBe(true);
+  });
+
+  test("is false when one value differs", () => {
+    expect(sameTokens(tokens, { ...tokens, "--paper": "#000001" })).toBe(false);
+  });
+
+  test("is false when the key counts differ", () => {
+    const { "--paper": _, ...fewer } = tokens;
+    expect(sameTokens(tokens, fewer as typeof tokens)).toBe(false);
   });
 });
 

@@ -27,6 +27,7 @@ import {
   type CachedTheme,
   clearCachedTheme,
   DEFAULT_SLOT_THEME,
+  isStandIn,
   readCachedTheme,
   readSavedSlotId,
   readSlotTheme,
@@ -34,6 +35,7 @@ import {
   resolveScheme,
   resolveThemeId,
   type SchemeMediaQuery,
+  sameTokens,
   systemPrefersDark,
   type ThemeMode,
   watchSystemScheme,
@@ -47,7 +49,6 @@ import {
   paintPalette,
   paintTheme,
   type Scheme,
-  type Theme,
   type ThemeId,
   themeFor,
 } from "$lib/theme.ts";
@@ -113,11 +114,6 @@ export interface AppearanceDeps {
 }
 
 const SCHEMES = ["light", "dark"] as const;
-
-function sameTokens(a: Theme["tokens"], b: Theme["tokens"]): boolean {
-  const names = Object.keys(a) as (keyof Theme["tokens"])[];
-  return names.length === Object.keys(b).length && names.every((name) => a[name] === b[name]);
-}
 
 /**
  * Build a live appearance over the persisted mode + slots. Exported for
@@ -208,13 +204,9 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
       live.prefersDark = probe();
       const showing = scheme();
       const cached = readCachedTheme(showing);
-      standIn =
-        cached !== undefined &&
-        cached.id === readSavedSlotId(showing) &&
-        // False only when boot re-runs after registration — the dev `--fresh` reset.
-        live.slots[showing] !== cached.id
-          ? cached
-          : undefined;
+      standIn = isStandIn(cached, readSavedSlotId(showing), live.slots[showing])
+        ? cached
+        : undefined;
       if (standIn) paintPalette(standIn);
       else paintTheme(resolved());
     },
