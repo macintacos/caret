@@ -52,7 +52,10 @@ export type ThemeSave =
   | { ok: false; reason: ThemeSaveRefusal; errors: string[]; code?: string };
 
 /** Writes queue on the folder, so two uploads cannot interleave one's removals with the other's write. */
-export function createThemeWriter(dir: string): ThemeWriter {
+export function createThemeWriter(
+  dir: string,
+  remove = (path: string) => rm(path, { force: true }),
+): ThemeWriter {
   const writes = createKeyedQueue();
   return {
     async save(text) {
@@ -77,7 +80,7 @@ export function createThemeWriter(dir: string): ThemeWriter {
             // On a case-insensitive filesystem `Twin.json` is the file just written.
             const existing = await stat(join(dir, file)).catch(() => undefined);
             if (existing && !(existing.ino === written.ino && existing.dev === written.dev)) {
-              await rm(join(dir, file), { force: true });
+              await remove(join(dir, file));
             }
           }
         } catch (error) {

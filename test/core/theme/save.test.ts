@@ -112,6 +112,22 @@ describe("createThemeWriter", () => {
     expect(loaded.errors).toEqual([]);
   });
 
+  test("a removal that fails after the write is a save naming the file left behind", async () => {
+    writeFileSync(join(dir, "a.json"), themeFileText("nightly"));
+    const text = themeFileText("nightly", { accent: "#123456" });
+    const parsed = parseThemeFile(text);
+    if (!parsed.ok) throw new Error("fixture must parse");
+    const remove = () => Promise.reject(Object.assign(new Error("denied"), { code: "EPERM" }));
+    const saved: unknown = await createThemeWriter(dir, remove).save(text);
+    expect(saved).toEqual({
+      ok: true,
+      theme: parsed.file,
+      unremoved: ["a.json"],
+      code: "EPERM",
+    });
+    expect(readFileSync(join(dir, "nightly.json"), "utf-8")).toBe(text);
+  });
+
   test("a conflict is refused and writes nothing", async () => {
     const held = themeFileText("foo");
     writeFileSync(join(dir, "nightly.json"), held);

@@ -440,6 +440,16 @@ describe("reapply", () => {
     expect(localStorage.getItem(DARK_SLOT_KEY)).toBe(id);
   });
 
+  test("a slot at its default takes its saved theme back once the scheme matches again", async () => {
+    const { appearance, file, id } = await holdInDark("reapply-flipped-back", "dark");
+    replaceTheme(await customThemeFile(id, "light"));
+    appearance.reapply(id);
+    replaceTheme(withNewAccent(file));
+    appearance.reapply(id);
+    expect(appearance.slots.dark).toBe(id);
+    expect(readCachedTheme("dark")?.tokens["--accent"]).toBe(NEW_ACCENT);
+  });
+
   test("an id no slot holds changes nothing", async () => {
     const file = await customThemeFile("reapply-unheld", "dark");
     const id = addTheme(file);
