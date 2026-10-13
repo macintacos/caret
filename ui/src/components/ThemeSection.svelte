@@ -163,7 +163,7 @@
       <Alert.Title>These theme files didn't load</Alert.Title>
       <Alert.Description>
         <ul class="error-list">
-          {#each errors as error (error.file)}
+          {#each errors as error, index (index)}
             <li>
               <code class="error-file">{error.file}</code>
               {#each error.messages as message, i (i)}<p>{message}</p>{/each}

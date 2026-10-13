@@ -23,6 +23,13 @@ import type { Locator, Page } from "@playwright/test";
 import { openSettings } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface, rowColors, seedAndOpen } from "@test/e2e/support/source-view.ts";
+import { caretThemeFile } from "@test/support/theme.ts";
+
+const CARET_DARK_ACCENT = caretThemeFile("dark").palette.accent;
+// Computed styles come back in decimal.
+const CARET_DARK_ACCENT_RGB = `rgb(${[1, 3, 5]
+  .map((i) => Number.parseInt(CARET_DARK_ACCENT.slice(i, i + 2), 16))
+  .join(", ")})`;
 
 const topbarHints = ".topbar [data-slot='kbd']";
 const keyboardButton = "button[aria-label='Keyboard shortcuts']";
@@ -283,10 +290,10 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
   await seedAndOpen(page, daemon);
 
   // The emulated OS is dark, so the dark slot is live: caret dark, amber headings.
-  // Computed styles come back in decimal, so the two assertions below spell caret
-  // dark's --accent (#ff8f3d) as rgb() — grep both forms when the palette is revised.
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(255, 143, 61)");
+  await expect
+    .poll(() => rowColors(page, "Widget Cache Refactor"))
+    .toContain(CARET_DARK_ACCENT_RGB);
 
   await openSettings(page);
   await pickDraculaDark(page);
@@ -307,7 +314,7 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
   // "no amber" by returning nothing.
   const retinted = await rowColors(page, "Widget Cache Refactor");
   expect(retinted.length).toBeGreaterThan(0);
-  expect(retinted).not.toContain("rgb(255, 143, 61)");
+  expect(retinted).not.toContain(CARET_DARK_ACCENT_RGB);
 
   // The fenced block is highlighted with Dracula's syntax roles: it paints `function`
   // its pink (#ff79c6), a hue neither caret theme file carries, so caret's pair cannot
@@ -372,7 +379,10 @@ test("hovering a theme option previews its palette beside the menu, without appl
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Dark theme" }).click();
   await expect(preview).toHaveCount(1);
-  await expect(preview).toHaveAttribute("style", /--accent:\s*#ff8f3d/i);
+  await expect(preview).toHaveAttribute(
+    "style",
+    new RegExp(`--accent:\\s*${CARET_DARK_ACCENT}`, "i"),
+  );
 });
 
 test("keyboard-highlighting a theme option previews it too (EXC-753)", async ({ daemon, page }) => {

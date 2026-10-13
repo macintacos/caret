@@ -12,7 +12,7 @@
 
 import { type GrammarState, hastToHtml } from "shiki/core";
 
-import { REGISTERED_SHIKI_THEMES, shikiThemeFor, shikiThemeName } from "$lib/caret-theme.ts";
+import { BUILTIN_SHIKI_THEMES, shikiThemeFor, shikiThemeName } from "$lib/caret-theme.ts";
 import { CARET_TOKENIZE_OPTIONS, createHighlighter } from "$lib/diffview/shiki-bundle.ts";
 import { isBuiltinThemeId, type ThemeId, themeFor } from "$lib/theme.ts";
 
@@ -28,7 +28,7 @@ function highlighter(): Promise<Highlighter> {
   if (highlighterPromise === undefined) {
     highlighterPromise = createHighlighter({
       langs: [],
-      themes: REGISTERED_SHIKI_THEMES,
+      themes: BUILTIN_SHIKI_THEMES,
     });
   }
   return highlighterPromise;

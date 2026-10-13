@@ -32,15 +32,16 @@ export function registerUploadedTheme(file: FileTheme): "added" | "replaced" {
   return "replaced";
 }
 
-/** Registers the daemon's custom themes and settles the appearance, returning the files
- * that failed to load. `null` (a failed read) only drops a boot stand-in. Call once per
- * page load: a second call would re-register the same ids and throw. */
+/** Registers the daemon's custom themes, then reports them loaded to the appearance
+ * (`themesLoaded`), returning the files that failed to load. `null` (a failed read)
+ * registers nothing and reports `themesUnavailable`, which drops a boot stand-in. Call
+ * once per page load: a second call would re-register the same ids and throw. */
 export function registerCustomThemes(served: CustomThemes | null): readonly ThemeFileError[] {
   if (served === null) {
-    appearance.dropStandIn();
+    appearance.themesUnavailable();
     return [];
   }
   for (const file of served.themes) registerTheme(buildFileTheme(file));
-  appearance.settle();
+  appearance.themesLoaded();
   return served.errors;
 }

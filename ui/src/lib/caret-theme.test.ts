@@ -6,7 +6,7 @@ import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
 import type { SyntaxRole } from "@core/theme/schema.ts";
 import { customThemeFile, themeFileColors } from "@ui/support/theme-file.ts";
 import {
-  REGISTERED_SHIKI_THEMES,
+  BUILTIN_SHIKI_THEMES,
   shikiThemeFor,
   shikiThemeForPalette,
   shikiThemeName,
@@ -146,8 +146,8 @@ describe("caret's own shiki themes", () => {
 describe("caret-theme ↔ THEMES palette sync", () => {
   // Every palette gets a highlighter theme, not just caret's own pair (EXC-752):
   // a reviewer who picks Dracula reads Dracula-colored code, not amber code.
-  test("resolves one shiki theme per registered palette, named by its id", () => {
-    expect(REGISTERED_SHIKI_THEMES.map((theme) => theme.name)).toEqual(THEME_IDS);
+  test("resolves one shiki theme per built-in palette, named by its id", () => {
+    expect(BUILTIN_SHIKI_THEMES.map((theme) => theme.name)).toEqual(THEME_IDS);
   });
 
   test("highlights a vendor palette in its own colors, not caret's", () => {

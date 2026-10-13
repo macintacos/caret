@@ -148,4 +148,4 @@ export function shikiThemeFor(id: ThemeId): ThemeRegistrationRaw {
 
 /** One resolved theme per built-in palette, in THEME_IDS order — what a highlighter
  * registers at creation. Runtime themes are not here. */
-export const REGISTERED_SHIKI_THEMES: ThemeRegistrationRaw[] = THEME_IDS.map(shikiThemeFor);
+export const BUILTIN_SHIKI_THEMES: ThemeRegistrationRaw[] = THEME_IDS.map(shikiThemeFor);

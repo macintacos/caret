@@ -20,6 +20,7 @@ import {
   type RuntimeTheme,
   type Scheme,
   THEMES,
+  type Theme,
   type ThemeId,
   themesForScheme,
 } from "$lib/theme.ts";
@@ -101,6 +102,22 @@ export function appearanceSummary(mode: ThemeMode, scheme: Scheme, label: string
     : `Always ${scheme} — ${label} is showing.`;
 }
 
+/** Whether two palettes carry the same token names and values. */
+export function sameTokens(a: Theme["tokens"], b: Theme["tokens"]): boolean {
+  const names = Object.keys(a) as (keyof Theme["tokens"])[];
+  return names.length === Object.keys(b).length && names.every((name) => a[name] === b[name]);
+}
+
+/** Whether boot paints the showing slot's cached palette in place of its default: the
+ * cache names the saved id, and that theme has not registered yet. */
+export function isStandIn(
+  cached: CachedTheme | undefined,
+  savedId: string | undefined,
+  liveId: ThemeId,
+): boolean {
+  return cached !== undefined && cached.id === savedId && liveId !== cached.id;
+}
+
 // ----- Persisted state -------------------------------------------------------
 
 /** Read the remembered mode, defaulting to `system` on a missing, unrecognized,
@@ -123,7 +140,6 @@ export function writeSlotTheme(scheme: Scheme, id: ThemeId): void {
 /** A slot's custom theme as boot paints it before the daemon's themes arrive. */
 export type CachedTheme = { id: string } & Pick<RuntimeTheme, "scheme" | "tokens">;
 
-const SLOT_KEYS: Record<Scheme, string> = { light: LIGHT_SLOT_KEY, dark: DARK_SLOT_KEY };
 const CACHE_KEYS: Record<Scheme, string> = { light: LIGHT_CACHE_KEY, dark: DARK_CACHE_KEY };
 // Every palette carries exactly the `ColorToken` set (theme.test.ts pins it);
 // caret-dark stands for all.
@@ -168,12 +184,12 @@ export function clearCachedTheme(scheme: Scheme): void {
   }
 }
 
-/** The slot's stored id as written, registered or not; null when unset or unreadable. */
-export function readSavedSlotId(scheme: Scheme): string | null {
+/** The slot's stored id as written, registered or not; undefined when unset or unreadable. */
+export function readSavedSlotId(scheme: Scheme): string | undefined {
   try {
-    return localStorage.getItem(SLOT_KEYS[scheme]);
+    return localStorage.getItem(slotPrefs[scheme].KEY) ?? undefined;
   } catch {
-    return null;
+    return undefined;
   }
 }
 
