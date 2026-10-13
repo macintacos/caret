@@ -1,8 +1,8 @@
-// The shared shape every palette is mapped through (EXC-752), caret's own two
-// (./caret.ts) included: name the thirteen colors a palette actually decides, and
-// the thirteen that are always derived (the two rules, the accent wash, the two
-// marks, the orphan mark, the six chip tints, the shadow) come out consistent for
-// every theme instead of being re-typed once per palette.
+// The shared shape every theme file's palette is mapped through (EXC-752): name the
+// thirteen colors a palette actually decides, and the thirteen that are always derived
+// (the two rules, the accent wash, the two marks, the orphan mark, the six chip tints,
+// the shadow) come out consistent for every theme instead of being re-typed once per
+// palette.
 //
 // The alpha suffixes and the two shadows are caret-dark's and caret-light's own
 // values, so a vendor theme's hairlines and highlight marks sit at exactly the
@@ -10,14 +10,11 @@
 // wants a derived wash on some other hue says so through the nine optional
 // overrides below rather than by writing its tokens out by hand.
 
-import type { BuiltinTheme, BuiltinThemeId, ColorToken, Scheme, ShikiThemeId } from "$lib/theme.ts";
+import type { ColorToken, Scheme } from "$lib/theme.ts";
 
-/** The colors a palette decides for itself, plus the shiki theme it names.
- * Everything else in a `Theme` is derived from these by `paletteTheme`. */
+/** The colors a palette decides for itself. Every other token is derived from these
+ * by `paletteTokens`. */
 export interface PaletteInput {
-  id: BuiltinThemeId;
-  /** Human label shown in the Settings dropdown. */
-  label: string;
   scheme: Scheme;
   /** The page surface. In dark it is the darkest of the three; in light it sits
    * between the raised and sunk surfaces. */
@@ -72,11 +69,6 @@ export interface PaletteInput {
   chipRefHue?: string;
   /** The hue `--chip-skill` rides. Defaults to `attention`. */
   chipSkillHue?: string;
-
-  /** The shiki theme this palette highlights code with: the vendor's own published
-   * one (EXC-896), or — for caret's pair — the theme authored for it under the same
-   * name (EXC-903). Every palette names one; caret-theme.ts resolves it. */
-  shikiTheme: ShikiThemeId;
 }
 
 // caret-dark's and caret-light's shadows. Black alphas, so they carry no hue and
@@ -95,21 +87,8 @@ const ALPHA: Record<Scheme, { wash: string; mark: string; markActive: string; ch
   light: { wash: "1f", mark: "24", markActive: "47", chip: "1c" },
 };
 
-/** Expand a palette's decided colors into caret's full theme. */
-export function paletteTheme(input: PaletteInput): BuiltinTheme {
-  return {
-    id: input.id,
-    label: input.label,
-    scheme: input.scheme,
-    tokens: paletteTokens(input),
-    shikiTheme: input.shikiTheme,
-  };
-}
-
 /** Expand a palette's decided colors into caret's full token set. */
-export function paletteTokens(
-  input: Omit<PaletteInput, "id" | "label" | "shikiTheme">,
-): Record<ColorToken, string> {
+export function paletteTokens(input: PaletteInput): Record<ColorToken, string> {
   const alpha = ALPHA[input.scheme];
   const ruleHue = input.ruleHue ?? input.ink;
   const washHue = input.washHue ?? input.accent;

@@ -1,0 +1,42 @@
+{
+  "id": "catppuccin-latte",
+  "label": "Catppuccin Latte",
+  "scheme": "light",
+  "palette": {
+    "paper": "#e6e9ef",
+    "raised": "#eff1f5",
+    "sunk": "#dce0e8",
+    "ink": "#4c4f69",
+    "inkSoft": "#5c5f77",
+    "inkFaint": "#7c7f93",
+    "accent": "#8839ef",
+    "accentBright": "#7287fd",
+    "accentInk": "#eff1f5",
+    "neutral": "#9ca0b0",
+    "ok": "#40a02b",
+    "danger": "#d20f39",
+    "attention": "#1e66f5"
+  },
+  "syntax": {
+    "comment": { "color": "#7c7f93", "fontStyle": ["italic"] },
+    "punctuation": { "color": "#7c7f93" },
+    "operator": { "color": "#179299" },
+    "bracket": { "color": "#4c4f69" },
+    "variable": { "color": "#4c4f69" },
+    "parameter": { "color": "#e64553", "fontStyle": ["italic"] },
+    "property": { "color": "#4c4f69" },
+    "attribute": { "color": "#df8e1d" },
+    "keyword": { "color": "#8839ef" },
+    "languageVariable": { "color": "#4c4f69" },
+    "tag": { "color": "#1e66f5" },
+    "tagPunctuation": { "color": "#179299" },
+    "function": { "color": "#1e66f5", "fontStyle": ["italic"] },
+    "builtinFunction": { "color": "#d20f39", "fontStyle": ["italic"] },
+    "type": { "color": "#df8e1d", "fontStyle": ["italic"] },
+    "builtinType": { "color": "#8839ef" },
+    "string": { "color": "#40a02b" },
+    "escape": { "color": "#ea76cb" },
+    "interpolation": { "color": "#7c7f93" },
+    "number": { "color": "#fe640b" }
+  }
+}

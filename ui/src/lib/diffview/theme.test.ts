@@ -55,9 +55,8 @@ describe("registerCaretDiffThemes", () => {
     }
   });
 
-  // Pinned on Dracula's pink keyword, a hue caret's own named color set does not
-  // carry (EXC-896).
-  test("loads a vendor palette's upstream theme, not caret's own", async () => {
+  // Pinned on Dracula's pink keyword, a hue neither caret theme file carries (EXC-896).
+  test("loads a vendor palette's own theme, not caret's", async () => {
     const loaders = new Map<string, () => Promise<unknown>>();
     registerCaretDiffThemes((name, load) => {
       loaders.set(name, load);

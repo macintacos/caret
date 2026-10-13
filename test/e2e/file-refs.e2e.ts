@@ -417,10 +417,10 @@ test("routes a click to the excerpt preview or the folder tree, by kind", async 
   }
 });
 
-// EXC-896: tagging depends on shiki emitting the opening backtick as a token of its
-// own, which only holds while the backtick and the path resolve to different colors.
-// A vendor palette highlights with that vendor's published theme, where the two are
-// the same color, so caret appends a rule that keeps them apart. Without it the icon,
+// Tagging depends on shiki emitting the opening backtick as a token of its own, which
+// only holds while the backtick and the path resolve to different colors. A vendor
+// palette highlights with the syntax roles converted into its theme file, where the two
+// can be the same color, so caret appends a rule that keeps them apart. Without it the icon,
 // the pointer cursor, and the hover wash all vanish under every vendor palette while
 // the click target survives — a failure shape no color assertion can see.
 test("marks references under a vendor palette too", async ({ daemon, page }) => {

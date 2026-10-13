@@ -261,6 +261,10 @@ after a page reload, an uploaded one straight away. When a slot's selected theme
 loading, the slot shows caret's theme for that scheme and keeps the selection, so
 restoring the file brings it back.
 
+caret's built-in themes ship as theme files in
+[`ui/src/lib/themes/`](../ui/src/lib/themes/); copying one is a good starting point for
+your own — give the copy its own `id`.
+
 ### Where caret finds theme files
 
 caret reads theme files from `$XDG_CONFIG_HOME/caret/themes`, or `~/.config/caret/themes`

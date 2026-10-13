@@ -1,29 +1,15 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 
 import { readThemeFile } from "@ui/support/theme-file.ts";
-import { CARET_SHIKI_THEMES } from "$lib/caret-shiki.ts";
 import { shikiThemeFor } from "$lib/caret-theme.ts";
 import { CARET_TOKENIZE_OPTIONS, createHighlighter } from "$lib/diffview/shiki-bundle.ts";
-import { addTheme, type CustomThemeId, THEMES } from "$lib/theme.ts";
+import { addTheme, type CustomThemeId, THEME_IDS, THEMES } from "$lib/theme.ts";
 import { buildFileTheme } from "$lib/theme-file.ts";
 
 describe("buildFileTheme", () => {
-  for (const id of ["caret-dark", "caret-light"] as const) {
-    test(`${id}.json builds the bundled ${id} tokens and shiki theme`, async () => {
-      const built = buildFileTheme(await readThemeFile(`${id}.json`));
-      const bundled = THEMES[id];
-      expect({
-        id: built.id,
-        label: built.label,
-        scheme: built.scheme,
-        tokens: built.tokens,
-      }).toEqual({
-        id: bundled.id,
-        label: bundled.label,
-        scheme: bundled.scheme,
-        tokens: bundled.tokens,
-      });
-      expect(built.shikiTheme).toEqual(CARET_SHIKI_THEMES[id]);
+  for (const id of THEME_IDS) {
+    test(`${id}.json builds the bundled ${id} theme`, async () => {
+      expect(buildFileTheme(await readThemeFile(`${id}.json`))).toEqual(THEMES[id]);
     });
   }
 

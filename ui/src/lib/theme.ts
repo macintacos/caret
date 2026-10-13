@@ -25,10 +25,10 @@
 // that do (kbd, input), so it needs the `dark:` variant reworked to a nearest-ancestor
 // form first: every `dark:` utility in the tree, hence a separate change.
 //
-// The palettes themselves live in ./themes/ — one module per family, each carrying
-// its upstream source and the mapping onto the tokens below. This module owns the
-// types, the assembled registry, and the painting; ./themes/recipe.ts owns the
-// tokens a palette derives rather than decides.
+// The palettes themselves are theme files in ./themes/, built at module load by the
+// same `buildFileTheme` a runtime theme goes through. This module owns the types, the
+// assembled registry, and the painting; ./themes/recipe.ts owns the tokens a palette
+// derives rather than decides.
 //
 // Which palette is live — the light/dark/system mode and the two per-scheme theme
 // slots — is selection policy, and lives in appearance.ts (EXC-773); paintTheme is
@@ -45,26 +45,22 @@
 import type { ThemeRegistrationRaw } from "shiki/core";
 import { SvelteMap } from "svelte/reactivity";
 
-import type { CaretShikiThemeId } from "$lib/caret-shiki.ts";
-// Type-only both ways (theme-file.ts takes `RuntimeTheme` from here), so the cycle is
-// erased by `verbatimModuleSyntax` — never reach for a runtime value across it.
-import type { FileTheme } from "$lib/theme-file.ts";
-import { caretDark, caretLight } from "$lib/themes/caret.ts";
-import {
-  catppuccinFrappe,
-  catppuccinLatte,
-  catppuccinMacchiato,
-  catppuccinMocha,
-} from "$lib/themes/catppuccin.ts";
-import { dracula } from "$lib/themes/dracula.ts";
-import { githubDark, githubLight } from "$lib/themes/github.ts";
-import { dawnfox, duskfox } from "$lib/themes/nightfox.ts";
-import type { UpstreamShikiThemeId } from "$lib/upstream-shiki.ts";
-
-/** Every shiki theme a palette may name: the vendors' published ones (EXC-896) and
- * the two caret authors for its own pair (EXC-903). One union over both maps is what
- * lets caret-theme.ts resolve any palette through a single lookup. */
-export type ShikiThemeId = UpstreamShikiThemeId | CaretShikiThemeId;
+import { fillFallbackRoles } from "@core/theme/role-scopes.ts";
+import type { ThemeFile } from "@core/theme/schema.ts";
+// theme-file.ts takes only types from here, so this runtime import is not a load-order
+// cycle — never reach for a runtime value in that direction.
+import { buildFileTheme, type FileTheme } from "$lib/theme-file.ts";
+import caretDark from "$lib/themes/caret-dark.json";
+import caretLight from "$lib/themes/caret-light.json";
+import catppuccinFrappe from "$lib/themes/catppuccin-frappe.json";
+import catppuccinLatte from "$lib/themes/catppuccin-latte.json";
+import catppuccinMacchiato from "$lib/themes/catppuccin-macchiato.json";
+import catppuccinMocha from "$lib/themes/catppuccin-mocha.json";
+import dawnfox from "$lib/themes/dawnfox.json";
+import dracula from "$lib/themes/dracula.json";
+import duskfox from "$lib/themes/duskfox.json";
+import githubDark from "$lib/themes/github-dark.json";
+import githubLight from "$lib/themes/github-light.json";
 
 export type BuiltinThemeId =
   | "caret-dark"
@@ -138,11 +134,8 @@ interface ThemeFields {
 /** A compiled-in palette. */
 export interface BuiltinTheme extends ThemeFields {
   id: BuiltinThemeId;
-  /** The shiki theme this palette highlights code with — the vendor's own published
-   * one for a palette named after a vendor (EXC-896), caret's own theme of the
-   * same name for its own pair (EXC-903). Required, so a palette that names none is
-   * a compile error rather than a page of uncolored code. */
-  shikiTheme: ShikiThemeId;
+  /** The shiki theme its code is highlighted with, built from its theme file's syntax roles. */
+  shikiTheme: ThemeRegistrationRaw;
 }
 
 /** A theme built from a theme file, carrying its shiki theme inline. */
@@ -158,18 +151,29 @@ export type Theme = BuiltinTheme | RuntimeTheme;
 // Insertion order is display order: caret's own pair first, then each vendor family
 // kept together, so a slot's dropdown groups the way a reader expects to find it.
 export const THEMES: Record<BuiltinThemeId, BuiltinTheme> = {
-  "caret-dark": caretDark,
-  "caret-light": caretLight,
-  "catppuccin-latte": catppuccinLatte,
-  "catppuccin-frappe": catppuccinFrappe,
-  "catppuccin-macchiato": catppuccinMacchiato,
-  "catppuccin-mocha": catppuccinMocha,
-  dracula,
-  "github-light": githubLight,
-  "github-dark": githubDark,
-  dawnfox,
-  duskfox,
+  "caret-dark": builtin("caret-dark", caretDark),
+  "caret-light": builtin("caret-light", caretLight),
+  "catppuccin-latte": builtin("catppuccin-latte", catppuccinLatte),
+  "catppuccin-frappe": builtin("catppuccin-frappe", catppuccinFrappe),
+  "catppuccin-macchiato": builtin("catppuccin-macchiato", catppuccinMacchiato),
+  "catppuccin-mocha": builtin("catppuccin-mocha", catppuccinMocha),
+  dracula: builtin("dracula", dracula),
+  "github-light": builtin("github-light", githubLight),
+  "github-dark": builtin("github-dark", githubDark),
+  dawnfox: builtin("dawnfox", dawnfox),
+  duskfox: builtin("duskfox", duskfox),
 };
+
+// A JSON import is the schema's unvalidated input — `scheme` widens to string and the
+// optional roles may be absent — so the fallbacks are filled as the schema's transform
+// fills them. theme-file.test.ts pins the result to the validated build.
+function builtin(
+  id: BuiltinThemeId,
+  json: Omit<ThemeFile, "scheme" | "syntax"> & { scheme: string; syntax: object },
+): BuiltinTheme {
+  const syntax = fillFallbackRoles(json.syntax as Parameters<typeof fillFallbackRoles>[0]);
+  return { ...buildFileTheme({ ...json, scheme: json.scheme as ThemeFile["scheme"], syntax }), id };
+}
 
 /** The built-in ids in display order — caret-dark first. Runtime themes are not
  * here; `themesForScheme` is the live list of what a slot can select. */

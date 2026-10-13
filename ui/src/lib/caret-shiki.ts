@@ -1,18 +1,11 @@
-// caret's own two shiki themes (EXC-903). The eleven shiki-only hues of the named color
-// set in ./themes/caret.ts (EXC-902) are spent here, across a TextMate scope set wide
+// The shiki theme every theme file builds — built-in and runtime alike. `syntaxShikiTheme`
+// maps a file's syntax roles onto core's role-scopes.ts table, a TextMate scope set wide
 // enough to tell a type from a function, a number from a string escape, and an attribute
-// from a property — the three pairs that set holds apart by hue.
-// `syntaxShikiTheme` maps any theme's syntax roles onto core's role-scopes.ts table; caret's
-// pair reaches it by mapping its record onto those roles (`caretRoles`).
+// from a property.
 //
-// A theme is a plain `ThemeRegistrationRaw` object (shiki's load-theme guide), the same
-// shape ./upstream-shiki.ts's vendor themes carry, so caret-theme.ts resolves the whole
-// registry through one lookup rather than a fork.
-//
-// The colors come from the `CaretPalette` record rather than from `Theme.tokens`. The
+// The colors come from the file's palette and syntax rather than from `Theme.tokens`. The
 // syntax half never becomes a `ColorToken`, so the tokens map has nowhere to put it; the
-// record is where both halves live, and its `sunk` / `ink` are the same values
-// `--paper-sunk` / `--ink` carry.
+// palette's `sunk` / `ink` are the same values `--paper-sunk` / `--ink` carry.
 //
 // caret's appended markdown rules — the structural markers and EXC-867's emphasis set —
 // are deliberately ABSENT. caret-theme.ts appends them to every theme it resolves, and
@@ -21,21 +14,16 @@
 
 import type { ThemeRegistrationRaw } from "shiki/core";
 
-import { fillFallbackRoles, ROLE_SCOPES } from "@core/theme/role-scopes.ts";
-import type { SyntaxRole, ThemeSyntax } from "@core/theme/schema.ts";
-// Both imports are type-only in one direction: theme.ts takes `CaretShikiThemeId`
-// from here and this module takes its two types from there. `verbatimModuleSyntax`
-// erases both, so the cycle is a source-graph artifact rather than a load order — keep
-// it that way, and never reach for a runtime value across it.
-import type { BuiltinThemeId, Scheme } from "$lib/theme.ts";
-import { CARET_DARK, CARET_LIGHT, type CaretPalette } from "$lib/themes/caret.ts";
+import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
+import type { SyntaxRole, ThemeFile, ThemeSyntax } from "@core/theme/schema.ts";
+import type { Scheme } from "$lib/theme.ts";
 
 /** Build a shiki theme from a scheme's syntax roles, plus caret's fixed markdown and diff
  * rules, which paint from the six chrome colors and the comment role. */
 export function syntaxShikiTheme(
   name: string,
   scheme: Scheme,
-  chrome: Pick<CaretPalette, "sunk" | "ink" | "accent" | "accentBright" | "ok" | "danger">,
+  chrome: Pick<ThemeFile["palette"], "sunk" | "ink" | "accent" | "accentBright" | "ok" | "danger">,
   roles: ThemeSyntax,
 ): ThemeRegistrationRaw {
   return {
@@ -64,8 +52,8 @@ export function syntaxShikiTheme(
       },
       { scope: ["markup.bold"], settings: { fontStyle: "bold" } },
       { scope: ["markup.italic"], settings: { fontStyle: "italic" } },
-      // Inline code and a fence's body ride the accent's lighter sibling: the set names
-      // no hue of their own, and giving them one is EXC-858's.
+      // Inline code and a fence's body ride the accent's lighter sibling: theme files name
+      // no inline-code role, and giving them one is EXC-858's.
       {
         scope: ["markup.inline.raw", "markup.fenced_code"],
         settings: { foreground: chrome.accentBright },
@@ -115,45 +103,3 @@ function fontStyleResets(roles: ThemeSyntax): NonNullable<ThemeRegistrationRaw["
     })),
   ];
 }
-
-function caretRoles(p: CaretPalette): ThemeSyntax {
-  return fillFallbackRoles({
-    comment: { color: p.comment, fontStyle: ["italic"] },
-    punctuation: { color: p.punctuation },
-    variable: { color: p.variable },
-    property: { color: p.property },
-    attribute: { color: p.attribute },
-    keyword: { color: p.keyword },
-    function: { color: p.func },
-    type: { color: p.type },
-    string: { color: p.string },
-    escape: { color: p.escape },
-    number: { color: p.number },
-  });
-}
-
-/** Build one scheme's theme from its record.
- *
- * @param id - The theme's shiki name, which is also its palette id — a highlighter
- * resolves it by the same handle appearance.ts paints with. Typing it `BuiltinThemeId` keeps a
- * theme from naming a palette that does not exist; that its key and its `name` agree is
- * pinned by caret-theme.test.ts, and `caretTheme`'s `BuiltinThemeId & CaretShikiThemeId`
- * parameter closes the loop from the palette side. */
-function caretShikiTheme(
-  id: BuiltinThemeId,
-  scheme: Scheme,
-  p: CaretPalette,
-): ThemeRegistrationRaw {
-  return syntaxShikiTheme(id, scheme, p, caretRoles(p));
-}
-
-/** caret's own shiki themes, keyed by the palette id each belongs to. In THEMES order,
- * so this registry and upstream-shiki.ts's read alike. */
-export const CARET_SHIKI_THEMES = {
-  "caret-dark": caretShikiTheme("caret-dark", "dark", CARET_DARK),
-  "caret-light": caretShikiTheme("caret-light", "light", CARET_LIGHT),
-} as const;
-
-/** The theme ids caret's own palettes point at — caret's own pair, and the half of
- * `ShikiThemeId` that is not a vendor's. */
-export type CaretShikiThemeId = keyof typeof CARET_SHIKI_THEMES;

@@ -130,7 +130,141 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## Catppuccin
+
+[catppuccin-latte.json](ui/src/lib/themes/catppuccin-latte.json),
+[catppuccin-frappe.json](ui/src/lib/themes/catppuccin-frappe.json),
+[catppuccin-macchiato.json](ui/src/lib/themes/catppuccin-macchiato.json), and
+[catppuccin-mocha.json](ui/src/lib/themes/catppuccin-mocha.json) carry Catppuccin's
+colors. Their chrome palette is
+[`catppuccin/palette`](https://github.com/catppuccin/palette)'s published hex values;
+their syntax roles were converted from the VS Code theme shiki ships,
+[`catppuccin/vscode`](https://github.com/catppuccin/vscode). Both repositories carry this
+notice:
+
+```text
+MIT License
+
+Copyright (c) 2021 Catppuccin
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## Dracula
+
+[dracula.json](ui/src/lib/themes/dracula.json) carries Dracula's colors. Its chrome
+palette is the published palette plus the UI shades the official VS Code theme,
+[`dracula/visual-studio-code`](https://github.com/dracula/visual-studio-code), defines
+beside it; its syntax roles were converted from that same VS Code theme, which shiki
+ships.
+
+```text
+The MIT License (MIT)
+
+Copyright (c) 2016 Dracula Theme
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## GitHub
+
+[github-light.json](ui/src/lib/themes/github-light.json) and
+[github-dark.json](ui/src/lib/themes/github-dark.json) carry GitHub's colors. Their chrome
+palette is Primer functional tokens, by way of
+[`primer/github-vscode-theme`](https://github.com/primer/github-vscode-theme) and the
+[`primer/primitives`](https://github.com/primer/primitives) it draws its colors from;
+their syntax roles were converted from the VS Code theme shiki ships,
+`primer/github-vscode-theme`.
+
+`primer/github-vscode-theme`:
+
+```text
+MIT License
+
+Copyright (c) 2020 Primer
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+`primer/primitives`:
+
+```text
+The MIT License (MIT)
+
+Copyright (c) 2018 GitHub Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## Nightfox
+
+[dawnfox.json](ui/src/lib/themes/dawnfox.json) and
+[duskfox.json](ui/src/lib/themes/duskfox.json) carry Nightfox's colors, from
+`lua/nightfox/palette/` at the commit below.
 
 [ui/src/code-themes/nightfox/dawnfox.json](ui/src/code-themes/nightfox/dawnfox.json) and
 [ui/src/code-themes/nightfox/duskfox.json](ui/src/code-themes/nightfox/duskfox.json) are

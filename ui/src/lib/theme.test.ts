@@ -4,7 +4,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { BUILTIN_THEME_IDS } from "@core/theme/builtin-ids.ts";
-import { customThemeFile } from "@ui/support/theme-file.ts";
+import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
+import type { SyntaxRole } from "@core/theme/schema.ts";
+import { customThemeFile, readThemeFile, themeFileColors } from "@ui/support/theme-file.ts";
 import { QUOTE_SUBDUE } from "$lib/diffview/coreStyles.ts";
 import {
   addTheme,
@@ -23,7 +25,6 @@ import {
   themeFor,
   themesForScheme,
 } from "$lib/theme.ts";
-import { CARET_COLOR_PLACEMENT, CARET_DARK, CARET_LIGHT } from "$lib/themes/caret.ts";
 
 afterEach(() => {
   // Strip any inline vars/attrs a prior paintTheme wrote onto the root.
@@ -199,9 +200,9 @@ describe("THEMES", () => {
   // Neither caret palette has a CSS mirror — app.css's first-paint block is emitted
   // from this record — so each pins its whole token set directly, and nothing else
   // in the repo pins their decided colors. The eleven derived values come out of the
-  // recipe's hue fallbacks; the thirteen decided ones are read from the named color set
-  // in themes/caret.ts, so this pin is what catches a slip in either the set or the
-  // reading. The three hue overrides are subsumed: each rides a hue that is NOT the
+  // recipe's hue fallbacks; the thirteen decided ones are read from the palette in
+  // themes/caret-{dark,light}.json, so this pin is what catches a slip in the file or the
+  // recipe. The three hue overrides are subsumed: each rides a hue that is NOT the
   // token it would otherwise default to — the rules ride bone in dark and a warmer
   // umber than the ink in light, the accent wash an ember that is not --accent, the
   // marks a lighter amber than the wash's — so a dropped or mis-cascaded override
@@ -267,94 +268,38 @@ describe("THEMES", () => {
   });
 });
 
-// caret's own named color set (EXC-902) — the record the thirteen PaletteInput values
-// are read from, and the one EXC-903's caret shiki themes spend. The token colors
+// caret's own theme files' colors — the palette the thirteen decided tokens
+// are read from, and the syntax roles caret's shiki themes spend. The token colors
 // are already covered by the two full-token pins above and by the registry-wide
-// invariants below; what those cannot reach is the set's shiki-only half, which never
-// becomes a ColorToken and so never renders on a surface the other tests measure.
-//
-// Coverage of the placement map is deliberately NOT asserted here.
-// `Record<keyof CaretPalette, ColorPlacement>` already makes a color with no placement
-// (or a placement for no color) a compile error, and the "type annotation is a weak
-// proxy" note below applies to source-text claims that cannot be typed, not to this one.
-describe("the caret color set", () => {
-  const records = [
-    ["caret-dark", CARET_DARK],
-    ["caret-light", CARET_LIGHT],
-  ] as const;
+// invariants below; what those cannot reach is the syntax half, which never becomes a
+// ColorToken and so never renders on a surface the other tests measure.
+const CARET_RECORDS = [
+  ["caret-dark", await themeFileColors("caret-dark.json")],
+  ["caret-light", await themeFileColors("caret-light.json")],
+] as const;
+const SYNTAX_ROLES = Object.keys(ROLE_SCOPES) as SyntaxRole[];
 
-  // shiki resolves token colors at highlight time and takes plain 6-digit hex, and the
-  // registry-wide pin below already demands the same form of the tokens it reads. One
-  // rule over the whole record keeps the two halves from drifting apart.
-  test("names every color as alpha-free 6-digit hex", () => {
-    for (const [id, record] of records) {
-      for (const [color, value] of Object.entries(record)) {
-        expect(value, `${id} ${color}`).toMatch(/^#[0-9a-f]{6}$/i);
-      }
-    }
-  });
-
+describe("caret's theme file colors", () => {
   // The syntax hues render on --paper-sunk (the code body and the diff surface), which
   // is neither of the two chrome surfaces the ink-ramp floors are measured against — in
   // caret-dark it sits between them, in caret-light below both. So they get their own
   // floor on their own surface: WCAG AA, except the hues that recede on purpose, held to
   // the large-text floor instead. The exception list is named here rather than inferred,
   // so widening it is a visible decision.
-  const RECESSIVE: (keyof typeof CARET_DARK)[] = ["comment"];
+  const RECESSIVE: SyntaxRole[] = ["comment"];
 
-  const shikiOnly = Object.entries(CARET_COLOR_PLACEMENT)
-    .filter(([, placement]) => placement === "shiki-only")
-    .map(([color]) => color as keyof typeof CARET_DARK);
-
-  // Guards the loop below against iterating an empty list: a reclassification that left
-  // no color `shiki-only` would otherwise report as a clean pass having measured nothing.
-  test("names a shiki-only half to measure", () => {
-    expect(shikiOnly.length).toBeGreaterThan(0);
-  });
-
-  test("clears caret's contrast floors for every shiki-only hue, on --paper-sunk", () => {
-    for (const [id, record] of records) {
-      for (const color of shikiOnly) {
-        const ratio = contrast(record[color], record.sunk);
-        if (RECESSIVE.includes(color)) {
-          expect(ratio, `${id} ${color} on sunk (recessive)`).toBeGreaterThan(3);
+  test("clears caret's contrast floors for every syntax role, on --paper-sunk", () => {
+    for (const [id, record] of CARET_RECORDS) {
+      for (const role of SYNTAX_ROLES) {
+        const ratio = contrast(record[role], record.sunk);
+        if (RECESSIVE.includes(role)) {
+          expect(ratio, `${id} ${role} on sunk (recessive)`).toBeGreaterThan(3);
         } else {
-          expect(ratio, `${id} ${color} on sunk`).toBeGreaterThanOrEqual(4.5);
+          expect(ratio, `${id} ${role} on sunk`).toBeGreaterThanOrEqual(4.5);
         }
       }
     }
   });
-});
-
-// The recipe is the only way a Theme is constructed (EXC-885). Asserted against each
-// palette module's source rather than its exports, because a hand-written token
-// record and a generated one are indistinguishable once they are Theme objects —
-// the thing worth pinning is that the derivation is not re-typed per palette.
-// recipe.ts is the constructor itself, so it is the one file exempt.
-describe("every palette module", () => {
-  const THEMES_DIR = join(import.meta.dir, "themes");
-  const modules = readdirSync(THEMES_DIR).filter(
-    (file) => file.endsWith(".ts") && file !== "recipe.ts",
-  );
-
-  // Guards the loop below against iterating an empty list, which would report as a
-  // clean pass if the directory ever moved.
-  test("is found beside recipe.ts", () => {
-    expect(modules.length).toBeGreaterThan(0);
-  });
-
-  for (const file of modules) {
-    test(`${file} builds its themes through paletteTheme`, () => {
-      const source = readFileSync(join(THEMES_DIR, file), "utf8");
-      expect(source, file).toContain("paletteTheme(");
-      expect(source, file).not.toContain("Record<ColorToken, string>");
-      // The type annotation alone is a weak proxy — a module could drop it and still
-      // hand-write a token record. No palette module names a `"--token":` key at all
-      // (only recipe.ts does, and it is excluded), so the absence of one is the
-      // falsifiable form of "the derivation is not re-typed per palette".
-      expect(source, file).not.toMatch(/"--[\w-]+"\s*:/);
-    });
-  }
 });
 
 // Registry-wide invariants: these run over every palette rather than the two named
@@ -652,9 +597,8 @@ describe("every theme", () => {
   // shiki resolves token colors at highlight time and takes plain 6-digit hex; an
   // alpha suffix on any of these would reach the highlighter as an invalid color.
   // Only the tokens caret-theme.ts's appended markdown rules read reach shiki through
-  // the tokens: caret's own themes take their colors from the named set (covered
-  // by "names every color as alpha-free 6-digit hex" above), and a vendor palette
-  // highlights with its own upstream `colors`.
+  // the tokens: every built-in's syntax and chrome colors come from its theme file,
+  // which theme-file.test.ts validates as 6-digit hex.
   test("supplies alpha-free hex for the tokens shiki reads", () => {
     const shikiTokens: ColorToken[] = ["--ink-faint", "--ink-soft", "--accent"];
     for (const [id, theme] of themeEntries()) {
@@ -705,9 +649,18 @@ describe("every theme", () => {
   // The recipe's default hue for --chip-skill is `attention`, which clears this in every
   // vendor palette (66 degrees at the tightest, dawnfox's yellow attention against its
   // pink chip-ref). caret's own two do NOT clear it that way — verdigris is about 46
-  // degrees off carrot-top — so caret.ts routes them to woad instead, and they land near
+  // degrees off carrot-top — so caret-{dark,light}.json set `chipSkillHue` to woad instead, and they land near
   // 72. Without that override this is the test that fails.
   //
+  // caret's skill chip rides its syntax `type` hue; the theme files spell the two
+  // separately, so this holds them together.
+  test("gives caret's skill chip its syntax type hue", async () => {
+    for (const name of ["caret-dark.json", "caret-light.json"]) {
+      const file = await readThemeFile(name);
+      expect(file.palette.chipSkillHue, name).toBe(file.syntax.type.color);
+    }
+  });
+
   // NOT pinned: --chip-skill against --chip-link. Catppuccin draws those about 15
   // degrees apart, and no surface renders both — a link chip is the rendered plan's,
   // a skill chip is the composer's.

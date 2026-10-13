@@ -14,37 +14,40 @@ import { join, resolve } from "node:path";
 
 import type { Plugin } from "vite";
 
-/** What ui/dist measured at EXC-1224, each with `bunx vite build` from ui/ and one alias
+/** What ui/dist measured at EXC-1986, each with `bunx vite build` from ui/ and one alias
  * entry of ui/vite.config.ts's `resolve.alias` block deleted. The budget below is derived
  * from these, and bundle-budget.test.ts reds if the two drift apart.
  *
  * Their deltas overlap, so none can be derived from the others by subtraction — each
  * number here is its own build. */
 export const MEASURED_BYTES = {
-  /** A clean build, all three entries in place, across 417 files. */
-  baseline: 12_719_017,
+  /** A clean build, all four entries in place, across 359 files. */
+  baseline: 11_422_735,
   /** Added by un-aliasing `/^shiki\/wasm$/` alone — the Oniguruma WASM binary, and the
    * break the "~600 KB" claim on package.json's @pierre/diffs pin names. */
   shikiWasmBreak: 622_310,
   /** Added by un-aliasing the `@pierre/theme/*` entry alone — the ten palette payloads.
    * The smallest break a size budget can act on, so it is what sets the headroom. */
   pierreThemeBreak: 334_084,
-  /** Added by un-aliasing the bare `/^shiki$/` entry alone. Two orders of magnitude
-   * smaller than the other two, and the reason the constant below is explicit about what
+  /** Added by un-aliasing the `@shikijs/themes/*` entry alone — every theme shiki ships,
+   * none of which caret renders: its vendor themes are built from theme files. */
+  shikiThemesBreak: 1_326_604,
+  /** Added by un-aliasing the bare `/^shiki$/` entry alone. About thirty times
+   * smaller than the others, and the reason the constant below is explicit about what
    * it does not cover. */
-  shikiBarrelBreak: 10_741,
+  shikiBarrelBreak: 11_163,
 } as const;
 
 /** The ceiling the built UI is asserted against, in bytes.
  *
- * What it protects: the `shiki/wasm` and `@pierre/theme/` entries in ui/vite.config.ts's
- * `resolve.alias` block, which stub the Oniguruma WASM binary and the pierre theme
- * payloads that nothing in caret loads. Before this gate an entry that stopped matching (a
- * renamed specifier after a shiki or @pierre/diffs bump) grew the bundle and failed
- * nothing.
+ * What it protects: the `shiki/wasm`, `@pierre/theme/` and `@shikijs/themes/` entries in
+ * ui/vite.config.ts's `resolve.alias` block, which stub the Oniguruma WASM binary, the
+ * pierre theme payloads and shiki's own themes that nothing in caret loads. Before this
+ * gate an entry that stopped matching (a renamed specifier after a shiki or @pierre/diffs
+ * bump) grew the bundle and failed nothing.
  *
- * `baseline + 180_983`: the headroom is a little over half of `pierreThemeBreak`, so
- * ordinary growth has ~177 KiB to move in while that break still overshoots by about as
+ * `baseline + 177_265`: the headroom is a little over half of `pierreThemeBreak`, so
+ * ordinary growth has ~173 KiB to move in while that break still overshoots by about as
  * much as it clears. A legitimate raise re-measures and updates MEASURED_BYTES above, not
  * just this number.
  *
@@ -52,7 +55,7 @@ export const MEASURED_BYTES = {
  * dist/ by `shikiBarrelBreak` — well inside the noise any usable headroom has to tolerate
  * — because that entry is a behaviour swap (which regex engine, whose themes) rather than
  * a payload it keeps out. */
-export const UI_BUNDLE_BUDGET_BYTES = 12_900_000;
+export const UI_BUNDLE_BUDGET_BYTES = 11_600_000;
 
 /** One emitted file, as measured under the dist root. */
 export interface DistFile {
@@ -113,11 +116,11 @@ export function budgetFailure(files: DistFile[], budget: number): string | null 
     ...largest,
     "",
     "Before raising UI_BUNDLE_BUDGET_BYTES, check ui/vite.config.ts's resolve.alias block.",
-    "Two of its shiki entries are what hold this number down, and the measured cost of one",
+    "Three of its entries are what hold this number down, and the measured cost of one",
     "ceasing to match — a renamed specifier after a shiki or @pierre/diffs bump — is",
-    "+622 KB for shiki/wasm and +334 KB for @pierre/theme/. An overage near either is a",
-    "broken alias until proven otherwise. If the growth is legitimate, re-measure and",
-    "update MEASURED_BYTES in that file as well as the number.",
+    "+622 KB for shiki/wasm, +334 KB for @pierre/theme/ and +1.3 MB for @shikijs/themes/.",
+    "An overage near any of them is a broken alias until proven otherwise. If the growth",
+    "is legitimate, re-measure and update MEASURED_BYTES in that file as well as the number.",
   ].join("\n");
 }
 

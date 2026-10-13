@@ -120,10 +120,11 @@ entry that outlived what it described:
   removed or de-pinned. The `@pierre/diffs` entry has a second gate that lives in the
   build rather than the unit suite: the `caret-bundle-budget` vite plugin in
   [`../../ui/bundle-budget.ts`](../../ui/bundle-budget.ts) fails `vite build` once
-  `ui/dist` grows past a recorded budget. That budget covers the `shiki/wasm` and
-  `@pierre/theme/` alias entries — one that stops matching grows the bundle by +622,310 or
-  +334,084 bytes — and deliberately not the bare `/^shiki$/` entry, which grows it by only
-  +10,741 bytes because it swaps behaviour rather than keeping a payload out.
+  `ui/dist` grows past a recorded budget. That budget covers the `shiki/wasm`,
+  `@pierre/theme/` and `@shikijs/themes/` alias entries — one that stops matching grows
+  the bundle by +622,310, +334,084 or +1,326,604 bytes — and deliberately not the bare
+  `/^shiki$/` entry, which grows it by only +11,163 bytes because it swaps behaviour
+  rather than keeping a payload out.
 - **`held`** — a range deliberately stopping below the current major, with the evidence
   and the condition that lifts it. Its one entry, `typescript`, records a
   **peer obligation** rather than a blocked upgrade: the tree type-checks with TypeScript

@@ -85,7 +85,11 @@ describe("measureDist", () => {
 // budget can act on so the gate still fires. Raise one without the other and this reds.
 describe("UI_BUNDLE_BUDGET_BYTES", () => {
   test("sits between the baseline and the smallest gateable break", () => {
-    const gateable = Math.min(MEASURED_BYTES.shikiWasmBreak, MEASURED_BYTES.pierreThemeBreak);
+    const gateable = Math.min(
+      MEASURED_BYTES.shikiWasmBreak,
+      MEASURED_BYTES.pierreThemeBreak,
+      MEASURED_BYTES.shikiThemesBreak,
+    );
 
     expect(UI_BUNDLE_BUDGET_BYTES).toBeGreaterThan(MEASURED_BYTES.baseline);
     expect(UI_BUNDLE_BUDGET_BYTES).toBeLessThan(MEASURED_BYTES.baseline + gateable);
