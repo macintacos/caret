@@ -29,9 +29,7 @@
   import * as Alert from "$lib/components/ui/alert/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
-  import { uploadTheme } from "$lib/api.ts";
-  import { registerUploadedTheme } from "$lib/registerTheme.ts";
-  import { buildFileTheme } from "$lib/theme-file.ts";
+  import { type ThemeUploadOutcome, uploadThemeFile } from "$lib/themeUpload.ts";
   import {
     Field,
     FieldContent,
@@ -61,47 +59,22 @@
   }
   let { fields, errors, onApply, onThemeErrors }: Props = $props();
 
-  type Outcome = { ok: true; message: string } | { ok: false; file: string; errors: string[] };
   let picker: HTMLInputElement | undefined = $state();
   let uploading = $state(false);
-  let outcome: Outcome | null = $state(null);
+  let outcome: ThemeUploadOutcome | null = $state(null);
 
   async function upload(input: HTMLInputElement): Promise<void> {
     const file = input.files?.[0];
     if (file === undefined) return;
     uploading = true;
     try {
-      outcome = await uploadOutcome(file);
+      outcome = await uploadThemeFile(file);
+      if (outcome.ok) onThemeErrors(outcome.loadErrors);
     } finally {
       uploading = false;
       // Cleared so picking the same file again still fires `change`.
       input.value = "";
     }
-  }
-
-  async function uploadOutcome(file: File): Promise<Outcome> {
-    let text: string;
-    try {
-      text = await file.text();
-    } catch {
-      return { ok: false, file: file.name, errors: ["The file couldn't be read."] };
-    }
-    const result = await uploadTheme(text);
-    if (!result.ok) return { ok: false, file: file.name, errors: result.errors };
-    const { label, scheme } = result.theme;
-    onThemeErrors(result.errors);
-    let registration: "added" | "replaced";
-    try {
-      registration = registerUploadedTheme(buildFileTheme(result.theme));
-    } catch {
-      // The daemon has already saved the file, so this is not a refusal.
-      return { ok: true, message: `Saved "${label}". Reload the page to use it.` };
-    }
-    const message =
-      registration === "added"
-        ? `Added "${label}" to the ${scheme} themes.`
-        : `Replaced "${label}".`;
-    return { ok: true, message };
   }
 
   // Which slot wears the pill: the live resolved scheme, so an OS flip moves it.
