@@ -95,13 +95,26 @@ const ALPHA: Record<Scheme, { wash: string; mark: string; markActive: string; ch
   light: { wash: "1f", mark: "24", markActive: "47", chip: "1c" },
 };
 
-/** Expand a palette's decided colors into caret's full token set. */
+/** Expand a palette's decided colors into caret's full theme. */
 export function paletteTheme(input: PaletteInput): Theme {
+  return {
+    id: input.id,
+    label: input.label,
+    scheme: input.scheme,
+    tokens: paletteTokens(input),
+    shikiTheme: input.shikiTheme,
+  };
+}
+
+/** Expand a palette's decided colors into caret's full token set. */
+export function paletteTokens(
+  input: Omit<PaletteInput, "id" | "label" | "shikiTheme">,
+): Record<ColorToken, string> {
   const alpha = ALPHA[input.scheme];
   const ruleHue = input.ruleHue ?? input.ink;
   const washHue = input.washHue ?? input.accent;
   const markHue = input.markHue ?? washHue;
-  const tokens: Record<ColorToken, string> = {
+  return {
     "--paper": input.paper,
     "--paper-raised": input.raised,
     "--paper-sunk": input.sunk,
@@ -140,12 +153,5 @@ export function paletteTheme(input: PaletteInput): Theme {
     "--danger": input.danger,
     "--attention": input.attention,
     "--shadow-card": SHADOW[input.scheme],
-  };
-  return {
-    id: input.id,
-    label: input.label,
-    scheme: input.scheme,
-    tokens,
-    shikiTheme: input.shikiTheme,
   };
 }

@@ -1,0 +1,37 @@
+{
+  "id": "caret-light",
+  "label": "caret light",
+  "scheme": "light",
+  "palette": {
+    "paper": "#fefcf8",
+    "raised": "#fffefc",
+    "sunk": "#faf6ec",
+    "ink": "#191310",
+    "inkSoft": "#544b43",
+    "inkFaint": "#847a70",
+    "accent": "#c2490d",
+    "accentBright": "#e06a24",
+    "accentInk": "#fff6ec",
+    "neutral": "#7a6f63",
+    "ok": "#1d802a",
+    "danger": "#c11f30",
+    "attention": "#0a5f57",
+    "ruleHue": "#2a2018",
+    "washHue": "#e07a2e",
+    "markHue": "#e8882e",
+    "chipSkillHue": "#145d8f"
+  },
+  "syntax": {
+    "comment": { "color": "#8a7d6d", "fontStyle": ["italic"] },
+    "punctuation": { "color": "#665b52" },
+    "variable": { "color": "#2a221c" },
+    "property": { "color": "#35617e" },
+    "attribute": { "color": "#963c07" },
+    "keyword": { "color": "#9a2f22" },
+    "function": { "color": "#7d5a05" },
+    "type": { "color": "#145d8f" },
+    "string": { "color": "#2c7331" },
+    "escape": { "color": "#ab1f43" },
+    "number": { "color": "#14717b" }
+  }
+}

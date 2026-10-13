@@ -1,0 +1,37 @@
+{
+  "id": "caret-dark",
+  "label": "caret dark",
+  "scheme": "dark",
+  "palette": {
+    "paper": "#0a0806",
+    "raised": "#15110d",
+    "sunk": "#100d0a",
+    "ink": "#f7f2ea",
+    "inkSoft": "#bcb0a1",
+    "inkFaint": "#918576",
+    "accent": "#ff8f3d",
+    "accentBright": "#ffb277",
+    "accentInk": "#0a0806",
+    "neutral": "#9a8c7e",
+    "ok": "#4ed056",
+    "danger": "#f65a6f",
+    "attention": "#3fbda9",
+    "ruleHue": "#f2e7d5",
+    "washHue": "#f2842f",
+    "markHue": "#ffa64d",
+    "chipSkillHue": "#6ec4e4"
+  },
+  "syntax": {
+    "comment": { "color": "#7f7466", "fontStyle": ["italic"] },
+    "punctuation": { "color": "#b0a094" },
+    "variable": { "color": "#ece2d4" },
+    "property": { "color": "#a3d4ec" },
+    "attribute": { "color": "#f5834f" },
+    "keyword": { "color": "#dd7a6c" },
+    "function": { "color": "#ecc25c" },
+    "type": { "color": "#6ec4e4" },
+    "string": { "color": "#92d474" },
+    "escape": { "color": "#f56f8e" },
+    "number": { "color": "#4cbbc8" }
+  }
+}
