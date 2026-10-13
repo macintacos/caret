@@ -117,10 +117,10 @@ export function syntaxShikiTheme(
       "editor.foreground": chrome.ink,
     },
     settings: [
-      ...Object.entries(ROLE_SCOPES).map(([role, scope]) => {
+      ...Object.entries(ROLE_SCOPES).map(([role, scopes]) => {
         const { color, fontStyle } = roles[role as SyntaxRole];
         return {
-          scope: [...scope],
+          scope: [...scopes],
           settings: fontStyle
             ? { foreground: color, fontStyle: fontStyle.join(" ") }
             : { foreground: color },

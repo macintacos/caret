@@ -246,9 +246,9 @@ describe("doc/CONFIGURING.md", () => {
   test("its example theme file is valid and is caret-dark", () => {
     const doc = readFileSync(join(REPO_ROOT, "doc/CONFIGURING.md"), "utf8");
     const section = doc.split("\n## Theme files\n")[1]?.split("\n## ")[0] ?? "";
-    const block = section.match(/```json\n([\s\S]*?)\n```/)?.[1] ?? "";
-    expect(parseThemeFile(block).ok).toBe(true);
-    const example = JSON.parse(block);
+    const exampleJson = section.match(/```json\n([\s\S]*?)\n```/)?.[1] ?? "";
+    expect(parseThemeFile(exampleJson).ok).toBe(true);
+    const example = JSON.parse(exampleJson);
     delete example.$schema;
     expect(example).toEqual(
       JSON.parse(readFileSync(join(REPO_ROOT, "ui/src/lib/themes/caret-dark.json"), "utf8")),

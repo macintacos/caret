@@ -45,8 +45,8 @@ export function fillFallbackRoles<Base extends string, Optional extends string>(
   return filled as Record<Base | Optional, RoleStyle>;
 }
 
-const LONGEST = 64;
-const TOO_LONG = `must be at most ${LONGEST} characters`;
+const MAX_LENGTH = 64;
+const TOO_LONG = `must be at most ${MAX_LENGTH} characters`;
 
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be a hex color like #1a2b3c");
 
@@ -116,12 +116,12 @@ export const ThemeFileSchema = z.strictObject({
   $schema: z.string().optional(),
   id: z
     .string()
-    .max(LONGEST, TOO_LONG)
+    .max(MAX_LENGTH, TOO_LONG)
     .regex(
       /^[a-z0-9]+(-[a-z0-9]+)*$/,
       "must be a lowercase slug of letters, digits, and single dashes, like my-theme",
     ),
-  label: z.string().min(1, "must not be empty").max(LONGEST, TOO_LONG),
+  label: z.string().min(1, "must not be empty").max(MAX_LENGTH, TOO_LONG),
   scheme: z.enum(["light", "dark"], {
     error: (issue) => (issue.input === undefined ? "is required" : 'must be "light" or "dark"'),
   }),
@@ -132,12 +132,12 @@ export const ThemeFileSchema = z.strictObject({
 /** A validated theme file; every optional syntax role is already filled from its fallback. */
 export type ThemeFile = z.output<typeof ThemeFileSchema>;
 
-const ARTICLE: Record<string, string> = { array: "an array", object: "an object" };
+const TYPE_WITH_ARTICLE: Record<string, string> = { array: "an array", object: "an object" };
 
 function userMessage(issue: z.core.$ZodRawIssue): string | undefined {
   if (issue.code !== "invalid_type") return undefined;
   if (issue.input === undefined) return "is required";
-  return `must be ${ARTICLE[issue.expected] ?? `a ${issue.expected}`}`;
+  return `must be ${TYPE_WITH_ARTICLE[issue.expected] ?? `a ${issue.expected}`}`;
 }
 
 function issueLines(issue: z.core.$ZodIssue): string[] {
