@@ -18,9 +18,9 @@ import type { Page, Route } from "@playwright/test";
 import { openSettings } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
 import { rowColors, seedAndOpen } from "@test/e2e/support/source-view.ts";
-import { themeFileText } from "@test/support/theme.ts";
+import { caretThemeFile, themeFileText } from "@test/support/theme.ts";
 
-const CARET_DARK_ACCENT = "#ff8f3d";
+const CARET_DARK_ACCENT = caretThemeFile("dark").palette.accent;
 const NIGHTLY_ACCENT = "#00c2a8";
 const NIGHTLY_KEYWORD = "#12ab34";
 // NIGHTLY_KEYWORD as getComputedStyle reports it.
@@ -28,12 +28,7 @@ const NIGHTLY_KEYWORD_RGB = "rgb(18, 171, 52)";
 const EDITED_ACCENT = "#c20078";
 const EDITED_KEYWORD = "#ab1234";
 const EDITED_KEYWORD_RGB = "rgb(171, 18, 52)";
-
-declare global {
-  interface Window {
-    accents: string[];
-  }
-}
+type AccentLog = { __accents: string[] };
 
 async function writeThemes(daemon: Daemon): Promise<void> {
   await writeFile(
@@ -59,11 +54,12 @@ async function pinDark(page: Page): Promise<void> {
 /** Record each distinct `--accent` the page paints on `<html>`, from the first frame. */
 async function recordAccents(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    window.accents = [];
+    const w = window as unknown as AccentLog;
+    w.__accents = [];
     // An init script runs before <html> is parsed, so observe the document instead.
     new MutationObserver(() => {
       const value = document.documentElement?.style.getPropertyValue("--accent") ?? "";
-      if (value && value !== window.accents.at(-1)) window.accents.push(value);
+      if (value && value !== w.__accents.at(-1)) w.__accents.push(value);
     }).observe(document, { attributes: true, attributeFilter: ["style"], subtree: true });
   });
 }
@@ -146,11 +142,8 @@ test("a reload paints the picked custom theme before the themes arrive", async (
 }) => {
   await pickNightly(page, daemon);
   await recordAccents(page);
-  let held!: (route: Route) => void;
-  const heldRoute = new Promise<Route>((resolve) => {
-    held = resolve;
-  });
-  await page.route("**/api/themes", (route) => held(route));
+  const { promise: heldRoute, resolve: hold } = Promise.withResolvers<Route>();
+  await page.route("**/api/themes", hold);
 
   await page.reload();
   const route = await heldRoute;
@@ -159,7 +152,7 @@ test("a reload paints the picked custom theme before the themes arrive", async (
 
   await openSettings(page);
   await expect(darkTrigger(page)).toContainText("nightly");
-  const accents = await page.evaluate(() => window.accents);
+  const accents = await page.evaluate(() => (window as unknown as AccentLog).__accents);
   expect(accents).toContain(NIGHTLY_ACCENT);
   expect(accents).not.toContain(CARET_DARK_ACCENT);
 });
@@ -177,7 +170,10 @@ test("an edited theme file repaints on reload, straight from the cached palette"
 
   await page.reload();
   await expect.poll(() => accent(page)).toBe(EDITED_ACCENT);
-  expect(await page.evaluate(() => window.accents)).toEqual([NIGHTLY_ACCENT, EDITED_ACCENT]);
+  expect(await page.evaluate(() => (window as unknown as AccentLog).__accents)).toEqual([
+    NIGHTLY_ACCENT,
+    EDITED_ACCENT,
+  ]);
 });
 
 test("a deleted theme file falls back to caret dark and keeps the selection", async ({
