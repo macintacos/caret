@@ -39,7 +39,11 @@ function specificity(selector: string, scope: string): number {
   return selector.split(".").length;
 }
 
-function resolve(rules: readonly FlatRule[], scope: string, key: Setting): string | undefined {
+function resolveSetting(
+  rules: readonly FlatRule[],
+  scope: string,
+  key: Setting,
+): string | undefined {
   let best: string | undefined;
   let bestRank = -1;
   for (const { selector, settings } of rules) {
@@ -77,9 +81,9 @@ function roleStyle(
   scope: string,
   defaultColor: string | undefined,
 ): RoleStyle {
-  const color = resolve(rules, scope, "foreground") ?? defaultColor;
+  const color = resolveSetting(rules, scope, "foreground") ?? defaultColor;
   if (color === undefined) throw new Error(`the theme sets no color for the ${role} role`);
-  const fontStyle = parseFontStyle(resolve(rules, scope, "fontStyle"));
+  const fontStyle = parseFontStyle(resolveSetting(rules, scope, "fontStyle"));
   return fontStyle ? { color: normalizeColor(color), fontStyle } : { color: normalizeColor(color) };
 }
 

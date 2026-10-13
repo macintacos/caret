@@ -83,19 +83,19 @@ export async function themeDrift(
       themes: { original: "original", converted: "converted" },
       ...CARET_TOKENIZE_OPTIONS,
     });
-    lines.forEach((tokens, index) => {
+    lines.forEach((tokens, lineIndex) => {
       for (const token of tokens) {
         if (token.content.trim() === "") continue;
         result.tokens++;
-        const before = tokenStyle(token.variants.original);
-        const after = tokenStyle(token.variants.converted);
-        if (!sameStyle(before, after)) {
+        const originalStyle = tokenStyle(token.variants.original);
+        const convertedStyle = tokenStyle(token.variants.converted);
+        if (!sameStyle(originalStyle, convertedStyle)) {
           result.drift.push({
             lang,
-            line: index + 1,
+            line: lineIndex + 1,
             text: token.content,
-            original: before,
-            converted: after,
+            original: originalStyle,
+            converted: convertedStyle,
           });
         }
       }
@@ -114,8 +114,8 @@ const styleCell = (s: TokenStyle) => [s.color, ...s.fontStyle].join(" ");
 function themeSection({ id, drift }: ThemeDrift & { id: string }): string {
   if (drift.length === 0) return `## ${id}\n\nNo differing tokens.\n`;
   const rows = drift.map(
-    (d) =>
-      `| ${d.lang} | ${d.line} | ${codeSpan(d.text)} | ${styleCell(d.original)} | ${styleCell(d.converted)} |`,
+    (token) =>
+      `| ${token.lang} | ${token.line} | ${codeSpan(token.text)} | ${styleCell(token.original)} | ${styleCell(token.converted)} |`,
   );
   return [
     `## ${id}`,
@@ -130,7 +130,9 @@ function themeSection({ id, drift }: ThemeDrift & { id: string }): string {
 /** Render the drift report. Pure, and nothing in it varies between runs, so an unchanged
  * tree regenerates the committed report byte for byte once `mise run format` has run. */
 export function renderDriftReport(results: readonly (ThemeDrift & { id: string })[]): string {
-  const summary = results.map((r) => `| ${r.id} | ${r.drift.length} | ${r.tokens} |`);
+  const summary = results.map(
+    (theme) => `| ${theme.id} | ${theme.drift.length} | ${theme.tokens} |`,
+  );
   return [
     "# Theme conversion drift",
     "",
@@ -151,21 +153,23 @@ export function renderDriftReport(results: readonly (ThemeDrift & { id: string }
 }
 
 function vendorPair(id: keyof typeof UPSTREAM_SHIKI_THEMES) {
-  const theme = THEME_IDS.map((t) => THEMES[t]).find((t) => t.shikiTheme === id);
+  const theme = THEME_IDS.map((themeId) => THEMES[themeId]).find(
+    (palette) => palette.shikiTheme === id,
+  );
   if (!theme) throw new Error(`no palette names the shiki theme ${id}`);
-  const source = UPSTREAM_SHIKI_THEMES[id];
-  const t = theme.tokens;
+  const vendorTheme = UPSTREAM_SHIKI_THEMES[id];
+  const tokens = theme.tokens;
   const chrome = {
-    sunk: t["--paper-sunk"],
-    ink: t["--ink"],
-    accent: t["--accent"],
-    accentBright: t["--accent-bright"],
-    ok: t["--ok"],
-    danger: t["--danger"],
+    sunk: tokens["--paper-sunk"],
+    ink: tokens["--ink"],
+    accent: tokens["--accent"],
+    accentBright: tokens["--accent-bright"],
+    ok: tokens["--ok"],
+    danger: tokens["--danger"],
   };
-  const roles = syntaxFromVsCodeTheme(source);
+  const roles = syntaxFromVsCodeTheme(vendorTheme);
   return {
-    original: withStructuralOverrides(theme, source),
+    original: withStructuralOverrides(theme, vendorTheme),
     converted: withStructuralOverrides(
       theme,
       syntaxShikiTheme(theme.id, theme.scheme, chrome, roles),

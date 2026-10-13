@@ -96,19 +96,19 @@ test("the sample reaches every role's canonical scope", async () => {
       })),
     ],
   };
-  const h: HighlighterCore = await createHighlighter({
+  const sampleHighlighter: HighlighterCore = await createHighlighter({
     themes: [probe],
     langs: THEME_SAMPLES.map((s) => s.lang),
   });
-  const seen = new Set(
+  const paintedColors = new Set(
     THEME_SAMPLES.flatMap(({ lang, code }) =>
-      h
+      sampleHighlighter
         .codeToTokensBase(code, { lang, theme: "role-probe", ...CARET_TOKENIZE_OPTIONS })
         .flat()
         .map((t) => t.color?.toLowerCase()),
     ),
   );
-  expect(roles.filter((_, i) => !seen.has(color(i))).map(([role]) => role)).toEqual([]);
+  expect(roles.filter((_, i) => !paintedColors.has(color(i))).map(([role]) => role)).toEqual([]);
 });
 
 describe("renderDriftReport", () => {
