@@ -61,7 +61,7 @@
   import SettingControl from "@/components/SettingControl.svelte";
   import ThemeSection from "@/components/ThemeSection.svelte";
   import UpdatesPane from "@/components/UpdatesPane.svelte";
-  import type { UpdateReport } from "@core/lib/types";
+  import type { ThemeFileError, UpdateReport } from "@core/lib/types";
 
   interface Props {
     /** Controlled open — false while the dialog plays its exit. */
@@ -88,6 +88,9 @@
      * `updates.check` already folded in. Null when it could not be read; the pane
      * degrades rather than erroring. */
     updateReport?: UpdateReport | null;
+    /** The custom theme files that failed to load, listed in the Appearance pane. Empty
+     * until the daemon's themes arrive, and when its read fails. */
+    themeErrors?: readonly ThemeFileError[];
   }
   let {
     open,
@@ -99,6 +102,7 @@
     onWhatsNew = () => {},
     updatePending = false,
     updateReport = null,
+    themeErrors = [],
   }: Props = $props();
 
   // EXC-849: while Settings owns the view, publish its keyboard affordances into the shared
@@ -295,7 +299,7 @@
                 <!-- The composite theme block carries no section header of its own — the
                      pane's "Appearance" header is that header. -->
                 <div class="section">
-                  <ThemeSection fields={section.fields} {values} onApply={apply} />
+                  <ThemeSection fields={section.fields} errors={themeErrors} onApply={apply} />
                 </div>
               {:else if section.label}
                 <!-- Only a LABELLED section becomes a fieldset: a fieldset with no legend is

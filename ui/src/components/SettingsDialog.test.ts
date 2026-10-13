@@ -494,3 +494,14 @@ describe("SettingsDialog Updates category (EXC-1207)", () => {
     expect(has("[data-updates-pane] .update-placeholder")).toBe(true);
   });
 });
+
+describe("SettingsDialog Appearance pane", () => {
+  test("lists the theme files that failed to load", async () => {
+    const { flush } = render(
+      SettingsDialog,
+      props({ themeErrors: [{ file: "neon.json", messages: ["is not valid JSON"] }] }),
+    );
+    await flushUntil(flush, mounted);
+    expect(document.body.querySelector("[data-theme-errors]")?.textContent).toContain("neon.json");
+  });
+});

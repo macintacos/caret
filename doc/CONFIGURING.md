@@ -254,15 +254,17 @@ A theme file is a JSON file that describes one caret theme: its name, whether it
 or dark, the colors of caret's interface, and the colors used to highlight code. A theme
 file is self-contained. caret derives everything else it needs, such as hairline rules,
 selection washes, and chip tints, from the colors the file names. caret reads theme files
-from its [themes folder](#where-caret-finds-theme-files); the Appearance settings do not
-offer them yet.
+from its [themes folder](#where-caret-finds-theme-files), and after a page reload each
+theme appears in the Appearance theme picker for its scheme. When a slot's selected theme
+stops loading, the slot shows caret's theme for that scheme and keeps the selection, so
+restoring the file brings it back.
 
 ### Where caret finds theme files
 
 caret reads theme files from `$XDG_CONFIG_HOME/caret/themes`, or `~/.config/caret/themes`
-when `XDG_CONFIG_HOME` is unset. It reads the folder each time caret is asked for its
-themes, so adding, editing, or deleting a file takes effect without a restart. A missing
-or empty folder is fine.
+when `XDG_CONFIG_HOME` is unset. The page reads the folder once per load, so adding,
+editing, or deleting a file takes effect on the next page load, without a restart. A
+missing or empty folder is fine.
 
 caret reads only the `*.json` files directly in the folder, including symlinks to files.
 It ignores everything else: subfolders, other extensions, and names that start with `.`.
@@ -276,14 +278,8 @@ caret skips a file, and reports an error that names it, when the file:
   `github-light`, `github-dark`, `dawnfox`, or `duskfox`;
 - shares its `id` with another file. caret skips every file with that `id`.
 
-The daemon lists those errors (`42718` is `[daemon].port`):
-
-```sh
-curl -s http://127.0.0.1:42718/api/themes | jq .errors
-```
-
-With token auth on, add
-`-H "Authorization: Bearer $(cat "${XDG_STATE_HOME:-$HOME/.local/state}/caret/daemon.token")"`.
+The Appearance settings list each file that didn't load, with its errors, under the theme
+pickers.
 
 ### Top-level fields
 

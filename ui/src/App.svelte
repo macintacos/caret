@@ -12,9 +12,9 @@
   import { approveVariants, pickApproveMode } from "$lib/approve.ts";
   import { readApproveMode } from "$lib/approveModePref.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
-  import { registerCustomThemes } from "$lib/registerTheme.ts";
   import { withPlanHandoff } from "$lib/planHandoff.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
+  import { registerCustomThemes } from "$lib/registerTheme.ts";
   import { createSafeModeGuard } from "$lib/safeMode.ts";
   import { createSeenWatcher } from "$lib/seen.ts";
   import {
@@ -66,6 +66,7 @@
     ApproveVariantId,
     Annotation,
     PersistedScratch,
+    ThemeFileError,
     UpdateReport,
   } from "@core/lib/types";
 
@@ -123,6 +124,7 @@
   // thunk 404s the route — and every surface then stays quiet. The `updates.check`
   // opt-out is folded in daemon-side (EXC-1210), so this is their whole truth.
   let updateReport = $state<UpdateReport | null>(null);
+  let themeErrors = $state<readonly ThemeFileError[]>([]);
   let work = $state<{
     annotations: Annotation[];
     generalCommentDraft: string;
@@ -425,7 +427,9 @@
 
   // ----- Custom themes -----
   $effect(() => {
-    void getThemes().then(registerCustomThemes);
+    void getThemes().then((list) => {
+      themeErrors = registerCustomThemes(list);
+    });
   });
 
   // The once-per-version nudge, fired only when this browser has not already toasted
@@ -938,6 +942,7 @@
       onCopyDiagnostic={copyDiagnostics}
       {updatePending}
       {updateReport}
+      {themeErrors}
       onWhatsNew={openWhatsNew}
     />
   {/snippet}

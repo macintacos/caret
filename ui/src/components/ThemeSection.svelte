@@ -7,7 +7,9 @@
   // of the current mode; showing both is what teaches that the pairing exists. The
   // live one wears an IN USE pill, the block's single amber mark. Which one that is
   // comes from the live appearance module, so the pill and the summary line track an
-  // OS flip while the modal is open without a subscription of this section's own.
+  // OS flip while the modal is open without a subscription of this section's own. The
+  // slot rows read the live appearance too, so a slot settled by a late-loading custom
+  // theme shows its real selection.
   //
   // The shell renders this in place of the generic field rows for the Theme
   // section, and hands it that section's fields — which the /-search may have
@@ -21,7 +23,9 @@
   // `[data-slot="field"].setting-item` rather than copying it back here; key on the
   // data-slot as well as the class, because SettingSelect puts `.setting-item` on its
   // portalled menu rows too.
+  import type { ThemeFileError } from "@core/lib/types";
   import { appearance } from "@/state/appearance.svelte.ts";
+  import * as Alert from "$lib/components/ui/alert/index.js";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import {
     Field,
@@ -42,13 +46,13 @@
   interface Props {
     /** The Theme section's fields, in registry order and possibly search-filtered. */
     fields: readonly StagedField[];
-    /** The shell's reactive mirror of every field's persisted value. */
-    values: Record<string, unknown>;
+    /** The custom theme files that failed to load, listed under the summary line. */
+    errors: readonly ThemeFileError[];
     /** Apply a field's new value now (the shell persists + confirms with a toast).
      * The shell's own `apply` owns the await; these call sites just hand it off. */
     onApply: (field: StagedField, value: unknown) => void | Promise<void>;
   }
-  let { fields, values, onApply }: Props = $props();
+  let { fields, errors, onApply }: Props = $props();
 
   // Which slot wears the pill: the live resolved scheme, so an OS flip moves it.
   const liveKey = $derived(appearance.scheme === "light" ? THEME_FIELD.light : THEME_FIELD.dark);
@@ -94,7 +98,7 @@
           </FieldLabel>
           <FieldDescription>{field.description}</FieldDescription>
         </FieldContent>
-        <SettingControl {field} value={values[field.key]} {onApply} />
+        <SettingControl {field} value={field.read()} {onApply} />
       </Field>
     {/each}
   </FieldGroup>
@@ -102,6 +106,22 @@
   <!-- The resolved state in one sentence, so "why is it dark right now" never
        needs working out from the three controls above. -->
   <p class="resolved" data-theme-summary>{appearance.summary}</p>
+
+  {#if errors.length > 0}
+    <Alert.Root variant="destructive" class="theme-errors" data-theme-errors>
+      <Alert.Title>These theme files didn't load</Alert.Title>
+      <Alert.Description>
+        <ul class="error-list">
+          {#each errors as error (error.file)}
+            <li>
+              <code class="error-file">{error.file}</code>
+              {#each error.messages as message, i (i)}<p>{message}</p>{/each}
+            </li>
+          {/each}
+        </ul>
+      </Alert.Description>
+    </Alert.Root>
+  {/if}
 </div>
 
 <style>
@@ -136,6 +156,26 @@
     margin: 0;
     font-size: var(--text-xs);
     color: var(--ink-faint);
+  }
+
+  .theme-section :global(.theme-errors) {
+    margin-top: 0.25rem;
+    font-size: var(--text-xs);
+  }
+  .error-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .error-list p {
+    margin: 0;
+  }
+  .error-file {
+    font-family: var(--font-mono);
+    color: var(--ink);
   }
 
   @keyframes in-use-in {
