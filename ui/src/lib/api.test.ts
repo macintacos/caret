@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import type {
   Annotation,
+  CustomThemes,
   DirListing,
   FileExcerpt,
   ResolveBody,
@@ -26,6 +27,7 @@ import {
   getReview,
   getSkillDescription,
   getSkills,
+  getThemes,
   getUpdate,
   getUpdateChanges,
   HttpError,
@@ -299,6 +301,27 @@ describe("putDraft instrumentation", () => {
     const scratches = [{ startLine: 2, endLine: 3, text: "wip" }];
     await putDraft(ID, { annotations, generalCommentDraft: "", composerScratches: scratches });
     expect(body).toMatchObject({ composerScratches: scratches });
+  });
+});
+
+describe("getThemes", () => {
+  const body: CustomThemes = { themes: [], errors: [{ file: "bad.json", messages: ["nope"] }] };
+
+  test("returns the daemon's themes on success", async () => {
+    respond = () => Promise.resolve(jsonResponse(body));
+    expect(await getThemes()).toEqual(body);
+  });
+
+  test("a non-2xx answers null and warns", async () => {
+    respond = () => Promise.resolve(new Response("boom", { status: 500 }));
+    expect(await getThemes()).toBeNull();
+    flush();
+    expectLoggedAt("warn", "request");
+  });
+
+  test("a rejected fetch answers null", async () => {
+    respond = () => Promise.reject(new Error("offline"));
+    expect(await getThemes()).toBeNull();
   });
 });
 

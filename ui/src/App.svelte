@@ -8,10 +8,11 @@
   // presence beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
   // holds them together and lays out the TopBar + DiffPlanView.
   import { untrack } from "svelte";
-  import { getHealth, getUpdate, getUpdateChanges, markSeen } from "$lib/api.ts";
+  import { getHealth, getThemes, getUpdate, getUpdateChanges, markSeen } from "$lib/api.ts";
   import { approveVariants, pickApproveMode } from "$lib/approve.ts";
   import { readApproveMode } from "$lib/approveModePref.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
+  import { registerCustomThemes } from "$lib/registerTheme.ts";
   import { withPlanHandoff } from "$lib/planHandoff.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
   import { createSafeModeGuard } from "$lib/safeMode.ts";
@@ -420,6 +421,11 @@
         if (report) seedUpdatesCheck(report.checkEnabled);
         updateReport = report;
       });
+  });
+
+  // ----- Custom themes -----
+  $effect(() => {
+    void getThemes().then(registerCustomThemes);
   });
 
   // The once-per-version nudge, fired only when this browser has not already toasted

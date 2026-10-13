@@ -4,14 +4,19 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { flushUntil, render } from "@ui/support/mount.ts";
 import { closeSelect, openSelect, pointer } from "@ui/support/select.ts";
-import { CUSTOM_ACCENT, CUSTOM_KEYWORD, customThemeFile } from "@ui/support/theme-file.ts";
+import {
+  CUSTOM_ACCENT,
+  CUSTOM_KEYWORD,
+  customThemeFile,
+  customThemeSource,
+} from "@ui/support/theme-file.ts";
 import SettingControl from "@/components/SettingControl.svelte";
 import SettingSelect from "@/components/SettingSelect.svelte";
 import { appearance } from "@/state/appearance.svelte.ts";
-import { DARK_SLOT_KEY, MODE_KEY } from "$lib/appearance.ts";
+import { DARK_SLOT_KEY, MODE_KEY, readCachedTheme, writeCachedTheme } from "$lib/appearance.ts";
 import { highlightExcerpt } from "$lib/diffview/highlight.ts";
 import { caretDiffTheme } from "$lib/diffview/theme.ts";
-import { registerTheme } from "$lib/registerTheme.ts";
+import { registerCustomThemes, registerTheme } from "$lib/registerTheme.ts";
 import {
   SETTINGS_REGISTRY,
   type SettingOption,
@@ -144,6 +149,73 @@ describe("a slot saved before its theme registers", () => {
     expect(appearance.themeId).toBe(registered);
     expect(rootToken("--accent")).toBe(CUSTOM_ACCENT);
     expect(localStorage.getItem(DARK_SLOT_KEY)).toBe(id);
+  });
+});
+
+describe("registerCustomThemes", () => {
+  const caretDarkAccent = THEMES["caret-dark"].tokens["--accent"];
+  const errors = [{ file: "broken.json", messages: ["palette: required"] }];
+
+  async function darkStandIn(id: string): Promise<void> {
+    const file = await customThemeFile(id, "dark");
+    localStorage.setItem(MODE_KEY, "dark");
+    localStorage.setItem(DARK_SLOT_KEY, id);
+    writeCachedTheme({ id, scheme: "dark", tokens: file.tokens });
+    appearance.boot();
+  }
+
+  test("offers each theme in its own scheme's slot after the built-ins and returns the errors", async () => {
+    const dark = await customThemeSource("served-dark", "dark");
+    const light = await customThemeSource("served-light", "light");
+
+    expect(registerCustomThemes({ themes: [dark, light], errors })).toEqual(errors);
+
+    const darkIds = slotOptionsOf(THEME_FIELD.dark).map((o) => o.value);
+    const lightIds = slotOptionsOf(THEME_FIELD.light).map((o) => o.value);
+    expect(darkIds.at(-1)).toBe("served-dark");
+    expect(darkIds).toContain("dracula");
+    expect(lightIds.at(-1)).toBe("served-light");
+    expect(darkIds).not.toContain("served-light");
+    expect(lightIds).not.toContain("served-dark");
+  });
+
+  test("a failed read adds no option and returns no errors", () => {
+    const before = slotOptionsOf(THEME_FIELD.dark).length;
+    expect(registerCustomThemes(null)).toEqual([]);
+    expect(slotOptionsOf(THEME_FIELD.dark).length).toBe(before);
+  });
+
+  test("a failed read repaints the default over a stand-in and keeps its cache", async () => {
+    await darkStandIn("served-unread");
+    expect(rootToken("--accent")).toBe(CUSTOM_ACCENT);
+
+    registerCustomThemes(null);
+
+    expect(rootToken("--accent")).toBe(caretDarkAccent);
+    expect(readCachedTheme("dark")?.id).toBe("served-unread");
+  });
+
+  test("a saved slot whose theme is served switches to it", async () => {
+    localStorage.setItem(MODE_KEY, "dark");
+    localStorage.setItem(DARK_SLOT_KEY, "served-reload");
+    appearance.boot();
+
+    registerCustomThemes({
+      themes: [await customThemeSource("served-reload", "dark")],
+      errors: [],
+    });
+
+    expect<string>(appearance.themeId).toBe("served-reload");
+    expect(rootToken("--accent")).toBe(CUSTOM_ACCENT);
+  });
+
+  test("a cached theme no longer served falls back to the default and keeps the saved id", async () => {
+    await darkStandIn("served-deleted");
+
+    registerCustomThemes({ themes: [], errors: [] });
+
+    expect(rootToken("--accent")).toBe(caretDarkAccent);
+    expect(localStorage.getItem(DARK_SLOT_KEY)).toBe("served-deleted");
   });
 });
 
