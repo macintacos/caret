@@ -91,19 +91,12 @@ export default defineConfig({
         find: /^shiki$/,
         replacement: fileURLToPath(new URL("./src/lib/diffview/shiki-bundle.ts", import.meta.url)),
       },
-      // shiki/wasm (the Oniguruma engine) and the ten @pierre/theme/* palettes are
-      // reachable only through lazy `import(...)` the library never takes: caret runs
-      // the JS regex engine and registers its own themes. Stubbing both keeps ~600 KB
-      // of WASM and the pierre theme payloads out of the build.
-      //
-      // Do NOT add @shikijs/themes/* alongside them, however much it looks like the
-      // other half of the same collection — it cost a release-blocking regression to
-      // learn. upstream-shiki.ts imports seven of those modules ITSELF as
-      // `shiki/themes/<name>.mjs`, one-line re-exports of `@shikijs/themes/<name>` in
-      // shiki 4.x, so the stub would replace caret's own vendor palette data (EXC-896:
-      // dracula, github-*, catppuccin-*) and every shiki-shipped vendor palette
-      // renders unthemed. Nothing caret ships is named pierre-*, which is why the entry
-      // below is safe where that one is not.
+      // shiki/wasm (the Oniguruma engine), the ten @pierre/theme/* palettes, and shiki's
+      // @shikijs/themes/* are reachable only through lazy `import(...)` the library never
+      // takes: caret runs the JS regex engine and builds every theme from its theme file.
+      // Stubbing them keeps ~600 KB of WASM and the vendor theme payloads out of the
+      // build. The themes entry holds only while no app module imports a shiki theme,
+      // which test/structure/no-shiki-themes-in-ui.test.ts enforces.
       {
         find: /^shiki\/wasm$/,
         replacement: fileURLToPath(
@@ -112,6 +105,12 @@ export default defineConfig({
       },
       {
         find: /^@pierre\/theme\/.*/,
+        replacement: fileURLToPath(
+          new URL("./src/lib/diffview/unused-shiki-extras.ts", import.meta.url),
+        ),
+      },
+      {
+        find: /^@shikijs\/themes\/.*/,
         replacement: fileURLToPath(
           new URL("./src/lib/diffview/unused-shiki-extras.ts", import.meta.url),
         ),
