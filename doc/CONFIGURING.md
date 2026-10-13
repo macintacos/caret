@@ -441,6 +441,33 @@ Set `$schema` to
 example does. An editor that understands JSON Schema, such as VS Code, then completes
 field names and flags invalid values as you type.
 
+### Converting a VS Code theme
+
+`caret convert-theme <file> [--out <file>]` turns a VS Code color theme JSON into a caret
+theme file. It prints the theme file to stdout unless `--out` names a file, and writes
+into the [themes folder](#where-caret-finds-theme-files) only when `--out` points there:
+
+```sh
+caret convert-theme dracula.json --out ~/.config/caret/themes/dracula-custom.json
+```
+
+The input may be JSONC: comments and trailing commas are fine. The command maps:
+
+- `syntax`: all 20 roles, from the theme's token rules, as VS Code would color each scope.
+- `scheme`: from the theme's `type`. `dark` and `hcDark` become `dark`; `light` and
+  `hcLight` become `light`.
+- `palette`: the 13 required colors, a best-effort pick from the theme's `colors`. A color
+  with no clear source, missing or translucent, takes caret's own color for the scheme and
+  is printed as a `palette.<key>:` note. The optional hues are left out, so caret derives
+  them.
+- `id` and `label`: from the theme's `name`, or the file name when it has none. An `id`
+  that matches a built-in theme gets `-custom` appended, with a note.
+
+Notes go to stderr as `caret convert-theme: <note>` and leave the exit code 0. The command
+refuses a theme that uses `include`, a `tokenColors` that names a `.tmTheme` file, or one
+with no `type`; it prints the reason and exits 1 without writing anything. Treat the
+output as a starting point: check the noted colors and tweak what you like.
+
 ## Plan formatting (rumdl)
 
 caret canonicalizes every incoming plan by reflowing it to a 90-column MD013 shape with
