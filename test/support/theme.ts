@@ -1,13 +1,16 @@
-// Valid theme file text for suites that need a theme on disk.
+// caret's bundled theme files for suites outside the UI bundle: read whole, or as valid
+// theme-file text to put on disk.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { ThemeFile } from "@core/theme/schema.ts";
+import type { z } from "zod";
+
+import type { ThemeFileSchema } from "@core/theme/schema.ts";
 
 const THEMES_DIR = join(import.meta.dirname, "..", "..", "ui/src/lib/themes");
 
-/** Caret's own theme file for `scheme`, parsed. */
-export function caretThemeFile(scheme: "light" | "dark" = "dark"): ThemeFile {
+/** caret's own theme file for `scheme`, read as authored and unvalidated. */
+export function caretThemeFile(scheme: "light" | "dark" = "dark"): z.input<typeof ThemeFileSchema> {
   return JSON.parse(readFileSync(join(THEMES_DIR, `caret-${scheme}.json`), "utf8"));
 }
 

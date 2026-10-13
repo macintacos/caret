@@ -114,8 +114,7 @@ export function isStandIn(
   cached: CachedTheme | undefined,
   savedId: string | undefined,
   liveId: ThemeId,
-): cached is CachedTheme {
-  // liveId equals the cached id only when boot re-runs after registration — the dev `--fresh` reset.
+): boolean {
   return cached !== undefined && cached.id === savedId && liveId !== cached.id;
 }
 

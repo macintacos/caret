@@ -260,8 +260,7 @@ describe("refresh", () => {
   });
 });
 
-/** Dark mode with the dark slot saved as `id`, unregistered, and that id's palette
- * cached — the boot state of a reload before the daemon's themes arrive. */
+/** `seedDarkStandIn`, booted on a fresh harness. */
 async function darkStandIn(id: string) {
   const file = await seedDarkStandIn(id);
   const h = harness();

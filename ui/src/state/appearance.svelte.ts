@@ -14,8 +14,8 @@
 // The one exception is the boot stand-in: a slot whose saved custom theme has not
 // registered yet boots on that theme's cached palette instead of its default. The
 // theme registering with the same tokens takes over without a wipe; any other move
-// of the resolved theme, `setSlot` on the stand-in's slot, `themesUnavailable`, or `themesLoaded`
-// replaces it with what the slots resolve to.
+// of the resolved theme, `setSlot` on the stand-in's slot, `themesUnavailable`, or
+// `themesLoaded` replaces it with what the slots resolve to.
 //
 // A module singleton (the `shortcuts` registry's shape): there is exactly one
 // appearance per document — paintTheme writes `document.documentElement`, and the

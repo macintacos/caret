@@ -146,7 +146,7 @@ describe("caret's own shiki themes", () => {
 describe("caret-theme ↔ THEMES palette sync", () => {
   // Every palette gets a highlighter theme, not just caret's own pair (EXC-752):
   // a reviewer who picks Dracula reads Dracula-colored code, not amber code.
-  test("resolves one shiki theme per registered palette, named by its id", () => {
+  test("resolves one shiki theme per built-in palette, named by its id", () => {
     expect(BUILTIN_SHIKI_THEMES.map((theme) => theme.name)).toEqual(THEME_IDS);
   });
 

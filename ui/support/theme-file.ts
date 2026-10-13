@@ -31,9 +31,9 @@ export async function themeFileColors(
   return { ...file.palette, ...(Object.fromEntries(roleColors) as Record<SyntaxRole, string>) };
 }
 
-/** `themeFileText`'s file, parsed, with a keyword and accent no built-in uses so an
- * assertion can tell it apart from caret's — the unit suites and the daemon/e2e suites
- * share this one recipe. */
+/** `themeFileText`'s file — the recipe the daemon and e2e suites put on disk — parsed,
+ * with an accent and keyword no built-in uses so an assertion can tell it apart from
+ * caret's. */
 export async function customThemeSource(id: string, scheme: Scheme): Promise<ThemeFile> {
   return parsedOrThrow(
     themeFileText(id, { scheme, accent: CUSTOM_ACCENT, keyword: CUSTOM_KEYWORD }),
