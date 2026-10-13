@@ -5,6 +5,7 @@ import { z } from "zod";
 
 // Relative, not @/: the UI's svelte-check reaches this file via @core, where @/ is ui/src.
 import { errorMessage } from "../lib/types.ts";
+import { fillFallbackRoles, SYNTAX_ROLE_FALLBACKS } from "./role-scopes.ts";
 
 /** The syntax roles every theme file must define. */
 export const SYNTAX_ROLES = [
@@ -21,10 +22,7 @@ export const SYNTAX_ROLES = [
   "number",
 ] as const;
 
-type BaseSyntaxRole = (typeof SYNTAX_ROLES)[number];
-
-/** Each optional syntax role, mapped to the required role whose style it takes when a file omits it. */
-export const SYNTAX_ROLE_FALLBACKS = {} as const satisfies Readonly<Record<string, BaseSyntaxRole>>;
+export type BaseSyntaxRole = (typeof SYNTAX_ROLES)[number];
 
 export const FONT_STYLES = ["italic", "bold", "underline", "strikethrough"] as const;
 
@@ -32,18 +30,6 @@ type FontStyle = (typeof FONT_STYLES)[number];
 export type SyntaxRole = BaseSyntaxRole | keyof typeof SYNTAX_ROLE_FALLBACKS;
 export type RoleStyle = { color: string; fontStyle?: FontStyle[] };
 export type ThemeSyntax = Record<SyntaxRole, RoleStyle>;
-
-/** Fills each optional role the file omitted with its fallback role's style. */
-export function fillFallbackRoles<Base extends string, Optional extends string>(
-  syntax: NoInfer<Record<Base, RoleStyle> & Partial<Record<Optional, RoleStyle>>>,
-  fallbacks: Readonly<Record<Optional, Base>>,
-): Record<Base | Optional, RoleStyle> {
-  const filled: Partial<Record<Base | Optional, RoleStyle>> = { ...syntax };
-  for (const [role, base] of Object.entries(fallbacks) as [Optional, Base][]) {
-    filled[role] ??= syntax[base];
-  }
-  return filled as Record<Base | Optional, RoleStyle>;
-}
 
 const MAX_LENGTH = 64;
 const TOO_LONG = `must be at most ${MAX_LENGTH} characters`;

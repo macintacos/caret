@@ -21,8 +21,8 @@
 
 import type { ThemeRegistrationRaw } from "shiki/core";
 
-import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
-import type { SyntaxRole, ThemeSyntax } from "@core/theme/schema.ts";
+import { fillFallbackRoles, ROLE_SCOPES, SYNTAX_ROLE_FALLBACKS } from "@core/theme/role-scopes.ts";
+import type { BaseSyntaxRole, SyntaxRole, ThemeSyntax } from "@core/theme/schema.ts";
 // Both imports are type-only in one direction: theme.ts takes `CaretShikiThemeId`
 // from here and this module takes its two types from there. `verbatimModuleSyntax`
 // erases both, so the cycle is a source-graph artifact rather than a load order — keep
@@ -93,19 +93,22 @@ export function syntaxShikiTheme(
 }
 
 function caretRoles(p: CaretPalette): ThemeSyntax {
-  return {
-    comment: { color: p.comment, fontStyle: ["italic"] },
-    punctuation: { color: p.punctuation },
-    variable: { color: p.variable },
-    property: { color: p.property },
-    attribute: { color: p.attribute },
-    keyword: { color: p.keyword },
-    function: { color: p.func },
-    type: { color: p.type },
-    string: { color: p.string },
-    escape: { color: p.escape },
-    number: { color: p.number },
-  };
+  return fillFallbackRoles<BaseSyntaxRole, keyof typeof SYNTAX_ROLE_FALLBACKS>(
+    {
+      comment: { color: p.comment, fontStyle: ["italic"] },
+      punctuation: { color: p.punctuation },
+      variable: { color: p.variable },
+      property: { color: p.property },
+      attribute: { color: p.attribute },
+      keyword: { color: p.keyword },
+      function: { color: p.func },
+      type: { color: p.type },
+      string: { color: p.string },
+      escape: { color: p.escape },
+      number: { color: p.number },
+    },
+    SYNTAX_ROLE_FALLBACKS,
+  );
 }
 
 /** Build one scheme's theme from its record.

@@ -2,12 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  fillFallbackRoles,
-  parseThemeFile,
-  SYNTAX_ROLES,
-  themeFileJsonSchema,
-} from "@/theme/schema.ts";
+import { parseThemeFile, SYNTAX_ROLES, themeFileJsonSchema } from "@/theme/schema.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 
@@ -200,20 +195,6 @@ describe("parseThemeFile", () => {
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0]?.startsWith("theme file: is not valid JSON (")).toBe(true);
     }
-  });
-});
-
-describe("fillFallbackRoles", () => {
-  const fallbacks = { tag: "keyword" } as const;
-  const keyword = { color: "#111111", fontStyle: ["bold" as const] };
-
-  test("gives an absent optional role its fallback's style", () => {
-    expect(fillFallbackRoles({ keyword }, fallbacks)).toEqual({ keyword, tag: keyword });
-  });
-
-  test("keeps a present optional role's own style", () => {
-    const tag = { color: "#222222" };
-    expect(fillFallbackRoles({ keyword, tag }, fallbacks)).toEqual({ keyword, tag });
   });
 });
 

@@ -1,4 +1,20 @@
-import type { SyntaxRole } from "./schema.ts";
+// Each syntax role's TextMate scopes and each optional role's fallback.
+import type { BaseSyntaxRole, RoleStyle, SyntaxRole } from "./schema.ts";
+
+/** Each optional syntax role, mapped to the required role whose style it takes when a file omits it. */
+export const SYNTAX_ROLE_FALLBACKS = {} as const satisfies Readonly<Record<string, BaseSyntaxRole>>;
+
+/** Fills each optional role the file omitted with its fallback role's style. */
+export function fillFallbackRoles<Base extends string, Optional extends string>(
+  syntax: NoInfer<Record<Base, RoleStyle> & Partial<Record<Optional, RoleStyle>>>,
+  fallbacks: Readonly<Record<Optional, Base>>,
+): Record<Base | Optional, RoleStyle> {
+  const filled: Partial<Record<Base | Optional, RoleStyle>> = { ...syntax };
+  for (const [role, base] of Object.entries(fallbacks) as [Optional, Base][]) {
+    filled[role] ??= syntax[base];
+  }
+  return filled as Record<Base | Optional, RoleStyle>;
+}
 
 /** The TextMate scopes each syntax role paints, its canonical scope first — the one
  * `syntaxFromVsCodeTheme` reads a theme's style from. */
