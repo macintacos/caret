@@ -90,15 +90,17 @@
     if (!result.ok) return { ok: false, file: file.name, errors: result.errors };
     const { label, scheme } = result.theme;
     onThemeErrors(result.errors);
-    let how: "added" | "replaced";
+    let registration: "added" | "replaced";
     try {
-      how = registerUploadedTheme(buildFileTheme(result.theme));
+      registration = registerUploadedTheme(buildFileTheme(result.theme));
     } catch {
       // The daemon has already saved the file, so this is not a refusal.
       return { ok: true, message: `Saved "${label}". Reload the page to use it.` };
     }
     const message =
-      how === "added" ? `Added "${label}" to the ${scheme} themes.` : `Replaced "${label}".`;
+      registration === "added"
+        ? `Added "${label}" to the ${scheme} themes.`
+        : `Replaced "${label}".`;
     return { ok: true, message };
   }
 

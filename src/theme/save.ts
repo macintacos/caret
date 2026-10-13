@@ -75,8 +75,8 @@ export function createThemeWriter(dir: string): ThemeWriter {
           const written = await stat(target);
           for (const file of plan.remove) {
             // On a case-insensitive filesystem `Twin.json` is the file just written.
-            const s = await stat(join(dir, file)).catch(() => undefined);
-            if (s && !(s.ino === written.ino && s.dev === written.dev)) {
+            const existing = await stat(join(dir, file)).catch(() => undefined);
+            if (existing && !(existing.ino === written.ino && existing.dev === written.dev)) {
               await rm(join(dir, file), { force: true });
             }
           }
