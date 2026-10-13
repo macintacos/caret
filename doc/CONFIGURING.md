@@ -306,7 +306,7 @@ There is no delete control. To remove a theme, delete its file from the folder.
 | --------- | -------- | ---------------------------------------------------------------------------------------- |
 | `$schema` | No       | A URL to the JSON Schema, for editor support. caret ignores it.                          |
 | `id`      | Yes      | A lowercase slug of letters, digits, and single dashes, like `my-theme`. At most 64 characters. |
-| `label`   | Yes      | The name shown in Settings. 1 to 64 characters.                                          |
+| `label`   | Yes      | The name shown in Settings. 1 to 64 characters, not all whitespace.                                      |
 | `scheme`  | Yes      | `"light"` or `"dark"`.                                                                   |
 | `palette` | Yes      | The interface colors, below.                                                             |
 | `syntax`  | Yes      | The code highlighting roles, below.                                                      |

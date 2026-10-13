@@ -100,7 +100,11 @@ export const ThemeFileSchema = z.strictObject({
       /^[a-z0-9]+(-[a-z0-9]+)*$/,
       "must be a lowercase slug of letters, digits, and single dashes, like my-theme",
     ),
-  label: z.string().min(1, "must not be empty").max(MAX_LENGTH, TOO_LONG),
+  label: z
+    .string()
+    .min(1, { error: "must not be empty", abort: true })
+    .regex(/\S/, "must not be only whitespace")
+    .max(MAX_LENGTH, TOO_LONG),
   scheme: z.enum(["light", "dark"], {
     error: (issue) => (issue.input === undefined ? "is required" : 'must be "light" or "dark"'),
   }),
