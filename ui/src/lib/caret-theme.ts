@@ -115,7 +115,13 @@ function caretMarkdownRules(p: Palette): NonNullable<ThemeRegistrationRaw["setti
   ];
 }
 
-/** Re-key a source theme to caret's palette id and append the structural marker
+/** The name both highlighters know a theme by: a built-in's id, a runtime theme's
+ * inline shiki theme name — its id until a replace names it afresh. */
+export function shikiThemeName(theme: Theme): string {
+  return typeof theme.shikiTheme === "string" ? theme.id : (theme.shikiTheme.name ?? theme.id);
+}
+
+/** Re-key a source theme to the name `shikiThemeName` gives it and append the structural marker
  * rules. A source carries its rules as `settings` (tmTheme-derived: caret's own pair
  * and the vendored Nightfox themes) or `tokenColors` (the VS Code themes shiki ships);
  * normalizing to one keeps the appended rules last, which is what makes them win
@@ -128,7 +134,7 @@ export function withStructuralOverrides(
   const { tokenColors, settings, ...rest } = source;
   return {
     ...rest,
-    name: theme.id,
+    name: shikiThemeName(theme),
     settings: [...(settings ?? tokenColors ?? []), ...caretMarkdownRules(paletteFromTheme(theme))],
   };
 }
@@ -155,9 +161,9 @@ const SHIKI_THEMES = Object.fromEntries(
   THEME_IDS.map((id) => [id, shikiThemeForPalette(THEMES[id])]),
 ) as Record<BuiltinThemeId, ThemeRegistrationRaw>;
 
-/** The shiki theme for one caret palette. It is named by the palette's id, so a
- * highlighter resolves it by the same handle appearance.ts paints with. A runtime
- * theme's is built per call. */
+/** The shiki theme for one caret palette, named by `shikiThemeName`: the palette's
+ * id, the handle appearance.ts paints with, until a replace gives a runtime theme a
+ * fresh name. A runtime theme's is built per call. */
 export function shikiThemeFor(id: ThemeId): ThemeRegistrationRaw {
   return isBuiltinThemeId(id) ? SHIKI_THEMES[id] : shikiThemeForPalette(themeFor(id));
 }

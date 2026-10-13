@@ -1,7 +1,8 @@
 // Standalone syntax highlighting for the filename-hover excerpt (EXC-687). The
 // @pierre/diffs library keeps its own private highlighter, so this builds a small
 // dedicated one bound to shiki's full grammar bundle and caret's themes (built-ins
-// up front, a runtime theme on first use), then highlights an excerpt to the caret
+// up front, a runtime theme on first use and again under its fresh name after a
+// replace), then highlights an excerpt to the caret
 // theme in effect, so the preview reads like the plan view's own code. Two entry points share it: highlightExcerpt colours a
 // whole window in one pass, highlightChunk colours a file a piece at a time and
 // hands back the grammar state each piece ended on, so a construct that opens in
@@ -20,7 +21,7 @@ type HastNode = HastRoot | HastRoot["children"][number];
 
 let highlighterPromise: Promise<Highlighter> | undefined;
 const loadedLanguages = new Set<string>();
-const loadedThemes = new Set<ThemeId>();
+const loadedThemes = new Set<string>();
 
 function highlighter(): Promise<Highlighter> {
   if (highlighterPromise === undefined) {
@@ -46,12 +47,16 @@ async function resolveLanguage(hl: Highlighter, language: string): Promise<strin
   }
 }
 
-// Loads a runtime theme into the shared highlighter on first use; built-ins load
-// with the highlighter itself.
-async function resolveTheme(hl: Highlighter, themeId: ThemeId): Promise<void> {
-  if (isBuiltinThemeId(themeId) || loadedThemes.has(themeId)) return;
-  await hl.loadTheme(shikiThemeFor(themeId));
-  loadedThemes.add(themeId);
+// Returns the name to highlight `themeId` with, loading a runtime theme into the
+// shared highlighter once per name; built-ins load with the highlighter itself.
+async function resolveTheme(hl: Highlighter, themeId: ThemeId): Promise<string> {
+  if (isBuiltinThemeId(themeId)) return themeId;
+  const theme = shikiThemeFor(themeId);
+  const name = String(theme.name);
+  if (loadedThemes.has(name)) return name;
+  await hl.loadTheme(theme);
+  loadedThemes.add(name);
+  return name;
 }
 
 /** Highlights `code` to themed HTML (`<pre class="shiki">…`) in one pass, in a
@@ -68,9 +73,9 @@ export async function highlightExcerpt(
   if (hasUnhighlightableLine(code)) return "";
   try {
     const hl = await highlighter();
-    await resolveTheme(hl, themeId);
+    const theme = await resolveTheme(hl, themeId);
     const lang = await resolveLanguage(hl, language);
-    return hl.codeToHtml(code, { lang, theme: themeId, ...CARET_TOKENIZE_OPTIONS });
+    return hl.codeToHtml(code, { lang, theme, ...CARET_TOKENIZE_OPTIONS });
   } catch {
     return "";
   }
@@ -162,13 +167,13 @@ export async function highlightChunk(
   if (hasUnhighlightableLine(code)) return { rows: [] };
   try {
     const hl = await highlighter();
-    await resolveTheme(hl, themeId);
+    const theme = await resolveTheme(hl, themeId);
     const lang = await resolveLanguage(hl, language);
     // codeToHast tokenizes once and stashes the ending state against the tree it
     // returns, so getLastGrammarState reads it back rather than tokenizing again.
     const root = hl.codeToHast(code, {
       lang,
-      theme: themeId,
+      theme,
       grammarState: state,
       ...CARET_TOKENIZE_OPTIONS,
     });

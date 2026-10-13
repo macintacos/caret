@@ -4,16 +4,23 @@ import { createHighlighterCore } from "shiki/core";
 
 import { customThemeFile } from "@ui/support/theme-file.ts";
 import { CARET_SHIKI_THEMES, type CaretShikiThemeId } from "$lib/caret-shiki.ts";
-import { REGISTERED_SHIKI_THEMES, shikiThemeFor, shikiThemeForPalette } from "$lib/caret-theme.ts";
+import {
+  REGISTERED_SHIKI_THEMES,
+  shikiThemeFor,
+  shikiThemeForPalette,
+  shikiThemeName,
+} from "$lib/caret-theme.ts";
 import { CARET_TOKENIZE_OPTIONS, createCaretRegexEngine } from "$lib/diffview/shiki-bundle.ts";
 import {
   addTheme,
   type BuiltinThemeId,
   type ColorToken,
+  replaceTheme,
   type ShikiThemeId,
   THEME_IDS,
   THEMES,
   type ThemeId,
+  themeFor,
 } from "$lib/theme.ts";
 import { CARET_COLOR_PLACEMENT, CARET_DARK, CARET_LIGHT } from "$lib/themes/caret.ts";
 import { UPSTREAM_SHIKI_THEMES } from "$lib/upstream-shiki.ts";
@@ -660,5 +667,25 @@ describe("shikiThemeFor a runtime theme", () => {
       appendedRules.find((r) => String(r.scope).includes(FENCE_LANGUAGE))?.settings.foreground,
     ).toBe(file.tokens["--accent"]);
     expect(file.shikiTheme).toEqual(original);
+  });
+});
+
+describe("shikiThemeName", () => {
+  test("is a built-in's id", () => {
+    expect(shikiThemeName(THEMES.dracula)).toBe("dracula");
+    expect(shikiThemeFor("dracula").name).toBe("dracula");
+  });
+
+  test("is a runtime theme's id until a replace names it afresh", async () => {
+    const file = await customThemeFile("shiki-name", "dark");
+    const id = addTheme(file);
+    expect(shikiThemeName(themeFor(id))).toBe(id);
+    expect(shikiThemeFor(id).name).toBe(id);
+
+    replaceTheme(file);
+    const renamed = shikiThemeName(themeFor(id));
+    expect(renamed).not.toBe(id);
+    expect(renamed.startsWith(`${id}~`)).toBe(true);
+    expect(shikiThemeFor(id).name).toBe(renamed);
   });
 });

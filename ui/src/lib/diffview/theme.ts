@@ -13,7 +13,7 @@
 import { registerCustomTheme } from "@pierre/diffs";
 import type { ThemeRegistrationRaw } from "shiki/core";
 
-import { REGISTERED_SHIKI_THEMES, shikiThemeFor } from "$lib/caret-theme.ts";
+import { REGISTERED_SHIKI_THEMES, shikiThemeFor, shikiThemeName } from "$lib/caret-theme.ts";
 import { type CustomThemeId, type ThemeId, themeFor } from "$lib/theme.ts";
 
 /** Registers a named theme into the library's shared highlighter. Derived from
@@ -37,7 +37,9 @@ export function caretDiffTheme(id?: ThemeId): {
   if (id === undefined) {
     return { theme: { light: "caret-light", dark: "caret-dark" }, themeType: "system" };
   }
-  return { theme: { light: id, dark: id }, themeType: themeFor(id).scheme };
+  const theme = themeFor(id);
+  const name = shikiThemeName(theme);
+  return { theme: { light: name, dark: name }, themeType: theme.scheme };
 }
 
 // The name is duplicated onto the theme object because the library resolves a
@@ -74,7 +76,8 @@ export function registerCaretDiffThemes(register?: RegisterTheme): void {
 }
 
 /** Registers one runtime theme, added after boot, into the @pierre/diffs
- * highlighter so the diff view can select it by its id. */
+ * highlighter so the diff view can select it by its id. A replaced theme registers
+ * again, under the fresh name the replace gave it. */
 export function registerDiffTheme(
   id: CustomThemeId,
   register: RegisterTheme = registerCustomTheme,

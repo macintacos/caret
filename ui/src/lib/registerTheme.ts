@@ -1,7 +1,7 @@
 import type { CustomThemes, ThemeFileError } from "@core/lib/types";
 import { appearance } from "@/state/appearance.svelte.ts";
 import { registerDiffTheme } from "$lib/diffview/theme.ts";
-import { addTheme, type CustomThemeId } from "$lib/theme.ts";
+import { addTheme, type CustomThemeId, isCustomThemeId, replaceTheme } from "$lib/theme.ts";
 import { buildFileTheme, type FileTheme } from "$lib/theme-file.ts";
 
 /** The one call a theme's arrival needs: registers it for painting, both
@@ -14,6 +14,21 @@ export function registerTheme(file: FileTheme): CustomThemeId {
   registerDiffTheme(id);
   appearance.refresh();
   return id;
+}
+
+/** The arrival call for an uploaded theme. Unlike `registerTheme` it may replace: a
+ * registered id is swapped in place, re-registered in the diff highlighter, and
+ * re-applied to the appearance. Throws on a built-in id. */
+export function registerUploadedTheme(file: FileTheme): "added" | "replaced" {
+  if (!isCustomThemeId(file.id)) {
+    registerTheme(file);
+    return "added";
+  }
+  // The diff loader before `reapply`, for `registerTheme`'s reason.
+  const id = replaceTheme(file);
+  registerDiffTheme(id);
+  appearance.reapply(id);
+  return "replaced";
 }
 
 /** Registers the daemon's custom themes and settles the appearance, returning the files

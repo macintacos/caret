@@ -12,7 +12,8 @@ import {
   readCachedTheme,
   writeCachedTheme,
 } from "$lib/appearance.ts";
-import { addTheme, THEMES } from "$lib/theme.ts";
+import { addTheme, replaceTheme, THEMES } from "$lib/theme.ts";
+import type { FileTheme } from "$lib/theme-file.ts";
 
 afterEach(() => {
   localStorage.clear();
@@ -368,5 +369,61 @@ describe("the palette cache", () => {
     appearance.boot();
     appearance.settle();
     expect(wipes()).toBe(0);
+  });
+});
+
+describe("reapply", () => {
+  const NEW_ACCENT = "#123456";
+  const withNewAccent = (file: FileTheme): FileTheme => ({
+    ...file,
+    tokens: { ...file.tokens, "--accent": NEW_ACCENT },
+  });
+
+  async function holdInDark(id: string, mode: "dark" | "light") {
+    const file = await customThemeFile(id, "dark");
+    const registered = addTheme(file);
+    const h = harness();
+    h.appearance.setMode(mode);
+    h.appearance.setSlot("dark", registered);
+    return { ...h, file, id: registered, before: h.wipes() };
+  }
+
+  test("repaints the showing theme's new tokens once and recaches its slot", async () => {
+    const { appearance, wipes, before, file, id } = await holdInDark("reapply-showing", "dark");
+    replaceTheme(withNewAccent(file));
+    appearance.reapply(id);
+    expect(wipes() - before).toBe(1);
+    expect(document.documentElement.style.getPropertyValue("--accent")).toBe(NEW_ACCENT);
+    expect(readCachedTheme("dark")?.tokens["--accent"]).toBe(NEW_ACCENT);
+  });
+
+  test("recaches a slot that is not showing without a wipe", async () => {
+    const { appearance, wipes, before, file, id } = await holdInDark("reapply-hidden", "light");
+    replaceTheme(withNewAccent(file));
+    appearance.reapply(id);
+    expect(wipes() - before).toBe(0);
+    expect(readCachedTheme("dark")?.tokens["--accent"]).toBe(NEW_ACCENT);
+  });
+
+  test("moves a slot whose theme changed scheme to its default, keeping the saved id", async () => {
+    const { appearance, wipes, before, id } = await holdInDark("reapply-flipped", "dark");
+    replaceTheme(await customThemeFile(id, "light"));
+    appearance.reapply(id);
+    expect(appearance.slots.dark).toBe("caret-dark");
+    expect(wipes() - before).toBe(1);
+    expect(readCachedTheme("dark")).toBeUndefined();
+    expect(localStorage.getItem(DARK_SLOT_KEY)).toBe(id);
+  });
+
+  test("an id no slot holds changes nothing", async () => {
+    const file = await customThemeFile("reapply-unheld", "dark");
+    const id = addTheme(file);
+    const { appearance, wipes } = harness();
+    appearance.boot();
+    writeCachedTheme({ id, scheme: "dark", tokens: file.tokens });
+    replaceTheme(withNewAccent(file));
+    appearance.reapply(id);
+    expect(wipes()).toBe(0);
+    expect(readCachedTheme("dark")?.tokens["--accent"]).toBe(CUSTOM_ACCENT);
   });
 });
