@@ -2,9 +2,11 @@ import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { fakeMediaQuery } from "@ui/support/media-query.ts";
+import { withThrowingStorage } from "@ui/support/storage.ts";
+import { CUSTOM_ACCENT, customThemeFile } from "@ui/support/theme-file.ts";
 import { type AppearanceDeps, createAppearance } from "@/state/appearance.svelte.ts";
 import { DARK_SLOT_KEY, LIGHT_SLOT_KEY, MODE_KEY } from "$lib/appearance.ts";
-import { THEMES } from "$lib/theme.ts";
+import { addTheme, THEMES } from "$lib/theme.ts";
 
 afterEach(() => {
   localStorage.clear();
@@ -209,5 +211,44 @@ describe("summary", () => {
     appearance.setMode("dark");
     expect(appearance.summary).toContain(THEMES["caret-dark"].label);
     expect(appearance.summary).not.toContain("system");
+  });
+});
+
+describe("refresh", () => {
+  test("adopts a saved slot once its theme registers, repainting with its tokens", async () => {
+    localStorage.setItem(MODE_KEY, "dark");
+    localStorage.setItem(DARK_SLOT_KEY, "refresh-late-dark");
+    const { appearance, wipes } = harness();
+    expect(appearance.themeId).toBe("caret-dark");
+
+    const id = addTheme(await customThemeFile("refresh-late-dark", "dark"));
+    appearance.refresh();
+
+    expect(appearance.themeId).toBe(id);
+    expect(document.documentElement.style.getPropertyValue("--accent")).toBe(CUSTOM_ACCENT);
+    expect(wipes()).toBe(1);
+    expect(localStorage.getItem(DARK_SLOT_KEY)).toBe("refresh-late-dark");
+  });
+
+  test("does not repaint when the registry change leaves the same palette showing", () => {
+    localStorage.setItem(MODE_KEY, "dark");
+    localStorage.setItem(DARK_SLOT_KEY, "refresh-never-registered");
+    const { appearance, wipes } = harness();
+    appearance.refresh();
+    expect(appearance.themeId).toBe("caret-dark");
+    expect(wipes()).toBe(0);
+    expect(localStorage.getItem(DARK_SLOT_KEY)).toBe("refresh-never-registered");
+  });
+
+  test("keeps an in-session pick that storage failed to persist", async () => {
+    const file = await customThemeFile("refresh-unrelated", "dark");
+    const { appearance, wipes } = harness(true);
+    withThrowingStorage(() => {
+      appearance.setSlot("dark", "dracula");
+      addTheme(file);
+      appearance.refresh();
+    });
+    expect(appearance.themeId).toBe("dracula");
+    expect(wipes()).toBe(1);
   });
 });

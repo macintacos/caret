@@ -1,16 +1,10 @@
-import type { ThemeRegistrationRaw } from "shiki/core";
-
 import type { ThemeFile } from "@core/theme/schema.ts";
 import { syntaxShikiTheme } from "$lib/caret-shiki.ts";
-import type { Theme } from "$lib/theme.ts";
+import type { RuntimeTheme } from "$lib/theme.ts";
 import { type PaletteInput, paletteTokens } from "$lib/themes/recipe.ts";
 
-/** Not a `Theme`: `ThemeId` and `ShikiThemeId` are closed unions a file's slug
- * cannot join until the theme is registered. */
-export type FileTheme = Omit<Theme, "id" | "shikiTheme"> & {
-  id: string;
-  shikiTheme: ThemeRegistrationRaw;
-};
+/** Not a `Theme`: its id is a plain string until `addTheme` mints it a `CustomThemeId`. */
+export type FileTheme = Omit<RuntimeTheme, "id"> & { id: string };
 
 type RecipeColors = Omit<PaletteInput, "id" | "label" | "scheme" | "shikiTheme">;
 type Palette = ThemeFile["palette"];

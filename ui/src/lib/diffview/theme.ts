@@ -11,9 +11,10 @@
 // highlighters use the same pure-JS regex engine, so this duplicates a theme
 // registration, never the WASM engine.
 import { registerCustomTheme } from "@pierre/diffs";
+import type { ThemeRegistrationRaw } from "shiki/core";
 
-import { REGISTERED_SHIKI_THEMES } from "$lib/caret-theme.ts";
-import { THEMES, type ThemeId } from "$lib/theme.ts";
+import { REGISTERED_SHIKI_THEMES, shikiThemeFor } from "$lib/caret-theme.ts";
+import { type CustomThemeId, type ThemeId, themeFor } from "$lib/theme.ts";
 
 /** Registers a named theme into the library's shared highlighter. Derived from
  * the library's own signature so the loader's resolved theme type stays in
@@ -36,23 +37,26 @@ export function caretDiffTheme(id?: ThemeId): {
   if (id === undefined) {
     return { theme: { light: "caret-light", dark: "caret-dark" }, themeType: "system" };
   }
-  return { theme: { light: id, dark: id }, themeType: THEMES[id].scheme };
+  return { theme: { light: id, dark: id }, themeType: themeFor(id).scheme };
 }
 
 // The name is duplicated onto the theme object because the library resolves a
 // theme by the name it was registered under.
-const caretThemeLoaders: { name: string; load: ThemeLoader }[] = REGISTERED_SHIKI_THEMES.map(
-  (theme) => {
-    const name = String(theme.name);
-    return { name, load: async () => ({ ...theme, name }) };
-  },
-);
+function themeLoader(theme: ThemeRegistrationRaw): {
+  name: string;
+  load: ThemeLoader;
+} {
+  const name = String(theme.name);
+  return { name, load: async () => ({ ...theme, name }) };
+}
+
+const caretThemeLoaders = REGISTERED_SHIKI_THEMES.map(themeLoader);
 
 let registered = false;
 
 /**
  * Register caret's Shiki themes into the @pierre/diffs highlighter — every
- * palette, so whichever theme the reviewer picks can be selected by name.
+ * built-in palette; a runtime theme arrives through `registerDiffTheme`.
  *
  * The shared production highlighter is a process singleton, so a module-level
  * guard skips repeat production registrations (the wrapper calls this on every
@@ -67,4 +71,14 @@ export function registerCaretDiffThemes(register?: RegisterTheme): void {
   if (registered) return;
   registered = true;
   for (const { name, load } of caretThemeLoaders) registerCustomTheme(name, load);
+}
+
+/** Registers one runtime theme, added after boot, into the @pierre/diffs
+ * highlighter so the diff view can select it by its id. */
+export function registerDiffTheme(
+  id: CustomThemeId,
+  register: RegisterTheme = registerCustomTheme,
+): void {
+  const { name, load } = themeLoader(shikiThemeFor(id));
+  register(name, load);
 }

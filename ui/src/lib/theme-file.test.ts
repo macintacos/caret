@@ -1,17 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
-import { parseThemeFile, type ThemeFile } from "@core/theme/schema.ts";
+import { readThemeFile } from "@ui/support/theme-file.ts";
 import { CARET_SHIKI_THEMES } from "$lib/caret-shiki.ts";
 import { THEMES } from "$lib/theme.ts";
 import { buildFileTheme } from "$lib/theme-file.ts";
-
-async function readThemeFile(name: string): Promise<ThemeFile> {
-  const parsed = parseThemeFile(
-    await Bun.file(new URL(`./themes/${name}`, import.meta.url)).text(),
-  );
-  if (!parsed.ok) throw new Error(parsed.errors.join("\n"));
-  return parsed.file;
-}
 
 describe("buildFileTheme", () => {
   for (const id of ["caret-dark", "caret-light"] as const) {

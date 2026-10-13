@@ -4,14 +4,19 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { BUILTIN_THEME_IDS } from "@core/theme/builtin-ids.ts";
+import { customThemeFile } from "@ui/support/theme-file.ts";
 import { QUOTE_SUBDUE } from "$lib/diffview/coreStyles.ts";
 import {
+  addTheme,
+  type BuiltinThemeId,
   type ColorToken,
+  isBuiltinThemeId,
   paintTheme,
   type Scheme,
   THEME_IDS,
   THEMES,
   type ThemeId,
+  themeFor,
   themesForScheme,
 } from "$lib/theme.ts";
 import { CARET_COLOR_PLACEMENT, CARET_DARK, CARET_LIGHT } from "$lib/themes/caret.ts";
@@ -110,7 +115,8 @@ const TABLE_CARD_FILL = 0.06;
  * checks. */
 const TABLE_GROUNDS = [0.02, TABLE_CARD_FILL, 0.08] as const;
 
-const themeEntries = () => Object.entries(THEMES) as [ThemeId, (typeof THEMES)[ThemeId]][];
+const themeEntries = () =>
+  Object.entries(THEMES) as [BuiltinThemeId, (typeof THEMES)[BuiltinThemeId]][];
 
 describe("THEMES", () => {
   test("THEME_IDS lists caret's palettes first, then each vendor family", () => {
@@ -499,7 +505,7 @@ describe("every theme", () => {
   /** Assert `paintOn(theme, ground)` clears the 3:1 non-text floor against every
    * row-banded ground, on every palette. */
   function expectAboveNonTextFloor(
-    paintOn: (theme: (typeof THEMES)[ThemeId], ground: string) => string,
+    paintOn: (theme: (typeof THEMES)[BuiltinThemeId], ground: string) => string,
     label: string,
   ): void {
     for (const [id, theme] of themeEntries()) {
@@ -884,4 +890,39 @@ describe("every ColorToken is read somewhere in ui/src", () => {
       expect(new RegExp(`var\\(\\s*${token}(?![\\w-])`).test(sources), token).toBe(true);
     });
   }
+});
+
+describe("runtime themes", () => {
+  test("themesForScheme lists a registered theme after the built-ins, in its own scheme only", async () => {
+    const id = addTheme(await customThemeFile("runtime-list", "light"));
+    const lightIds = themesForScheme("light").map((t) => t.id);
+    expect(lightIds.at(-1)).toBe(id);
+    expect(lightIds.slice(0, -1)).toEqual(THEME_IDS.filter((t) => THEMES[t].scheme === "light"));
+    expect(themesForScheme("dark").map((t) => t.id)).not.toContain(id);
+  });
+
+  test("paintTheme paints a registered theme's tokens", async () => {
+    const file = await customThemeFile("runtime-paint", "dark");
+    paintTheme(addTheme(file));
+    expect(document.documentElement.style.getPropertyValue("--accent")).toBe(
+      file.tokens["--accent"],
+    );
+  });
+
+  test("addTheme refuses a built-in or already-registered id", async () => {
+    addTheme(await customThemeFile("runtime-twice", "dark"));
+    const darkBefore = themesForScheme("dark");
+    for (const id of ["caret-dark", "dracula", "runtime-twice"]) {
+      const file = await customThemeFile(id, "dark");
+      expect(() => addTheme(file)).toThrow(id);
+    }
+    expect(themeFor("caret-dark")).toBe(THEMES["caret-dark"]);
+    expect(themesForScheme("dark")).toEqual(darkBefore);
+  });
+
+  test("an unregistered string is not a ThemeId", () => {
+    // @ts-expect-error a ThemeId is a built-in or one addTheme minted
+    const id: ThemeId = "not-a-theme";
+    expect(isBuiltinThemeId(id)).toBe(false);
+  });
 });

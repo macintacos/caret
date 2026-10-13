@@ -65,6 +65,16 @@ describe("definePref (enum)", () => {
       expect(() => pref.write("b")).not.toThrow();
     });
   });
+
+  test("a getter allow-list is re-read on every read", () => {
+    const key = "test.definePref.getter";
+    const allowed: string[] = ["a"];
+    const growing = definePref<string>(key, () => allowed, "a");
+    localStorage.setItem(key, "b");
+    expect(growing.read()).toBe("a");
+    allowed.push("b");
+    expect(growing.read()).toBe("b");
+  });
 });
 
 describe("defineFlagPref (boolean flag)", () => {

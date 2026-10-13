@@ -12,7 +12,7 @@
 // the live appearance, and it is the surface callers use (EXC-883).
 
 import { definePref, registerPrefKey } from "$lib/definePref.ts";
-import { type Scheme, type ThemeId, themesForScheme } from "$lib/theme.ts";
+import { type BuiltinThemeId, type Scheme, type ThemeId, themesForScheme } from "$lib/theme.ts";
 
 /** When each scheme applies: pinned to one, or following the OS. */
 export type ThemeMode = "light" | "dark" | "system";
@@ -24,7 +24,7 @@ export const THEME_MODES: readonly ThemeMode[] = ["light", "dark", "system"];
 export const DEFAULT_MODE: ThemeMode = "system";
 
 /** Each slot defaults to the caret palette of its own scheme. */
-export const DEFAULT_SLOT_THEME: Record<Scheme, ThemeId> = {
+export const DEFAULT_SLOT_THEME: Record<Scheme, BuiltinThemeId> = {
   light: "caret-light",
   dark: "caret-dark",
 };
@@ -45,16 +45,17 @@ const modePref = definePref<ThemeMode>(MODE_KEY, THEME_MODES, DEFAULT_MODE);
 
 // Each slot's allow-list is its OWN scheme's ids, so a hand-edited wrong-scheme
 // value degrades to the slot's default rather than painting a dark palette while
-// the resolved scheme (and `data-theme`) say light.
+// the resolved scheme (and `data-theme`) say light. It is read live, so a saved id
+// resolves once its theme registers.
 const slotPrefs: Record<Scheme, ReturnType<typeof definePref<ThemeId>>> = {
   light: definePref<ThemeId>(
     LIGHT_SLOT_KEY,
-    themesForScheme("light").map((t) => t.id),
+    () => themesForScheme("light").map((t) => t.id),
     DEFAULT_SLOT_THEME.light,
   ),
   dark: definePref<ThemeId>(
     DARK_SLOT_KEY,
-    themesForScheme("dark").map((t) => t.id),
+    () => themesForScheme("dark").map((t) => t.id),
     DEFAULT_SLOT_THEME.dark,
   ),
 };

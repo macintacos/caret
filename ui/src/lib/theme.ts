@@ -4,7 +4,9 @@
 // target is the document root, where they override app.css's :root defaults (inline
 // style wins over a stylesheet rule), so the whole chrome — plus everything that
 // reads `var(--token)`: dialogs, the .diffview bridge — retints in realtime with no
-// per-component change. Defining a new palette is one more entry in THEMES.
+// per-component change. A compiled-in palette is one more entry in THEMES; a theme
+// built from a theme file joins at runtime through `registerTheme`
+// (registerTheme.ts), whose registry half is `addTheme`.
 //
 // A caller may pass any element instead, painting the palette onto that subtree
 // rather than the page (EXC-884) — the scoped preview card previews a palette the
@@ -39,7 +41,13 @@
 // expression, which a parameter default evaluates per call, not at module load — so
 // caret-theme.ts can import THEMES under bun-test without a DOM.
 
+import type { ThemeRegistrationRaw } from "shiki/core";
+import { SvelteMap } from "svelte/reactivity";
+
 import type { CaretShikiThemeId } from "$lib/caret-shiki.ts";
+// Type-only both ways (theme-file.ts takes `RuntimeTheme` from here), so the cycle is
+// erased by `verbatimModuleSyntax` — never reach for a runtime value across it.
+import type { FileTheme } from "$lib/theme-file.ts";
 import { caretDark, caretLight } from "$lib/themes/caret.ts";
 import {
   catppuccinFrappe,
@@ -57,7 +65,7 @@ import type { UpstreamShikiThemeId } from "$lib/upstream-shiki.ts";
  * lets caret-theme.ts resolve any palette through a single lookup. */
 export type ShikiThemeId = UpstreamShikiThemeId | CaretShikiThemeId;
 
-export type ThemeId =
+export type BuiltinThemeId =
   | "caret-dark"
   | "caret-light"
   | "catppuccin-latte"
@@ -69,6 +77,14 @@ export type ThemeId =
   | "github-dark"
   | "dawnfox"
   | "duskfox";
+
+declare const customThemeId: unique symbol;
+/** A runtime theme's id. Only `addTheme` mints one, so a typo'd literal is still a
+ * compile error rather than a silently unknown theme. */
+export type CustomThemeId = string & { readonly [customThemeId]: true };
+
+/** Any theme a slot can hold: a built-in palette or one `addTheme` minted. */
+export type ThemeId = BuiltinThemeId | CustomThemeId;
 
 /** A native color scheme. Every theme declares one, and it is what
  * `color-scheme` / `data-theme` carry and what a theme slot is keyed by. */
@@ -108,8 +124,7 @@ export type ColorToken =
   | "--attention"
   | "--shadow-card";
 
-export interface Theme {
-  id: ThemeId;
+interface ThemeFields {
   /** Human label shown in the Settings dropdown. */
   label: string;
   /** Native color scheme; drives `color-scheme` and the diff view's themeType,
@@ -117,6 +132,11 @@ export interface Theme {
   scheme: Scheme;
   /** CSS custom property → value, covering every color token app.css declares. */
   tokens: Record<ColorToken, string>;
+}
+
+/** A compiled-in palette. */
+export interface BuiltinTheme extends ThemeFields {
+  id: BuiltinThemeId;
   /** The shiki theme this palette highlights code with — the vendor's own published
    * one for a palette named after a vendor (EXC-896), caret's own theme of the
    * same name for its own pair (EXC-903). Required, so a palette that names none is
@@ -124,9 +144,17 @@ export interface Theme {
   shikiTheme: ShikiThemeId;
 }
 
+/** A theme built from a theme file, carrying its shiki theme inline. */
+export interface RuntimeTheme extends ThemeFields {
+  id: CustomThemeId;
+  shikiTheme: ThemeRegistrationRaw;
+}
+
+export type Theme = BuiltinTheme | RuntimeTheme;
+
 // Insertion order is display order: caret's own pair first, then each vendor family
 // kept together, so a slot's dropdown groups the way a reader expects to find it.
-export const THEMES: Record<ThemeId, Theme> = {
+export const THEMES: Record<BuiltinThemeId, BuiltinTheme> = {
   "caret-dark": caretDark,
   "caret-light": caretLight,
   "catppuccin-latte": catppuccinLatte,
@@ -140,16 +168,56 @@ export const THEMES: Record<ThemeId, Theme> = {
   duskfox,
 };
 
-/** Selectable ids in display order — caret-dark first. Drives the per-slot
- * preference allow-lists and the Settings dropdowns. */
-export const THEME_IDS = Object.keys(THEMES) as ThemeId[];
+/** The built-in ids in display order — caret-dark first. Runtime themes are not
+ * here; `themesForScheme` is the live list of what a slot can select. */
+export const THEME_IDS = Object.keys(THEMES) as BuiltinThemeId[];
 
-/** The themes selectable for one scheme's slot, in THEME_IDS order. A light slot
- * offers only light palettes (and vice versa), so the live theme can never
- * contradict the resolved scheme. Every scheme has at least one, which
- * theme.test.ts pins — a slot with no options would render an empty picker. */
+// A SvelteMap so a template reading `themesForScheme` re-runs when a theme registers.
+// Module-level, like THEMES: one registry per document, and every consumer calls
+// functions on it. Entries are never removed, so a registering test uses an id no
+// other test in its file uses.
+const runtimeThemes = new SvelteMap<CustomThemeId, RuntimeTheme>();
+
+/** Whether an id names a compiled-in palette (an own key of THEMES). */
+export function isBuiltinThemeId(id: string): id is BuiltinThemeId {
+  return Object.hasOwn(THEMES, id);
+}
+
+/** Add a theme built from a theme file to the registry, returning its minted id.
+ * The registry half only — a theme's arrival goes through `registerTheme`
+ * (registerTheme.ts), which also teaches the diff highlighter and re-resolves the
+ * slots.
+ *
+ * @throws When the id is a built-in or already registered: both highlighters key
+ * themes by this id, so a collision would shadow or half-replace a theme. */
+export function addTheme(file: FileTheme): CustomThemeId {
+  const id = file.id as CustomThemeId; // the one place a CustomThemeId is minted
+  if (isBuiltinThemeId(id) || runtimeThemes.has(id)) {
+    throw new Error(`theme id "${id}" is already taken`);
+  }
+  runtimeThemes.set(id, { ...file, id });
+  return id;
+}
+
+/** The theme for an id, built-in or registered.
+ *
+ * @throws On an unregistered id — unreachable, since only `addTheme` mints one. */
+export function themeFor(id: ThemeId): Theme {
+  const theme = isBuiltinThemeId(id) ? THEMES[id] : runtimeThemes.get(id);
+  if (theme === undefined) throw new Error(`no theme registered as "${id}"`);
+  return theme;
+}
+
+/** The themes selectable for one scheme's slot: built-ins in THEME_IDS order, then
+ * runtime themes in registration order. A light slot offers only light palettes
+ * (and vice versa), so the live theme can never contradict the resolved scheme.
+ * Every scheme has at least one, which theme.test.ts pins — a slot with no options
+ * would render an empty picker. Reads the runtime registry reactively, so a template
+ * or `$derived` calling it re-runs when a theme registers. */
 export function themesForScheme(scheme: Scheme): Theme[] {
-  return THEME_IDS.map((id) => THEMES[id]).filter((theme) => theme.scheme === scheme);
+  return [...THEME_IDS.map((id) => THEMES[id]), ...runtimeThemes.values()].filter(
+    (theme) => theme.scheme === scheme,
+  );
 }
 
 /** Paint a theme onto an element — inline custom properties + color-scheme +
@@ -161,7 +229,7 @@ export function themesForScheme(scheme: Scheme): Theme[] {
  * instead (see the module header's note on what a scoped stamp does and doesn't
  * insulate). */
 export function paintTheme(id: ThemeId, target: HTMLElement = document.documentElement): Theme {
-  const theme = THEMES[id];
+  const theme = themeFor(id);
   for (const [name, value] of Object.entries(theme.tokens)) {
     target.style.setProperty(name, value);
   }
