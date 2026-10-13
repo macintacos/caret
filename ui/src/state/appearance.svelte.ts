@@ -14,7 +14,7 @@
 // The one exception is the boot stand-in: a slot whose saved custom theme has not
 // registered yet boots on that theme's cached palette instead of its default. The
 // theme registering with the same tokens takes over without a wipe; any other move
-// of the resolved theme, `setSlot` on the stand-in's slot, `dropStandIn`, or `settle`
+// of the resolved theme, `setSlot` on the stand-in's slot, `themesUnavailable`, or `themesLoaded`
 // replaces it with what the slots resolve to.
 //
 // A module singleton (the `shortcuts` registry's shape): there is exactly one
@@ -72,7 +72,7 @@ export interface Appearance {
   /** Pin a scheme, or follow the OS. Persists, then repaints as a wipe. */
   setMode(mode: ThemeMode): void;
   /** Choose a scheme's palette. Persists, then repaints as a wipe — and caches a
-   * custom pick's palette for the next boot. */
+   * custom pick's palette for the next boot, or clears the cache for a built-in pick. */
   setSlot(scheme: Scheme, id: ThemeId): void;
   /** Re-seed from storage and paint instantly, with no wipe — boot (which runs
    * after `migrateLegacyTheme` may have rewritten storage behind this instance)
@@ -84,14 +84,13 @@ export interface Appearance {
    * that just registered takes effect — repainting as a wipe only if the palette
    * showing moved. */
   refresh(): void;
-  /** The call for when the daemon's themes could not be read: replaces a boot
-   * stand-in with what the slots resolve to, as a wipe, and leaves the cache for
-   * the next load. */
-  dropStandIn(): void;
-  /** The one call after the daemon's served themes have registered: caches each
-   * slot's custom palette (clearing the cache of a slot that holds a built-in),
-   * then drops any stand-in whose theme never arrived. */
-  settle(): void;
+  /** The daemon's themes could not be read: replaces a boot stand-in with what the
+   * slots resolve to, as a wipe, and leaves the cache for the next load. */
+  themesUnavailable(): void;
+  /** The daemon's served themes have registered: caches each slot's custom palette
+   * (clearing the cache of a slot that holds a built-in), then drops any stand-in
+   * whose theme never arrived. */
+  themesLoaded(): void;
   /** Re-apply a theme just replaced under the same id: a slot holding it whose scheme
    * no longer matches falls back to its default in-session (storage keeps the saved
    * id), the palette repaints as a wipe if it is showing, and each slot's cache is
@@ -140,12 +139,10 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
     withWipe(() => paintTheme(resolved()), deps.wipe);
   };
 
-  const cacheSlots = (): void => {
-    for (const slot of SCHEMES) {
-      const id = live.slots[slot];
-      if (isBuiltinThemeId(id)) clearCachedTheme(slot);
-      else writeCachedTheme({ id, scheme: slot, tokens: themeFor(id).tokens });
-    }
+  const syncCache = (slot: Scheme): void => {
+    const id = live.slots[slot];
+    if (isBuiltinThemeId(id)) clearCachedTheme(slot);
+    else writeCachedTheme({ id, scheme: slot, tokens: themeFor(id).tokens });
   };
 
   // Persist and update state first, then repaint — but only when the resolved
@@ -193,10 +190,7 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
       // Picking the slot's default leaves the resolved id unchanged, so `commit`
       // alone would leave the cached palette up.
       if (standIn?.scheme === target) dropStandIn();
-      if (!isBuiltinThemeId(id)) {
-        const { scheme, tokens } = themeFor(id);
-        writeCachedTheme({ id, scheme, tokens });
-      }
+      syncCache(target);
     },
     boot() {
       live.mode = readThemeMode();
@@ -219,9 +213,9 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
         }
       });
     },
-    dropStandIn,
-    settle() {
-      cacheSlots();
+    themesUnavailable: dropStandIn,
+    themesLoaded() {
+      for (const slot of SCHEMES) syncCache(slot);
       dropStandIn();
     },
     reapply(id) {
@@ -234,7 +228,7 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
         }
       });
       if (showing && resolved() === id) withWipe(() => paintTheme(id), deps.wipe);
-      cacheSlots();
+      for (const slot of SCHEMES) syncCache(slot);
     },
     watch(media) {
       return watchSystemScheme((prefersDark) => {
