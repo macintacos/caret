@@ -81,10 +81,12 @@ describe("MarkdownEditor code styling", () => {
     expect(target.querySelector(".cm-md-codeblock-close")).not.toBeNull();
   });
 
-  function contentLine(target: HTMLElement) {
-    return Array.from(target.querySelectorAll(".cm-md-codeblock")).find((l) =>
+  /** The text of each span on the fence's body line. */
+  function spanTexts(target: HTMLElement): string[] {
+    const line = Array.from(target.querySelectorAll(".cm-md-codeblock")).find((l) =>
       l.textContent?.includes("const x = 1"),
     );
+    return Array.from(line?.querySelectorAll("span") ?? [], (span) => span.textContent ?? "");
   }
 
   test("highlights fenced code for a known language", async () => {
@@ -98,7 +100,7 @@ describe("MarkdownEditor code styling", () => {
     flush();
     // The language parser tokenizes the body into spans — `const` becomes a
     // highlighted keyword span (a no-language fence leaves it as plain text).
-    expect(contentLine(target)?.querySelector("span")).not.toBeNull();
+    expect(spanTexts(target)).toContain("const");
   });
 
   test("leaves a fence with no language as plain (untokenized) text", () => {
@@ -107,7 +109,7 @@ describe("MarkdownEditor code styling", () => {
       onInput: () => {},
     });
     flush();
-    expect(contentLine(target)?.querySelector("span")).toBeNull();
+    expect(spanTexts(target)).not.toContain("const");
   });
 });
 

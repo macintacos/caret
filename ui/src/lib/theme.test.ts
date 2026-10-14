@@ -527,14 +527,9 @@ describe("every theme", () => {
     const RULE_INK = "--ink-soft" as const;
     // What the line PAINTS, not what its token names. channels() drops an alpha suffix
     // on purpose — a wash and its hue are one color for the angle tests — but a
-    // translucent paint's contrast is the contrast of what lands on the ground, so the
-    // src-over composite happens here. An opaque token passes through unchanged, which
-    // is why the assertion can be written once for any candidate.
-    const alpha = (hex: string) => {
-      const m = /^#[0-9a-f]{6}([0-9a-f]{2})$/i.exec(hex);
-      return m === null ? 1 : Number.parseInt(m[1] as string, 16) / 255;
-    };
-    const over = (fg: string, bg: string) => banded(bg, fg, alpha(fg));
+    // translucent paint's contrast is the contrast of what lands on the ground, so it is
+    // composited first. An opaque token passes through unchanged, which is why the
+    // assertion can be written once for any candidate.
     expectAboveNonTextFloor(
       (theme, ground) => over(theme.tokens[RULE_INK], ground),
       `thematic-break rule ${RULE_INK}`,
@@ -841,7 +836,7 @@ describe("every theme", () => {
   });
 
   // The elements that share a line have to read as different colors where both spend a
-  // hue: the four inline ones among themselves, a heading against the code and links in
+  // hue: the four inline ones among themselves, a heading against the inline elements in
   // it, a quote against everything nested in it, and a list marker against what starts
   // its item. A heading never shares a line with a list marker or a quote, which is what
   // lets a palette spend one hue on its structure. 20 is a large step on the CIE76 scale
@@ -855,6 +850,8 @@ describe("every theme", () => {
     ["bold", "italic"],
     ["heading", "code"],
     ["heading", "link"],
+    ["heading", "bold"],
+    ["heading", "italic"],
     ...(["code", "link", "bold", "italic", "listMarker"] as const).map(
       (e): [MarkdownElement, MarkdownElement] => ["quote", e],
     ),
@@ -869,6 +866,20 @@ describe("every theme", () => {
         if (ca === undefined || cb === undefined) continue;
         if (onInkRamp(theme, ca) || onInkRamp(theme, cb)) continue;
         expect(deltaE(ca, cb), `${id} ${a} vs ${b}`).toBeGreaterThanOrEqual(20);
+      }
+    }
+  });
+
+  // A version diff paints a deletion in --danger, and an error wears it too, so inline code
+  // or bold in that red reads as one of them. --ok is left open on purpose: green code is
+  // Dracula's and Catppuccin's own convention, and reads as that before it reads as an
+  // added line. Falsifiable: duskfox's code in its love red.
+  test("keeps every markdown style off --danger", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const [element, style] of Object.entries(theme.markdown)) {
+        expect(style.color.toLowerCase(), `${id} ${element}`).not.toBe(
+          theme.tokens["--danger"].toLowerCase(),
+        );
       }
     }
   });

@@ -398,21 +398,22 @@ elements. Each is an object with a `color` and an optional `fontStyle`, the same
 a syntax role. A file that omits an element, or the whole `markdown` object, paints it as
 caret does by default.
 
-| Element      | What it colors                                                   | Default                       |
-| ------------ | ---------------------------------------------------------------- | ----------------------------- |
-| `heading`    | A heading, its `#` markers included                              | `accent`, bold                |
-| `code`       | Inline code, and the body of a fenced block                      | `accentBright`                |
-| `link`       | A link's text                                                    | `ink` mixed toward `accent`   |
-| `bold`       | Bold text, between its `**` markers                              | `ink`                         |
-| `italic`     | Italic text, between its `_` or `*` markers                      | `ink`                         |
-| `listMarker` | A list's bullet and an ordered item's number                     | `inkSoft` and `inkFaint`      |
-| `quote`      | Blockquote text                                                  | `ink`, slightly faded         |
+| Element      | What it colors                               | Plan view default           | Comment editor default |
+| ------------ | -------------------------------------------- | --------------------------- | ---------------------- |
+| `heading`    | A heading, its `#` markers included          | `accent`                    | `ink`, bold            |
+| `code`       | Inline code, and the body of a fenced block  | `accentBright`              | `ink`                  |
+| `link`       | A link's text                                | `ink` mixed toward `accent` | `accent`               |
+| `bold`       | Bold text, between its `**` markers          | `ink`                       | `ink`                  |
+| `italic`     | Italic text, between its `_` or `*` markers  | `ink`                       | `ink`                  |
+| `listMarker` | A list's bullet and an ordered item's number | `inkSoft` and `inkFaint`    | `inkFaint`             |
+| `quote`      | Blockquote text                              | `ink`, slightly faded       | `inkSoft`              |
 
 A few elements keep part of their look whatever the style says:
 
-- Bold text stays bold, italic text stays italic, and a link keeps its dotted underline
-  and its chip. A `fontStyle` adds to these.
-- A `heading` style replaces the default bold, so name `"bold"` to keep it.
+- Bold text stays bold, italic text stays italic, and a link keeps its underline, dotted
+  in the plan view, and its chip. A `fontStyle` adds to these.
+- A `heading` style sets the heading's weight on both surfaces, so name `"bold"` for a
+  bold heading.
 - A styled `quote` paints at full strength, since its color already sets it apart.
 - The `**`, `_`, and backtick markers keep their own color.
 - A fenced block's body takes the `code` color but not its `fontStyle`.
@@ -420,8 +421,9 @@ A few elements keep part of their look whatever the style says:
 The chip tint behind bold, italic, inline code, and link text comes from the `chip*Hue`
 [palette](#palette) overrides, not from these styles.
 
-The comment editor applies the `heading`, `link`, `quote`, and `listMarker` colors, plus
-the `heading` and `quote` font styles and the `link` decoration.
+The comment editor applies these styles too. There, text nested in a heading, link, or
+quote takes that element's color, and in a heading its weight too. A fenced block that
+names its language takes the editor's own code colors rather than `code`.
 
 ### Colors and errors
 

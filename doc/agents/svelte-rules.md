@@ -351,9 +351,10 @@ imports it — stays green under any invocation.
   style stays 15 degrees off `--accent`, the inline styles stay 30 degrees off
   `--chip-ref`, and a link stays 30 degrees off `--chip-skill` too. Styles that share a
   line stay 20 apart in CIE76. A style on the palette's own ink ramp is exempt from the
-  hue rules. No Catppuccin Latte or Dawnfox accent reaches AA on its own sunk surface, so
-  those two keep their text on that ramp and spend hue on the link chip instead, Latte on
-  its list marker too.
+  hue rules. No style wears `--danger`, the deletion and error red; `--ok` stays open,
+  since green code is Dracula's and Catppuccin's own convention. No Catppuccin Latte or
+  Dawnfox accent reaches AA on its own sunk surface, so those two keep their text on that
+  ramp and spend hue on the link chip instead, Latte on its list marker too.
 - **An overdrawn glyph belongs on the run's FIRST token, not on every tagged one.**
   `inlineDecorate.ts` tags every shiki token a run covers, and shiki does not always hand
   a multi-character run over as one token — an uppercase `[X]` comes back cut into three.

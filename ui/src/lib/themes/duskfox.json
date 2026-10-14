@@ -43,10 +43,10 @@
   },
   "markdown": {
     "heading": { "color": "#f6c177", "fontStyle": ["bold"] },
-    "code": { "color": "#eb6f92" },
+    "code": { "color": "#ea9a97" },
     "link": { "color": "#e0def4" },
     "bold": { "color": "#a3be8c" },
-    "italic": { "color": "#f6c177" },
+    "italic": { "color": "#eb98c3" },
     "listMarker": { "color": "#4a869c" },
     "quote": { "color": "#9ccfd8", "fontStyle": ["italic"] }
   }

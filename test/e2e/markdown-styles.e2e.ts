@@ -29,14 +29,15 @@ Some **bold words** and *italic words* here.
 > quoted line of text
 `;
 
+// Every element carries a font style, so each surface shows it honours them all.
 const STYLES = {
   heading: { color: "#9580ff", fontStyle: ["bold"] },
-  code: { color: "#8aff80" },
-  link: { color: "#ff80bf" },
-  bold: { color: "#ffca80" },
-  italic: { color: "#ffff80" },
-  listMarker: { color: "#80ffea" },
-  quote: { color: "#ffff80", fontStyle: ["italic"] },
+  code: { color: "#8aff80", fontStyle: ["italic"] },
+  link: { color: "#ff80bf", fontStyle: ["bold"] },
+  bold: { color: "#ffca80", fontStyle: ["italic"] },
+  italic: { color: "#ffff80", fontStyle: ["bold"] },
+  listMarker: { color: "#80ffea", fontStyle: ["bold"] },
+  quote: { color: "#ffff80", fontStyle: ["italic", "bold"] },
 } satisfies ThemeMarkdown;
 
 // No built-in theme uses it, so a spec can tell when its own theme has painted.
@@ -73,11 +74,29 @@ function paint(page: Page) {
       bold: font(token("bold words")),
       italic: font(token("italic words")),
       bullet: getComputedStyle(bullet, "::before").color,
-      ordered: getComputedStyle(sh.querySelector('[data-md-list="ordered"]') as Element).color,
+      ordered: font(getComputedStyle(sh.querySelector('[data-md-list="ordered"]') as Element)),
       quote: { ...font(token("quoted line")), opacity: token("quoted line").opacity },
     };
   });
 }
+
+/** PLAN's paint under STYLES. */
+const STYLED_PAINT = {
+  heading: { color: rgb(STYLES.heading.color), weight: "700", slant: "normal" },
+  code: { color: rgb(STYLES.code.color), weight: "400", slant: "italic" },
+  link: {
+    color: rgb(STYLES.link.color),
+    weight: "700",
+    slant: "normal",
+    underline: "underline dotted",
+  },
+  bold: { color: rgb(STYLES.bold.color), weight: "700", slant: "italic" },
+  italic: { color: rgb(STYLES.italic.color), weight: "700", slant: "italic" },
+  bullet: rgb(STYLES.listMarker.color),
+  ordered: { color: rgb(STYLES.listMarker.color), weight: "700", slant: "normal" },
+  // At full strength: the quote's own color is what sets it apart from body text.
+  quote: { color: rgb(STYLES.quote.color), weight: "700", slant: "italic", opacity: "1" },
+};
 
 test("a theme's markdown styles paint each element in its own color and font style", async ({
   daemon,
@@ -90,24 +109,23 @@ test("a theme's markdown styles paint each element in its own color and font sty
   );
   await openPlan(page, daemon, PLAN);
 
-  await expect
-    .poll(() => paint(page))
-    .toEqual({
-      heading: { color: rgb(STYLES.heading.color), weight: "700", slant: "normal" },
-      code: { color: rgb(STYLES.code.color), weight: "400", slant: "normal" },
-      link: {
-        color: rgb(STYLES.link.color),
-        weight: "400",
-        slant: "normal",
-        underline: "underline dotted",
-      },
-      bold: { color: rgb(STYLES.bold.color), weight: "700", slant: "normal" },
-      italic: { color: rgb(STYLES.italic.color), weight: "400", slant: "italic" },
-      bullet: rgb(STYLES.listMarker.color),
-      ordered: rgb(STYLES.listMarker.color),
-      // At full strength: the quote's own color is what sets it apart from body text.
-      quote: { color: rgb(STYLES.quote.color), weight: "400", slant: "italic", opacity: "1" },
-    });
+  await expect.poll(() => paint(page)).toEqual(STYLED_PAINT);
+});
+
+test("a reload paints a theme's markdown styles while its palette is cached", async ({
+  daemon,
+  page,
+}) => {
+  await selectThemeFile(
+    page,
+    daemon,
+    caretThemeVariant("styled", "dark", { accent: ACCENT, markdown: STYLES }),
+  );
+  await openPlan(page, daemon, PLAN);
+  await expect.poll(() => paint(page)).toEqual(STYLED_PAINT);
+
+  await page.reload();
+  await expect.poll(() => paint(page)).toEqual(STYLED_PAINT);
 });
 
 test("a theme that styles no markdown element paints each in caret's own ink", async ({
@@ -136,13 +154,13 @@ test("a theme that styles no markdown element paints each in caret's own ink", a
       bold: { color: ink, weight: "700", slant: "normal" },
       italic: { color: ink, weight: "400", slant: "italic" },
       bullet: inkSoft,
-      ordered: inkFaint,
+      ordered: { color: inkFaint, weight: "400", slant: "normal" },
       quote: { color: ink, weight: "400", slant: "normal", opacity: "0.88" },
     });
 });
 
-/** Open the composer from the keyboard, type a comment exercising the four elements the
- * editor styles, and read their paint. The keyboard rather than the gutter: the plan
+/** Open the composer from the keyboard, type a comment exercising every element, and read
+ * their paint. The keyboard rather than the gutter: the plan
  * repaints as the runtime theme registers, and a gutter hover landing inside that repaint
  * is dropped. */
 async function editorPaint(page: Page) {
@@ -152,35 +170,44 @@ async function editorPaint(page: Page) {
     .getByRole("dialog", { name: "Add a comment" })
     .getByRole("textbox", { name: "Comment" });
   await expect(input).toBeFocused();
+  // The quote comes last: Enter continues a quote, so a list typed after one lands in it.
   await page.keyboard.type(
-    "# Heading words\n[a link](https://docs.example.test)\n> quoted words\n\n",
+    "# Heading words\n[a link](https://docs.example.test) **bold words** *italic words* " +
+      "`inline code` ***both words***\n- listed words\n> quoted words",
   );
-  await page.keyboard.type("- listed words");
-  await expect(input).toContainText("listed words");
+  await expect(input).toContainText("quoted words");
   return input.evaluate((content) => {
+    // The element holding the text itself: an element the editor styles nothing in, such as
+    // inline code under caret's own look, keeps its text bare inside a wider mark.
     const leaf = (text: string) => {
-      const el = [...content.querySelectorAll("span")].find(
-        (span) => span.children.length === 0 && span.textContent?.trim() === text,
-      );
-      if (el === undefined) throw new Error(`no span reads ${JSON.stringify(text)}`);
-      return getComputedStyle(el);
+      const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        if (node.textContent?.trim() === text)
+          return getComputedStyle(node.parentElement as Element);
+      }
+      throw new Error(`no text node reads ${JSON.stringify(text)}`);
     };
-    const heading = leaf("Heading words");
+    const font = (style: CSSStyleDeclaration) => ({
+      color: style.color,
+      weight: style.fontWeight,
+      slant: style.fontStyle,
+    });
     const link = leaf("a link");
-    const quote = leaf("quoted words");
     return {
-      heading: { color: heading.color, weight: heading.fontWeight, slant: heading.fontStyle },
-      link: { color: link.color, underline: link.textDecorationLine },
-      quote: { color: quote.color, slant: quote.fontStyle },
-      listMarker: leaf("-").color,
+      heading: font(leaf("Heading words")),
+      code: font(leaf("inline code")),
+      link: { ...font(link), underline: link.textDecorationLine },
+      bold: font(leaf("bold words")),
+      italic: font(leaf("italic words")),
+      // Nested, so both highlight styles declare its weight: caret's own must win.
+      both: font(leaf("both words")),
+      quote: font(leaf("quoted words")),
+      listMarker: font(leaf("-")),
     };
   });
 }
 
-test("the feedback editor paints a theme's heading, link, quote and list-marker styles", async ({
-  daemon,
-  page,
-}) => {
+test("the feedback editor paints a theme's markdown styles", async ({ daemon, page }) => {
   await selectThemeFile(
     page,
     daemon,
@@ -193,9 +220,13 @@ test("the feedback editor paints a theme's heading, link, quote and list-marker 
 
   expect(await editorPaint(page)).toEqual({
     heading: { color: rgb(STYLES.heading.color), weight: "700", slant: "normal" },
-    link: { color: rgb(STYLES.link.color), underline: "underline" },
-    quote: { color: rgb(STYLES.quote.color), slant: "italic" },
-    listMarker: rgb(STYLES.listMarker.color),
+    code: { color: rgb(STYLES.code.color), weight: "400", slant: "italic" },
+    link: { color: rgb(STYLES.link.color), weight: "700", slant: "normal", underline: "underline" },
+    bold: { color: rgb(STYLES.bold.color), weight: "700", slant: "italic" },
+    italic: { color: rgb(STYLES.italic.color), weight: "700", slant: "italic" },
+    both: { color: rgb(STYLES.italic.color), weight: "700", slant: "italic" },
+    quote: { color: rgb(STYLES.quote.color), weight: "700", slant: "italic" },
+    listMarker: { color: rgb(STYLES.listMarker.color), weight: "700", slant: "normal" },
   });
 });
 
@@ -212,8 +243,12 @@ test("the feedback editor keeps its own look under a theme that styles no markdo
   );
   expect(await editorPaint(page)).toEqual({
     heading: { color: ink, weight: "700", slant: "normal" },
-    link: { color: rgb(ACCENT), underline: "underline" },
-    quote: { color: inkSoft, slant: "normal" },
-    listMarker: inkFaint,
+    code: { color: ink, weight: "400", slant: "normal" },
+    link: { color: rgb(ACCENT), weight: "400", slant: "normal", underline: "underline" },
+    bold: { color: ink, weight: "700", slant: "normal" },
+    italic: { color: ink, weight: "400", slant: "italic" },
+    both: { color: ink, weight: "700", slant: "italic" },
+    quote: { color: inkSoft, weight: "400", slant: "normal" },
+    listMarker: { color: inkFaint, weight: "400", slant: "normal" },
   });
 });

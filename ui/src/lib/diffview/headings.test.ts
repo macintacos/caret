@@ -30,6 +30,12 @@ describe("headingLines", () => {
     expect(lines(["```sh", "# a shell comment", "```"].join("\n"))).toEqual([]);
   });
 
+  test("leaves YAML front matter alone, where marked reads its lines as headings", () => {
+    // marked reads the comment as an ATX heading, and the last key over the closer as setext.
+    const text = ["---", "# a yaml comment", "title: x", "---", "", "# Real"].join("\n");
+    expect(lines(text)).toEqual([6]);
+  });
+
   test("leaves a line the code panel claims alone, where CommonMark reads a heading", () => {
     // A backtick in its info string makes the first line prose to CommonMark, but caret's
     // fence scan opens a block on it, and the panel is what the reader sees.
