@@ -26,7 +26,7 @@ import { planSurface, rowColors, seedAndOpen } from "@test/e2e/support/source-vi
 import { caretThemeFile } from "@test/support/theme.ts";
 
 const CARET_DARK_ACCENT = caretThemeFile("dark").palette.accent;
-const CARET_DARK_HEADING = caretThemeFile("dark").markdown?.heading?.color ?? "";
+const CARET_DARK_HEADING = caretThemeFile("dark").markdown?.heading1?.color ?? "";
 // Computed styles come back in decimal.
 const CARET_DARK_HEADING_RGB = `rgb(${[1, 3, 5]
   .map((i) => Number.parseInt(CARET_DARK_HEADING.slice(i, i + 2), 16))
@@ -308,8 +308,8 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
 
-  // And so does the code: the plan's heading is Dracula cyan, not caret gold.
-  await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(139, 233, 253)");
+  // And so does the code: the plan's title is Dracula's pink, not caret gold.
+  await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(255, 121, 198)");
   // Read once more and assert the gold is gone. Asserted on a resolved non-empty
   // array rather than inside a poll, so a row that stopped matching can't satisfy
   // "no gold" by returning nothing.

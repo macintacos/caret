@@ -486,6 +486,12 @@ This is caret's own dark theme as a theme file:
   },
   "markdown": {
     "heading": { "color": "#ecc25c", "fontStyle": ["bold"] },
+    "heading1": { "color": "#ecc25c", "fontStyle": ["bold", "italic"] },
+    "heading2": { "color": "#92d474", "fontStyle": ["bold"] },
+    "heading3": { "color": "#3fbda9", "fontStyle": ["bold"] },
+    "heading4": { "color": "#6ec4e4", "fontStyle": ["bold"] },
+    "heading5": { "color": "#ecc25c" },
+    "heading6": { "color": "#bcb0a1", "fontStyle": ["italic"] },
     "code": { "color": "#a3d4ec" },
     "link": { "color": "#f56f8e" },
     "bold": { "color": "#dd7a6c" },

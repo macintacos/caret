@@ -350,11 +350,23 @@ imports it — stays green under any invocation.
   element drawn on a chip. A list-marker style joins the replacement family's 3:1. A hued
   style stays 15 degrees off `--accent`, the inline styles stay 30 degrees off
   `--chip-ref`, and a link stays 30 degrees off `--chip-skill` too. Styles that share a
-  line stay 20 apart in CIE76. A style on the palette's own ink ramp is exempt from the
-  hue rules. No style wears `--danger`, the deletion and error red; `--ok` stays open,
-  since green code is Dracula's and Catppuccin's own convention. No Catppuccin Latte or
-  Dawnfox accent reaches AA on its own sunk surface, so those two keep their text on that
-  ramp and spend hue on the link chip instead, Latte on its list marker too.
+  line stay 20 apart in CIE76. A heading level may share a color with the bold, italic or
+  link inside it only where that element adds something the level lacks: bold its weight,
+  italic its slant, and a link a decoration its own style names, since the excerpt preview
+  draws a link no underline of its own. Inline code is exempt, as the plan view and the
+  comment editor draw it a pill. Adjacent heading levels stay 20 apart in color unless no
+  two of the palette and syntax colors that clear the heading floors sit that far apart;
+  only then may weight or slant separate them, and such a palette is exempt from the
+  inline rule too. A hued heading also stays 15 degrees off `--danger`, and a regular,
+  upright one stays 15 apart from `--ink` in CIE76, so no level reads as body text. A
+  style on the palette's own ink ramp is exempt from the hue rules. No style wears
+  `--danger`, the deletion and error red; `--ok` stays open, since green code is Dracula's
+  and Catppuccin's own convention. No Catppuccin Latte or Dawnfox accent reaches AA on its
+  own sunk surface, so those two keep their text on that ramp and spend hue on the link
+  chip instead, Latte on its list marker too; they are the two palettes whose heading
+  levels step by weight and slant alone. Every other palette gives each of its first four
+  heading levels a hue of its own. Every bundled theme styles `heading` as well, which
+  every heading outside markdown takes, so those stay off the accent too.
 - **An overdrawn glyph belongs on the run's FIRST token, not on every tagged one.**
   `inlineDecorate.ts` tags every shiki token a run covers, and shiki does not always hand
   a multi-character run over as one token — an uppercase `[X]` comes back cut into three.

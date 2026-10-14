@@ -37,6 +37,12 @@
   },
   "markdown": {
     "heading": { "color": "#7d5a05", "fontStyle": ["bold"] },
+    "heading1": { "color": "#7d5a05", "fontStyle": ["bold", "italic"] },
+    "heading2": { "color": "#2c7331", "fontStyle": ["bold"] },
+    "heading3": { "color": "#0a5f57", "fontStyle": ["bold"] },
+    "heading4": { "color": "#145d8f", "fontStyle": ["bold"] },
+    "heading5": { "color": "#7d5a05" },
+    "heading6": { "color": "#544b43", "fontStyle": ["italic"] },
     "code": { "color": "#35617e" },
     "link": { "color": "#ab1f43" },
     "bold": { "color": "#191310" },

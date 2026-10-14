@@ -14,8 +14,8 @@ show drift no role change removes.
 | catppuccin-frappe | 54 | 330 |
 | catppuccin-macchiato | 54 | 330 |
 | catppuccin-mocha | 54 | 330 |
-| dracula | 100 | 318 |
-| github-light-default | 40 | 277 |
+| dracula | 101 | 320 |
+| github-light-default | 41 | 277 |
 | github-dark-default | 56 | 293 |
 | dawnfox | 50 | 313 |
 | duskfox | 64 | 322 |
@@ -39,21 +39,21 @@ show drift no role change removes.
 | typescript | 23 | `.` | #179299 | #7c7f93 |
 | typescript | 23 | `.` | #179299 | #7c7f93 |
 | typescript | 23 | `null` | #8839ef | #fe640b |
-| markdown | 1 | `# Review notes` | #d20f39 | #8839ef bold |
+| markdown | 1 | `# Review notes` | #d20f39 | #4c4f69 italic bold |
 | markdown | 3 | `*` | #7c7f93 | #7c7f93 italic |
 | markdown | 3 | `emphasis` | #d20f39 italic | #4c4f69 italic |
 | markdown | 3 | `*` | #7c7f93 | #7c7f93 italic |
 | markdown | 3 | `**` | #7c7f93 | #7c7f93 bold |
 | markdown | 3 | `strong text` | #d20f39 bold | #4c4f69 bold |
 | markdown | 3 | `**` | #7c7f93 | #7c7f93 bold |
-| markdown | 3 | `inline code` | #40a02b | #7287fd |
-| markdown | 5 | `-` | #179299 | #7c7f93 |
+| markdown | 3 | `inline code` | #40a02b | #4c4f69 |
+| markdown | 5 | `-` | #179299 | #1e66f5 |
 | markdown | 5 | `[` | #7287fd | #7c7f93 |
-| markdown | 5 | `the plan` | #7287fd | #40a02b |
+| markdown | 5 | `the plan` | #7287fd | #4c4f69 |
 | markdown | 5 | `]` | #7287fd | #7c7f93 |
 | markdown | 5 | `https://example.com/plan` | #1e66f5 | #4c4f69 |
-| markdown | 6 | `-` | #179299 | #7c7f93 |
-| markdown | 8 | `## Snippet` | #fe640b | #8839ef bold |
+| markdown | 6 | `-` | #179299 | #1e66f5 |
+| markdown | 8 | `## Snippet` | #fe640b | #4c4f69 bold |
 | json | 2 | `name` | #1e66f5 | #4c4f69 |
 | json | 3 | `version` | #1e66f5 | #4c4f69 |
 | json | 4 | `private` | #1e66f5 | #4c4f69 |
@@ -98,21 +98,21 @@ show drift no role change removes.
 | typescript | 23 | `.` | #81c8be | #949cbb |
 | typescript | 23 | `.` | #81c8be | #949cbb |
 | typescript | 23 | `null` | #ca9ee6 | #ef9f76 |
-| markdown | 1 | `# Review notes` | #e78284 | #ca9ee6 bold |
+| markdown | 1 | `# Review notes` | #e78284 | #f4b8e4 italic bold |
 | markdown | 3 | `*` | #949cbb | #949cbb italic |
-| markdown | 3 | `emphasis` | #e78284 italic | #c6d0f5 italic |
+| markdown | 3 | `emphasis` | #e78284 italic | #e5c890 italic |
 | markdown | 3 | `*` | #949cbb | #949cbb italic |
 | markdown | 3 | `**` | #949cbb | #949cbb bold |
-| markdown | 3 | `strong text` | #e78284 bold | #c6d0f5 bold |
+| markdown | 3 | `strong text` | #e78284 bold | #babbf1 bold |
 | markdown | 3 | `**` | #949cbb | #949cbb bold |
-| markdown | 3 | `inline code` | #a6d189 | #babbf1 |
-| markdown | 5 | `-` | #81c8be | #949cbb |
+| markdown | 3 | `inline code` | #a6d189 | #81c8be |
+| markdown | 5 | `-` | #81c8be | #a6d189 |
 | markdown | 5 | `[` | #babbf1 | #949cbb |
-| markdown | 5 | `the plan` | #babbf1 | #a6d189 |
+| markdown | 5 | `the plan` | #babbf1 | #f4b8e4 underline |
 | markdown | 5 | `]` | #babbf1 | #949cbb |
 | markdown | 5 | `https://example.com/plan` | #8caaee | #c6d0f5 |
-| markdown | 6 | `-` | #81c8be | #949cbb |
-| markdown | 8 | `## Snippet` | #ef9f76 | #ca9ee6 bold |
+| markdown | 6 | `-` | #81c8be | #a6d189 |
+| markdown | 8 | `## Snippet` | #ef9f76 | #ef9f76 bold |
 | json | 2 | `name` | #8caaee | #c6d0f5 |
 | json | 3 | `version` | #8caaee | #c6d0f5 |
 | json | 4 | `private` | #8caaee | #c6d0f5 |
@@ -157,21 +157,21 @@ show drift no role change removes.
 | typescript | 23 | `.` | #8bd5ca | #939ab7 |
 | typescript | 23 | `.` | #8bd5ca | #939ab7 |
 | typescript | 23 | `null` | #c6a0f6 | #f5a97f |
-| markdown | 1 | `# Review notes` | #ed8796 | #c6a0f6 bold |
+| markdown | 1 | `# Review notes` | #ed8796 | #f5bde6 italic bold |
 | markdown | 3 | `*` | #939ab7 | #939ab7 italic |
-| markdown | 3 | `emphasis` | #ed8796 italic | #cad3f5 italic |
+| markdown | 3 | `emphasis` | #ed8796 italic | #eed49f italic |
 | markdown | 3 | `*` | #939ab7 | #939ab7 italic |
 | markdown | 3 | `**` | #939ab7 | #939ab7 bold |
-| markdown | 3 | `strong text` | #ed8796 bold | #cad3f5 bold |
+| markdown | 3 | `strong text` | #ed8796 bold | #b7bdf8 bold |
 | markdown | 3 | `**` | #939ab7 | #939ab7 bold |
-| markdown | 3 | `inline code` | #a6da95 | #b7bdf8 |
-| markdown | 5 | `-` | #8bd5ca | #939ab7 |
+| markdown | 3 | `inline code` | #a6da95 | #8bd5ca |
+| markdown | 5 | `-` | #8bd5ca | #a6da95 |
 | markdown | 5 | `[` | #b7bdf8 | #939ab7 |
-| markdown | 5 | `the plan` | #b7bdf8 | #a6da95 |
+| markdown | 5 | `the plan` | #b7bdf8 | #f5bde6 underline |
 | markdown | 5 | `]` | #b7bdf8 | #939ab7 |
 | markdown | 5 | `https://example.com/plan` | #8aadf4 | #cad3f5 |
-| markdown | 6 | `-` | #8bd5ca | #939ab7 |
-| markdown | 8 | `## Snippet` | #f5a97f | #c6a0f6 bold |
+| markdown | 6 | `-` | #8bd5ca | #a6da95 |
+| markdown | 8 | `## Snippet` | #f5a97f | #f5a97f bold |
 | json | 2 | `name` | #8aadf4 | #cad3f5 |
 | json | 3 | `version` | #8aadf4 | #cad3f5 |
 | json | 4 | `private` | #8aadf4 | #cad3f5 |
@@ -216,21 +216,21 @@ show drift no role change removes.
 | typescript | 23 | `.` | #94e2d5 | #9399b2 |
 | typescript | 23 | `.` | #94e2d5 | #9399b2 |
 | typescript | 23 | `null` | #cba6f7 | #fab387 |
-| markdown | 1 | `# Review notes` | #f38ba8 | #cba6f7 bold |
+| markdown | 1 | `# Review notes` | #f38ba8 | #f5c2e7 italic bold |
 | markdown | 3 | `*` | #9399b2 | #9399b2 italic |
-| markdown | 3 | `emphasis` | #f38ba8 italic | #cdd6f4 italic |
+| markdown | 3 | `emphasis` | #f38ba8 italic | #f9e2af italic |
 | markdown | 3 | `*` | #9399b2 | #9399b2 italic |
 | markdown | 3 | `**` | #9399b2 | #9399b2 bold |
-| markdown | 3 | `strong text` | #f38ba8 bold | #cdd6f4 bold |
+| markdown | 3 | `strong text` | #f38ba8 bold | #b4befe bold |
 | markdown | 3 | `**` | #9399b2 | #9399b2 bold |
-| markdown | 3 | `inline code` | #a6e3a1 | #b4befe |
-| markdown | 5 | `-` | #94e2d5 | #9399b2 |
+| markdown | 3 | `inline code` | #a6e3a1 | #94e2d5 |
+| markdown | 5 | `-` | #94e2d5 | #a6e3a1 |
 | markdown | 5 | `[` | #b4befe | #9399b2 |
-| markdown | 5 | `the plan` | #b4befe | #a6e3a1 |
+| markdown | 5 | `the plan` | #b4befe | #f5c2e7 underline |
 | markdown | 5 | `]` | #b4befe | #9399b2 |
 | markdown | 5 | `https://example.com/plan` | #89b4fa | #cdd6f4 |
-| markdown | 6 | `-` | #94e2d5 | #9399b2 |
-| markdown | 8 | `## Snippet` | #fab387 | #cba6f7 bold |
+| markdown | 6 | `-` | #94e2d5 | #a6e3a1 |
+| markdown | 8 | `## Snippet` | #fab387 | #fab387 bold |
 | json | 2 | `name` | #89b4fa | #cdd6f4 |
 | json | 3 | `version` | #89b4fa | #cdd6f4 |
 | json | 4 | `private` | #89b4fa | #cdd6f4 |
@@ -272,11 +272,12 @@ show drift no role change removes.
 | typescript | 22 | `"` | #e9f284 | #f1fa8c |
 | typescript | 23 | `"` | #e9f284 | #f1fa8c |
 | typescript | 23 | `"` | #e9f284 | #f1fa8c |
-| markdown | 3 | `emphasis` | #f1fa8c italic | #f8f8f2 italic |
-| markdown | 3 | `strong text` | #ffb86c bold | #f8f8f2 bold |
-| markdown | 3 | `inline code` | #50fa7b | #d6acff |
-| markdown | 5 | `the plan` | #ff79c6 | #f1fa8c |
+| markdown | 1 | `# Review notes` | #bd93f9 bold | #ff79c6 italic bold |
+| markdown | 5 | `-` | #f8f8f2 | #8be9fd |
+| markdown | 5 | `the plan` | #ff79c6 | #ff79c6 underline |
 | markdown | 5 | `https://example.com/plan` | #8be9fd underline | #f8f8f2 |
+| markdown | 6 | `-` | #f8f8f2 | #8be9fd |
+| markdown | 8 | `## Snippet` | #bd93f9 bold | #f1fa8c bold |
 | json | 2 | `"` | #8be9fe | #f8f8f2 |
 | json | 2 | `name` | #8be9fd | #f8f8f2 |
 | json | 2 | `"` | #8be9fe | #f8f8f2 |
@@ -376,11 +377,12 @@ show drift no role change removes.
 | typescript | 21 | `EXC-` | #0a3069 | #cf222e |
 | typescript | 21 | `\d` | #0550ae | #cf222e |
 | typescript | 22 | `reviewer` | #0550ae | #1f2328 |
-| markdown | 1 | `# Review notes` | #0550ae bold | #0969da bold |
-| markdown | 5 | `-` | #953800 | #1f2328 |
+| markdown | 1 | `# Review notes` | #0550ae bold | #953800 italic bold |
+| markdown | 3 | `emphasis` | #1f2328 italic | #59636e italic |
+| markdown | 3 | `inline code` | #0550ae | #1f2328 |
+| markdown | 5 | `the plan` | #0a3069 | #1f2328 |
 | markdown | 5 | `https://example.com/plan` | #1f2328 underline | #1f2328 |
-| markdown | 6 | `-` | #953800 | #1f2328 |
-| markdown | 8 | `## Snippet` | #0550ae bold | #0969da bold |
+| markdown | 8 | `## Snippet` | #0550ae bold | #6639ba bold |
 | markdown | 11 | `answer` | #0550ae | #1f2328 |
 | json | 2 | `"name"` | #116329 | #1f2328 |
 | json | 3 | `"version"` | #116329 | #1f2328 |
@@ -421,20 +423,20 @@ show drift no role change removes.
 | typescript | 21 | `EXC-` | #a5d6ff | #ff7b72 |
 | typescript | 21 | `\d` | #79c0ff | #ff7b72 |
 | typescript | 22 | `reviewer` | #79c0ff | #e6edf3 |
-| markdown | 1 | `# Review notes` | #79c0ff bold | #4493f8 bold |
+| markdown | 1 | `# Review notes` | #79c0ff bold | #ffa657 italic bold |
 | markdown | 3 | `Some` | #e6edf3 | #f0f6fc |
-| markdown | 3 | `emphasis` | #e6edf3 italic | #f0f6fc italic |
+| markdown | 3 | `emphasis` | #e6edf3 italic | #d29922 italic |
 | markdown | 3 | `, some` | #e6edf3 | #f0f6fc |
 | markdown | 3 | `strong text` | #e6edf3 bold | #f0f6fc bold |
 | markdown | 3 | `, and` | #e6edf3 | #f0f6fc |
+| markdown | 3 | `inline code` | #79c0ff | #ff7b72 |
 | markdown | 3 | `.` | #e6edf3 | #f0f6fc |
-| markdown | 5 | `-` | #ffa657 | #e6edf3 |
 | markdown | 5 | `See` | #e6edf3 | #f0f6fc |
+| markdown | 5 | `the plan` | #a5d6ff | #d2a8ff underline |
 | markdown | 5 | `https://example.com/plan` | #e6edf3 underline | #f0f6fc |
 | markdown | 5 | `first.` | #e6edf3 | #f0f6fc |
-| markdown | 6 | `-` | #ffa657 | #e6edf3 |
 | markdown | 6 | `Then read <kbd class="key" title="Enter">Enter</kbd> to approve.` | #e6edf3 | #f0f6fc |
-| markdown | 8 | `## Snippet` | #79c0ff bold | #4493f8 bold |
+| markdown | 8 | `## Snippet` | #79c0ff bold | #d2a8ff bold |
 | markdown | 11 | `answer` | #79c0ff | #e6edf3 |
 | json | 2 | `"name"` | #7ee787 | #e6edf3 |
 | json | 3 | `"version"` | #7ee787 | #e6edf3 |
@@ -486,21 +488,21 @@ show drift no role change removes.
 | typescript | 23 | `.` | #56949f | #4c4769 |
 | typescript | 23 | `.` | #56949f | #4c4769 |
 | typescript | 23 | `null` | #907aa9 | #ea9d34 |
-| markdown | 1 | `# Review notes` | #b4637a | #286983 bold |
+| markdown | 1 | `# Review notes` | #b4637a | #4c4769 italic bold |
 | markdown | 3 | `*` | #837e9a | #837e9a italic |
 | markdown | 3 | `emphasis` | #b4637a italic | #4c4769 italic |
 | markdown | 3 | `*` | #837e9a | #837e9a italic |
 | markdown | 3 | `**` | #837e9a | #837e9a bold |
 | markdown | 3 | `strong text` | #b4637a bold | #4c4769 bold |
 | markdown | 3 | `**` | #837e9a | #837e9a bold |
-| markdown | 3 | `inline code` | #618774 | #2d81a3 |
-| markdown | 5 | `-` | #56949f | #4c4769 |
+| markdown | 3 | `inline code` | #618774 | #4c4769 |
+| markdown | 5 | `-` | #56949f | #625c87 |
 | markdown | 5 | `[` | #b7bdf8 | #4c4769 |
-| markdown | 5 | `the plan` | #b7bdf8 | #618774 |
+| markdown | 5 | `the plan` | #b7bdf8 | #4c4769 |
 | markdown | 5 | `]` | #b7bdf8 | #4c4769 |
 | markdown | 5 | `https://example.com/plan` | #295e73 | #4c4769 |
-| markdown | 6 | `-` | #56949f | #4c4769 |
-| markdown | 8 | `## Snippet` | #ea9d34 | #286983 bold |
+| markdown | 6 | `-` | #56949f | #625c87 |
+| markdown | 8 | `## Snippet` | #ea9d34 | #4c4769 bold |
 | json | 2 | `name` | #295e73 | #4c4769 |
 | json | 3 | `version` | #295e73 | #4c4769 |
 | json | 4 | `private` | #295e73 | #4c4769 |
@@ -541,28 +543,28 @@ show drift no role change removes.
 | typescript | 23 | `.` | #9ccfd8 | #eae8ff |
 | typescript | 23 | `.` | #9ccfd8 | #eae8ff |
 | typescript | 23 | `null` | #c4a7e7 | #f6c177 |
-| markdown | 1 | `# Review notes` | #eb6f92 | #c4a7e7 bold |
+| markdown | 1 | `# Review notes` | #eb6f92 | #ea9a97 italic bold |
 | markdown | 3 | `Some` | #eae8ff | #e0def4 |
 | markdown | 3 | `*` | #817c9c | #817c9c italic |
-| markdown | 3 | `emphasis` | #eb6f92 italic | #e0def4 italic |
+| markdown | 3 | `emphasis` | #eb6f92 italic | #eb98c3 italic |
 | markdown | 3 | `*` | #817c9c | #817c9c italic |
 | markdown | 3 | `, some` | #eae8ff | #e0def4 |
 | markdown | 3 | `**` | #817c9c | #817c9c bold |
-| markdown | 3 | `strong text` | #eb6f92 bold | #e0def4 bold |
+| markdown | 3 | `strong text` | #eb6f92 bold | #a3be8c bold |
 | markdown | 3 | `**` | #817c9c | #817c9c bold |
 | markdown | 3 | `, and` | #eae8ff | #e0def4 |
-| markdown | 3 | `inline code` | #a3be8c | #ccb1ed |
+| markdown | 3 | `inline code` | #a3be8c | #ea9a97 |
 | markdown | 3 | `.` | #eae8ff | #e0def4 |
-| markdown | 5 | `-` | #9ccfd8 | #eae8ff |
+| markdown | 5 | `-` | #9ccfd8 | #4a869c |
 | markdown | 5 | `See` | #eae8ff | #e0def4 |
 | markdown | 5 | `[` | #b7bdf8 | #eae8ff |
-| markdown | 5 | `the plan` | #b7bdf8 | #a3be8c |
+| markdown | 5 | `the plan` | #b7bdf8 | #e0def4 underline |
 | markdown | 5 | `]` | #b7bdf8 | #eae8ff |
 | markdown | 5 | `https://example.com/plan` | #4a869c | #e0def4 |
 | markdown | 5 | `first.` | #eae8ff | #e0def4 |
-| markdown | 6 | `-` | #9ccfd8 | #eae8ff |
+| markdown | 6 | `-` | #9ccfd8 | #4a869c |
 | markdown | 6 | `Then read <kbd class="key" title="Enter">Enter</kbd> to approve.` | #eae8ff | #e0def4 |
-| markdown | 8 | `## Snippet` | #f6c177 | #c4a7e7 bold |
+| markdown | 8 | `## Snippet` | #f6c177 | #f6c177 bold |
 | json | 2 | `name` | #4a869c | #eae8ff |
 | json | 3 | `version` | #4a869c | #eae8ff |
 | json | 4 | `private` | #4a869c | #eae8ff |
