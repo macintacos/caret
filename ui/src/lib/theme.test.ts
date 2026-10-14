@@ -940,7 +940,8 @@ describe("paintPalette", () => {
         scheme: "dark",
         tokens,
         markdown: {
-          heading: { color: "#bd93f9", fontStyle: ["bold", "underline"] },
+          heading: { color: "#50fa7b", fontStyle: ["italic"] },
+          heading2: { color: "#bd93f9", fontStyle: ["bold", "underline"] },
           link: { color: "#ff79c6", fontStyle: ["strikethrough"] },
           listMarker: { color: "#8be9fd" },
           quote: { color: "#f1fa8c", fontStyle: ["italic"] },
@@ -954,9 +955,13 @@ describe("paintPalette", () => {
         .map((name) => [name, node.style.getPropertyValue(name)]),
     );
     expect(painted).toEqual({
-      "--markdown-heading-color": "#bd93f9",
-      "--markdown-heading-font-weight": "bold",
-      "--markdown-heading-text-decoration": "underline",
+      // caret's own heading is bold, so a heading style without bold paints normal weight.
+      "--markdown-heading-color": "#50fa7b",
+      "--markdown-heading-font-weight": "normal",
+      "--markdown-heading-font-style": "italic",
+      "--markdown-heading2-color": "#bd93f9",
+      "--markdown-heading2-font-weight": "bold",
+      "--markdown-heading2-text-decoration": "underline",
       // A link is always underlined; its style adds to that rather than replacing it.
       "--markdown-link-color": "#ff79c6",
       "--markdown-link-text-decoration": "underline line-through",
@@ -968,12 +973,12 @@ describe("paintPalette", () => {
     });
   });
 
-  // caret's own heading is bold, so a heading style that names no bold replaces it.
-  test("paints a heading style without bold at normal weight", () => {
+  // caret's own heading is bold, so a heading level's style that names no bold replaces it.
+  test("paints a heading level's style without bold at normal weight", () => {
     const node = document.createElement("div");
     const { tokens } = THEMES["caret-dark"];
-    paintPalette({ scheme: "dark", tokens, markdown: { heading: { color: "#bd93f9" } } }, node);
-    expect(node.style.getPropertyValue("--markdown-heading-font-weight")).toBe("normal");
+    paintPalette({ scheme: "dark", tokens, markdown: { heading5: { color: "#bd93f9" } } }, node);
+    expect(node.style.getPropertyValue("--markdown-heading5-font-weight")).toBe("normal");
   });
 
   test("clears the markdown styles a previous palette painted", () => {

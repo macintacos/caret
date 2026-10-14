@@ -440,7 +440,7 @@
 
   // The heading rows, memoized like the breaks above and derived from codeRanges for the
   // same reason.
-  let headingsMemo: { text: string; headings: Set<number> } | undefined;
+  let headingsMemo: { text: string; headings: Map<number, number> } | undefined;
   const headings = $derived.by(() => {
     if (headingsMemo?.text !== doc.text) {
       headingsMemo = { text: doc.text, headings: headingLines(doc.text, codeRanges) };

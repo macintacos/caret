@@ -129,7 +129,8 @@ interface ThemeFields {
   scheme: Scheme;
   /** CSS custom property → value, covering every color token app.css declares. */
   tokens: Record<ColorToken, string>;
-  /** The markdown elements the theme styles itself; an element it omits keeps caret's look. */
+  /** The markdown elements the theme styles itself, each heading level it omits filled from
+   * `heading`; an element it omits keeps caret's look. */
   markdown: ThemeMarkdown;
 }
 
@@ -299,7 +300,7 @@ function markdownProperties(markdown: ThemeMarkdown): Record<string, string> {
     const font = new Set(style.fontStyle);
     properties[`${name}-color`] = style.color;
     // caret's own heading is bold, so a heading style replaces that rather than adding to it.
-    if (font.has("bold") || element === "heading") {
+    if (font.has("bold") || element.startsWith("heading")) {
       properties[`${name}-font-weight`] = font.has("bold") ? "bold" : "normal";
     }
     if (font.has("italic")) properties[`${name}-font-style`] = "italic";

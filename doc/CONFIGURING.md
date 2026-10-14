@@ -398,22 +398,29 @@ elements. Each is an object with a `color` and an optional `fontStyle`, the same
 a syntax role. A file that omits an element, or the whole `markdown` object, paints it as
 caret does by default.
 
-| Element      | What it colors                               | Plan view default           | Comment editor default |
-| ------------ | -------------------------------------------- | --------------------------- | ---------------------- |
-| `heading`    | A heading, its `#` markers included          | `accent`                    | `ink`, bold            |
-| `code`       | Inline code, and the body of a fenced block  | `accentBright`              | `ink`                  |
-| `link`       | A link's text                                | `ink` mixed toward `accent` | `accent`               |
-| `bold`       | Bold text, between its `**` markers          | `ink`                       | `ink`                  |
-| `italic`     | Italic text, between its `_` or `*` markers  | `ink`                       | `ink`                  |
-| `listMarker` | A list's bullet and an ordered item's number | `inkSoft` and `inkFaint`    | `inkFaint`             |
-| `quote`      | Blockquote text                              | `ink`, slightly faded       | `inkSoft`              |
+| Element                  | What it colors                               | Plan view default           | Comment editor default |
+| ------------------------ | -------------------------------------------- | --------------------------- | ---------------------- |
+| `heading`                | A heading, its `#` markers included          | `accent`                    | `ink`, bold            |
+| `heading1` to `heading6` | A markdown heading of that level             | `heading`                   | `heading`              |
+| `code`                   | Inline code, and the body of a fenced block  | `accentBright`              | `ink`                  |
+| `link`                   | A link's text                                | `ink` mixed toward `accent` | `accent`               |
+| `bold`                   | Bold text, between its `**` markers          | `ink`                       | `ink`                  |
+| `italic`                 | Italic text, between its `_` or `*` markers  | `ink`                       | `ink`                  |
+| `listMarker`             | A list's bullet and an ordered item's number | `inkSoft` and `inkFaint`    | `inkFaint`             |
+| `quote`                  | Blockquote text                              | `ink`, slightly faded       | `inkSoft`              |
+
+A markdown heading level without a style of its own takes `heading`'s. A level's style
+replaces `heading` whole, `fontStyle` included, so a level that names no `fontStyle` takes
+none from it. A setext heading is level 1 under `===` and level 2 under `---`. Headings in
+other formats, such as reStructuredText, AsciiDoc, Org, and MDX, in a fenced block or a
+previewed file, carry no level caret reads, so `heading` styles every one of them.
 
 A few elements keep part of their look whatever the style says:
 
 - Bold text stays bold, italic text stays italic, and a link keeps its underline, dotted
   in the plan view, and its chip. A `fontStyle` adds to these.
-- A `heading` style sets the heading's weight on both surfaces, so name `"bold"` for a
-  bold heading.
+- A heading style sets the heading's weight on both surfaces, so name `"bold"` for a bold
+  heading.
 - A styled `quote` paints at full strength, since its color already sets it apart.
 - The `**`, `_`, and backtick markers keep their own color.
 - A fenced block's body takes the `code` color but not its `fontStyle`.

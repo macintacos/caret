@@ -15,8 +15,14 @@
 
 import type { ThemeRegistrationRaw } from "shiki/core";
 
-import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
-import type { RoleStyle, SyntaxRole, ThemeFile, ThemeSyntax } from "@core/theme/schema.ts";
+import { HEADING_LEVELS, ROLE_SCOPES } from "@core/theme/role-scopes.ts";
+import type {
+  RoleStyle,
+  SyntaxRole,
+  ThemeFile,
+  ThemeMarkdown,
+  ThemeSyntax,
+} from "@core/theme/schema.ts";
 
 /** Build a shiki theme from a file's syntax roles, plus caret's markdown and diff rules,
  * which paint from six of its palette colors, its comment role, and the markdown styles
@@ -53,6 +59,7 @@ export function syntaxShikiTheme(
           ? { foreground: markdown.heading.color, fontStyle: fontStyle(markdown.heading) ?? "" }
           : { foreground: chrome.accent, fontStyle: "bold" },
       },
+      ...headingLevelRules(markdown),
       // Whatever a bold or italic style adds to the font rides caret-theme.ts's emphasis rules.
       { scope: ["markup.bold"], settings: { fontStyle: "bold", ...foreground(markdown.bold) } },
       {
@@ -87,6 +94,31 @@ export function syntaxShikiTheme(
       { scope: ["invalid", "invalid.illegal"], settings: { foreground: chrome.danger } },
     ],
   };
+}
+
+/** One rule per heading level the file styles, on the markdown grammar's scopes alone; a
+ * heading in any other grammar keeps the rule above. A level's selectors outrank that rule
+ * on its own scopes: TextMate breaks a tie on the deepest scope by the longer parent, and
+ * `heading.N.markdown` is longer than `markup.heading`. A setext heading scopes only its
+ * underline, as level 1 or 2. */
+function headingLevelRules(markdown: ThemeMarkdown): NonNullable<ThemeRegistrationRaw["settings"]> {
+  return HEADING_LEVELS.flatMap((level) => {
+    const style = markdown[`heading${level}`];
+    if (style === undefined) return [];
+    const scope = `heading.${level}.markdown`;
+    return [
+      {
+        scope: [
+          scope,
+          `${scope} entity.name`,
+          `${scope} punctuation.definition.heading`,
+          ...(level <= 2 ? [`markup.heading.setext.${level}.markdown`] : []),
+        ],
+        // A heading style replaces caret's bold rather than adding to it.
+        settings: { foreground: style.color, fontStyle: fontStyle(style) ?? "" },
+      },
+    ];
+  });
 }
 
 function fontStyle(style: RoleStyle | undefined): string | undefined {

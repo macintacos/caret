@@ -226,6 +226,12 @@ describe("parseThemeFile", () => {
   describe("markdown styles", () => {
     const MARKDOWN: ThemeMarkdown = {
       heading: { color: "#bd93f9", fontStyle: ["bold"] },
+      heading1: { color: "#ff79c6", fontStyle: ["bold", "underline"] },
+      heading2: { color: "#ffb86c" },
+      heading3: { color: "#f1fa8c", fontStyle: ["italic"] },
+      heading4: { color: "#50fa7b" },
+      heading5: { color: "#8be9fd" },
+      heading6: { color: "#6272a4" },
       code: { color: "#50fa7b" },
       link: { color: "#ff79c6" },
       bold: { color: "#ffb86c" },

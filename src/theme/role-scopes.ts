@@ -1,10 +1,12 @@
-// Each syntax role's TextMate scopes and each optional role's fallback. The UI imports this
-// at runtime, so it stays zod-free: take only types from ./schema.ts.
+// Each syntax role's TextMate scopes and each optional role's fallback, and each markdown
+// heading level's. The UI imports this at runtime, so it stays zod-free: take only types
+// from ./schema.ts.
 import type {
   OptionalSyntaxRole,
   RequiredSyntaxRole,
   RoleStyle,
   SyntaxRole,
+  ThemeMarkdown,
   ThemeSyntax,
 } from "./schema.ts";
 
@@ -34,6 +36,16 @@ export function fillFallbackRoles(
     filled[role] ??= syntax[fallback];
   }
   return filled as ThemeSyntax;
+}
+
+export const HEADING_LEVELS = [1, 2, 3, 4, 5, 6] as const;
+
+/** Fills each heading level the markdown omits with its `heading` style, if it has one. */
+export function fillHeadingLevels(markdown: ThemeMarkdown): ThemeMarkdown {
+  const { heading } = markdown;
+  if (heading === undefined) return markdown;
+  const levels = Object.fromEntries(HEADING_LEVELS.map((level) => [`heading${level}`, heading]));
+  return { ...levels, ...markdown };
 }
 
 /** The TextMate scopes each syntax role paints, its canonical scope first — the one
