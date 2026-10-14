@@ -43,6 +43,12 @@
   },
   "markdown": {
     "heading": { "color": "#4c4769", "fontStyle": ["bold"] },
+    "heading1": { "color": "#4c4769", "fontStyle": ["bold", "italic"] },
+    "heading2": { "color": "#4c4769", "fontStyle": ["bold"] },
+    "heading3": { "color": "#4c4769", "fontStyle": ["italic"] },
+    "heading4": { "color": "#625c87", "fontStyle": ["bold", "italic"] },
+    "heading5": { "color": "#625c87", "fontStyle": ["bold"] },
+    "heading6": { "color": "#625c87", "fontStyle": ["italic"] },
     "code": { "color": "#4c4769" },
     "link": { "color": "#4c4769" },
     "bold": { "color": "#4c4769" },

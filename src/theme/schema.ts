@@ -47,6 +47,12 @@ export type ThemeSyntax = Record<SyntaxRole, RoleStyle>;
 /** The markdown elements a theme file may style in the plan view. */
 export const MARKDOWN_ELEMENTS = [
   "heading",
+  "heading1",
+  "heading2",
+  "heading3",
+  "heading4",
+  "heading5",
+  "heading6",
   "code",
   "link",
   "bold",

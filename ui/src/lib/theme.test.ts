@@ -4,8 +4,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { BUILTIN_THEME_IDS } from "@core/theme/builtin-ids.ts";
-import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
-import type { MarkdownElement, SyntaxRole } from "@core/theme/schema.ts";
+import { HEADING_LEVELS, ROLE_SCOPES } from "@core/theme/role-scopes.ts";
+import type { MarkdownElement, RoleStyle, SyntaxRole } from "@core/theme/schema.ts";
 import { customThemeFile, readThemeFile, themeFileColors } from "@ui/support/theme-file.ts";
 import { shikiThemeName } from "$lib/caret-theme.ts";
 import { QUOTE_SUBDUE } from "$lib/diffview/coreStyles.ts";
@@ -798,16 +798,62 @@ describe("every theme", () => {
       color,
     );
 
+  // A hue caret reserves for one meaning, which a style this near reads as.
+  const RESERVED_HUE_GAP = 15;
+
   // The accent marks the current selection, so a markdown element in its hue reads as
-  // selected. Falsifiable: Dracula's headings in its purple accent red here.
+  // selected. A theme without a heading style paints every heading outside markdown in the
+  // accent. Falsifiable: Dracula's headings in its purple accent red here.
   test("keeps every hued markdown style off the accent's hue", () => {
     for (const [id, theme] of themeEntries()) {
-      for (const [element, style] of Object.entries(theme.markdown)) {
+      const styles = { heading: { color: theme.tokens["--accent"] }, ...theme.markdown };
+      for (const [element, style] of Object.entries(styles)) {
         if (onInkRamp(theme, style.color)) continue;
         expect(
           hueGap(style.color, theme.tokens["--accent"]),
           `${id} ${element}`,
-        ).toBeGreaterThanOrEqual(15);
+        ).toBeGreaterThanOrEqual(RESERVED_HUE_GAP);
+      }
+    }
+  });
+
+  const HEADING_STYLES: MarkdownElement[] = [
+    "heading",
+    ...HEADING_LEVELS.map((level) => `heading${level}` as const),
+  ];
+
+  // A version diff paints a deletion in --danger, and the Reject control and the error
+  // states wear it, so a heading near its hue reads as one of them, the plan's title worst
+  // of all. Falsifiable: Catppuccin Frappé's title in its maroon.
+  test("keeps every hued heading style off the danger hue", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const element of HEADING_STYLES) {
+        const style = theme.markdown[element];
+        if (style === undefined || onInkRamp(theme, style.color)) continue;
+        expect(
+          hueGap(style.color, theme.tokens["--danger"]),
+          `${id} ${element}`,
+        ).toBeGreaterThanOrEqual(RESERVED_HUE_GAP);
+      }
+    }
+  });
+
+  // Every plan row is one size, so a heading set regular and upright near the body's ink
+  // reads as a paragraph, its markers the only sign. 15 sits between the subtext levels that
+  // read as body by eye and Frappé's sapphire, which reads as blue. Falsifiable: Latte's
+  // fourth level regular in its subtext.
+  const BODY_GAP = 15;
+  test("sets every heading style apart from body text by weight, slant or color", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const element of HEADING_STYLES) {
+        const style = theme.markdown[element];
+        if (style === undefined || style.fontStyle?.some((f) => f === "bold" || f === "italic")) {
+          continue;
+        }
+        expect(
+          deltaE(style.color, theme.tokens["--ink"]),
+          `${id} ${element}`,
+        ).toBeGreaterThanOrEqual(BODY_GAP);
       }
     }
   });
@@ -836,11 +882,12 @@ describe("every theme", () => {
   });
 
   // The elements that share a line have to read as different colors where both spend a
-  // hue: the four inline ones among themselves, a heading against the inline elements in
-  // it, a quote against everything nested in it, and a list marker against what starts
-  // its item. A heading never shares a line with a list marker or a quote, which is what
-  // lets a palette spend one hue on its structure. 20 is a large step on the CIE76 scale
-  // — a glance, not a comparison. Falsifiable: Dracula's link in its italic yellow.
+  // hue: the four inline ones among themselves, a quote against everything nested in it,
+  // and a list marker against what starts its item. A heading is absent: what sits inline
+  // in it has a floor of its own below, and it shares a line with nothing else. 20 is a
+  // large step on the CIE76 scale — a glance, not a comparison. Falsifiable: Dracula's link
+  // in its italic yellow.
+  const GLANCE = 20;
   const SHARE_A_LINE: [MarkdownElement, MarkdownElement][] = [
     ["code", "link"],
     ["code", "bold"],
@@ -848,10 +895,6 @@ describe("every theme", () => {
     ["link", "bold"],
     ["link", "italic"],
     ["bold", "italic"],
-    ["heading", "code"],
-    ["heading", "link"],
-    ["heading", "bold"],
-    ["heading", "italic"],
     ...(["code", "link", "bold", "italic", "listMarker"] as const).map(
       (e): [MarkdownElement, MarkdownElement] => ["quote", e],
     ),
@@ -865,7 +908,78 @@ describe("every theme", () => {
         const [ca, cb] = [theme.markdown[a]?.color, theme.markdown[b]?.color];
         if (ca === undefined || cb === undefined) continue;
         if (onInkRamp(theme, ca) || onInkRamp(theme, cb)) continue;
-        expect(deltaE(ca, cb), `${id} ${a} vs ${b}`).toBeGreaterThanOrEqual(20);
+        expect(deltaE(ca, cb), `${id} ${a} vs ${b}`).toBeGreaterThanOrEqual(GLANCE);
+      }
+    }
+  });
+
+  /** Each heading level's style, a level the theme leaves unstyled as caret's accent bold. */
+  const levelStyles = (theme: (typeof THEMES)[BuiltinThemeId]): RoleStyle[] =>
+    HEADING_LEVELS.map(
+      (level) =>
+        theme.markdown[`heading${level}`] ?? {
+          color: theme.tokens["--accent"],
+          fontStyle: ["bold"],
+        },
+    );
+
+  /** Whether two of the theme file's colors that clear a heading's floors above sit GLANCE
+   * apart, so its heading levels can step by color. doc/agents/svelte-rules.md
+   * § CSS-token discipline names the palettes that cannot. */
+  async function headingsStepByColor(id: BuiltinThemeId, theme: (typeof THEMES)[BuiltinThemeId]) {
+    const clearsHeadingFloors = (color: string) =>
+      contrast(color, theme.tokens["--paper-sunk"]) >= 4.5 &&
+      (onInkRamp(theme, color) ||
+        (hueGap(color, theme.tokens["--accent"]) >= RESERVED_HUE_GAP &&
+          hueGap(color, theme.tokens["--danger"]) >= RESERVED_HUE_GAP));
+    const colors = Object.values(await themeFileColors(`${id}.json`)).filter(
+      (color) => color !== undefined && clearsHeadingFloors(color),
+    );
+    return colors.some((a) => colors.some((b) => deltaE(a, b) >= GLANCE));
+  }
+
+  // Bold, italic and a link inside a heading share its line, so where one's color is within
+  // GLANCE of the level's, it has to differ in what it adds, as it inherits the rest of its
+  // font from the heading: bold its weight, italic its slant, and a link a decoration its
+  // style names, since the excerpt preview draws a link no underline of its own. Code is
+  // exempt: the plan view and the comment editor draw it a pill. So is a palette whose
+  // levels cannot step by color, its inline text in the same ink. Falsifiable: Dracula's
+  // second level bold in its bold orange.
+  const INLINE_ADDS = { bold: ["bold"], italic: ["italic"], link: [] } as const;
+  test("keeps bold, italic and links apart from a heading level near their color", async () => {
+    for (const [id, theme] of themeEntries()) {
+      if (!(await headingsStepByColor(id, theme))) continue;
+      for (const [i, heading] of levelStyles(theme).entries()) {
+        for (const [element, marks] of Object.entries(INLINE_ADDS)) {
+          const style = theme.markdown[element as keyof typeof INLINE_ADDS];
+          if (style === undefined || deltaE(style.color, heading.color) >= GLANCE) continue;
+          const adds = [...marks, ...(style.fontStyle ?? [])];
+          expect(
+            adds.some((f) => !heading.fontStyle?.includes(f)),
+            `${id} heading${i + 1} vs ${element}`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  // Every plan row is one size, so a heading's level shows in its color first, and the
+  // outline reads only if adjacent levels differ at a glance: by GLANCE in CIE76. Only a
+  // palette whose levels cannot step by color may step by weight or slant instead.
+  // Falsifiable: caret-dark's first two levels both in its function gold.
+  test("keeps adjacent heading levels a glance apart in color, where the palette allows", async () => {
+    const font = (style: RoleStyle) =>
+      (["bold", "italic"] as const).filter((f) => style.fontStyle?.includes(f)).join(" ");
+    for (const [id, theme] of themeEntries()) {
+      const byColor = await headingsStepByColor(id, theme);
+      const levels = levelStyles(theme);
+      for (const [i, lower] of levels.entries()) {
+        const upper = levels[i - 1];
+        if (upper === undefined || (!byColor && font(upper) !== font(lower))) continue;
+        expect(
+          deltaE(upper.color, lower.color),
+          `${id} heading${i} vs heading${i + 1}`,
+        ).toBeGreaterThanOrEqual(GLANCE);
       }
     }
   });
@@ -940,7 +1054,8 @@ describe("paintPalette", () => {
         scheme: "dark",
         tokens,
         markdown: {
-          heading: { color: "#bd93f9", fontStyle: ["bold", "underline"] },
+          heading: { color: "#50fa7b", fontStyle: ["italic"] },
+          heading2: { color: "#bd93f9", fontStyle: ["bold", "underline"] },
           link: { color: "#ff79c6", fontStyle: ["strikethrough"] },
           listMarker: { color: "#8be9fd" },
           quote: { color: "#f1fa8c", fontStyle: ["italic"] },
@@ -954,9 +1069,13 @@ describe("paintPalette", () => {
         .map((name) => [name, node.style.getPropertyValue(name)]),
     );
     expect(painted).toEqual({
-      "--markdown-heading-color": "#bd93f9",
-      "--markdown-heading-font-weight": "bold",
-      "--markdown-heading-text-decoration": "underline",
+      // caret's own heading is bold, so a heading style without bold paints normal weight.
+      "--markdown-heading-color": "#50fa7b",
+      "--markdown-heading-font-weight": "normal",
+      "--markdown-heading-font-style": "italic",
+      "--markdown-heading2-color": "#bd93f9",
+      "--markdown-heading2-font-weight": "bold",
+      "--markdown-heading2-text-decoration": "underline",
       // A link is always underlined; its style adds to that rather than replacing it.
       "--markdown-link-color": "#ff79c6",
       "--markdown-link-text-decoration": "underline line-through",
@@ -968,12 +1087,12 @@ describe("paintPalette", () => {
     });
   });
 
-  // caret's own heading is bold, so a heading style that names no bold replaces it.
-  test("paints a heading style without bold at normal weight", () => {
+  // caret's own heading is bold, so a heading level's style that names no bold replaces it.
+  test("paints a heading level's style without bold at normal weight", () => {
     const node = document.createElement("div");
     const { tokens } = THEMES["caret-dark"];
-    paintPalette({ scheme: "dark", tokens, markdown: { heading: { color: "#bd93f9" } } }, node);
-    expect(node.style.getPropertyValue("--markdown-heading-font-weight")).toBe("normal");
+    paintPalette({ scheme: "dark", tokens, markdown: { heading5: { color: "#bd93f9" } } }, node);
+    expect(node.style.getPropertyValue("--markdown-heading5-font-weight")).toBe("normal");
   });
 
   test("clears the markdown styles a previous palette painted", () => {

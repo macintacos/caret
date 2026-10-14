@@ -4,6 +4,7 @@
 // it owns the shadow root and adopts that stylesheet here — without it the
 // content column collapses to zero width and only the line-number gutter shows.
 
+import { HEADING_LEVELS } from "@core/theme/role-scopes.ts";
 import fileIconRaw from "@/icons/file.svg?raw";
 import folderIconRaw from "@/icons/folder.svg?raw";
 import squareIconRaw from "@/icons/square.svg?raw";
@@ -43,6 +44,15 @@ const CHECKBOX_MASKS = {
  * numbers live) rather than with body copy — a call for a human, not a tuning knob.
  */
 export const QUOTE_SUBDUE = 0.88;
+
+// A heading row's font, from its level's --markdown-heading<N>-* properties (theme.ts).
+const HEADING_FONT_RULES = HEADING_LEVELS.map(
+  (level) => `[data-content] [data-line][data-md-heading="${level}"] {
+    font-weight: var(--markdown-heading${level}-font-weight);
+    font-style: var(--markdown-heading${level}-font-style);
+    text-decoration: var(--markdown-heading${level}-text-decoration);
+  }`,
+).join("\n  ");
 
 // caret's adjustments layered over the vendored core stylesheet. The gutter and
 // content sit in adjacent grid columns with no gap, which reads cramped — line
@@ -393,11 +403,7 @@ const CARET_OVERRIDES = `
      purpose: on a token carrying both, what the markup means wins over a style. A list
      marker never shares a token with emphasis, so its font rides its ink rule further
      down. */
-  [data-content] [data-line][data-md-heading] {
-    font-weight: var(--markdown-heading-font-weight);
-    font-style: var(--markdown-heading-font-style);
-    text-decoration: var(--markdown-heading-text-decoration);
-  }
+  ${HEADING_FONT_RULES}
   [data-content] [data-line][data-quote-depth] {
     font-weight: var(--markdown-quote-font-weight);
     font-style: var(--markdown-quote-font-style);

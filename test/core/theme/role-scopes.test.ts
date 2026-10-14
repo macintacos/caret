@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { fillFallbackRoles, ROLE_SCOPES } from "@/theme/role-scopes.ts";
+import { fillFallbackRoles, fillHeadingLevels, ROLE_SCOPES } from "@/theme/role-scopes.ts";
 import { REQUIRED_SYNTAX_ROLES, type RequiredSyntaxRole, type RoleStyle } from "@/theme/schema.ts";
 
 describe("ROLE_SCOPES", () => {
@@ -25,5 +25,11 @@ describe("fillFallbackRoles", () => {
   test("keeps a present optional role's own style", () => {
     const tag = { color: "#222222" };
     expect(fillFallbackRoles({ ...requiredStyles, tag }).tag).toEqual(tag);
+  });
+});
+
+describe("fillHeadingLevels", () => {
+  test("names no level when the markdown names no heading", () => {
+    expect(Object.keys(fillHeadingLevels({ link: { color: "#111111" } }))).toEqual(["link"]);
   });
 });

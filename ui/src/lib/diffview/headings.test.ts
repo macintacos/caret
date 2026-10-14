@@ -8,17 +8,22 @@ import { headingLines, tagHeadingRows } from "$lib/diffview/headings.ts";
 describe("headingLines", () => {
   // The fenced ranges the view would pass, derived the same way SourceView derives them.
   const lines = (text: string) =>
-    [...headingLines(text, codeBlockRanges(text))].sort((a, b) => a - b);
+    [...headingLines(text, codeBlockRanges(text))].sort(([a], [b]) => a - b);
 
-  test("finds every ATX level", () => {
+  test("finds every ATX level, with its level", () => {
     expect(lines(["# One", "", "prose", "", "### Three", "###### Six"].join("\n"))).toEqual([
-      1, 5, 6,
+      [1, 1],
+      [5, 3],
+      [6, 6],
     ]);
   });
 
-  test("finds both lines of a setext heading", () => {
+  test("finds both lines of a setext heading, at level 1 for === and 2 for ---", () => {
     expect(lines(["prose", "", "Setext title", "===", "", "Second", "---"].join("\n"))).toEqual([
-      3, 4, 6, 7,
+      [3, 1],
+      [4, 1],
+      [6, 2],
+      [7, 2],
     ]);
   });
 
@@ -33,7 +38,7 @@ describe("headingLines", () => {
   test("leaves YAML front matter alone, where marked reads its lines as headings", () => {
     // marked reads the comment as an ATX heading, and the last key over the closer as setext.
     const text = ["---", "# a yaml comment", "title: x", "---", "", "# Real"].join("\n");
-    expect(lines(text)).toEqual([6]);
+    expect(lines(text)).toEqual([[6, 1]]);
   });
 
   test("leaves a line the code panel claims alone, where CommonMark reads a heading", () => {
@@ -52,15 +57,15 @@ function buildContent(lineCount: number): HTMLElement {
   return root;
 }
 
-const tagged = (root: HTMLElement, line: number) =>
-  root.querySelector(`[data-content] [data-line="${line}"]`)?.hasAttribute("data-md-heading") ??
-  false;
+const level = (root: HTMLElement, line: number) =>
+  root.querySelector(`[data-content] [data-line="${line}"]`)?.getAttribute("data-md-heading") ??
+  null;
 
 describe("tagHeadingRows", () => {
-  test("tags the named rows and clears the rest", () => {
+  test("tags the named rows with their level and clears the rest", () => {
     const root = buildContent(3);
-    tagHeadingRows(root, new Set([1]));
-    tagHeadingRows(root, new Set([3]));
-    expect([1, 2, 3].map((n) => tagged(root, n))).toEqual([false, false, true]);
+    tagHeadingRows(root, new Map([[1, 1]]));
+    tagHeadingRows(root, new Map([[2, 4]]));
+    expect([1, 2, 3].map((n) => level(root, n))).toEqual([null, "4", null]);
   });
 });

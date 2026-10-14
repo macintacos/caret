@@ -1,3 +1,4 @@
+import { fillHeadingLevels } from "@core/theme/role-scopes.ts";
 import type { ThemeFile } from "@core/theme/schema.ts";
 import { syntaxShikiTheme } from "$lib/caret-shiki.ts";
 import type { RuntimeTheme } from "$lib/theme.ts";
@@ -21,12 +22,13 @@ type PaletteCheckedThemeFile = [keyof Palette, keyof RecipeColors] extends [
 /** Build a theme file's token set and shiki theme — the one path every theme caret paints,
  * built-in or custom, goes through. */
 export function buildFileTheme(file: PaletteCheckedThemeFile): FileTheme {
+  const markdown = fillHeadingLevels(file.markdown ?? {});
   return {
     id: file.id,
     label: file.label,
     scheme: file.scheme,
     tokens: paletteTokens({ scheme: file.scheme, ...file.palette }),
-    markdown: file.markdown ?? {},
-    shikiTheme: syntaxShikiTheme(file),
+    markdown,
+    shikiTheme: syntaxShikiTheme({ ...file, markdown }),
   };
 }

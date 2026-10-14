@@ -24,6 +24,7 @@ import {
 } from "@codemirror/view";
 import { styleTags, Tag, tags } from "@lezer/highlight";
 
+import { HEADING_LEVELS } from "@core/theme/role-scopes.ts";
 import {
   completionListOpen,
   type ReviewCompletionSource,
@@ -77,8 +78,10 @@ const inlineCode = Tag.define(tags.monospace);
 // A theme's markdown style rides each property this scheme declares for its element, as a
 // --markdown-* property theme.ts paints with the editor's own look as its fallback. Order
 // is load-bearing: a span nested in several elements carries all their classes, so the
-// later rule wins each property. The heading comes before strong, so a theme's
-// normal-weight heading keeps its bold words bold.
+// later rule wins each property. The headings come before strong, so a theme's
+// normal-weight heading keeps its bold words bold. The markdown parser tags every heading,
+// setext included, with its level, and a span takes only its most specific tag's rule, so
+// the bare heading rule reaches only a fenced language's headings.
 const highlightStyle = HighlightStyle.define([
   // Markdown structure.
   {
@@ -86,6 +89,11 @@ const highlightStyle = HighlightStyle.define([
     color: "var(--markdown-heading-color, var(--ink))",
     fontWeight: "var(--markdown-heading-font-weight, 700)",
   },
+  ...HEADING_LEVELS.map((level) => ({
+    tag: tags[`heading${level}`],
+    color: `var(--markdown-heading${level}-color, var(--ink))`,
+    fontWeight: `var(--markdown-heading${level}-font-weight, 700)`,
+  })),
   { tag: tags.strikethrough, textDecoration: "line-through" },
   {
     tag: [tags.link, tags.url],
@@ -154,6 +162,11 @@ const themeOnlyStyle = HighlightStyle.define([
     fontStyle: "var(--markdown-heading-font-style)",
     textDecoration: "var(--markdown-heading-text-decoration)",
   },
+  ...HEADING_LEVELS.map((level) => ({
+    tag: tags[`heading${level}`],
+    fontStyle: `var(--markdown-heading${level}-font-style)`,
+    textDecoration: `var(--markdown-heading${level}-text-decoration)`,
+  })),
   { tag: tags.monospace, color: "var(--markdown-code-color)" },
   {
     tag: inlineCode,

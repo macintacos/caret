@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { createHighlighterCore } from "shiki/core";
 
 import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
-import type { SyntaxRole } from "@core/theme/schema.ts";
+import type { SyntaxRole, ThemeFile } from "@core/theme/schema.ts";
 import { customThemeFile, customThemeSource, themeFileColors } from "@ui/support/theme-file.ts";
 import {
   BUILTIN_SHIKI_THEMES,
@@ -594,15 +594,27 @@ describe("a theme's markdown styles", () => {
     "```",
   ].join("\n");
 
-  async function tokenize(file: Awaited<ReturnType<typeof customThemeSource>>) {
+  const GRAMMARS = {
+    markdown: () => import("shiki/langs/markdown.mjs"),
+    mdx: () => import("shiki/langs/mdx.mjs"),
+    rst: () => import("shiki/langs/rst.mjs"),
+    asciidoc: () => import("shiki/langs/asciidoc.mjs"),
+    org: () => import("shiki/langs/org.mjs"),
+  };
+
+  async function tokenize(
+    file: Awaited<ReturnType<typeof customThemeSource>>,
+    sample = SAMPLE,
+    lang: keyof typeof GRAMMARS = "markdown",
+  ) {
     const id = addTheme(buildFileTheme(file));
     const hl = await createHighlighterCore({
       themes: [shikiThemeFor(id)],
-      langs: [import("shiki/langs/markdown.mjs")],
+      langs: [GRAMMARS[lang]()],
       engine: createCaretRegexEngine(),
     });
-    const lines = hl.codeToTokensBase(SAMPLE, {
-      lang: "markdown",
+    const lines = hl.codeToTokensBase(sample, {
+      lang,
       theme: shikiThemeFor(id).name,
       ...CARET_TOKENIZE_OPTIONS,
     });
@@ -670,6 +682,120 @@ describe("a theme's markdown styles", () => {
     expect(find(1, "code")).toEqual({ color: tokens["--accent-bright"], fontStyle: 0 });
     expect(find(2, "strong").fontStyle).toBe(BOLD);
     expect(find(7, "fenced body").color).toBe(tokens["--accent-bright"]);
+  });
+
+  describe("heading levels", () => {
+    const HEADINGS = [
+      "# One",
+      "## Two",
+      "### Three",
+      "#### Four",
+      "##### Five",
+      "###### Six",
+      "",
+      "Setext one",
+      "===",
+      "",
+      "Setext two",
+      "---",
+    ].join("\n");
+    const ATX = ["# One", "## Two", "### Three", "#### Four", "##### Five", "###### Six"];
+
+    async function headingPaint(id: string, markdown: ThemeFile["markdown"]) {
+      const { find, tokens } = await tokenize(
+        { ...(await customThemeSource(id, "dark")), markdown },
+        HEADINGS,
+      );
+      return {
+        atx: ATX.map((heading, line) => find(line, heading)),
+        setext: [find(8, "==="), find(11, "---")],
+        tokens,
+      };
+    }
+
+    test("paints each level in its own style", async () => {
+      const { atx } = await headingPaint("md-levels", {
+        heading: { color: "#a0a0a0", fontStyle: ["bold"] },
+        heading1: { color: "#a1a1f1", fontStyle: ["bold", "underline"] },
+        heading2: { color: "#a2f2a2", fontStyle: ["bold"] },
+        heading3: { color: "#f3a3c3", fontStyle: ["italic"] },
+        heading4: { color: "#f4b444" },
+        heading5: { color: "#f5f5a5", fontStyle: ["underline"] },
+        heading6: { color: "#a6e6f6", fontStyle: ["bold", "italic"] },
+      });
+      expect(atx).toEqual([
+        { color: "#a1a1f1", fontStyle: BOLD | UNDERLINE },
+        { color: "#a2f2a2", fontStyle: BOLD },
+        { color: "#f3a3c3", fontStyle: ITALIC },
+        { color: "#f4b444", fontStyle: 0 },
+        { color: "#f5f5a5", fontStyle: UNDERLINE },
+        { color: "#a6e6f6", fontStyle: BOLD | ITALIC },
+      ]);
+    });
+
+    test("styles a setext underline as level 1 for === and level 2 for ---", async () => {
+      const { setext } = await headingPaint("md-setext", {
+        heading1: { color: "#a1a1f1", fontStyle: ["underline"] },
+        heading2: { color: "#a2f2a2", fontStyle: ["italic"] },
+      });
+      expect(setext).toEqual([
+        { color: "#a1a1f1", fontStyle: UNDERLINE },
+        { color: "#a2f2a2", fontStyle: ITALIC },
+      ]);
+    });
+
+    test("gives a level without its own style the heading style, bold dropped where a level names none", async () => {
+      const { atx, setext } = await headingPaint("md-level-fallback", {
+        heading: { color: "#a0a0a0", fontStyle: ["bold"] },
+        heading2: { color: "#a2f2a2" },
+      });
+      const heading = { color: "#a0a0a0", fontStyle: BOLD };
+      const second = { color: "#a2f2a2", fontStyle: 0 };
+      expect(atx).toEqual([heading, second, heading, heading, heading, heading]);
+      expect(setext).toEqual([heading, second]);
+    });
+
+    test("gives every level the heading style when the file names no level", async () => {
+      const { atx, setext } = await headingPaint("md-heading-only", {
+        heading: { color: "#a0a0a0", fontStyle: ["italic"] },
+      });
+      const heading = { color: "#a0a0a0", fontStyle: ITALIC };
+      expect([...atx, ...setext]).toEqual(Array(8).fill(heading));
+    });
+
+    // Every other grammar scopes a heading without the markdown grammar's level, so the
+    // levels never reach it. MDX scopes its ATX and setext headings in a shape of its own.
+    test.each([
+      ["rst", "Title\n=====", 1, "====="],
+      ["asciidoc", "== Section", 0, "== Section"],
+      ["org", "* Heading", 0, "* Heading"],
+      ["mdx", "# Title", 0, "# Title"],
+      ["mdx", "Setext\n===", 1, "==="],
+    ] as const)(
+      "styles a %s heading by the heading style alone",
+      async (lang, sample, line, text) => {
+        const file = await customThemeSource(`md-outside-${lang}-${line}`, "dark");
+        const { find } = await tokenize(
+          {
+            ...file,
+            markdown: {
+              heading: { color: "#a0a0a0", fontStyle: ["underline"] },
+              heading1: { color: "#a1a1f1", fontStyle: ["bold"] },
+              heading2: { color: "#a2f2a2", fontStyle: ["bold"] },
+            },
+          },
+          sample,
+          lang,
+        );
+        expect(find(line, text)).toEqual({ color: "#a0a0a0", fontStyle: UNDERLINE });
+      },
+    );
+
+    test("paints every level as caret does when the file styles no heading", async () => {
+      const { atx, setext, tokens } = await headingPaint("md-no-heading", undefined);
+      const caret = { color: tokens["--accent"], fontStyle: BOLD };
+      expect([...atx, ...setext]).toEqual(Array(8).fill(caret));
+    });
   });
 });
 
