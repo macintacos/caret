@@ -51,7 +51,7 @@ const FRONT_MATTER_CLOSE = ["---", "..."];
  * inverts the error to the cheaper one — front matter carrying a blank line inside
  * is no longer recognised, so its two delimiters draw rules, which is local and
  * visible where the other silently deletes a rule elsewhere. */
-function frontMatterLines(text: string): number[] {
+export function frontMatterLines(text: string): number[] {
   const lines = text.split("\n");
   if (lines[0] !== FRONT_MATTER_OPEN) return [];
   for (let i = 1; i < lines.length; i++) {

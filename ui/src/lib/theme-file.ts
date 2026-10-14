@@ -26,6 +26,7 @@ export function buildFileTheme(file: PaletteCheckedThemeFile): FileTheme {
     label: file.label,
     scheme: file.scheme,
     tokens: paletteTokens({ scheme: file.scheme, ...file.palette }),
-    shikiTheme: syntaxShikiTheme(file.id, file.scheme, file.palette, file.syntax),
+    markdown: file.markdown ?? {},
+    shikiTheme: syntaxShikiTheme(file),
   };
 }

@@ -343,6 +343,18 @@ imports it — stays green under any invocation.
   measures, may keep a pin's own falsifiability note — the palette and value it reds on.
   Design constants (a 12% step, the 1.05 threshold) and one palette's facts in its own
   module are not covered.
+- **A theme file's markdown styles are text, and are held as text.** A style colors the
+  plan's headings, inline code, link text, emphasis, list markers or quotes, through shiki
+  and the `--markdown-*` properties `theme.ts` paints. `theme.test.ts` holds every bundled
+  theme's text styles to AA on `--paper-sunk`, measured on the chip tint too for an
+  element drawn on a chip. A list-marker style joins the replacement family's 3:1. A hued
+  style stays 15 degrees off `--accent`, the inline styles stay 30 degrees off
+  `--chip-ref`, and a link stays 30 degrees off `--chip-skill` too. Styles that share a
+  line stay 20 apart in CIE76. A style on the palette's own ink ramp is exempt from the
+  hue rules. No style wears `--danger`, the deletion and error red; `--ok` stays open,
+  since green code is Dracula's and Catppuccin's own convention. No Catppuccin Latte or
+  Dawnfox accent reaches AA on its own sunk surface, so those two keep their text on that
+  ramp and spend hue on the link chip instead, Latte on its list marker too.
 - **An overdrawn glyph belongs on the run's FIRST token, not on every tagged one.**
   `inlineDecorate.ts` tags every shiki token a run covers, and shiki does not always hand
   a multi-character run over as one token — an uppercase `[X]` comes back cut into three.

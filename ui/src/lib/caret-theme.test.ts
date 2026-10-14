@@ -4,7 +4,7 @@ import { createHighlighterCore } from "shiki/core";
 
 import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
 import type { SyntaxRole } from "@core/theme/schema.ts";
-import { customThemeFile, themeFileColors } from "@ui/support/theme-file.ts";
+import { customThemeFile, customThemeSource, themeFileColors } from "@ui/support/theme-file.ts";
 import {
   BUILTIN_SHIKI_THEMES,
   shikiThemeFor,
@@ -22,6 +22,7 @@ import {
   type ThemeId,
   themeFor,
 } from "$lib/theme.ts";
+import { buildFileTheme } from "$lib/theme-file.ts";
 
 // caret-theme.ts resolves one shiki theme per registered palette: every theme carries
 // its own, built from its theme file's syntax roles. shiki resolves token colors at
@@ -33,13 +34,11 @@ import {
 // rules, added last for every registered theme. caret's own pair's themes are pinned
 // alongside — they spend their file's colors and nothing else.
 
-// The tokens these tests read: the two the fence line's own rules paint with, plus
-// the one a fenced block's body takes under caret's own themes. (The third structural
-// rule's token, --ink-soft, is asserted directly where it is read.)
+// The tokens these tests read: the two the fence line's own rules paint with. (The third
+// structural rule's token, --ink-soft, is asserted directly where it is read.)
 const FIELD_TO_TOKEN: Record<string, ColorToken> = {
   comment: "--ink-faint",
   keyword: "--accent",
-  fenceBody: "--accent-bright",
 };
 
 /** caret's two palettes paired with the colors of the theme file each is built from. */
@@ -246,12 +245,11 @@ describe("fenced-code fence line", () => {
   }
 
   // The body is the half caret does NOT override, so it is the theme's own: under
-  // caret's pair the fence body takes --accent-bright (theme files carry no
-  // inline-code role — that is EXC-858's), and the Dracula block below is the same
-  // assertion from the vendor side.
-  test("leaves the code body to caret's own theme (--accent-bright)", async () => {
+  // caret's pair the fence body takes the file's inline-code style, which it shares, and
+  // the Dracula block below is the same assertion from the vendor side.
+  test("leaves the code body to the theme's own inline-code style", async () => {
     const code = (await tokenizeFence("caret-light"))[1]?.find((t) => t.content === "code");
-    expect(code?.color?.toLowerCase()).toBe(expectedPalette("caret-light").fenceBody);
+    expect(code?.color?.toLowerCase()).toBe(THEMES["caret-light"].markdown.code?.color);
   });
 });
 
@@ -569,6 +567,109 @@ describe("shikiThemeFor a runtime theme", () => {
       appendedRules.find((r) => String(r.scope).includes(FENCE_LANGUAGE))?.settings.foreground,
     ).toBe(file.tokens["--accent"]);
     expect(file.shikiTheme).toEqual(original);
+  });
+});
+
+// A theme file's `markdown` styles reach every surface that highlights through shiki —
+// the plan view's token colors and the excerpt preview's colors and font styles.
+describe("a theme's markdown styles", () => {
+  const STYLED = {
+    heading: { color: "#a1a1f1", fontStyle: ["underline" as const] },
+    code: { color: "#a2f2a2", fontStyle: ["italic" as const] },
+    link: { color: "#f3a3c3", fontStyle: ["bold" as const] },
+    bold: { color: "#f4b444", fontStyle: ["underline" as const] },
+    italic: { color: "#f5f5a5" },
+    listMarker: { color: "#a6e6f6" },
+    quote: { color: "#e7e787", fontStyle: ["italic" as const] },
+  };
+  const SAMPLE = [
+    "# Title `x`",
+    "Use `code` and [the docs](https://docs.test) here.",
+    "**strong** and *slanted*",
+    "- item",
+    "1. first",
+    "> quoted words",
+    "```unknownlang",
+    "fenced body",
+    "```",
+  ].join("\n");
+
+  async function tokenize(file: Awaited<ReturnType<typeof customThemeSource>>) {
+    const id = addTheme(buildFileTheme(file));
+    const hl = await createHighlighterCore({
+      themes: [shikiThemeFor(id)],
+      langs: [import("shiki/langs/markdown.mjs")],
+      engine: createCaretRegexEngine(),
+    });
+    const lines = hl.codeToTokensBase(SAMPLE, {
+      lang: "markdown",
+      theme: shikiThemeFor(id).name,
+      ...CARET_TOKENIZE_OPTIONS,
+    });
+    const find = (line: number, content: string) => {
+      const token = lines[line]?.find((t) => t.content.trim() === content);
+      if (token === undefined) throw new Error(`no ${JSON.stringify(content)} on line ${line}`);
+      return { color: token.color?.toLowerCase(), fontStyle: token.fontStyle ?? 0 };
+    };
+    return { find, tokens: themeFor(id).tokens };
+  }
+
+  // shiki's fontStyle bitmask.
+  const ITALIC = 1;
+  const BOLD = 2;
+  const UNDERLINE = 4;
+
+  test("paints each element in its own color and font style", async () => {
+    const { find } = await tokenize({
+      ...(await customThemeSource("md-all", "dark")),
+      markdown: STYLED,
+    });
+    // The `#` takes the heading's style too, so shiki hands the two over as one token.
+    expect(find(0, "# Title")).toEqual({ color: "#a1a1f1", fontStyle: UNDERLINE });
+    expect(find(1, "code")).toEqual({ color: "#a2f2a2", fontStyle: ITALIC });
+    expect(find(1, "the docs")).toEqual({ color: "#f3a3c3", fontStyle: BOLD });
+    expect(find(2, "strong")).toEqual({ color: "#f4b444", fontStyle: BOLD | UNDERLINE });
+    expect(find(2, "slanted")).toEqual({ color: "#f5f5a5", fontStyle: ITALIC });
+    expect(find(3, "-").color).toBe("#a6e6f6");
+    expect(find(4, "1.").color).toBe("#a6e6f6");
+    expect(find(5, "quoted words")).toEqual({ color: "#e7e787", fontStyle: ITALIC });
+  });
+
+  test("leaves the markers their own ink", async () => {
+    const { find, tokens } = await tokenize({
+      ...(await customThemeSource("md-markers", "dark")),
+      markdown: STYLED,
+    });
+    expect(find(1, "`").color).toBe(tokens["--ink-soft"]);
+    expect(find(2, "**").color).toBe(tokens["--ink-faint"]);
+    expect(find(2, "*").color).toBe(tokens["--ink-faint"]);
+  });
+
+  test("gives a fence's body the code color but not its font style", async () => {
+    const { find } = await tokenize({
+      ...(await customThemeSource("md-fence", "dark")),
+      markdown: STYLED,
+    });
+    expect(find(7, "fenced body")).toEqual({ color: "#a2f2a2", fontStyle: 0 });
+  });
+
+  test("drops caret's bold from a heading whose style names none", async () => {
+    const { find } = await tokenize({
+      ...(await customThemeSource("md-plain-heading", "dark")),
+      markdown: { heading: { color: "#a1a1f1" } },
+    });
+    expect(find(0, "# Title")).toEqual({ color: "#a1a1f1", fontStyle: 0 });
+  });
+
+  test("paints an element the file does not style as caret does", async () => {
+    const { find, tokens } = await tokenize({
+      ...(await customThemeSource("md-none", "dark")),
+      markdown: undefined,
+    });
+    expect(find(0, "# Title")).toEqual({ color: tokens["--accent"], fontStyle: BOLD });
+    expect(find(1, "code")).toEqual({ color: tokens["--accent-bright"], fontStyle: 0 });
+    expect(find(2, "strong").fontStyle).toBe(BOLD);
+    expect(find(7, "fenced body").color).toBe(tokens["--accent-bright"]);
   });
 });
 

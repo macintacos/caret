@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { BUILTIN_THEME_IDS } from "@core/theme/builtin-ids.ts";
 import { ROLE_SCOPES } from "@core/theme/role-scopes.ts";
-import type { SyntaxRole } from "@core/theme/schema.ts";
+import type { MarkdownElement, SyntaxRole } from "@core/theme/schema.ts";
 import { customThemeFile, readThemeFile, themeFileColors } from "@ui/support/theme-file.ts";
 import { shikiThemeName } from "$lib/caret-theme.ts";
 import { QUOTE_SUBDUE } from "$lib/diffview/coreStyles.ts";
@@ -124,6 +124,38 @@ const TABLE_GROUNDS = [0.02, TABLE_CARD_FILL, 0.08] as const;
 const themeEntries = () =>
   Object.entries(THEMES) as [BuiltinThemeId, (typeof THEMES)[BuiltinThemeId]][];
 
+/** A color's CIELAB coordinates (D65), so "can a reader tell these two apart" weighs
+ * lightness alongside hue, as the eye does. */
+function lab(hex: string): [number, number, number] {
+  const linear = channels(hex).map((c) =>
+    c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+  );
+  const [r, g, b] = linear as [number, number, number];
+  const f = (t: number) => (t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116);
+  const fx = f((0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047);
+  const fy = f(0.2126 * r + 0.7152 * g + 0.0722 * b);
+  const fz = f((0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883);
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+
+/** The CIE76 distance between two colors. */
+function deltaE(a: string, b: string): number {
+  const [p, q] = [lab(a), lab(b)];
+  return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
+}
+
+/** The shorter way round the hue circle between two colors, in degrees. */
+function hueGap(a: string, b: string): number {
+  const gap = Math.abs(hue(a) - hue(b));
+  return Math.min(gap, 360 - gap);
+}
+
+/** A translucent token composited over `ground`, as the browser paints it. */
+function over(fg: string, ground: string): string {
+  const alpha = /^#[0-9a-f]{6}([0-9a-f]{2})$/i.exec(fg)?.[1];
+  return banded(ground, fg.slice(0, 7), alpha === undefined ? 1 : Number.parseInt(alpha, 16) / 255);
+}
+
 describe("THEMES", () => {
   test("THEME_IDS lists caret's palettes first, then each vendor family", () => {
     expect(THEME_IDS).toEqual([
@@ -228,7 +260,7 @@ describe("THEMES", () => {
       "--chip-bold": "#f7f2ea24",
       "--chip-italic": "#bcb0a124",
       "--chip-code": "#9a8c7e24",
-      "--chip-link": "#ffb27724",
+      "--chip-link": "#f56f8e24",
       "--chip-ref": "#4ed05624",
       "--chip-skill": "#6ec4e424",
       "--ok": "#4ed056",
@@ -258,7 +290,7 @@ describe("THEMES", () => {
       "--chip-bold": "#1913101c",
       "--chip-italic": "#544b431c",
       "--chip-code": "#7a6f631c",
-      "--chip-link": "#e06a241c",
+      "--chip-link": "#ab1f431c",
       "--chip-ref": "#1d802a1c",
       "--chip-skill": "#145d8f1c",
       "--ok": "#1d802a",
@@ -495,14 +527,9 @@ describe("every theme", () => {
     const RULE_INK = "--ink-soft" as const;
     // What the line PAINTS, not what its token names. channels() drops an alpha suffix
     // on purpose — a wash and its hue are one color for the angle tests — but a
-    // translucent paint's contrast is the contrast of what lands on the ground, so the
-    // src-over composite happens here. An opaque token passes through unchanged, which
-    // is why the assertion can be written once for any candidate.
-    const alpha = (hex: string) => {
-      const m = /^#[0-9a-f]{6}([0-9a-f]{2})$/i.exec(hex);
-      return m === null ? 1 : Number.parseInt(m[1] as string, 16) / 255;
-    };
-    const over = (fg: string, bg: string) => banded(bg, fg, alpha(fg));
+    // translucent paint's contrast is the contrast of what lands on the ground, so it is
+    // composited first. An opaque token passes through unchanged, which is why the
+    // assertion can be written once for any candidate.
     expectAboveNonTextFloor(
       (theme, ground) => over(theme.tokens[RULE_INK], ground),
       `thematic-break rule ${RULE_INK}`,
@@ -727,6 +754,136 @@ describe("every theme", () => {
     }
   });
 
+  // A theme file's markdown styles color the plan's body copy, so each is text held to
+  // WCAG AA on the plan surface, as the syntax roles are. An element drawn on a chip is
+  // measured on the chip's tint as well: a link chip riding the link's own hue moves the
+  // ground toward the text. Which palettes the floor pushes back onto their ink ramp is
+  // in doc/agents/svelte-rules.md § CSS-token discipline.
+  const MARKDOWN_CHIPS: Partial<Record<MarkdownElement, ColorToken>> = {
+    code: "--chip-code",
+    link: "--chip-link",
+    bold: "--chip-bold",
+    italic: "--chip-italic",
+  };
+  test("keeps every markdown text style at AA on the ground it renders on", () => {
+    for (const [id, theme] of themeEntries()) {
+      const sunk = theme.tokens["--paper-sunk"];
+      for (const [element, style] of Object.entries(theme.markdown)) {
+        if (element === "listMarker") continue;
+        const chip = MARKDOWN_CHIPS[element as MarkdownElement];
+        for (const ground of chip ? [sunk, over(theme.tokens[chip], sunk)] : [sunk]) {
+          expect(
+            contrast(style.color, ground),
+            `${id} ${element} on ${ground}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  });
+
+  // The bullet replaces its dash, so a list-marker style joins the replacement family
+  // above and owes the same non-text floor on the same grounds.
+  test("keeps a list-marker style above the non-text floor on every palette", () => {
+    expectAboveNonTextFloor(
+      (theme) => theme.markdown.listMarker?.color ?? theme.tokens["--ink-soft"],
+      "list marker",
+    );
+  });
+
+  // The hue rules below exempt a style that spends the palette's own ink ramp: those
+  // colors carry no hue to confuse, and the weight, slant, chip and underline tell the
+  // elements apart as they did before a theme could style them.
+  const onInkRamp = (theme: (typeof THEMES)[BuiltinThemeId], color: string) =>
+    [theme.tokens["--ink"], theme.tokens["--ink-soft"], theme.tokens["--ink-faint"]].includes(
+      color,
+    );
+
+  // The accent marks the current selection, so a markdown element in its hue reads as
+  // selected. Falsifiable: Dracula's headings in its purple accent red here.
+  test("keeps every hued markdown style off the accent's hue", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const [element, style] of Object.entries(theme.markdown)) {
+        if (onInkRamp(theme, style.color)) continue;
+        expect(
+          hueGap(style.color, theme.tokens["--accent"]),
+          `${id} ${element}`,
+        ).toBeGreaterThanOrEqual(15);
+      }
+    }
+  });
+
+  // A resolved reference shares its sentence with the inline elements, and a skill chip
+  // shares the comment editor's with a link, so neither may borrow its hue. 30 degrees,
+  // half the chip pins' floor, because a text color is a smaller patch than a tint.
+  // Falsifiable: caret-dark italics in its string green sit 23 degrees from --chip-ref.
+  test("keeps inline markdown styles off the reference chip's hue, and a link off the skill chip's", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const element of ["code", "link", "bold", "italic"] as const) {
+        const style = theme.markdown[element];
+        if (style === undefined || onInkRamp(theme, style.color)) continue;
+        const near = [
+          "--chip-ref",
+          ...(element === "link" ? (["--chip-skill"] as const) : []),
+        ] as const;
+        for (const chip of near) {
+          expect(
+            hueGap(style.color, theme.tokens[chip]),
+            `${id} ${element} vs ${chip}`,
+          ).toBeGreaterThanOrEqual(30);
+        }
+      }
+    }
+  });
+
+  // The elements that share a line have to read as different colors where both spend a
+  // hue: the four inline ones among themselves, a heading against the inline elements in
+  // it, a quote against everything nested in it, and a list marker against what starts
+  // its item. A heading never shares a line with a list marker or a quote, which is what
+  // lets a palette spend one hue on its structure. 20 is a large step on the CIE76 scale
+  // — a glance, not a comparison. Falsifiable: Dracula's link in its italic yellow.
+  const SHARE_A_LINE: [MarkdownElement, MarkdownElement][] = [
+    ["code", "link"],
+    ["code", "bold"],
+    ["code", "italic"],
+    ["link", "bold"],
+    ["link", "italic"],
+    ["bold", "italic"],
+    ["heading", "code"],
+    ["heading", "link"],
+    ["heading", "bold"],
+    ["heading", "italic"],
+    ...(["code", "link", "bold", "italic", "listMarker"] as const).map(
+      (e): [MarkdownElement, MarkdownElement] => ["quote", e],
+    ),
+    ...(["code", "link", "bold", "italic"] as const).map(
+      (e): [MarkdownElement, MarkdownElement] => ["listMarker", e],
+    ),
+  ];
+  test("keeps the hued markdown styles that share a line apart", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const [a, b] of SHARE_A_LINE) {
+        const [ca, cb] = [theme.markdown[a]?.color, theme.markdown[b]?.color];
+        if (ca === undefined || cb === undefined) continue;
+        if (onInkRamp(theme, ca) || onInkRamp(theme, cb)) continue;
+        expect(deltaE(ca, cb), `${id} ${a} vs ${b}`).toBeGreaterThanOrEqual(20);
+      }
+    }
+  });
+
+  // A version diff paints a deletion in --danger, and an error wears it too, so inline code
+  // or bold in that red reads as one of them. --ok is left open on purpose: green code is
+  // Dracula's and Catppuccin's own convention, and reads as that before it reads as an
+  // added line. Falsifiable: duskfox's code in its love red.
+  test("keeps every markdown style off --danger", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const [element, style] of Object.entries(theme.markdown)) {
+        expect(style.color.toLowerCase(), `${id} ${element}`).not.toBe(
+          theme.tokens["--danger"].toLowerCase(),
+        );
+      }
+    }
+  });
+
   // --accent is the scarce mark caret spends on the current selection; --attention is
   // the separate "look here" hue (the notification dot, the version-count badge).
   // Collapsing them into one color erases that distinction.
@@ -771,6 +928,60 @@ describe("paintPalette", () => {
     }
     expect(node.style.getPropertyValue("color-scheme")).toBe("light");
     expect(node.dataset.theme).toBe("light");
+  });
+
+  // The plan view and the feedback editor read these; shiki carries the same styles to
+  // the highlighted code. Each surface falls back to its own look where one is unset.
+  test("paints each markdown style as the element's custom properties", () => {
+    const node = document.createElement("div");
+    const { tokens } = THEMES["caret-dark"];
+    paintPalette(
+      {
+        scheme: "dark",
+        tokens,
+        markdown: {
+          heading: { color: "#bd93f9", fontStyle: ["bold", "underline"] },
+          link: { color: "#ff79c6", fontStyle: ["strikethrough"] },
+          listMarker: { color: "#8be9fd" },
+          quote: { color: "#f1fa8c", fontStyle: ["italic"] },
+        },
+      },
+      node,
+    );
+    const painted = Object.fromEntries(
+      Array.from(node.style)
+        .filter((name) => name.startsWith("--markdown-"))
+        .map((name) => [name, node.style.getPropertyValue(name)]),
+    );
+    expect(painted).toEqual({
+      "--markdown-heading-color": "#bd93f9",
+      "--markdown-heading-font-weight": "bold",
+      "--markdown-heading-text-decoration": "underline",
+      // A link is always underlined; its style adds to that rather than replacing it.
+      "--markdown-link-color": "#ff79c6",
+      "--markdown-link-text-decoration": "underline line-through",
+      "--markdown-list-marker-color": "#8be9fd",
+      "--markdown-quote-color": "#f1fa8c",
+      "--markdown-quote-font-style": "italic",
+      // A quote with a color of its own is told apart by it, so it drops the subdue.
+      "--markdown-quote-opacity": "1",
+    });
+  });
+
+  // caret's own heading is bold, so a heading style that names no bold replaces it.
+  test("paints a heading style without bold at normal weight", () => {
+    const node = document.createElement("div");
+    const { tokens } = THEMES["caret-dark"];
+    paintPalette({ scheme: "dark", tokens, markdown: { heading: { color: "#bd93f9" } } }, node);
+    expect(node.style.getPropertyValue("--markdown-heading-font-weight")).toBe("normal");
+  });
+
+  test("clears the markdown styles a previous palette painted", () => {
+    const node = document.createElement("div");
+    const { tokens } = THEMES["caret-dark"];
+    paintPalette({ scheme: "dark", tokens, markdown: { link: { color: "#ff79c6" } } }, node);
+    paintPalette({ scheme: "dark", tokens, markdown: {} }, node);
+    expect(Array.from(node.style).filter((name) => name.startsWith("--markdown-"))).toEqual([]);
   });
 });
 

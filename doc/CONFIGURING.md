@@ -251,15 +251,15 @@ or stacked host.
 ## Theme files
 
 A theme file is a JSON file that describes one caret theme: its name, whether it is light
-or dark, the colors of caret's interface, and the colors used to highlight code. A theme
-file is self-contained. caret derives everything else it needs, such as hairline rules,
-selection washes, and chip tints, from the colors the file names. A theme reaches caret
-either from its [themes folder](#where-caret-finds-theme-files) or by
-[uploading it](#uploading-a-theme) in the Appearance settings, which writes it into the
-folder. Each theme appears in the Appearance theme picker for its scheme: a dropped file
-after a page reload, an uploaded one straight away. When a slot's selected theme stops
-loading, the slot shows caret's theme for that scheme and keeps the selection, so
-restoring the file brings it back.
+or dark, the colors of caret's interface, and the colors used to highlight code and,
+optionally, the plan's markdown. A theme file is self-contained. caret derives everything
+else it needs, such as hairline rules, selection washes, and chip tints, from the colors
+the file names. A theme reaches caret either from its
+[themes folder](#where-caret-finds-theme-files) or by [uploading it](#uploading-a-theme)
+in the Appearance settings, which writes it into the folder. Each theme appears in the
+Appearance theme picker for its scheme: a dropped file after a page reload, an uploaded
+one straight away. When a slot's selected theme stops loading, the slot shows caret's
+theme for that scheme and keeps the selection, so restoring the file brings it back.
 
 caret's built-in themes ship as theme files in
 [`ui/src/lib/themes/`](../ui/src/lib/themes/); copying one is a good starting point for
@@ -316,6 +316,7 @@ There is no delete control. To remove a theme, delete its file from the folder.
 | `scheme`  | Yes      | `"light"` or `"dark"`.                                                                   |
 | `palette` | Yes      | The interface colors, below.                                                             |
 | `syntax`  | Yes      | The code highlighting roles, below.                                                      |
+| `markdown` | No      | The markdown element styles, below.                                                      |
 
 ### `palette`
 
@@ -390,6 +391,40 @@ to, so add one only to set it apart.
 | `builtinType` | Built-in and primitive types | `support.type.primitive`, `support.type.builtin` | `type` |
 | `interpolation` | Template interpolation delimiters | `punctuation.definition.template-expression` | `escape` |
 
+### `markdown`
+
+The plan view renders the plan as markdown source, and these optional styles color its
+elements. Each is an object with a `color` and an optional `fontStyle`, the same shape as
+a syntax role. A file that omits an element, or the whole `markdown` object, paints it as
+caret does by default.
+
+| Element      | What it colors                               | Plan view default           | Comment editor default |
+| ------------ | -------------------------------------------- | --------------------------- | ---------------------- |
+| `heading`    | A heading, its `#` markers included          | `accent`                    | `ink`, bold            |
+| `code`       | Inline code, and the body of a fenced block  | `accentBright`              | `ink`                  |
+| `link`       | A link's text                                | `ink` mixed toward `accent` | `accent`               |
+| `bold`       | Bold text, between its `**` markers          | `ink`                       | `ink`                  |
+| `italic`     | Italic text, between its `_` or `*` markers  | `ink`                       | `ink`                  |
+| `listMarker` | A list's bullet and an ordered item's number | `inkSoft` and `inkFaint`    | `inkFaint`             |
+| `quote`      | Blockquote text                              | `ink`, slightly faded       | `inkSoft`              |
+
+A few elements keep part of their look whatever the style says:
+
+- Bold text stays bold, italic text stays italic, and a link keeps its underline, dotted
+  in the plan view, and its chip. A `fontStyle` adds to these.
+- A `heading` style sets the heading's weight on both surfaces, so name `"bold"` for a
+  bold heading.
+- A styled `quote` paints at full strength, since its color already sets it apart.
+- The `**`, `_`, and backtick markers keep their own color.
+- A fenced block's body takes the `code` color but not its `fontStyle`.
+
+The chip tint behind bold, italic, inline code, and link text comes from the `chip*Hue`
+[palette](#palette) overrides, not from these styles.
+
+The comment editor applies these styles too. There, text nested in a heading, link, or
+quote takes that element's color, and in a heading its weight too. A fenced block that
+names its language takes the editor's own code colors rather than `code`.
+
 ### Colors and errors
 
 Every color is a six-digit hex color, `#rrggbb`, in either case. Shorthand (`#fff`), alpha
@@ -426,6 +461,7 @@ This is caret's own dark theme as a theme file:
     "ruleHue": "#f2e7d5",
     "washHue": "#f2842f",
     "markHue": "#ffa64d",
+    "chipLinkHue": "#f56f8e",
     "chipSkillHue": "#6ec4e4"
   },
   "syntax": {
@@ -440,6 +476,15 @@ This is caret's own dark theme as a theme file:
     "string": { "color": "#92d474" },
     "escape": { "color": "#f56f8e" },
     "number": { "color": "#4cbbc8" }
+  },
+  "markdown": {
+    "heading": { "color": "#ecc25c", "fontStyle": ["bold"] },
+    "code": { "color": "#a3d4ec" },
+    "link": { "color": "#f56f8e" },
+    "bold": { "color": "#dd7a6c" },
+    "italic": { "color": "#3fbda9" },
+    "listMarker": { "color": "#ecc25c" },
+    "quote": { "color": "#92d474", "fontStyle": ["italic"] }
   }
 }
 ```

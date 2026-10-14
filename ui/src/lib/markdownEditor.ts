@@ -22,7 +22,7 @@ import {
   ViewPlugin,
   type ViewUpdate,
 } from "@codemirror/view";
-import { tags } from "@lezer/highlight";
+import { styleTags, Tag, tags } from "@lezer/highlight";
 
 import {
   completionListOpen,
@@ -65,19 +65,39 @@ export interface MarkdownEditorOptions {
   refDeps?: RefRecognitionDeps;
 }
 
+// A list item's marker, apart from the other markdown markers, and inline code's text,
+// apart from a fence's, so a theme can style each.
+const listMark = Tag.define(tags.processingInstruction);
+const inlineCode = Tag.define(tags.monospace);
+
 // The editor's own scheme, NOT the diff view's: the shiki themes there paint from
 // each theme file's `syntax` roles, which are not ColorTokens, so a `var(--x)` highlight style
 // has no way to name them. Tokens only (hex/var, never oklch).
+//
+// A theme's markdown style rides each property this scheme declares for its element, as a
+// --markdown-* property theme.ts paints with the editor's own look as its fallback. Order
+// is load-bearing: a span nested in several elements carries all their classes, so the
+// later rule wins each property. The heading comes before strong, so a theme's
+// normal-weight heading keeps its bold words bold.
 const highlightStyle = HighlightStyle.define([
   // Markdown structure.
+  {
+    tag: tags.heading,
+    color: "var(--markdown-heading-color, var(--ink))",
+    fontWeight: "var(--markdown-heading-font-weight, 700)",
+  },
+  { tag: tags.strikethrough, textDecoration: "line-through" },
+  {
+    tag: [tags.link, tags.url],
+    color: "var(--markdown-link-color, var(--accent))",
+    textDecoration: "var(--markdown-link-text-decoration, underline)",
+  },
+  { tag: tags.quote, color: "var(--markdown-quote-color, var(--ink-soft))" },
   { tag: tags.strong, fontWeight: "700" },
   { tag: tags.emphasis, fontStyle: "italic" },
-  { tag: tags.strikethrough, textDecoration: "line-through" },
-  { tag: tags.heading, fontWeight: "700", color: "var(--ink)" },
-  { tag: [tags.link, tags.url], color: "var(--accent)", textDecoration: "underline" },
-  { tag: tags.quote, color: "var(--ink-soft)" },
   // The literal markdown markers (**, `, #, >, -, ```): kept visible but receded.
   { tag: tags.meta, color: "var(--ink-faint)" },
+  { tag: listMark, color: "var(--markdown-list-marker-color, var(--ink-faint))" },
   // Fenced-code syntax.
   {
     tag: [
@@ -121,6 +141,56 @@ const highlightStyle = HighlightStyle.define([
   { tag: [tags.propertyName, tags.attributeName], color: "var(--ink)" },
   { tag: [tags.variableName, tags.attributeValue], color: "var(--ink)" },
   { tag: tags.escape, color: "var(--accent-bright)" },
+]);
+
+// The rest of a theme's markdown styles: the properties highlightStyle leaves undeclared,
+// with no fallback, so an unset one makes its declaration inherit (none, for a decoration),
+// as if it were absent. A HighlightStyle gives a tag one rule, so these sit in a second,
+// mounted at Prec.low so its rules precede highlightStyle's: a nested span keeps the
+// enclosing element's declaration, and a theme that styles nothing paints as before.
+const themeOnlyStyle = HighlightStyle.define([
+  {
+    tag: tags.heading,
+    fontStyle: "var(--markdown-heading-font-style)",
+    textDecoration: "var(--markdown-heading-text-decoration)",
+  },
+  { tag: tags.monospace, color: "var(--markdown-code-color)" },
+  {
+    tag: inlineCode,
+    color: "var(--markdown-code-color)",
+    fontWeight: "var(--markdown-code-font-weight)",
+    fontStyle: "var(--markdown-code-font-style)",
+    textDecoration: "var(--markdown-code-text-decoration)",
+  },
+  {
+    tag: [tags.link, tags.url],
+    fontWeight: "var(--markdown-link-font-weight)",
+    fontStyle: "var(--markdown-link-font-style)",
+  },
+  {
+    tag: tags.strong,
+    color: "var(--markdown-bold-color)",
+    fontStyle: "var(--markdown-bold-font-style)",
+    textDecoration: "var(--markdown-bold-text-decoration)",
+  },
+  {
+    tag: tags.emphasis,
+    color: "var(--markdown-italic-color)",
+    fontWeight: "var(--markdown-italic-font-weight)",
+    textDecoration: "var(--markdown-italic-text-decoration)",
+  },
+  {
+    tag: listMark,
+    fontWeight: "var(--markdown-list-marker-font-weight)",
+    fontStyle: "var(--markdown-list-marker-font-style)",
+    textDecoration: "var(--markdown-list-marker-text-decoration)",
+  },
+  {
+    tag: tags.quote,
+    fontWeight: "var(--markdown-quote-font-weight)",
+    fontStyle: "var(--markdown-quote-font-style)",
+    textDecoration: "var(--markdown-quote-text-decoration)",
+  },
 ]);
 
 // Inline code stays an inline pill; a fenced block is a full-width band (one line
@@ -445,8 +515,12 @@ export function markdownExtensions(opts: MarkdownEditorOptions): Extension[] {
     // codeLanguages: the full @codemirror/language-data set (~140 languages),
     // each lazy-loaded on demand when a fenced block declares it — so the initial
     // bundle stays lean and new languages need no code change here.
-    markdown({ codeLanguages: languages }),
+    markdown({
+      codeLanguages: languages,
+      extensions: { props: [styleTags({ ListMark: listMark, InlineCode: inlineCode })] },
+    }),
     syntaxHighlighting(highlightStyle),
+    Prec.low(syntaxHighlighting(themeOnlyStyle)),
     codeHighlighter,
     // What codeHighlighter reads to chip a reference. Contributes nothing —
     // not even the state field — for a surface mounted outside a review.

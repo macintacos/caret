@@ -18,6 +18,7 @@
   import { clearSearchHighlights, paintSearchHighlights } from "$lib/diffview/searchHighlight.ts";
   import type { SearchMatch } from "$lib/diffview/planSearch.ts";
   import { type CodeBlockRange, codeBlockRanges, tagCodeBlockRows } from "$lib/diffview/codeBlocks.ts";
+  import { headingLines, tagHeadingRows } from "$lib/diffview/headings.ts";
   import { decorateInlineRuns } from "$lib/diffview/inlineDecorate.ts";
   import type { InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
   import { applyCodeBlockReflow, syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
@@ -437,6 +438,16 @@
     return breaksMemo.breaks;
   });
 
+  // The heading rows, memoized like the breaks above and derived from codeRanges for the
+  // same reason.
+  let headingsMemo: { text: string; headings: Set<number> } | undefined;
+  const headings = $derived.by(() => {
+    if (headingsMemo?.text !== doc.text) {
+      headingsMemo = { text: doc.text, headings: headingLines(doc.text, codeRanges) };
+    }
+    return headingsMemo.headings;
+  });
+
   // The GFM tables (EXC-864), memoized on the same rendered text and for the same
   // reason: a fresh array each poll tick would re-arm the observer effect below.
   // Derived from codeRanges so a table written inside a fence stays code.
@@ -522,6 +533,7 @@
     // rendered text — so none of them re-arms the observer on every render.
     const inlineSpans = inline;
     const breaks = thematicBreaks;
+    const headingRows = headings;
     const tables = tableSpans;
     const imageSpans = images;
     const quotes = quoteDepth;
@@ -538,6 +550,7 @@
       // because it is the same kind of pass — one attribute per row, no nodes — and it
       // depends on nothing else here, so its position costs no frame either way.
       tagThematicBreakRows(root, breaks);
+      tagHeadingRows(root, headingRows);
       syncCodeBlockCards(root, ranges);
       // Always run, so a populated→empty transition clears the marks too.
       applyCodeBlockReflow(root, reflowed ?? EMPTY_REFLOWED);

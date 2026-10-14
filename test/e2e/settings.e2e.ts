@@ -26,9 +26,10 @@ import { planSurface, rowColors, seedAndOpen } from "@test/e2e/support/source-vi
 import { caretThemeFile } from "@test/support/theme.ts";
 
 const CARET_DARK_ACCENT = caretThemeFile("dark").palette.accent;
+const CARET_DARK_HEADING = caretThemeFile("dark").markdown?.heading?.color ?? "";
 // Computed styles come back in decimal.
-const CARET_DARK_ACCENT_RGB = `rgb(${[1, 3, 5]
-  .map((i) => Number.parseInt(CARET_DARK_ACCENT.slice(i, i + 2), 16))
+const CARET_DARK_HEADING_RGB = `rgb(${[1, 3, 5]
+  .map((i) => Number.parseInt(CARET_DARK_HEADING.slice(i, i + 2), 16))
   .join(", ")})`;
 
 const topbarHints = ".topbar [data-slot='kbd']";
@@ -285,15 +286,15 @@ test("picking a slot's palette applies it immediately when that slot is live", a
 // EXC-752: a palette from outside caret's own pair has to land on BOTH halves of the
 // app — the chrome repaints from its tokens, and the code the reviewer is reading
 // retints with it. Dracula is the pick precisely because nothing in it is caret's
-// amber, so "the heading is still amber" is an unambiguous failure.
+// heading gold, so "the heading is still gold" is an unambiguous failure.
 test("picking a vendor palette retints the chrome and the code", async ({ daemon, page }) => {
   await seedAndOpen(page, daemon);
 
-  // The emulated OS is dark, so the dark slot is live: caret dark, amber headings.
+  // The emulated OS is dark, so the dark slot is live: caret dark, gold headings.
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect
     .poll(() => rowColors(page, "Widget Cache Refactor"))
-    .toContain(CARET_DARK_ACCENT_RGB);
+    .toContain(CARET_DARK_HEADING_RGB);
 
   await openSettings(page);
   await pickDraculaDark(page);
@@ -307,14 +308,14 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
 
-  // And so does the code: the plan's heading is Dracula purple, not caret amber.
-  await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(189, 147, 249)");
-  // Read once more and assert the amber is gone. Asserted on a resolved non-empty
+  // And so does the code: the plan's heading is Dracula cyan, not caret gold.
+  await expect.poll(() => rowColors(page, "Widget Cache Refactor")).toContain("rgb(139, 233, 253)");
+  // Read once more and assert the gold is gone. Asserted on a resolved non-empty
   // array rather than inside a poll, so a row that stopped matching can't satisfy
-  // "no amber" by returning nothing.
+  // "no gold" by returning nothing.
   const retinted = await rowColors(page, "Widget Cache Refactor");
   expect(retinted.length).toBeGreaterThan(0);
-  expect(retinted).not.toContain(CARET_DARK_ACCENT_RGB);
+  expect(retinted).not.toContain(CARET_DARK_HEADING_RGB);
 
   // The fenced block is highlighted with Dracula's syntax roles: it paints `function`
   // its pink (#ff79c6), a hue neither caret theme file carries, so caret's pair cannot

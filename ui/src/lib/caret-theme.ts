@@ -1,5 +1,6 @@
 import type { ThemeRegistrationRaw } from "shiki/core";
 
+import type { FontStyle, RoleStyle, ThemeMarkdown } from "@core/theme/schema.ts";
 import {
   type BuiltinThemeId,
   isBuiltinThemeId,
@@ -74,7 +75,10 @@ function paletteFromTheme(t: Theme): Palette {
  * say, so `***both***` — whose content carries `markup.bold.markdown` AND
  * `markup.italic.markdown` — otherwise resolves against `markup.italic.markdown` alone and
  * renders italic with no weight. The descendant scope is more specific than either. */
-function caretMarkdownRules(p: Palette): NonNullable<ThemeRegistrationRaw["settings"]> {
+function caretMarkdownRules(
+  p: Palette,
+  markdown: ThemeMarkdown,
+): NonNullable<ThemeRegistrationRaw["settings"]> {
   return [
     {
       scope: ["markup.fenced_code.block.markdown punctuation.definition.markdown"],
@@ -90,21 +94,26 @@ function caretMarkdownRules(p: Palette): NonNullable<ThemeRegistrationRaw["setti
     },
     {
       scope: ["markup.bold.markdown"],
-      settings: { fontStyle: "bold" },
+      settings: { fontStyle: emphasisFont(["bold"], markdown.bold) },
     },
     {
       scope: ["markup.italic.markdown"],
-      settings: { fontStyle: "italic" },
+      settings: { fontStyle: emphasisFont(["italic"], markdown.italic) },
     },
     {
       scope: ["markup.bold.markdown markup.italic.markdown"],
-      settings: { fontStyle: "bold italic" },
+      settings: { fontStyle: emphasisFont(["bold", "italic"], markdown.bold, markdown.italic) },
     },
     {
       scope: ["punctuation.definition.bold.markdown", "punctuation.definition.italic.markdown"],
       settings: { foreground: p.comment },
     },
   ];
+}
+
+/** An emphasis rule's font style: what the markup means, plus whatever its style adds. */
+function emphasisFont(base: FontStyle[], ...styles: (RoleStyle | undefined)[]): string {
+  return [...new Set([...base, ...styles.flatMap((style) => style?.fontStyle ?? [])])].join(" ");
 }
 
 /** The name both highlighters know a theme by: its id, then `<id>~<revision>` once a
@@ -125,7 +134,10 @@ function withStructuralOverrides(theme: Theme, source: ThemeRegistrationRaw): Th
   return {
     ...rest,
     name: shikiThemeName(theme),
-    settings: [...(settings ?? tokenColors ?? []), ...caretMarkdownRules(paletteFromTheme(theme))],
+    settings: [
+      ...(settings ?? tokenColors ?? []),
+      ...caretMarkdownRules(paletteFromTheme(theme), theme.markdown),
+    ],
   };
 }
 

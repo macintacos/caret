@@ -155,7 +155,11 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
     if (after === before) return;
     const shown = standIn;
     standIn = undefined;
-    if (shown?.id === after && sameTokens(shown.tokens, themeFor(after).tokens)) return;
+    // The cache holds tokens alone, so the markdown styles land here, unwiped.
+    if (shown?.id === after && sameTokens(shown.tokens, themeFor(after).tokens)) {
+      paintTheme(after);
+      return;
+    }
     withWipe(() => {
       paintTheme(after);
     }, deps.wipe);

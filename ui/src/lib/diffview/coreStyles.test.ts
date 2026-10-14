@@ -87,12 +87,14 @@ function tintRule(member: string): string {
 }
 
 /** A `data-md` member's other rule — the one carrying the properties the text intrinsically
- * has (bold's weight, italic's slant, a link's ink). Defined as the complement of
+ * has (bold's weight, italic's slant, a link's ink). Defined as the last rule that is not
  * `tintRule` rather than by sniffing for a property name, so it stays correct when a
- * member's intrinsic set changes. */
+ * member's intrinsic set changes; the theme's font rule for the member sits before it. */
 function propsRule(member: string): string {
   return (
-    rulesFor(String.raw`\[data-md~="${member}"\]`).find((r) => !r.includes(`--md-${member}:`)) ?? ""
+    rulesFor(String.raw`\[data-md~="${member}"\]`)
+      .filter((r) => !r.includes(`--md-${member}:`))
+      .at(-1) ?? ""
   );
 }
 
@@ -445,6 +447,20 @@ describe("the inline emphasis chips (EXC-867)", () => {
     expect(slant).not.toMatch(/:not\(\[data-selected-line\]\)/);
   });
 
+  // A theme's font rule for a member reads a --markdown-* property that is usually unset,
+  // which leaves it inheriting. Declared after the weight and slant, it would beat them on
+  // a token carrying two members: a bold link or bold code would lose its weight.
+  test("declares a theme's font rules before the weight and slant they must not beat", () => {
+    const at = (pattern: RegExp) => overrideDecls.search(pattern);
+    const weight = at(/font-weight:\s*bold\s*;/);
+    const slant = at(/font-style:\s*italic\s*;/);
+    for (const member of ["code", "link", "bold", "italic"]) {
+      const themed = at(new RegExp(String.raw`\[data-md~="${member}"\]\s*\{[^}]*--markdown-`));
+      expect(themed, member).toBeGreaterThan(-1);
+      expect(themed, member).toBeLessThan(Math.min(weight, slant));
+    }
+  });
+
   test("spends the family's own bold and italic tints, and declares neither", () => {
     // Consumed, never redefined: the recipe (EXC-858) derives all five tints for every
     // palette, so a literal here would be one more, unreviewed palette.
@@ -558,7 +574,9 @@ describe("the link chip (EXC-859)", () => {
     // half-drawn. The tint is a minority mix of the accent into --ink, never the accent
     // itself: amber stays scarce and brand-reserved, so a paragraph of links never reads
     // as a page of selections.
-    expect(inkRule).toMatch(/color:\s*color-mix\([^)]*var\(--ink\)[^)]*var\(--accent\)/);
+    expect(inkRule).toMatch(
+      /color:\s*var\(--markdown-link-color,\s*color-mix\([^)]*var\(--ink\)[^)]*var\(--accent\)/,
+    );
     expect(inkRule).toMatch(/text-decoration:\s*underline dotted/);
     expect(inkRule).not.toMatch(/color:\s*var\(--accent[^)]*\)\s*;/);
   });
@@ -899,7 +917,7 @@ describe("the list markers (EXC-861)", () => {
     // An ordered item's `1.` keeps its glyph and is only tinted, so it is supplementary
     // and stays on --ink-faint — the ink caret-theme.ts already gives the fence markers
     // and the ** / _ emphasis markers. No sixth --chip-* token for a single dash.
-    expect(anyMarker).toMatch(/color:\s*var\(--ink-faint\)/);
+    expect(anyMarker).toMatch(/color:\s*var\(--markdown-list-marker-color,\s*var\(--ink-faint\)\)/);
     expect(anyMarker).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(anyMarker).not.toMatch(/--chip-/);
   });
@@ -921,7 +939,7 @@ describe("the list markers (EXC-861)", () => {
     // and reds naming the palette. This pins only that the sheet spends what they chose,
     // and that the drawn glyph and the surviving marker genuinely differ — one shared ink
     // here would mean the rule had been dropped.
-    expect(glyphRule).toMatch(/color:\s*var\(--ink-soft\)/);
+    expect(glyphRule).toMatch(/color:\s*var\(--markdown-list-marker-color,\s*var\(--ink-soft\)\)/);
     expect(glyphRule).not.toMatch(/--ink-faint/);
   });
 

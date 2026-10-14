@@ -296,6 +296,15 @@ describe("the boot stand-in", () => {
     expect(wipes()).toBe(0);
   });
 
+  test("the theme registering with identical tokens paints its markdown styles", async () => {
+    const { appearance, file } = await darkStandIn("standin-markdown");
+    addTheme({ ...file, markdown: { link: { color: "#ff79c6" } } });
+    appearance.refresh();
+    appearance.themesLoaded();
+    const link = document.documentElement.style.getPropertyValue("--markdown-link-color");
+    expect(link).toBe("#ff79c6");
+  });
+
   test("the theme registering with changed tokens wipes once to them", async () => {
     const { appearance, wipes, file } = await darkStandIn("standin-changed");
     addTheme({ ...file, tokens: { ...file.tokens, "--accent": "#123456" } });

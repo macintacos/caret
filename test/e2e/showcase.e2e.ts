@@ -500,9 +500,11 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
   // What the palette's own tokens resolve to inside this shadow root, measured rather
   // than transcribed — a hex copied into this file is a second place a flavour bump has
   // to be edited, and it reds naming a colour instead of a token.
-  const [inkSoft, inkFaint, tableInk] = await Promise.all([
+  const [inkSoft, inkFaint, listMarker, tableInk] = await Promise.all([
     probeColor(page, "--ink-soft"),
     probeColor(page, "--ink-faint"),
+    // Latte styles its list markers, and the bullet takes that style rather than the ink.
+    probeColor(page, "--markdown-list-marker-color"),
     // A table's rules are not an ink at all: EXC-1136 restated them as one step off the
     // SURFACE — --paper-sunk 12% toward --ink, the same idiom as the card fill and the
     // row bands — so one number reads the same on every palette without a light-dark().
@@ -552,10 +554,11 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
 
   // EXC-871's replacement/supplementary rule, on the palette that made it necessary: a
   // mark that REPLACES its source glyph lands on this palette's --ink-soft, a step above
-  // the --ink-faint the markers that survive take. Opaque throughout — an alpha suffix
-  // here would be the 10%-alpha --rule regression coming back.
+  // the --ink-faint the markers that survive take — the bullet excepted, which wears the
+  // list-marker style Latte names. Opaque throughout — an alpha suffix here would be the
+  // 10%-alpha --rule regression coming back.
   expect(inkSoft).not.toBe(inkFaint);
-  expect(paint.bullet).toBe(inkSoft);
+  expect(paint.bullet).toBe(listMarker);
   expect(paint.quoteBar).toBe(inkSoft);
   expect(paint.checkbox).toBe(inkSoft);
   expect(paint.rule).toContain(inkSoft);
