@@ -180,6 +180,50 @@ exist today.
 - **`[/]`** renders as `data-task="slashed"`. `indeterminate` has no attribute form, so
   `PlanPreview.svelte` sets the property on each such input after every mount of new HTML.
 
+### Source-line map
+
+The preview reflows text, so a rendered position is not a source line. `planSourceMap.ts`
+maps between the two for comments, the cursor and search.
+
+- **Markers.** The renderer puts an empty `<span data-source-line="N">` before the first
+  rendered character of every source line that produces inline text: at the start of each
+  leaf (paragraph, heading, list item text, table cell), after every `\n` inside inline
+  text — a trailing one included, so a link, codespan or inline tag that opens a line
+  counts on that line — and after any other inline token whose raw spans lines. A code
+  block gets one marker before its `<pre>`, at its first code line, carrying
+  `data-source-code`; an empty code block gets none. A raw-HTML block gets one at its
+  first line. Markers are inline elements: never wrappers, never inside a `<pre>`. Plan
+  text cannot forge one, since the sanitizer allows no attributes on `span`.
+- **The map.** `createPlanSourceMap(root)` takes the element whose content is exactly the
+  rendered HTML and walks it once per version, storing runs of text offset → line. After a
+  `data-source-code` marker, each `\n` in the next element's text that more code follows
+  starts the next line's run. Every lookup is a binary search; none reads layout.
+- **Lookups.** `lineAt` gives the line of the character at a DOM point, the last
+  character's at the end of the text, and null outside the root or for an empty preview.
+  `linesOf` gives the lines of a range's first and last non-whitespace characters (its
+  first and last characters when it covers only whitespace), so a triple-click selection
+  that ends at the next block's start reports the previous block's line. `rangeOf` gives
+  the rendered text a line produced, or null for a line that produced none: blank, link
+  definition, fence, table delimiter row, `hr`, out of range.
+- **Edges.**
+  - A soft break's `\n` belongs to the line it ends.
+  - The structural `\n` marked emits between tags belongs to the preceding run (before the
+    first run, to the first). `lineAt` at a boundary ahead of one, such as `(tr, 0)`,
+    reports the preceding line; `linesOf` skips whitespace and does not.
+  - An image is atomic: a safe one renders no text, an unsafe one renders its alt with no
+    marker inside. A codespan or image alt that straddles a break maps wholly to its first
+    line, and the text after it starts on the right line.
+  - An entity such as `&#10;` renders a `\n` but starts no line; markers come from source
+    raws, not rendered text.
+  - A raw-HTML block's text, a `<pre>` inside it included, maps to its first line.
+  - Accepted: a line inside a leaf whose only content renders no text (a link's closing
+    `](…)`, a lone inline `</b>` or `<br>`) still starts a run; with nothing after it in
+    the block, the run holds only the structural whitespace, which `rangeOf` returns and
+    `lineAt` reports as that line.
+- **Highlighting.** Offsets resolve against the live text, so replacing a code block's
+  markup, even its whole `<pre>`, with spans of the same text leaves the map valid,
+  whether it was built before or after.
+
 ## Surfaces
 
 `SURFACE_BEHAVIORS` in `ui/src/lib/planView.ts` is the one place a source-view behavior
