@@ -3,14 +3,15 @@
 // dedicated one bound to shiki's full grammar bundle and caret's themes (built-ins
 // up front, a runtime theme on first use and again under its fresh name after a
 // replace), then highlights an excerpt to the caret theme in effect, so the
-// preview reads like the plan view's own code. Two entry points share it:
+// preview reads like the plan view's own code. Three entry points share it:
 // highlightExcerpt colours a whole window in one pass, highlightChunk colours a
 // file a piece at a time and hands back the grammar state each piece ended on, so
-// a construct that opens in one chunk still colours the next. Grammars load
+// a construct that opens in one chunk still colours the next, and highlightTokens
+// hands back raw tokens for a caller that builds its own DOM. Grammars load
 // lazily and cache; anything that can't highlight falls back to plain text.
 // Never throws.
 
-import { type GrammarState, hastToHtml } from "shiki/core";
+import { type GrammarState, hastToHtml, type ThemedToken } from "shiki/core";
 
 import { BUILTIN_SHIKI_THEMES, shikiThemeFor, shikiThemeName } from "$lib/caret-theme.ts";
 import { CARET_TOKENIZE_OPTIONS, createHighlighter } from "$lib/diffview/shiki-bundle.ts";
@@ -181,5 +182,30 @@ export async function highlightChunk(
     return { rows: chunkRows(root), state: hl.getLastGrammarState(root) };
   } catch {
     return { rows: [] };
+  }
+}
+
+/** Tokenizes `code` (whole lines, no trailing newline) in `language`, a bundled grammar id,
+ * and the theme in effect: one token array per line. Null when it can't — a grammar that
+ * won't load, a line past MAX_HIGHLIGHT_LINE_CHARS, any failure — so the caller leaves
+ * the block plain. Never throws. */
+export async function highlightTokens(
+  code: string,
+  language: string,
+  themeId: ThemeId,
+): Promise<ThemedToken[][] | null> {
+  if (hasUnhighlightableLine(code)) return null;
+  try {
+    const hl = await highlighter();
+    const theme = await resolveTheme(hl, themeId);
+    const lang = await resolveLanguage(hl, language);
+    if (lang === "text") return null;
+    return hl.codeToTokensBase(code, {
+      lang: lang as NonNullable<Parameters<Highlighter["codeToTokensBase"]>[1]["lang"]>,
+      theme,
+      ...CARET_TOKENIZE_OPTIONS,
+    });
+  } catch {
+    return null;
   }
 }
