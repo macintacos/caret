@@ -157,6 +157,10 @@ preview shows. Your browser remembers the choice, so it holds across reviews and
 Switching away from the source view with a comment open keeps its text as a draft, which
 you resume in the source view.
 
+Switching keeps your place: the other view opens at the part of the plan you were reading.
+A heading link you opened the review with still takes you to its heading the first time
+you switch to the source view.
+
 Compare mode always shows source, and hides the button. Leaving compare mode returns to
 the view you chose.
 

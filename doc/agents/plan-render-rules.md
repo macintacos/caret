@@ -246,3 +246,33 @@ The preview renders a version once. `memoLast` returns the last result for the s
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same
 version every tick; without the memo each tick would re-lex and re-sanitize the whole
 plan.
+
+### Keeping the place across a flip
+
+A flip between source and preview keeps the reader's place, block by block. Both surfaces
+read and park at the source view's reading zone and parking offset, so the block one flip
+parks is the block the next flip reads back. `ui/src/lib/planPlace.ts` holds the logic;
+`setPlanView` captures the place before it swaps the surface.
+
+- **Source to preview.** The source view's top visible line goes through
+  `blockIndexForLine` over `RenderedPlan.blocks`. It is a binary search over the block
+  spans and measures nothing; the result indexes the preview's children.
+- **Preview to source.** `previewTopLine` binary-searches the preview's children for the
+  first block whose bottom passes the reading zone, then returns that block's first source
+  line. A linear scan would read layout from every block above the fold, which a long plan
+  makes slow. `onSourceReady` parks the source row for that line once the new `SourceView`
+  mounts.
+- **The landing is instant.** A flip swaps the view rather than travelling, so a smooth
+  scroll would slide through unrelated text.
+- **`holdPlace` re-parks** the target on every resize of the new surface's content, as
+  images load and rows highlight. It releases on the reader's first wheel, touch, pointer
+  press or key press, when the target or its surface is gone, on the next flip, and on a
+  version change or unmount. It ignores `scroll` events, since native scroll anchoring
+  moves `scrollTop` too. Each park writes an absolute `scrollTop`, never a delta, so it
+  composes with native `overflow-anchor` where a browser has it and still holds in Safari
+  26 and earlier, which has none.
+- **A deep link wins.** A resolved `?heading=` jumps on the first source mount, ahead of a
+  place carried from the preview, since the preview cannot honor it.
+
+Place-keeping is not a `SURFACE_BEHAVIORS` row. It runs at the flip itself, not on a
+surface.

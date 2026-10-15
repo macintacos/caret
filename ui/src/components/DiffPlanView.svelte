@@ -94,7 +94,13 @@
     readDrawerSize,
     writeDrawerSize,
   } from "$lib/fileDrawer.ts";
-  import { lineAtReadingZone, REVEAL_MARGIN_BOTTOM, revealScrollDelta } from "$lib/diffview/scroll.ts";
+  import {
+    lineAtReadingZone,
+    REVEAL_MARGIN_BOTTOM,
+    revealScrollDelta,
+    rowForLine,
+  } from "$lib/diffview/scroll.ts";
+  import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
   import {
     type Annotation,
     type ClientReview,
@@ -1051,13 +1057,74 @@
   // scrolling to it once. takeHeadingSlug() clears the param, so a later SourceView
   // remount (a version switch) won't re-jump — the live `?heading=` mirror takes
   // over from there. An unknown or stale slug resolves to null and is a no-op.
+  // A resolved deep link wins over a place carried from the preview: the preview
+  // cannot honor `?heading=`, so the link waits for this first source mount.
   function onSourceReady(a: SourceViewApi) {
     api = a;
     const slug = takeHeadingSlug();
     const line = slug != null ? lineForSlug(headings, slug) : null;
+    const carried = carriedLine;
+    carriedLine = null;
     if (line != null) retryScrollTo(line);
+    else if (carried != null) {
+      releasePlace();
+      releasePlace = keepPlace(() => a.host, () => rowForLine(a.host, carried));
+    }
     restored = true;
   }
+
+  // Cancels the pending landing or ends the live hold, whichever is current.
+  let releasePlace: () => void = () => {};
+  // The preview's top line, waiting for the next SourceView to hand over its api.
+  let carriedLine: number | null = null;
+
+  // A flip parks the new surface on the reader's place instantly — it swaps the view
+  // rather than travelling, so a glide would slide through unrelated text — and holds
+  // it there while images load and rows highlight.
+  function keepPlace(
+    content: () => Element | null | undefined,
+    target: () => Element | null,
+  ): () => void {
+    let releaseHold: (() => void) | undefined;
+    const cancelFrames = retryFrames(() => {
+      const box = content();
+      if (scrollEl == null || box == null || target() == null) return false;
+      releaseHold = holdPlace({ scroller: scrollEl, content: box, target });
+      return true;
+    });
+    return () => {
+      cancelFrames();
+      releaseHold?.();
+    };
+  }
+
+  const previewEl = (): Element | null => scrollEl?.querySelector(".plan-preview") ?? null;
+
+  function capturePlace(): void {
+    if (planView === "source") {
+      const line = topVisibleLine();
+      if (line == null) return;
+      releasePlace();
+      releasePlace = keepPlace(previewEl, () => {
+        const preview = previewEl();
+        const i = planPreview ? blockIndexForLine(planPreview.blocks, line) : null;
+        return preview && i != null ? (preview.children[i] ?? null) : null;
+      });
+    } else {
+      const preview = previewEl();
+      carriedLine =
+        scrollEl && preview && planPreview
+          ? previewTopLine(scrollEl.getBoundingClientRect().top, preview, planPreview.blocks)
+          : null;
+    }
+  }
+
+  // Keyed on contentKey, not surface: the flip itself changes surface, and that
+  // teardown would cancel the hold the flip just scheduled.
+  $effect(() => {
+    void contentKey;
+    return () => releasePlace();
+  });
 
   // Hand the host the reveal(line) action once. `untrack` keeps onExposeReveal from
   // becoming a reactive dependency; revealLine closes over the live `api`, so exposing
@@ -1416,7 +1483,9 @@
   // The composer lives in SourceView's rows, so leaving source would drop it:
   // retain its text as a scratch first, which the approve guard still counts.
   function setPlanView(next: PlanView): void {
+    releasePlace();
     if (planView === "source" && next !== "source") commenting.cancel(liveText);
+    if (next !== planView) capturePlace();
     planView = next;
     writePlanView(next);
   }
