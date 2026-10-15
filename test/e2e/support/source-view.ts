@@ -24,6 +24,10 @@ import { expect, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
  */
 export const PLAN_SURFACE = ".diff-plan";
 
+/** The rendered preview that replaces the source view when the Preview toggle is on;
+ * a role-less container, so its class is the handle. */
+export const PLAN_PREVIEW = ".plan-preview";
+
 /**
  * A banded code row's gutter→content seam-fill strip, as Chromium serializes it: a shadow
  * layer pulled left by the two insets, with no blur and no spread.

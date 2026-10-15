@@ -766,8 +766,8 @@
   {/if}
 
   {#if active}
-    <!-- The plan rendered as line-numbered markdown source with a heading
-         breadcrumbs bar and a line gutter for creating comments. The
+    <!-- The plan, as line-numbered markdown source (breadcrumbs bar, comment
+         gutter) or a rendered preview. The
          resolved theme id is passed down because the view renders into a shadow
          root and can't read the palette off the chrome. -->
     <DiffPlanView

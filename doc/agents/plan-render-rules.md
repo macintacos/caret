@@ -2,13 +2,16 @@
 
 *Audience: coding agents and contributors changing how a plan is rendered —
 `ui/src/lib/diffview/`, the `SourceView` / `DiffPlanView` components, and the preview
-renderer `ui/src/lib/planMarkdown.ts`.*
+renderer `ui/src/lib/planMarkdown.ts`, its mount `ui/src/components/PlanPreview.svelte`,
+and the source/preview surface table `ui/src/lib/planView.ts`.*
 
 The **source view** renders a plan as **line-numbered markdown source**. Every decoration
 the reviewer sees is drawn over the characters they would copy. Everything up to § The
 preview renderer is the contract the whole `ui/src/lib/diffview/` layer shares; each
 module's own header carries only what is local to it. The preview is a second surface
-rendered from the same stored text, not an exception to transform-in-place.
+rendered from the same stored text, not an exception to transform-in-place. The reader
+switches between the two with the plan view's **Preview** toggle; compare mode always
+shows source.
 
 ## Transform in place (EXC-855)
 
@@ -174,5 +177,27 @@ exist today.
   anything else renders as its label.
 - **Images** that pass `isSafeUrl` carry `IMAGE_ATTRIBUTES`, never `srcset`, `style` or
   `title`; anything else renders as its alt text.
-- **`[/]`** renders as `data-task="slashed"`; whoever mounts the preview sets
-  `indeterminate` on it.
+- **`[/]`** renders as `data-task="slashed"`. `indeterminate` has no attribute form, so
+  `PlanPreview.svelte` sets the property on each such input after every mount of new HTML.
+
+## Surfaces
+
+`SURFACE_BEHAVIORS` in `ui/src/lib/planView.ts` is the one place a source-view behavior
+declares the surfaces it runs on: `source`, `preview`, or `compare`. `DiffPlanView` gates
+each behavior through `runsOn`.
+
+The gates exist because `SourceView` hands `DiffPlanView` an `api` and its `host`, and
+nothing clears them when `SourceView` unmounts. An effect, shortcut, or surface outside
+`SourceView`'s branch that reads them keeps acting on a detached shadow root unless it
+gates through `runsOn`. So a row covers each effect, shortcut `enabled` guard, and
+control-row or lane surface in `DiffPlanView` outside that branch. Anything inside the
+branch unmounts with it and needs no gate.
+
+Adding `"preview"` to a row switches on the source implementation, which still reads the
+stale `api` and `host`. A port gives the behavior a preview implementation first, then
+adds `"preview"` to its row.
+
+The preview renders a version once. `memoLast` returns the last result for the same text,
+so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same
+version every tick; without the memo each tick would re-lex and re-sanitize the whole
+plan.

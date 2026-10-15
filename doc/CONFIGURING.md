@@ -393,7 +393,7 @@ to, so add one only to set it apart.
 
 ### `markdown`
 
-The plan view renders the plan as markdown source, and these optional styles color its
+The plan's source view renders it as markdown source, and these optional styles color its
 elements. Each is an object with a `color` and an optional `fontStyle`, the same shape as
 a syntax role. A file that omits an element, or the whole `markdown` object, paints it as
 caret does by default.
