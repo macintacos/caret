@@ -79,14 +79,14 @@ export async function highlightPreviewCode(
     // task; chunk it through grammar state as highlightChunk does if that bites.
     await nextTask();
     if (signal.aborted) return;
-    const text = code.textContent ?? "";
+    const originalText = code.textContent ?? "";
     const tokens = await tokenize(previewCodeText(code), language);
     if (signal.aborted) return;
     if (tokens === null) continue;
     // One fragment, not a spread: a huge block's nodes would exceed a call's argument limit.
     const fragment = document.createDocumentFragment();
     fragment.append(...tokenNodes(tokens), "\n");
-    if (fragment.textContent === text) code.replaceChildren(fragment);
+    if (fragment.textContent === originalText) code.replaceChildren(fragment);
   }
 }
 

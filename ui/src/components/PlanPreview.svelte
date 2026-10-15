@@ -56,7 +56,7 @@
     void themeFor(theme);
     const controller = new AbortController();
     void highlightPreviewCode(el, languages, {
-      tokenize: (c, l) => highlightTokens(c, l, theme),
+      tokenize: (code, language) => highlightTokens(code, language, theme),
       nextTask: () => new Promise((resolve) => setTimeout(resolve, 0)),
       signal: controller.signal,
     });
