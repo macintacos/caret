@@ -37,7 +37,7 @@ digraph caret_rules_router {
     "What does the change touch?" -> "Load doc/agents/typescript-rules.md" [label="TS module shape: DI, file-split seams, zod boundaries, helpers, import aliases (@/)"];
     "What does the change touch?" -> "Load doc/agents/svelte-rules.md" [label="Svelte UI in ui/: components, runes, state factories, CSS tokens"];
     "What does the change touch?" -> "Load doc/agents/shadcn-rules.md" [label="composing UI from shadcn-svelte components: compose-first norm, token bridge, icon swap, what stays custom"];
-    "What does the change touch?" -> "Load doc/agents/plan-render-rules.md" [label="how a plan is rendered: ui/src/lib/diffview/, the layer pipeline and its invariants, the preview renderer ui/src/lib/planMarkdown.ts, its source-line map ui/src/lib/planSourceMap.ts, its mount ui/src/components/PlanPreview.svelte and the source/preview surface table ui/src/lib/planView.ts"];
+    "What does the change touch?" -> "Load doc/agents/plan-render-rules.md" [label="how a plan is rendered: ui/src/lib/diffview/, the layer pipeline and its invariants, the preview renderer ui/src/lib/planMarkdown.ts, its source-line map ui/src/lib/planSourceMap.ts, its code-block highlight pass ui/src/lib/previewCode.ts, its mount ui/src/components/PlanPreview.svelte and the source/preview surface table ui/src/lib/planView.ts"];
     "What does the change touch?" -> "Load doc/agents/browser-testing.md" [label="testing browser behavior: e2e vs. unit, the e2e harness"];
     "What does the change touch?" -> "Load doc/agents/test-layout.md" [label="where a backend test suite belongs under test/"];
     "What does the change touch?" -> "Load doc/agents/logging-rules.md" [label="logging: levels, message style, redaction"];

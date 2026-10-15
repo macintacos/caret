@@ -16,13 +16,19 @@
 // ui/src/lib/diffview/codeBlockScroll.test.ts, the three CSS rules in
 // ui/src/lib/diffview/coreStyles.test.ts, and the chrome component's own render branches
 // in ui/src/components/CodeBlockChrome.test.ts.
+//
+// The `on the preview` specs carry the same chrome onto the plan preview's light-DOM `pre`
+// blocks. They need a browser for the measured `pre` overflow and height a wrap changes,
+// the clipboard a copy writes, and wheel scroll. The pure halves are units: the preview
+// suite in ui/src/lib/diffview/codeChrome.test.ts, applyPreviewReflow in
+// ui/src/lib/previewCode.test.ts, and the two preview cases in
+// ui/src/components/DiffPlanView.test.ts.
 
 import type { Page } from "@playwright/test";
 
 import { previewToggle } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
-import * as sourceView from "@test/e2e/support/source-view.ts";
-import { planSurface, settledMutations } from "@test/e2e/support/source-view.ts";
+import { PLAN_PREVIEW, planSurface, settledMutations } from "@test/e2e/support/source-view.ts";
 
 // One block far wider than the reading width (so it cards and offers the wrap toggle) and
 // one inside it (so it does not) — the pair every assertion below reads the per-block
@@ -361,7 +367,6 @@ test("the wrap toggle is reachable and operable from the keyboard", async ({ dae
 });
 
 test.describe("on the preview", () => {
-  const { PLAN_PREVIEW } = sourceView;
   // The same chrome over the preview's light-DOM blocks: a block's `pre` follows the
   // source-line marker of its first code line, one past its opening fence.
   const previewPre = (start: number) =>

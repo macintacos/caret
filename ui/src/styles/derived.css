@@ -42,4 +42,6 @@
      noticed, worn through the .count-attention atom. Reach for it when a surface
      does the novelty job and needs a fill rather than just ink. */
   --attention-wash: color-mix(in lab, var(--attention) 18%, transparent);
+
+  --code-panel: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
 }

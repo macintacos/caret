@@ -1,9 +1,10 @@
-// Standalone syntax highlighting for the filename-hover excerpt (EXC-687). The
+// Standalone syntax highlighting for the filename-hover excerpt (EXC-687) and the
+// plan preview's code blocks (EXC-2015). The
 // @pierre/diffs library keeps its own private highlighter, so this builds a small
 // dedicated one bound to shiki's full grammar bundle and caret's themes (built-ins
 // up front, a runtime theme on first use and again under its fresh name after a
 // replace), then highlights an excerpt to the caret theme in effect, so the
-// preview reads like the plan view's own code. Three entry points share it:
+// file preview reads like the plan view's own code. Three entry points share it:
 // highlightExcerpt colours a whole window in one pass, highlightChunk colours a
 // file a piece at a time and hands back the grammar state each piece ended on, so
 // a construct that opens in one chunk still colours the next, and highlightTokens
@@ -112,8 +113,8 @@ export type ChunkState = GrammarState;
  */
 export const MAX_HIGHLIGHT_LINE_CHARS = 1024;
 
-/** Whether `code` holds a line past `MAX_HIGHLIGHT_LINE_CHARS`, which both entry
- * points refuse wholesale rather than tokenize — see the `ponytail:` note in
+/** Whether `code` holds a line past `MAX_HIGHLIGHT_LINE_CHARS`, which every entry
+ * point refuses wholesale rather than tokenize — see the `ponytail:` note in
  * highlightChunk for why the offending line's neighbours go down with it. */
 function hasUnhighlightableLine(code: string): boolean {
   return code.split("\n").some((line) => line.length > MAX_HIGHLIGHT_LINE_CHARS);

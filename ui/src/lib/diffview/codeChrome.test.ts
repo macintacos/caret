@@ -195,8 +195,8 @@ describe("preview code chrome", () => {
     const read = previewReader(pres, scroller);
     // top = 10 - (5 - 50) = 55 ; left = 300 - (8 - 10) = 302
     expect(previewCodeChromeAnchors(root, scroller, new Set(), read)).toEqual([
-      { start: 3, top: 55, left: 302, carded: false },
-      { start: 8, top: 95, left: 302, carded: false },
+      { start: 3, top: 55, left: 302, carded: false, text: "a" },
+      { start: 8, top: 95, left: 302, carded: false, text: "b" },
     ]);
     root.remove();
   });
@@ -214,11 +214,28 @@ describe("preview code chrome", () => {
     root.remove();
   });
 
+  function previewTexts(plan: string): (string | undefined)[] {
+    const root = document.createElement("div");
+    root.innerHTML = renderPlanMarkdown(plan).html;
+    const scroller = document.createElement("div");
+    return previewCodeChromeAnchors(root, scroller, new Set()).map((a) => a.text);
+  }
+
+  test("carries the block's own text when it quotes a shorter fence", () => {
+    const plan = ["````md", "```ts", "const a = 1;", "```", "````", ""].join("\n");
+    expect(previewTexts(plan)).toEqual(["```ts\nconst a = 1;\n```"]);
+  });
+
+  test("carries a list-nested block's text de-indented", () => {
+    const plan = ["- item", "", "  ```", "  x", "  y", "  ```", ""].join("\n");
+    expect(previewTexts(plan)).toEqual(["x\ny"]);
+  });
+
   test("hits the block under the point, and nothing between blocks", () => {
     const { root, pres } = mountPreview();
     const read = previewReader(pres, document.createElement("div"));
     expect(previewCodeBlockAtPoint(root, 150, 60, read)).toBe(8);
-    expect(previewCodeBlockAtPoint(root, 150, 40, read)).toBeNull();
+    expect(previewCodeBlockAtPoint(root, 150, 40, read)).toBeUndefined();
     root.remove();
   });
 });

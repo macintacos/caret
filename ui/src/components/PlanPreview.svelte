@@ -3,10 +3,10 @@
   // div[data-source-start][data-source-end] blocks stay direct children for the
   // source-mapped features to find. DiffPlanView decides which text and when; this only
   // mounts it, sets what HTML cannot carry, and styles it; it highlights its code blocks
-  // after the plain first paint, and marks the soft-wrapped ones.
+  // after the plain block mounts, and marks the soft-wrapped ones.
   import { highlightTokens } from "$lib/diffview/highlight.ts";
   import { applyPreviewReflow, highlightPreviewCode } from "$lib/previewCode.ts";
-  import type { ThemeId } from "$lib/theme.ts";
+  import { type ThemeId, themeFor } from "$lib/theme.ts";
 
   interface Props {
     /** renderPlanMarkdown's already-sanitized HTML. Inserted unescaped. */
@@ -17,6 +17,9 @@
     themeId?: ThemeId;
     /** Opening fence lines of the soft-wrapped blocks, shared with the source view. */
     reflowedBlocks?: ReadonlySet<number>;
+    /** The element whose content is exactly the rendered HTML — what createPlanSourceMap
+     * and the chrome geometry walk. Bindable, and cleared on unmount, unlike an onReady
+     * handle. */
     root?: HTMLDivElement;
   }
   let {
@@ -42,20 +45,21 @@
     if (event.target instanceof HTMLImageElement) event.target.hidden = true;
   }
 
-  // Every input is read before the first await, so a theme switch re-runs the pass.
+  // Read every input here rather than inside the async pass, so Svelte tracks them: a
+  // theme switch, or a replace of the showing theme, re-runs it.
   $effect(() => {
     void html;
     const el = root;
     const theme = themeId;
     const languages = codeLanguages;
     if (!el || theme === undefined) return;
+    void themeFor(theme);
     const controller = new AbortController();
-    void highlightPreviewCode(
-      el,
-      languages,
-      (c, l) => highlightTokens(c, l, theme),
-      controller.signal,
-    );
+    void highlightPreviewCode(el, languages, {
+      tokenize: (c, l) => highlightTokens(c, l, theme),
+      nextTask: () => new Promise((resolve) => setTimeout(resolve, 0)),
+      signal: controller.signal,
+    });
     return () => controller.abort();
   });
 
@@ -275,18 +279,18 @@
   .plan-preview :global(img) {
     max-width: 100%;
   }
-  /* The source view's code panel fill, so a block reads the same in both views. The
-     inline-end padding keeps the top-right copy and wrap chrome off the code. */
-  .plan-preview :global(pre:has(> code)) {
+  /* The source view's code panel fill. The inline-end padding keeps the top-right copy
+     and wrap chrome off the code. */
+  .plan-preview :global([data-source-code] + pre) {
     padding-block: 0.6rem;
     padding-inline: 2ch 4.5rem;
     border-radius: var(--radius);
-    background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
+    background-color: var(--code-panel);
     font-family: var(--font-mono);
     font-size: var(--text-sm);
-    line-height: 1.5;
+    line-height: var(--leading-relaxed);
   }
-  .plan-preview :global(pre > code) {
+  .plan-preview :global([data-source-code] + pre > code) {
     font-family: inherit;
   }
   .plan-preview :global(pre[data-code-reflow]) {

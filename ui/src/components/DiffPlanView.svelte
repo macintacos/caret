@@ -37,6 +37,7 @@
   import { type BracketSpan, bracketLayer } from "$lib/diffview/bracket.ts";
   import { type CodeBlockRange, codeBlockRanges, codeBlockText } from "$lib/diffview/codeBlocks.ts";
   import {
+    type ChromeGeometry,
     codeBlockAtPoint,
     type CodeChromeAnchor,
     codeChromeAnchors,
@@ -177,8 +178,10 @@
      * same expose-upward idiom as onExposeReveal. */
     onCompareChange?: (versions: { before: number; after: number } | null) => void;
     /** The active caret theme, forwarded to the shadow-DOM diff view so its shiki
-     * highlighting is painted in the selected palette (EXC-730, EXC-752). Omitted
-     * leaves the library on caret's pair following the system preference. */
+     * highlighting is painted in the selected palette (EXC-730, EXC-752), and to
+     * PlanPreview, where it colours the preview's code blocks. Omitted leaves the
+     * library on caret's pair following the system preference, and the preview's code
+     * blocks plain. */
     themeId?: ThemeId;
     /** Whether the shortcut-hint affordances are shown (EXC-826); gates the V-mode
      * "c comment · Esc cancel" chip. Defaults to shown; the shortcut still fires. */
@@ -758,9 +761,9 @@
   type ChromeBox = CodeChromeAnchor & { text: string };
   let chromeBoxes = $state<ChromeBox[]>([]);
 
-  // A version switch or a fresh SourceView leaves the boxes holding the previous
-  // document's coordinates and code, and the first re-sync is a frame away — long enough
-  // to paint them over rows they were never measured on.
+  // A version switch, a fresh SourceView, or a flip between source and preview leaves the
+  // boxes holding the previous document's coordinates and code, and the first re-sync is a
+  // frame away — long enough to paint them over rows they were never measured on.
   $effect(() => {
     void contentKey;
     void host;
@@ -776,13 +779,7 @@
   // row, before the surface mounts, or with no fenced block. A preview block joins a
   // source block by `start`, so one the source view does not see gets no chrome.
   const chromeGeometry = $derived.by(
-    ():
-      | {
-          observed: HTMLElement;
-          blockAt: (x: number, y: number) => number | undefined;
-          anchors: (scroller: HTMLElement) => CodeChromeAnchor[];
-        }
-      | undefined => {
+    (): ChromeGeometry | undefined => {
       const blocks = codeBlocks;
       if (!runs("codeChrome") || blocks.length === 0) return undefined;
       if (surface === "preview") {
@@ -790,7 +787,7 @@
         if (root == null) return undefined;
         return {
           observed: root,
-          blockAt: (x, y) => previewCodeBlockAtPoint(root, x, y) ?? undefined,
+          blockAt: (x, y) => previewCodeBlockAtPoint(root, x, y),
           anchors: (scroller) => previewCodeChromeAnchors(root, scroller, reflowedBlocks),
         };
       }
@@ -843,11 +840,12 @@
   });
 
   // Keep every block's chrome anchored, the same shape as the reference-hint sync below:
-  // rAF-throttled, re-run from a ResizeObserver over the host. Content coordinates survive
-  // scrolling by construction, so what has to be caught is anything that changes a block's
-  // box — a library repaint, a block moving into or out of its scroll card, a viewport
-  // resize — and all of them change the rendered height the observer watches. The chrome
-  // is a light-DOM child of .diff-plan, so it scrolls with the rows for free.
+  // rAF-throttled, re-run from a ResizeObserver over the surface's content
+  // (`geometry.observed`). Content coordinates survive scrolling by construction, so what
+  // has to be caught is anything that changes a block's box — a library repaint, a block
+  // moving into or out of its scroll card, a viewport resize — and all of them change the
+  // rendered height the observer watches. The chrome is a light-DOM child of .diff-plan,
+  // so it scrolls with the rows for free.
   $effect(() => {
     const scroller = scrollEl;
     const geometry = chromeGeometry;
@@ -855,9 +853,6 @@
     // A wrap toggle changes a block's height: depending on it re-measures now rather than
     // waiting for the ResizeObserver to report the new box.
     void reflowedBlocks;
-    // Nothing to anchor off the codeChrome surfaces — they render no chrome, and their
-    // content is a different document, so syncing there would walk the source view's
-    // torn-out shadow root.
     if (scroller == null || geometry === undefined) {
       chromeBoxes = [];
       return;
@@ -867,15 +862,16 @@
     const sync = () => {
       raf = 0;
       chromeBoxes = geometry.anchors(scroller).flatMap((anchor) => {
-        const text = codeByStart.get(anchor.start);
-        return text === undefined ? [] : [{ ...anchor, text }];
+        const sourceText = codeByStart.get(anchor.start);
+        return sourceText === undefined ? [] : [{ ...anchor, text: anchor.text ?? sourceText }];
       });
     };
     const schedule = () => {
       if (raf === 0) raf = requestAnimationFrame(sync);
     };
-    // The rows are tagged and carded on a frame off SourceView's MutationObserver, so
-    // there is nothing to measure for the first few frames after a document arrives.
+    // The source rows are tagged and carded on a frame off SourceView's MutationObserver,
+    // so there is nothing to measure for the first few frames after a document arrives;
+    // on the preview the first sync measures.
     const cancelFrames = retryFrames(() => {
       sync();
       return chromeBoxes.length > 0;
@@ -1135,20 +1131,18 @@
     };
   }
 
-  const previewEl = (): Element | null => scrollEl?.querySelector(".plan-preview") ?? null;
-
   function capturePlace(): void {
     if (planView === "source") {
       const line = topVisibleLine();
       if (line == null) return;
       releasePlace();
-      releasePlace = keepPlace(previewEl, () => {
-        const preview = previewEl();
+      releasePlace = keepPlace(() => previewEl, () => {
+        const preview = previewEl;
         const i = planPreview ? blockIndexForLine(planPreview.blocks, line) : null;
         return preview && i != null ? (preview.children[i] ?? null) : null;
       });
     } else {
-      const preview = previewEl();
+      const preview = previewEl;
       carriedLine =
         scrollEl && preview && planPreview
           ? previewTopLine(scrollEl.getBoundingClientRect().top, preview, planPreview.blocks)
@@ -1760,7 +1754,11 @@
          is a clean surface with no gutter and no inline annotations; the compared
          versions' comments read in the docked panel instead (EXC-872). -->
     <div class="diff-plan" bind:this={scrollEl} onmouseenter={showDragHint} role="presentation">
-      <!-- The per-code-block chrome, rendered by the source and preview branches below. -->
+      <!-- The per-code-block chrome, keyed on the block's opening line so a re-anchor
+           updates each box's props and leaves the instance — and its copied/checkmark
+           state — alone. A snippet rendered in both branches below, not once after the
+           {/if}, so it keeps its place in the source view's DOM order against the overlays
+           that follow it. -->
       {#snippet codeChrome()}
         {#each chromeBoxes as chromeBox (chromeBox.start)}
           <CodeBlockChrome
@@ -1857,10 +1855,8 @@
         <div use:bracketLayer={{ host, spans: bracketSpans }}></div>
         <!-- The per-code-block chrome (EXC-692, EXC-1386): copy at the top-right of every
              fenced block, plus soft wrap on the ones that overflow, resting dimmed and
-             brightening under the pointer. Keyed on the block's opening line so a re-anchor
-             updates each box's props and leaves the instance — and its copied/checkmark
-             state — alone. It layers over the .diff-plan scroll content, so like the bracket
-             rails it scrolls with the rows. -->
+             brightening under the pointer. It layers over the .diff-plan scroll content, so
+             like the bracket rails it scrolls with the rows. -->
         {@render codeChrome()}
         <!-- The one-time reference hints (EXC-1061): one badge over the first
              on-screen file reference and one over the first directory reference,

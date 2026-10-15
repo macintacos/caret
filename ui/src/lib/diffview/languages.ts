@@ -6,7 +6,9 @@
 // default fenced code renders as one un-tokenized markdown "raw" color. This
 // module closes that gap: it scans the plan for the languages its fences use and
 // attaches those grammars to the library's shared highlighter, so the markdown
-// grammar's embedded rules light the code up.
+// grammar's embedded rules light the code up. It is also the fence-to-grammar
+// resolver (fenceGrammar) the preview renderer shares: where an info string is
+// reduced to a bundled grammar or none.
 //
 // This is the single owner of the fenced-language @pierre/diffs imports, mirroring
 // how theme.ts owns the theme registration.
@@ -22,31 +24,31 @@ const BUNDLED: ReadonlySet<string> = new Set(Object.keys(bundledLanguages));
 // Fence info-strings agents write don't always match shiki's canonical grammar
 // name; map the common aliases onto the grammar that actually carries their
 // scope so ```sh and ```py resolve.
-const ALIAS: Readonly<Record<string, string>> = {
-  js: "javascript",
-  mjs: "javascript",
-  cjs: "javascript",
-  node: "javascript",
-  ts: "typescript",
-  py: "python",
-  python3: "python",
-  rb: "ruby",
-  rs: "rust",
-  golang: "go",
-  sh: "shellscript",
-  bash: "shellscript",
-  zsh: "shellscript",
-  shell: "shellscript",
-  console: "shellscript",
-  yml: "yaml",
-  "c++": "cpp",
-  cxx: "cpp",
-  cc: "cpp",
-  hpp: "cpp",
-  htm: "html",
-  docker: "dockerfile",
-  gql: "graphql",
-};
+const ALIAS: ReadonlyMap<string, string> = new Map([
+  ["js", "javascript"],
+  ["mjs", "javascript"],
+  ["cjs", "javascript"],
+  ["node", "javascript"],
+  ["ts", "typescript"],
+  ["py", "python"],
+  ["python3", "python"],
+  ["rb", "ruby"],
+  ["rs", "rust"],
+  ["golang", "go"],
+  ["sh", "shellscript"],
+  ["bash", "shellscript"],
+  ["zsh", "shellscript"],
+  ["shell", "shellscript"],
+  ["console", "shellscript"],
+  ["yml", "yaml"],
+  ["c++", "cpp"],
+  ["cxx", "cpp"],
+  ["cc", "cpp"],
+  ["hpp", "cpp"],
+  ["htm", "html"],
+  ["docker", "dockerfile"],
+  ["gql", "graphql"],
+]);
 
 // Opening fences: 3+ backticks or tildes (≤3 leading spaces per CommonMark),
 // then the info string's first token. A closing fence has no token, so it never
@@ -55,7 +57,9 @@ const ALIAS: Readonly<Record<string, string>> = {
 // fence shown *inside* another fenced block is scanned too, so a language may be
 // over-attached (one extra on-demand chunk). It never under-attaches, which is
 // what matters.
-const FENCE_RE = /^[ \t]{0,3}(?:`{3,}|~{3,})[ \t]*([A-Za-z0-9_+#.-]+)/gm;
+const TAG_CLASS = "[A-Za-z0-9_+#.-]";
+const FENCE_RE = new RegExp(`^[ \\t]{0,3}(?:\`{3,}|~{3,})[ \\t]*(${TAG_CLASS}+)`, "gm");
+const LEADING_TAG_RE = new RegExp(`^${TAG_CLASS}*`);
 
 /**
  * Canonical grammar names for the fenced code blocks in `text`, limited to the
@@ -73,11 +77,11 @@ export function scanFenceLanguages(text: string): string[] {
   return [...found].sort();
 }
 
-/** The bundled grammar a fence's info string names (its first word, lower-cased and
- * alias-resolved), or null when it names none. */
+/** The bundled grammar a fence's info string names (its leading tag — the same token
+ * the fence scan reads — lower-cased and alias-resolved), or null when it names none. */
 export function fenceGrammar(info: string): string | null {
-  const tag = (info.trim().split(/\s/, 1)[0] ?? "").toLowerCase();
-  const lang = Object.hasOwn(ALIAS, tag) ? (ALIAS[tag] as string) : tag;
+  const tag = (LEADING_TAG_RE.exec(info.trim())?.[0] ?? "").toLowerCase();
+  const lang = ALIAS.get(tag) ?? tag;
   return BUNDLED.has(lang) ? lang : null;
 }
 

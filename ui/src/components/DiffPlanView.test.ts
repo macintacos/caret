@@ -1,6 +1,8 @@
 import "@ui/support/mount.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { flushSync } from "svelte";
+
 import type { ClientReview, PlanVersion } from "@core/lib/types";
 import { until } from "@test/support/poll.ts";
 import { expectViewRecreated } from "@ui/support/diffview.ts";
@@ -555,9 +557,9 @@ describe("DiffPlanView code-block chrome", () => {
     const target = await renderPreviewWithBlocks();
     await until(() => chromeBoxes(target).length === 2);
     previewToggle(target)!.click();
-    await until(() => target.querySelector(".plan-preview") == null);
+    flushSync();
+    expect(chromeBoxes(target).length).toBe(0);
     await until(() => chromeBoxes(target).length === 2);
-    expect(target.querySelector(".plan-preview .code-chrome") != null).toBe(false);
     expect(copyLabels(target)).toEqual(["Copy code from line 3", "Copy code from line 7"]);
   });
 });

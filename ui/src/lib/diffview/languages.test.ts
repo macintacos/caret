@@ -54,6 +54,11 @@ describe("fenceGrammar", () => {
     expect(fenceGrammar("markdown")).toBe("markdown");
   });
 
+  test("reads the same leading token as the fence scan when attributes abut the tag", () => {
+    expect(fenceGrammar("ts:src/a.ts")).toBe("typescript");
+    expect(fenceGrammar("js{1,3}")).toBe("javascript");
+  });
+
   test("names no grammar for plain text, unknown, empty, or hostile info strings", () => {
     for (const info of ["text", "nosuchlang", "", "__proto__", "constructor", '"><script>']) {
       expect(fenceGrammar(info)).toBeNull();

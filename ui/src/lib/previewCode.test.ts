@@ -8,6 +8,7 @@ import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
 import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
 import {
   applyPreviewReflow,
+  type HighlightDeps,
   highlightPreviewCode,
   previewCodeBlocks,
   type Tokenize,
@@ -57,15 +58,20 @@ const real: Tokenize = (c, l) => highlightTokens(c, l, "caret-dark");
 const instant: Tokenize = async (code) =>
   code.split("\n").map((content) => [{ content, offset: 0, color: "#ff0000" } as ThemedToken]);
 
-async function flushMicrotasks(): Promise<void> {
-  for (let i = 0; i < 20; i++) await Promise.resolve();
+function deps(tokenize: Tokenize, signal = new AbortController().signal): HighlightDeps {
+  return { tokenize, nextTask: async () => {}, signal };
 }
 
-// Bun runs every due timer before draining microtasks, so the pass's own timer
-// fires alongside this one and its continuation needs a flush after.
-async function tick(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await flushMicrotasks();
+/** A nextTask the test resolves by hand, one task at a time. */
+function manualTasks(): { nextTask: () => Promise<void>; run: () => Promise<void> } {
+  const waiting: (() => void)[] = [];
+  return {
+    nextTask: () => new Promise((resolve) => waiting.push(resolve)),
+    run: async () => {
+      waiting.shift()?.();
+      for (let i = 0; i < 20; i++) await Promise.resolve();
+    },
+  };
 }
 
 function isHighlighted(code: Element): boolean {
@@ -98,7 +104,7 @@ describe("highlightPreviewCode", () => {
     const { root, languages } = mount(PLAN);
     const [code] = codes(root);
     const before = code?.textContent;
-    await highlightPreviewCode(root, languages, real, new AbortController().signal);
+    await highlightPreviewCode(root, languages, deps(real));
     const spans = [...(code?.querySelectorAll("span") ?? [])];
     expect(spans.length).toBeGreaterThan(1);
     expect(spans.some((span) => span.style.color !== "")).toBe(true);
@@ -107,7 +113,7 @@ describe("highlightPreviewCode", () => {
 
   test("leaves a block no language names as its single text node", async () => {
     const { root, languages } = mount(PLAN);
-    await highlightPreviewCode(root, languages, real, new AbortController().signal);
+    await highlightPreviewCode(root, languages, deps(real));
     const plain = codes(root)[2];
     expect(plain?.childNodes.length).toBe(1);
     expect(plain?.firstChild?.nodeType).toBe(Node.TEXT_NODE);
@@ -115,23 +121,32 @@ describe("highlightPreviewCode", () => {
 
   test("leaves a block untouched when the tokenizer gives up", async () => {
     const { root, languages } = mount(PLAN);
-    await highlightPreviewCode(root, languages, async () => null, new AbortController().signal);
+    await highlightPreviewCode(
+      root,
+      languages,
+      deps(async () => null),
+    );
     expect(codes(root).some(isHighlighted)).toBe(false);
   });
 
   test("leaves a block untouched when the tokens' text differs from it", async () => {
     const { root, languages } = mount(PLAN);
     const wrong: Tokenize = async () => [[{ content: "other", offset: 0 } as ThemedToken]];
-    await highlightPreviewCode(root, languages, wrong, new AbortController().signal);
+    await highlightPreviewCode(root, languages, deps(wrong));
     expect(codes(root).some(isHighlighted)).toBe(false);
   });
 
-  test("highlights one block per task", async () => {
+  test("highlights one block per task, none in the calling one", async () => {
     const { root, languages } = mount(PLAN);
-    const pass = highlightPreviewCode(root, languages, instant, new AbortController().signal);
-    await flushMicrotasks();
+    const tasks = manualTasks();
+    const pass = highlightPreviewCode(root, languages, {
+      ...deps(instant),
+      nextTask: tasks.nextTask,
+    });
+    expect(codes(root).map(isHighlighted)).toEqual([false, false, false]);
+    await tasks.run();
     expect(codes(root).map(isHighlighted)).toEqual([true, false, false]);
-    await tick();
+    await tasks.run();
     expect(codes(root).map(isHighlighted)).toEqual([true, true, false]);
     await pass;
   });
@@ -139,13 +154,16 @@ describe("highlightPreviewCode", () => {
   test("stops at the next block once the signal aborts", async () => {
     const { root, languages } = mount(PLAN);
     const controller = new AbortController();
-    const abortAfterFirst: Tokenize = async (code, language) => {
-      const tokens = await instant(code, language);
-      controller.abort();
-      return tokens;
-    };
-    await highlightPreviewCode(root, languages, abortAfterFirst, controller.signal);
-    expect(isHighlighted(codes(root)[1] as HTMLElement)).toBe(false);
+    const tasks = manualTasks();
+    const pass = highlightPreviewCode(root, languages, {
+      ...deps(instant, controller.signal),
+      nextTask: tasks.nextTask,
+    });
+    await tasks.run();
+    controller.abort();
+    await tasks.run();
+    await pass;
+    expect(codes(root).map(isHighlighted)).toEqual([true, false, false]);
   });
 
   test("a second pass in another theme repaints a highlighted block", async () => {
@@ -153,10 +171,10 @@ describe("highlightPreviewCode", () => {
     const [code] = codes(root);
     const before = code?.textContent;
     const colours = () => [...(code?.querySelectorAll("span") ?? [])].map((s) => s.style.color);
-    await highlightPreviewCode(root, languages, real, new AbortController().signal);
+    await highlightPreviewCode(root, languages, deps(real));
     const dark = colours();
     const light: Tokenize = (c, l) => highlightTokens(c, l, "caret-light");
-    await highlightPreviewCode(root, languages, light, new AbortController().signal);
+    await highlightPreviewCode(root, languages, deps(light));
     expect(colours()).not.toEqual(dark);
     expect(code?.textContent).toBe(before);
   });
@@ -189,7 +207,7 @@ describe("the source map over highlighted code", () => {
   test("maps built before and after the pass both answer", async () => {
     const { root, languages } = mount(CODE);
     const before = createPlanSourceMap(root);
-    await highlightPreviewCode(root, languages, real, new AbortController().signal);
+    await highlightPreviewCode(root, languages, deps(real));
     expect(root.querySelectorAll("pre span").length).toBeGreaterThan(1);
     expectCodeLines(root, before);
     expectCodeLines(root, createPlanSourceMap(root));

@@ -3,13 +3,7 @@
 // APIs, never parsed markup, so neither the fence's language nor the theme reaches
 // markup, and a block's text stays byte-identical to the fence's for the source map.
 
-import type { ThemedToken } from "shiki/core";
-
-// shiki's FontStyle bit flags; its enum is const, so it has no runtime export.
-const ITALIC = 1;
-const BOLD = 2;
-const UNDERLINE = 4;
-const STRIKETHROUGH = 8;
+import { getTokenStyleObject, type ThemedToken } from "shiki/core";
 
 /** A code block in the mounted preview: the `pre` right after a `data-source-code` marker. */
 export interface PreviewCodeBlock {
@@ -35,20 +29,21 @@ export function previewCodeBlocks(root: ParentNode): PreviewCodeBlock[] {
   return blocks;
 }
 
+/** Tokens per line, or null to leave the block plain. Must not reject: the pass runs detached. */
 export type Tokenize = (code: string, language: string) => Promise<ThemedToken[][] | null>;
+
+export interface HighlightDeps {
+  tokenize: Tokenize;
+  /** Resolves on a later task. Production passes a setTimeout(0) promise. */
+  nextTask: () => Promise<void>;
+  signal: AbortSignal;
+}
 
 function tokenSpan(token: ThemedToken): HTMLSpanElement {
   const span = document.createElement("span");
   span.textContent = token.content;
-  if (token.color) span.style.color = token.color;
-  const style = token.fontStyle ?? 0;
-  if (style & ITALIC) span.style.fontStyle = "italic";
-  if (style & BOLD) span.style.fontWeight = "bold";
-  const lines = [
-    style & UNDERLINE ? "underline" : "",
-    style & STRIKETHROUGH ? "line-through" : "",
-  ].filter(Boolean);
-  if (lines.length > 0) span.style.textDecoration = lines.join(" ");
+  for (const [property, value] of Object.entries(getTokenStyleObject(token)))
+    span.style.setProperty(property, value);
   return span;
 }
 
@@ -59,27 +54,22 @@ function tokenNodes(lines: ThemedToken[][]): Node[] {
   ]);
 }
 
-/** Highlights each block `languages` names, one block per task, by replacing its `code`'s
- * children with token spans of the same text. A block whose tokens come back null, or
- * whose tokens' text differs from the block's, stays as it is. Returns at the first await
- * after `signal` aborts. */
+/** Highlights each block `languages` names, one block per task and none in the calling
+ * task, by replacing its `code`'s children with token spans of the same text. A block
+ * whose tokens come back null, or whose tokens' text differs from the block's, stays as
+ * it is. Returns at the first await after `signal` aborts. */
 export async function highlightPreviewCode(
   root: ParentNode,
   languages: ReadonlyMap<number, string>,
-  tokenize: Tokenize,
-  signal: AbortSignal,
+  { tokenize, nextTask, signal }: HighlightDeps,
 ): Promise<void> {
-  let first = true;
   for (const { line, code } of previewCodeBlocks(root)) {
     const language = languages.get(line);
     if (language === undefined) continue;
-    if (!first) {
-      // ponytail: yields between blocks only, so one huge block still tokenizes in a
-      // single task; chunk it through grammar state as highlightChunk does if that bites.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      if (signal.aborted) return;
-    }
-    first = false;
+    // ponytail: yields per block only, so one huge block still tokenizes in a single
+    // task; chunk it through grammar state as highlightChunk does if that bites.
+    await nextTask();
+    if (signal.aborted) return;
     const text = code.textContent ?? "";
     const tokens = await tokenize(text.replace(/\n$/, ""), language);
     if (signal.aborted) return;
