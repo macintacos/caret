@@ -38,6 +38,7 @@ import type { ImageSpan, ImageSpanMap } from "$lib/diffview/links.ts";
 
 const IMAGE_ATTR = "data-md-image";
 
+/** The attributes every plan image carries, in the source view and the preview. */
 export const IMAGE_ATTRIBUTES = { referrerpolicy: "no-referrer", loading: "lazy" } as const;
 
 /** The images this module owns on a row, in document order. */

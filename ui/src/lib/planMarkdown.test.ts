@@ -173,6 +173,20 @@ describe("renderPlanMarkdown tasks", () => {
     expect(li?.textContent?.trim()).toBe("doing");
   });
 
+  test("[/] followed by inline markup still renders a slashed checkbox", () => {
+    for (const text of [
+      "- [/] **Phase 2**: wire it",
+      "- [/] `foo` bar",
+      "- [/] [doc](https://a.test) x",
+      "- a\n  - [/] *b*",
+    ]) {
+      const root = fragment(renderPlanMarkdown(text).html);
+      const states = [...root.querySelectorAll("input")].map((i) => i.getAttribute("data-task"));
+      expect(states).toEqual(["slashed"]);
+      expect(root.textContent?.includes("[/]")).toBe(false);
+    }
+  });
+
   test("nested and loose items get the slashed state", () => {
     expect(boxes("- a\n  - [/] nested").map((i) => i.getAttribute("data-task"))).toEqual([
       "slashed",
@@ -208,7 +222,7 @@ describe("renderPlanMarkdown links", () => {
 
 describe("renderPlanMarkdown images", () => {
   test("a safe image loads lazily without a referrer", () => {
-    const html = renderPlanMarkdown("![alt](https://a.test/i.png)").html;
+    const html = renderPlanMarkdown('![alt](https://a.test/i.png "t")').html;
     const img = fragment(html).querySelector("img");
     expect(img?.getAttribute("src")).toBe("https://a.test/i.png");
     expect(img?.getAttribute("loading")).toBe("lazy");
@@ -222,6 +236,32 @@ describe("renderPlanMarkdown images", () => {
       expect(html).not.toContain("<img");
       expect(html).toContain("alt");
     }
+  });
+
+  test("alt text is the image label's plain text", () => {
+    const img = (text: string) =>
+      fragment(renderPlanMarkdown(text).html).querySelector("img")?.getAttribute("alt");
+    expect(img("![**b** _i_](https://a.test/i.png)")).toBe("b i");
+    expect(renderPlanMarkdown("![a & b](https://a.test/i.png)").html).toContain('alt="a &amp; b"');
+    expect(renderPlanMarkdown("![**b** _i_](rel.png)").html).toContain("b i");
+  });
+});
+
+describe("renderPlanMarkdown attribute escaping", () => {
+  test("quotes in a link or image cannot add attributes", () => {
+    const root = fragment(
+      renderPlanMarkdown(
+        [
+          '[x](<https://a.test/"onx="y> "t\\" onx=\\"y")',
+          "",
+          '![a" onx="y](<https://a.test/"onx="y> "t\\" onx=\\"y")',
+        ].join("\n"),
+      ).html,
+    );
+    const names = (selector: string) =>
+      root.querySelector(selector)?.getAttributeNames().sort() ?? [];
+    expect(names("a")).toEqual(["href", "rel", "target", "title"]);
+    expect(names("img")).toEqual(["alt", "loading", "referrerpolicy", "src"]);
   });
 });
 
@@ -253,6 +293,36 @@ describe("renderPlanMarkdown raw HTML", () => {
     expect(root.querySelector("img, video, [style], [srcset]") === null).toBe(true);
   });
 
+  test("no raw tag keeps a URL-bearing attribute", () => {
+    for (const text of [
+      '<a href="https://a.test">a</a>',
+      '<area href="https://a.test">',
+      '<audio src="https://a.test/a"></audio>',
+      '<img src="https://a.test/i.png">',
+      '<video poster="https://a.test/p.png"></video>',
+    ]) {
+      const root = fragment(renderPlanMarkdown(text).html);
+      expect(root.querySelector("[href], [src], [poster], [srcset]") === null).toBe(true);
+    }
+  });
+
+  test("a raw <div> leaves every block a top-level sibling", () => {
+    expect(spans("Wrap it in a <div> here.\n\n# A")).toEqual([
+      [1, 1],
+      [3, 3],
+    ]);
+    expect(spans('<div align="center">\n\n# Title\n\n</div>\n\npara')).toEqual([
+      [1, 1],
+      [3, 3],
+      [5, 5],
+      [7, 7],
+    ]);
+  });
+
+  test("a raw <table> renders as text", () => {
+    expect(renderPlanMarkdown("Render a <table> here.\n\n# Next").html).not.toContain("<table");
+  });
+
   test("a raw <details> survives", () => {
     const root = fragment(renderPlanMarkdown("<details><summary>s</summary></details>").html);
     expect(root.querySelector("details > summary") !== null).toBe(true);
@@ -262,6 +332,7 @@ describe("renderPlanMarkdown raw HTML", () => {
 describe("renderPlanMarkdown speed", () => {
   test("renders a 2,000-line plan in under 200 ms", () => {
     const chunk = [
+      "",
       "## Step",
       "",
       "A paragraph that wraps at ninety columns with a [link](https://a.test) and",

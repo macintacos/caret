@@ -13,12 +13,13 @@ const marked = new Marked({ gfm: true, breaks: true });
 
 export function renderMarkdown(source: string): string {
   const html = marked.parse(source, { async: false }) as string;
-  // The default whitelist already covers the tags marked emits: unknown tags are
+  // This whitelist already covers the tags marked emits: unknown tags are
   // escaped, inline handlers dropped, javascript:/vbscript:/data: URIs stripped.
   return filterXSS(html, { whiteList: htmlWhiteList() });
 }
 
-/** The HTML comment bodies and the plan preview may keep; a fresh copy per call. */
+/** The raw HTML comment bodies keep, which the plan preview narrows: widening it widens
+ * both. A fresh copy per call, so one caller's narrowing never leaks into the other's. */
 export function htmlWhiteList() {
   return getDefaultWhiteList();
 }

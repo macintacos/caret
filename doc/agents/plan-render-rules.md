@@ -162,12 +162,14 @@ exist today.
 - **Blocks.** A block is a top-level marked token that renders to something. Each is
   wrapped in a `div` carrying `data-source-start` / `data-source-end`: 1-based, inclusive,
   over the stored text comment anchors use. Blocks are flat siblings; `blocks[i]` is the
-  i-th.
+  i-th. A block ends at its last non-blank line.
 - **Soft breaks** stay `\n` and render as a space.
 - **Sanitizing.** Only raw-HTML tokens pass through js-xss, using `htmlWhiteList()`
-  (shared with comment bodies) minus `a`, `area`, `audio`, `img` and `video`. Those render
-  as text, so the preview fetches and navigates nothing the source view would not. caret's
-  own markup and attributes never pass through the sanitizer.
+  (shared with comment bodies) minus every tag that may keep a URL-bearing attribute
+  (`href`, `src`, `srcset`, `poster`), plus `div` and `table`, whose unclosed forms would
+  swallow later blocks. Those render as text, so the preview fetches and navigates nothing
+  the source view would not. caret's own markup and attributes never pass through the
+  sanitizer.
 - **Links** that pass `isSafeUrl` open in a new tab with `rel="noopener noreferrer"`;
   anything else renders as its label.
 - **Images** that pass `isSafeUrl` carry `IMAGE_ATTRIBUTES`, never `srcset`, `style` or
