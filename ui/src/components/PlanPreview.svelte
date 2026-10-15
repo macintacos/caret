@@ -2,20 +2,36 @@
   // The plan preview: mounts renderPlanMarkdown's HTML as-is in one container, so its
   // div[data-source-start][data-source-end] blocks stay direct children for the
   // source-mapped features to find. DiffPlanView decides which text and when; this only
-  // mounts it, sets what HTML cannot carry, and styles it.
+  // mounts it, sets what HTML cannot carry, and styles it; it highlights its code blocks
+  // after the plain first paint, and marks the soft-wrapped ones.
+  import { highlightTokens } from "$lib/diffview/highlight.ts";
+  import { applyPreviewReflow, highlightPreviewCode } from "$lib/previewCode.ts";
+  import type { ThemeId } from "$lib/theme.ts";
+
   interface Props {
     /** renderPlanMarkdown's already-sanitized HTML. Inserted unescaped. */
     html: string;
+    /** renderPlanMarkdown's grammar per code block, keyed by its first code line. */
+    codeLanguages?: ReadonlyMap<number, string>;
+    /** The theme to highlight in; omitted leaves code blocks plain. */
+    themeId?: ThemeId;
+    /** Opening fence lines of the soft-wrapped blocks, shared with the source view. */
+    reflowedBlocks?: ReadonlySet<number>;
+    root?: HTMLDivElement;
   }
-  let { html }: Props = $props();
-
-  let container = $state<HTMLDivElement>();
+  let {
+    html,
+    codeLanguages = new Map(),
+    themeId,
+    reflowedBlocks = new Set(),
+    root = $bindable(),
+  }: Props = $props();
 
   $effect(() => {
     void html;
-    if (!container) return;
+    if (!root) return;
     // `indeterminate` has no attribute form, so the sanitized HTML can't carry it.
-    for (const input of container.querySelectorAll<HTMLInputElement>('input[data-task="slashed"]')) {
+    for (const input of root.querySelectorAll<HTMLInputElement>('input[data-task="slashed"]')) {
       input.indeterminate = true;
     }
   });
@@ -25,9 +41,31 @@
   function hideFailedImage(event: Event) {
     if (event.target instanceof HTMLImageElement) event.target.hidden = true;
   }
+
+  // Every input is read before the first await, so a theme switch re-runs the pass.
+  $effect(() => {
+    void html;
+    const el = root;
+    const theme = themeId;
+    const languages = codeLanguages;
+    if (!el || theme === undefined) return;
+    const controller = new AbortController();
+    void highlightPreviewCode(
+      el,
+      languages,
+      (c, l) => highlightTokens(c, l, theme),
+      controller.signal,
+    );
+    return () => controller.abort();
+  });
+
+  $effect(() => {
+    void html;
+    if (root) applyPreviewReflow(root, reflowedBlocks);
+  });
 </script>
 
-<div class="plan-preview" bind:this={container} onerrorcapture={hideFailedImage}>{@html html}</div>
+<div class="plan-preview" bind:this={root} onerrorcapture={hideFailedImage}>{@html html}</div>
 
 <style>
   .plan-preview {
@@ -236,5 +274,23 @@
   }
   .plan-preview :global(img) {
     max-width: 100%;
+  }
+  /* The source view's code panel fill, so a block reads the same in both views. The
+     inline-end padding keeps the top-right copy and wrap chrome off the code. */
+  .plan-preview :global(pre:has(> code)) {
+    padding-block: 0.6rem;
+    padding-inline: 2ch 4.5rem;
+    border-radius: var(--radius);
+    background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: 1.5;
+  }
+  .plan-preview :global(pre > code) {
+    font-family: inherit;
+  }
+  .plan-preview :global(pre[data-code-reflow]) {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 </style>

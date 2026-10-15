@@ -1749,7 +1749,12 @@
           onReady={(a) => (diffApi = a)}
         />
       {:else if planPreview}
-        <PlanPreview html={planPreview.html} />
+        <PlanPreview
+          html={planPreview.html}
+          codeLanguages={planPreview.codeLanguages}
+          {themeId}
+          {reflowedBlocks}
+        />
       {:else}
         <!-- Live range readout: a zero-height sticky rail rendered first so it pins to
              the top of the scroll viewport from scroll position 0 without reflowing
