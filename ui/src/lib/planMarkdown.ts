@@ -4,6 +4,7 @@ import { Marked, type Token, type Tokens } from "marked";
 import { FilterXSS } from "xss";
 
 import { IMAGE_ATTRIBUTES } from "$lib/diffview/inlineImages.ts";
+import { fenceGrammar } from "$lib/diffview/languages.ts";
 import { isSafeUrl } from "$lib/diffview/links.ts";
 import { htmlWhiteList } from "$lib/markdown.ts";
 
@@ -21,6 +22,9 @@ export interface RenderedPlan {
   /** Each block's span; `blocks[i]` is the html's i-th top-level element. A block ends at
    * its last non-blank line; blank lines between blocks belong to none. */
   blocks: SourceSpan[];
+  /** Each fenced block's bundled shiki grammar, keyed by the line its `data-source-code`
+   * marker carries. Indented blocks and fences naming no bundled grammar have no entry. */
+  codeLanguages: ReadonlyMap<number, string>;
 }
 
 // A raw tag that is excluded renders as text, as every raw tag does in the source view.
@@ -68,6 +72,11 @@ const marked = new Marked({
   ],
   renderer: {
     html: ({ text }) => rawHtmlFilter.process(text),
+    // marked's default minus the `language-` class: the info string never reaches markup.
+    code({ text, escaped }) {
+      const body = `${text.replace(/\n$/, "")}\n`;
+      return `<pre><code>${escaped ? body : escapeHtml(body)}</code></pre>\n`;
+    },
     link({ href, title, tokens }) {
       const label = this.parser.parseInline(tokens);
       if (!isSafeUrl(href)) return label;
@@ -164,8 +173,13 @@ const LEAVES = new Set(["paragraph", "heading", "text"]);
 
 /** Marks where each source line starts in block tokens whose raws begin on `firstLine`:
  * a marker leads each leaf's inline text and each source line inside it, and precedes each
- * code and raw-HTML block. Mutates nested tokens in place; returns this level's tokens. */
-function markSourceLines(tokens: Token[], firstLine: number): Token[] {
+ * code and raw-HTML block, recording each marked fence's grammar into `codeLanguages`.
+ * Mutates nested tokens in place; returns this level's tokens. */
+function markSourceLines(
+  tokens: Token[],
+  firstLine: number,
+  codeLanguages: Map<number, string>,
+): Token[] {
   const out: Token[] = [];
   let line = firstLine;
   for (const token of tokens) {
@@ -180,6 +194,8 @@ function markSourceLines(tokens: Token[], firstLine: number): Token[] {
           line: firstCodeLine,
           code: true,
         } satisfies SourceLineToken);
+        const grammar = token.codeBlockStyle === "indented" ? null : fenceGrammar(token.lang ?? "");
+        if (grammar !== null) codeLanguages.set(firstCodeLine, grammar);
       }
     } else if (token.type === "html") {
       if (rawHtmlFilter.process(token.text) !== "") out.push(sourceLine(start));
@@ -193,11 +209,11 @@ function markSourceLines(tokens: Token[], firstLine: number): Token[] {
     } else if (token.type === "list") {
       let itemLine = start;
       for (const item of (token as Tokens.List).items) {
-        item.tokens = markSourceLines(item.tokens, itemLine);
+        item.tokens = markSourceLines(item.tokens, itemLine, codeLanguages);
         itemLine += newlines(item.raw);
       }
     } else if (token.type === "blockquote") {
-      token.tokens = markSourceLines((token as Tokens.Blockquote).tokens, start);
+      token.tokens = markSourceLines((token as Tokens.Blockquote).tokens, start, codeLanguages);
     } else if (LEAVES.has(token.type) && "tokens" in token && token.tokens) {
       token.tokens = markLeaf(token.tokens, start);
     }
@@ -216,9 +232,10 @@ export function renderPlanMarkdown(text: string): RenderedPlan {
   marked.walkTokens(tokens, liftSlashedTask);
   let html = "";
   const blocks: SourceSpan[] = [];
+  const codeLanguages = new Map<number, string>();
   let line = 1;
   for (const token of tokens) {
-    const blockHtml = marked.parser(markSourceLines([token], line));
+    const blockHtml = marked.parser(markSourceLines([token], line, codeLanguages));
     if (blockHtml !== "") {
       const span = {
         start: line + leadingNewlines(token.raw),
@@ -230,5 +247,5 @@ export function renderPlanMarkdown(text: string): RenderedPlan {
     }
     line += newlines(token.raw);
   }
-  return { html, blocks };
+  return { html, blocks, codeLanguages };
 }

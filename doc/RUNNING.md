@@ -150,7 +150,8 @@ Caret shows a plan version in one of two views:
 - The **source view** shows the plan's markdown as stored, with a line number on every
   row.
 - The **preview** renders the plan as a document: headings, lists, tables, and links as
-  they would appear on a page.
+  they would appear on a page. Code blocks are highlighted and keep the source view's copy
+  and wrap buttons.
 
 The **Preview** button beside **Versions** switches between them. It is pressed while the
 preview shows. Your browser remembers the choice, so it holds across reviews and restarts.

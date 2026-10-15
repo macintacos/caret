@@ -2,8 +2,10 @@
 
 *Audience: coding agents and contributors changing how a plan is rendered —
 `ui/src/lib/diffview/`, the `SourceView` / `DiffPlanView` components, and the preview
-renderer `ui/src/lib/planMarkdown.ts`, its mount `ui/src/components/PlanPreview.svelte`,
-and the source/preview surface table `ui/src/lib/planView.ts`.*
+renderer `ui/src/lib/planMarkdown.ts`, its source-line map `ui/src/lib/planSourceMap.ts`,
+its code-block highlight pass `ui/src/lib/previewCode.ts`, its mount
+`ui/src/components/PlanPreview.svelte`, and the source/preview surface table
+`ui/src/lib/planView.ts`.*
 
 The **source view** renders a plan as **line-numbered markdown source**. Every decoration
 the reviewer sees is drawn over the characters they would copy. Everything up to § The
@@ -189,6 +191,15 @@ exist today.
   through the first block wrapper (`.plan-preview > :first-child > :is(h1, …, h6)`).
   `data-task` stays distinct from the source view's `data-md-checkbox`: one marks an
   `input` in the light DOM, the other a `span` in the shadow root, so no rule is shared.
+- **Code blocks.** A code block renders `<pre><code>` with its escaped text and no class.
+  A fence's info string resolves through `fenceGrammar` to a bundled grammar, carried as
+  `RenderedPlan.codeLanguages` keyed by the code marker's line, and never as markup; an
+  indented block gets no entry. `fenceGrammar` reads the info string's leading token with
+  the same character class as the source view's fence scan, so ```` ```ts:app.ts ````
+  reads `ts` (so `typescript`) in both views. `previewCode.ts` then highlights the mounted
+  blocks, yielding a task before every block it highlights so each mounts plain first. It
+  re-runs on a theme switch or a replace of the showing custom theme, and leaves a block
+  plain when its grammar is unknown, missing, or refused.
 
 ### Source-line map
 
@@ -233,7 +244,9 @@ maps between the two for comments, the cursor and search.
     `lineAt` reports as that line.
 - **Highlighting.** Offsets resolve against the live text, so replacing a code block's
   markup, even its whole `<pre>`, with spans of the same text leaves the map valid,
-  whether it was built before or after.
+  whether it was built before or after. The preview relies on this: `previewCode.ts` swaps
+  a block's `code` children for token spans built through `textContent`, only when their
+  text is identical, with the trailing `\n` kept.
 
 ## Surfaces
 
@@ -251,6 +264,15 @@ branch unmounts with it and needs no gate.
 Adding `"preview"` to a row switches on the source implementation, which still reads the
 stale `api` and `host`. A port gives the behavior a preview implementation first, then
 adds `"preview"` to its row.
+
+`codeChrome` is the first ported behavior. `codeChrome.ts` gives it a light-DOM geometry
+over the preview's `pre`s, keyed by the opening fence line (the code marker's line minus
+one), and it shares the wrap set, keyed by that line, with the source view. Its copy
+button copies the preview block's own text, what the reader sees (a fence nested in a list
+is de-indented there), because marked and the source view's stateless fence scan can
+disagree on a block's extent. A preview block gets chrome only where the source view has a
+block at the same opening line, so a block with no source-view counterpart gets no chrome:
+an indented or empty block, or a fence the source view's stateless scan does not see.
 
 The preview renders a version once. `memoLast` returns the last result for the same text,
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same

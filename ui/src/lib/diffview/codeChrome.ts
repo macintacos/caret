@@ -1,19 +1,19 @@
 // Geometry for the per-code-block chrome — the copy button (EXC-692) and the soft-wrap
 // toggle (EXC-1386). The chrome is a caret-owned overlay in the .diff-plan scroll
-// container — the same host-overlay approach as bracket.ts, because the library paints
-// no such control and the code rows live in a shadow root. The rect reader is injected
-// so the math unit-tests without real layout (happy-dom returns all-zero rects).
+// container — the same host-overlay approach as bracket.ts, because neither surface paints
+// such a control. On the source view a block is shadow-root rows; on the preview it is a
+// light-DOM `pre`. The rect reader is injected so the math unit-tests without real layout
+// (happy-dom returns all-zero rects); the preview's overflow read (`pre.scrollWidth`) is
+// not.
 
 import { CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
 import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
+import { previewCodeBlocks, previewCodeText } from "$lib/previewCode.ts";
 
 /** Reads an element's viewport rect. Injectable for tests. */
-export type RectReader = (el: HTMLElement) => {
-  top: number;
-  bottom: number;
-  left: number;
-  right: number;
-};
+export type RectReader = (el: HTMLElement) => Box;
+
+type Box = { top: number; bottom: number; left: number; right: number };
 
 const defaultReader: RectReader = (el) => {
   const r = el.getBoundingClientRect();
@@ -28,6 +28,33 @@ export interface CodeChromeAnchor {
   top: number;
   left: number;
   carded: boolean;
+}
+
+/** An anchor plus the text its copy button writes. */
+export type ChromeBox = CodeChromeAnchor & { text: string };
+
+/** The chrome's geometry on one surface: what to observe for resizes, the hit-test by
+ * block `start`, and the finished boxes. */
+export interface ChromeGeometry {
+  observed: HTMLElement;
+  blockAt(x: number, y: number): number | undefined;
+  boxes(scroller: HTMLElement): ChromeBox[];
+}
+
+function contains(box: Box, x: number, y: number): boolean {
+  return y >= box.top && y <= box.bottom && x >= box.left && x <= box.right;
+}
+
+/** A box's top-right corner in `scroller` content coordinates. */
+function contentCorner(
+  box: Box,
+  scroller: HTMLElement,
+  scrollerRect: Box,
+): { top: number; left: number } {
+  return {
+    top: box.top - (scrollerRect.top - scroller.scrollTop),
+    left: box.right - (scrollerRect.left - scroller.scrollLeft),
+  };
 }
 
 /**
@@ -45,7 +72,7 @@ function blockBox(
   root: ShadowRoot,
   range: CodeBlockRange,
   read: RectReader,
-): { top: number; bottom: number; left: number; right: number; carded: boolean } | null {
+): (Box & { carded: boolean }) | null {
   const card = root.querySelector<HTMLElement>(`[data-content] > [${CARD_ATTR}="${range.start}"]`);
   if (card != null) return { ...read(card), carded: true };
   const firstRow = root.querySelector<HTMLElement>(`[data-content] [data-line="${range.start}"]`);
@@ -78,14 +105,7 @@ export function codeBlockAtPoint(
   for (const range of ranges) {
     const box = blockBox(root, range, read);
     if (box == null) continue;
-    if (
-      clientY >= box.top &&
-      clientY <= box.bottom &&
-      clientX >= box.left &&
-      clientX <= box.right
-    ) {
-      return range;
-    }
+    if (contains(box, clientX, clientY)) return range;
   }
   return null;
 }
@@ -113,10 +133,39 @@ export function codeChromeAnchors(
     if (box == null) continue;
     anchors.push({
       start: range.start,
-      top: box.top - (scrollerRect.top - scroller.scrollTop),
-      left: box.right - (scrollerRect.left - scroller.scrollLeft),
+      ...contentCorner(box, scroller, scrollerRect),
       carded: box.carded,
     });
   }
   return anchors;
+}
+
+/** The preview block under a viewport point, by its `start`, or undefined. */
+export function previewCodeBlockAtPoint(
+  root: ParentNode,
+  clientX: number,
+  clientY: number,
+  read: RectReader = defaultReader,
+): number | undefined {
+  return previewCodeBlocks(root).find((block) => contains(read(block.pre), clientX, clientY))
+    ?.start;
+}
+
+/** codeChromeAnchors for the preview: each block's `pre` top-right corner in `scroller`
+ * content coordinates, keyed by `start`, with the `code`'s own text. Carded when the `pre`
+ * overflows or `reflowed` holds it — a wrapped block no longer overflows, and its wrap
+ * button has to stay to unwrap it. */
+export function previewCodeChromeAnchors(
+  root: ParentNode,
+  scroller: HTMLElement,
+  reflowed: ReadonlySet<number>,
+  read: RectReader = defaultReader,
+): ChromeBox[] {
+  const scrollerRect = read(scroller);
+  return previewCodeBlocks(root).map(({ start, pre, code }) => ({
+    start,
+    ...contentCorner(read(pre), scroller, scrollerRect),
+    carded: pre.scrollWidth > pre.clientWidth || reflowed.has(start),
+    text: previewCodeText(code),
+  }));
 }

@@ -5,6 +5,7 @@ import {
   type ChunkState,
   highlightChunk,
   highlightExcerpt,
+  highlightTokens,
   MAX_HIGHLIGHT_LINE_CHARS,
 } from "$lib/diffview/highlight.ts";
 import { addTheme, replaceTheme } from "$lib/theme.ts";
@@ -206,4 +207,29 @@ test("a state from before its theme was replaced still yields rows", async () =>
 
   const chunk = await highlightChunk("const y = 2;", "typescript", id, state);
   expect(chunk.rows).toHaveLength(1);
+});
+
+// highlightTokens hands the plan preview raw tokens, which it turns into spans
+// itself, so the text it gets back has to be the text it sent.
+test("tokenizes each line, keeping its text and colouring its tokens", async () => {
+  const code = "const x = 1;\nlet y = 'two';";
+  const lines = await highlightTokens(code, "typescript", "caret-dark");
+  expect(lines).toHaveLength(2);
+  expect(lines?.map((line) => line.map((t) => t.content).join("")).join("\n")).toBe(code);
+  expect(new Set(lines?.flat().map((t) => t.color)).size).toBeGreaterThan(1);
+});
+
+test("tokens take the named theme's colours", async () => {
+  const colours = async (theme: "caret-dark" | "caret-light") =>
+    (await highlightTokens("const x = 1;", "typescript", theme))?.flat().map((t) => t.color);
+  expect(await colours("caret-dark")).not.toEqual(await colours("caret-light"));
+});
+
+test("a line past MAX_HIGHLIGHT_LINE_CHARS yields no tokens", async () => {
+  const long = "a".repeat(MAX_HIGHLIGHT_LINE_CHARS + 1);
+  expect(await highlightTokens(`const x = 1;\n${long}`, "typescript", "caret-dark")).toBeNull();
+});
+
+test("a grammar that won't load yields no tokens", async () => {
+  expect(await highlightTokens("hello", "not-a-real-lang", "caret-dark")).toBeNull();
 });
