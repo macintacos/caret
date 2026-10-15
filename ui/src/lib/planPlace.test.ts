@@ -1,23 +1,12 @@
 import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { SCROLL_OFFSET_TOP } from "$lib/diffview/scroll.ts";
+import { SCROLL_OFFSET_TOP } from "$lib/layout.ts";
 import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
 
 // happy-dom has no layout, so every rect is stubbed in the viewport space
 // getBoundingClientRect reads from.
-function rect(top: number, bottom = top): DOMRect {
-  return {
-    top,
-    bottom,
-    left: 0,
-    right: 0,
-    width: 0,
-    height: bottom - top,
-    x: 0,
-    y: top,
-  } as DOMRect;
-}
+const rect = (top: number, bottom = top) => new DOMRect(0, top, 0, bottom - top);
 
 const TOP = 100;
 const ZONE = TOP + SCROLL_OFFSET_TOP;
@@ -59,16 +48,14 @@ describe("blockIndexForLine", () => {
     expect(blockIndexForLine(blocks, 99)).toBe(2);
   });
 
-  test("no blocks gives -1", () => {
-    expect(blockIndexForLine([], 1)).toBe(-1);
+  test("no blocks gives null", () => {
+    expect(blockIndexForLine([], 1) === null).toBe(true);
   });
 });
 
-/** A scroller at TOP holding a preview of `n` stacked blocks, the first block's
- * top at `firstTop`. Counts every child rect read. */
+/** A preview of `n` stacked blocks, the first block's top at `firstTop`. Counts
+ * every child rect read. */
 function preview(n: number, firstTop: number) {
-  const scroller = document.createElement("div");
-  scroller.getBoundingClientRect = () => rect(TOP);
   const box = document.createElement("div");
   const reads = { count: 0 };
   for (let i = 0; i < n; i++) {
@@ -80,10 +67,8 @@ function preview(n: number, firstTop: number) {
     };
     box.append(child);
   }
-  scroller.append(box);
-  document.body.append(scroller);
   const blocks = Array.from({ length: n }, (_, i) => ({ start: i * 3 + 1, end: i * 3 + 2 }));
-  return { scroller, box, blocks, reads };
+  return { box, blocks, reads };
 }
 
 describe("previewTopLine", () => {
@@ -95,25 +80,25 @@ describe("previewTopLine", () => {
       ZONE - BLOCK - 5,
       ZONE - 3 * BLOCK + 1,
     ]) {
-      const { scroller, box, blocks } = preview(6, firstTop);
+      const { box, blocks } = preview(6, firstTop);
       const linear = blocks.find((_, i) => firstTop + (i + 1) * BLOCK > ZONE + 1);
-      expect(previewTopLine(scroller, box, blocks)).toBe(linear?.start ?? null);
+      expect(previewTopLine(TOP, box, blocks)).toBe(linear?.start ?? null);
     }
   });
 
   test("returns the last block's start when every block sits above the zone", () => {
-    const { scroller, box, blocks } = preview(4, ZONE - 10 * BLOCK);
-    expect(previewTopLine(scroller, box, blocks)).toBe(blocks[3]?.start ?? -1);
+    const { box, blocks } = preview(4, ZONE - 10 * BLOCK);
+    expect(previewTopLine(TOP, box, blocks)).toBe(blocks[3]?.start ?? -1);
   });
 
   test("returns null with no blocks", () => {
-    const { scroller, box } = preview(0, 0);
-    expect(previewTopLine(scroller, box, [])).toBe(null);
+    const { box } = preview(0, 0);
+    expect(previewTopLine(TOP, box, [])).toBe(null);
   });
 
   test("reads at most 11 block rects over a 1,000-block preview", () => {
-    const { scroller, box, blocks, reads } = preview(1000, ZONE - 500 * BLOCK - 5);
-    expect(previewTopLine(scroller, box, blocks)).toBe(blocks[500]?.start ?? -1);
+    const { box, blocks, reads } = preview(1000, ZONE - 500 * BLOCK - 5);
+    expect(previewTopLine(TOP, box, blocks)).toBe(blocks[500]?.start ?? -1);
     expect(reads.count).toBeLessThanOrEqual(11);
   });
 });
@@ -191,6 +176,22 @@ describe("holdPlace", () => {
     drop();
     fake.fire();
     expect(fake.disconnects).toBe(1);
+  });
+
+  test("an observer that fires during observe releases cleanly when the target is gone", () => {
+    const scroller = document.createElement("div");
+    const content = document.createElement("div");
+    scroller.append(content);
+    document.body.append(scroller);
+    let disconnects = 0;
+    const observe = (_el: Element, onResize: () => void) => {
+      onResize();
+      return () => {
+        disconnects += 1;
+      };
+    };
+    holdPlace({ scroller, content, target: () => null }, observe);
+    expect(disconnects).toBe(1);
   });
 
   test("a second release is harmless and disconnects once", () => {

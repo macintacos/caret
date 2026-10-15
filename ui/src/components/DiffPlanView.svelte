@@ -1066,28 +1066,36 @@
     const carried = carriedLine;
     carriedLine = null;
     if (line != null) retryScrollTo(line);
-    else if (carried != null) keepPlace(() => a.host, () => rowForLine(a.host, carried));
+    else if (carried != null) {
+      releasePlace();
+      releasePlace = keepPlace(() => a.host, () => rowForLine(a.host, carried));
+    }
     restored = true;
   }
 
-  // A flip parks the new surface on the reader's place instantly — it swaps the view
-  // rather than travelling, so a glide would slide through unrelated text — and holds
-  // it there while images load and rows highlight.
+  // Cancels the pending landing or ends the live hold, whichever is current.
   let releasePlace: () => void = () => {};
   // The preview's top line, waiting for the next SourceView to hand over its api.
   let carriedLine: number | null = null;
 
+  // A flip parks the new surface on the reader's place instantly — it swaps the view
+  // rather than travelling, so a glide would slide through unrelated text — and holds
+  // it there while images load and rows highlight.
   function keepPlace(
     content: () => Element | null | undefined,
     target: () => Element | null,
-  ): void {
-    releasePlace();
-    releasePlace = retryFrames(() => {
+  ): () => void {
+    let hold: (() => void) | undefined;
+    const cancel = retryFrames(() => {
       const box = content();
       if (scrollEl == null || box == null || target() == null) return false;
-      releasePlace = holdPlace({ scroller: scrollEl, content: box, target });
+      hold = holdPlace({ scroller: scrollEl, content: box, target });
       return true;
     });
+    return () => {
+      cancel();
+      hold?.();
+    };
   }
 
   const previewEl = (): Element | null => scrollEl?.querySelector(".plan-preview") ?? null;
@@ -1096,16 +1104,17 @@
     if (planView === "source") {
       const line = topVisibleLine();
       if (line == null) return;
-      keepPlace(previewEl, () => {
+      releasePlace();
+      releasePlace = keepPlace(previewEl, () => {
         const preview = previewEl();
-        const blocks = planPreview?.blocks;
-        return preview && blocks ? (preview.children[blockIndexForLine(blocks, line)] ?? null) : null;
+        const i = planPreview ? blockIndexForLine(planPreview.blocks, line) : null;
+        return preview && i != null ? (preview.children[i] ?? null) : null;
       });
     } else {
       const preview = previewEl();
       carriedLine =
         scrollEl && preview && planPreview
-          ? previewTopLine(scrollEl, preview, planPreview.blocks)
+          ? previewTopLine(scrollEl.getBoundingClientRect().top, preview, planPreview.blocks)
           : null;
     }
   }

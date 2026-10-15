@@ -1,5 +1,5 @@
 // Shared layout constants. Pure TS (no node imports) so it stays node-free
-// and is importable from both the UI and the Playwright config.
+// and is importable from both the UI and the Playwright config and its e2e helpers.
 
 /**
  * The reference layout width, in CSS px: the viewport at which the source view
@@ -10,10 +10,15 @@
  */
 export const REFERENCE_WIDTH_PX = 1400;
 
-/** Breathing room (px) above a jumped-to row so the heading isn't flush against
- * the very top edge of the scroll container — and the plan's reading zone, which
- * the e2e probes measure against. */
+/** Breathing room (px) above a parked row, so it isn't flush with the scroll
+ * container's top edge; the reading zone sits on the same line. */
 export const SCROLL_OFFSET_TOP = 12;
+
+/** Sub-pixel margin (px) below the reading-zone line. A parked row's top sits on
+ * that line and the row above ends exactly there; scrollTop rounds to device
+ * pixels, so without this margin the prior row can round past the line and steal
+ * the active slot. Kept well under a source line's height. */
+export const READING_ZONE_SLOP = 1;
 
 /**
  * Width foundation for the responsive effort (EXC-806, parent EXC-770). Three

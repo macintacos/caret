@@ -265,11 +265,12 @@ parks is the block the next flip reads back. `ui/src/lib/planPlace.ts` holds the
 - **The landing is instant.** A flip swaps the view rather than travelling, so a smooth
   scroll would slide through unrelated text.
 - **`holdPlace` re-parks** the target on every resize of the new surface's content, as
-  images load and rows highlight. It releases on the reader's first wheel, touch, pointer,
-  or key input, when the target is gone, or on the next flip. It ignores `scroll` events,
-  since native scroll anchoring moves `scrollTop` too. Each park writes an absolute
-  `scrollTop`, never a delta, so it composes with native `overflow-anchor` where a browser
-  has it and still holds in Safari 26 and earlier, which has none.
+  images load and rows highlight. It releases on the reader's first wheel, touch, pointer
+  press or key press, when the target or its surface is gone, on the next flip, and on a
+  version change or unmount. It ignores `scroll` events, since native scroll anchoring
+  moves `scrollTop` too. Each park writes an absolute `scrollTop`, never a delta, so it
+  composes with native `overflow-anchor` where a browser has it and still holds in Safari
+  26 and earlier, which has none.
 - **A deep link wins.** A resolved `?heading=` jumps on the first source mount, ahead of a
   place carried from the preview, since the preview cannot honor it.
 

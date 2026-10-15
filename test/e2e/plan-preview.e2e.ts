@@ -18,15 +18,17 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { currentCrumb, previewToggle as toggle } from "@test/e2e/support/chrome.ts";
-import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
 import {
   lineCenterY,
   lineOf,
+  PLAN_SURFACE,
   PLAN_PREVIEW as PREVIEW,
   planSurface,
   previewTopBlock,
   settledMutations,
   sourceTopLine,
+  wheelPlan,
 } from "@test/e2e/support/source-view.ts";
 import { SCROLL_OFFSET_TOP } from "@ui/src/lib/layout.ts";
 
@@ -138,27 +140,34 @@ test("a new version re-renders the preview without losing scroll", async ({ daem
     .toBeLessThan(2);
 });
 
-/** Wait until the plan's scrollTop holds still across two reads, so a wheel's
- * scroll has landed before a probe reads the reading zone. */
-async function settleScroll(plan: Locator): Promise<void> {
-  let previous = -1;
-  await expect
-    .poll(async () => {
-      const now = await plan.evaluate((el) => el.scrollTop);
-      const still = now === previous;
-      previous = now;
-      return still;
-    })
-    .toBe(true);
-}
-
 /** Wheel the plan by however far puts source `line`'s centre in the reading zone. */
 async function wheelLineToZone(page: Page, plan: Locator, line: number): Promise<void> {
   const top = await plan.evaluate((el) => el.getBoundingClientRect().top);
-  await plan.hover();
-  await page.mouse.wheel(0, (await lineCenterY(page, line)) - top - SCROLL_OFFSET_TOP);
-  await settleScroll(plan);
+  await wheelPlan(page, (await lineCenterY(page, line)) - top - SCROLL_OFFSET_TOP);
 }
+
+/** Polls a nullable probe until it reads a value, failing with `message` otherwise,
+ * and returns the value it proved — a re-read could come back null. */
+async function present<T>(read: () => Promise<T | null | undefined>, message: string): Promise<T> {
+  // An object, not a local: control-flow analysis cannot see into the poll callback.
+  const last: { value: T | null | undefined } = { value: null };
+  await expect
+    .poll(
+      async () => {
+        last.value = await read();
+        return last.value != null;
+      },
+      { message },
+    )
+    .toBe(true);
+  return last.value as T;
+}
+
+const readingLine = (page: Page) =>
+  present(() => sourceTopLine(page), "no source row at the reading zone");
+
+const blockStart = (page: Page, line: number) =>
+  present(() => blockStartFor(page, line), `no preview block reaches source line ${line}`);
 
 /** The start of the preview block a source line belongs to: the first block whose
  * span ends at or after it, so a line in a gap between blocks takes the next one. */
@@ -174,10 +183,12 @@ function blockStartFor(page: Page, line: number): Promise<number | null> {
   );
 }
 
-const parkedAt = async (page: Page, start: number): Promise<boolean> => {
+/** Whether the preview block starting at `start` sits parked at the reading zone. */
+async function parkedAt(page: Page, start: number): Promise<boolean> {
   const block = await previewTopBlock(page);
+  // 2px: device-pixel rounding of the parked scrollTop plus the probe's own rect read.
   return block?.start === start && Math.abs(block.top - SCROLL_OFFSET_TOP) <= 2;
-};
+}
 
 const CODE_LINES = Array.from({ length: 40 }, (_, i) => `code line ${i + 1}`).join("\n");
 const PLACE_PLAN = SECTIONED.replace(
@@ -193,36 +204,36 @@ const IMAGE_PLAN = SECTIONED.replace(
 test("flipping keeps the reader's place in both directions", async ({ daemon, page }) => {
   await daemon.seed({ plan: PLACE_PLAN });
   await page.goto("/");
-  const plan = await planSurface(page);
+  await planSurface(page);
   await expect(page.locator(".diffview")).toBeVisible();
-  await plan.hover();
-  await page.mouse.wheel(0, 1500);
-  await settleScroll(plan);
+  await wheelPlan(page, 1500);
 
-  const line = (await sourceTopLine(page)) as number;
+  const line = await readingLine(page);
   await toggle(page).click();
   await expect(page.locator(PREVIEW)).toBeVisible();
-  const start = (await blockStartFor(page, line)) as number;
+  const start = await blockStart(page, line);
   await expect.poll(() => parkedAt(page, start)).toBe(true);
 
-  await page.locator(PREVIEW).hover();
-  await page.mouse.wheel(0, 900);
-  await settleScroll(plan);
-  const back = (await previewTopBlock(page))?.start;
+  await wheelPlan(page, 900, PREVIEW);
+  const back = await present(
+    async () => (await previewTopBlock(page))?.start,
+    "no preview block at the reading zone",
+  );
   await toggle(page).click();
   await expect.poll(() => sourceTopLine(page)).toBe(back);
   await settledMutations(page);
+  // Deliberately one read: the claim is that it stayed, which a poll would weaken.
   expect(await sourceTopLine(page)).toBe(back);
 });
 
-test("a round trip from inside a code block lands within it", async ({ daemon, page }) => {
+test("a round trip from inside a code block lands at its fence", async ({ daemon, page }) => {
   await daemon.seed({ plan: PLACE_PLAN });
   await page.goto("/");
   const plan = await planSurface(page);
   const fenceStart = (await lineOf(page, "code line 1")) - 1;
   const fenceEnd = (await lineOf(page, "code line 40")) + 1;
   await wheelLineToZone(page, plan, fenceStart + 20);
-  const inside = (await sourceTopLine(page)) as number;
+  const inside = await readingLine(page);
   expect(inside).toBeGreaterThan(fenceStart);
   expect(inside).toBeLessThan(fenceEnd);
 
@@ -233,10 +244,16 @@ test("a round trip from inside a code block lands within it", async ({ daemon, p
   await expect.poll(() => sourceTopLine(page)).toBe(fenceStart);
 });
 
-test("the anchored block stays put while an image above it loads", async ({ daemon, page }) => {
-  let release = () => {};
+/** Seeds IMAGE_PLAN with its image held back until the returned `release` is called,
+ * flips to the preview from below the image, and waits until the reader's block is
+ * parked. Returns that block's start and `release`. */
+async function parkBelowLateImage(
+  daemon: Daemon,
+  page: Page,
+): Promise<{ start: number; release: () => Promise<void> }> {
+  let open = () => {};
   const gate = new Promise<void>((resolve) => {
-    release = resolve;
+    open = resolve;
   });
   await page.route(LATE_IMAGE, async (route) => {
     await gate;
@@ -253,15 +270,40 @@ test("the anchored block stays put while an image above it loads", async ({ daem
   await page.addStyleTag({ content: ".diff-plan { overflow-anchor: none !important; }" });
   await wheelLineToZone(page, plan, await lineOf(page, "alpha paragraph 14 of the plan body."));
 
-  const line = (await sourceTopLine(page)) as number;
+  const line = await readingLine(page);
   await turnPreviewOn(page);
-  const start = (await blockStartFor(page, line)) as number;
+  const start = await blockStart(page, line);
   await expect.poll(() => parkedAt(page, start)).toBe(true);
 
-  release();
-  const image = page.locator(`${PREVIEW} img`);
-  await expect
-    .poll(() => image.evaluate((el: HTMLImageElement) => el.complete && el.naturalHeight > 0))
-    .toBe(true);
+  const release = async () => {
+    open();
+    const image = page.locator(`${PREVIEW} img`);
+    await expect
+      .poll(() => image.evaluate((el: HTMLImageElement) => el.complete && el.naturalHeight > 0))
+      .toBe(true);
+  };
+  return { start, release };
+}
+
+test("the anchored block stays put while an image above it loads", async ({ daemon, page }) => {
+  const { start, release } = await parkBelowLateImage(daemon, page);
+  await release();
   await expect.poll(() => parkedAt(page, start)).toBe(true);
+});
+
+test("a reader who scrolls away is not pulled back when an image loads", async ({
+  daemon,
+  page,
+}) => {
+  const { release } = await parkBelowLateImage(daemon, page);
+  const plan = page.locator(PLAN_SURFACE);
+  await wheelPlan(page, 200, PREVIEW);
+  const scrolled = await plan.evaluate((el) => el.scrollTop);
+  await release();
+  // Two frames: the image's resize reaches a hold's observer within one.
+  await page.evaluate(
+    () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+  );
+  // Deliberately one read: the claim is that it stayed, which a poll would weaken.
+  expect(await plan.evaluate((el) => el.scrollTop)).toBe(scrolled);
 });

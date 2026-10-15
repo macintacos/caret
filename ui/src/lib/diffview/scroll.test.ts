@@ -14,11 +14,11 @@ import {
   revealScrollDelta,
   rowForLine,
   SCROLL_ANIM_MS,
-  SCROLL_OFFSET_TOP,
   scrollToDiffLine,
   scrollToLine,
   scrollTweenTop,
 } from "$lib/diffview/scroll.ts";
+import { SCROLL_OFFSET_TOP } from "$lib/layout.ts";
 
 // @pierre/diffs renders each source line as a <div data-line="N"> inside the
 // container's shadow root. scrollToLine finds that row and tweens the nearest

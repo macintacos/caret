@@ -1,5 +1,6 @@
 // Scroll-to-line, active-line resolution, the keyboard cursor's follow scroll,
-// and the composer reveal — the source view's scrolling. @pierre/diffs
+// the composer reveal, and the instant park a view flip lands with — the plan's
+// scrolling. @pierre/diffs
 // renders each line as a <div data-line="N"> inside the container's shadow root;
 // jumping to a heading finds that row and scrolls the surrounding scroll container
 // so the row rests near the top, and the reverse — which line currently occupies
@@ -15,9 +16,7 @@
 import { quadOut } from "svelte/easing";
 
 import type { DiffSide } from "$lib/diffview/types.ts";
-import { SCROLL_OFFSET_TOP } from "$lib/layout.ts";
-
-export { SCROLL_OFFSET_TOP };
+import { READING_ZONE_SLOP, SCROLL_OFFSET_TOP } from "$lib/layout.ts";
 
 /** Duration (ms) of a jump to a place — the JS mirror of --dur-travel. */
 export const SCROLL_ANIM_MS = 240;
@@ -48,13 +47,6 @@ export function scrollTweenTop(g: {
   const t = Math.min(1, Math.max(0, g.elapsed / g.duration));
   return g.from + (g.to - g.from) * quadOut(t);
 }
-
-/** Sub-pixel margin (px) below the reading-zone line. A jumped heading parks with
- * its top on that line, and the row above ends its bottom exactly there; the
- * browser rounds scrollTop to device pixels, so without this margin the prior
- * row's bottom can round a fraction past the line and steal the active slot — the
- * off-by-one this guards against. Kept well under a source line's height. */
-const READING_ZONE_SLOP = 1;
 
 /** Nearest scrollable ancestor of `el` (the element that actually scrolls). */
 function nearestScrollParent(el: HTMLElement): HTMLElement | undefined {
@@ -165,11 +157,12 @@ function parkedTop(scroller: HTMLElement, el: Element): number {
 }
 
 /** Parks `el` where a jump would, instantly. An absolute write, never a delta, so
- * it composes with the browser's own scroll anchoring; skipped within 1px so a
- * re-park of a settled view does not fight sub-pixel rounding. */
+ * it composes with the browser's own scroll anchoring; skipped within
+ * SCROLL_TAKEOVER_SLOP so a re-park of a settled view does not fight the same
+ * set/get rounding drift. */
 export function parkAt(scroller: HTMLElement, el: Element): void {
   const top = parkedTop(scroller, el);
-  if (Math.abs(scroller.scrollTop - top) > 1) scroller.scrollTop = top;
+  if (Math.abs(scroller.scrollTop - top) > SCROLL_TAKEOVER_SLOP) scroller.scrollTop = top;
 }
 
 /** The source view's row for 1-based `line`, or null when it is not rendered. */

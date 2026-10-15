@@ -1,14 +1,13 @@
-// Keeps the reader's place across a flip between the plan's source view and its
-// preview. Both surfaces share the source view's reading zone and parking offset,
-// so a block parked by one flip is the block the next flip reads back. Places are
-// block-granular, located through the preview's block spans by binary search, so
-// a long plan is never measured block by block.
+// Finds the reader's place on one plan surface and holds it on the other across a
+// source/preview flip. Places are block-granular, found by binary search over the
+// preview's block spans, so a long plan is never measured block by block.
 import { indexAtReadingZone, parkAt } from "$lib/diffview/scroll.ts";
 import type { SourceSpan } from "$lib/planMarkdown.ts";
 
 /** The index of the block holding 1-based `line`: a line in a gap takes the next
- * block, a line past the end the last, and no blocks gives -1. */
-export function blockIndexForLine(blocks: readonly SourceSpan[], line: number): number {
+ * block, a line past the end the last, and no blocks gives null. */
+export function blockIndexForLine(blocks: readonly SourceSpan[], line: number): number | null {
+  if (blocks.length === 0) return null;
   let lo = 0;
   let hi = blocks.length;
   while (lo < hi) {
@@ -23,16 +22,15 @@ export function blockIndexForLine(blocks: readonly SourceSpan[], line: number): 
  * block's when every block sits above it, or null with no blocks. `preview`'s
  * children are the blocks, `blocks[i]` the i-th child's span. */
 export function previewTopLine(
-  scroller: Element,
+  scrollerTop: number,
   preview: Element,
   blocks: readonly SourceSpan[],
 ): number | null {
   if (blocks.length === 0) return null;
-  const count = Math.min(blocks.length, preview.children.length);
   const i = indexAtReadingZone(
-    count,
+    blocks.length,
     (k) => (preview.children[k] as Element).getBoundingClientRect().bottom,
-    scroller.getBoundingClientRect().top,
+    scrollerTop,
   );
   return (blocks[i ?? blocks.length - 1] as SourceSpan).start;
 }
@@ -57,17 +55,21 @@ const observeResize: ObserveResize = (el, onResize) => {
 
 // `scroll` is deliberately absent: native scroll anchoring moves scrollTop too.
 const READER_INPUTS = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+const LISTEN = { capture: true, passive: true } as const;
 
 /** Park `target` now and again on every `content` resize, until the reader takes
- * over or the surface goes away. Returns the release; calling it twice is harmless. */
+ * over or the surface goes away. While held it listens for reader input on the
+ * scroller's document, in the capture phase. Returns the release; calling it
+ * twice is harmless. */
 export function holdPlace(hold: PlaceHold, observe: ObserveResize = observeResize): () => void {
   const doc = hold.scroller.ownerDocument;
   let released = false;
+  let disconnect = (): void => {};
   const release = (): void => {
     if (released) return;
     released = true;
     disconnect();
-    for (const type of READER_INPUTS) doc.removeEventListener(type, release, true);
+    for (const type of READER_INPUTS) doc.removeEventListener(type, release, LISTEN);
   };
   const park = (): void => {
     if (released) return;
@@ -75,8 +77,13 @@ export function holdPlace(hold: PlaceHold, observe: ObserveResize = observeResiz
     if (el == null) release();
     else parkAt(hold.scroller, el);
   };
-  for (const type of READER_INPUTS) doc.addEventListener(type, release, true);
-  const disconnect = observe(hold.content, park);
+  const stop = observe(hold.content, park);
+  if (released) {
+    stop();
+    return release;
+  }
+  disconnect = stop;
+  for (const type of READER_INPUTS) doc.addEventListener(type, release, LISTEN);
   park();
   return release;
 }
