@@ -83,9 +83,11 @@ export async function highlightPreviewCode(
     const tokens = await tokenize(previewCodeText(code), language);
     if (signal.aborted) return;
     if (tokens === null) continue;
-    // One fragment, not a spread: a huge block's nodes would exceed a call's argument limit.
+    // Appended one node at a time: spread into one call, a huge block's nodes would
+    // exceed the engine's argument limit.
     const fragment = document.createDocumentFragment();
-    fragment.append(...tokenNodes(tokens), "\n");
+    for (const node of tokenNodes(tokens)) fragment.append(node);
+    fragment.append("\n");
     if (fragment.textContent === originalText) code.replaceChildren(fragment);
   }
 }
