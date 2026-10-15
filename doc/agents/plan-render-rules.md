@@ -189,6 +189,9 @@ exist today.
   through the first block wrapper (`.plan-preview > :first-child > :is(h1, …, h6)`).
   `data-task` stays distinct from the source view's `data-md-checkbox`: one marks an
   `input` in the light DOM, the other a `span` in the shadow root, so no rule is shared.
+- **Code blocks.** A fence renders `<pre><code>` with its escaped text and no class. The
+  info string's first word resolves through `fenceGrammar` to a bundled grammar, carried
+  as `RenderedPlan.codeLanguages` keyed by the code marker's line, and never as markup.
 
 ### Source-line map
 
@@ -233,7 +236,11 @@ maps between the two for comments, the cursor and search.
     `lineAt` reports as that line.
 - **Highlighting.** Offsets resolve against the live text, so replacing a code block's
   markup, even its whole `<pre>`, with spans of the same text leaves the map valid,
-  whether it was built before or after.
+  whether it was built before or after. The preview relies on this: `previewCode.ts` swaps
+  a block's `code` children for token spans built through `textContent`, only when their
+  text is identical, with the trailing `\n` kept. It runs one block per task after a plain
+  first paint, re-runs on a theme switch, and leaves a block plain when its grammar is
+  unknown, missing, or refused.
 
 ## Surfaces
 
@@ -251,6 +258,12 @@ branch unmounts with it and needs no gate.
 Adding `"preview"` to a row switches on the source implementation, which still reads the
 stale `api` and `host`. A port gives the behavior a preview implementation first, then
 adds `"preview"` to its row.
+
+`codeChrome` is the first ported behavior. `codeChrome.ts` gives it a light-DOM geometry
+over the preview's `pre`s, keyed by the opening fence line (the code marker's line minus
+one), and it shares copy text and the wrap set with the source view. A block with no
+source-view counterpart gets no chrome: an indented or empty block, or a fence the source
+view's stateless scan does not see.
 
 The preview renders a version once. `memoLast` returns the last result for the same text,
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same
