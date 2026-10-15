@@ -28,7 +28,7 @@ export const writePlanView = pref.write;
  * Running a behavior on another surface means adding the surface to its row; see
  * doc/agents/plan-render-rules.md § Surfaces for what that does and does not switch on. */
 export const SURFACE_BEHAVIORS = {
-  codeChrome: ["source"], // copy / soft-wrap chrome over fenced code
+  codeChrome: ["source", "preview"], // copy / soft-wrap chrome over fenced code
   referenceHints: ["source"], // ref-hint badges, file drawer, folder card
   search: ["source"], // `/` dock, n/N, match highlights
   keyboardCursor: ["source"], // cursor motions, `c`, `V`, Esc

@@ -1,11 +1,13 @@
 // Geometry for the per-code-block chrome — the copy button (EXC-692) and the soft-wrap
 // toggle (EXC-1386). The chrome is a caret-owned overlay in the .diff-plan scroll
-// container — the same host-overlay approach as bracket.ts, because the library paints
-// no such control and the code rows live in a shadow root. The rect reader is injected
-// so the math unit-tests without real layout (happy-dom returns all-zero rects).
+// container — the same host-overlay approach as bracket.ts, because neither surface paints
+// such a control. On the source view a block is shadow-root rows; on the preview it is a
+// light-DOM `pre`. The rect reader is injected so the math unit-tests without real layout
+// (happy-dom returns all-zero rects).
 
 import { CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
 import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
+import { previewCodeBlocks } from "$lib/previewCode.ts";
 
 /** Reads an element's viewport rect. Injectable for tests. */
 export type RectReader = (el: HTMLElement) => {
@@ -119,4 +121,47 @@ export function codeChromeAnchors(
     });
   }
   return anchors;
+}
+
+/** The preview block under a viewport point, by its `start`, or null. */
+export function previewCodeBlockAtPoint(
+  root: ParentNode,
+  clientX: number,
+  clientY: number,
+  read: RectReader = defaultReader,
+): number | null {
+  for (const block of previewCodeBlocks(root)) {
+    const box = read(block.pre);
+    if (
+      clientY >= box.top &&
+      clientY <= box.bottom &&
+      clientX >= box.left &&
+      clientX <= box.right
+    ) {
+      return block.start;
+    }
+  }
+  return null;
+}
+
+/** codeChromeAnchors for the preview: each block's `pre` top-right corner in `scroller`
+ * content coordinates, keyed by `start`. Carded when the `pre` overflows or `reflowed`
+ * holds it — a wrapped block no longer overflows, and its wrap button has to stay to
+ * unwrap it. */
+export function previewCodeChromeAnchors(
+  root: ParentNode,
+  scroller: HTMLElement,
+  reflowed: ReadonlySet<number>,
+  read: RectReader = defaultReader,
+): CodeChromeAnchor[] {
+  const scrollerRect = read(scroller);
+  return previewCodeBlocks(root).map(({ start, pre }) => {
+    const box = read(pre);
+    return {
+      start,
+      top: box.top - (scrollerRect.top - scroller.scrollTop),
+      left: box.right - (scrollerRect.left - scroller.scrollLeft),
+      carded: pre.scrollWidth > pre.clientWidth || reflowed.has(start),
+    };
+  });
 }

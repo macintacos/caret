@@ -40,6 +40,8 @@
     codeBlockAtPoint,
     type CodeChromeAnchor,
     codeChromeAnchors,
+    previewCodeBlockAtPoint,
+    previewCodeChromeAnchors,
   } from "$lib/diffview/codeChrome.ts";
   import {
     type ComposerScratch,
@@ -762,28 +764,64 @@
   $effect(() => {
     void contentKey;
     void host;
+    void surface;
     chromeBoxes = [];
   });
 
-  // Track the hovered code block from pointer moves over the scroll container; the rows
-  // live in the SourceView's shadow root, so codeChrome.ts does the hit-test. rAF-
-  // throttled, and it yields a key rather than a position — every block's chrome is
-  // anchored by the sync effect below, whatever the pointer is doing.
+  // The preview's root, bound from PlanPreview; the chrome's light-DOM geometry reads it.
+  let previewEl = $state<HTMLDivElement | undefined>();
+
+  // The chrome's geometry on the surface on screen: what to observe for resizes, the
+  // hit-test, and the anchors. Undefined where no chrome renders — off the codeChrome
+  // row, before the surface mounts, or with no fenced block. A preview block joins a
+  // source block by `start`, so one the source view does not see gets no chrome.
+  const chromeGeometry = $derived.by(
+    ():
+      | {
+          observed: HTMLElement;
+          blockAt: (x: number, y: number) => number | undefined;
+          anchors: (scroller: HTMLElement) => CodeChromeAnchor[];
+        }
+      | undefined => {
+      const blocks = codeBlocks;
+      if (!runs("codeChrome") || blocks.length === 0) return undefined;
+      if (surface === "preview") {
+        const root = previewEl;
+        if (root == null) return undefined;
+        return {
+          observed: root,
+          blockAt: (x, y) => previewCodeBlockAtPoint(root, x, y) ?? undefined,
+          anchors: (scroller) => previewCodeChromeAnchors(root, scroller, reflowedBlocks),
+        };
+      }
+      const el = host;
+      if (el == null) return undefined;
+      const ranges = blocks.map((b) => b.range);
+      return {
+        observed: el,
+        blockAt: (x, y) => codeBlockAtPoint(el, ranges, x, y)?.start,
+        anchors: (scroller) => codeChromeAnchors(el, scroller, ranges),
+      };
+    },
+  );
+
+  // Track the hovered code block from pointer moves over the scroll container; the
+  // geometry does the hit-test. rAF-throttled, and it yields a key rather than a
+  // position — every block's chrome is anchored by the sync effect below, whatever the
+  // pointer is doing.
   $effect(() => {
     const scroller = scrollEl;
-    const el = host;
-    const blocks = codeBlocks;
-    if (!runs("codeChrome") || scroller == null || el == null || blocks.length === 0) {
+    const geometry = chromeGeometry;
+    if (scroller == null || geometry === undefined) {
       hoveredBlockStart = undefined;
       return;
     }
-    const ranges = blocks.map((b) => b.range);
     let raf = 0;
     let lastX = 0;
     let lastY = 0;
     const update = () => {
       raf = 0;
-      hoveredBlockStart = codeBlockAtPoint(el, ranges, lastX, lastY)?.start;
+      hoveredBlockStart = geometry.blockAt(lastX, lastY);
     };
     const onMove = (event: PointerEvent) => {
       lastX = event.clientX;
@@ -812,7 +850,7 @@
   // is a light-DOM child of .diff-plan, so it scrolls with the rows for free.
   $effect(() => {
     const scroller = scrollEl;
-    const el = host;
+    const geometry = chromeGeometry;
     const blocks = codeBlocks;
     // A wrap toggle changes a block's height: depending on it re-measures now rather than
     // waiting for the ResizeObserver to report the new box.
@@ -820,16 +858,15 @@
     // Nothing to anchor off the codeChrome surfaces — they render no chrome, and their
     // content is a different document, so syncing there would walk the source view's
     // torn-out shadow root.
-    if (!runs("codeChrome") || scroller == null || el == null || blocks.length === 0) {
+    if (scroller == null || geometry === undefined) {
       chromeBoxes = [];
       return;
     }
-    const ranges = blocks.map((b) => b.range);
     const codeByStart = new Map(blocks.map((b) => [b.range.start, b.text]));
     let raf = 0;
     const sync = () => {
       raf = 0;
-      chromeBoxes = codeChromeAnchors(el, scroller, ranges).flatMap((anchor) => {
+      chromeBoxes = geometry.anchors(scroller).flatMap((anchor) => {
         const text = codeByStart.get(anchor.start);
         return text === undefined ? [] : [{ ...anchor, text }];
       });
@@ -844,7 +881,7 @@
       return chromeBoxes.length > 0;
     });
     const observer = new ResizeObserver(schedule);
-    observer.observe(el);
+    observer.observe(geometry.observed);
     return () => {
       cancelFrames();
       cancelAnimationFrame(raf);
@@ -1723,6 +1760,21 @@
          is a clean surface with no gutter and no inline annotations; the compared
          versions' comments read in the docked panel instead (EXC-872). -->
     <div class="diff-plan" bind:this={scrollEl} onmouseenter={showDragHint} role="presentation">
+      <!-- The per-code-block chrome, rendered by the source and preview branches below. -->
+      {#snippet codeChrome()}
+        {#each chromeBoxes as chromeBox (chromeBox.start)}
+          <CodeBlockChrome
+            text={chromeBox.text}
+            start={chromeBox.start}
+            top={chromeBox.top}
+            left={chromeBox.left}
+            carded={chromeBox.carded}
+            reflowed={reflowedBlocks.has(chromeBox.start)}
+            hovered={hoveredBlockStart === chromeBox.start}
+            onToggleReflow={() => toggleReflow(chromeBox.start)}
+          />
+        {/each}
+      {/snippet}
       {#if showDiff}
         <!-- Compare mode: a diff between the selected version pair. Base is the
              reference version (the default base is the current version) and renders
@@ -1754,7 +1806,9 @@
           codeLanguages={planPreview.codeLanguages}
           {themeId}
           {reflowedBlocks}
+          bind:root={previewEl}
         />
+        {@render codeChrome()}
       {:else}
         <!-- Live range readout: a zero-height sticky rail rendered first so it pins to
              the top of the scroll viewport from scroll position 0 without reflowing
@@ -1807,18 +1861,7 @@
              updates each box's props and leaves the instance — and its copied/checkmark
              state — alone. It layers over the .diff-plan scroll content, so like the bracket
              rails it scrolls with the rows. -->
-        {#each chromeBoxes as chromeBox (chromeBox.start)}
-          <CodeBlockChrome
-            text={chromeBox.text}
-            start={chromeBox.start}
-            top={chromeBox.top}
-            left={chromeBox.left}
-            carded={chromeBox.carded}
-            reflowed={reflowedBlocks.has(chromeBox.start)}
-            hovered={hoveredBlockStart === chromeBox.start}
-            onToggleReflow={() => toggleReflow(chromeBox.start)}
-          />
-        {/each}
+        {@render codeChrome()}
         <!-- The one-time reference hints (EXC-1061): one badge over the first
              on-screen file reference and one over the first directory reference,
              teaching that a path token opens a preview. Layered over the .diff-plan

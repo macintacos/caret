@@ -19,7 +19,9 @@
 
 import type { Page } from "@playwright/test";
 
+import { previewToggle } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
+import * as sourceView from "@test/e2e/support/source-view.ts";
 import { planSurface, settledMutations } from "@test/e2e/support/source-view.ts";
 
 // One block far wider than the reading width (so it cards and offers the wrap toggle) and
@@ -356,4 +358,140 @@ test("the wrap toggle is reachable and operable from the keyboard", async ({ dae
   await page.keyboard.press("Enter");
   await expect.poll(async () => (await blockMetrics(page, WIDE))?.reflowed).toBe(true);
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
+});
+
+test.describe("on the preview", () => {
+  const { PLAN_PREVIEW } = sourceView;
+  // The same chrome over the preview's light-DOM blocks: a block's `pre` follows the
+  // source-line marker of its first code line, one past its opening fence.
+  const previewPre = (start: number) =>
+    `${PLAN_PREVIEW} [data-source-code][data-source-line="${start + 1}"] + pre`;
+
+  function previewMetrics(page: Page, start: number) {
+    return page.evaluate((selector) => {
+      const pre = document.querySelector<HTMLElement>(selector);
+      if (pre == null) return null;
+      const r = pre.getBoundingClientRect();
+      return {
+        reflowed: pre.hasAttribute("data-code-reflow"),
+        scrollWidth: pre.scrollWidth,
+        clientWidth: pre.clientWidth,
+        height: r.height,
+        top: r.top,
+        right: r.right,
+      };
+    }, previewPre(start));
+  }
+
+  async function flipToPreview(page: Page): Promise<void> {
+    await previewToggle(page).click();
+    await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
+    await expect(chromeFor(page, WIDE)).toBeVisible();
+  }
+
+  async function flipToSource(page: Page): Promise<void> {
+    await previewToggle(page).click();
+    await expect(page.locator(PLAN_PREVIEW)).toHaveCount(0);
+    await expect.poll(async () => (await blockMetrics(page, WIDE))?.carded).toBe(true);
+  }
+
+  test("copy is offered on both blocks and wrap only on the wide one", async ({ daemon, page }) => {
+    await openMixedPlan(page, daemon);
+    await flipToPreview(page);
+
+    await expect(page.getByRole("button", { name: "Copy code" })).toHaveCount(2);
+    await expect(wrapToggle(page)).toHaveCount(1);
+    await expect(
+      chromeFor(page, WIDE).getByRole("button", { name: "Wrap long lines" }),
+    ).toHaveCount(1);
+  });
+
+  test("copy copies the block's text, as on the source view", async ({ daemon, page }) => {
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await openMixedPlan(page, daemon);
+    // By name rather than chromeFor: the copy button renames itself once it has copied.
+    const copy = () => page.getByRole("button", { name: `Copy code from line ${WIDE}` });
+    const copied = () => page.getByRole("button", { name: `Copied code from line ${WIDE}` });
+
+    await copy().click();
+    await expect(copied()).toBeVisible();
+    const fromSource = await page.evaluate(() => navigator.clipboard.readText());
+
+    await flipToPreview(page);
+    await copy().click();
+    await expect(copied()).toBeVisible();
+    const fromPreview = await page.evaluate(() => navigator.clipboard.readText());
+
+    const shown = await page.locator(`${previewPre(WIDE)} > code`).textContent();
+    expect(fromPreview).toBe(fromSource);
+    expect(fromPreview).toBe(shown?.replace(/\n$/, ""));
+  });
+
+  test("wrapping reflows the block in place and unwrapping restores its scrolling", async ({
+    daemon,
+    page,
+  }) => {
+    await openMixedPlan(page, daemon);
+    await flipToPreview(page);
+    const before = await previewMetrics(page, WIDE);
+    expect(before?.scrollWidth).toBeGreaterThan(before?.clientWidth as number);
+
+    await wrapToggle(page).click();
+    await expect.poll(async () => (await previewMetrics(page, WIDE))?.reflowed).toBe(true);
+    const wrapped = await previewMetrics(page, WIDE);
+    expect(wrapped?.scrollWidth).toBeLessThanOrEqual(wrapped?.clientWidth as number);
+    expect(wrapped?.height as number).toBeGreaterThan(before?.height as number);
+
+    await wrapToggle(page).click();
+    await expect.poll(async () => (await previewMetrics(page, WIDE))?.reflowed).toBe(false);
+    const restored = await previewMetrics(page, WIDE);
+    expect(restored?.scrollWidth).toBeGreaterThan(restored?.clientWidth as number);
+  });
+
+  test("the wrap state is shared with the source view", async ({ daemon, page }) => {
+    await openMixedPlan(page, daemon);
+    await wrapToggle(page).click();
+    await expect.poll(async () => (await blockMetrics(page, WIDE))?.reflowed).toBe(true);
+
+    await flipToPreview(page);
+    await expect(wrapToggle(page)).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(async () => (await previewMetrics(page, WIDE))?.reflowed).toBe(true);
+
+    await wrapToggle(page).click();
+    await expect.poll(async () => (await previewMetrics(page, WIDE))?.reflowed).toBe(false);
+    await flipToSource(page);
+    await expect(wrapToggle(page)).toHaveAttribute("aria-pressed", "false");
+    expect(await reflowMarkCount(page)).toBe(0);
+  });
+
+  test("the chrome sits in the block's top-right corner, and stays there on scroll", async ({
+    daemon,
+    page,
+  }) => {
+    await openMixedPlan(page, daemon);
+    await flipToPreview(page);
+    const offset = async () => {
+      const pre = await previewMetrics(page, WIDE);
+      const box = await chromeFor(page, WIDE).boundingBox();
+      return {
+        top: Math.abs((box?.y ?? Number.NaN) - (pre?.top ?? Number.NaN)),
+        right: Math.abs((box?.x ?? Number.NaN) + (box?.width ?? 0) - (pre?.right ?? Number.NaN)),
+      };
+    };
+    const expectCornered = async () => {
+      const { top, right } = await offset();
+      expect(top).toBeLessThan(12);
+      expect(right).toBeLessThan(12);
+    };
+
+    await expect.poll(async () => (await offset()).top).toBeLessThan(12);
+    await expectCornered();
+    const pre = await previewMetrics(page, WIDE);
+    await page.mouse.move(400, (pre?.top ?? 0) + 200);
+    await page.mouse.wheel(0, 150);
+    await expect
+      .poll(async () => (await previewMetrics(page, WIDE))?.top)
+      .toBeLessThan((pre?.top ?? 0) - 100);
+    await expectCornered();
+  });
 });

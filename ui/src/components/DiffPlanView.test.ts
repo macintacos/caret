@@ -524,6 +524,42 @@ describe("DiffPlanView code-block chrome", () => {
     flush();
     expect(chromeBoxes(target)).toHaveLength(0);
   });
+
+  // Fences open on lines 3 and 7.
+  const twoBlocks = "# Title\n\n```ts\na\n```\n\n```\nb\n```\n";
+  const previewToggle = (target: HTMLElement) =>
+    target.querySelector<HTMLButtonElement>(".control-row .preview-toggle");
+  const copyLabels = (target: HTMLElement) =>
+    [...chromeBoxes(target)].map(
+      (box) => box.querySelector("button")?.getAttribute("aria-label") ?? "",
+    );
+
+  async function renderPreviewWithBlocks(): Promise<HTMLElement> {
+    const { target } = render(
+      DiffPlanView,
+      props({ review: reviewFixture({ currentPlan: twoBlocks }) }),
+    );
+    await until(() => previewToggle(target) != null);
+    previewToggle(target)!.click();
+    await until(() => target.querySelector(".plan-preview") != null);
+    return target;
+  }
+
+  test("the preview mounts one box per block, keyed by its fence line", async () => {
+    const target = await renderPreviewWithBlocks();
+    await until(() => chromeBoxes(target).length === 2);
+    expect(copyLabels(target)).toEqual(["Copy code from line 3", "Copy code from line 7"]);
+  });
+
+  test("flipping back to source re-mounts the source boxes and no preview box", async () => {
+    const target = await renderPreviewWithBlocks();
+    await until(() => chromeBoxes(target).length === 2);
+    previewToggle(target)!.click();
+    await until(() => target.querySelector(".plan-preview") == null);
+    await until(() => chromeBoxes(target).length === 2);
+    expect(target.querySelector(".plan-preview .code-chrome") != null).toBe(false);
+    expect(copyLabels(target)).toEqual(["Copy code from line 3", "Copy code from line 7"]);
+  });
 });
 
 // File-reference resolution (EXC-687) is keyed off the plan text, not the review

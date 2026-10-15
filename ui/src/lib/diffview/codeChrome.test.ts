@@ -3,7 +3,14 @@ import { describe, expect, test } from "bun:test";
 
 import { fillLines, scrolledOffsetReader } from "@ui/support/diffview-dom.ts";
 import { CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
-import { codeBlockAtPoint, codeChromeAnchors, type RectReader } from "$lib/diffview/codeChrome.ts";
+import {
+  codeBlockAtPoint,
+  codeChromeAnchors,
+  previewCodeBlockAtPoint,
+  previewCodeChromeAnchors,
+  type RectReader,
+} from "$lib/diffview/codeChrome.ts";
+import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
 
 // A host with a shadow root of [data-content] > [data-line] rows, matching the
 // @pierre/diffs structure codeChrome reads.
@@ -150,5 +157,68 @@ describe("codeChromeAnchors", () => {
         read,
       ).map((a) => a.start),
     ).toEqual([1]);
+  });
+});
+
+describe("preview code chrome", () => {
+  // Two fences: the first opens on line 3, the second on line 8.
+  const PLAN = ["intro", "", "```ts", "a", "```", "", "between", "```", "b", "```", ""].join("\n");
+
+  function mountPreview(): { root: HTMLElement; pres: HTMLElement[] } {
+    const root = document.createElement("div");
+    root.innerHTML = renderPlanMarkdown(PLAN).html;
+    document.body.append(root);
+    const pres = [...root.querySelectorAll<HTMLElement>("pre")];
+    return { root, pres };
+  }
+
+  function stubWidths(pre: HTMLElement, scrollWidth: number, clientWidth: number): void {
+    Object.defineProperty(pre, "scrollWidth", { configurable: true, value: scrollWidth });
+    Object.defineProperty(pre, "clientWidth", { configurable: true, value: clientWidth });
+  }
+
+  // The first pre spans y [10,30], the second y [50,70], both x [100,300].
+  function previewReader(pres: HTMLElement[], scroller: HTMLElement): RectReader {
+    return (el) => {
+      if (el === scroller) return { top: 5, bottom: 1000, left: 8, right: 400 };
+      const i = pres.indexOf(el);
+      return { top: 10 + i * 40, bottom: 30 + i * 40, left: 100, right: 300 };
+    };
+  }
+
+  test("anchors each block at its pre's top-right in scrolled scroller content coords", () => {
+    const { root, pres } = mountPreview();
+    const scroller = document.createElement("div");
+    scroller.scrollTop = 50;
+    scroller.scrollLeft = 10;
+    for (const pre of pres) stubWidths(pre, 100, 100);
+    const read = previewReader(pres, scroller);
+    // top = 10 - (5 - 50) = 55 ; left = 300 - (8 - 10) = 302
+    expect(previewCodeChromeAnchors(root, scroller, new Set(), read)).toEqual([
+      { start: 3, top: 55, left: 302, carded: false },
+      { start: 8, top: 95, left: 302, carded: false },
+    ]);
+    root.remove();
+  });
+
+  test("cards an overflowing block and a wrapped one, not a fitting one", () => {
+    const { root, pres } = mountPreview();
+    const scroller = document.createElement("div");
+    stubWidths(pres[0]!, 500, 200);
+    stubWidths(pres[1]!, 200, 200);
+    const read = previewReader(pres, scroller);
+    const carded = (reflowed: ReadonlySet<number>) =>
+      previewCodeChromeAnchors(root, scroller, reflowed, read).map((a) => a.carded);
+    expect(carded(new Set())).toEqual([true, false]);
+    expect(carded(new Set([8]))).toEqual([true, true]);
+    root.remove();
+  });
+
+  test("hits the block under the point, and nothing between blocks", () => {
+    const { root, pres } = mountPreview();
+    const read = previewReader(pres, document.createElement("div"));
+    expect(previewCodeBlockAtPoint(root, 150, 60, read)).toBe(8);
+    expect(previewCodeBlockAtPoint(root, 150, 40, read)).toBeNull();
+    root.remove();
   });
 });
