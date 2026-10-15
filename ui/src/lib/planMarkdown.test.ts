@@ -62,6 +62,14 @@ describe("renderPlanMarkdown block spans", () => {
     expect(spans("[r]: https://a.test\n\nsee [r]\n")).toEqual([[3, 3]]);
   });
 
+  test("an HTML comment records no block", () => {
+    expect(spans("<!-- c -->\n\npara")).toEqual([[3, 3]]);
+  });
+
+  test("an HTML comment inside a list item keeps the list's span", () => {
+    expect(spans("- <!-- c -->\n- b")).toEqual([[1, 2]]);
+  });
+
   test("a mixed plan gets one span per block", () => {
     const text = [
       "# Title",

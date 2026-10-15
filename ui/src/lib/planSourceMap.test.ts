@@ -19,13 +19,12 @@ function mount(text: string): { root: HTMLElement; map: PlanSourceMap } {
   return { root, map: createPlanSourceMap(root) };
 }
 
-/** The text node holding `needle` (the `nth` occurrence) and the offset where it starts. */
-function find(root: Node, needle: string, nth = 0): [Text, number] {
+/** The first text node holding `needle` and the offset where it starts. */
+function find(root: Node, needle: string): [Text, number] {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let seen = 0;
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
     const index = node.textContent?.indexOf(needle) ?? -1;
-    if (index !== -1 && seen++ === nth) return [node as Text, index];
+    if (index !== -1) return [node as Text, index];
   }
   throw new Error(`no text node holds ${JSON.stringify(needle)}`);
 }
@@ -103,6 +102,37 @@ describe("lineAt", () => {
     expect(map.lineAt(document.body, 0)).toBe(null);
   });
 
+  test("each level of a tight nested list maps to its line", () => {
+    const { root, map } = mount("- outer\n  - inner\n    - deepest\n- back\n");
+    expect(lineOf(map, root, "inner")).toBe(2);
+    expect(lineOf(map, root, "deepest")).toBe(3);
+    expect(lineOf(map, root, "back")).toBe(4);
+  });
+
+  test("each level of a loose nested list maps to its line", () => {
+    const { root, map } = mount("- outer\n\n  - inner\n\n  - sibling\n\n- back\n");
+    expect(lineOf(map, root, "inner")).toBe(3);
+    expect(lineOf(map, root, "sibling")).toBe(5);
+    expect(lineOf(map, root, "back")).toBe(7);
+  });
+
+  test("a loose list with two blank lines between items maps each item", () => {
+    const { root, map } = mount("- one\n\n\n- two\n");
+    expect(lineOf(map, root, "two")).toBe(4);
+  });
+
+  test("task items map to their line", () => {
+    const { root, map } = mount("- [ ] open\n- [/] doing\n");
+    expect(lineOf(map, root, "open")).toBe(1);
+    expect(lineOf(map, root, "doing")).toBe(2);
+  });
+
+  test("each line of an indented code block maps to its own line", () => {
+    const { root, map } = mount("para\n\n    let a;\n    let b;\n");
+    expect(lineOf(map, root, "let a")).toBe(3);
+    expect(lineOf(map, root, "let b")).toBe(4);
+  });
+
   test("an empty preview has no lines", () => {
     const { root, map } = mount("");
     expect(map.lineAt(root, 0)).toBe(null);
@@ -155,6 +185,17 @@ describe("linesOf", () => {
     const { root, map } = mount("one\ntwo\n");
     const [node, at] = find(root, "\n");
     expect(map.linesOf(rangeBetween([node, at], [node, at + 1]))).toEqual({ start: 1, end: 1 });
+  });
+
+  test("a range starting or ending outside the root has no lines", () => {
+    const { root, map } = mount("one\n");
+    const inside = find(root, "one");
+    expect(map.linesOf(rangeBetween([document.body, 0], inside)) === null).toBe(true);
+    const outside = document.createElement("p");
+    outside.textContent = "x";
+    document.body.append(outside);
+    mounted.push(outside);
+    expect(map.linesOf(rangeBetween(inside, [outside, 1])) === null).toBe(true);
   });
 
   test("a collapsed range reports its point's line", () => {
@@ -222,7 +263,25 @@ describe("rangeOf", () => {
 
   test("lines that render no text have no range", () => {
     const { map } = mount(MIXED);
-    for (const line of [2, 6, 15, 18, 21, 23, 24, 26, 99]) expect(map.rangeOf(line)).toBe(null);
+    for (const line of [2, 6, 15, 18, 21, 23, 24, 26, 99]) {
+      expect(map.rangeOf(line) === null).toBe(true);
+    }
+  });
+
+  test("a range for a line that opens a block starts inside that block", () => {
+    const { root, map } = mount("para one\n\nsecond\n");
+    const start = map.rangeOf(3)?.startContainer.parentElement;
+    expect(start?.closest("[data-source-start]") === root.children[1]).toBe(true);
+  });
+});
+
+describe("comments", () => {
+  test("a comment under the root moves no line or range", () => {
+    const { root } = mount("one\n\ntwo\n");
+    root.prepend(document.createComment("a long comment"));
+    const map = createPlanSourceMap(root);
+    expect(lineOf(map, root, "two")).toBe(3);
+    expect(map.rangeOf(3)?.toString()).toBe("two\n");
   });
 });
 
@@ -232,7 +291,7 @@ describe("raw HTML", () => {
     expect(lineOf(map, root, "b")).toBe(1);
     expect(lineOf(map, root, "after")).toBe(3);
     expect(map.rangeOf(3)?.toString()).toContain("after");
-    expect(map.rangeOf(2)).toBe(null);
+    expect(map.rangeOf(2) === null).toBe(true);
   });
 });
 

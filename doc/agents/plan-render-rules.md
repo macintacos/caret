@@ -191,20 +191,21 @@ maps between the two for comments, the cursor and search.
   text — a trailing one included, so a link, codespan or inline tag that opens a line
   counts on that line — and after any other inline token whose raw spans lines. A code
   block gets one marker before its `<pre>`, at its first code line, carrying
-  `data-source-code`; an empty code block gets none. A raw-HTML block gets one at its
-  first line. Markers are inline elements: never wrappers, never inside a `<pre>`. Plan
-  text cannot forge one, since the sanitizer allows no attributes on `span`.
+  `data-source-code`; an empty code block gets none. A raw-HTML block that renders
+  anything gets one at its first line; one the sanitizer empties, such as an HTML comment,
+  gets no marker and no block. Markers are inline elements: never wrappers, never inside a
+  `<pre>`. Plan text cannot forge one, since the sanitizer allows no attributes on `span`.
 - **The map.** `createPlanSourceMap(root)` takes the element whose content is exactly the
   rendered HTML and walks it once per version, storing runs of text offset → line. After a
   `data-source-code` marker, each `\n` in the next element's text that more code follows
-  starts the next line's run. Every lookup is a binary search; none reads layout.
+  starts the next line's run. No lookup reads layout.
 - **Lookups.** `lineAt` gives the line of the character at a DOM point, the last
   character's at the end of the text, and null outside the root or for an empty preview.
   `linesOf` gives the lines of a range's first and last non-whitespace characters (its
   first and last characters when it covers only whitespace), so a triple-click selection
   that ends at the next block's start reports the previous block's line. `rangeOf` gives
-  the rendered text a line produced, or null for a line that produced none: blank, link
-  definition, fence, table delimiter row, `hr`, out of range.
+  the rendered text a line produced, or null for a line that produced none: blank outside
+  code, link definition, fence, table delimiter row, `hr`, out of range.
 - **Edges.**
   - A soft break's `\n` belongs to the line it ends.
   - The structural `\n` marked emits between tags belongs to the preceding run (before the

@@ -7,8 +7,7 @@ import { IMAGE_ATTRIBUTES } from "$lib/diffview/inlineImages.ts";
 import { isSafeUrl } from "$lib/diffview/links.ts";
 import { htmlWhiteList } from "$lib/markdown.ts";
 
-/** A block's source lines in the version's stored text: 1-based, inclusive.
- * A block ends at its last non-blank line; blank lines between blocks belong to none. */
+/** An inclusive, 1-based range of source lines in the version's stored text. */
 export interface SourceSpan {
   start: number;
   end: number;
@@ -17,9 +16,10 @@ export interface SourceSpan {
 export interface RenderedPlan {
   /** One `<div data-source-start="…" data-source-end="…">` per block, in document order.
    * An empty `<span data-source-line="N">` precedes the first rendered character of each
-   * source line; the one before a code block's `<pre>` also carries `data-source-code`. */
+   * source line that renders text; the one before a code block's `<pre>` also carries `data-source-code`. */
   html: string;
-  /** Each block's span; `blocks[i]` is the html's i-th top-level element. */
+  /** Each block's span; `blocks[i]` is the html's i-th top-level element. A block ends at
+   * its last non-blank line; blank lines between blocks belong to none. */
   blocks: SourceSpan[];
 }
 
@@ -109,15 +109,15 @@ function newlines(text: string): number {
   return text.split("\n").length - 1;
 }
 
-function sourceLine(line: number, code = false): Token {
-  return { type: "sourceLine", raw: "", line, code } satisfies SourceLineToken;
+function sourceLine(line: number): Token {
+  return { type: "sourceLine", raw: "", line, code: false } satisfies SourceLineToken;
 }
 
 function leadingNewlines(raw: string): number {
   return newlines(raw.slice(0, raw.length - raw.trimStart().length));
 }
 
-// Inline text has `raw === text` in marked, so both split at the same index.
+// Inline text has `raw === text` in marked, so each piece is its own raw.
 function splitAfterNewlines(token: Tokens.Text): Tokens.Text[] {
   // A trailing "\n" keeps its empty piece, so the next line's marker still follows it.
   const pieces = token.text
@@ -173,15 +173,17 @@ function markSourceLines(tokens: Token[], firstLine: number): Token[] {
     if (token.type === "code") {
       // An empty block's only rendered character sits on its closing fence.
       if (token.text !== "") {
-        out.push(sourceLine(token.codeBlockStyle === "indented" ? start : start + 1, true));
+        const line = token.codeBlockStyle === "indented" ? start : start + 1;
+        out.push({ type: "sourceLine", raw: "", line, code: true } satisfies SourceLineToken);
       }
     } else if (token.type === "html") {
-      out.push(sourceLine(start));
+      if (rawHtmlFilter.process(token.text) !== "") out.push(sourceLine(start));
     } else if (token.type === "table") {
       const table = token as Tokens.Table;
       for (const cell of table.header) cell.tokens = markLeaf(cell.tokens, start);
+      const firstBodyLine = start + 2; // past the header and delimiter rows
       table.rows.forEach((row, i) => {
-        for (const cell of row) cell.tokens = markLeaf(cell.tokens, start + 2 + i);
+        for (const cell of row) cell.tokens = markLeaf(cell.tokens, firstBodyLine + i);
       });
     } else if (token.type === "list") {
       let itemLine = start;
