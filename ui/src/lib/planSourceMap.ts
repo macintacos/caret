@@ -111,15 +111,15 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
       return at === null ? null : lineAtOffset(at);
     },
     linesOf(range) {
-      const at = offsetOf(range.startContainer, range.startOffset);
-      if (at === null || !root.contains(range.endContainer)) return null;
+      const rangeStart = offsetOf(range.startContainer, range.startOffset);
+      if (rangeStart === null || !root.contains(range.endContainer)) return null;
       const text = range.toString();
-      const [from, to] =
+      const [firstChar, lastChar] =
         text.trim() === ""
           ? [0, Math.max(text.length - 1, 0)]
           : [text.length - text.trimStart().length, text.trimEnd().length - 1];
-      const start = lineAtOffset(at + from);
-      const end = lineAtOffset(at + to);
+      const start = lineAtOffset(rangeStart + firstChar);
+      const end = lineAtOffset(rangeStart + lastChar);
       return start === null || end === null ? null : { start, end };
     },
     rangeOf(line) {

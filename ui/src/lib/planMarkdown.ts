@@ -173,8 +173,13 @@ function markSourceLines(tokens: Token[], firstLine: number): Token[] {
     if (token.type === "code") {
       // An empty block's only rendered character sits on its closing fence.
       if (token.text !== "") {
-        const line = token.codeBlockStyle === "indented" ? start : start + 1;
-        out.push({ type: "sourceLine", raw: "", line, code: true } satisfies SourceLineToken);
+        const firstCodeLine = token.codeBlockStyle === "indented" ? start : start + 1;
+        out.push({
+          type: "sourceLine",
+          raw: "",
+          line: firstCodeLine,
+          code: true,
+        } satisfies SourceLineToken);
       }
     } else if (token.type === "html") {
       if (rawHtmlFilter.process(token.text) !== "") out.push(sourceLine(start));
