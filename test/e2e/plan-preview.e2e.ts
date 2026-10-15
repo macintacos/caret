@@ -215,15 +215,15 @@ test("flipping keeps the reader's place in both directions", async ({ daemon, pa
   await expect.poll(() => parkedAt(page, start)).toBe(true);
 
   await wheelPlan(page, 900, PREVIEW);
-  const back = await present(
+  const previewStart = await present(
     async () => (await previewTopBlock(page))?.start,
     "no preview block at the reading zone",
   );
   await toggle(page).click();
-  await expect.poll(() => sourceTopLine(page)).toBe(back);
+  await expect.poll(() => sourceTopLine(page)).toBe(previewStart);
   await settledMutations(page);
   // Deliberately one read: the claim is that it stayed, which a poll would weaken.
-  expect(await sourceTopLine(page)).toBe(back);
+  expect(await sourceTopLine(page)).toBe(previewStart);
 });
 
 test("a round trip from inside a code block lands at its fence", async ({ daemon, page }) => {

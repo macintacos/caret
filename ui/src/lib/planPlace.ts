@@ -73,16 +73,16 @@ export function holdPlace(hold: PlaceHold, observe: ObserveResize = observeResiz
   };
   const park = (): void => {
     if (released) return;
-    const el = hold.content.isConnected ? hold.target() : null;
-    if (el == null) release();
-    else parkAt(hold.scroller, el);
+    const target = hold.content.isConnected ? hold.target() : null;
+    if (target == null) release();
+    else parkAt(hold.scroller, target);
   };
-  const stop = observe(hold.content, park);
+  const stopObserving = observe(hold.content, park);
   if (released) {
-    stop();
+    stopObserving();
     return release;
   }
-  disconnect = stop;
+  disconnect = stopObserving;
   for (const type of READER_INPUTS) doc.addEventListener(type, release, LISTEN);
   park();
   return release;

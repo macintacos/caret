@@ -1085,16 +1085,16 @@
     content: () => Element | null | undefined,
     target: () => Element | null,
   ): () => void {
-    let hold: (() => void) | undefined;
-    const cancel = retryFrames(() => {
+    let releaseHold: (() => void) | undefined;
+    const cancelFrames = retryFrames(() => {
       const box = content();
       if (scrollEl == null || box == null || target() == null) return false;
-      hold = holdPlace({ scroller: scrollEl, content: box, target });
+      releaseHold = holdPlace({ scroller: scrollEl, content: box, target });
       return true;
     });
     return () => {
-      cancel();
-      hold?.();
+      cancelFrames();
+      releaseHold?.();
     };
   }
 

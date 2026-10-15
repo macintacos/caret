@@ -116,12 +116,12 @@ describe("holdPlace", () => {
     content.append(target);
     scroller.append(content);
     document.body.append(scroller);
-    const fake = { fire: () => {}, disconnects: 0, observed: null as Element | null };
+    const observer = { fire: () => {}, disconnects: 0, observed: null as Element | null };
     const observe = (el: Element, onResize: () => void) => {
-      fake.observed = el;
-      fake.fire = onResize;
+      observer.observed = el;
+      observer.fire = onResize;
       return () => {
-        fake.disconnects += 1;
+        observer.disconnects += 1;
       };
     };
     let resolved: Element | null = target;
@@ -130,7 +130,7 @@ describe("holdPlace", () => {
       scroller,
       content,
       geo,
-      fake,
+      observer,
       release,
       drop: () => {
         resolved = null;
@@ -139,43 +139,43 @@ describe("holdPlace", () => {
   }
 
   test("parks the target immediately and watches the content", () => {
-    const { scroller, content, fake } = arrange();
+    const { scroller, content, observer } = arrange();
     expect(scroller.scrollTop).toBe(500 - SCROLL_OFFSET_TOP);
-    expect(fake.observed === content).toBe(true);
+    expect(observer.observed === content).toBe(true);
   });
 
   test("re-parks on every content resize", () => {
-    const { scroller, geo, fake } = arrange();
+    const { scroller, geo, observer } = arrange();
     geo.targetTop += 80; // an image above loaded and pushed the target down
-    fake.fire();
+    observer.fire();
     expect(scroller.scrollTop).toBe(500 + 80 - SCROLL_OFFSET_TOP);
   });
 
   for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) {
     test(`a reader's ${type} releases the hold`, () => {
-      const { scroller, geo, fake } = arrange();
+      const { scroller, geo, observer } = arrange();
       document.dispatchEvent(new Event(type));
-      expect(fake.disconnects).toBe(1);
+      expect(observer.disconnects).toBe(1);
       geo.targetTop += 80;
-      fake.fire();
+      observer.fire();
       expect(scroller.scrollTop).toBe(500 - SCROLL_OFFSET_TOP);
     });
   }
 
   test("releases itself when the content is detached", () => {
-    const { scroller, content, fake } = arrange();
+    const { scroller, content, observer } = arrange();
     content.remove();
     const before = scroller.scrollTop;
-    fake.fire();
-    expect(fake.disconnects).toBe(1);
+    observer.fire();
+    expect(observer.disconnects).toBe(1);
     expect(scroller.scrollTop).toBe(before);
   });
 
   test("releases itself when the target no longer resolves", () => {
-    const { fake, drop } = arrange();
+    const { observer, drop } = arrange();
     drop();
-    fake.fire();
-    expect(fake.disconnects).toBe(1);
+    observer.fire();
+    expect(observer.disconnects).toBe(1);
   });
 
   test("an observer that fires during observe releases cleanly when the target is gone", () => {
@@ -195,10 +195,10 @@ describe("holdPlace", () => {
   });
 
   test("a second release is harmless and disconnects once", () => {
-    const { fake, release } = arrange();
+    const { observer, release } = arrange();
     release();
     release();
     document.dispatchEvent(new Event("wheel"));
-    expect(fake.disconnects).toBe(1);
+    expect(observer.disconnects).toBe(1);
   });
 });
