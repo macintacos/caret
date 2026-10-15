@@ -91,9 +91,128 @@ describe("renderPlanMarkdown block spans", () => {
   });
 });
 
+function withoutMarkers(html: string): string {
+  return html.replace(/<span data-source-line="\d+"( data-source-code)?><\/span>/g, "");
+}
+
+function marker(line: number): string {
+  return `<span data-source-line="${line}"></span>`;
+}
+
+function codeMarker(line: number): string {
+  return `<span data-source-line="${line}" data-source-code></span>`;
+}
+
+function markerCount(html: string): number {
+  return html.split("data-source-line=").length - 1;
+}
+
+describe("renderPlanMarkdown source-line markers", () => {
+  test("a soft break starts the next line's marker after its newline", () => {
+    expect(renderPlanMarkdown("alpha\nbeta").html).toContain(
+      `<p>${marker(1)}alpha\n${marker(2)}beta</p>`,
+    );
+  });
+
+  test("a bold run straddling a break carries the marker inside <strong>", () => {
+    expect(renderPlanMarkdown("a **bold\nrun** b").html).toContain(
+      `<strong>bold\n${marker(2)}run</strong>`,
+    );
+  });
+
+  test("a link label straddling a break carries the marker inside <a>", () => {
+    expect(renderPlanMarkdown("see [the\nlabel](https://a.test) x").html).toContain(
+      `>the\n${marker(2)}label</a>`,
+    );
+  });
+
+  test("a hard break puts the next line's marker after <br>", () => {
+    for (const text of ["a  \nb", "a\\\nb"]) {
+      expect(renderPlanMarkdown(text).html).toContain(`<br>${marker(2)}b`);
+    }
+  });
+
+  test("a codespan straddling a break marks the next line after it", () => {
+    const html = renderPlanMarkdown("x `co\nde` after").html;
+    expect(html).toContain(`<code>co de</code>${marker(2)} after`);
+    expect(markerCount(html)).toBe(2);
+  });
+
+  test("an image whose alt straddles a break keeps a plain alt and marks the next line after it", () => {
+    const html = renderPlanMarkdown("![a\nb](https://a.test/i.png) tail\nnext").html;
+    expect(html).toContain('alt="a\nb"');
+    expect(html).toMatch(new RegExp(`<img [^>]*>${marker(2)} tail`));
+  });
+
+  test("an unsafe image's alt text straddling a break marks the next line after it", () => {
+    const html = renderPlanMarkdown("![a\nb](rel.png) tail\nnext").html;
+    expect(html).not.toContain("&lt;span");
+    expect(html).toContain(`a\nb${marker(2)} tail`);
+  });
+
+  test("an entity that renders a newline starts no line", () => {
+    expect(markerCount(renderPlanMarkdown("a &#10; b").html)).toBe(1);
+  });
+
+  test("a loose list item's second paragraph carries its own line", () => {
+    expect(renderPlanMarkdown("- one\n\n  two\n").html).toContain(`<p>${marker(3)}two</p>`);
+  });
+
+  test("a blockquote's second paragraph carries its own line", () => {
+    expect(renderPlanMarkdown("> one\n>\n> two").html).toContain(`<p>${marker(3)}two</p>`);
+  });
+
+  test("each table cell starts with its row's line", () => {
+    const root = fragment(
+      renderPlanMarkdown("intro\n\n| h | i |\n| - | - |\n| 1 | 2 |\n| 3 | 4 |").html,
+    );
+    const lineOf = (cell: Element) => cell.firstElementChild?.getAttribute("data-source-line");
+    expect([...root.querySelectorAll("th")].map(lineOf)).toEqual(["3", "3"]);
+    expect([...root.querySelectorAll("td")].map(lineOf)).toEqual(["5", "5", "6", "6"]);
+  });
+
+  test("a fenced block is marked once, before <pre>, at its first code line", () => {
+    const html = renderPlanMarkdown("para\n\n```\nx\ny\n```").html;
+    expect(html).toContain(`${codeMarker(4)}<pre>`);
+    expect(markerCount(html)).toBe(2);
+  });
+
+  test("an indented block is marked at its first line", () => {
+    expect(renderPlanMarkdown("para\n\n    code").html).toContain(`${codeMarker(3)}<pre>`);
+  });
+
+  test("a fenced block in a list item is marked inside the <li>", () => {
+    const li = fragment(renderPlanMarkdown("- item\n\n  ```\n  x\n  ```").html).querySelector("li");
+    expect(li?.querySelector("[data-source-code]")?.getAttribute("data-source-line")).toBe("4");
+  });
+
+  test("an empty fenced block is unmarked", () => {
+    expect(markerCount(renderPlanMarkdown("```\n```").html)).toBe(0);
+  });
+
+  test("a native task's marker follows its checkbox; a [/] task's precedes it", () => {
+    expect(renderPlanMarkdown("- [ ] task").html).toMatch(
+      /<input [^>]*> <span data-source-line="1"><\/span>task/,
+    );
+    expect(renderPlanMarkdown("- [/] task").html).toContain(`<li>${marker(1)}<input`);
+  });
+
+  test("a raw-HTML <pre> carries only its block's line marker", () => {
+    const html = renderPlanMarkdown("<pre>\na\nb\n</pre>").html;
+    expect(html).toContain(`${marker(1)}<pre>`);
+    expect(html).not.toContain("data-source-code");
+  });
+
+  test("a raw marker-shaped span in plan text cannot forge a marker", () => {
+    expect(
+      renderPlanMarkdown('t <span data-source-line="9" data-source-code>x</span>').html,
+    ).toContain("<span>x</span>");
+  });
+});
+
 describe("renderPlanMarkdown text", () => {
   test("a soft line break stays a newline, not <br>", () => {
-    const { html } = renderPlanMarkdown("a\nb");
+    const html = withoutMarkers(renderPlanMarkdown("a\nb").html);
     expect(html).toContain("<p>a\nb</p>");
     expect(html).not.toContain("<br");
   });
