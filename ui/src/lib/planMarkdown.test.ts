@@ -22,7 +22,7 @@ function spans(text: string): [number, number][] {
 
 describe("renderPlanMarkdown block spans", () => {
   test("an empty plan has no blocks", () => {
-    expect(renderPlanMarkdown("")).toEqual({ html: "", blocks: [] });
+    expect(renderPlanMarkdown("")).toEqual({ html: "", blocks: [], codeLanguages: new Map() });
   });
 
   test("a plan that is one fenced block spans every line", () => {
@@ -469,6 +469,66 @@ describe("renderPlanMarkdown raw HTML", () => {
   test("a raw <details> survives", () => {
     const root = fragment(renderPlanMarkdown("<details><summary>s</summary></details>").html);
     expect(root.querySelector("details > summary") !== null).toBe(true);
+  });
+});
+
+describe("renderPlanMarkdown code blocks", () => {
+  const hostile = '```"><img src=x onerror=alert(1)>\nx\n```\n';
+
+  test("every fence renders a class-free <pre><code> whatever its info string", () => {
+    for (const fence of ["```ts\nx\n```\n", "```nosuchlang\nx\n```\n", "```\nx\n```\n", hostile]) {
+      const html = renderPlanMarkdown(fence).html;
+      expect(html).toContain("<pre><code>x\n</code></pre>");
+      for (const banned of ["language-", "nosuchlang", "onerror", "<img"]) {
+        expect(html).not.toContain(banned);
+      }
+    }
+  });
+
+  test("code text is escaped and keeps its trailing newline", () => {
+    expect(renderPlanMarkdown("```\na<b\n```\n").html).toContain("<code>a&lt;b\n</code>");
+  });
+
+  test("codeLanguages keys each highlightable fence's grammar by its code marker's line", () => {
+    const text = [
+      "```ts", // 1
+      "const a = 1;",
+      "```",
+      "",
+      "- item", // 5
+      "",
+      "  ```js",
+      "  b();",
+      "  ```",
+      "",
+      "```nosuchlang", // 11
+      "x",
+      "```",
+      "",
+      "```", // 15
+      "bare",
+      "```",
+      "",
+      '```"><img src=x>', // 19
+      "y",
+      "```",
+      "",
+      "```text", // 23
+      "t",
+      "```",
+      "",
+      "```py", // 27
+      "```",
+      "",
+      "    indented", // 30
+      "",
+    ].join("\n");
+    const { html, codeLanguages } = renderPlanMarkdown(text);
+    expect([...codeLanguages]).toEqual([
+      [2, "typescript"],
+      [8, "javascript"],
+    ]);
+    expect(html).toContain(`${codeMarker(8)}<pre>`);
   });
 });
 

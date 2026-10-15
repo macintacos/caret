@@ -67,11 +67,18 @@ const FENCE_RE = /^[ \t]{0,3}(?:`{3,}|~{3,})[ \t]*([A-Za-z0-9_+#.-]+)/gm;
 export function scanFenceLanguages(text: string): string[] {
   const found = new Set<string>();
   for (const m of text.matchAll(FENCE_RE)) {
-    const tag = (m[1] ?? "").toLowerCase();
-    const lang = ALIAS[tag] ?? tag;
-    if (lang !== "markdown" && BUNDLED.has(lang)) found.add(lang);
+    const lang = fenceGrammar(m[1] ?? "");
+    if (lang !== null && lang !== "markdown") found.add(lang);
   }
   return [...found].sort();
+}
+
+/** The bundled grammar a fence's info string names (its first word, lower-cased and
+ * alias-resolved), or null when it names none. */
+export function fenceGrammar(info: string): string | null {
+  const tag = (info.trim().split(/\s/, 1)[0] ?? "").toLowerCase();
+  const lang = Object.hasOwn(ALIAS, tag) ? (ALIAS[tag] as string) : tag;
+  return BUNDLED.has(lang) ? lang : null;
 }
 
 // A grammar is attached to the shared highlighter exactly once, but several

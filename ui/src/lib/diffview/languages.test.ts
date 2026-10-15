@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { scanFenceLanguages } from "$lib/diffview/languages.ts";
+import { fenceGrammar, scanFenceLanguages } from "$lib/diffview/languages.ts";
 
 // scanFenceLanguages is the gate between an agent's free-form fence tags and the
 // shiki grammar bundle: only canonical, bundled grammar names should reach the
@@ -42,5 +42,21 @@ describe("scanFenceLanguages", () => {
 
   test("returns nothing for a plan with no code", () => {
     expect(scanFenceLanguages("# Title\n\nJust prose, no fences.\n")).toEqual([]);
+  });
+});
+
+describe("fenceGrammar", () => {
+  test("resolves an info string's first word to its canonical bundled grammar", () => {
+    expect(fenceGrammar("ts")).toBe("typescript");
+    expect(fenceGrammar("Py")).toBe("python");
+    expect(fenceGrammar("sh")).toBe("shellscript");
+    expect(fenceGrammar("js {1,3}")).toBe("javascript");
+    expect(fenceGrammar("markdown")).toBe("markdown");
+  });
+
+  test("names no grammar for plain text, unknown, empty, or hostile info strings", () => {
+    for (const info of ["text", "nosuchlang", "", "__proto__", "constructor", '"><script>']) {
+      expect(fenceGrammar(info)).toBeNull();
+    }
   });
 });
