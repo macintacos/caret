@@ -6,10 +6,13 @@ import {
   FOLLOW_ANIM_MS,
   followCursorLine,
   followScrollDelta,
+  indexAtReadingZone,
   lineAtReadingZone,
+  parkAt,
   REVEAL_MARGIN_BOTTOM,
   revealCard,
   revealScrollDelta,
+  rowForLine,
   SCROLL_ANIM_MS,
   SCROLL_OFFSET_TOP,
   scrollToDiffLine,
@@ -419,6 +422,101 @@ describe("lineAtReadingZone", () => {
       { line: 2, bottom: PARK - 2 },
     ];
     expect(lineAtReadingZone(rows, TOP)).toBe(null);
+  });
+});
+
+describe("indexAtReadingZone", () => {
+  /** Runs both probes over the same bottoms: lines are 1-based indexes + 1. */
+  function both(bottoms: number[]): [number | null, number | null] {
+    const i = indexAtReadingZone(bottoms.length, (k) => bottoms[k] as number, TOP);
+    const line = lineAtReadingZone(
+      bottoms.map((bottom, k) => ({ line: k + 1, bottom })),
+      TOP,
+    );
+    return [i === null ? null : i + 1, line];
+  }
+
+  test("agrees with lineAtReadingZone across the zone and its slop boundary", () => {
+    for (const bottoms of [
+      [PARK, PARK + ROW, PARK + ROW * 2],
+      [PARK + 0.5, PARK + ROW],
+      [PARK + 1, PARK + ROW],
+      [PARK + 1.01, PARK + ROW],
+      [PARK - 40, PARK - 20, PARK - 4, PARK + 14, PARK + 32],
+      [PARK + 50],
+    ]) {
+      const [index, line] = both(bottoms);
+      expect(index).toBe(line);
+    }
+  });
+
+  test("returns null when there are no elements", () => {
+    expect(indexAtReadingZone(0, () => 0, TOP)).toBe(null);
+  });
+
+  test("returns null when every element ends above the reading zone", () => {
+    expect(indexAtReadingZone(3, (k) => PARK - 30 + k * 10, TOP)).toBe(null);
+  });
+
+  test("reads at most ⌈log₂ n⌉ + 1 bottoms over 1,000 elements", () => {
+    let reads = 0;
+    const bottomOf = (k: number) => {
+      reads += 1;
+      return PARK - 5000 + k * ROW;
+    };
+    const index = indexAtReadingZone(1000, bottomOf, TOP);
+    expect(index).toBe(Math.floor(5000 / ROW) + 1);
+    expect(reads).toBeLessThanOrEqual(11);
+  });
+});
+
+describe("rowForLine", () => {
+  test("finds the row for a line in the container's shadow root", () => {
+    const { host } = harness([1, 5, 9]);
+    expect(rowForLine(host, 5)?.getAttribute("data-line")).toBe("5");
+  });
+
+  test("returns null when no row carries the line", () => {
+    const { host } = harness([1, 2]);
+    expect(rowForLine(host, 9) == null).toBe(true);
+  });
+});
+
+describe("parkAt", () => {
+  function parked(elTop: number, scrollTop: number): HTMLElement {
+    const scroller = document.createElement("div");
+    scroller.getBoundingClientRect = () => rect(TOP);
+    scroller.scrollTop = scrollTop;
+    const el = document.createElement("div");
+    el.getBoundingClientRect = () => rect(elTop);
+    parkAt(scroller, el);
+    return scroller;
+  }
+
+  test("parks the element SCROLL_OFFSET_TOP below the scroller's top, instantly", () => {
+    expect(parked(TOP + 400, 100).scrollTop).toBe(100 + 400 - SCROLL_OFFSET_TOP);
+  });
+
+  test("clamps at the top of the content", () => {
+    expect(parked(TOP, 0).scrollTop).toBe(0);
+  });
+
+  test("does not write when already within a pixel of the park", () => {
+    const scroller = document.createElement("div");
+    scroller.getBoundingClientRect = () => rect(TOP);
+    let writes = 0;
+    let top = 300;
+    Object.defineProperty(scroller, "scrollTop", {
+      get: () => top,
+      set: (v: number) => {
+        writes += 1;
+        top = v;
+      },
+    });
+    const el = document.createElement("div");
+    el.getBoundingClientRect = () => rect(TOP + SCROLL_OFFSET_TOP + 0.6);
+    parkAt(scroller, el);
+    expect(writes).toBe(0);
   });
 });
 
