@@ -15,10 +15,9 @@
 import { quadOut } from "svelte/easing";
 
 import type { DiffSide } from "$lib/diffview/types.ts";
+import { SCROLL_OFFSET_TOP } from "$lib/layout.ts";
 
-/** Breathing room (px) above a jumped-to row so the heading isn't flush against
- * the very top edge of the scroll container. */
-export const SCROLL_OFFSET_TOP = 12;
+export { SCROLL_OFFSET_TOP };
 
 /** Duration (ms) of a jump to a place — the JS mirror of --dur-travel. */
 export const SCROLL_ANIM_MS = 240;

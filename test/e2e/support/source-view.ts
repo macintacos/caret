@@ -13,6 +13,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import { currentCrumb } from "@test/e2e/support/chrome.ts";
 import { expect, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { SCROLL_OFFSET_TOP } from "@ui/src/lib/layout.ts";
 
 /**
  * The plan's scroll container.
@@ -201,6 +202,46 @@ export async function lineOf(page: Page, text: string): Promise<number> {
   }, text);
   if (line === null) throw new Error(`no rendered row reads exactly ${JSON.stringify(text)}`);
   return line;
+}
+
+/** The 1-based line of the first source row whose bottom clears the reading zone
+ * (`SCROLL_OFFSET_TOP` + 1 px below the plan scroller's top) — where the reader
+ * "is" — or null when no row is rendered there. */
+export function sourceTopLine(page: Page): Promise<number | null> {
+  return page.evaluate(
+    ({ surface, offset }) => {
+      const zone = (document.querySelector(surface) as HTMLElement).getBoundingClientRect().top;
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const row = [...(sh?.querySelectorAll("[data-line]") ?? [])].find(
+        (r) => r.getBoundingClientRect().bottom > zone + offset + 1,
+      );
+      return row ? Number(row.getAttribute("data-line")) : null;
+    },
+    { surface: PLAN_SURFACE, offset: SCROLL_OFFSET_TOP },
+  );
+}
+
+/** The preview block at the same reading zone `sourceTopLine` reads: its source span
+ * and its top relative to the scroller's top, or null with no preview block there. */
+export function previewTopBlock(
+  page: Page,
+): Promise<{ start: number; end: number; top: number } | null> {
+  return page.evaluate(
+    ({ surface, preview, offset }) => {
+      const top = (document.querySelector(surface) as HTMLElement).getBoundingClientRect().top;
+      const block = [...document.querySelectorAll<HTMLElement>(`${preview} > div`)].find(
+        (b) => b.getBoundingClientRect().bottom > top + offset + 1,
+      );
+      return block
+        ? {
+            start: Number(block.dataset.sourceStart),
+            end: Number(block.dataset.sourceEnd),
+            top: block.getBoundingClientRect().top - top,
+          }
+        : null;
+    },
+    { surface: PLAN_SURFACE, preview: PLAN_PREVIEW, offset: SCROLL_OFFSET_TOP },
+  );
 }
 
 /** One character cell's advance, in viewport px, measured off the row whose text is

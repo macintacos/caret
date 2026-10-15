@@ -10,6 +10,11 @@
  */
 export const REFERENCE_WIDTH_PX = 1400;
 
+/** Breathing room (px) above a jumped-to row so the heading isn't flush against
+ * the very top edge of the scroll container — and the plan's reading zone, which
+ * the e2e probes measure against. */
+export const SCROLL_OFFSET_TOP = 12;
+
 /**
  * Width foundation for the responsive effort (EXC-806, parent EXC-770). Three
  * thresholds, single-sourced here and mirrored as `--w-*` custom properties in
