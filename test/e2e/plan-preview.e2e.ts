@@ -14,13 +14,9 @@
 
 import type { Page } from "@playwright/test";
 
+import { currentCrumb, previewToggle as toggle } from "@test/e2e/support/chrome.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
-
-const PREVIEW = ".plan-preview";
-const CRUMB = ".plan-breadcrumbs button.crumb";
-
-const toggle = (page: Page) => page.getByRole("button", { name: "Preview", exact: true });
+import { PLAN_PREVIEW as PREVIEW, planSurface } from "@test/e2e/support/source-view.ts";
 
 const body = (tag: string) =>
   Array.from({ length: 30 }, (_, i) => `${tag} paragraph ${i + 1} of the plan body.`).join("\n\n");
@@ -53,10 +49,8 @@ test("the toggle flips a fresh origin from source to a laid-out preview", async 
   await expect(toggle(page)).toBeFocused();
   const slashed = preview.locator('input[data-task="slashed"]');
   await expect.poll(() => slashed.evaluate((el: HTMLInputElement) => el.indeterminate)).toBe(true);
-  const fits = await preview
-    .locator("p", { hasText: LONG_WORD })
-    .evaluate((el) => el.scrollWidth <= el.clientWidth);
-  expect(fits).toBe(true);
+  const long = preview.locator("p", { hasText: LONG_WORD });
+  await expect.poll(() => long.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
 });
 
 test("the preview stays on across a reload", async ({ daemon, page }) => {
@@ -87,7 +81,10 @@ test("compare hides the toggle, then hands back the preview and re-arms heading 
   await expect(page.locator(PREVIEW)).toBeVisible();
 
   await toggle(page).click();
-  await expect(page.locator(CRUMB).first()).toHaveText("Alpha");
+  const plan = await planSurface(page);
+  await plan.hover();
+  await page.mouse.wheel(0, 100_000);
+  await expect(currentCrumb(page)).toHaveText("Echo");
 });
 
 test("a ?heading= deep link waits under the preview for the first source mount", async ({
@@ -104,7 +101,7 @@ test("a ?heading= deep link waits under the preview for the first source mount",
   expect(new URL(page.url()).searchParams.get("heading")).toBe("echo");
 
   await toggle(page).click();
-  await expect(page.locator(CRUMB).last()).toHaveText("Echo");
+  await expect(currentCrumb(page)).toHaveText("Echo");
 });
 
 test("a new version re-renders the preview without losing scroll", async ({ daemon, page }) => {
@@ -116,11 +113,13 @@ test("a new version re-renders the preview without losing scroll", async ({ daem
   await page.locator(PREVIEW).hover();
   await page.mouse.wheel(0, 600);
   await expect.poll(() => plan.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  const before = await plan.evaluate((el) => el.scrollTop);
 
-  await daemon.addVersion(id, SECTIONED.replace("bravo paragraph 1 ", "revised bravo text "));
+  // The edit sits in the last section, below the viewport, so nothing above it moves.
+  await daemon.addVersion(id, SECTIONED.replace("echo paragraph 30 ", "revised echo text "));
 
-  await expect(page.locator(PREVIEW).getByText("revised bravo text")).toBeVisible();
+  await expect(page.locator(PREVIEW).getByText("revised echo text")).toHaveCount(1);
   await expect
-    .poll(() => page.locator(PLAN_SURFACE).evaluate((el) => el.scrollTop))
-    .toBeGreaterThan(0);
+    .poll(async () => Math.abs((await plan.evaluate((el) => el.scrollTop)) - before))
+    .toBeLessThan(2);
 });

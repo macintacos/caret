@@ -14,8 +14,8 @@ Find the row that matches what you came here to do, then follow the link.
 | Understand how caret reformats a plan before you read it | [`CONFIGURING.md` § Plan formatting (rumdl)](CONFIGURING.md#plan-formatting-rumdl) |
 | Write or check a theme file | [`CONFIGURING.md` § Theme files](CONFIGURING.md#theme-files) |
 | Turn on desktop notifications, or work out why none appear | [`RUNNING.md` § Desktop notifications](RUNNING.md#desktop-notifications) |
-| Switch a plan between its source and a rendered preview | [`RUNNING.md` § Reading a plan](RUNNING.md#reading-a-plan) |
 | Turn caret's sounds off | [`RUNNING.md` § Sound](RUNNING.md#sound) |
+| Switch a plan between its source and a rendered preview | [`RUNNING.md` § Reading a plan](RUNNING.md#reading-a-plan) |
 | Tell which plans arrived while you were reading another one | [`RUNNING.md` § Unread plans](RUNNING.md#unread-plans) |
 | Clear a cmux pane's unread mark from a review | [`RUNNING.md` § cmux unread marks](RUNNING.md#cmux-unread-marks) |
 | Find out what the mark on the settings button means, or stop update notices | [`RUNNING.md` § Update notices](RUNNING.md#update-notices) |

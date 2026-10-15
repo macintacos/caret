@@ -1,10 +1,9 @@
 import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import type { RenderedPlan } from "$lib/planMarkdown.ts";
+import { withBlockedStorage } from "@ui/support/storage.ts";
 import {
   PLAN_VIEW_KEY,
-  previewRenderer,
   readPlanView,
   runsOn,
   SURFACE_BEHAVIORS,
@@ -26,6 +25,12 @@ describe("plan view preference", () => {
     expect(readPlanView()).toBe("source");
   });
 
+  test("defaults to source when storage throws", () => {
+    withBlockedStorage(() => {
+      expect(readPlanView()).toBe("source");
+    });
+  });
+
   test("a written preview reads back", () => {
     writePlanView("preview");
     expect(readPlanView()).toBe("preview");
@@ -37,34 +42,11 @@ describe("runsOn", () => {
     expect(BEHAVIORS.every((b) => runsOn(b, "source"))).toBe(true);
   });
 
-  test("no behavior runs on the preview or in compare", () => {
-    expect(BEHAVIORS.some((b) => runsOn(b, "preview") || runsOn(b, "compare"))).toBe(false);
-  });
-});
-
-describe("previewRenderer", () => {
-  function counting(): { render: (text: string) => RenderedPlan; calls: () => number } {
-    let calls = 0;
-    const render = (text: string): RenderedPlan => {
-      calls++;
-      return { html: text } as unknown as RenderedPlan;
-    };
-    return { render, calls: () => calls };
-  }
-
-  test("renders repeated identical text once and returns the same object", () => {
-    const fake = counting();
-    const renderPreview = previewRenderer(fake.render);
-    const first = renderPreview("# a");
-    expect(renderPreview("# a") === first).toBe(true);
-    expect(fake.calls()).toBe(1);
+  test("no behavior runs in compare", () => {
+    expect(BEHAVIORS.some((b) => runsOn(b, "compare"))).toBe(false);
   });
 
-  test("renders again for new text", () => {
-    const fake = counting();
-    const renderPreview = previewRenderer(fake.render);
-    renderPreview("# a");
-    renderPreview("# b");
-    expect(fake.calls()).toBe(2);
+  test("no behavior runs on the preview yet", () => {
+    expect(BEHAVIORS.some((b) => runsOn(b, "preview"))).toBe(false);
   });
 });

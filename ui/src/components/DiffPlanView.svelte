@@ -13,7 +13,7 @@
   // the contentKey is unchanged, so scroll survives the 2s poll re-delivering the
   // same version.
   //
-  // A toggle in the control row swaps the source view for a preview of the same text
+  // A toggle in the control row swaps the source view for a plan preview of the same text
   // rendered as HTML (PlanPreview), remembered per browser. The source view's own
   // behaviors — gutter, cursor, search, heading tracking, reference and code chrome —
   // run only on the surfaces planView.ts's SURFACE_BEHAVIORS lists for them.
@@ -21,7 +21,7 @@
   // When the review has multiple stored versions, a compare control lets the
   // reviewer diff any two of them (base vs. target) through the SourceDiffView
   // wrapper, switching the split/unified layout at runtime. The heading surfaces,
-  // gutter, and inline annotation cards belong to the single-version view only —
+  // gutter, and inline annotation cards belong to the source view only —
   // compare mode is a clean diff surface with none of them; the compared versions'
   // comments surface in the docked panel instead, revealing their line on the side
   // they belong to for the two rendered versions and listing non-interactively for
@@ -115,11 +115,11 @@
   import FolderTree from "@/components/FolderTree.svelte";
   import PlanPreview from "@/components/PlanPreview.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
+  import { memoLast } from "$lib/memoLast.ts";
   import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
   import {
     type PlanSurface,
     type PlanView,
-    previewRenderer,
     readPlanView,
     runsOn,
     type SurfaceBehavior,
@@ -157,8 +157,9 @@
     /** Hand the host a reveal(line, side) action once the source view mounts, so a
      * sibling (the comment navigator) can scroll to a commented line. The side is
      * read only while comparing, where a line number alone names a row on either
-     * document; the single-version view ignores it. A call before the view paints
-     * is a bounded-retry no-op. */
+     * document; the source view ignores it. A call before the view paints is a
+     * bounded-retry no-op, and on the plan preview, where the lineComments row does
+     * not run, the reveal is a no-op. */
     onExposeReveal?: (reveal: (line: number, side?: DiffSide) => void) => void;
     /** Report the compared versions upward (null when not comparing), so App can
      * point the single CommentNavigator instance at the cross-version index.
@@ -271,10 +272,14 @@
   const surface = $derived<PlanSurface>(showDiff ? "compare" : planView);
   const runs = (b: SurfaceBehavior): boolean => runsOn(b, surface);
 
-  // The preview renders the stored text, so its blocks' source spans count the same
-  // lines the source view numbers. Rendered lazily and once per text.
-  const renderPreview = previewRenderer(renderPlanMarkdown);
-  const preview = $derived(surface === "preview" ? renderPreview(review.currentPlan) : null);
+  // The plan preview renders the stored text, so its blocks' source spans count the
+  // same lines the source view numbers. Memoized because the 2s poll hands a fresh
+  // `review` each tick, and without it every tick would re-lex and re-sanitize the
+  // whole plan; `{@html}` itself compares by value.
+  const renderPreview = memoLast(renderPlanMarkdown);
+  const planPreview = $derived(
+    surface === "preview" ? renderPreview(review.currentPlan) : null,
+  );
 
   // Report the compared versions to the host, so App can point the docked comment
   // panel at the cross-version index (EXC-872). The assignment matches what the
@@ -427,7 +432,7 @@
   // The file the preview is open on, plus the token it was opened from, which the
   // reveal effect below measures so the clicked filename stays visible beside the
   // drawer. It closes on Escape (the dismissal effect below) or on the pane's own
-  // close button; compare mode hides the lane without clearing this — the dismissal
+  // close button; leaving the source view hides the lane without clearing this — the dismissal
   // effect carries the matching guard.
   //
   // `token` is optional because there are two openers. A plan reference (EXC-687)
@@ -485,7 +490,7 @@
   //
   // The RECT rather than the element: the card places itself once and never
   // tracks the token, and the plan surface it belongs to is torn out whenever
-  // compare mode opens — a detached element measures all zeros, which would park
+  // the source view gives way — a detached element measures all zeros, which would park
   // the card in the viewport's corner and keep the dead subtree alive besides.
   let folderTree = $state<{ path: string; rect: DOMRect } | undefined>();
 
@@ -711,7 +716,10 @@
   });
 
   // The imperative API the SourceView hands us once mounted: scroll-to-line plus
-  // the host element whose annotation slots we project comments into.
+  // the host element whose annotation slots we project comments into. Never cleared —
+  // it outlives SourceView on the plan preview and in compare — so anything outside
+  // SourceView's branch that reads it (or `host`) gates through runs(…); that gate,
+  // not a null check, is what keeps a detached shadow root inert.
   let api = $state<SourceViewApi | undefined>();
   const host = $derived(api?.host);
   // The compare view's counterpart, captured the same way. Undefined until the
@@ -1015,8 +1023,8 @@
 
   // Reveal a commented line for the host (the comment navigator): scroll whichever
   // view is on screen to it. While comparing, the side picks which of the diff's
-  // two documents the line names; otherwise it is ignored and the single-version
-  // view scrolls. Both read their live api, so a call before the view mounts is a
+  // two documents the line names; otherwise it is ignored and the source view
+  // scrolls; off the lineComments surfaces (the plan preview) it does nothing. Both read their live api, so a call before the view mounts is a
   // no-op, and both spend the same paint budget waiting for the row.
   function revealLine(line: number, side?: DiffSide): void {
     if (showDiff) {
@@ -1085,8 +1093,8 @@
   // The plan's keyboard surface (EXC-875): the vim line cursor (EXC-788), visual
   // line-select (EXC-790), and the `/` full-text search HUD (EXC-832) in one
   // unit-testable factory (state/planKeyboard). The component owns the reactive store —
-  // the runes live here — and the factory sequences the transitions over it; single-
-  // version view only (compare mode is a read-only diff with no cursor). The DOM effects
+  // the runes live here — and the factory sequences the transitions over it; source
+  // view only (compare and the plan preview have no line cursor). The DOM effects
   // are injected: the rendered lines, heading lines, the reading position, the half-page
   // size, scroll-follow, the shared jump, the composer open, and focus/blur.
   let keyboardStore = $state<PlanKeyboardStore>({
@@ -1536,8 +1544,8 @@
 
 <!-- Control row above the surface. The version-compare picker is always shown; its
      toggle disables itself when there are no other versions to compare (EXC-664).
-     The heading breadcrumbs and the working-directory path each earn their place
-     conditionally alongside it. -->
+     The Preview toggle (off compare only), the heading breadcrumbs and the
+     working-directory path each earn their place conditionally alongside it. -->
 <div class="control-row" class:comparing={compareStore.comparing}>
   <!-- The plan's table of contents (EXC-1095): every heading at once, the
        see-the-whole-shape surface the breadcrumbs bar beside it is not. It reads
@@ -1647,7 +1655,7 @@
         {/if}
       </div>
     {/if}
-    <!-- The gutter composer is the single-version surface only. The compare diff
+    <!-- The gutter composer is the source view only. The compare diff
          is a clean surface with no gutter and no inline annotations; the compared
          versions' comments read in the docked panel instead (EXC-872). -->
     <div class="diff-plan" bind:this={scrollEl} onmouseenter={showDragHint} role="presentation">
@@ -1676,8 +1684,8 @@
           }}
           onReady={(a) => (diffApi = a)}
         />
-      {:else if preview}
-        <PlanPreview html={preview.html} />
+      {:else if planPreview}
+        <PlanPreview html={planPreview.html} />
       {:else}
         <!-- Live range readout: a zero-height sticky rail rendered first so it pins to
              the top of the scroll viewport from scroll position 0 without reflowing
@@ -1746,9 +1754,9 @@
              on-screen file reference and one over the first directory reference,
              teaching that a path token opens a preview. Layered over the .diff-plan
              scroll content like the copy button, so they scroll with the rows.
-             Rendered in this branch only, so compare mode drops both — and since
-             nothing renders there, neither flag is spent and the hints survive to
-             teach on the next single-version render.
+             Rendered in this branch only, so off the source view both drop — and
+             since nothing renders there, neither flag is spent and the hints survive
+             to teach on the next source-view render.
              NOT gated on showShortcutHints, unlike the two hint chips further down:
              that pref governs keyboard-shortcut affordances, and this teaches a
              mouse gesture. Keyed on the kind — never on a value a poll tick changes
@@ -1890,6 +1898,12 @@
 {/if}
 
 <style>
+  /* A view option, not a selection — neutral, like the soft-wrap toggle. */
+  .control-row :global(button.preview-toggle[aria-pressed="true"]:not(:disabled)) {
+    background: var(--chip-hover);
+    color: var(--ink);
+  }
+
   /* The control bar above the surface. Carries the bar chrome (raised paper,
      hairline rule) for the version-compare picker: the "Versions" toggle sits at
      the left, and (in compare mode) the layout / indicator toggles are pushed to

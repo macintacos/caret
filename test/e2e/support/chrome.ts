@@ -87,6 +87,11 @@ export function alerts(page: Page): Locator {
   return page.locator(".alert-host").getByRole("status");
 }
 
+/** The plan view's source/preview toggle beside Versions. */
+export function previewToggle(page: Page): Locator {
+  return page.getByRole("button", { name: "Preview", exact: true });
+}
+
 /** The breadcrumbs bar (`Breadcrumb.Root aria-label="Plan location"`). */
 function planLocation(page: Page): Locator {
   return page.getByRole("navigation", { name: "Plan location" });

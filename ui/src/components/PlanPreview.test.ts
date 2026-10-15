@@ -4,7 +4,7 @@ import { describe, expect, test } from "bun:test";
 import { render } from "@ui/support/mount.ts";
 import { reactiveProps } from "@ui/support/props.svelte.ts";
 import PlanPreview from "@/components/PlanPreview.svelte";
-import { renderPlanMarkdown } from "@/lib/planMarkdown";
+import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
 
 function task(target: HTMLElement, selector: string): HTMLInputElement {
   return target.querySelector(selector) as HTMLInputElement;

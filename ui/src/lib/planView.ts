@@ -1,14 +1,15 @@
-// Which view of a single plan version the reviewer reads — the line-numbered source or
-// the rendered preview — persisted in localStorage.
+// The plan view's surfaces and where each source-view behavior runs: the reader's
+// remembered source/preview choice, and SURFACE_BEHAVIORS, the one declaration of which
+// surfaces each behavior runs on.
 //
-// A pure browser display preference with no security surface, so it lives in
-// localStorage like diffStylePref.ts rather than the daemon's prefs. definePref
-// registers the key for the `--fresh` reset and degrades a blocked store to the default.
+// The choice is a pure display pref with no security surface, so it lives in localStorage;
+// definePref registers the key for the `--fresh` reset and degrades a blocked store.
 
 import { definePref } from "$lib/definePref.ts";
-import type { RenderedPlan } from "$lib/planMarkdown.ts";
 
+/** Which view of a single plan version the reader reads. */
 export type PlanView = "source" | "preview";
+/** What the plan pane shows: the reader's view, or "compare", which overrides it while comparing. */
 export type PlanSurface = PlanView | "compare";
 
 /** localStorage key holding the remembered plan view. */
@@ -23,8 +24,9 @@ export const readPlanView = pref.read;
 /** Persist the chosen view; a storage failure is swallowed. */
 export const writePlanView = pref.write;
 
-/** The surfaces each source-view behavior runs on. A sibling issue that ports a
- * behavior to the preview adds "preview" to its row — the one place to do so. */
+/** The surfaces each source-view behavior runs on — the only place that is declared.
+ * Running a behavior on another surface means adding the surface to its row; see
+ * doc/agents/plan-render-rules.md § Surfaces for what that does and does not switch on. */
 export const SURFACE_BEHAVIORS = {
   codeChrome: ["source"], // copy / soft-wrap chrome over fenced code
   referenceHints: ["source"], // ref-hint badges, file drawer, folder card
@@ -36,18 +38,8 @@ export const SURFACE_BEHAVIORS = {
 
 export type SurfaceBehavior = keyof typeof SURFACE_BEHAVIORS;
 
+/** Whether `behavior` is declared to run on `surface`. */
 export function runsOn(behavior: SurfaceBehavior, surface: PlanSurface): boolean {
-  return (SURFACE_BEHAVIORS[behavior] as readonly PlanSurface[]).includes(surface);
-}
-
-/** Wrap `render` so the same text returns the last result (same reference) without
- * re-rendering — a same-version poll tick must not churn the mounted HTML. */
-export function previewRenderer(
-  render: (text: string) => RenderedPlan,
-): (text: string) => RenderedPlan {
-  let last: { text: string; plan: RenderedPlan } | undefined;
-  return (text) => {
-    if (last?.text !== text) last = { text, plan: render(text) };
-    return last.plan;
-  };
+  const surfaces: readonly PlanSurface[] = SURFACE_BEHAVIORS[behavior];
+  return surfaces.includes(surface);
 }
