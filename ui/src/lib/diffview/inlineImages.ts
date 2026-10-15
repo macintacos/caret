@@ -38,6 +38,9 @@ import type { ImageSpan, ImageSpanMap } from "$lib/diffview/links.ts";
 
 const IMAGE_ATTR = "data-md-image";
 
+/** The attributes every plan image carries, in the source view and the preview. */
+export const IMAGE_ATTRIBUTES = { referrerpolicy: "no-referrer", loading: "lazy" } as const;
+
 /** The images this module owns on a row, in document order. */
 function imagesIn(row: Element): Element[] {
   return [...row.children].filter((el) => el.hasAttribute(IMAGE_ATTR));
@@ -63,8 +66,7 @@ function createImage(doc: Document, image: ImageSpan): HTMLImageElement {
   const img = doc.createElement("img");
   img.setAttribute(IMAGE_ATTR, "");
   img.setAttribute("alt", image.alt);
-  img.setAttribute("referrerpolicy", "no-referrer");
-  img.setAttribute("loading", "lazy");
+  for (const [name, value] of Object.entries(IMAGE_ATTRIBUTES)) img.setAttribute(name, value);
   img.addEventListener("error", () => {
     img.hidden = true;
   });
