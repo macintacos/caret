@@ -27,6 +27,7 @@
 // the same path a dead remote asset would take.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { GONE, GOOD, routeAssets } from "@test/e2e/support/images.ts";
 import {
   copyRows,
   firstGlyphX,
@@ -36,20 +37,12 @@ import {
   rowHeights,
 } from "@test/e2e/support/source-view.ts";
 
-// A 900x700 1-bit PNG, solid black. The size is the point: 700px intrinsic height
-// is well past the 18rem (288px) cap, so the cap has to bind for the assertions
-// below to pass — a 2x2 pixel would let them pass with the cap deleted.
-const BIG_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAA4QAAAK8AQAAAACfa0ziAAAAZElEQVR42u3BMQEAAADCoPVPbQlPoAAAAAAAAAAA" +
-    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
-    "eBo3xwABf429cQAAAABJRU5ErkJggg==",
-  "base64",
-);
+// The image GOOD serves is 700px tall (support/images.ts), well past the 18rem (288px)
+// cap, so the cap has to bind for the assertions below to pass — a 2x2 pixel would let
+// them pass with the cap deleted.
 const CAP_PX = 288; // 18rem at the root's 16px
 const MEASURE_PX = 720; // the max-width the fenced panel also spends
 
-const GOOD = "https://assets.test/diagram.png";
-const GONE = "https://assets.test/absent.png";
 const IMAGE_MARKUP = `![the cache topology](${GOOD})`;
 
 // One image that loads, one that 404s, one whose target is a scheme the layer
@@ -79,15 +72,6 @@ const IMAGE_LINE = 5;
 const PROSE_ABOVE = 3;
 const PROSE_BELOW = 7;
 const BROKEN_LINE = 9;
-
-/** Serve every intercepted asset from this file: the good URL as a real PNG, the
- * missing one as a 404. Installed before the page loads so no request escapes. */
-async function routeAssets(page: import("@playwright/test").Page): Promise<void> {
-  await page.route(GOOD, (route) =>
-    route.fulfill({ status: 200, contentType: "image/png", body: BIG_PNG }),
-  );
-  await page.route(GONE, (route) => route.fulfill({ status: 404, body: "" }));
-}
 
 /** Every image element in the source view's shadow root, with the state that
  * distinguishes a drawn picture from a hidden one: its src, its alt, whether the

@@ -398,7 +398,7 @@ elements. Each is an object with a `color` and an optional `fontStyle`, the same
 a syntax role. A file that omits an element, or the whole `markdown` object, paints it as
 caret does by default.
 
-| Element                  | What it colors                               | Plan view default           | Comment editor default |
+| Element                  | What it colors                               | Source view default         | Comment editor default |
 | ------------------------ | -------------------------------------------- | --------------------------- | ---------------------- |
 | `heading`                | A heading, its `#` markers included          | `accent`                    | `ink`, bold            |
 | `heading1` to `heading6` | A markdown heading of that level             | `heading`                   | `heading`              |
@@ -418,8 +418,8 @@ previewed file, carry no level caret reads, so `heading` styles every one of the
 A few elements keep part of their look whatever the style says:
 
 - Bold text stays bold, italic text stays italic, and a link keeps its underline, dotted
-  in the plan view, and its chip. A `fontStyle` adds to these.
-- A heading style sets the heading's weight on both surfaces, so name `"bold"` for a bold
+  in the plan view, and, in the source view, its chip. A `fontStyle` adds to these.
+- A heading style sets the heading's weight on every surface, so name `"bold"` for a bold
   heading.
 - A styled `quote` paints at full strength, since its color already sets it apart.
 - The `**`, `_`, and backtick markers keep their own color.
@@ -427,6 +427,11 @@ A few elements keep part of their look whatever the style says:
 
 The chip tint behind bold, italic, inline code, and link text comes from the `chip*Hue`
 [palette](#palette) overrides, not from these styles.
+
+The plan's preview applies these styles too. Unstyled, it differs from the source view
+default in three ways: a heading is semibold, a quote is `inkSoft` rather than faded, and
+a link or emphasis draws no chip. It leaves a fenced block's body to its own highlighting,
+so `code` colors only inline code there.
 
 The comment editor applies these styles too. There, text nested in a heading, link, or
 quote takes that element's color, and in a heading its weight too. A fenced block that
