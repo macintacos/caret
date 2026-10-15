@@ -8,15 +8,12 @@
 
 import { CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
 import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
-import { previewCodeBlocks } from "$lib/previewCode.ts";
+import { previewCodeBlocks, previewCodeText } from "$lib/previewCode.ts";
 
 /** Reads an element's viewport rect. Injectable for tests. */
-export type RectReader = (el: HTMLElement) => {
-  top: number;
-  bottom: number;
-  left: number;
-  right: number;
-};
+export type RectReader = (el: HTMLElement) => Box;
+
+type Box = { top: number; bottom: number; left: number; right: number };
 
 const defaultReader: RectReader = (el) => {
   const r = el.getBoundingClientRect();
@@ -31,21 +28,18 @@ export interface CodeChromeAnchor {
   top: number;
   left: number;
   carded: boolean;
-  /** The text the copy button writes, when the surface renders it itself — the preview's
-   * `code`, which can differ from the source scan's block (a quoted shorter fence, a
-   * list-nested fence's indent). Absent on the source view. */
-  text?: string;
 }
 
+/** An anchor plus the text its copy button writes. */
+export type ChromeBox = CodeChromeAnchor & { text: string };
+
 /** The chrome's geometry on one surface: what to observe for resizes, the hit-test by
- * block `start`, and the anchors. */
+ * block `start`, and the finished boxes. */
 export interface ChromeGeometry {
   observed: HTMLElement;
   blockAt(x: number, y: number): number | undefined;
-  anchors(scroller: HTMLElement): CodeChromeAnchor[];
+  boxes(scroller: HTMLElement): ChromeBox[];
 }
-
-type Box = { top: number; bottom: number; left: number; right: number };
 
 function contains(box: Box, x: number, y: number): boolean {
   return y >= box.top && y <= box.bottom && x >= box.left && x <= box.right;
@@ -78,7 +72,7 @@ function blockBox(
   root: ShadowRoot,
   range: CodeBlockRange,
   read: RectReader,
-): { top: number; bottom: number; left: number; right: number; carded: boolean } | null {
+): (Box & { carded: boolean }) | null {
   const card = root.querySelector<HTMLElement>(`[data-content] > [${CARD_ATTR}="${range.start}"]`);
   if (card != null) return { ...read(card), carded: true };
   const firstRow = root.querySelector<HTMLElement>(`[data-content] [data-line="${range.start}"]`);
@@ -166,12 +160,12 @@ export function previewCodeChromeAnchors(
   scroller: HTMLElement,
   reflowed: ReadonlySet<number>,
   read: RectReader = defaultReader,
-): CodeChromeAnchor[] {
+): ChromeBox[] {
   const scrollerRect = read(scroller);
   return previewCodeBlocks(root).map(({ start, pre, code }) => ({
     start,
     ...contentCorner(read(pre), scroller, scrollerRect),
     carded: pre.scrollWidth > pre.clientWidth || reflowed.has(start),
-    text: (code.textContent ?? "").replace(/\n$/, ""),
+    text: previewCodeText(code),
   }));
 }

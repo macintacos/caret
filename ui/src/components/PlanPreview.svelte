@@ -1,9 +1,9 @@
 <script lang="ts">
   // The plan preview: mounts renderPlanMarkdown's HTML as-is in one container, so its
   // div[data-source-start][data-source-end] blocks stay direct children for the
-  // source-mapped features to find. DiffPlanView decides which text and when; this only
-  // mounts it, sets what HTML cannot carry, and styles it; it highlights its code blocks
-  // after the plain block mounts, and marks the soft-wrapped ones.
+  // source-mapped features to find. DiffPlanView decides which text and when; this mounts
+  // it, sets what HTML cannot carry, highlights its code blocks once each has mounted
+  // plain, marks the soft-wrapped ones, and styles it.
   import { highlightTokens } from "$lib/diffview/highlight.ts";
   import { applyPreviewReflow, highlightPreviewCode } from "$lib/previewCode.ts";
   import { type ThemeId, themeFor } from "$lib/theme.ts";
@@ -17,9 +17,9 @@
     themeId?: ThemeId;
     /** Opening fence lines of the soft-wrapped blocks, shared with the source view. */
     reflowedBlocks?: ReadonlySet<number>;
-    /** The element whose content is exactly the rendered HTML — what createPlanSourceMap
-     * and the chrome geometry walk. Bindable, and cleared on unmount, unlike an onReady
-     * handle. */
+    /** The element whose content is exactly the rendered HTML: DiffPlanView's chrome
+     * geometry and its place-keeping across a flip read it. Bindable, and cleared on
+     * unmount, unlike an onReady handle. */
     root?: HTMLDivElement;
   }
   let {
@@ -276,11 +276,8 @@
     overflow-x: auto;
     overflow-wrap: normal;
   }
-  .plan-preview :global(img) {
-    max-width: 100%;
-  }
-  /* The source view's code panel fill. The inline-end padding keeps the top-right copy
-     and wrap chrome off the code. */
+  /* Matches the source view's code panel fill. The inline-end padding keeps the
+     top-right copy and wrap chrome off the code. */
   .plan-preview :global([data-source-code] + pre) {
     padding-block: 0.6rem;
     padding-inline: 2ch 4.5rem;
@@ -293,8 +290,11 @@
   .plan-preview :global([data-source-code] + pre > code) {
     font-family: inherit;
   }
-  .plan-preview :global(pre[data-code-reflow]) {
+  .plan-preview :global([data-source-code] + pre[data-code-reflow]) {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+  .plan-preview :global(img) {
+    max-width: 100%;
   }
 </style>

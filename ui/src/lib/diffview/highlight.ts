@@ -1,15 +1,15 @@
 // Standalone syntax highlighting for the filename-hover excerpt (EXC-687) and the
-// plan preview's code blocks (EXC-2015). The
-// @pierre/diffs library keeps its own private highlighter, so this builds a small
-// dedicated one bound to shiki's full grammar bundle and caret's themes (built-ins
-// up front, a runtime theme on first use and again under its fresh name after a
-// replace), then highlights an excerpt to the caret theme in effect, so the
-// file preview reads like the plan view's own code. Three entry points share it:
-// highlightExcerpt colours a whole window in one pass, highlightChunk colours a
-// file a piece at a time and hands back the grammar state each piece ended on, so
-// a construct that opens in one chunk still colours the next, and highlightTokens
-// hands back raw tokens for a caller that builds its own DOM. Grammars load
-// lazily and cache; anything that can't highlight falls back to plain text.
+// plan preview's code blocks (EXC-2015). The @pierre/diffs library keeps its own
+// private highlighter, so this builds a small dedicated one bound to shiki's full
+// grammar bundle and caret's themes (built-ins up front, a runtime theme on first
+// use and again under its fresh name after a replace), then highlights an excerpt
+// to the caret theme in effect, so the file preview reads like the plan view's own
+// code. Three entry points share it: highlightExcerpt colours a whole window in one
+// pass, highlightChunk colours a file a piece at a time and hands back the grammar
+// state each piece ended on, so a construct that opens in one chunk still colours
+// the next, and highlightTokens hands back raw tokens for a caller that builds its
+// own DOM. Grammars load lazily and cache; anything that can't highlight falls back
+// to plain text.
 // Never throws.
 
 import { type GrammarState, hastToHtml, type ThemedToken } from "shiki/core";
@@ -202,6 +202,8 @@ export async function highlightTokens(
     const lang = await resolveLanguage(hl, language);
     if (lang === "text") return null;
     return hl.codeToTokensBase(code, {
+      // codeToTokensBase types `lang` as the bundle's literal union, unlike codeToHast;
+      // resolveLanguage returns only a grammar that loaded, and "text" is excluded above.
       lang: lang as NonNullable<Parameters<Highlighter["codeToTokensBase"]>[1]["lang"]>,
       theme,
       ...CARET_TOKENIZE_OPTIONS,

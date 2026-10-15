@@ -41,11 +41,12 @@ describe("the derived-token tier", () => {
     expect(appCss).toMatch(DERIVED_BLOCK);
   });
 
-  test("names the five tokens the chrome reads", () => {
+  test("names the tokens the chrome reads", () => {
     expect(Object.keys(tokens).sort()).toEqual([
       "--attention-wash",
       "--chip",
       "--chip-hover",
+      "--code-panel",
       "--ink-wash",
       "--paper-veil",
     ]);

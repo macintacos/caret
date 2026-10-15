@@ -10,7 +10,9 @@ export interface PreviewCodeBlock {
   /** The marker's line: the block's first code line, which keys `codeLanguages`. */
   line: number;
   /** The line before it: a fenced block's opening fence, which keys its chrome and wrap
-   * state exactly as the source view's CodeBlockRange.start does. */
+   * state exactly as the source view's CodeBlockRange.start does. For an indented block
+   * it is the blank line above, which no source-view block opens on, so that block gets
+   * no chrome. */
   start: number;
   pre: HTMLElement;
   code: HTMLElement;
@@ -29,12 +31,19 @@ export function previewCodeBlocks(root: ParentNode): PreviewCodeBlock[] {
   return blocks;
 }
 
+/** A preview code block's text as the reader sees it: its `code` element's text without the
+ * one trailing newline the renderer adds. */
+export function previewCodeText(code: HTMLElement): string {
+  return (code.textContent ?? "").replace(/\n$/, "");
+}
+
 /** Tokens per line, or null to leave the block plain. Must not reject: the pass runs detached. */
 export type Tokenize = (code: string, language: string) => Promise<ThemedToken[][] | null>;
 
 export interface HighlightDeps {
   tokenize: Tokenize;
-  /** Resolves on a later task. Production passes a setTimeout(0) promise. */
+  /** Resolves on a later task, never a microtask, so a block mounts plain and input runs
+   * between two blocks. */
   nextTask: () => Promise<void>;
   signal: AbortSignal;
 }
@@ -71,11 +80,13 @@ export async function highlightPreviewCode(
     await nextTask();
     if (signal.aborted) return;
     const text = code.textContent ?? "";
-    const tokens = await tokenize(text.replace(/\n$/, ""), language);
+    const tokens = await tokenize(previewCodeText(code), language);
     if (signal.aborted) return;
     if (tokens === null) continue;
-    const nodes = [...tokenNodes(tokens), document.createTextNode("\n")];
-    if (nodes.map((node) => node.textContent).join("") === text) code.replaceChildren(...nodes);
+    // One fragment, not a spread: a huge block's nodes would exceed a call's argument limit.
+    const fragment = document.createDocumentFragment();
+    fragment.append(...tokenNodes(tokens), "\n");
+    if (fragment.textContent === text) code.replaceChildren(fragment);
   }
 }
 

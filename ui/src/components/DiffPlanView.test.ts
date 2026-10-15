@@ -1,8 +1,6 @@
 import "@ui/support/mount.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { flushSync } from "svelte";
-
 import type { ClientReview, PlanVersion } from "@core/lib/types";
 import { until } from "@test/support/poll.ts";
 import { expectViewRecreated } from "@ui/support/diffview.ts";
@@ -506,6 +504,17 @@ describe("DiffPlanView comment-span brackets", () => {
   });
 });
 
+const toggle = (target: HTMLElement) =>
+  target.querySelector<HTMLButtonElement>(".control-row .preview-toggle");
+
+async function renderOnPreview(over = {}) {
+  const mounted = render(DiffPlanView, props(over));
+  await until(() => toggle(mounted.target) != null);
+  toggle(mounted.target)!.click();
+  await until(() => mounted.target.querySelector(".plan-preview") != null);
+  return mounted;
+}
+
 describe("DiffPlanView code-block chrome", () => {
   // The chrome's pixel geometry is real layout, owned by codeChrome.ts's unit tests and
   // the Playwright e2e — happy-dom has none. Here: the host-side wiring, that the boxes
@@ -529,35 +538,42 @@ describe("DiffPlanView code-block chrome", () => {
 
   // Fences open on lines 3 and 7.
   const twoBlocks = "# Title\n\n```ts\na\n```\n\n```\nb\n```\n";
-  const previewToggle = (target: HTMLElement) =>
-    target.querySelector<HTMLButtonElement>(".control-row .preview-toggle");
   const copyLabels = (target: HTMLElement) =>
     [...chromeBoxes(target)].map(
       (box) => box.querySelector("button")?.getAttribute("aria-label") ?? "",
     );
-
-  async function renderPreviewWithBlocks(): Promise<HTMLElement> {
-    const { target } = render(
-      DiffPlanView,
-      props({ review: reviewFixture({ currentPlan: twoBlocks }) }),
-    );
-    await until(() => previewToggle(target) != null);
-    previewToggle(target)!.click();
-    await until(() => target.querySelector(".plan-preview") != null);
-    return target;
-  }
+  const renderBlocksOnPreview = () =>
+    renderOnPreview({ review: reviewFixture({ currentPlan: twoBlocks }) });
 
   test("the preview mounts one box per block, keyed by its fence line", async () => {
-    const target = await renderPreviewWithBlocks();
+    const { target } = await renderBlocksOnPreview();
     await until(() => chromeBoxes(target).length === 2);
     expect(copyLabels(target)).toEqual(["Copy code from line 3", "Copy code from line 7"]);
   });
 
-  test("flipping back to source re-mounts the source boxes and no preview box", async () => {
-    const target = await renderPreviewWithBlocks();
+  test("a block hovered on one surface is not lit on the other after a flip", async () => {
+    const { target } = render(
+      DiffPlanView,
+      props({ review: reviewFixture({ currentPlan: twoBlocks }) }),
+    );
     await until(() => chromeBoxes(target).length === 2);
-    previewToggle(target)!.click();
-    flushSync();
+    const lit = () => target.querySelectorAll(".code-chrome[data-lit]").length;
+    // happy-dom rects are all zero, so the origin falls inside the first block.
+    target
+      .querySelector(".diff-plan")!
+      .dispatchEvent(new PointerEvent("pointermove", { clientX: 0, clientY: 0 }));
+    await until(() => lit() === 1);
+    toggle(target)!.click();
+    await until(() => target.querySelector(".plan-preview") != null);
+    await until(() => chromeBoxes(target).length === 2);
+    expect(lit()).toBe(0);
+  });
+
+  test("flipping back to source re-mounts the source boxes and no preview box", async () => {
+    const { target, flush } = await renderBlocksOnPreview();
+    await until(() => chromeBoxes(target).length === 2);
+    toggle(target)!.click();
+    flush();
     expect(chromeBoxes(target).length).toBe(0);
     await until(() => chromeBoxes(target).length === 2);
     expect(copyLabels(target)).toEqual(["Copy code from line 3", "Copy code from line 7"]);
@@ -739,9 +755,6 @@ describe("DiffPlanView plan search (EXC-832)", () => {
 });
 
 describe("DiffPlanView plan view toggle", () => {
-  const toggle = (target: HTMLElement) =>
-    target.querySelector<HTMLButtonElement>(".control-row .preview-toggle");
-
   test("a fresh mount reads the source view with the toggle unpressed", async () => {
     const { target } = render(DiffPlanView, props());
     await until(() => shadow(target)?.textContent?.includes("hello world") ?? false);
@@ -749,16 +762,8 @@ describe("DiffPlanView plan view toggle", () => {
     expect(target.querySelector(".plan-preview") != null).toBe(false);
   });
 
-  async function renderOnPreview(over = {}): Promise<HTMLElement> {
-    const { target } = render(DiffPlanView, props(over));
-    await until(() => toggle(target) != null);
-    toggle(target)!.click();
-    await until(() => target.querySelector(".plan-preview") != null);
-    return target;
-  }
-
   test("the toggle switches to the preview and remembers it", async () => {
-    const target = await renderOnPreview();
+    const { target } = await renderOnPreview();
     expect(target.querySelector(".plan-preview")?.textContent).toContain("hello world");
     expect(toggle(target)?.getAttribute("aria-pressed")).toBe("true");
     expect(localStorage.getItem("caret.planView")).toBe("preview");
@@ -781,7 +786,7 @@ describe("DiffPlanView plan view toggle", () => {
   });
 
   test("hovering the preview does not arm the drag hint for the source view", async () => {
-    const target = await renderOnPreview();
+    const { target } = await renderOnPreview();
     target.querySelector(".diff-plan")!.dispatchEvent(new MouseEvent("mouseenter"));
     toggle(target)!.click();
     await until(() => shadow(target)?.textContent?.includes("hello world") ?? false);

@@ -37,9 +37,9 @@
   import { type BracketSpan, bracketLayer } from "$lib/diffview/bracket.ts";
   import { type CodeBlockRange, codeBlockRanges, codeBlockText } from "$lib/diffview/codeBlocks.ts";
   import {
+    type ChromeBox,
     type ChromeGeometry,
     codeBlockAtPoint,
-    type CodeChromeAnchor,
     codeChromeAnchors,
     previewCodeBlockAtPoint,
     previewCodeChromeAnchors,
@@ -290,6 +290,8 @@
   const planPreview = $derived(
     surface === "preview" ? renderPreview(review.currentPlan) : null,
   );
+  // The preview's root, bound from PlanPreview: the chrome geometry and capturePlace read it.
+  let previewEl = $state<HTMLDivElement | undefined>();
 
   // Report the compared versions to the host, so App can point the docked comment
   // panel at the cross-version index (EXC-872). The assignment matches what the
@@ -757,8 +759,7 @@
 
   // Where each block's chrome sits, in .diff-plan content coordinates, whether the block
   // overflows unwrapped — the predicate the wrap button gates on — and the code its copy
-  // button writes, joined in the sync below so the template never looks one up.
-  type ChromeBox = CodeChromeAnchor & { text: string };
+  // button writes.
   let chromeBoxes = $state<ChromeBox[]>([]);
 
   // A version switch, a fresh SourceView, or a flip between source and preview leaves the
@@ -771,9 +772,6 @@
     chromeBoxes = [];
   });
 
-  // The preview's root, bound from PlanPreview; the chrome's light-DOM geometry reads it.
-  let previewEl = $state<HTMLDivElement | undefined>();
-
   // The chrome's geometry on the surface on screen: what to observe for resizes, the
   // hit-test, and the anchors. Undefined where no chrome renders — off the codeChrome
   // row, before the surface mounts, or with no fenced block. A preview block joins a
@@ -782,13 +780,17 @@
     (): ChromeGeometry | undefined => {
       const blocks = codeBlocks;
       if (!runs("codeChrome") || blocks.length === 0) return undefined;
+      const textByStart = new Map(blocks.map((b) => [b.range.start, b.text]));
       if (surface === "preview") {
         const root = previewEl;
         if (root == null) return undefined;
         return {
           observed: root,
           blockAt: (x, y) => previewCodeBlockAtPoint(root, x, y),
-          anchors: (scroller) => previewCodeChromeAnchors(root, scroller, reflowedBlocks),
+          boxes: (scroller) =>
+            previewCodeChromeAnchors(root, scroller, reflowedBlocks).filter((b) =>
+              textByStart.has(b.start),
+            ),
         };
       }
       const el = host;
@@ -797,7 +799,11 @@
       return {
         observed: el,
         blockAt: (x, y) => codeBlockAtPoint(el, ranges, x, y)?.start,
-        anchors: (scroller) => codeChromeAnchors(el, scroller, ranges),
+        boxes: (scroller) =>
+          codeChromeAnchors(el, scroller, ranges).flatMap((a) => {
+            const text = textByStart.get(a.start);
+            return text === undefined ? [] : [{ ...a, text }];
+          }),
       };
     },
   );
@@ -809,10 +815,10 @@
   $effect(() => {
     const scroller = scrollEl;
     const geometry = chromeGeometry;
-    if (scroller == null || geometry === undefined) {
-      hoveredBlockStart = undefined;
-      return;
-    }
+    // A flip between surfaces swaps one geometry for another; a kept key would brighten
+    // the new surface's block with the same `start` until the pointer moves.
+    hoveredBlockStart = undefined;
+    if (scroller == null || geometry === undefined) return;
     let raf = 0;
     let lastX = 0;
     let lastY = 0;
@@ -849,7 +855,6 @@
   $effect(() => {
     const scroller = scrollEl;
     const geometry = chromeGeometry;
-    const blocks = codeBlocks;
     // A wrap toggle changes a block's height: depending on it re-measures now rather than
     // waiting for the ResizeObserver to report the new box.
     void reflowedBlocks;
@@ -857,14 +862,10 @@
       chromeBoxes = [];
       return;
     }
-    const codeByStart = new Map(blocks.map((b) => [b.range.start, b.text]));
     let raf = 0;
     const sync = () => {
       raf = 0;
-      chromeBoxes = geometry.anchors(scroller).flatMap((anchor) => {
-        const sourceText = codeByStart.get(anchor.start);
-        return sourceText === undefined ? [] : [{ ...anchor, text: anchor.text ?? sourceText }];
-      });
+      chromeBoxes = geometry.boxes(scroller);
     };
     const schedule = () => {
       if (raf === 0) raf = requestAnimationFrame(sync);

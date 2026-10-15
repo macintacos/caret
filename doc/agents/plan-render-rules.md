@@ -197,9 +197,9 @@ exist today.
   indented block gets no entry. `fenceGrammar` reads the info string's leading token with
   the same character class as the source view's fence scan, so ```` ```ts:app.ts ````
   reads `ts` (so `typescript`) in both views. `previewCode.ts` then highlights the mounted
-  blocks, yielding a task before every block so each mounts plain first. It re-runs on a
-  theme switch or a replace of the showing custom theme, and leaves a block plain when its
-  grammar is unknown, missing, or refused.
+  blocks, yielding a task before every block it highlights so each mounts plain first. It
+  re-runs on a theme switch or a replace of the showing custom theme, and leaves a block
+  plain when its grammar is unknown, missing, or refused.
 
 ### Source-line map
 

@@ -11,6 +11,7 @@ import {
   type HighlightDeps,
   highlightPreviewCode,
   previewCodeBlocks,
+  previewCodeText,
   type Tokenize,
 } from "$lib/previewCode.ts";
 
@@ -63,14 +64,22 @@ function deps(tokenize: Tokenize, signal = new AbortController().signal): Highli
 }
 
 /** A nextTask the test resolves by hand, one task at a time. */
-function manualTasks(): { nextTask: () => Promise<void>; run: () => Promise<void> } {
+function manualTasks() {
   const waiting: (() => void)[] = [];
+  let parked = () => {};
   return {
-    nextTask: () => new Promise((resolve) => waiting.push(resolve)),
-    run: async () => {
-      waiting.shift()?.();
-      for (let i = 0; i < 20; i++) await Promise.resolve();
-    },
+    nextTask: () =>
+      new Promise<void>((resolve) => {
+        waiting.push(resolve);
+        parked();
+      }),
+    /** Releases one task; resolves once the pass parks again or finishes. */
+    run: (pass: Promise<void>) =>
+      new Promise<void>((done) => {
+        parked = done;
+        void pass.then(done);
+        waiting.shift()?.();
+      }),
   };
 }
 
@@ -95,6 +104,17 @@ describe("previewCodeBlocks", () => {
       "const x = 1;\nlet y = 2;\n",
       "a();\n",
       "plain text\n",
+    ]);
+  });
+});
+
+describe("previewCodeText", () => {
+  test("is a block's text without the trailing newline the renderer adds", () => {
+    const { root } = mount(PLAN);
+    expect(codes(root).map(previewCodeText)).toEqual([
+      "const x = 1;\nlet y = 2;",
+      "a();",
+      "plain text",
     ]);
   });
 });
@@ -144,9 +164,9 @@ describe("highlightPreviewCode", () => {
       nextTask: tasks.nextTask,
     });
     expect(codes(root).map(isHighlighted)).toEqual([false, false, false]);
-    await tasks.run();
+    await tasks.run(pass);
     expect(codes(root).map(isHighlighted)).toEqual([true, false, false]);
-    await tasks.run();
+    await tasks.run(pass);
     expect(codes(root).map(isHighlighted)).toEqual([true, true, false]);
     await pass;
   });
@@ -159,9 +179,9 @@ describe("highlightPreviewCode", () => {
       ...deps(instant, controller.signal),
       nextTask: tasks.nextTask,
     });
-    await tasks.run();
+    await tasks.run(pass);
     controller.abort();
-    await tasks.run();
+    await tasks.run(pass);
     await pass;
     expect(codes(root).map(isHighlighted)).toEqual([true, false, false]);
   });

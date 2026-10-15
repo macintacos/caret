@@ -1,7 +1,10 @@
 // The preview's code blocks: highlighted for their language in the active theme, plain
 // for any fence that names no bundled grammar. Computed fonts and colours, and a theme
 // switch driven by the OS colour scheme, need a real browser. The pass's own logic is
-// unit-tested in ui/src/lib/previewCode.test.ts and its mount in PlanPreview.test.ts.
+// unit-tested in ui/src/lib/previewCode.test.ts and its mount in PlanPreview.test.ts;
+// the plain-fence test proves the class-free, no-`img` markup holds on the shipped
+// bundle in a real browser. The `ts` fence comes last so the pass has reached every
+// plain block before a test sees it highlighted.
 
 import type { Page } from "@playwright/test";
 
@@ -12,10 +15,6 @@ import { PLAN_PREVIEW, planSurface } from "@test/e2e/support/source-view.ts";
 const TS_BODY = "const answer: number = 42;\nfunction warm() {}";
 
 const CODE_PLAN = `# Code plan
-
-\`\`\`ts
-${TS_BODY}
-\`\`\`
 
 \`\`\`nosuchlang
 plain words here
@@ -28,6 +27,10 @@ bare fence body
 \`\`\`"><img src=x onerror=alert(1)>
 hostile fence body
 \`\`\`
+
+\`\`\`ts
+${TS_BODY}
+\`\`\`
 `;
 
 async function openPreview(page: Page): Promise<void> {
@@ -37,11 +40,11 @@ async function openPreview(page: Page): Promise<void> {
   await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
 }
 
-/** The computed colour of each token span in the preview's first code block. */
+/** The computed colour of each token span in the preview's last (`ts`) code block. */
 function tsColours(page: Page): Promise<string[]> {
   return page
     .locator(`${PLAN_PREVIEW} pre code`)
-    .first()
+    .last()
     .evaluate((code) => [...code.children].map((span) => getComputedStyle(span).color));
 }
 
@@ -52,7 +55,7 @@ test("a ts block renders monospace and highlighted with the fence's text", async
   await daemon.seed({ plan: CODE_PLAN });
   await openPreview(page);
 
-  const pre = page.locator(`${PLAN_PREVIEW} pre`).first();
+  const pre = page.locator(`${PLAN_PREVIEW} pre`).last();
   const mono = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim(),
   );
@@ -72,7 +75,7 @@ test("unknown, bare and hostile fences render plain with no language in markup",
   await expect(codes).toHaveCount(4);
   await expect.poll(async () => (await tsColours(page)).length).toBeGreaterThan(0);
 
-  for (const i of [1, 2, 3])
+  for (const i of [0, 1, 2])
     expect(await codes.nth(i).evaluate((c) => c.childElementCount)).toBe(0);
   await expect(preview.locator("img")).toHaveCount(0);
   const html = await preview.evaluate((el) => el.innerHTML);
