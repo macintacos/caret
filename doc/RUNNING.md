@@ -1,7 +1,7 @@
 # caret — Running
 
-*Audience: users running caret day to day — desktop notifications, sound, cmux unread
-marks, and logging & debugging.*
+*Audience: users running caret day to day — reading a plan, desktop notifications, sound,
+cmux unread marks, and logging & debugging.*
 
 Part of the deep reference behind [README.md](../README.md). For what caret is, how to
 install it, and basic usage, start there.
@@ -142,6 +142,21 @@ say so in a sentence and leave the list working.
 
 The top of the list names the shortcut. Turning **Settings → Shortcut hints** off takes
 that line away; the shortcut keeps working.
+
+## Reading a plan
+
+Caret shows a plan version in one of two views:
+
+- The **source view** shows the plan's markdown as stored, with a line number on every
+  row.
+- The **preview** renders the plan as a document: headings, lists, tables, and links as
+  they would appear on a page.
+
+The **Preview** button beside **Versions** switches between them. It is pressed while the
+preview shows. Your browser remembers the choice, so it holds across reviews and restarts.
+
+Compare mode always shows source, and hides the button. Leaving compare mode returns to
+the view you chose.
 
 ## References caret recognizes
 

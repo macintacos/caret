@@ -2,13 +2,16 @@
 
 *Audience: coding agents and contributors changing how a plan is rendered —
 `ui/src/lib/diffview/`, the `SourceView` / `DiffPlanView` components, and the preview
-renderer `ui/src/lib/planMarkdown.ts`.*
+renderer `ui/src/lib/planMarkdown.ts`, and its mount
+`ui/src/components/PlanPreview.svelte` and `ui/src/lib/planView.ts`.*
 
 The **source view** renders a plan as **line-numbered markdown source**. Every decoration
 the reviewer sees is drawn over the characters they would copy. Everything up to § The
 preview renderer is the contract the whole `ui/src/lib/diffview/` layer shares; each
 module's own header carries only what is local to it. The preview is a second surface
-rendered from the same stored text, not an exception to transform-in-place.
+rendered from the same stored text, not an exception to transform-in-place. The reader
+switches between the two with the plan view's **Preview** toggle; compare mode always
+shows source.
 
 ## Transform in place (EXC-855)
 
@@ -174,5 +177,15 @@ exist today.
   anything else renders as its label.
 - **Images** that pass `isSafeUrl` carry `IMAGE_ATTRIBUTES`, never `srcset`, `style` or
   `title`; anything else renders as its alt text.
-- **`[/]`** renders as `data-task="slashed"`; whoever mounts the preview sets
-  `indeterminate` on it.
+- **`[/]`** renders as `data-task="slashed"`. `indeterminate` has no attribute form, so
+  `PlanPreview.svelte` sets the property on each such input after every mount of new HTML.
+
+### Surfaces
+
+`SURFACE_BEHAVIORS` in `ui/src/lib/planView.ts` is the one place a source-view behavior
+declares the surfaces it runs on: `source`, `preview`, or `compare`. `DiffPlanView` gates
+each behavior through `runsOn`. A behavior ported to the preview adds `"preview"` to its
+row and drops nothing else.
+
+The preview renders a version once. `previewRenderer` returns the last result for the same
+text, so a toggle flip, a theme switch, or a same-version poll tick reuses it.
