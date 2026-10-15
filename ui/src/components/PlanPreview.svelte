@@ -2,7 +2,7 @@
   // The plan preview: mounts renderPlanMarkdown's HTML as-is in one container, so its
   // div[data-source-start][data-source-end] blocks stay direct children for the
   // source-mapped features to find. DiffPlanView decides which text and when; this only
-  // mounts it and sets what HTML cannot carry.
+  // mounts it, sets what HTML cannot carry, and styles it.
   interface Props {
     /** renderPlanMarkdown's already-sanitized HTML. Inserted unescaped. */
     html: string;
@@ -33,10 +33,7 @@
   .plan-preview {
     padding-block: 0.5rem;
     padding-inline: 2ch 0.75rem;
-    font-family: var(--font-sans);
     font-size: var(--text-base);
-    line-height: var(--leading-normal);
-    color: var(--ink);
     overflow-wrap: break-word;
   }
   /* The child rules are :global because {@html} content gets no Svelte scoping. */
@@ -119,7 +116,7 @@
     text-decoration: var(--markdown-code-text-decoration);
   }
   .plan-preview :global(a) {
-    /* Same mix as coreStyles.ts's link rule; keep in sync. */
+    /* Mirrors coreStyles.ts's link rule; keep in sync. */
     color: var(--markdown-link-color, color-mix(in lab, var(--ink), var(--accent) 45%));
     font-weight: var(--markdown-link-font-weight);
     font-style: var(--markdown-link-font-style);
@@ -167,26 +164,52 @@
   .plan-preview :global(li:has(> input[data-task], > p > input[data-task])) {
     list-style-type: none;
   }
+  /* A loose list wraps the item in <p>; the box hangs in the marker gutter the hidden
+     bullet vacated. Drawn by hand so the only carrier of task state is on --ink-soft,
+     not the UA's faint disabled greys; the three states differ by shape. */
   .plan-preview :global(input[data-task]) {
+    appearance: none;
+    display: inline-grid;
+    place-content: center;
+    inline-size: 0.9em;
+    block-size: 0.9em;
     margin: 0 0.2em 0.25em -1.4em;
+    border: 1.5px solid var(--ink-soft);
+    border-radius: 3px;
+    opacity: 1;
     vertical-align: middle;
+  }
+  .plan-preview :global(input[data-task]:is(:checked, :indeterminate)) {
+    background: var(--ink-soft);
+  }
+  .plan-preview :global(input[data-task]:checked::after) {
+    content: "";
+    inline-size: 0.22em;
+    block-size: 0.45em;
+    margin-block-start: -0.1em;
+    border: solid var(--paper);
+    border-width: 0 2px 2px 0;
+    rotate: 45deg;
+  }
+  .plan-preview :global(input[data-task]:indeterminate::after) {
+    content: "";
+    inline-size: 0.5em;
+    block-size: 2px;
+    background: var(--paper);
   }
   .plan-preview :global(blockquote) {
     padding-inline-start: 1em;
-    border-inline-start: 0.25em solid var(--rule-strong);
+    border-inline-start: 0.25ch solid var(--ink-soft);
     color: var(--markdown-quote-color, var(--ink-soft));
     font-weight: var(--markdown-quote-font-weight);
     font-style: var(--markdown-quote-font-style);
     text-decoration: var(--markdown-quote-text-decoration);
   }
-  .plan-preview :global(blockquote > :last-child) {
-    margin-block-end: 0;
-  }
   .plan-preview :global(hr) {
-    height: 0.25em;
+    height: 1px;
     margin-block: 1.5em;
     border: 0;
-    background: var(--rule-strong);
+    background: var(--ink-soft);
   }
   /* display: block lets a wide table scroll without a wrapper element. */
   .plan-preview :global(table) {
@@ -203,19 +226,9 @@
   .plan-preview :global(th) {
     font-weight: 600;
   }
-  /* marked emits align on every aligned cell, which Chromium maps to -webkit-* values and
-     a centred header; restate them plainly, and start-align an unaligned header. */
+  /* Chromium's UA sheet centres a header cell; start it like a body cell. */
   .plan-preview :global(th:not([align])) {
     text-align: start;
-  }
-  .plan-preview :global(:is(th, td)[align="left"]) {
-    text-align: left;
-  }
-  .plan-preview :global(:is(th, td)[align="center"]) {
-    text-align: center;
-  }
-  .plan-preview :global(:is(th, td)[align="right"]) {
-    text-align: right;
   }
   .plan-preview :global(pre) {
     overflow-x: auto;

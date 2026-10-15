@@ -13,70 +13,45 @@ import type { ThemeMarkdown } from "@core/theme/schema.ts";
 import { previewToggle } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
 import { GONE, GOOD, routeAssets } from "@test/e2e/support/images.ts";
-import { openPlan, PLAN_PREVIEW } from "@test/e2e/support/source-view.ts";
+import {
+  ACCENT,
+  LEVEL_TEXTS,
+  LEVELS_PLAN,
+  PLAN,
+  rgb,
+  STYLES,
+} from "@test/e2e/support/markdown-styles.ts";
+import { openPlan, PLAN_PREVIEW, PLAN_SURFACE } from "@test/e2e/support/source-view.ts";
 import { caretThemeVariant, selectThemeFile } from "@test/e2e/support/themes.ts";
 
-const PLAN = `# Styled heading
-
-Prose with \`inline code\` and [a link](https://docs.example.test) beside it.
-
-Some **bold words** and *italic words* here.
-
-- bullet item
-
-1. ordered item
-
-> quoted line of text
-`;
-
-const LEVELS_PLAN = `# Level one
-
-## Level two
-
-### Level three
-
-#### Level four
-
-##### Level five
-
-###### Level six
-`;
-
-const LEVEL_TEXTS = ["one", "two", "three", "four", "five", "six"].map((n) => `Level ${n}`);
-
-const STYLES = {
-  heading: { color: "#9580ff", fontStyle: ["bold"] },
-  code: { color: "#8aff80", fontStyle: ["italic"] },
-  link: { color: "#ff80bf", fontStyle: ["bold"] },
-  bold: { color: "#ffca80", fontStyle: ["italic"] },
-  italic: { color: "#ffff80", fontStyle: ["bold"] },
-  listMarker: { color: "#80ffea", fontStyle: ["bold"] },
-  quote: { color: "#c0c0ff", fontStyle: ["italic", "bold"] },
-} satisfies ThemeMarkdown;
-
-// No built-in theme uses it, so a spec can tell when its own theme has painted.
-const ACCENT = "#00c2a8";
-
-const rgb = (hex: string) =>
-  `rgb(${[1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
-
-async function openPreview(page: Page, daemon: Daemon, plan: string): Promise<void> {
-  await openPlan(page, daemon, plan);
+async function showPreview(page: Page): Promise<void> {
   await previewToggle(page).click();
   await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
 }
 
-/** `value` — a custom property (leading `--`) or any CSS color — resolved on a light-DOM
- * probe, where the preview's own declarations resolve. */
-function paletteColor(page: Page, value: string): Promise<string> {
-  return page.evaluate((v) => {
-    const el = document.createElement("span");
-    el.style.color = v.startsWith("--") ? `var(${v})` : v;
-    document.body.append(el);
-    const resolved = getComputedStyle(el).color;
-    el.remove();
-    return resolved;
-  }, value);
+async function openPreview(page: Page, daemon: Daemon, plan: string): Promise<void> {
+  await openPlan(page, daemon, plan);
+  await showPreview(page);
+}
+
+/** `value` — a custom property (leading `--`) or any CSS value — set as `property` on a
+ * light-DOM probe and read back computed, where the preview's own declarations resolve. */
+function resolveStyle(
+  page: Page,
+  property: "color" | "fontFamily" | "backgroundColor",
+  value: string,
+): Promise<string> {
+  return page.evaluate(
+    ([prop, v]) => {
+      const el = document.createElement("span");
+      el.style[prop] = v.startsWith("--") ? `var(${v})` : v;
+      document.body.append(el);
+      const resolved = getComputedStyle(el)[prop];
+      el.remove();
+      return resolved;
+    },
+    [property, value] as const,
+  );
 }
 
 /** The computed paint of each element in PLAN, located by its text. */
@@ -108,54 +83,61 @@ function paint(page: Page) {
   }, PLAN_PREVIEW);
 }
 
-/** A computed style property of the first `selector` match inside the preview whose text
- * holds `text`. */
-function styleOf(page: Page, selector: string, text: string, property: string) {
+/** A probe's selector inside the preview, the text its element holds, and the computed
+ * property to read off it. */
+type Probe = readonly [selector: string, text: string, property: string];
+
+/** Each probe's computed value, keyed like `probes`; `null` where no element matches. */
+function stylesOf<K extends string>(page: Page, probes: Record<K, Probe>) {
   return page.evaluate(
-    ([root, sel, txt, prop]) => {
-      const el = [...document.querySelectorAll(`${root} ${sel}`)].find((e) =>
-        e.textContent?.includes(txt),
-      );
-      if (el === undefined) throw new Error(`no ${sel} holds ${JSON.stringify(txt)}`);
-      return getComputedStyle(el).getPropertyValue(prop);
-    },
-    [PLAN_PREVIEW, selector, text, property] as const,
-  );
+    ([root, p]) =>
+      Object.fromEntries(
+        Object.entries(p).map(([key, [sel, txt, prop]]) => {
+          const el = [...document.querySelectorAll(`${root} ${sel}`)].find((e) =>
+            e.textContent?.includes(txt),
+          );
+          return [key, el === undefined ? null : getComputedStyle(el).getPropertyValue(prop)];
+        }),
+      ),
+    [PLAN_PREVIEW, probes as Record<string, Probe>] as const,
+  ) as Promise<Record<K, string | null>>;
 }
+
+const HEADING_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6"];
 
 test("prose is sans-serif, inline code monospace on a chip, and headings scale down", async ({
   daemon,
   page,
 }) => {
-  // One h1 only: the daemon's reflow demotes a plan's second h1.
   await openPreview(page, daemon, `${LEVELS_PLAN}\nProse with \`inline code\` beside it.\n`);
-  const fonts = await page.evaluate(() => {
-    const probe = (prop: "fontFamily" | "backgroundColor", value: string) => {
-      const el = document.createElement("span");
-      el.style[prop] = value;
-      document.body.append(el);
-      const resolved = getComputedStyle(el)[prop];
-      el.remove();
-      return resolved;
-    };
-    return {
-      sans: probe("fontFamily", "var(--font-sans)"),
-      mono: probe("fontFamily", "var(--font-mono)"),
-      chip: probe("backgroundColor", "var(--chip-code)"),
-    };
-  });
-  expect(await styleOf(page, "p", "Prose with", "font-family")).toBe(fonts.sans);
-  expect(await styleOf(page, "code", "inline code", "font-family")).toBe(fonts.mono);
-  expect(await styleOf(page, "code", "inline code", "background-color")).toBe(fonts.chip);
+  const [sans, mono, chip] = await Promise.all([
+    resolveStyle(page, "fontFamily", "--font-sans"),
+    resolveStyle(page, "fontFamily", "--font-mono"),
+    resolveStyle(page, "backgroundColor", "--chip-code"),
+  ]);
+  await expect
+    .poll(() =>
+      stylesOf(page, {
+        prose: ["p", "Prose with", "font-family"],
+        code: ["code", "inline code", "font-family"],
+        chip: ["code", "inline code", "background-color"],
+      }),
+    )
+    .toEqual({ prose: sans, code: mono, chip });
 
-  const sizes = await Promise.all(
-    ["h1", "h2", "h3", "h4", "h5", "h6"].map(async (tag, i) =>
-      Number.parseFloat(await styleOf(page, tag, LEVEL_TEXTS[i] as string, "font-size")),
-    ),
-  );
-  for (let i = 1; i < sizes.length; i++) {
-    expect(sizes[i]).toBeLessThan(sizes[i - 1] as number);
-  }
+  const sizes = async () => {
+    const probes = Object.fromEntries(
+      HEADING_TAGS.map((tag, i) => [tag, [tag, LEVEL_TEXTS[i] as string, "font-size"] as const]),
+    );
+    const read = await stylesOf(page, probes);
+    return HEADING_TAGS.map((tag) => Number.parseFloat(read[tag] ?? "NaN"));
+  };
+  await expect
+    .poll(async () => {
+      const s = await sizes();
+      return s.every((size, i) => i === 0 || size < (s[i - 1] as number));
+    })
+    .toBe(true);
 });
 
 test("a theme's markdown styles paint each preview element", async ({ daemon, page }) => {
@@ -185,22 +167,33 @@ test("a theme's markdown styles paint each preview element", async ({ daemon, pa
     });
 });
 
+/** The source view's computed color for the token holding "a link". */
+function sourceLinkColor(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const sh = document.querySelector(".diffview")?.shadowRoot;
+    const leaf = [...(sh?.querySelectorAll("[data-content] [data-line] span") ?? [])].find(
+      (el) => el.children.length === 0 && el.textContent?.includes("a link"),
+    );
+    return leaf === undefined ? null : getComputedStyle(leaf).color;
+  });
+}
+
 test("a theme that styles no markdown element paints the preview in caret's own ink", async ({
   daemon,
   page,
 }) => {
   await selectThemeFile(page, daemon, caretThemeVariant("unstyled", "dark", { accent: ACCENT }));
-  await openPreview(page, daemon, PLAN);
-  await expect.poll(() => paletteColor(page, "--accent")).toBe(rgb(ACCENT));
+  await openPlan(page, daemon, PLAN);
+  await expect.poll(() => resolveStyle(page, "color", "--accent")).toBe(rgb(ACCENT));
+  // The preview's link ink must match the source view's, whatever mix that one uses.
+  await expect.poll(() => sourceLinkColor(page)).not.toBeNull();
+  const linkInk = await sourceLinkColor(page);
+  await showPreview(page);
 
-  const [ink, inkSoft, inkFaint, accentBright, linkInk] = await Promise.all(
-    [
-      "--ink",
-      "--ink-soft",
-      "--ink-faint",
-      "--accent-bright",
-      "color-mix(in lab, var(--ink), var(--accent) 45%)",
-    ].map((value) => paletteColor(page, value)),
+  const [ink, inkSoft, inkFaint, accentBright] = await Promise.all(
+    ["--ink", "--ink-soft", "--ink-faint", "--accent-bright"].map((value) =>
+      resolveStyle(page, "color", value),
+    ),
   );
   await expect
     .poll(() => paint(page))
@@ -230,13 +223,21 @@ test("a heading level without its own style takes the heading style", async ({ d
   );
   await openPreview(page, daemon, LEVELS_PLAN);
 
-  const levels = () =>
-    Promise.all(
-      ["h1", "h2", "h3", "h4", "h5", "h6"].map(async (tag, i) => ({
-        color: await styleOf(page, tag, LEVEL_TEXTS[i] as string, "color"),
-        weight: await styleOf(page, tag, LEVEL_TEXTS[i] as string, "font-weight"),
-      })),
+  const levels = async () => {
+    const read = await stylesOf(
+      page,
+      Object.fromEntries(
+        HEADING_TAGS.flatMap((tag, i) => [
+          [`${tag}color`, [tag, LEVEL_TEXTS[i] as string, "color"] as const],
+          [`${tag}weight`, [tag, LEVEL_TEXTS[i] as string, "font-weight"] as const],
+        ]),
+      ),
     );
+    return HEADING_TAGS.map((tag) => ({
+      color: read[`${tag}color`],
+      weight: read[`${tag}weight`],
+    }));
+  };
   const heading = { color: rgb(markdown.heading.color), weight: "700" };
   await expect
     .poll(levels)
@@ -264,31 +265,52 @@ const LISTS_PLAN = `- outer bullet
 
 test("lists mark each depth and a task item shows its checkbox state", async ({ daemon, page }) => {
   await openPreview(page, daemon, LISTS_PLAN);
-  const type = (selector: string, text: string) => styleOf(page, selector, text, "list-style-type");
   // The text is the innermost item's, so `li` resolves to the outermost holding it — read
   // each depth off the list nesting instead.
-  expect(await type("ul", "outer bullet")).toBe("disc");
-  expect(await type("ul ul", "middle bullet")).toBe("circle");
-  expect(await type("ul ul ul", "inner bullet")).toBe("square");
-  expect(await type("ol", "outer number")).toBe("decimal");
-  expect(await type("ol ol", "inner number")).toBe("lower-roman");
-  expect(await type("li", "open task")).toBe("none");
+  await expect
+    .poll(() =>
+      stylesOf(page, {
+        outer: ["ul", "outer bullet", "list-style-type"],
+        middle: ["ul ul", "middle bullet", "list-style-type"],
+        inner: ["ul ul ul", "inner bullet", "list-style-type"],
+        number: ["ol", "outer number", "list-style-type"],
+        innerNumber: ["ol ol", "inner number", "list-style-type"],
+        task: ["li", "open task", "list-style-type"],
+      }),
+    )
+    .toEqual({
+      outer: "disc",
+      middle: "circle",
+      inner: "square",
+      number: "decimal",
+      innerNumber: "lower-roman",
+      task: "none",
+    });
 
-  const boxes = await page.evaluate((root) => {
-    const box = (text: string) => {
-      const li = [...document.querySelectorAll(`${root} li`)].find((e) =>
-        e.textContent?.includes(text),
-      );
-      const input = li?.querySelector("input") as HTMLInputElement;
-      return { checked: input.checked, indeterminate: input.indeterminate };
-    };
-    return [box("open task"), box("done task"), box("partial task")];
-  }, PLAN_PREVIEW);
-  expect(boxes).toEqual([
-    { checked: false, indeterminate: false },
-    { checked: true, indeterminate: false },
-    { checked: false, indeterminate: true },
-  ]);
+  const inkSoft = await resolveStyle(page, "color", "--ink-soft");
+  await expect
+    .poll(() =>
+      page.evaluate((root) => {
+        const box = (text: string) => {
+          const li = [...document.querySelectorAll(`${root} li`)].find((e) =>
+            e.textContent?.includes(text),
+          );
+          const input = li?.querySelector("input");
+          if (!input) return null;
+          return {
+            checked: input.checked,
+            indeterminate: input.indeterminate,
+            border: getComputedStyle(input).borderTopColor,
+          };
+        };
+        return [box("open task"), box("done task"), box("partial task")];
+      }, PLAN_PREVIEW),
+    )
+    .toEqual([
+      { checked: false, indeterminate: false, border: inkSoft },
+      { checked: true, indeterminate: false, border: inkSoft },
+      { checked: false, indeterminate: true, border: inkSoft },
+    ]);
 });
 
 // Cells wrap, so only a table whose narrowest layout overflows scrolls: many columns.
@@ -307,73 +329,109 @@ test("a table has headers, borders, column alignment and scrolls on its own", as
   page,
 }) => {
   await openPreview(page, daemon, TABLE_PLAN);
-  expect(Number(await styleOf(page, "th", "Left", "font-weight"))).toBeGreaterThanOrEqual(600);
-  expect(Number.parseFloat(await styleOf(page, "td", "a", "border-top-width"))).toBeGreaterThan(0);
-  expect(await styleOf(page, "th", "Left", "text-align")).toBe("left");
-  expect(await styleOf(page, "th", "Centre", "text-align")).toBe("center");
-  expect(await styleOf(page, "th", "Right", "text-align")).toBe("right");
-  expect(await styleOf(page, "th", "Plain", "text-align")).toBe("start");
+  await expect
+    .poll(async () => {
+      const s = await stylesOf(page, {
+        weight: ["th", "Left", "font-weight"],
+        border: ["td", "a", "border-top-width"],
+        left: ["th", "Left", "text-align"],
+        centre: ["th", "Centre", "text-align"],
+        right: ["th", "Right", "text-align"],
+        plain: ["th", "Plain", "text-align"],
+      });
+      return {
+        bold: Number(s.weight) >= 600,
+        bordered: Number.parseFloat(s.border ?? "0") > 0,
+        // Chromium maps a cell's align attribute to -webkit-left and the like.
+        left: /left$/.test(s.left ?? ""),
+        centre: /center$/.test(s.centre ?? ""),
+        right: /right$/.test(s.right ?? ""),
+        plain: s.plain,
+      };
+    })
+    .toEqual({ bold: true, bordered: true, left: true, centre: true, right: true, plain: "start" });
 
-  const wide = await page.evaluate((root) => {
-    const table = [...document.querySelectorAll(`${root} table`)].find((t) =>
-      t.textContent?.includes("column59"),
-    ) as HTMLElement;
-    const plan = document.querySelector(".diff-plan") as HTMLElement;
-    return {
-      overflow: getComputedStyle(table).overflowX,
-      scrolls: table.scrollWidth > table.clientWidth,
-      planScrolls: plan.scrollWidth > plan.clientWidth,
-    };
-  }, PLAN_PREVIEW);
-  expect(wide).toEqual({ overflow: "auto", scrolls: true, planScrolls: false });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ([root, surface]) => {
+          const table = [...document.querySelectorAll(`${root} table`)].find((t) =>
+            t.textContent?.includes("column59"),
+          );
+          const plan = document.querySelector(surface);
+          if (!table || !plan) return null;
+          return {
+            overflow: getComputedStyle(table).overflowX,
+            scrolls: table.scrollWidth > table.clientWidth,
+            planScrolls: plan.scrollWidth > plan.clientWidth,
+          };
+        },
+        [PLAN_PREVIEW, PLAN_SURFACE] as const,
+      ),
+    )
+    .toEqual({ overflow: "auto", scrolls: true, planScrolls: false });
 });
 
 test("nested quotes carry a rule, and a thematic break draws a bar", async ({ daemon, page }) => {
   await openPreview(page, daemon, `> outer quote\n>\n> > inner quote\n\n---\n\nAfter the break.\n`);
-  const quotes = await page.evaluate(
-    (root) =>
-      [...document.querySelectorAll(`${root} blockquote`)].map((q) => {
-        const s = getComputedStyle(q);
-        return { style: s.borderLeftStyle, width: Number.parseFloat(s.borderLeftWidth) > 0 };
-      }),
-    PLAN_PREVIEW,
-  );
-  expect(quotes).toEqual([
-    { style: "solid", width: true },
-    { style: "solid", width: true },
-  ]);
-  const rule = await page.evaluate((root) => {
-    const hr = document.querySelector(`${root} hr`) as HTMLElement;
-    return {
-      height: hr.getBoundingClientRect().height,
-      fill: getComputedStyle(hr).backgroundColor,
-    };
-  }, PLAN_PREVIEW);
-  expect(rule.height).toBeGreaterThan(0);
-  expect(rule.fill).not.toBe("rgba(0, 0, 0, 0)");
+  const inkSoft = await resolveStyle(page, "color", "--ink-soft");
+  await expect
+    .poll(() =>
+      page.evaluate((root) => {
+        const hr = document.querySelector(`${root} hr`);
+        return {
+          quotes: [...document.querySelectorAll(`${root} blockquote`)].map((q) => {
+            const s = getComputedStyle(q);
+            return {
+              style: s.borderLeftStyle,
+              width: Number.parseFloat(s.borderLeftWidth) > 0,
+              color: s.borderLeftColor,
+            };
+          }),
+          rule: hr && {
+            drawn: hr.getBoundingClientRect().height > 0,
+            fill: getComputedStyle(hr).backgroundColor,
+          },
+        };
+      }, PLAN_PREVIEW),
+    )
+    .toEqual({
+      quotes: [
+        { style: "solid", width: true, color: inkSoft },
+        { style: "solid", width: true, color: inkSoft },
+      ],
+      rule: { drawn: true, fill: inkSoft },
+    });
 });
 
 test("an image fits the preview and a failed one is hidden", async ({ daemon, page }) => {
+  // Narrower than GOOD's 900px, so the image's size cap has to bind.
+  await page.setViewportSize({ width: 800, height: 900 });
   await routeAssets(page);
   await openPreview(page, daemon, `![the diagram](${GOOD})\n\n![missing](${GONE})\n`);
   const images = () =>
-    page.evaluate((root) => {
-      const preview = document.querySelector(root) as HTMLElement;
-      const s = getComputedStyle(preview);
-      const content =
-        preview.clientWidth - Number.parseFloat(s.paddingLeft) - Number.parseFloat(s.paddingRight);
-      const img = (src: string) =>
-        [...preview.querySelectorAll("img")].find((i) => i.getAttribute("src") === src) as
-          | HTMLImageElement
-          | undefined;
-      const good = img("https://assets.test/diagram.png");
-      return {
-        decoded: (good?.naturalWidth ?? 0) > 0,
-        fits: (good?.getBoundingClientRect().width ?? Infinity) <= content + 0.5,
-        goneHidden: img("https://assets.test/absent.png")?.hidden ?? false,
-      };
-    }, PLAN_PREVIEW);
-  await expect.poll(images).toEqual({ decoded: true, fits: true, goneHidden: true });
+    page.evaluate(
+      ([root, good, gone]) => {
+        const preview = document.querySelector(root) as HTMLElement;
+        const s = getComputedStyle(preview);
+        const content =
+          preview.clientWidth -
+          Number.parseFloat(s.paddingLeft) -
+          Number.parseFloat(s.paddingRight);
+        const img = (src: string) =>
+          [...preview.querySelectorAll("img")].find((i) => i.getAttribute("src") === src);
+        const shown = img(good);
+        const width = shown?.getBoundingClientRect().width ?? Infinity;
+        return {
+          decoded: (shown?.naturalWidth ?? 0) > 0,
+          fits: width <= content + 0.5,
+          capped: width < (shown?.naturalWidth ?? 0),
+          goneHidden: img(gone)?.hidden ?? false,
+        };
+      },
+      [PLAN_PREVIEW, GOOD, GONE] as const,
+    );
+  await expect.poll(images).toEqual({ decoded: true, fits: true, capped: true, goneHidden: true });
 });
 
 test("the preview follows a light/dark switch live", async ({ daemon, page }) => {
@@ -390,7 +448,7 @@ test("the preview follows a light/dark switch live", async ({ daemon, page }) =>
     caretThemeVariant("day", "light", { accent: ACCENT, markdown: light }),
   );
   await openPreview(page, daemon, PLAN);
-  const h1 = () => styleOf(page, "h1", "Styled heading", "color");
+  const h1 = async () => (await stylesOf(page, { color: ["h1", "Styled heading", "color"] })).color;
   await expect.poll(h1).toBe(rgb(dark.heading.color));
 
   await page.emulateMedia({ colorScheme: "light" });

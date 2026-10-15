@@ -37,9 +37,9 @@ import {
   rowHeights,
 } from "@test/e2e/support/source-view.ts";
 
-// BIG_PNG's 700px intrinsic height is well past the 18rem (288px) cap, so the cap
-// has to bind for the assertions below to pass — a 2x2 pixel would let them pass
-// with the cap deleted.
+// The image GOOD serves is 700px tall (support/images.ts), well past the 18rem (288px)
+// cap, so the cap has to bind for the assertions below to pass — a 2x2 pixel would let
+// them pass with the cap deleted.
 const CAP_PX = 288; // 18rem at the root's 16px
 const MEASURE_PX = 720; // the max-width the fenced panel also spends
 

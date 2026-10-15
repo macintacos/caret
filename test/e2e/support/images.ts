@@ -2,14 +2,16 @@
 import type { Page } from "@playwright/test";
 
 /** A 900x700 1-bit PNG, solid black — large enough that a size cap has to bind. */
-export const BIG_PNG = Buffer.from(
+const BIG_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAA4QAAAK8AQAAAACfa0ziAAAAZElEQVR42u3BMQEAAADCoPVPbQlPoAAAAAAAAAAA" +
     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
     "eBo3xwABf429cQAAAABJRU5ErkJggg==",
   "base64",
 );
 
+/** Served as a real PNG by routeAssets. */
 export const GOOD = "https://assets.test/diagram.png";
+/** Answered 404 by routeAssets. */
 export const GONE = "https://assets.test/absent.png";
 
 /** Serve every intercepted asset from this file: the good URL as a real PNG, the
