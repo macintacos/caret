@@ -119,7 +119,11 @@ function leadingNewlines(raw: string): number {
 
 // Inline text has `raw === text` in marked, so both split at the same index.
 function splitAfterNewlines(token: Tokens.Text): Tokens.Text[] {
-  return token.text.split(/(?<=\n)/).map((piece) => ({ ...token, raw: piece, text: piece }));
+  // A trailing "\n" keeps its empty piece, so the next line's marker still follows it.
+  const pieces = token.text
+    .split("\n")
+    .map((piece, i, all) => (i < all.length - 1 ? `${piece}\n` : piece));
+  return pieces.map((piece) => ({ ...token, raw: piece, text: piece }));
 }
 
 // A token's own newlines come from its raw, never its rendered text: a codespan renders
@@ -131,7 +135,7 @@ function markInline(tokens: Token[], line: number): { tokens: Token[]; line: num
     if (token.type === "text" && !("tokens" in token && token.tokens)) {
       splitAfterNewlines(token as Tokens.Text).forEach((piece, i) => {
         if (i > 0) out.push(sourceLine(++line));
-        out.push(piece);
+        if (piece.text) out.push(piece);
       });
       continue;
     }

@@ -126,6 +126,22 @@ describe("renderPlanMarkdown source-line markers", () => {
     );
   });
 
+  test("a soft break before an autolink marks the next line before the link", () => {
+    const html = renderPlanMarkdown("x\n<https://a.test>\ny https://b.test\n").html;
+    expect(html).toContain(`\n${marker(2)}<a href="https://a.test"`);
+    expect(html).toContain(`\n${marker(3)}y `);
+  });
+
+  test("a soft break before a codespan marks the next line before it", () => {
+    expect(renderPlanMarkdown("a\n`c` b").html).toContain(`\n${marker(2)}<code>c</code>`);
+  });
+
+  test("a soft break inside inline html marks the next line before the closing tag", () => {
+    const html = renderPlanMarkdown("a <b>x\n</b> y\nz").html;
+    expect(html).toContain(`x\n${marker(2)}</b> y`);
+    expect(html).toContain(`\n${marker(3)}z`);
+  });
+
   test("a hard break puts the next line's marker after <br>", () => {
     for (const text of ["a  \nb", "a\\\nb"]) {
       expect(renderPlanMarkdown(text).html).toContain(`<br>${marker(2)}b`);
