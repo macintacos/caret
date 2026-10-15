@@ -19,9 +19,15 @@
       input.indeterminate = true;
     }
   });
+
+  // `error` does not bubble, hence the capture listener. Matches the source view's
+  // failed image (inlineImages.ts).
+  function hideFailedImage(event: Event) {
+    if (event.target instanceof HTMLImageElement) event.target.hidden = true;
+  }
 </script>
 
-<div class="plan-preview" bind:this={container}>{@html html}</div>
+<div class="plan-preview" bind:this={container} onerrorcapture={hideFailedImage}>{@html html}</div>
 
 <style>
   .plan-preview {
