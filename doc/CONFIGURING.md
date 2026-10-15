@@ -396,7 +396,9 @@ to, so add one only to set it apart.
 The plan's source view renders it as markdown source, and these optional styles color its
 elements. Each is an object with a `color` and an optional `fontStyle`, the same shape as
 a syntax role. A file that omits an element, or the whole `markdown` object, paints it as
-caret does by default.
+caret does by default. The plan's preview applies the same styles; unstyled, it differs
+from the "Plan view default" column in three ways: a heading is semibold, a quote is
+`inkSoft` rather than faded, and a link or emphasis draws no chip.
 
 | Element                  | What it colors                               | Plan view default           | Comment editor default |
 | ------------------------ | -------------------------------------------- | --------------------------- | ---------------------- |

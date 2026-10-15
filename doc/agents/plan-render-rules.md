@@ -179,6 +179,11 @@ exist today.
   `title`; anything else renders as its alt text.
 - **`[/]`** renders as `data-task="slashed"`. `indeterminate` has no attribute form, so
   `PlanPreview.svelte` sets the property on each such input after every mount of new HTML.
+- **Styling** lives in `PlanPreview.svelte`'s scoped stylesheet: every rule is rooted at
+  `.plan-preview` and painted from tokens and the theme's `--markdown-*` properties, with
+  the source view's fallbacks. `data-task` stays distinct from the source view's
+  `data-md-checkbox`: one marks an `input` in the light DOM, the other a `span` in the
+  shadow root, so no rule is shared.
 
 ### Source-line map
 
