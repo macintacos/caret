@@ -273,9 +273,8 @@
   const runs = (b: SurfaceBehavior): boolean => runsOn(b, surface);
 
   // The plan preview renders the stored text, so its blocks' source spans count the
-  // same lines the source view numbers. Memoized because the 2s poll hands a fresh
-  // `review` each tick, and without it every tick would re-lex and re-sanitize the
-  // whole plan; `{@html}` itself compares by value.
+  // same lines the source view numbers. Memoized: the 2s poll hands a fresh `review`
+  // each tick, which would otherwise re-lex and re-sanitize the whole plan.
   const renderPreview = memoLast(renderPlanMarkdown);
   const planPreview = $derived(
     surface === "preview" ? renderPreview(review.currentPlan) : null,
@@ -559,11 +558,9 @@
   // and is swallowed so dismissing never also opens a line comment.
   const CARD_EXEMPT = "[data-folder-tree], [data-file-drawer], [data-file-ref], [data-ref-hint]";
 
-  // Gated on the referenceHints surfaces as well as the state, matching the card's
-  // own render condition below and the lane's effect further down: any other
-  // surface takes the card off screen while leaving `folderTree` set, and both
-  // handlers here swallow what they act on — so left registered they would eat one
-  // Escape and one click from the view the reader is actually looking at.
+  // Gated on the referenceHints surfaces, not just the state: elsewhere the card is
+  // off screen with `folderTree` still set, and these handlers would eat an Escape
+  // and a click from the visible view.
   $effect(() => {
     if (!runs("referenceHints") || folderTree === undefined) return;
     const onKey = (e: KeyboardEvent) => {
@@ -597,10 +594,8 @@
   // IS viewport-fixed over the plan, so the divergence tracks the two surfaces'
   // shapes rather than being drift.
   //
-  // Gated on the referenceHints surfaces to match the pane's own render condition
-  // below, not just on the state: any other surface hides the lane while leaving
-  // `filePreview` set, and an unrendered pane's handler would swallow Escape from
-  // whatever the reader is actually looking at.
+  // Gated on the referenceHints surfaces, not just the state: elsewhere the lane is
+  // hidden with `filePreview` still set, and its handler would swallow Escape.
   //
   // Gated on the card too (EXC-1129), which is what gives the two coexisting
   // surfaces an Escape ORDER. Both handlers are capture-phase listeners on the same
