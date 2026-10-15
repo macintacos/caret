@@ -699,3 +699,78 @@ describe("DiffPlanView plan search (EXC-832)", () => {
     expect(gone).toBe(true);
   });
 });
+
+describe("DiffPlanView plan view toggle", () => {
+  const toggle = (target: HTMLElement) =>
+    target.querySelector<HTMLButtonElement>(".control-row .preview-toggle");
+
+  test("a fresh mount reads the source view with the toggle unpressed", async () => {
+    const { target } = render(DiffPlanView, props());
+    await until(() => shadow(target)?.textContent?.includes("hello world") ?? false);
+    expect(toggle(target)?.getAttribute("aria-pressed")).toBe("false");
+    expect(target.querySelector(".plan-preview") != null).toBe(false);
+  });
+
+  test("the toggle switches to the preview and remembers it", async () => {
+    const { target } = render(DiffPlanView, props());
+    await until(() => toggle(target) != null);
+    toggle(target)!.click();
+    await until(() => target.querySelector(".plan-preview") != null);
+    expect(target.querySelector(".plan-preview")?.textContent).toContain("hello world");
+    expect(toggle(target)?.getAttribute("aria-pressed")).toBe("true");
+    expect(localStorage.getItem("caret.planView")).toBe("preview");
+  });
+
+  test("the preview drops the source-only controls", async () => {
+    const { target } = render(DiffPlanView, props());
+    await until(() => toggle(target) != null);
+    toggle(target)!.click();
+    await until(() => target.querySelector(".plan-preview") != null);
+    target.querySelector(".diff-plan")!.dispatchEvent(new MouseEvent("mouseenter"));
+    const present = [
+      ".control-row [data-slot='popover-trigger']",
+      ".plan-breadcrumbs",
+      ".search-dock",
+      ".drag-hint",
+    ].filter((s) => target.querySelector(s) != null);
+    expect(present).toEqual([]);
+    expect(
+      shortcuts
+        .list()
+        .find((e) => e.id === "actions.search")
+        ?.enabled?.(),
+    ).toBe(false);
+  });
+
+  test("a remembered preview opens on the preview", async () => {
+    localStorage.setItem("caret.planView", "preview");
+    const { target } = render(DiffPlanView, props());
+    const opened = await until(() => target.querySelector(".plan-preview") != null);
+    expect(opened).toBe(true);
+  });
+
+  test("compare mode hides the toggle and leaving it restores the preview", async () => {
+    localStorage.setItem("caret.planView", "preview");
+    const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
+    await until(() => target.querySelector(".plan-preview") != null);
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    await until(() => toggle(target) == null);
+    expect(target.querySelector(".plan-preview") != null).toBe(false);
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    const restored = await until(() => target.querySelector(".plan-preview") != null);
+    expect(restored).toBe(true);
+  });
+
+  test("flipping with a typed composer open keeps the text as a scratch", async () => {
+    const commenting = createSourceCommenting({ onCreate: () => {} });
+    const { target, flush } = render(
+      DiffPlanView,
+      props({ commenting, pending: { startLine: 2, endLine: 2 }, pendingText: "half a thought" }),
+    );
+    await until(() => target.querySelector(".plan-preview, [data-composer], .cm-content") != null);
+    flush();
+    commenting.open({ start: 2, end: 2 });
+    toggle(target)!.click();
+    expect(commenting.scratches().map((s) => s.text)).toEqual(["half a thought"]);
+  });
+});
