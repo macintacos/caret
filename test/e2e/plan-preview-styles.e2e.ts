@@ -42,11 +42,11 @@ function resolveStyle(
   value: string,
 ): Promise<string> {
   return page.evaluate(
-    ([prop, v]) => {
+    ([property, value]) => {
       const el = document.createElement("span");
-      el.style[prop] = v.startsWith("--") ? `var(${v})` : v;
+      el.style[property] = value.startsWith("--") ? `var(${value})` : value;
       document.body.append(el);
-      const resolved = getComputedStyle(el)[prop];
+      const resolved = getComputedStyle(el)[property];
       el.remove();
       return resolved;
     },
@@ -90,13 +90,13 @@ type Probe = readonly [selector: string, text: string, property: string];
 /** Each probe's computed value, keyed like `probes`; `null` where no element matches. */
 function stylesOf<K extends string>(page: Page, probes: Record<K, Probe>) {
   return page.evaluate(
-    ([root, p]) =>
+    ([root, probes]) =>
       Object.fromEntries(
-        Object.entries(p).map(([key, [sel, txt, prop]]) => {
-          const el = [...document.querySelectorAll(`${root} ${sel}`)].find((e) =>
-            e.textContent?.includes(txt),
+        Object.entries(probes).map(([key, [selector, text, property]]) => {
+          const el = [...document.querySelectorAll(`${root} ${selector}`)].find((e) =>
+            e.textContent?.includes(text),
           );
-          return [key, el === undefined ? null : getComputedStyle(el).getPropertyValue(prop)];
+          return [key, el === undefined ? null : getComputedStyle(el).getPropertyValue(property)];
         }),
       ),
     [PLAN_PREVIEW, probes as Record<string, Probe>] as const,
@@ -125,7 +125,7 @@ test("prose is sans-serif, inline code monospace on a chip, and headings scale d
     )
     .toEqual({ prose: sans, code: mono, chip });
 
-  const sizes = async () => {
+  const headingSizes = async () => {
     const probes = Object.fromEntries(
       HEADING_TAGS.map((tag, i) => [tag, [tag, LEVEL_TEXTS[i] as string, "font-size"] as const]),
     );
@@ -134,8 +134,8 @@ test("prose is sans-serif, inline code monospace on a chip, and headings scale d
   };
   await expect
     .poll(async () => {
-      const s = await sizes();
-      return s.every((size, i) => i === 0 || size < (s[i - 1] as number));
+      const sizes = await headingSizes();
+      return sizes.every((size, i) => i === 0 || size < (sizes[i - 1] as number));
     })
     .toBe(true);
 });
@@ -331,7 +331,7 @@ test("a table has headers, borders, column alignment and scrolls on its own", as
   await openPreview(page, daemon, TABLE_PLAN);
   await expect
     .poll(async () => {
-      const s = await stylesOf(page, {
+      const styles = await stylesOf(page, {
         weight: ["th", "Left", "font-weight"],
         border: ["td", "a", "border-top-width"],
         left: ["th", "Left", "text-align"],
@@ -340,13 +340,13 @@ test("a table has headers, borders, column alignment and scrolls on its own", as
         plain: ["th", "Plain", "text-align"],
       });
       return {
-        bold: Number(s.weight) >= 600,
-        bordered: Number.parseFloat(s.border ?? "0") > 0,
+        bold: Number(styles.weight) >= 600,
+        bordered: Number.parseFloat(styles.border ?? "0") > 0,
         // Chromium maps a cell's align attribute to -webkit-left and the like.
-        left: /left$/.test(s.left ?? ""),
-        centre: /center$/.test(s.centre ?? ""),
-        right: /right$/.test(s.right ?? ""),
-        plain: s.plain,
+        left: /left$/.test(styles.left ?? ""),
+        centre: /center$/.test(styles.centre ?? ""),
+        right: /right$/.test(styles.right ?? ""),
+        plain: styles.plain,
       };
     })
     .toEqual({ bold: true, bordered: true, left: true, centre: true, right: true, plain: "start" });
@@ -381,11 +381,11 @@ test("nested quotes carry a rule, and a thematic break draws a bar", async ({ da
         const hr = document.querySelector(`${root} hr`);
         return {
           quotes: [...document.querySelectorAll(`${root} blockquote`)].map((q) => {
-            const s = getComputedStyle(q);
+            const quoteStyle = getComputedStyle(q);
             return {
-              style: s.borderLeftStyle,
-              width: Number.parseFloat(s.borderLeftWidth) > 0,
-              color: s.borderLeftColor,
+              style: quoteStyle.borderLeftStyle,
+              width: Number.parseFloat(quoteStyle.borderLeftWidth) > 0,
+              color: quoteStyle.borderLeftColor,
             };
           }),
           rule: hr && {
@@ -413,19 +413,19 @@ test("an image fits the preview and a failed one is hidden", async ({ daemon, pa
     page.evaluate(
       ([root, good, gone]) => {
         const preview = document.querySelector(root) as HTMLElement;
-        const s = getComputedStyle(preview);
-        const content =
+        const previewStyle = getComputedStyle(preview);
+        const contentWidth =
           preview.clientWidth -
-          Number.parseFloat(s.paddingLeft) -
-          Number.parseFloat(s.paddingRight);
+          Number.parseFloat(previewStyle.paddingLeft) -
+          Number.parseFloat(previewStyle.paddingRight);
         const img = (src: string) =>
           [...preview.querySelectorAll("img")].find((i) => i.getAttribute("src") === src);
-        const shown = img(good);
-        const width = shown?.getBoundingClientRect().width ?? Infinity;
+        const goodImage = img(good);
+        const width = goodImage?.getBoundingClientRect().width ?? Infinity;
         return {
-          decoded: (shown?.naturalWidth ?? 0) > 0,
-          fits: width <= content + 0.5,
-          capped: width < (shown?.naturalWidth ?? 0),
+          decoded: (goodImage?.naturalWidth ?? 0) > 0,
+          fits: width <= contentWidth + 0.5,
+          capped: width < (goodImage?.naturalWidth ?? 0),
           goneHidden: img(gone)?.hidden ?? false,
         };
       },
@@ -448,9 +448,10 @@ test("the preview follows a light/dark switch live", async ({ daemon, page }) =>
     caretThemeVariant("day", "light", { accent: ACCENT, markdown: light }),
   );
   await openPreview(page, daemon, PLAN);
-  const h1 = async () => (await stylesOf(page, { color: ["h1", "Styled heading", "color"] })).color;
-  await expect.poll(h1).toBe(rgb(dark.heading.color));
+  const headingColor = async () =>
+    (await stylesOf(page, { color: ["h1", "Styled heading", "color"] })).color;
+  await expect.poll(headingColor).toBe(rgb(dark.heading.color));
 
   await page.emulateMedia({ colorScheme: "light" });
-  await expect.poll(h1).toBe(rgb(light.heading.color));
+  await expect.poll(headingColor).toBe(rgb(light.heading.color));
 });
