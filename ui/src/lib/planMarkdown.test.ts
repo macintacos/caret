@@ -147,18 +147,18 @@ describe("renderPlanMarkdown text", () => {
     ]) {
       expect(root.querySelector(selector) !== null).toBe(true);
     }
-    const pres = [...root.querySelectorAll("pre > code")].map((el) => el.textContent);
-    expect(pres).toEqual(["fenced\n", "indented\n"]);
+    const codeBlockTexts = [...root.querySelectorAll("pre > code")].map((el) => el.textContent);
+    expect(codeBlockTexts).toEqual(["fenced\n", "indented\n"]);
   });
 });
 
 describe("renderPlanMarkdown tasks", () => {
-  function boxes(text: string) {
+  function checkboxes(text: string) {
     return [...fragment(renderPlanMarkdown(text).html).querySelectorAll("input")];
   }
 
   test("each task marker renders its own state, disabled, only [x] checked", () => {
-    const inputs = boxes("- [ ] a\n- [x] b\n- [/] c");
+    const inputs = checkboxes("- [ ] a\n- [x] b\n- [/] c");
     expect(inputs.map((i) => i.getAttribute("data-task"))).toEqual([
       "unchecked",
       "checked",
@@ -188,10 +188,10 @@ describe("renderPlanMarkdown tasks", () => {
   });
 
   test("nested and loose items get the slashed state", () => {
-    expect(boxes("- a\n  - [/] nested").map((i) => i.getAttribute("data-task"))).toEqual([
+    expect(checkboxes("- a\n  - [/] nested").map((i) => i.getAttribute("data-task"))).toEqual([
       "slashed",
     ]);
-    expect(boxes("- [/] one\n\n- [/] two").map((i) => i.getAttribute("data-task"))).toEqual([
+    expect(checkboxes("- [/] one\n\n- [/] two").map((i) => i.getAttribute("data-task"))).toEqual([
       "slashed",
       "slashed",
     ]);
@@ -239,9 +239,9 @@ describe("renderPlanMarkdown images", () => {
   });
 
   test("alt text is the image label's plain text", () => {
-    const img = (text: string) =>
+    const altOf = (text: string) =>
       fragment(renderPlanMarkdown(text).html).querySelector("img")?.getAttribute("alt");
-    expect(img("![**b** _i_](https://a.test/i.png)")).toBe("b i");
+    expect(altOf("![**b** _i_](https://a.test/i.png)")).toBe("b i");
     expect(renderPlanMarkdown("![a & b](https://a.test/i.png)").html).toContain('alt="a &amp; b"');
     expect(renderPlanMarkdown("![**b** _i_](rel.png)").html).toContain("b i");
   });
@@ -258,10 +258,10 @@ describe("renderPlanMarkdown attribute escaping", () => {
         ].join("\n"),
       ).html,
     );
-    const names = (selector: string) =>
+    const attributeNamesOf = (selector: string) =>
       root.querySelector(selector)?.getAttributeNames().sort() ?? [];
-    expect(names("a")).toEqual(["href", "rel", "target", "title"]);
-    expect(names("img")).toEqual(["alt", "loading", "referrerpolicy", "src"]);
+    expect(attributeNamesOf("a")).toEqual(["href", "rel", "target", "title"]);
+    expect(attributeNamesOf("img")).toEqual(["alt", "loading", "referrerpolicy", "src"]);
   });
 });
 

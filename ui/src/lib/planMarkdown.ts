@@ -79,14 +79,14 @@ function liftSlashedTask(token: Token): void {
   if (!SLASHED_TASK.test(item.text)) return;
   const block = item.tokens[0];
   if (block?.type !== "text" && block?.type !== "paragraph") return;
-  const inline = (block as Tokens.Text | Tokens.Paragraph).tokens;
-  const first = inline?.[0];
-  if (inline === undefined || first?.type !== "text") return;
-  const marker = SLASHED_TASK.exec(first.text);
+  const inlineTokens = (block as Tokens.Text | Tokens.Paragraph).tokens;
+  const firstInline = inlineTokens?.[0];
+  if (inlineTokens === undefined || firstInline?.type !== "text") return;
+  const marker = SLASHED_TASK.exec(firstInline.text);
   if (marker === null) return;
-  first.text = first.text.slice(marker[0].length);
-  first.raw = first.raw.slice(marker[0].length);
-  inline.unshift({ type: "checkbox", raw: marker[0], checked: false });
+  firstInline.text = firstInline.text.slice(marker[0].length);
+  firstInline.raw = firstInline.raw.slice(marker[0].length);
+  inlineTokens.unshift({ type: "checkbox", raw: marker[0], checked: false });
 }
 
 function newlines(text: string): number {
@@ -104,13 +104,16 @@ export function renderPlanMarkdown(text: string): RenderedPlan {
   const blocks: SourceSpan[] = [];
   let line = 1;
   for (const token of tokens) {
-    const body = marked.parser([token]);
-    if (body !== "") {
-      const leading = token.raw.slice(0, token.raw.length - token.raw.trimStart().length);
-      const span = { start: line + newlines(leading), end: line + newlines(token.raw.trimEnd()) };
+    const blockHtml = marked.parser([token]);
+    if (blockHtml !== "") {
+      const leadingWhitespace = token.raw.slice(0, token.raw.length - token.raw.trimStart().length);
+      const span = {
+        start: line + newlines(leadingWhitespace),
+        end: line + newlines(token.raw.trimEnd()),
+      };
       blocks.push(span);
       // A wrapper, not attributes on the block's root: sanitized raw HTML has no reliable root.
-      html += `<div data-source-start="${span.start}" data-source-end="${span.end}">${body}</div>`;
+      html += `<div data-source-start="${span.start}" data-source-end="${span.end}">${blockHtml}</div>`;
     }
     line += newlines(token.raw);
   }
