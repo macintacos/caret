@@ -6,7 +6,7 @@ import { reactiveProps } from "@ui/support/props.svelte.ts";
 import PlanPreview from "@/components/PlanPreview.svelte";
 import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
 
-function task(target: HTMLElement, selector: string): HTMLInputElement {
+function checkbox(target: HTMLElement, selector: string): HTMLInputElement {
   return target.querySelector(selector) as HTMLInputElement;
 }
 
@@ -17,8 +17,8 @@ describe("PlanPreview", () => {
     });
     flush();
 
-    expect(task(target, 'input[data-task="slashed"]').indeterminate).toBe(true);
-    expect(task(target, "input:checked").indeterminate).toBe(false);
+    expect(checkbox(target, 'input[data-task="slashed"]').indeterminate).toBe(true);
+    expect(checkbox(target, "input:checked").indeterminate).toBe(false);
   });
 
   test("marks a slashed task that arrives with new html", () => {
@@ -29,7 +29,7 @@ describe("PlanPreview", () => {
     props.html = renderPlanMarkdown("- [/] later\n").html;
     flush();
 
-    expect(task(target, 'input[data-task="slashed"]').indeterminate).toBe(true);
+    expect(checkbox(target, 'input[data-task="slashed"]').indeterminate).toBe(true);
   });
 
   test("keeps the source-mapped blocks as direct children of the container", () => {

@@ -270,7 +270,7 @@
 
   let planView = $state<PlanView>(readPlanView());
   const surface = $derived<PlanSurface>(showDiff ? "compare" : planView);
-  const runs = (b: SurfaceBehavior): boolean => runsOn(b, surface);
+  const runs = (behavior: SurfaceBehavior): boolean => runsOn(behavior, surface);
 
   // The plan preview renders the stored text, so its blocks' source spans count the
   // same lines the source view numbers. Memoized: the 2s poll hands a fresh `review`

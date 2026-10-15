@@ -18,12 +18,12 @@ import { currentCrumb, previewToggle as toggle } from "@test/e2e/support/chrome.
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { PLAN_PREVIEW as PREVIEW, planSurface } from "@test/e2e/support/source-view.ts";
 
-const body = (tag: string) =>
+const paragraphs = (tag: string) =>
   Array.from({ length: 30 }, (_, i) => `${tag} paragraph ${i + 1} of the plan body.`).join("\n\n");
 
 const LONG_WORD = "x".repeat(600);
 const TASK_PLAN = `# Plan\n\n- [/] half-done task\n- [x] done task\n\n${LONG_WORD}\n`;
-const SECTIONED = `# Alpha\n\n${body("alpha")}\n\n## Bravo\n\n${body("bravo")}\n\n## Echo\n\n${body("echo")}\n`;
+const SECTIONED = `# Alpha\n\n${paragraphs("alpha")}\n\n## Bravo\n\n${paragraphs("bravo")}\n\n## Echo\n\n${paragraphs("echo")}\n`;
 
 async function turnPreviewOn(page: Page): Promise<void> {
   await toggle(page).click();
@@ -49,8 +49,10 @@ test("the toggle flips a fresh origin from source to a laid-out preview", async 
   await expect(toggle(page)).toBeFocused();
   const slashed = preview.locator('input[data-task="slashed"]');
   await expect.poll(() => slashed.evaluate((el: HTMLInputElement) => el.indeterminate)).toBe(true);
-  const long = preview.locator("p", { hasText: LONG_WORD });
-  await expect.poll(() => long.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  const longParagraph = preview.locator("p", { hasText: LONG_WORD });
+  await expect
+    .poll(() => longParagraph.evaluate((el) => el.scrollWidth <= el.clientWidth))
+    .toBe(true);
 });
 
 test("the preview stays on across a reload", async ({ daemon, page }) => {
@@ -113,13 +115,13 @@ test("a new version re-renders the preview without losing scroll", async ({ daem
   await page.locator(PREVIEW).hover();
   await page.mouse.wheel(0, 600);
   await expect.poll(() => plan.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
-  const before = await plan.evaluate((el) => el.scrollTop);
+  const scrollTopBefore = await plan.evaluate((el) => el.scrollTop);
 
   // The edit sits in the last section, below the viewport, so nothing above it moves.
   await daemon.addVersion(id, SECTIONED.replace("echo paragraph 30 ", "revised echo text "));
 
   await expect(page.locator(PREVIEW).getByText("revised echo text")).toHaveCount(1);
   await expect
-    .poll(async () => Math.abs((await plan.evaluate((el) => el.scrollTop)) - before))
+    .poll(async () => Math.abs((await plan.evaluate((el) => el.scrollTop)) - scrollTopBefore))
     .toBeLessThan(2);
 });
