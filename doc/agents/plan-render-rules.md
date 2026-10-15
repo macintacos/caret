@@ -1,12 +1,14 @@
 # Plan Render Rules
 
 *Audience: coding agents and contributors changing how a plan is rendered —
-`ui/src/lib/diffview/` and the `SourceView` / `DiffPlanView` components.*
+`ui/src/lib/diffview/`, the `SourceView` / `DiffPlanView` components, and the preview
+renderer `ui/src/lib/planMarkdown.ts`.*
 
-caret renders a plan as **line-numbered markdown source**, not as rendered HTML. Every
-decoration the reviewer sees is drawn over the characters they would copy. This file is
-the contract the whole `ui/src/lib/diffview/` layer shares; each module's own header
-carries only what is local to it.
+The **source view** renders a plan as **line-numbered markdown source**. Every decoration
+the reviewer sees is drawn over the characters they would copy. Everything up to § The
+preview renderer is the contract the whole `ui/src/lib/diffview/` layer shares; each
+module's own header carries only what is local to it. The preview is a second surface
+rendered from the same stored text, not an exception to transform-in-place.
 
 ## Transform in place (EXC-855)
 
@@ -144,9 +146,31 @@ emitted as clickable or drawable, and no downstream module re-decides safety. A
 path-shaped target collapses but records **no** clickable span — `openUrl` must never be
 handed a filesystem path. Every other scheme (`javascript:`, `data:`, `mailto:`, the
 protocol-relative `//host/…` form, a scheme-less host) stays literal source text, so the
-reader can see what the link would actually do.
+reader can see what the link would actually do. The preview renderer passes every link and
+image through the same gate, `isSafeUrl`.
 
 Rendering an image makes the reviewer's browser fetch an arbitrary host when the row
 scrolls into view. `referrerpolicy` and `loading` reduce what leaks; they do not close the
 channel. Closing it wants an `img-src` CSP on the daemon's own response, which does not
 exist today.
+
+## The preview renderer
+
+`renderPlanMarkdown` turns a version's stored text into a `RenderedPlan`: `html` plus one
+`SourceSpan` per block.
+
+- **Blocks.** A block is a top-level marked token that renders to something. Each is
+  wrapped in a `div` carrying `data-source-start` / `data-source-end`: 1-based, inclusive,
+  over the stored text comment anchors use. Blocks are flat siblings; `blocks[i]` is the
+  i-th.
+- **Soft breaks** stay `\n` and render as a space.
+- **Sanitizing.** Only raw-HTML tokens pass through js-xss, using `htmlWhiteList()`
+  (shared with comment bodies) minus `a`, `area`, `audio`, `img` and `video`. Those render
+  as text, so the preview fetches and navigates nothing the source view would not. caret's
+  own markup and attributes never pass through the sanitizer.
+- **Links** that pass `isSafeUrl` open in a new tab with `rel="noopener noreferrer"`;
+  anything else renders as its label.
+- **Images** that pass `isSafeUrl` carry `IMAGE_ATTRIBUTES`, never `srcset`, `style` or
+  `title`; anything else renders as its alt text.
+- **`[/]`** renders as `data-task="slashed"`; whoever mounts the preview sets
+  `indeterminate` on it.
