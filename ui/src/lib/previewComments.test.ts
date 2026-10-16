@@ -2,7 +2,7 @@ import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { selectText } from "@ui/support/selection.ts";
-import type { RectReader } from "$lib/diffview/codeChrome.ts";
+import type { RectReader } from "$lib/geometry.ts";
 import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
 import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
 import {
@@ -148,7 +148,7 @@ describe("createSlotReserve", () => {
 describe("previewSlotBoxes", () => {
   test("puts a slot at its block's bottom less the reserve, in scrolled content coords", () => {
     const { root } = mount("a\n\nb");
-    const blocks = [...root.children] as HTMLElement[];
+    const blocks = [...root.children];
     const scroller = document.createElement("div");
     scroller.scrollTop = 50;
     // Block i spans y [10+40i, 30+40i], x [100,300]; the scroller's top-left is (8, 5).

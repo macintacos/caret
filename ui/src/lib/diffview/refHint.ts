@@ -12,9 +12,9 @@
 
 import type { FileRefKind } from "@core/lib/types";
 import { defineFlagPref, type Pref } from "$lib/definePref.ts";
-import type { RectReader } from "$lib/diffview/codeChrome.ts";
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import { refTokenAt } from "$lib/diffview/fileRefTag.ts";
+import { contentOrigin, type RectReader } from "$lib/geometry.ts";
 
 const FILE_KEY = "caret:diffview:file-ref-hint-dismissed";
 const DIR_KEY = "caret:diffview:dir-ref-hint-dismissed";
@@ -153,9 +153,7 @@ function pillEnd(token: HTMLElement): HTMLElement {
   return end;
 }
 
-// The pill's top-right in the scroll container's content coordinates. The
-// conversion mirrors codeChromeAnchors: a row's content offset is its viewport edge
-// minus the scroller's viewport edge, plus how far the content is scrolled.
+// The pill's top-right in the scroll container's content coordinates.
 function anchorFor(
   token: HTMLElement,
   scroller: HTMLElement,
@@ -168,11 +166,8 @@ function anchorFor(
   // edge is a corner the path itself never reaches. The badge stays on the
   // fragment the path occupies rather than jumping a line.
   const right = Math.abs(e.top - r.top) < 1 ? e.right : r.right;
-  const s = read(scroller);
-  return {
-    top: r.top - (s.top - scroller.scrollTop),
-    left: right - (s.left - scroller.scrollLeft),
-  };
+  const origin = contentOrigin(scroller, read(scroller));
+  return { top: r.top - origin.top, left: right - origin.left };
 }
 
 /**
