@@ -17,6 +17,12 @@ export interface PlanSourceMap {
    * included; null for a line nothing starts on — blank outside code, a link definition,
    * a fence, a delimiter row, `hr`, out of range. */
   rangeOf(line: number): Range | null;
+  /** `lineAt` for a caller that counted the root's text itself: the source line of the
+   * character `offset` characters in; null for an empty preview. */
+  lineAtOffset(offset: number): number | null;
+  /** Where `line`'s text starts, in characters into the root's text — the origin a
+   * TextPoint column counts from; null wherever `rangeOf(line)` is null. */
+  offsetOfLine(line: number): number | null;
 }
 
 /** A source line's text starts at `offset` and runs to the next run's. Offsets ascend. */
@@ -133,6 +139,10 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
       range.setStart(...start);
       range.setEnd(...end);
       return range;
+    },
+    lineAtOffset,
+    offsetOfLine(line) {
+      return runs.find((run) => run.line === line)?.offset ?? null;
     },
   };
 }
