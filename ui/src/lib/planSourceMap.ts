@@ -140,14 +140,14 @@ function firstPassing<T>(items: readonly T[], passes: (item: T) => boolean): num
 
 /** The first Text node at or after the boundary point `(node, offset)` under `root`. */
 function textFrom(root: Element, node: Node, offset: number): Text | null {
-  const after = (from: Node): Node | null => {
+  const nextOutside = (from: Node): Node | null => {
     for (let at: Node | null = from; at !== null && at !== root; at = at.parentNode) {
       if (at.nextSibling !== null) return at.nextSibling;
     }
     return null;
   };
-  let next = node.childNodes[offset] ?? after(node);
-  while (next !== null && !(next instanceof Text)) next = next.firstChild ?? after(next);
+  let next = node.childNodes[offset] ?? nextOutside(node);
+  while (next !== null && !(next instanceof Text)) next = next.firstChild ?? nextOutside(next);
   return next;
 }
 
@@ -202,8 +202,8 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
   const lineAtOffset = (offset: number): number | null => {
     if (length === 0) return null;
     const at = Math.min(offset, length - 1);
-    const next = firstPassing(runs, (run) => run.offset > at);
-    return (runs[next - 1] ?? runs[0])?.line ?? null;
+    const firstRunPast = firstPassing(runs, (run) => run.offset > at);
+    return (runs[firstRunPast - 1] ?? runs[0])?.line ?? null;
   };
 
   const offsetOfLine = (line: number): number | null => extents.get(line)?.start ?? null;
@@ -245,8 +245,8 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
     clampedPoint(p) {
       const extent = extents.get(p.line);
       if (extent === undefined) return null;
-      const last = Math.max(extent.end - extent.start - 1, 0);
-      return resolve(extent.start + Math.min(p.column, last), "after");
+      const lastColumn = Math.max(extent.end - extent.start - 1, 0);
+      return resolve(extent.start + Math.min(p.column, lastColumn), "after");
     },
     textPoint(node, offset) {
       const at = offsetAt(node, offset);
