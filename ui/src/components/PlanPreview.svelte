@@ -131,6 +131,12 @@
   style:--folder-ref-icon={FOLDER_ICON_MASK}>{@html html}</div>
 
 <style>
+  /* Light-DOM: the search highlight's rule is shadow-adopted and can't reach the preview.
+     --mark is caret's content-highlight wash. */
+  :global(::highlight(caret-comment-span)) {
+    background-color: var(--mark);
+  }
+
   .plan-preview {
     padding-block: 0.5rem;
     padding-inline: 2ch 0.75rem;

@@ -106,7 +106,16 @@
     scrollRowIntoView,
   } from "$lib/diffview/scroll.ts";
   import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
-  import { createSlotReserve, groupBySlot, previewSlotBoxes } from "$lib/previewComments.ts";
+  import { createPlanSourceMap } from "$lib/planSourceMap.ts";
+  import {
+    clearCommentHighlight,
+    commentSlotIndex,
+    createSlotReserve,
+    groupBySlot,
+    paintCommentHighlight,
+    previewSlotBoxes,
+    spanRanges,
+  } from "$lib/previewComments.ts";
   import { previewFileRefs } from "$lib/previewRefs.ts";
   import {
     type Annotation,
@@ -129,7 +138,7 @@
   import PlanPreview from "@/components/PlanPreview.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { memoLast } from "$lib/memoLast.ts";
-  import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
+  import { renderPlanMarkdown, type SourceSpan } from "$lib/planMarkdown.ts";
   import {
     type PlanSurface,
     type PlanView,
@@ -323,6 +332,48 @@
   $effect(() => {
     const reserve = slotReserve;
     return () => reserve?.release();
+  });
+
+  // The comment under the pointer or holding focus in a slot, else the open composer's
+  // range, else the focused annotation: the span the preview highlights.
+  let hoveredSpan = $state<SourceSpan | null>(null);
+  const pendingSpan = $derived(pending ? { start: pending.startLine, end: pending.endLine } : null);
+  const focusedSpan = $derived.by(() => {
+    const a = lineAnnotations.find((x) => x.id === focusedAnnotation);
+    return a ? { start: a.startLine, end: a.endLine } : null;
+  });
+  const activeSpan = $derived(hoveredSpan ?? pendingSpan ?? focusedSpan);
+
+  function slotSpan(target: EventTarget | null): SourceSpan | null {
+    if (!(target instanceof Element)) return null;
+    const card = target.closest<HTMLElement>("[data-annotation-card]");
+    if (card) {
+      const a = lineAnnotations.find((x) => x.id === card.dataset.annotationCard);
+      return a ? { start: a.startLine, end: a.endLine } : null;
+    }
+    const item = target.closest<HTMLElement>("[data-span-start]");
+    return item
+      ? { start: Number(item.dataset.spanStart), end: Number(item.dataset.slotLine) }
+      : null;
+  }
+
+  function leaveSlotFocus(e: FocusEvent): void {
+    const slot = e.currentTarget as HTMLElement;
+    if (!(e.relatedTarget instanceof Node && slot.contains(e.relatedTarget))) hoveredSpan = null;
+  }
+
+  // createPlanSourceMap reads only the DOM, so the html read is what rebuilds the map on a
+  // version switch.
+  const previewSourceMap = $derived.by(() => {
+    void planPreview?.html;
+    return previewEl ? createPlanSourceMap(previewEl) : null;
+  });
+  $effect(() => {
+    const map = previewSourceMap;
+    const span = activeSpan;
+    if (map && span) paintCommentHighlight(spanRanges(map, span));
+    else clearCommentHighlight();
+    return clearCommentHighlight;
   });
 
   // Report the compared versions to the host, so App can point the docked comment
@@ -1143,9 +1194,9 @@
 
   // Reveal a commented line for the host (the comment navigator): scroll whichever
   // view is on screen to it. While comparing, the side picks which of the diff's
-  // two documents the line names; otherwise it is ignored and the source view
-  // scrolls; off the lineComments surfaces (the plan preview) it does nothing. Both read their live api, so a call before the view mounts is a
-  // no-op, and both spend the same paint budget waiting for the row.
+  // two documents the line names; otherwise it is ignored and the source view scrolls
+  // to the line, or the preview to the line's item in its comment slot. Each spends the
+  // same paint budget waiting for its target.
   function revealLine(line: number, side?: DiffSide): void {
     if (showDiff) {
       const d = diffApi;
@@ -1156,8 +1207,23 @@
       retryFrames(() => d.scrollToLine(line, side ?? "after"));
       return;
     }
-    if (!runs("lineComments")) return;
+    if (!runs("commentThreads")) return;
+    if (surface === "preview") {
+      retryFrames(() => revealPreviewSlot(line));
+      return;
+    }
     retryScrollTo(line);
+  }
+
+  // False until the line's slot is measured, so retryFrames waits for the sync pass.
+  function revealPreviewSlot(line: number): boolean {
+    const block = planPreview ? commentSlotIndex(planPreview.blocks, line) : null;
+    if (block === null || !slotBoxes.has(block) || !scrollEl) return false;
+    const slot = scrollEl.querySelector<HTMLElement>(`[data-preview-slot="${block}"]`);
+    const item = slot?.querySelector<HTMLElement>(`[data-slot-line="${line}"]`);
+    if (!slot || !item) return false;
+    scrollRowIntoView(slot, item);
+    return true;
   }
 
   // Take the reviewer to a heading they picked in the breadcrumbs bar. The line
@@ -1923,11 +1989,16 @@
           {@const box = slotBoxes.get(slot.block)}
           <div
             class="preview-slot"
+            role="group"
             data-preview-slot={slot.block}
             style:top={box ? `${box.top}px` : undefined}
             style:left={box ? `${box.left}px` : undefined}
             style:width={box ? `${box.width}px` : undefined}
             style:visibility={box ? undefined : "hidden"}
+            onpointerover={(e) => (hoveredSpan = slotSpan(e.target))}
+            onfocusin={(e) => (hoveredSpan = slotSpan(e.target))}
+            onpointerleave={() => (hoveredSpan = null)}
+            onfocusout={leaveSlotFocus}
           >
             {#each slot.items as item (item.kind === "marker" ? item.scratch.key : `${item.kind}:${item.line}`)}
               {#if item.kind === "thread"}
