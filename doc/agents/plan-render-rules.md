@@ -248,6 +248,8 @@ maps between the two for comments, the cursor and search.
   a block's `code` children for token spans built through `textContent`, only when their
   text is identical, with the trailing `\n` kept. `previewRefs.ts` relies on the same
   property when it wraps a reference's text in place.
+- **Comment highlight.** The preview's comment highlight reads `rangeOf` and paints a CSS
+  Custom Highlight, so it inserts nothing into the root.
 
 ## Surfaces
 
@@ -286,6 +288,21 @@ reference's text in a `span[data-file-ref]`, finding it within its source line's
 range by its display text and occurrence. It changes no text, so the source map holds, and
 it never fetches: the preview reuses the view's resolved map and `openFileRef`. The badges
 stay source-only, under `referenceHints`.
+
+`commentThreads` is ported through `ui/src/lib/previewComments.ts`. Threads, the open
+composer and draft markers render in overlay slots, one per block, positioned beside the
+preview root rather than inside it, so the root stays exactly the rendered HTML the source
+map and `planPlace` index. A comment's slot follows the block holding its end line;
+`commentSlotIndex` gives a gap line the block before it and a line above every block the
+first, where `blockIndexForLine` gives a gap line the next block. `createSlotReserve`
+holds each slot's height open as `padding-block-end` on its block, and the slot sits at
+the block's bottom less that height. The reserve lives as long as the preview root, so a
+re-sync never drops a block's padding for a frame. The hovered or focused comment, else
+the open composer, else the focused annotation, is highlighted as `caret-comment-span`
+over the `rangeOf` ranges of its lines. Anchors stay source line ranges; nothing is
+re-anchored to rendered positions. Accepted: a padded block's bottom includes its slot, so
+`previewTopLine` can report a block whose text has scrolled past the reading zone while
+its slot is still in view, and a flip to source lands on that block's start.
 
 The preview renders a version once. `memoLast` returns the last result for the same text,
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same
