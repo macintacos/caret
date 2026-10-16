@@ -148,13 +148,13 @@ describe("createSlotReserve", () => {
 describe("previewSlotBoxes", () => {
   test("puts a slot at its block's bottom less the reserve, in scrolled content coords", () => {
     const { root } = mount("a\n\nb");
-    const blocks = [...root.children] as HTMLElement[];
+    const blocks = [...root.children];
     const scroller = document.createElement("div");
     scroller.scrollTop = 50;
     // Block i spans y [10+40i, 30+40i], x [100,300]; the scroller's top-left is (8, 5).
     const read: RectReader = (el) => {
       if (el === scroller) return { top: 5, bottom: 1000, left: 8, right: 400 };
-      const i = blocks.indexOf(el as HTMLElement);
+      const i = blocks.indexOf(el);
       return { top: 10 + i * 40, bottom: 30 + i * 40, left: 100, right: 300 };
     };
     // top = 70 - 12 - (5 - 50) = 103 ; left = 100 - 8 = 92

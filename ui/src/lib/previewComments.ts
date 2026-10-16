@@ -201,7 +201,7 @@ export function previewSlotBoxes(
   return boxes;
 }
 
-/** An exact compare, so a re-sync only reassigns the slot boxes when one moved. */
+/** Whether `a` and `b` place the same blocks at exactly the same boxes. */
 export function sameSlotBoxes(
   a: ReadonlyMap<number, SlotBox>,
   b: ReadonlyMap<number, SlotBox>,

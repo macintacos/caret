@@ -178,10 +178,10 @@ describe("preview code chrome", () => {
   }
 
   // The first pre spans y [10,30], the second y [50,70], both x [100,300].
-  function previewReader(pres: HTMLElement[], scroller: HTMLElement): RectReader {
+  function previewReader(pres: readonly Element[], scroller: HTMLElement): RectReader {
     return (el) => {
       if (el === scroller) return { top: 5, bottom: 1000, left: 8, right: 400 };
-      const i = pres.indexOf(el as HTMLElement);
+      const i = pres.indexOf(el);
       return { top: 10 + i * 40, bottom: 30 + i * 40, left: 100, right: 300 };
     };
   }

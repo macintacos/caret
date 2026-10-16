@@ -36,7 +36,7 @@ function contains(box: Box, x: number, y: number): boolean {
   return y >= box.top && y <= box.bottom && x >= box.left && x <= box.right;
 }
 
-/** A box's top-right corner in the content coordinates `origin` anchors. */
+/** `box`'s top-right corner, relative to `origin`. */
 function contentCorner(
   box: Box,
   origin: { top: number; left: number },
