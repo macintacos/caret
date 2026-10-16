@@ -6,9 +6,13 @@
 // Matches are plain `SearchMatch`es in source-line coordinates; painting adds no markup.
 import { findMatches, type SearchMatch } from "$lib/diffview/planSearch.ts";
 import { highlightsSupported } from "$lib/diffview/searchHighlight.ts";
-import type { PlanSourceMap } from "$lib/planSourceMap.ts";
+import { createTextCursor, type PlanSourceMap } from "$lib/planSourceMap.ts";
 
-const BLOCK = "p, li, h1, h2, h3, h4, h5, h6, th, td, pre, blockquote, div";
+// div covers each block's wrapper and the root itself, so closest() never leaves the root.
+const BLOCK =
+  "p, li, h1, h2, h3, h4, h5, h6, th, td, pre, blockquote, div, dl, dt, dd, details, summary, " +
+  "section, article, aside, header, footer, figure, figcaption, caption, address";
+// CSS's collapsible whitespace; \s would also collapse NBSP.
 const WHITESPACE = /[ \t\n\r\f]/;
 const ALL = "caret-preview-search";
 const CURRENT = "caret-preview-search-current";
@@ -79,22 +83,15 @@ function collectSegments(root: Element): Segment[] {
   return segments;
 }
 
-/** Every smartcase match of `query` in the preview's rendered text, in document order.
- * `line` is the source line the match starts on; `startCol`/`endCol` count from that
- * line's text in the preview (`PlanSourceMap.rangeOf(line)`'s start, a TextPoint column),
- * so a match may run on past its line's own text, across a soft break. */
-export function findPreviewMatches(
-  root: Element,
-  map: PlanSourceMap,
-  query: string,
-): SearchMatch[] {
-  const segments = collectSegments(root);
-  // ponytail: O(matches × source lines) via the map's linear run scans; binary-search the runs if a one-letter query lags on a long plan.
+function toMatches(segments: Segment[], map: PlanSourceMap, query: string): SearchMatch[] {
+  // ponytail: O(matches × source lines) via the map's linear run scans; binary-search the
+  // runs if a one-letter query lags on a long plan.
   return findMatches(
     segments.map((s) => s.text),
     query,
   ).flatMap((hit) => {
-    const segment = segments[hit.line - 1];
+    const segmentIndex = hit.line - 1;
+    const segment = segments[segmentIndex];
     const start = segment?.starts[hit.startCol];
     const end = segment?.ends[hit.endCol - 1];
     if (start === undefined || end === undefined) return [];
@@ -105,31 +102,50 @@ export function findPreviewMatches(
   });
 }
 
+export interface PreviewSearch {
+  /** Every smartcase match of `query` in the preview's rendered text, in document order.
+   * `line` is the source line the match starts on; `startCol`/`endCol` count from that
+   * line's text in the preview (`PlanSourceMap.offsetOfLine`, a TextPoint column), so a
+   * match may run on past its line's own text, across a soft break. */
+  find(query: string): SearchMatch[];
+}
+
+/** Search over `root`'s text, which `map` was built from. Build once per map: the text is
+ * fixed per version, so the segments are collected on the first `find` and kept. */
+export function createPreviewSearch(root: Element, map: PlanSourceMap): PreviewSearch {
+  let segments: Segment[] | undefined;
+  return {
+    find: (query) => {
+      segments ??= collectSegments(root);
+      return toMatches(segments, map, query);
+    },
+  };
+}
+
+/** Opens every closed `<details>` hiding `match`'s start, as find-in-page does; a
+ * `<details>` whose own `<summary>` holds the start stays closed, since a summary shows. */
+export function openMatchDetails(root: Element, map: PlanSourceMap, match: SearchMatch): void {
+  const start = previewMatchRanges(root, map, [match])[0]?.startContainer.parentElement;
+  for (let el = start?.closest("details"); el && root.contains(el); ) {
+    const summary = el.querySelector(":scope > summary");
+    if (!el.open && !summary?.contains(start ?? null)) el.open = true;
+    el = el.parentElement?.closest("details");
+  }
+}
+
 /** Ranges over `matches`, aligned with them (null where one no longer resolves), resolved in
- * one walk of the root's text. */
+ * one walk of the root's text. `matches` ascend and never overlap, as `find` returns them. */
 export function previewMatchRanges(
   root: Element,
   map: PlanSourceMap,
   matches: readonly SearchMatch[],
 ): (Range | null)[] {
-  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let node = walker.nextNode() as Text | null;
-  let seen = 0;
-  // Matches ascend and never overlap, so the walk only moves forward. At a boundary between
-  // two text nodes a start resolves into the later one and an end into the earlier one.
-  const pointAt = (offset: number, side: "before" | "after"): [Text, number] | null => {
-    for (; node !== null; node = walker.nextNode() as Text | null) {
-      const end = seen + node.data.length;
-      if (side === "after" ? offset < end : offset <= end) return [node, offset - seen];
-      seen = end;
-    }
-    return null;
-  };
+  const at = createTextCursor(root);
   return matches.map((m) => {
     const origin = map.offsetOfLine(m.line);
     if (origin === null) return null;
-    const start = pointAt(origin + m.startCol, "after");
-    const end = pointAt(origin + m.endCol, "before");
+    const start = at(origin + m.startCol, "after");
+    const end = at(origin + m.endCol, "before");
     if (start === null || end === null) return null;
     const range = root.ownerDocument.createRange();
     range.setStart(...start);

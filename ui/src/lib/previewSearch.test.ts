@@ -5,7 +5,8 @@ import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
 import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
 import {
   clearPreviewSearch,
-  findPreviewMatches,
+  createPreviewSearch,
+  openMatchDetails,
   paintPreviewSearch,
   previewMatchRanges,
 } from "$lib/previewSearch.ts";
@@ -27,13 +28,13 @@ function mount(text: string): { root: HTMLElement; map: PlanSourceMap } {
 
 function count(text: string, query: string): number {
   const { root, map } = mount(text);
-  return findPreviewMatches(root, map, query).length;
+  return createPreviewSearch(root, map).find(query).length;
 }
 
-describe("findPreviewMatches", () => {
+describe("createPreviewSearch", () => {
   test("a phrase across a soft break is one match on its first line", () => {
     const { root, map } = mount("alpha beta\ngamma delta\n");
-    const matches = findPreviewMatches(root, map, "beta gamma");
+    const matches = createPreviewSearch(root, map).find("beta gamma");
     expect(matches.length).toBe(1);
     expect(matches[0]?.line).toBe(1);
     const [range] = previewMatchRanges(root, map, matches);
@@ -42,7 +43,7 @@ describe("findPreviewMatches", () => {
 
   test("a match's columns locate its range from its line's start", () => {
     const { root, map } = mount("alpha beta\ngamma delta\n");
-    const [m] = findPreviewMatches(root, map, "beta gamma");
+    const [m] = createPreviewSearch(root, map).find("beta gamma");
     if (m === undefined) throw new Error("no match");
     const [range] = previewMatchRanges(root, map, [m]);
     if (range == null) throw new Error("no range");
@@ -65,6 +66,10 @@ describe("findPreviewMatches", () => {
     expect(count("- one end\n- start two\n", "end start")).toBe(0);
     expect(count("- one end\n  - start two\n", "end start")).toBe(0);
     expect(count("| one end | start two |\n| -- | -- |\n| a | b |\n", "end start")).toBe(0);
+    expect(count("<dl><dt>Term</dt><dd>Definition</dd></dl>\n", "TermDefinition")).toBe(0);
+    expect(count("<details open><summary>Heading</summary>Body</details>\n", "HeadingBody")).toBe(
+      0,
+    );
   });
 
   test("prose whitespace collapses to one space", () => {
@@ -87,10 +92,31 @@ describe("findPreviewMatches", () => {
   });
 });
 
+describe("openMatchDetails", () => {
+  const plan = "<details><summary>More</summary>\nhidden secret text\n</details>\n";
+
+  test("opens the closed details holding the match", () => {
+    const { root, map } = mount(plan);
+    const [m] = createPreviewSearch(root, map).find("secret");
+    if (m === undefined) throw new Error("no match");
+    openMatchDetails(root, map, m);
+    expect(root.querySelector("details")?.open).toBe(true);
+  });
+
+  test("leaves details closed when the match is in its summary", () => {
+    const { root, map } = mount(plan);
+    const [m] = createPreviewSearch(root, map).find("More");
+    if (m === undefined) throw new Error("no match");
+    openMatchDetails(root, map, m);
+    expect(root.querySelector("details")?.open).toBe(false);
+  });
+});
+
 describe("previewMatchRanges", () => {
   test("matches resolve after a code block's text is split into spans", () => {
     const { root, map } = mount("intro\n\n```js\nlet x = 1;\nlet y = 2;\n```\n");
-    const matches = findPreviewMatches(root, map, "= ");
+    const search = createPreviewSearch(root, map);
+    const matches = search.find("= ");
     const code = root.querySelector("pre > code");
     if (code === null) throw new Error("no code block");
     code.replaceChildren(
@@ -100,6 +126,7 @@ describe("previewMatchRanges", () => {
         return span;
       }),
     );
+    expect(search.find("= ")).toEqual(matches);
     const ranges = previewMatchRanges(root, map, matches);
     expect(ranges.length).toBe(2);
     expect(ranges.every((range) => range?.toString() === "= ")).toBe(true);
@@ -109,7 +136,7 @@ describe("previewMatchRanges", () => {
 describe("paintPreviewSearch", () => {
   test("paint and clear are no-ops without the Highlight API", () => {
     const { root, map } = mount("foo bar\n");
-    const ranges = previewMatchRanges(root, map, findPreviewMatches(root, map, "foo"));
+    const ranges = previewMatchRanges(root, map, createPreviewSearch(root, map).find("foo"));
     expect(() => {
       paintPreviewSearch(ranges, 0);
       clearPreviewSearch();

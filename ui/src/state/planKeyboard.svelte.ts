@@ -1,5 +1,5 @@
-// The plan source view's keyboard surface: the vim line cursor, visual line-select,
-// and the `/` full-text search HUD, as one deep, unit-testable factory the DiffPlanView
+// The plan's keyboard surface (source view and preview): the vim line cursor, visual
+// line-select, and the `/` full-text search HUD, as one deep, unit-testable factory the DiffPlanView
 // shell drives (EXC-875). Like the other state modules (compare, autosave), a plain
 // factory over an injected backing store plus a deps bag.
 //
@@ -61,7 +61,7 @@ export interface PlanKeyboardDeps {
   halfPage(): number;
   /** Scroll the view to keep `line` visible — the keyboard cursor's follow scroll. */
   follow(line: number): void;
-  /** Every match for `query` over the text the reader sees, in document order. */
+  /** Every match for `query` over the text the reader sees, in document order, `line` never decreasing. */
   matchesFor(query: string): SearchMatch[];
   /** Bring `match` into view once the cursor's line is on it: the source view follows the
    * line; the preview also pins the cursor's column to the match, so it lands on the
@@ -183,8 +183,7 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
   function revealMatch(): boolean {
     const m = matches()[store.searchIndex];
     if (m == null) return false;
-    store.cursorLine = m.line;
-    deps.followMatch(m);
+    reveal(m.line, () => deps.followMatch(m));
     return true;
   }
 

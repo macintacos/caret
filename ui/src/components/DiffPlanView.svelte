@@ -92,7 +92,8 @@
   import { findMatches } from "$lib/diffview/planSearch.ts";
   import {
     clearPreviewSearch,
-    findPreviewMatches,
+    createPreviewSearch,
+    openMatchDetails,
     paintPreviewSearch,
     previewMatchRanges,
   } from "$lib/previewSearch.ts";
@@ -412,12 +413,17 @@
       focusSpan = null;
   }
 
-  // createPlanSourceMap reads only the DOM, so the html read is what rebuilds the map on a
-  // version switch. Ungated: each consumer gates on its own row.
-  const previewSourceMap = $derived.by(() => {
+  // The map reads the DOM, so it is built in an effect, after the `{@html}` commits: a
+  // derived can be read mid-render over the previous version. Ungated: each consumer
+  // gates on its own row.
+  let previewSourceMap = $state.raw<PlanSourceMap | null>(null);
+  $effect(() => {
     void planPreview?.html;
-    return previewEl ? createPlanSourceMap(previewEl) : null;
+    previewSourceMap = previewEl ? createPlanSourceMap(previewEl) : null;
   });
+  const previewSearch = $derived(
+    previewEl && previewSourceMap ? createPreviewSearch(previewEl, previewSourceMap) : null,
+  );
   // The code highlight pass replaces a block's text nodes after mount and on a theme
   // switch, collapsing any range painted inside them, so the paint follows text changes.
   // Attributes stay unobserved: the slot reserve writes block styles, which would loop.
@@ -1428,7 +1434,8 @@
   // is shared with the preview cursor (state/previewCursor), which keeps `cursorLine`
   // and adds `cursorPoint`; no cursor on compare. The DOM effects are injected: the
   // rendered lines, heading lines, the reading position, the half-page size,
-  // scroll-follow, the shared jump, the composer open, and focus/blur.
+  // scroll-follow, the match space and its landing, the shared jump, the composer open,
+  // and focus/blur.
   let keyboardStore = $state<PlanKeyboardStore & PreviewCursorStore>({
     cursorLine: null,
     cursorPoint: null,
@@ -1448,14 +1455,16 @@
     follow: (line) => api?.followCursorLine(line),
     matchesFor: (query) =>
       surface === "preview"
-        ? previewEl && previewSourceMap
-          ? findPreviewMatches(previewEl, previewSourceMap, query)
-          : []
+        ? (previewSearch?.find(query) ?? [])
         : findMatches(linkLayer.text.split("\n"), query),
-    followMatch: (m) =>
-      surface === "preview"
-        ? previewCursor.placeAt({ line: m.line, column: m.startCol })
-        : api?.followCursorLine(m.line),
+    followMatch: (m) => {
+      if (surface !== "preview") {
+        api?.followCursorLine(m.line);
+        return;
+      }
+      if (previewEl && previewSourceMap) openMatchDetails(previewEl, previewSourceMap, m);
+      previewCursor.placeAt({ line: m.line, column: m.startCol });
+    },
     jump: (line) => api?.scrollToLine(line),
     openComposer: openRange,
     focusField: focusSearchField,
@@ -1571,6 +1580,8 @@
   // so the pill counter, the highlight, and the cursor jump all share it.
   const searchMatches = $derived(keyboard.matches());
 
+  // Matches hold a source line and columns; ranges are rebuilt through the map on each
+  // previewLayoutRev bump, since the highlighter's text-node swap collapses painted ones.
   $effect(() => {
     void previewLayoutRev;
     const map = previewSourceMap;
@@ -1583,12 +1594,13 @@
 
   // A flip swaps the match space under the live index (the source misses a wrapped
   // phrase, the preview a URL), so re-seat it at the cursor. The map read re-runs this
-  // once the preview root has mounted and its matches exist.
+  // once the preview root has mounted and its matches exist. The effect below covers an
+  // uncommitted query; this one covers the committed HUD.
   $effect(() => {
     void surface;
     void previewSourceMap;
     untrack(() => {
-      if (keyboardStore.searchOpen) keyboard.retrackToNearest();
+      if (runs("search") && keyboardStore.searchOpen) keyboard.retrackToNearest();
     });
   });
 

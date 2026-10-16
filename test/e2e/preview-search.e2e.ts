@@ -138,7 +138,9 @@ test("every match is highlighted and the current one apart", async ({ daemon, pa
   await expect
     .poll(async () => (await highlightTexts(page, "caret-preview-search")).length)
     .toBe(2);
-  expect(await highlightTexts(page, "caret-preview-search-current")).toHaveLength(1);
+  await expect
+    .poll(async () => (await highlightTexts(page, "caret-preview-search-current")).length)
+    .toBe(1);
 
   const first = (await currentSpot(page))!.at;
   await page.keyboard.press("n");
@@ -176,14 +178,14 @@ test("n / N land the band on the match's visual line, with smartcase", async ({ 
   await page.keyboard.press("n");
   await expect.poll(async () => (await counter(page)).current).toBe(2);
   // The second match ends a 90-column source line, so at 420px it sits on that line's
-  // second visual line rather than its first.
-  const lineTop = await page.evaluate((root) => {
-    const p = [...document.querySelectorAll(`${root} p`)].find((el) =>
-      el.textContent?.includes("Marmalade"),
-    )!;
-    return p.getClientRects()[0]!.top;
-  }, PLAN_PREVIEW);
-  expect((await currentSpot(page))!.mid).toBeGreaterThan(lineTop + 40);
+  // second visual line rather than on the visual line its marker starts.
+  const markerBottom = await page.evaluate(
+    ([root, line]) =>
+      document.querySelector(`${root} [data-source-line="${line}"]`)!.getBoundingClientRect()
+        .bottom,
+    [PLAN_PREVIEW, gadgetLines[1]] as const,
+  );
+  await expect.poll(async () => (await currentSpot(page))!.mid).toBeGreaterThan(markerBottom);
   await expectBandOnCurrent();
   await page.keyboard.press("n");
   await expect.poll(async () => (await counter(page)).current).toBe(3);
@@ -228,8 +230,8 @@ test("a flip re-seats the committed match on the new surface", async ({ daemon, 
 
   await flip(page, "source");
   await expect.poll(() => counter(page)).toEqual({ current: 0, total: 0 });
-  expect(await highlightTexts(page, "caret-preview-search")).toEqual([]);
-  expect(await highlightTexts(page, "caret-preview-search-current")).toEqual([]);
+  await expect.poll(() => highlightTexts(page, "caret-preview-search")).toEqual([]);
+  await expect.poll(() => highlightTexts(page, "caret-preview-search-current")).toEqual([]);
 
   await flip(page, "preview");
   await expect.poll(() => counter(page)).toEqual({ current: 1, total: 1 });
