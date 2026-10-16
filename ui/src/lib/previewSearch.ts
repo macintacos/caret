@@ -6,7 +6,7 @@
 // Matches are plain `SearchMatch`es in source-line coordinates; painting adds no markup.
 import { findMatches, type SearchMatch } from "$lib/diffview/planSearch.ts";
 import { highlightsSupported } from "$lib/diffview/searchHighlight.ts";
-import { createTextCursor, type PlanSourceMap } from "$lib/planSourceMap.ts";
+import type { PlanSourceMap } from "$lib/planSourceMap.ts";
 
 // div covers each block's wrapper and the root itself, so closest() never leaves the root.
 const BLOCK =
@@ -84,8 +84,6 @@ function collectSegments(root: Element): Segment[] {
 }
 
 function toMatches(segments: Segment[], map: PlanSourceMap, query: string): SearchMatch[] {
-  // ponytail: O(matches × source lines) via the map's linear run scans; binary-search the
-  // runs if a one-letter query lags on a long plan.
   return findMatches(
     segments.map((s) => s.text),
     query,
@@ -133,19 +131,15 @@ export function openMatchDetails(root: Element, map: PlanSourceMap, match: Searc
   }
 }
 
-/** Ranges over `matches`, aligned with them (null where one no longer resolves), resolved in
- * one walk of the root's text. `matches` ascend and never overlap, as `find` returns them. */
+/** Ranges over `matches`, aligned with them (null where one no longer resolves). */
 export function previewMatchRanges(
   root: Element,
   map: PlanSourceMap,
   matches: readonly SearchMatch[],
 ): (Range | null)[] {
-  const pointAt = createTextCursor(root);
   return matches.map((match) => {
-    const origin = map.offsetOfLine(match.line);
-    if (origin === null) return null;
-    const start = pointAt(origin + match.startCol, "after");
-    const end = pointAt(origin + match.endCol, "before");
+    const start = map.domPoint({ line: match.line, column: match.startCol }, "after");
+    const end = map.domPoint({ line: match.line, column: match.endCol }, "before");
     if (start === null || end === null) return null;
     const range = root.ownerDocument.createRange();
     range.setStart(...start);
