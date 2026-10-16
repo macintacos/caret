@@ -270,20 +270,20 @@ test("a slot keeps to its block when a theme switch rewraps the heading above it
   await waitPastSafeModeGrace(page);
   await showPreview(page);
 
-  const holds = async () => {
+  const slotStaysInPlace = async () => {
     const g = await slotAroundBlock(page, endLine, "ann-theme");
     return g.slotTop >= g.blockBottom - 1 && g.slotBottom <= g.nextTop + 1;
   };
-  await expect.poll(holds).toBe(true);
-  const top = (await slotAroundBlock(page, endLine, "ann-theme")).slotTop;
-  const rows = await headingRows(page);
+  await expect.poll(slotStaysInPlace).toBe(true);
+  const topBefore = (await slotAroundBlock(page, endLine, "ann-theme")).slotTop;
+  const rowsBefore = await headingRows(page);
 
   await page.emulateMedia({ colorScheme: "light" });
-  await expect.poll(() => headingRows(page)).not.toBe(rows);
+  await expect.poll(() => headingRows(page)).not.toBe(rowsBefore);
   await expect
     .poll(async () => (await slotAroundBlock(page, endLine, "ann-theme")).slotTop)
-    .not.toBe(top);
-  await expect.poll(holds).toBe(true);
+    .not.toBe(topBefore);
+  await expect.poll(slotStaysInPlace).toBe(true);
 });
 
 test("a slot that grows re-places itself under its block, clear of the next", async ({
@@ -317,14 +317,16 @@ test("a slot that grows re-places itself under its block, clear of the next", as
       { line: s.code, preview: PLAN_PREVIEW },
     );
   await expect.poll(async () => (await slotBox()).height).toBeGreaterThan(0);
-  const height = (await slotBox()).height;
+  const heightBefore = (await slotBox()).height;
 
   await marker.click();
   await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
   await expect
     .poll(async () => {
       const g = await slotBox();
-      return g.height > height && g.slotTop >= g.codeBottom - 1 && g.slotBottom <= g.nextTop + 1;
+      return (
+        g.height > heightBefore && g.slotTop >= g.codeBottom - 1 && g.slotBottom <= g.nextTop + 1
+      );
     })
     .toBe(true);
 });
