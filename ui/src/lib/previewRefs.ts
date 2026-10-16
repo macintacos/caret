@@ -35,10 +35,10 @@ function occurrences(haystack: string, needle: string): number[] {
 export function previewFileRefs(refs: FileRefSpanMap, displayText: string): PreviewFileRef[] {
   const lines = displayText.split("\n");
   return [...refs].flatMap(([line, spans]) => {
-    const display = lines[line - 1] ?? "";
+    const displayLine = lines[line - 1] ?? "";
     return spans.map((span) => {
-      const text = display.slice(span.startCol, span.endCol);
-      const all = occurrences(display, text);
+      const text = displayLine.slice(span.startCol, span.endCol);
+      const all = occurrences(displayLine, text);
       const nth = all.filter((i) => i + text.length <= span.startCol).length;
       return { line, text, nth, count: all.length, span };
     });
@@ -91,8 +91,8 @@ function rangeSlices(root: HTMLElement, range: Range): Slice[] {
 // (an escape or an image can change either count). The upgrade is for the renderer to
 // mark candidate runs.
 function findHit(slices: Slice[], ref: PreviewFileRef): Hit | null {
-  const text = slices.map((s) => s.node.data.slice(s.from, s.to)).join("");
-  const found = occurrences(text, ref.text);
+  const rangeText = slices.map((s) => s.node.data.slice(s.from, s.to)).join("");
+  const found = occurrences(rangeText, ref.text);
   const at = found[ref.nth];
   if (at === undefined || found.length !== ref.count) return null;
   let offset = 0;
@@ -125,12 +125,12 @@ export function tagPreviewFileRefs(
   refs: readonly PreviewFileRef[],
 ): Map<HTMLElement, FileRefSpan> {
   unwrap(root);
-  const map = createPlanSourceMap(root);
+  const sourceMap = createPlanSourceMap(root);
   const slicesByLine = new Map<number, Slice[]>();
   const hits = refs.flatMap((ref) => {
     let slices = slicesByLine.get(ref.line);
     if (slices === undefined) {
-      const range = map.rangeOf(ref.line);
+      const range = sourceMap.rangeOf(ref.line);
       slices = range === null ? [] : rangeSlices(root, range);
       slicesByLine.set(ref.line, slices);
     }
@@ -141,10 +141,10 @@ export function tagPreviewFileRefs(
   // leaves other nodes' offsets alone, so their relative order doesn't matter.
   hits.sort((a, b) => b.start - a.start);
   const tagged = new Map<HTMLElement, FileRefSpan>();
-  const lowest = new Map<Text, number>();
+  const wrappedFrom = new Map<Text, number>();
   for (const hit of hits) {
-    if (hit.end > (lowest.get(hit.node) ?? Infinity)) continue;
-    lowest.set(hit.node, hit.start);
+    if (hit.end > (wrappedFrom.get(hit.node) ?? Infinity)) continue;
+    wrappedFrom.set(hit.node, hit.start);
     tagged.set(wrap(hit), hit.ref.span);
   }
   return tagged;
