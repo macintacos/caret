@@ -329,7 +329,7 @@ the text without moving the cursor off it; a `cursorPoint` on any other line tha
 `ui/src/lib/previewLines.ts` measures visual lines per block from text-node rects, reading
 only the blocks a step crosses, never the whole document. The band
 (`data-caret-preview-cursor`) is an overlay sibling of `.plan-preview`, so the source
-map's text order is untouched. Esc runs wherever `search` or `keyboardComments` does.
+map's text order is untouched.
 
 `search` is ported through `ui/src/lib/previewSearch.ts`, which matches the text as
 rendered, segmented once per map, on the first query, by `createPreviewSearch`. A block,
@@ -347,14 +347,15 @@ swap collapses ranges; the paint rebuilds them on each `previewLayoutRev` bump. 
 swaps the match space under the live index, so an effect re-seats it at the cursor with
 `retrackToNearest`.
 
-`keyboardComments` (`c`, `V`, Esc) is ported as well. The preview anchor is `visualAnchor`
-plus `visualAnchorPoint`, read as the cursor's point is. `visualLineRange` gives the text
-from the anchor's visual line through the cursor's, or the cursor's line alone for `c`,
-and `commentOnPreview` (`linesOf`, then `openRange`) opens the composer on it, so a
-keyboard comment anchors where a mouse selection over the same text does. The selection
-paints as the `caret-visual-selection` highlight, a key of its own. A flip ends visual
-mode, because the two surfaces select different units: whole source lines against visual
-lines.
+`keyboardComments` (`c`, `V`) is ported as well; Esc runs wherever `search` or
+`keyboardComments` does. The preview anchor is `visualAnchor` plus `visualAnchorPoint`,
+read as the cursor's point is. `visualLineRange` gives the text from the anchor's visual
+line through the cursor's, or the cursor's line alone for `c`, and `commentOnPreview`
+(`linesOf`, then `openRange`) opens the composer on it, so a keyboard comment anchors
+where a mouse selection over the same text does. The selection paints as the
+`caret-visual-selection` highlight, a key of its own, rebuilt on each `previewLayoutRev`
+bump as search's are. A flip ends visual mode, because the two surfaces select different
+units: whole source lines against visual lines.
 
 `textComments` opens the composer from the preview. `PlanPreview` reports a click as its
 collapsed selection, and a drag as the selection the gesture changed; Shift selects

@@ -129,6 +129,7 @@
   import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
   import {
     clearCommentHighlight,
+    clearVisualSelection,
     commentSlotIndex,
     createSlotReserve,
     groupBySlot,
@@ -1434,10 +1435,10 @@
   // unit-testable factory (state/planKeyboard). The component owns the reactive store —
   // the runes live here — and the factory sequences the transitions over it. The store
   // is shared with the preview cursor (state/previewCursor), which keeps `cursorLine`
-  // and adds `cursorPoint`; no cursor on compare. The DOM effects are injected: the
-  // rendered lines, heading lines, the reading position, the half-page size,
-  // scroll-follow, the match space and its landing, the shared jump, the composer open,
-  // and focus/blur.
+  // and adds `cursorPoint` and `visualAnchorPoint`; no cursor on compare. The DOM
+  // effects are injected: the rendered lines, heading lines, the reading position, the
+  // half-page size, scroll-follow, the match space and its landing, the shared jump, the
+  // composer open, and focus/blur.
   let keyboardStore = $state<PlanKeyboardStore & PreviewCursorStore>({
     cursorLine: null,
     cursorPoint: null,
@@ -1533,7 +1534,7 @@
   // The band on screen and the source line it marks.
   let previewCursorBox = $state<({ line: number } & BandBox) | null>(null);
   // Bumped, rAF-throttled, whenever the preview's layout may have moved the band or
-  // collapsed the search highlight's ranges.
+  // collapsed a painted highlight's ranges (search, the visual selection).
   let previewLayoutRev = $state(0);
   $effect(() => {
     const root = previewEl;
@@ -1576,10 +1577,14 @@
   });
   $effect(() => {
     void previewLayoutRev;
-    paintVisualSelection(
-      runs("keyboardComments") && surface === "preview" ? previewCursor.selection() : null,
-    );
-    return () => paintVisualSelection(null);
+    // An open composer hides the selection, as the source's `selectedRange` does.
+    const range =
+      runs("keyboardComments") && surface === "preview" && pending == null
+        ? previewCursor.selection()
+        : null;
+    if (range === null) return;
+    paintVisualSelection(range);
+    return clearVisualSelection;
   });
 
   // The live visual selection, ascending — mirrored into SourceView's amber band through

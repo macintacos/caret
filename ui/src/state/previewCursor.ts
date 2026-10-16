@@ -47,6 +47,7 @@ export interface PreviewCursorDeps {
   selection(from: TextPoint, to: TextPoint): Range | null;
   /** Opens the composer on the source lines `range` covers. */
   comment(range: Range): void;
+  /** Play a moment's cue. Optional so a test drives the factory silently. */
   sound?: (event: SoundEvent) => void;
 }
 
@@ -66,7 +67,8 @@ export interface PreviewCursor {
   /** `V`: toggles visual mode, anchoring at the cursor — placed at the reading position
    * when unplaced. */
   enterVisualMode(): void;
-  /** `c`: comments on the cursor's visual line, or the selection, exiting visual mode. */
+  /** `c`: comments on the cursor's visual line, the reading position's when unplaced, or on
+   * the selection, exiting visual mode. */
   comment(): void;
 }
 
@@ -76,27 +78,20 @@ function before(a: TextPoint, b: TextPoint): boolean {
   return a.line < b.line || (a.line === b.line && a.column < b.column);
 }
 
+function ordered(a: TextPoint, b: TextPoint): [TextPoint, TextPoint] {
+  return before(b, a) ? [b, a] : [a, b];
+}
+
 export function createPreviewCursor(
   store: PreviewCursorStore,
   deps: PreviewCursorDeps,
 ): PreviewCursor {
-  function point(): TextPoint | null {
-    const { cursorLine, cursorPoint } = store;
-    if (cursorLine == null) return null;
-    return cursorPoint?.line === cursorLine ? cursorPoint : deps.pointForLine(cursorLine);
+  function pointOf(line: number | null, p: TextPoint | null): TextPoint | null {
+    if (line == null) return null;
+    return p?.line === line ? p : deps.pointForLine(line);
   }
-
-  function anchorPoint(): TextPoint | null {
-    const { visualAnchor, visualAnchorPoint } = store;
-    if (visualAnchor == null) return null;
-    return visualAnchorPoint?.line === visualAnchor
-      ? visualAnchorPoint
-      : deps.pointForLine(visualAnchor);
-  }
-
-  function ordered(a: TextPoint, b: TextPoint): [TextPoint, TextPoint] {
-    return before(b, a) ? [b, a] : [a, b];
-  }
+  const point = () => pointOf(store.cursorLine, store.cursorPoint);
+  const anchorPoint = () => pointOf(store.visualAnchor, store.visualAnchorPoint);
 
   // A blank line renders nothing, so its point is the next text line's start — which for
   // `{` at a paragraph's start is the cursor itself. Re-resolving from the target line
@@ -175,9 +170,9 @@ export function createPreviewCursor(
 
     selection() {
       const anchor = anchorPoint();
+      if (anchor == null) return null;
       const p = point();
-      if (anchor == null || p == null) return null;
-      return deps.selection(...ordered(anchor, p));
+      return p == null ? null : deps.selection(...ordered(anchor, p));
     },
 
     enterVisualMode() {
@@ -196,10 +191,10 @@ export function createPreviewCursor(
 
     comment() {
       const p = point() ?? deps.seed();
-      const anchor = anchorPoint() ?? p;
+      const anchor = anchorPoint();
       store.visualAnchor = null;
-      if (p == null || anchor == null) return;
-      const range = deps.selection(...ordered(anchor, p));
+      if (p == null) return;
+      const range = deps.selection(...ordered(anchor ?? p, p));
       if (range != null) deps.comment(range);
     },
   };

@@ -151,9 +151,9 @@ function joinLine(
   );
 }
 
-// ponytail: every lookup re-reads its blocks' rects — the cursor's block three times a
-// keypress (the step, the follow, the band); cache per layout generation if a huge
-// block makes held j stutter
+// ponytail: every lookup re-reads its blocks' rects — the cursor's block up to five times
+// a keypress (the step, the follow, the band, and in visual mode the selection's two
+// bounds); cache per layout generation if a huge block makes held j stutter
 /** The block's visual lines top to bottom, each with the first text node laid out on it. */
 function visualLines(block: Element, read: RangeRects): VisualLine[] {
   const lines: LineDraft[] = [];
@@ -263,12 +263,10 @@ export function stepVisualLine(
   count: number,
   read: RangeRects = clientRects,
 ): TextPoint {
-  const point = domPoint(root, map, from);
-  let block = point === null ? null : blockOf(root, point[0]);
-  if (point === null || block === null) return from;
-  let lines = visualLines(block, read);
-  if (lines.length === 0) return from;
-  let targetIndex = lineIndexAt(block, lines, point, read) + count;
+  const at = locate(root, map, from, read);
+  if (at === null) return from;
+  let { block, lines } = at;
+  let targetIndex = at.index + count;
   while (targetIndex >= lines.length) {
     const next = textBlockFrom(block, 1, read);
     if (next === null) {
@@ -352,38 +350,34 @@ export function visualLineBox(
   p: TextPoint,
   read: RangeRects = clientRects,
 ): Box | null {
-  const point = domPoint(root, map, p);
-  const block = point === null ? null : blockOf(root, point[0]);
-  if (point === null || block === null) return null;
-  const lines = visualLines(block, read);
-  const line = lines[lineIndexAt(block, lines, point, read)];
-  return line === undefined
-    ? null
-    : { top: line.top, bottom: line.bottom, left: line.left, right: line.right };
+  const at = locate(root, map, p, read);
+  return (
+    at && { top: at.line.top, bottom: at.line.bottom, left: at.line.left, right: at.line.right }
+  );
 }
 
-type DomPoint = [Node, number];
-
-/** The first character of `p`'s visual line, and the first of the next line in its block
- * or else the block's end. */
-function lineBounds(
+/** `p`'s block, that block's visual lines, and the one holding `p`; null when `p` cannot
+ * be placed or its block lays out no text. */
+function locate(
   root: Element,
   map: PlanSourceMap,
   p: TextPoint,
   read: RangeRects,
-): [DomPoint, DomPoint] | null {
+): { block: Element; lines: VisualLine[]; index: number; line: VisualLine } | null {
   const point = domPoint(root, map, p);
   const block = point === null ? null : blockOf(root, point[0]);
   if (point === null || block === null) return null;
   const lines = visualLines(block, read);
   const index = lineIndexAt(block, lines, point, read);
   const line = lines[index];
-  if (line === undefined) return null;
-  const next = lines[index + 1];
-  return [
-    lineStart(line, read),
-    next === undefined ? [block, block.childNodes.length] : lineStart(next, read),
-  ];
+  return line === undefined ? null : { block, lines, index, line };
+}
+
+/** The table row holding `line`, inside `block`. A row is one source line, and its
+ * middle-aligned cells put DOM order out of step with visual order. */
+function rowOf(block: Element, line: VisualLine): Element | null {
+  const row = line.node.parentElement?.closest("tr");
+  return row != null && block.contains(row) ? row : null;
 }
 
 /** The text of the visual lines from `from`'s through `to`'s, `from` not after `to`: from
@@ -396,12 +390,18 @@ export function visualLineRange(
   to: TextPoint,
   read: RangeRects = clientRects,
 ): Range | null {
-  const start = lineBounds(root, map, from, read)?.[0];
-  const end = lineBounds(root, map, to, read)?.[1];
-  if (start === undefined || end === undefined) return null;
+  const first = locate(root, map, from, read);
+  const last = locate(root, map, to, read);
+  if (first === null || last === null) return null;
   const range = root.ownerDocument.createRange();
-  range.setStart(...start);
-  range.setEnd(...end);
+  const startRow = rowOf(first.block, first.line);
+  if (startRow !== null) range.setStart(startRow, 0);
+  else range.setStart(...lineStart(first.line, read));
+  const endRow = rowOf(last.block, last.line);
+  const next = last.lines[last.index + 1];
+  if (endRow !== null) range.setEnd(endRow, endRow.childNodes.length);
+  else if (next === undefined) range.setEnd(last.block, last.block.childNodes.length);
+  else range.setEnd(...lineStart(next, read));
   return range;
 }
 

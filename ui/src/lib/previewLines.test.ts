@@ -144,6 +144,17 @@ function walk(root: Element, map: PlanSourceMap, from: TextPoint, read: RangeRec
   }
 }
 
+/** A layout read placing each text node, by its text, on the given line boxes, its
+ * characters split evenly across them. */
+function readByText(lines: Map<string, Box[]>): RangeRects {
+  return (range) => {
+    const node = range.startContainer as Text;
+    const boxes = lines.get(node.data) ?? [];
+    const of = (k: number) => Math.floor((k * boxes.length) / node.data.length);
+    return boxes.slice(of(range.startOffset), of(range.endOffset - 1) + 1);
+  };
+}
+
 const LONG = "abcdefghij".repeat(5); // 50 characters
 
 describe("stepVisualLine", () => {
@@ -287,12 +298,7 @@ describe("stepVisualLine", () => {
       ["xx", [box(35), box(45)]],
       ["yyy", [box(30), box(40), box(50)]],
     ]);
-    const read: RangeRects = (range) => {
-      const node = range.startContainer as Text;
-      const boxes = lines.get(node.data) ?? [];
-      const of = (k: number) => Math.floor((k * boxes.length) / node.data.length);
-      return boxes.slice(of(range.startOffset), of(range.endOffset - 1) + 1);
-    };
+    const read = readByText(lines);
     const points = [{ line: 1, column: 0 }, ...walk(root, map, { line: 1, column: 0 }, read)];
     const tops = points.map((p) => visualLineBox(root, map, p, read)?.top);
     expect(tops).toEqual([0, 10, 20, 30, 40, 50]);
@@ -467,6 +473,27 @@ describe("visualLineRange", () => {
     drag.setEnd(nodeWith("cccc"), 8);
     expect(drag.toString()).toBe(range.toString());
     expect(map.linesOf(drag)).toEqual({ start: 1, end: 2 });
+  });
+
+  test("a table row's visual lines cover the whole row, as a drag across it does", () => {
+    const { root, map } = mount("intro\n\n| a | b |\n|---|---|\n| two | yyy |\n");
+    const box = (top: number): Box => ({ top, bottom: top + 8, left: 0, right: 1 });
+    // "two" sits middle-aligned on the second of the three-line "yyy".
+    const lines = new Map<string, Box[]>([
+      ["intro", [box(0)]],
+      ["a", [box(10)]],
+      ["b", [box(10)]],
+      ["two", [box(30)]],
+      ["yyy", [box(20), box(30), box(40)]],
+    ]);
+    const read = readByText(lines);
+    const intro = { line: 1, column: 0 };
+    const row = stepVisualLine(root, map, intro, 2, read);
+    expect(row.line).toBe(5);
+    const own = visualLineRange(root, map, row, row, read) as Range;
+    expect(own.collapsed).toBe(false);
+    const span = visualLineRange(root, map, intro, row, read) as Range;
+    expect(map.linesOf(span)).toEqual({ start: 1, end: 5 });
   });
 
   test("is null for a point the preview does not render", () => {

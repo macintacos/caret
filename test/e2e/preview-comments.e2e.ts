@@ -685,6 +685,15 @@ test.describe("commenting from the preview", () => {
       await expect(previewCursor(page)).toHaveAttribute("data-line", String(s.near));
     }
 
+    /** Seeds the preview, then `g g j V`: visual mode anchored on NEAR's first visual line. */
+    async function visualAtNear(daemon: Daemon, page: Page): Promise<Seeded> {
+      const s = await seedPreview(daemon, page);
+      await cursorToNear(page, s);
+      await page.keyboard.press("V");
+      await expect.poll(() => visualSelectionText(page)).toMatch(/^Nearby/);
+      return s;
+    }
+
     async function bandBox(page: Page) {
       const box = await previewCursor(page).boundingBox();
       if (!box) throw new Error("the cursor band is not rendered");
@@ -712,37 +721,47 @@ test.describe("commenting from the preview", () => {
       const s = await seedPreview(daemon, page);
       await cursorToNear(page, s);
       await page.keyboard.press("c");
+      await expect(composerLabel(page)).toHaveText(/^Lines? /);
       const label = await composerLabel(page).textContent();
-      expect(label).toMatch(/^Lines? /);
       await closeComposer(page);
 
       await dragToBandEnd(page, s, await bandBox(page));
       await expect(composerLabel(page)).toHaveText(label ?? "");
     });
 
+    test("a mouse comment opened in visual mode hides the visual selection while its composer is open", async ({
+      daemon,
+      page,
+    }) => {
+      const s = await visualAtNear(daemon, page);
+
+      await dragToBandEnd(page, s, await bandBox(page));
+      await expect(composerLabel(page)).toHaveText(/^Lines? /);
+      await expect.poll(() => visualSelectionText(page)).toBe("");
+    });
+
     test("V and j extend the selection over visual lines, and c comments on what a drag over the same text does", async ({
       daemon,
       page,
     }) => {
-      const s = await seedPreview(daemon, page);
-      await cursorToNear(page, s);
-      await page.keyboard.press("V");
-      await expect.poll(() => visualSelectionText(page)).toMatch(/^Nearby/);
+      const s = await visualAtNear(daemon, page);
       await expect(hint(page)).toBeVisible();
       const one = await visualSelectionText(page);
       const firstTop = (await bandBox(page)).y;
 
       await page.keyboard.press("j");
       await expect.poll(async () => (await bandBox(page)).y).toBeGreaterThan(firstTop);
-      await expect.poll(() => visualSelectionText(page)).not.toBe(one);
-      const two = await visualSelectionText(page);
-      expect(two.startsWith(one.trimEnd())).toBe(true);
-      expect(two.length).toBeGreaterThan(one.length);
+      await expect
+        .poll(async () => {
+          const two = await visualSelectionText(page);
+          return two.length > one.length && two.startsWith(one.trimEnd());
+        })
+        .toBe(true);
 
       const box = await bandBox(page);
       await page.keyboard.press("c");
+      await expect(composerLabel(page)).toHaveText(/^Lines? /);
       const label = (await composerLabel(page).textContent()) ?? "";
-      expect(label).toMatch(/^Lines? /);
       await expect.poll(() => visualSelectionText(page)).toBe("");
       await expect(hint(page)).toHaveCount(0);
 
@@ -762,10 +781,7 @@ test.describe("commenting from the preview", () => {
     });
 
     test("Esc and a second V exit visual mode on the preview", async ({ daemon, page }) => {
-      const s = await seedPreview(daemon, page);
-      await cursorToNear(page, s);
-      await page.keyboard.press("V");
-      await expect.poll(() => visualSelectionText(page)).toMatch(/^Nearby/);
+      const s = await visualAtNear(daemon, page);
 
       await page.keyboard.press("Escape");
       await expect.poll(() => visualSelectionText(page)).toBe("");
