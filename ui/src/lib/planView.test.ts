@@ -46,7 +46,11 @@ describe("runsOn", () => {
     expect(BEHAVIORS.some((b) => runsOn(b, "compare"))).toBe(false);
   });
 
-  test("only codeChrome runs on the preview", () => {
-    expect(BEHAVIORS.filter((b) => runsOn(b, "preview"))).toEqual(["codeChrome"]);
+  test("codeChrome, fileReferences and headingTracking run on the preview", () => {
+    expect(BEHAVIORS.filter((b) => runsOn(b, "preview"))).toEqual([
+      "codeChrome",
+      "fileReferences",
+      "headingTracking",
+    ]);
   });
 });

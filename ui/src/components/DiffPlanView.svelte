@@ -20,10 +20,11 @@
   //
   // When the review has multiple stored versions, a compare control lets the
   // reviewer diff any two of them (base vs. target) through the SourceDiffView
-  // wrapper, switching the split/unified layout at runtime. The heading surfaces,
-  // gutter, and inline annotation cards belong to the source view only —
-  // compare mode is a clean diff surface with none of them; the compared versions'
-  // comments surface in the docked panel instead, revealing their line on the side
+  // wrapper, switching the split/unified layout at runtime. The gutter and
+  // inline annotation cards belong to the source view only, and the heading
+  // surfaces to the source view and the preview — compare mode is a clean diff
+  // surface with none of them; the compared versions' comments surface in the
+  // docked panel instead, revealing their line on the side
   // they belong to for the two rendered versions and listing non-interactively for
   // anything in between.
   import { untrack } from "svelte";
@@ -102,8 +103,10 @@
     REVEAL_MARGIN_BOTTOM,
     revealScrollDelta,
     rowForLine,
+    scrollRowIntoView,
   } from "$lib/diffview/scroll.ts";
   import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
+  import { previewFileRefs } from "$lib/previewRefs.ts";
   import {
     type Annotation,
     type ClientReview,
@@ -440,6 +443,13 @@
     }
     return active.size > 0 ? active : undefined;
   });
+  // The view's one resolved map, re-keyed by display text for the preview, which never
+  // resolves on its own.
+  const previewRefs = $derived(
+    runs("fileReferences") && planPreview && fileRefs
+      ? previewFileRefs(fileRefs, linkLayer.text)
+      : [],
+  );
 
   // The file the preview is open on, plus the token it was opened from, which the
   // reveal effect below measures so the clicked filename stays visible beside the
@@ -571,11 +581,11 @@
   // and is swallowed so dismissing never also opens a line comment.
   const CARD_EXEMPT = "[data-folder-tree], [data-file-drawer], [data-file-ref], [data-ref-hint]";
 
-  // Gated on the referenceHints surfaces, not just the state: elsewhere the card is
+  // Gated on the fileReferences surfaces, not just the state: elsewhere the card is
   // off screen with `folderTree` still set, and these handlers would eat an Escape
   // and a click from the visible view.
   $effect(() => {
-    if (!runs("referenceHints") || folderTree === undefined) return;
+    if (!runs("fileReferences") || folderTree === undefined) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       folderTree = undefined;
@@ -607,7 +617,7 @@
   // IS viewport-fixed over the plan, so the divergence tracks the two surfaces'
   // shapes rather than being drift.
   //
-  // Gated on the referenceHints surfaces, not just the state: elsewhere the lane is
+  // Gated on the fileReferences surfaces, not just the state: elsewhere the lane is
   // hidden with `filePreview` still set, and its handler would swallow Escape.
   //
   // Gated on the card too (EXC-1129), which is what gives the two coexisting
@@ -617,7 +627,7 @@
   // is stacked above the lane, so while one is open the lane simply does not listen.
   // Closing it re-runs this effect, and the next Escape reaches the lane.
   $effect(() => {
-    if (!runs("referenceHints") || filePreview === undefined || folderTree !== undefined) return;
+    if (!runs("fileReferences") || filePreview === undefined || folderTree !== undefined) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || drawerClosing) return;
       dismissFilePreview();
@@ -1023,7 +1033,8 @@
 
   // Gates the live `?heading=` mirror until the deep-link restore has consumed any
   // incoming `?heading=`. Without it, the mirror effect (activeLine starts null)
-  // could clear the param before onSourceReady reads it, depending on which
+  // could clear the param before the first surface's restore (`onSourceReady`, or the
+  // preview's restore effect below) reads it, depending on which
   // post-mount effect runs first.
   let restored = $state(false);
 
@@ -1083,19 +1094,29 @@
   // only a pick calls onJump — so reading around leaves the cursor untouched.
   function pickHeading(line: number): void {
     keyboardStore.cursorLine = line;
-    api?.scrollToLine(line);
+    if (surface !== "preview") {
+      api?.scrollToLine(line);
+      return;
+    }
+    const block = previewBlock(line);
+    if (previewEl != null && block != null) scrollRowIntoView(previewEl, block);
   }
 
-  // Captures the imperative API and, on the first ready, restores a deep-linked
-  // heading (`?heading=<slug>`) by resolving the slug to its source line and
-  // scrolling to it once. takeHeadingSlug() clears the param, so a later SourceView
-  // remount (a version switch) won't re-jump — the live `?heading=` mirror takes
-  // over from there. An unknown or stale slug resolves to null and is a no-op.
-  // A resolved deep link wins over a place carried from the preview: the preview
-  // cannot honor `?heading=`, so the link waits for this first source mount.
+  function previewBlock(line: number): Element | null {
+    const i = planPreview ? blockIndexForLine(planPreview.blocks, line) : null;
+    return previewEl && i != null ? (previewEl.children[i] ?? null) : null;
+  }
+
+  // Captures the imperative API and restores a deep-linked heading
+  // (`?heading=<slug>`) by resolving the slug to its source line and scrolling to
+  // it. takeHeadingSlug() clears the param, so a later SourceView remount (a version
+  // switch) won't re-jump — the live `?heading=` mirror takes over from there. An
+  // unknown or stale slug resolves to null and is a no-op. A place carried from the
+  // preview wins over the slug: by then the URL holds the preview's live mirror, not
+  // a link the reader opened.
   function onSourceReady(a: SourceViewApi) {
     api = a;
-    const slug = takeHeadingSlug();
+    const slug = carriedLine == null ? takeHeadingSlug() : null;
     const line = slug != null ? lineForSlug(headings, slug) : null;
     const carried = carriedLine;
     carriedLine = null;
@@ -1137,19 +1158,23 @@
       const line = topVisibleLine();
       if (line == null) return;
       releasePlace();
-      releasePlace = keepPlace(() => previewEl, () => {
-        const preview = previewEl;
-        const i = planPreview ? blockIndexForLine(planPreview.blocks, line) : null;
-        return preview && i != null ? (preview.children[i] ?? null) : null;
-      });
+      releasePlace = keepPlace(() => previewEl, () => previewBlock(line));
     } else {
-      const preview = previewEl;
-      carriedLine =
-        scrollEl && preview && planPreview
-          ? previewTopLine(scrollEl.getBoundingClientRect().top, preview, planPreview.blocks)
-          : null;
+      carriedLine = topVisibleLine();
     }
   }
+
+  // The preview's counterpart of onSourceReady's deep-link restore, on its first mount.
+  $effect(() => {
+    if (restored || surface !== "preview" || previewEl == null || planPreview == null) return;
+    const slug = takeHeadingSlug();
+    const line = slug != null ? lineForSlug(headings, slug) : null;
+    if (line != null) {
+      releasePlace();
+      releasePlace = keepPlace(() => previewEl, () => previewBlock(line));
+    }
+    restored = true;
+  });
 
   // Keyed on contentKey, not surface: the flip itself changes surface, and that
   // teardown would cancel the hold the flip just scheduled.
@@ -1174,13 +1199,13 @@
   let scrollEl = $state<HTMLElement | undefined>();
   // Opens the breadcrumbs bar's trailing crumb, handed over by the bar itself
   // (EXC-947). Undefined until the bar first mounts, and it keeps the last closure
-  // afterwards — leaving source unmounts the bar without clearing this. What makes
+  // afterwards — entering compare unmounts the bar without clearing this. What makes
   // `b` inert there is the binding's own headingTracking guard; the closure would
   // no-op anyway, since it reads a `barEl` the unmount set back to null.
   let openHeadingNav: (() => void) | undefined;
   // Opens the contents popup, handed over by PlanToc the same way (EXC-1097). Its
   // closure only sets the popup's own `open` flag, so the stale-closure question the
-  // bar's comment answers does not arise here; `\` is inert off source for the one
+  // bar's comment answers does not arise here; `\` is inert on compare for the one
   // reason that matters — the binding's headingTracking guard.
   let openToc: (() => void) | undefined;
 
@@ -1256,7 +1281,13 @@
   // paints each line as <div data-line="N"> in a shadow root; lineAtReadingZone
   // picks the line sitting at the same offset jumps park headings at, so the
   // tracked section matches where a crumb jump lands rather than the heading above it.
+  // The preview reads its block at the same zone instead.
   function topVisibleLine(): number | null {
+    if (surface === "preview") {
+      return scrollEl && previewEl && planPreview
+        ? previewTopLine(scrollEl.getBoundingClientRect().top, previewEl, planPreview.blocks)
+        : null;
+    }
     const rows = scrollEl?.querySelector(".diffview")?.shadowRoot?.querySelectorAll<HTMLElement>(
       "[data-line]",
     );
@@ -1413,8 +1444,8 @@
 
   // Mirror the active heading's slug into `?heading=` so a copied URL reopens the
   // review at the section being read (composing with deepLink.ts's `?review=`).
-  // A surface off the headingTracking row tracks no heading (and drops the
-  // breadcrumbs bar), so the param clears there.
+  // A surface off the headingTracking row tracks no heading (and drops
+  // the breadcrumbs bar), so the param clears there.
   // Held until restore consumes any incoming `?heading=` (see `restored`).
   $effect(() => {
     if (!restored) return;
@@ -1689,7 +1720,7 @@
   <!-- Heading breadcrumbs (EXC-946): where in the plan the reviewer is, and the
        menus to move sideways or deeper — the drill-down surface beside the ToC's
        whole-shape one. It rides the activeLine the scroll observer below tracks
-       and jumps through scrollToLine. Off the headingTracking row no heading is
+       and jumps through `pickHeading`. Off the headingTracking row no heading is
        tracked (and `?heading=` clears), so the bar is dropped there rather than
        left showing a stale trail. -->
   {#if runs("headingTracking")}
@@ -1806,6 +1837,8 @@
           {themeId}
           {reflowedBlocks}
           bind:root={previewEl}
+          fileRefs={previewRefs}
+          onFileRefClick={openFileRef}
         />
         {@render codeChrome()}
       {:else}
@@ -1863,9 +1896,10 @@
              on-screen file reference and one over the first directory reference,
              teaching that a path token opens a preview. Layered over the .diff-plan
              scroll content like the copy button, so they scroll with the rows.
-             Rendered in this branch only, so off the source view both drop — and
-             since nothing renders there, neither flag is spent and the hints survive
-             to teach on the next source-view render.
+             Rendered on the referenceHints surfaces only, so elsewhere both drop —
+             nothing renders there, so no badge is shown off the source view. Opening a
+             reference on the preview still retires its kind through `openFileRef`,
+             since the reader has learned the gesture.
              NOT gated on showShortcutHints, unlike the two hint chips further down:
              that pref governs keyboard-shortcut affordances, and this teaches a
              mouse gesture. Keyed on the kind — never on a value a poll tick changes
@@ -1960,8 +1994,8 @@
        beside the plan holding the referenced file's excerpt. It takes layout
        space rather than covering the plan, and wipes in from whichever edge it
        docked to. Only appears for references the daemon resolved to a real file,
-       and only on the referenceHints surfaces. -->
-  {#if runs("referenceHints") && filePreview}
+       and only on the fileReferences surfaces. -->
+  {#if runs("fileReferences") && filePreview}
     <!-- Bound here because the {#if}'s narrowing does not reach into a snippet body. -->
     {@const openRef = filePreview}
     <FileDrawer
@@ -1987,8 +2021,8 @@
 
 <!-- The folder-reference tree (EXC-918). A viewport-fixed card rather than a lane
      in the surface above, so it sits outside that flex row entirely; gated on the
-     referenceHints surfaces like the file lane is. -->
-{#if runs("referenceHints") && folderTree}
+     fileReferences surfaces like the file lane is. -->
+{#if runs("fileReferences") && folderTree}
   {@const openDir = folderTree}
   <!-- A file row opens the SAME lane a filename reference opens (EXC-1137). The
        card converted the row's tree-relative path already. -->

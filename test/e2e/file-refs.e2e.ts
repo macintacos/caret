@@ -25,6 +25,7 @@
 // writes a synthetic project dir and seeds a review whose cwd points at it. The
 // content is throwaway, non-identifying scaffolding — never a real plan.
 
+import { previewToggle } from "@test/e2e/support/chrome.ts";
 import {
   fileRefCount,
   makeProject,
@@ -32,8 +33,14 @@ import {
   seedFileRefs,
   settleDrawer,
 } from "@test/e2e/support/file-refs.ts";
-import { expect, motionToken, test, waitForTwoPollTicks } from "@test/e2e/support/fixtures.ts";
-import { expectNoComposerOpens, planSurface } from "@test/e2e/support/source-view.ts";
+import {
+  type Daemon,
+  expect,
+  motionToken,
+  test,
+  waitForTwoPollTicks,
+} from "@test/e2e/support/fixtures.ts";
+import { expectNoComposerOpens, PLAN_PREVIEW, planSurface } from "@test/e2e/support/source-view.ts";
 import { OVERSCAN_ROWS } from "@ui/src/lib/previewWindow.ts";
 import { MAX_EXCERPT_BYTES } from "@/plan/excerpt.ts";
 
@@ -1681,4 +1688,121 @@ test("switching references lets the outgoing file leave before the next arrives"
   } finally {
     await proj.cleanup();
   }
+});
+
+// The preview tags the references DiffPlanView already resolved, in light DOM, so these
+// need a real daemon for the resolve and a real cascade for the chip; the find itself is
+// previewRefs.test.ts's, the wiring PlanPreview.test.ts's.
+test.describe("on the preview", () => {
+  const PREVIEW_PLAN = [
+    "# Refs",
+    "",
+    "- The key is `src/cache.ts:42`.",
+    "- Helpers live in a file (src/lib/util.ts).",
+    "- Read [the cache](src/cache.ts) first.",
+    "- The folder `src/lib` holds them.",
+    "- Gone: `nope/missing.ts`.",
+    "",
+  ].join("\n");
+
+  async function openOnPreview(page: import("@playwright/test").Page, daemon: Daemon) {
+    const proj = await makeProject({ "src/cache.ts": CACHE_TS, "src/lib/util.ts": "export {};\n" });
+    await seedFileRefs(page, daemon, proj.dir, PREVIEW_PLAN, 4);
+    await previewToggle(page).click();
+    await expect(page.locator(`${PLAN_PREVIEW} [data-file-ref]`)).toHaveCount(4);
+    return proj;
+  }
+
+  /** A source-view reference's computed fill and inline padding, read from inside the
+   * shadow root; null until it is tagged. */
+  function sourceRef(page: import("@playwright/test").Page, text: string) {
+    return page.evaluate((text) => {
+      const sh = (document.querySelector(".diffview") as HTMLElement | null)?.shadowRoot;
+      const ref = [...(sh?.querySelectorAll("[data-file-ref]") ?? [])].find(
+        (el) => el.textContent === text,
+      );
+      if (!ref) return null;
+      const cs = getComputedStyle(ref);
+      return { background: cs.backgroundColor, padding: cs.paddingLeft };
+    }, text);
+  }
+
+  test("tags the resolved references and leaves the rest plain", async ({ daemon, page }) => {
+    const proj = await openOnPreview(page, daemon);
+    try {
+      const tagged = await page
+        .locator(`${PLAN_PREVIEW} [data-file-ref]`)
+        .evaluateAll((els) => els.map((el) => [el.textContent, el.getAttribute("data-file-ref")]));
+      expect(tagged).toEqual([
+        ["src/cache.ts:42", ""],
+        ["src/lib/util.ts", ""],
+        ["the cache", ""],
+        ["src/lib", "directory"],
+      ]);
+      const missing = page.locator(PLAN_PREVIEW).getByText("nope/missing.ts", { exact: true });
+      expect(await missing.evaluate((el) => el.closest("[data-file-ref]") === null)).toBe(true);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  test("a reference rests like the source view's and changes fill on hover", async ({
+    daemon,
+    page,
+  }) => {
+    const proj = await makeProject({ "src/cache.ts": CACHE_TS, "src/lib/util.ts": "export {};\n" });
+    try {
+      await seedFileRefs(page, daemon, proj.dir, PREVIEW_PLAN, 4);
+      await page.mouse.move(0, 0);
+      let source: Awaited<ReturnType<typeof sourceRef>> = null;
+      await expect.poll(async () => (source = await sourceRef(page, "the cache"))).not.toBeNull();
+      await previewToggle(page).click();
+      const refs = page.locator(`${PLAN_PREVIEW} [data-file-ref]`);
+      await expect(refs).toHaveCount(4);
+
+      const label = refs.filter({ hasText: "the cache" });
+      await expect(label).toHaveCSS("background-color", source!.background);
+      await expect(label).toHaveCSS("padding-left", source!.padding);
+
+      const pill = page
+        .locator(`${PLAN_PREVIEW} code`)
+        .filter({ has: page.locator("[data-file-ref]"), hasText: "src/cache.ts:42" });
+      const pillRef = pill.locator("[data-file-ref]");
+      await expect(pillRef).toHaveCSS("cursor", "pointer");
+      const rest = await pill.evaluate((el) => getComputedStyle(el).backgroundColor);
+      await pillRef.hover();
+      await expect(pill).not.toHaveCSS("background-color", rest);
+
+      await label.hover();
+      await expect(page.locator("[data-link-tooltip]")).toHaveText("src/cache.ts");
+      await page.mouse.move(0, 0);
+      await expect(page.locator("[data-link-tooltip]")).toHaveCount(0);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  test("a file reference opens the excerpt, not a comment", async ({ daemon, page }) => {
+    const proj = await openOnPreview(page, daemon);
+    try {
+      await page.locator(PLAN_PREVIEW).getByText("src/cache.ts:42", { exact: true }).click();
+      const preview = page.locator("[data-file-preview]");
+      await expect(preview).toContainText("MARKER_LINE_FORTYTWO");
+      await expect(preview.locator(".fp-target .fp-lnum")).toHaveText("42");
+      await settleDrawer(page);
+      await expectNoComposerOpens(page);
+    } finally {
+      await proj.cleanup();
+    }
+  });
+
+  test("a directory reference opens its tree", async ({ daemon, page }) => {
+    const proj = await openOnPreview(page, daemon);
+    try {
+      await page.locator(PLAN_PREVIEW).getByText("src/lib", { exact: true }).click();
+      await expect(page.locator("[data-folder-tree]")).toBeVisible();
+    } finally {
+      await proj.cleanup();
+    }
+  });
 });

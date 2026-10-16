@@ -15,9 +15,9 @@ import { DIFFS_CORE_STYLES } from "$lib/diffview/diffsCoreStyles.ts";
 // The vendored Lucide `file` glyph as a CSS mask source (EXC-687). Rendered as a
 // mask rather than an <img> so it takes the ink color of the surrounding text via
 // background-color, matching how Icon.svelte colors an SVG through currentColor.
-const FILE_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(fileIconRaw)}")`;
+export const FILE_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(fileIconRaw)}")`;
 // Its counterpart for a reference the daemon resolved to a directory (EXC-918).
-const FOLDER_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(folderIconRaw)}")`;
+export const FOLDER_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(folderIconRaw)}")`;
 // The task-list checkbox's three states, one vendored Lucide glyph each. Masks for the
 // same reason the file glyph is one: the row's ink is a palette token, and a mask takes
 // it through background-color where an <img> would be stuck with whatever the file draws.
@@ -123,18 +123,6 @@ const CARET_OVERRIDES = `
      elevation languages on one page" the shared value exists to prevent. */
   :host {
     --caret-card-lift: 0 1px 2px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.28));
-  }
-  /* The chip family's breathing room, stated once for every member that has any: the
-     inline-markup pills (EXC-867/868/859) and the file reference (EXC-687/880). Two
-     numbers rather than one because the axes are bounded differently — the inline half
-     is real space that pushes the next glyph along, so it is what keeps two abutting
-     chips from sharing a cell, while the block half only paints (padding on an inline
-     box never grows its line box) and is held under the line box's own slack so a dense
-     paragraph does not read as confetti. Both are em-relative, so they track the type
-     scale rather than a fixed pixel that would crowd at one size and gape at another. */
-  :host {
-    --chip-pad-inline: 0.32em;
-    --chip-pad-block: 0.16em;
   }
   /* The task-list checkbox's size (EXC-860) — the box the masked Lucide glyph is painted
      into, which every state measures from. Lucide draws its square inset in the viewBox
@@ -374,8 +362,8 @@ const CARET_OVERRIDES = `
 
      Block padding is bounded by the failure mode EXC-855 names: a chip taller than its line
      box reads as confetti in a dense paragraph. It is smaller than the inline half for that
-     reason, and both are stated once, here, as the two --chip-pad-* customs the file-ref
-     chip below reads too — so the family cannot drift apart one rule at a time.
+     reason, and both are stated once, in tokens.css, as the two --chip-pad-* customs the
+     file-ref chip below reads too — so the family cannot drift apart one rule at a time.
 
      Rounded ends ride the GROUP, not the run: an element fragmented into several runs
      gets its radius on the first and last only, so the pill closes once. The pass also

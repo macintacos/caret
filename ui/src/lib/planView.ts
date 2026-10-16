@@ -29,11 +29,12 @@ export const writePlanView = pref.write;
  * doc/agents/plan-render-rules.md § Surfaces for what that does and does not switch on. */
 export const SURFACE_BEHAVIORS = {
   codeChrome: ["source", "preview"], // copy / soft-wrap chrome over fenced code
-  referenceHints: ["source"], // ref-hint badges, file drawer, folder card
+  referenceHints: ["source"], // ref-hint badges
+  fileReferences: ["source", "preview"], // the file lane and folder card a reference opens
   search: ["source"], // `/` dock, n/N, match highlights
   keyboardCursor: ["source"], // cursor motions, `c`, `V`, Esc
   lineComments: ["source"], // drag readout, gutter range drag, drag/visual hint chips, hover re-fire, comment reveal
-  headingTracking: ["source"], // top-visible heading, ?heading= mirror, ToC, breadcrumbs, b and \
+  headingTracking: ["source", "preview"], // top-visible heading, ?heading= mirror, ToC, breadcrumbs, b and \
 } as const satisfies Record<string, readonly PlanSurface[]>;
 
 export type SurfaceBehavior = keyof typeof SURFACE_BEHAVIORS;

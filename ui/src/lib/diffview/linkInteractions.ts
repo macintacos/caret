@@ -11,6 +11,9 @@
 // would then run the width of the row. What the pointer is over decides — see
 // spanAtPointer — and for the same reason hover tracks pointer movement *within* a
 // token rather than only its enter/leave.
+//
+// The tooltip itself (showTooltip / hideTooltip) is also exported to the plan preview,
+// a light-DOM consumer that mounts it on the body.
 
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import type { LinkSpan, LinkSpanMap } from "$lib/diffview/links.ts";
@@ -91,8 +94,7 @@ const TOOLTIP_ATTR = "data-link-tooltip";
 
 /** The element a token's tooltip mounts into: its shadow root (the diffview
  * shadow tree the library renders the code into) when it has one, else the
- * owner document's body — the fallback only matters in unit tests, where the
- * token element is unattached. */
+ * owner document's body — a light-DOM element's, such as a preview reference. */
 function tooltipMount(tokenElement: HTMLElement): ParentNode {
   const root = tokenElement.getRootNode();
   if (root instanceof ShadowRoot) return root;
@@ -102,14 +104,14 @@ function tooltipMount(tokenElement: HTMLElement): ParentNode {
 /** Reveals the hover tooltip: a caret-surface bubble carrying the full target —
  * a link's href, or a file reference's path when its label hides it — mounted in
  * the token's root (the diffview shadow root) so it renders inside the same tree
- * as the code. Its colors come from the host-level --diffs-link-tooltip-* bridge
- * vars (declared once on the .diffview rule in app.css), which inherit through the
- * shadow boundary, as its FND/type-scale tokens do.
+ * as the code, or on the body for a light-DOM token (the preview's). Its colours are
+ * caret's raised-paper tokens, which inherit into the shadow root.
  *
  * The reveal is motionless — wiring the motion tokens (--dur-micro / --ease-out)
  * is a deliberate follow-up. The bubble does not reposition on scroll (no scroll
- * listener is added); dismissal relies on hideTooltip from onTokenLeave. */
-function showTooltip(tokenElement: HTMLElement, href: string): void {
+ * listener is added); dismissal relies on hideTooltip from the caller's pointer
+ * leave (onTokenLeave here, PlanPreview's pointerout). */
+export function showTooltip(tokenElement: HTMLElement, href: string): void {
   const mount = tooltipMount(tokenElement);
   hideTooltip(tokenElement);
 
@@ -124,9 +126,9 @@ function showTooltip(tokenElement: HTMLElement, href: string): void {
     "max-width: 80ch",
     "padding: 4px 8px",
     "border-radius: var(--radius-lg)",
-    "background: var(--diffs-link-tooltip-bg)",
-    "color: var(--diffs-link-tooltip-fg)",
-    "border: 1px solid var(--diffs-link-tooltip-border)",
+    "background: var(--paper-raised)",
+    "color: var(--ink)",
+    "border: 1px solid color-mix(in lab, var(--paper-raised), var(--ink) 14%)",
     "box-shadow: var(--shadow-chip)",
     "font-family: var(--font-mono)",
     "font-size: var(--text-2xs)",
@@ -148,7 +150,7 @@ function showTooltip(tokenElement: HTMLElement, href: string): void {
 
 /** Removes any tooltip in the token's root. Pairs with showTooltip; a no-op when
  * none is present. */
-function hideTooltip(tokenElement: HTMLElement): void {
+export function hideTooltip(tokenElement: HTMLElement): void {
   for (const el of tooltipMount(tokenElement).querySelectorAll(`[${TOOLTIP_ATTR}]`)) el.remove();
 }
 

@@ -623,6 +623,64 @@ describe("DiffPlanView file-reference resolution", () => {
     }
   });
 
+  function stubResolve(): { calls: () => number; restore: () => void } {
+    let n = 0;
+    const cap = logCapture((url) => {
+      if (url.includes("/file-refs")) {
+        n++;
+        return Promise.resolve(jsonResponse({ resolved: { "src/foo.ts": "file" } }));
+      }
+      return Promise.resolve(new Response(null, { status: 204 }));
+    });
+    return { calls: () => n, restore: cap.restore };
+  }
+  const PREVIEW_PLAN = "# Title\n\nSee `src/foo.ts` for the cache.\n";
+  const previewRef = (target: HTMLElement) =>
+    target.querySelector<HTMLElement>(".plan-preview [data-file-ref]");
+
+  test("on the preview, the resolved references are tagged", async () => {
+    const stub = stubResolve();
+    try {
+      const { target } = await renderOnPreview({
+        review: reviewFixture({ currentPlan: PREVIEW_PLAN }),
+      });
+      expect(await until(() => previewRef(target) != null)).toBe(true);
+      expect(previewRef(target)?.textContent).toBe("src/foo.ts");
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("flipping to the preview issues no further resolve", async () => {
+    const stub = stubResolve();
+    try {
+      const { target } = await renderOnPreview({
+        review: reviewFixture({ currentPlan: PREVIEW_PLAN }),
+      });
+      await until(() => previewRef(target) != null);
+      expect(stub.calls()).toBe(1);
+    } finally {
+      stub.restore();
+    }
+  });
+
+  test("clicking a preview reference opens the file lane", async () => {
+    const stub = stubResolve();
+    try {
+      const { target, flush } = await renderOnPreview({
+        review: reviewFixture({ currentPlan: PREVIEW_PLAN }),
+      });
+      await until(() => previewRef(target) != null);
+
+      previewRef(target)?.click();
+      flush();
+
+      expect(await until(() => target.querySelector("[data-file-drawer]") != null)).toBe(true);
+    } finally {
+      stub.restore();
+    }
+  });
+
   test("re-resolves when the plan text actually changes", async () => {
     let fileRefCalls = 0;
     const cap = logCapture((url) => {
@@ -769,20 +827,29 @@ describe("DiffPlanView plan view toggle", () => {
     expect(localStorage.getItem("caret.planView")).toBe("preview");
   });
 
-  test("the preview drops the source-only controls", async () => {
-    const controls = [".control-row [data-slot='popover-trigger']", ".search-dock"];
+  const enabled = (id: string) =>
+    shortcuts
+      .list()
+      .find((e) => e.id === id)
+      ?.enabled?.();
+
+  test("the preview drops the search dock and its shortcut", async () => {
     const { target } = render(DiffPlanView, props());
-    const shown = await until(() => controls.every((s) => target.querySelector(s) != null));
-    expect(shown).toBe(true);
+    await until(() => target.querySelector(".search-dock") != null);
     toggle(target)!.click();
     await until(() => target.querySelector(".plan-preview") != null);
-    expect(controls.filter((s) => target.querySelector(s) != null)).toEqual([]);
-    expect(
-      shortcuts
-        .list()
-        .find((e) => e.id === "actions.search")
-        ?.enabled?.(),
-    ).toBe(false);
+    expect(target.querySelector(".search-dock") != null).toBe(false);
+    expect(enabled("actions.search")).toBe(false);
+  });
+
+  test("the preview keeps the contents trigger and the heading shortcuts", async () => {
+    const { target } = await renderOnPreview();
+    const shown = await until(
+      () => target.querySelector(".control-row [data-slot='popover-trigger']") != null,
+    );
+    expect(shown).toBe(true);
+    expect(enabled("actions.contents")).toBe(true);
+    expect(enabled("actions.headingNav")).toBe(true);
   });
 
   test("hovering the preview does not arm the drag hint for the source view", async () => {

@@ -151,7 +151,7 @@ Caret shows a plan version in one of two views:
   row.
 - The **preview** renders the plan as a document: headings, lists, tables, and links as
   they would appear on a page. Code blocks are highlighted and keep the source view's copy
-  and wrap buttons.
+  and wrap buttons. Cited files open, and the contents and breadcrumbs work there too.
 
 The **Preview** button beside **Versions** switches between them. It is pressed while the
 preview shows. Your browser remembers the choice, so it holds across reviews and restarts.
@@ -159,8 +159,8 @@ Switching away from the source view with a comment open keeps its text as a draf
 you resume in the source view.
 
 Switching keeps your place: the other view opens at the part of the plan you were reading.
-A heading link you opened the review with still takes you to its heading the first time
-you switch to the source view.
+A heading link opens at its heading in either view, and the address bar follows the
+heading you are reading in both.
 
 Compare mode always shows source, and hides the button. Leaving compare mode returns to
 the view you chose.
@@ -174,9 +174,9 @@ project as it actually is.
 
 ### In a plan you are reading
 
-A file the agent cited draws a small icon beside it, and clicking it opens a preview of
-that file — the head of it, or a window framed on the lines the reference names, so
-`src/mail/send.ts:127-141` opens on 127. A folder opens its tree instead.
+A file the agent cited draws a small icon beside it in either view, and clicking it opens
+a preview of that file — the head of it, or a window framed on the lines the reference
+names, so `src/mail/send.ts:127-141` opens on 127. A folder opens its tree instead.
 
 Caret picks up two ways of writing one: a path in backticks, and a path in parentheses
 beside the symbol it belongs to, the way a plan cites its evidence —
