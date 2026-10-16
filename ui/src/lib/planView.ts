@@ -33,7 +33,7 @@ export const SURFACE_BEHAVIORS = {
   search: ["source"], // `/` dock, n/N, match highlights
   keyboardCursor: ["source"], // cursor motions, `c`, `V`, Esc
   lineComments: ["source"], // drag readout, gutter range drag, drag/visual hint chips, hover re-fire, comment reveal
-  headingTracking: ["source"], // top-visible heading, ?heading= mirror, ToC, breadcrumbs, b and \
+  headingTracking: ["source", "preview"], // top-visible heading, ?heading= mirror, ToC, breadcrumbs, b and \
 } as const satisfies Record<string, readonly PlanSurface[]>;
 
 export type SurfaceBehavior = keyof typeof SURFACE_BEHAVIORS;

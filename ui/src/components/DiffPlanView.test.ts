@@ -769,20 +769,29 @@ describe("DiffPlanView plan view toggle", () => {
     expect(localStorage.getItem("caret.planView")).toBe("preview");
   });
 
-  test("the preview drops the source-only controls", async () => {
-    const controls = [".control-row [data-slot='popover-trigger']", ".search-dock"];
+  const enabled = (id: string) =>
+    shortcuts
+      .list()
+      .find((e) => e.id === id)
+      ?.enabled?.();
+
+  test("the preview drops the search dock and its shortcut", async () => {
     const { target } = render(DiffPlanView, props());
-    const shown = await until(() => controls.every((s) => target.querySelector(s) != null));
-    expect(shown).toBe(true);
+    await until(() => target.querySelector(".search-dock") != null);
     toggle(target)!.click();
     await until(() => target.querySelector(".plan-preview") != null);
-    expect(controls.filter((s) => target.querySelector(s) != null)).toEqual([]);
-    expect(
-      shortcuts
-        .list()
-        .find((e) => e.id === "actions.search")
-        ?.enabled?.(),
-    ).toBe(false);
+    expect(target.querySelector(".search-dock") != null).toBe(false);
+    expect(enabled("actions.search")).toBe(false);
+  });
+
+  test("the preview keeps the contents trigger and the heading shortcuts", async () => {
+    const { target } = await renderOnPreview();
+    const shown = await until(
+      () => target.querySelector(".control-row [data-slot='popover-trigger']") != null,
+    );
+    expect(shown).toBe(true);
+    expect(enabled("actions.contents")).toBe(true);
+    expect(enabled("actions.headingNav")).toBe(true);
   });
 
   test("hovering the preview does not arm the drag hint for the source view", async () => {

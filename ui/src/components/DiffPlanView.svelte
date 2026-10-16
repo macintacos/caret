@@ -102,6 +102,7 @@
     REVEAL_MARGIN_BOTTOM,
     revealScrollDelta,
     rowForLine,
+    scrollRowIntoView,
   } from "$lib/diffview/scroll.ts";
   import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
   import {
@@ -1083,19 +1084,29 @@
   // only a pick calls onJump — so reading around leaves the cursor untouched.
   function pickHeading(line: number): void {
     keyboardStore.cursorLine = line;
-    api?.scrollToLine(line);
+    if (surface !== "preview") {
+      api?.scrollToLine(line);
+      return;
+    }
+    const block = previewBlock(line);
+    if (previewEl != null && block != null) scrollRowIntoView(previewEl, block);
   }
 
-  // Captures the imperative API and, on the first ready, restores a deep-linked
-  // heading (`?heading=<slug>`) by resolving the slug to its source line and
-  // scrolling to it once. takeHeadingSlug() clears the param, so a later SourceView
-  // remount (a version switch) won't re-jump — the live `?heading=` mirror takes
-  // over from there. An unknown or stale slug resolves to null and is a no-op.
-  // A resolved deep link wins over a place carried from the preview: the preview
-  // cannot honor `?heading=`, so the link waits for this first source mount.
+  function previewBlock(line: number): Element | null {
+    const i = planPreview ? blockIndexForLine(planPreview.blocks, line) : null;
+    return previewEl && i != null ? (previewEl.children[i] ?? null) : null;
+  }
+
+  // Captures the imperative API and restores a deep-linked heading
+  // (`?heading=<slug>`) by resolving the slug to its source line and scrolling to
+  // it. takeHeadingSlug() clears the param, so a later SourceView remount (a version
+  // switch) won't re-jump — the live `?heading=` mirror takes over from there. An
+  // unknown or stale slug resolves to null and is a no-op. A place carried from the
+  // preview wins over the slug: by then the URL holds the preview's live mirror, not
+  // a link the reader opened.
   function onSourceReady(a: SourceViewApi) {
     api = a;
-    const slug = takeHeadingSlug();
+    const slug = carriedLine == null ? takeHeadingSlug() : null;
     const line = slug != null ? lineForSlug(headings, slug) : null;
     const carried = carriedLine;
     carriedLine = null;
@@ -1137,19 +1148,23 @@
       const line = topVisibleLine();
       if (line == null) return;
       releasePlace();
-      releasePlace = keepPlace(() => previewEl, () => {
-        const preview = previewEl;
-        const i = planPreview ? blockIndexForLine(planPreview.blocks, line) : null;
-        return preview && i != null ? (preview.children[i] ?? null) : null;
-      });
+      releasePlace = keepPlace(() => previewEl, () => previewBlock(line));
     } else {
-      const preview = previewEl;
-      carriedLine =
-        scrollEl && preview && planPreview
-          ? previewTopLine(scrollEl.getBoundingClientRect().top, preview, planPreview.blocks)
-          : null;
+      carriedLine = topVisibleLine();
     }
   }
+
+  // The preview's counterpart of onSourceReady's deep-link restore, on its first mount.
+  $effect(() => {
+    if (restored || surface !== "preview" || previewEl == null || planPreview == null) return;
+    const slug = takeHeadingSlug();
+    const line = slug != null ? lineForSlug(headings, slug) : null;
+    if (line != null) {
+      releasePlace();
+      releasePlace = keepPlace(() => previewEl, () => previewBlock(line));
+    }
+    restored = true;
+  });
 
   // Keyed on contentKey, not surface: the flip itself changes surface, and that
   // teardown would cancel the hold the flip just scheduled.
@@ -1256,7 +1271,13 @@
   // paints each line as <div data-line="N"> in a shadow root; lineAtReadingZone
   // picks the line sitting at the same offset jumps park headings at, so the
   // tracked section matches where a crumb jump lands rather than the heading above it.
+  // The preview reads its block at the same zone instead.
   function topVisibleLine(): number | null {
+    if (surface === "preview") {
+      return scrollEl && previewEl && planPreview
+        ? previewTopLine(scrollEl.getBoundingClientRect().top, previewEl, planPreview.blocks)
+        : null;
+    }
     const rows = scrollEl?.querySelector(".diffview")?.shadowRoot?.querySelectorAll<HTMLElement>(
       "[data-line]",
     );
@@ -1413,8 +1434,8 @@
 
   // Mirror the active heading's slug into `?heading=` so a copied URL reopens the
   // review at the section being read (composing with deepLink.ts's `?review=`).
-  // A surface off the headingTracking row tracks no heading (and drops the
-  // breadcrumbs bar), so the param clears there.
+  // A surface off the headingTracking row (compare) tracks no heading (and drops
+  // the breadcrumbs bar), so the param clears there.
   // Held until restore consumes any incoming `?heading=` (see `restored`).
   $effect(() => {
     if (!restored) return;
