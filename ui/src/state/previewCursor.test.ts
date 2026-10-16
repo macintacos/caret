@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { createPreviewCursor, type PreviewCursorStore } from "@/state/previewCursor.ts";
 import type { TextPoint } from "$lib/previewLines.ts";
+import type { SoundEvent } from "$lib/sound.ts";
 
 // Headings on 1 and 6, blanks on 2, 5 and 7; the paragraph 3–4 starts with a line that
 // wraps once, and so does the body on 8.
@@ -20,7 +21,10 @@ const at = (i: number): TextPoint => VISUAL[i] as TextPoint;
 
 /** Fake geometry over VISUAL: a step moves through the list, a line maps to the first
  * visual line at or after it (a blank renders nothing). */
-function build(store: PreviewCursorStore, over: { seed?: TextPoint | null; empty?: boolean } = {}) {
+function build(
+  store: PreviewCursorStore,
+  over: { seed?: TextPoint | null; empty?: boolean; noRange?: boolean } = {},
+) {
   const lines = VISUAL.slice(0, over.empty ? 0 : VISUAL.length);
   const indexOf = (p: TextPoint) =>
     lines.findIndex((v) => v.line === p.line && v.column === p.column);
@@ -28,6 +32,10 @@ function build(store: PreviewCursorStore, over: { seed?: TextPoint | null; empty
   const follows: TextPoint[] = [];
   const jumps: TextPoint[] = [];
   const seeds = { count: 0 };
+  const selections: [TextPoint, TextPoint][] = [];
+  const comments: Range[] = [];
+  const sounds: SoundEvent[] = [];
+  const range = {} as Range;
   const cursor = createPreviewCursor(store, {
     lines: () => TEXT.split("\n"),
     headingLines: () => [1, 6],
@@ -44,12 +52,27 @@ function build(store: PreviewCursorStore, over: { seed?: TextPoint | null; empty
     last: () => lines.at(-1) ?? null,
     follow: (p) => follows.push(p),
     jump: (p) => jumps.push(p),
+    selection: (from, to) => {
+      selections.push([from, to]);
+      return over.noRange ? null : range;
+    },
+    comment: (r) => comments.push(r),
+    sound: (e) => sounds.push(e),
   });
-  return { cursor, steps, follows, jumps, seeds };
+  return { cursor, steps, follows, jumps, seeds, selections, comments, sounds, range };
 }
 
-const unplaced = (): PreviewCursorStore => ({ cursorLine: null, cursorPoint: null });
-const placed = (p: TextPoint): PreviewCursorStore => ({ cursorLine: p.line, cursorPoint: p });
+const unplaced = (): PreviewCursorStore => ({
+  cursorLine: null,
+  cursorPoint: null,
+  visualAnchor: null,
+  visualAnchorPoint: null,
+});
+const placed = (p: TextPoint): PreviewCursorStore => ({
+  ...unplaced(),
+  cursorLine: p.line,
+  cursorPoint: p,
+});
 
 describe("placeAt", () => {
   test("places the cursor on the point and follows it", () => {
@@ -208,11 +231,121 @@ describe("point()", () => {
   });
 
   test("resolves a cursorLine moved elsewhere to that line's start", () => {
-    const store: PreviewCursorStore = { cursorLine: 8, cursorPoint: at(2) };
+    const store: PreviewCursorStore = { ...unplaced(), cursorLine: 8, cursorPoint: at(2) };
     expect(build(store).cursor.point()).toEqual(at(5));
   });
 
   test("is null when unplaced", () => {
     expect(build(unplaced()).cursor.point()).toBe(null);
+  });
+});
+
+describe("visual mode and keyboard comments", () => {
+  test("V on a placed cursor anchors at its point, follows it and plays visualEntered", () => {
+    const store = placed(at(2));
+    const h = build(store);
+    h.cursor.enterVisualMode();
+    expect(store.visualAnchor).toBe(3);
+    expect(store.visualAnchorPoint).toEqual(at(2));
+    expect(h.follows).toEqual([at(2)]);
+    expect(h.sounds).toEqual(["visualEntered"]);
+  });
+
+  test("V on an unplaced cursor places it at the reading position and anchors there", () => {
+    const store = unplaced();
+    build(store).cursor.enterVisualMode();
+    expect(store.cursorLine).toBe(3);
+    expect(store.cursorPoint).toEqual(at(2));
+    expect(store.visualAnchorPoint).toEqual(at(2));
+  });
+
+  test("V with nothing to seed changes nothing and plays nothing", () => {
+    const store = unplaced();
+    const h = build(store, { seed: null });
+    h.cursor.enterVisualMode();
+    expect(store).toEqual(unplaced());
+    expect(h.sounds).toEqual([]);
+  });
+
+  test("V again exits visual mode and plays visualExited", () => {
+    const store = placed(at(2));
+    const h = build(store);
+    h.cursor.enterVisualMode();
+    h.cursor.enterVisualMode();
+    expect(store.visualAnchor).toBe(null);
+    expect(h.sounds).toEqual(["visualEntered", "visualExited"]);
+  });
+
+  test("selection() is null outside visual mode", () => {
+    const h = build(placed(at(2)));
+    expect(h.cursor.selection() === null).toBe(true);
+    expect(h.selections).toEqual([]);
+  });
+
+  test("selection() runs from the anchor down to the cursor", () => {
+    const h = build(placed(at(2)));
+    h.cursor.enterVisualMode();
+    h.cursor.moveCursor("down");
+    expect(h.cursor.selection() === h.range).toBe(true);
+    expect(h.selections).toEqual([[at(2), at(3)]]);
+  });
+
+  test("selection() runs from the cursor down to an anchor below it", () => {
+    const h = build(placed(at(2)));
+    h.cursor.enterVisualMode();
+    h.cursor.moveCursor("up");
+    h.cursor.selection();
+    expect(h.selections).toEqual([[at(1), at(2)]]);
+  });
+
+  test("an anchor whose point is not on its line reads as that line's start", () => {
+    for (const visualAnchorPoint of [null, at(2)]) {
+      const store = { ...placed(at(6)), visualAnchor: 6, visualAnchorPoint };
+      const h = build(store);
+      h.cursor.selection();
+      expect(h.selections).toEqual([[at(4), at(6)]]);
+    }
+  });
+
+  test("c outside visual mode comments on the cursor's visual line", () => {
+    const h = build(placed(at(2)));
+    h.cursor.comment();
+    expect(h.selections).toEqual([[at(2), at(2)]]);
+    expect(h.comments).toEqual([h.range]);
+  });
+
+  test("c on an unplaced cursor comments on the reading position's line", () => {
+    const h = build(unplaced());
+    h.cursor.comment();
+    expect(h.selections).toEqual([[at(2), at(2)]]);
+  });
+
+  test("c in visual mode comments on the selection and exits silently", () => {
+    const store = placed(at(3));
+    const h = build(store);
+    h.cursor.enterVisualMode();
+    h.cursor.moveCursor("up");
+    h.cursor.comment();
+    expect(h.selections).toEqual([[at(2), at(3)]]);
+    expect(h.comments).toEqual([h.range]);
+    expect(store.visualAnchor).toBe(null);
+    expect(h.sounds).toEqual(["visualEntered"]);
+  });
+
+  test("c with nothing to select opens no composer but still exits visual mode", () => {
+    const store = placed(at(2));
+    const h = build(store, { noRange: true });
+    h.cursor.enterVisualMode();
+    h.cursor.comment();
+    expect(h.comments).toEqual([]);
+    expect(store.visualAnchor).toBe(null);
+  });
+
+  test("reset() drops the anchor's column too", () => {
+    const store = placed(at(2));
+    const h = build(store);
+    h.cursor.enterVisualMode();
+    h.cursor.reset();
+    expect(store.visualAnchorPoint).toBe(null);
   });
 });

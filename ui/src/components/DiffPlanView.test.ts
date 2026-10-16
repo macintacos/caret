@@ -1030,13 +1030,13 @@ describe("DiffPlanView preview cursor", () => {
       [{ top: 0, bottom: 20, left: 0, right: 100 }] as unknown as DOMRectList;
   }
 
-  test("the preview runs the motions but not the line comments", async () => {
+  test("the preview runs the motions and the keyboard comments", async () => {
     await renderOnPreview();
     await until(() => live("motion.down"));
     expect(["motion.down", "commenting.comment", "commenting.visualLine"].map(live)).toEqual([
       true,
-      false,
-      false,
+      true,
+      true,
     ]);
   });
 
@@ -1047,6 +1047,44 @@ describe("DiffPlanView preview cursor", () => {
     expect(await until(() => enabled("commenting.clear") === true)).toBe(true);
     run("commenting.clear");
     expect(await until(() => enabled("commenting.clear") === false)).toBe(true);
+  });
+
+  // A heading [1,1] and a paragraph stored over lines 3–4; under stubLayout each block
+  // renders as one visual line.
+  const twoBlocks = "# H\n\nalpha one\nalpha two\n";
+  const label = (target: HTMLElement) => target.querySelector(".composer .label")?.textContent;
+
+  test("c on the preview comments on the lines the cursor's visual line covers", async () => {
+    stubLayout();
+    const { target } = await renderSlots(twoBlocks);
+    await until(() => live("commenting.comment"));
+    run("motion.top");
+    run("motion.down");
+    run("commenting.comment");
+    expect(await until(() => label(target) === "Lines 3–4")).toBe(true);
+  });
+
+  test("V, j, c on the preview comments across the selected visual lines", async () => {
+    stubLayout();
+    const { target } = await renderSlots(twoBlocks);
+    await until(() => live("commenting.visualLine"));
+    run("motion.top");
+    run("commenting.visualLine");
+    run("motion.down");
+    run("commenting.comment");
+    expect(await until(() => label(target) === "Lines 1–4")).toBe(true);
+    expect(enabled("commenting.clear")).toBe(false);
+  });
+
+  test("V on the preview shows the visual hint chip", async () => {
+    stubLayout();
+    const { target } = await renderOnPreview();
+    await until(() => live("commenting.visualLine"));
+    run("motion.top");
+    run("commenting.visualLine");
+    expect(await until(() => target.querySelector(".visual-hint") != null)).toBe(true);
+    run("commenting.clear");
+    expect(await until(() => target.querySelector(".visual-hint") == null)).toBe(true);
   });
 
   test("the source view runs the motions and the line comments", async () => {
@@ -1099,7 +1137,8 @@ describe("DiffPlanView preview cursor", () => {
     expect(await until(() => bandTop(target) !== before)).toBe(true);
   });
 
-  test("a visual selection does not survive a round trip through the preview", async () => {
+  test("a flip ends visual mode in either direction", async () => {
+    stubLayout();
     const { target } = render(DiffPlanView, props());
     await until(() => live("commenting.visualLine"));
     run("motion.top");
@@ -1107,8 +1146,12 @@ describe("DiffPlanView preview cursor", () => {
     expect(enabled("commenting.clear")).toBe(true);
     toggle(target)!.click();
     await until(() => target.querySelector(".plan-preview") != null);
+    expect(enabled("commenting.clear")).toBe(false);
+    run("motion.top");
+    run("commenting.visualLine");
+    expect(enabled("commenting.clear")).toBe(true);
     toggle(target)!.click();
-    await until(() => live("commenting.visualLine"));
+    await until(() => target.querySelector(".plan-preview") == null);
     expect(enabled("commenting.clear")).toBe(false);
   });
 

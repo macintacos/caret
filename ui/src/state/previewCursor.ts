@@ -1,6 +1,7 @@
-// The plan preview's keyboard cursor: the source view's motions over visual lines. A
-// DOM-free factory over the same store planKeyboard drives, with the preview's geometry
-// injected, so the cursor's truth stays `cursorLine` and a flip carries it unchanged.
+// The plan preview's keyboard cursor: the source view's motions, visual mode and comment
+// key over visual lines. A DOM-free factory over the same store planKeyboard drives, with
+// the preview's geometry injected, so the cursor's truth stays `cursorLine` and a flip
+// carries it unchanged.
 
 import {
   blankLinesOf,
@@ -10,6 +11,7 @@ import {
   resolveCursorLine,
 } from "$lib/diffview/lineCursor.ts";
 import type { TextPoint } from "$lib/previewLines.ts";
+import type { SoundEvent } from "$lib/sound.ts";
 
 export interface PreviewCursorStore {
   /** The cursor's source line — the same field PlanKeyboardStore holds. */
@@ -17,6 +19,10 @@ export interface PreviewCursorStore {
   /** The preview's finer position on that line. Counts only while its line equals
    * cursorLine; whatever moves cursorLine elsewhere and back revives it unless it clears it. */
   cursorPoint: TextPoint | null;
+  /** The visual anchor's source line — the same field PlanKeyboardStore holds. */
+  visualAnchor: number | null;
+  /** The anchor's finer position. Counts only while its line equals visualAnchor. */
+  visualAnchorPoint: TextPoint | null;
 }
 
 export interface PreviewCursorDeps {
@@ -37,6 +43,12 @@ export interface PreviewCursorDeps {
   follow(p: TextPoint): void;
   /** Scrolls `p` to rest near the top. */
   jump(p: TextPoint): void;
+  /** The text of the visual lines from `from`'s through `to`'s, `from` not after `to`. */
+  selection(from: TextPoint, to: TextPoint): Range | null;
+  /** Opens the composer on the source lines `range` covers. */
+  comment(range: Range): void;
+  /** Play a moment's cue. Optional so a test drives the factory silently. */
+  sound?: (event: SoundEvent) => void;
 }
 
 export interface PreviewCursor {
@@ -50,6 +62,14 @@ export interface PreviewCursor {
   placeAt(p: TextPoint): void;
   /** Drops the preview's column, so a content switch leaves no point behind. */
   reset(): void;
+  /** The visual selection's text, null outside visual mode. */
+  selection(): Range | null;
+  /** `V`: toggles visual mode, anchoring at the cursor — placed at the reading position
+   * when unplaced. */
+  enterVisualMode(): void;
+  /** `c`: comments on the cursor's visual line, the reading position's when unplaced,
+   * or on the selection, exiting visual mode. */
+  comment(): void;
 }
 
 type LineMotion = Extract<CursorMotion, "nextHeading" | "prevHeading" | "nextBlank" | "prevBlank">;
@@ -58,15 +78,20 @@ function before(a: TextPoint, b: TextPoint): boolean {
   return a.line < b.line || (a.line === b.line && a.column < b.column);
 }
 
+function ordered(a: TextPoint, b: TextPoint): [TextPoint, TextPoint] {
+  return before(b, a) ? [b, a] : [a, b];
+}
+
 export function createPreviewCursor(
   store: PreviewCursorStore,
   deps: PreviewCursorDeps,
 ): PreviewCursor {
-  function point(): TextPoint | null {
-    const { cursorLine, cursorPoint } = store;
-    if (cursorLine == null) return null;
-    return cursorPoint?.line === cursorLine ? cursorPoint : deps.pointForLine(cursorLine);
+  function pointOf(line: number | null, p: TextPoint | null): TextPoint | null {
+    if (line == null) return null;
+    return p?.line === line ? p : deps.pointForLine(line);
   }
+  const point = () => pointOf(store.cursorLine, store.cursorPoint);
+  const anchorPoint = () => pointOf(store.visualAnchor, store.visualAnchorPoint);
 
   // A blank line renders nothing, so its point is the next text line's start — which for
   // `{` at a paragraph's start is the cursor itself. Re-resolving from the target line
@@ -130,6 +155,7 @@ export function createPreviewCursor(
 
     reset() {
       store.cursorPoint = null;
+      store.visualAnchorPoint = null;
     },
 
     moveCursor(motion) {
@@ -140,6 +166,36 @@ export function createPreviewCursor(
 
     placeAt(p) {
       land(p);
+    },
+
+    selection() {
+      const anchor = anchorPoint();
+      if (anchor == null) return null;
+      const p = point();
+      return p == null ? null : deps.selection(...ordered(anchor, p));
+    },
+
+    enterVisualMode() {
+      if (store.visualAnchor != null) {
+        store.visualAnchor = null;
+        deps.sound?.("visualExited");
+        return;
+      }
+      const p = point() ?? deps.seed();
+      if (p == null) return;
+      land(p);
+      store.visualAnchor = p.line;
+      store.visualAnchorPoint = p;
+      deps.sound?.("visualEntered");
+    },
+
+    comment() {
+      const p = point() ?? deps.seed();
+      const anchor = anchorPoint();
+      store.visualAnchor = null;
+      if (p == null) return;
+      const range = deps.selection(...ordered(anchor ?? p, p));
+      if (range != null) deps.comment(range);
     },
   };
 }

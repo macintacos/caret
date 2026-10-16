@@ -123,15 +123,18 @@
     readingPoint,
     stepVisualLine,
     visualLineBox,
+    visualLineRange,
   } from "$lib/previewLines.ts";
   import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
   import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
   import {
     clearCommentHighlight,
+    clearVisualSelection,
     commentSlotIndex,
     createSlotReserve,
     groupBySlot,
     paintCommentHighlight,
+    paintVisualSelection,
     previewSlotBoxes,
     spanRanges,
   } from "$lib/previewComments.ts";
@@ -1432,14 +1435,15 @@
   // unit-testable factory (state/planKeyboard). The component owns the reactive store —
   // the runes live here — and the factory sequences the transitions over it. The store
   // is shared with the preview cursor (state/previewCursor), which keeps `cursorLine`
-  // and adds `cursorPoint`; no cursor on compare. The DOM effects are injected: the
-  // rendered lines, heading lines, the reading position, the half-page size,
-  // scroll-follow, the match space and its landing, the shared jump, the composer open,
-  // and focus/blur.
+  // and adds `cursorPoint` and `visualAnchorPoint`; no cursor on compare. The DOM
+  // effects are injected: the rendered lines, heading lines, the reading position, the
+  // half-page size, scroll-follow, the match space and its landing, the shared jump, the
+  // composer open, and focus/blur.
   let keyboardStore = $state<PlanKeyboardStore & PreviewCursorStore>({
     cursorLine: null,
     cursorPoint: null,
     visualAnchor: null,
+    visualAnchorPoint: null,
     searchOpen: false,
     searchCommitted: false,
     searchQuery: "",
@@ -1519,12 +1523,18 @@
       const block = previewBlock(p.line);
       if (previewEl && block) scrollRowIntoView(previewEl, block);
     },
+    selection: (from, to) => {
+      const geometry = previewGeometry();
+      return geometry && visualLineRange(geometry.root, geometry.map, from, to);
+    },
+    comment: commentOnPreview,
+    sound: sound.play,
   });
 
   // The band on screen and the source line it marks.
   let previewCursorBox = $state<({ line: number } & BandBox) | null>(null);
   // Bumped, rAF-throttled, whenever the preview's layout may have moved the band or
-  // collapsed the search highlight's ranges.
+  // collapsed a painted highlight's ranges (search, the visual selection).
   let previewLayoutRev = $state(0);
   $effect(() => {
     const root = previewEl;
@@ -1564,6 +1574,17 @@
     const lineHeight = Number.parseFloat(getComputedStyle(previewEl).lineHeight);
     const band = cursorBand(previewEl, scrollEl, map, p, lineHeight);
     previewCursorBox = band && { line: p.line, ...band };
+  });
+  $effect(() => {
+    void previewLayoutRev;
+    // An open composer hides the selection, as the source's `selectedRange` does.
+    const range =
+      runs("keyboardComments") && surface === "preview" && pending == null
+        ? previewCursor.selection()
+        : null;
+    if (range === null) return;
+    paintVisualSelection(range);
+    return clearVisualSelection;
   });
 
   // The live visual selection, ascending — mirrored into SourceView's amber band through
@@ -1763,15 +1784,18 @@
 
   $effect(() => {
     if (!runs("keyboardComments")) return;
+    const onPreview = surface === "preview";
+    const comment = onPreview ? previewCursor.comment : keyboard.commentCursorLine;
+    const enterVisualMode = onPreview ? previewCursor.enterVisualMode : keyboard.enterVisualMode;
     const offs: Array<() => void> = [];
     // Commenting on the focused line / a keyboard-selected range (EXC-790): live entries
     // bound over EXC-786's reservations, with the motions' editing-context guard. c
-    // comments the cursor line (or, in visual mode, the whole selection); V enters visual
-    // line-select.
+    // comments the cursor line — on the preview, the cursor's visual line — or, in visual
+    // mode, the whole selection; V enters visual line-select.
     offs.push(
       shortcuts.register(
         bind("commenting.comment", {
-          run: () => keyboard.commentCursorLine(),
+          run: () => comment(),
           enabled: () => !defaultIsEditingContext(),
         }),
       ),
@@ -1779,7 +1803,7 @@
     offs.push(
       shortcuts.register(
         bind("commenting.visualLine", {
-          run: () => keyboard.enterVisualMode(),
+          run: () => enterVisualMode(),
           enabled: () => !defaultIsEditingContext(),
         }),
       ),
@@ -1915,9 +1939,10 @@
     if (next !== planView) {
       commenting.cancel(liveText);
       capturePlace();
+      // The surfaces select different units — source lines against visual lines — so a
+      // carried selection would silently change its extent.
+      keyboardStore.visualAnchor = null;
     }
-    // The preview can neither show nor cancel a visual selection.
-    if (next === "preview") keyboardStore.visualAnchor = null;
     planView = next;
     writePlanView(next);
   }
@@ -2200,6 +2225,17 @@
       {#snippet draftMarker(scratch: ComposerScratch)}
         <SourceScratchMarker text={scratch.text} onResume={() => resumeScratch(scratch.key)} />
       {/snippet}
+      <!-- Visual line-select affordance (EXC-790): while V mode is active, a quiet
+           bottom-pinned chip names the two keys — c commits the selection to a
+           comment, Esc cancels — rendered as shadcn Kbd keycaps. Shares the
+           drag-hint's chip chrome; the selection's own highlight already shows the range. -->
+      {#snippet visualHint()}
+        {#if keyboardStore.visualAnchor != null && showShortcutHints}
+          <div class="visual-hint" role="note">
+            Selecting lines — <Kbd class="kbd-sm">c</Kbd> comment · <Kbd class="kbd-sm">Esc</Kbd> cancel
+          </div>
+        {/if}
+      {/snippet}
       {#if showDiff}
         <!-- Compare mode: a diff between the selected version pair. Base is the
              reference version (the default base is the current version) and renders
@@ -2284,6 +2320,7 @@
             style:height="{previewCursorBox.height}px"
           ></div>
         {/if}
+        {@render visualHint()}
       {:else}
         <!-- Live range readout: a zero-height sticky rail rendered first so it pins to
              the top of the scroll viewport from scroll position 0 without reflowing
@@ -2397,15 +2434,7 @@
         {#if hintVisible}
           <div class="drag-hint" role="note">Drag across lines to comment on a range — hold Shift to select text.</div>
         {/if}
-        <!-- Visual line-select affordance (EXC-790): while V mode is active, a quiet
-             bottom-pinned chip names the two keys — c commits the selection to a
-             comment, Esc cancels — rendered as shadcn Kbd keycaps. Shares the
-             drag-hint's chip chrome; the amber selection band already shows the range. -->
-        {#if keyboardStore.visualAnchor != null && showShortcutHints}
-          <div class="visual-hint" role="note">
-            Selecting lines — <Kbd class="kbd-sm">c</Kbd> comment · <Kbd class="kbd-sm">Esc</Kbd> cancel
-          </div>
-        {/if}
+        {@render visualHint()}
       {/if}
     </div>
   </div>
