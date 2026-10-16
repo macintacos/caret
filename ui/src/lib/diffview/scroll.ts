@@ -266,18 +266,23 @@ export function followCursorLine(container: HTMLElement, line: number): boolean 
   const scroller = nearestScrollParent(container);
   // No identifiable scroll container: defer to scrollToLine's own fallback.
   if (scroller == null) return scrollToLine(container, line);
-  const rowRect = row.getBoundingClientRect();
+  followBox(scroller, row.getBoundingClientRect());
+  return true;
+}
+
+/** The scrolloff follow over a viewport `box`: scrolls `scroller` just enough to keep
+ * it `CURSOR_SCROLLOFF` box-heights inside both edges. */
+export function followBox(scroller: HTMLElement, box: { top: number; bottom: number }): void {
   const hostRect = scroller.getBoundingClientRect();
   const delta = followScrollDelta({
-    rowTop: rowRect.top,
-    rowBottom: rowRect.bottom,
-    rowHeight: rowRect.height,
+    rowTop: box.top,
+    rowBottom: box.bottom,
+    rowHeight: box.bottom - box.top,
     viewTop: hostRect.top,
     viewBottom: hostRect.bottom,
     scrolloff: CURSOR_SCROLLOFF,
   });
   if (delta !== 0) animateScrollTop(scroller, scroller.scrollTop + delta, FOLLOW_ANIM_MS);
-  return true;
 }
 
 /** Breathing room (px) below a revealed composer card, so its action row isn't
