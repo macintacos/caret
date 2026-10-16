@@ -5,6 +5,7 @@ import type { RectReader } from "$lib/diffview/codeChrome.ts";
 import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
 import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
 import {
+  clampToRoot,
   clearCommentHighlight,
   commentSlotIndex,
   createSlotReserve,
@@ -154,5 +155,66 @@ describe("previewSlotBoxes", () => {
     expect(previewSlotBoxes(root, scroller, new Map([[1, 12]]), read)).toEqual(
       new Map([[1, { top: 103, left: 92, width: 200 }]]),
     );
+  });
+});
+
+describe("clampToRoot", () => {
+  function withSibling(text: string) {
+    const { root, map } = mount(text);
+    const sibling = document.createElement("div");
+    sibling.textContent = "slot";
+    root.after(sibling);
+    mounted.push(sibling);
+    return { root, map, sibling };
+  }
+
+  test("returns a range inside the root unchanged", () => {
+    const { root } = mount("one\ntwo");
+    const range = document.createRange();
+    range.selectNodeContents(root);
+
+    const clamped = clampToRoot(range, root, null);
+
+    expect(clamped.compareBoundaryPoints(Range.START_TO_START, range)).toBe(0);
+    expect(clamped.compareBoundaryPoints(Range.END_TO_END, range)).toBe(0);
+  });
+
+  test("ends a range released past the root at the release block's end", () => {
+    const { root, map, sibling } = withSibling("one\ntwo\n\nthree");
+    const range = document.createRange();
+    range.setStart(root, 0);
+    range.setEnd(sibling, 1);
+
+    const clamped = clampToRoot(range, root, root.children[0] as Element);
+
+    expect(map.linesOf(clamped)).toEqual({ start: 1, end: 2 });
+  });
+
+  test("ends a range released past the root with no block at the root's end", () => {
+    const { root, sibling } = withSibling("one\n\ntwo");
+    const range = document.createRange();
+    range.setStart(root, 0);
+    range.setEnd(sibling, 1);
+
+    const clamped = clampToRoot(range, root, null);
+
+    expect(clamped.endContainer === root).toBe(true);
+    expect(clamped.endOffset).toBe(root.childNodes.length);
+  });
+
+  test("starts a range begun before the root at the root's start", () => {
+    const { root } = mount("one\n\ntwo");
+    const before = document.createElement("div");
+    before.textContent = "above";
+    root.before(before);
+    mounted.push(before);
+    const range = document.createRange();
+    range.setStart(before, 0);
+    range.setEnd(root, root.childNodes.length);
+
+    const clamped = clampToRoot(range, root, null);
+
+    expect(clamped.startContainer === root).toBe(true);
+    expect(clamped.startOffset).toBe(0);
   });
 });

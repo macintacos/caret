@@ -165,20 +165,20 @@ describe("PlanPreview", () => {
   });
 });
 
+const PLAN = "See `src/a.ts` and [the doc](src/b.ts).\n";
+
+function refsFor(text: string): PreviewFileRef[] {
+  const layer = buildLinkLayer(text);
+  const refs: FileRefSpanMap = new Map();
+  for (const [line, spans] of mergeFileRefSpans(buildFileRefLayer(layer.text), layer.fileRefs))
+    refs.set(
+      line,
+      spans.map((s) => ({ ...s, kind: "file" as const })),
+    );
+  return previewFileRefs(refs, layer.text);
+}
+
 describe("PlanPreview file references", () => {
-  const PLAN = "See `src/a.ts` and [the doc](src/b.ts).\n";
-
-  function refsFor(text: string): PreviewFileRef[] {
-    const layer = buildLinkLayer(text);
-    const refs: FileRefSpanMap = new Map();
-    for (const [line, spans] of mergeFileRefSpans(buildFileRefLayer(layer.text), layer.fileRefs))
-      refs.set(
-        line,
-        spans.map((s) => ({ ...s, kind: "file" as const })),
-      );
-    return previewFileRefs(refs, layer.text);
-  }
-
   const tags = (target: HTMLElement) =>
     [...target.querySelectorAll(".plan-preview [data-file-ref]")].map((el) => el.textContent);
 
@@ -243,7 +243,7 @@ describe("PlanPreview file references", () => {
     expect(click.defaultPrevented).toBe(true);
   });
 
-  test("a click on plain text opens nothing", () => {
+  test("a click on plain text opens no file", () => {
     let calls = 0;
     const { target, flush } = render(PlanPreview, {
       html: renderPlanMarkdown(PLAN).html,
@@ -297,3 +297,142 @@ function colours(code: Element): Set<string> {
     [...code.querySelectorAll<HTMLElement>("[style]")].map((span) => span.style.color),
   );
 }
+
+describe("PlanPreview text comments", () => {
+  const realElementsFromPoint = document.elementsFromPoint;
+
+  afterEach(() => {
+    document.getSelection()?.removeAllRanges();
+    document.elementsFromPoint = realElementsFromPoint;
+  });
+
+  function setup(text: string) {
+    const ranges: Range[] = [];
+    let refClicks = 0;
+    const { target, flush } = render(PlanPreview, {
+      html: renderPlanMarkdown(text).html,
+      fileRefs: refsFor(text),
+      onFileRefClick: () => refClicks++,
+      onTextComment: (range: Range) => ranges.push(range),
+    });
+    flush();
+    const root = target.querySelector(".plan-preview") as HTMLElement;
+    return { root, ranges, refClicks: () => refClicks };
+  }
+
+  function select(node: Node, start: number, end = start): Range {
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, end);
+    const selection = document.getSelection() as Selection;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return range;
+  }
+
+  const click = (el: Element) =>
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+  function drag(root: Element, select: () => void, init: PointerEventInit = {}) {
+    document.elementsFromPoint = () => [];
+    root.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, ...init }));
+    select();
+    window.dispatchEvent(new PointerEvent("pointerup", { button: 0, ...init }));
+  }
+
+  const textOf = (root: Element, selector: string) =>
+    document
+      .createTreeWalker(root.querySelector(selector) as Element, NodeFilter.SHOW_TEXT)
+      .nextNode() as Node;
+
+  test("a click on plain text reports the collapsed selection it leaves", () => {
+    const { root, ranges } = setup("Plain words here.\n");
+    const node = textOf(root, "p");
+    select(node, 3);
+
+    click(root.querySelector("p") as Element);
+
+    expect(ranges.length).toBe(1);
+    expect(ranges[0]?.collapsed).toBe(true);
+    expect(ranges[0]?.startContainer === node).toBe(true);
+    expect(ranges[0]?.startOffset).toBe(3);
+  });
+
+  test("a click on a file reference opens the file instead", () => {
+    const { root, ranges, refClicks } = setup(PLAN);
+    const ref = root.querySelector("[data-file-ref]") as Element;
+    select(ref.firstChild as Node, 1);
+
+    click(ref);
+
+    expect(refClicks()).toBe(1);
+    expect(ranges.length).toBe(0);
+  });
+
+  test("a click inside a link, button or input reports nothing", () => {
+    const { root, ranges } = setup("A [link](https://x.test) and - [ ] box.\n\n- [ ] task\n");
+    const button = document.createElement("button");
+    button.textContent = "go";
+    root.querySelector("p")?.append(button);
+
+    for (const el of [root.querySelector("a"), button, root.querySelector("input")] as Element[]) {
+      select(el.firstChild ?? el, 0);
+      click(el);
+    }
+
+    expect(ranges.length).toBe(0);
+  });
+
+  test("a click that leaves a selection reports nothing", () => {
+    const { root, ranges } = setup("Plain words here.\n");
+    select(textOf(root, "p"), 0, 5);
+
+    click(root.querySelector("p") as Element);
+
+    expect(ranges.length).toBe(0);
+  });
+
+  test("a drag that selects text reports the selection", () => {
+    const { root, ranges } = setup("Plain words here.\n");
+    let selected: Range | undefined;
+
+    drag(root, () => {
+      selected = select(textOf(root, "p"), 0, 5);
+    });
+
+    expect(ranges.map((r) => r.toString())).toEqual([String(selected)]);
+  });
+
+  test("a Shift drag leaves the native selection alone", () => {
+    const { root, ranges } = setup("Plain words here.\n");
+
+    drag(root, () => select(textOf(root, "p"), 0, 5), { shiftKey: true });
+
+    expect(ranges.length).toBe(0);
+  });
+
+  test("a press that leaves the selection collapsed reports nothing", () => {
+    const { root, ranges } = setup("Plain words here.\n");
+
+    drag(root, () => select(textOf(root, "p"), 2));
+
+    expect(ranges.length).toBe(0);
+  });
+
+  test("a secondary-button drag reports nothing", () => {
+    const { root, ranges } = setup("Plain words here.\n");
+
+    drag(root, () => select(textOf(root, "p"), 0, 5), { button: 2 });
+
+    expect(ranges.length).toBe(0);
+  });
+
+  test("a press inside a standing selection does not report it again", () => {
+    const { root, ranges } = setup("Plain words here.\n");
+    select(textOf(root, "p"), 0, 5);
+
+    drag(root, () => {});
+
+    expect(ranges.length).toBe(0);
+  });
+});

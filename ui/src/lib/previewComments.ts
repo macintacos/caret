@@ -59,6 +59,19 @@ export function paintCommentHighlight(ranges: readonly Range[]): void {
   CSS.highlights.set(HIGHLIGHT, new Highlight(...ranges));
 }
 
+/** `range` with any end outside `root` pulled back inside it: a start to the root's start,
+ * an end to the end of `releaseBlock` (the root child the pointer was released beside), or
+ * of the root without one — so a drag that ends over a slot anchors to that block's lines. */
+export function clampToRoot(range: Range, root: Element, releaseBlock: Element | null): Range {
+  const clamped = range.cloneRange();
+  if (!root.contains(clamped.startContainer)) clamped.setStart(root, 0);
+  if (!root.contains(clamped.endContainer)) {
+    const end = releaseBlock ?? root;
+    clamped.setEnd(end, end.childNodes.length);
+  }
+  return clamped;
+}
+
 /** Removes the comment highlight; a no-op without the Custom Highlight API. */
 export function clearCommentHighlight(): void {
   if (!highlightsSupported()) return;

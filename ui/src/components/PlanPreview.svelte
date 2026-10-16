@@ -4,12 +4,14 @@
   // source-mapped features to find. DiffPlanView decides which text and when; this mounts
   // it, sets what HTML cannot carry, highlights its code blocks once each has mounted
   // plain, marks the soft-wrapped ones, tags the resolved file references and opens them
-  // on click, and styles it.
+  // on click, reports a plain click or a text selection for a comment, and styles it.
+  import { shouldCommentOnLineClick } from "$lib/diffview/annotationSlot.ts";
   import { FILE_ICON_MASK, FOLDER_ICON_MASK } from "$lib/diffview/coreStyles.ts";
   import type { FileRefSpan } from "$lib/diffview/fileRefs.ts";
   import { highlightTokens } from "$lib/diffview/highlight.ts";
   import { hideTooltip, showTooltip } from "$lib/diffview/linkInteractions.ts";
   import { applyPreviewReflow, highlightPreviewCode } from "$lib/previewCode.ts";
+  import { clampToRoot } from "$lib/previewComments.ts";
   import { type PreviewFileRef, tagPreviewFileRefs } from "$lib/previewRefs.ts";
   import { type ThemeId, themeFor } from "$lib/theme.ts";
 
@@ -30,6 +32,9 @@
     fileRefs?: readonly PreviewFileRef[];
     /** A tagged reference was clicked. */
     onFileRefClick?: (ref: FileRefSpan, el: HTMLElement) => void;
+    /** A plain click (collapsed) or a text selection, clamped to the root; DiffPlanView
+     * maps it to source lines. */
+    onTextComment?: (range: Range) => void;
   }
   let {
     html,
@@ -39,6 +44,7 @@
     root = $bindable(),
     fileRefs = [],
     onFileRefClick,
+    onTextComment,
   }: Props = $props();
 
   $effect(() => {
@@ -99,11 +105,58 @@
 
   // preventDefault so a reference inside a link opens the file, not the URL — as in the
   // source view, where a reference click also wins over its link.
-  function openRef(event: MouseEvent) {
+  function onRootClick(event: MouseEvent) {
     const hit = refAt(event.target);
-    if (!hit) return;
-    event.preventDefault();
-    onFileRefClick?.(hit[1], hit[0]);
+    if (hit) {
+      event.preventDefault();
+      onFileRefClick?.(hit[1], hit[0]);
+      return;
+    }
+    const selection = document.getSelection();
+    const interactive =
+      event.target instanceof Element && event.target.closest(INTERACTIVE) !== null;
+    if (
+      onTextComment &&
+      selection?.rangeCount &&
+      root?.contains(selection.anchorNode) &&
+      shouldCommentOnLineClick({
+        numberColumn: false,
+        linkConsumed: interactive,
+        selectionCollapsed: selection.isCollapsed,
+      })
+    )
+      onTextComment(selection.getRangeAt(0));
+  }
+
+  const INTERACTIVE = "a, button, input, label, select, summary, textarea";
+
+  const selectedRange = () => {
+    const selection = document.getSelection();
+    return selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+  };
+  const sameRange = (a: Range, b: Range) =>
+    a.compareBoundaryPoints(Range.START_TO_START, b) === 0 &&
+    a.compareBoundaryPoints(Range.END_TO_END, b) === 0;
+
+  // Shift bows out so the browser selects natively — the copy escape hatch the source
+  // view's body drag has (lineDrag.ts). A press inside an existing selection leaves it
+  // standing until mouseup, so only a selection this gesture changed is reported. The
+  // release listens on window: a drag can end over a slot, outside the root.
+  function armSelection(event: PointerEvent) {
+    if (!onTextComment || event.button !== 0 || event.shiftKey) return;
+    const before = selectedRange();
+    window.addEventListener(
+      "pointerup",
+      (up) => {
+        const range = selectedRange();
+        if (!root || !range || range.collapsed || (before && sameRange(range, before))) return;
+        const releaseBlock =
+          document.elementsFromPoint(up.clientX, up.clientY).find((el) => el.parentElement === root) ??
+          null;
+        onTextComment?.(clampToRoot(range, root, releaseBlock));
+      },
+      { once: true },
+    );
   }
 
   function showRefTarget(event: PointerEvent) {
@@ -124,7 +177,8 @@
   class="plan-preview"
   bind:this={root}
   onerrorcapture={hideFailedImage}
-  onclick={openRef}
+  onclick={onRootClick}
+  onpointerdown={armSelection}
   onpointerover={showRefTarget}
   onpointerout={hideRefTarget}
   style:--file-ref-icon={FILE_ICON_MASK}
