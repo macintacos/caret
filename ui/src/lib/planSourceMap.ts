@@ -1,8 +1,9 @@
 // Maps the mounted preview's text back to the plan's source lines, from the empty
 // `[data-source-line]` markers `renderPlanMarkdown` emits. Offsets count all of the root's
-// text and are resolved against the live DOM at lookup time: the text nodes are indexed
-// once and each one a lookup reads is checked on use, so replacing a code block's markup
-// with spans of the same text re-indexes and keeps every answer valid.
+// text and are resolved against the live DOM at lookup time: the text nodes are indexed at
+// build, and a lookup re-indexes when a node it reads was detached or resized. A mutation
+// may replace, split, merge or wrap text nodes, keeping the root's text in order; it never
+// edits an indexed node's `data` in place or reorders nodes.
 import type { SourceSpan } from "$lib/planMarkdown.ts";
 
 export interface PlanSourceMap {
@@ -36,8 +37,8 @@ export interface PlanSourceMap {
   textPoint(node: Node, offset: number): TextPoint | null;
 }
 
-/** A cursor position on the preview: a source line, and a character offset into the
- * text that line renders (`PlanSourceMap.rangeOf(line)`). */
+/** A point in the preview's text: a source line, and a column counted from that line's
+ * start (`offsetOfLine`); `domPoint` lets the column run past the line's own text. */
 export interface TextPoint {
   line: number;
   column: number;
@@ -96,34 +97,42 @@ function collectRuns(root: Node): { runs: Run[]; length: number } {
   return { runs, length: offset };
 }
 
-/** The root's text nodes in document order: where each one's text ends, and each one's place. */
+/** A text node under the root, and where its text starts and ends in the root's text. */
+interface IndexedText {
+  node: Text;
+  start: number;
+  end: number;
+}
+
+/** The root's text nodes in document order, and each node's record. */
 interface TextIndex {
-  nodes: Text[];
-  ends: number[];
-  places: Map<Text, number>;
+  texts: IndexedText[];
+  byNode: Map<Text, IndexedText>;
 }
 
 function indexText(root: Element): TextIndex {
-  const index: TextIndex = { nodes: [], ends: [], places: new Map() };
+  const textIndex: TextIndex = { texts: [], byNode: new Map() };
   const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let end = 0;
+  let start = 0;
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
     const text = node as Text;
-    end += text.data.length;
-    index.places.set(text, index.nodes.length);
-    index.nodes.push(text);
-    index.ends.push(end);
+    const record = { node: text, start, end: start + text.data.length };
+    textIndex.texts.push(record);
+    textIndex.byNode.set(text, record);
+    start = record.end;
   }
-  return index;
+  return textIndex;
 }
 
-/** The first index below `count` that passes, where `passes` is false then true; `count` when none does. */
-function firstPassing(count: number, passes: (index: number) => boolean): number {
+/** The first item that passes, where `passes` is false then true; `items.length` when none
+ * does. */
+function firstPassing<T>(items: readonly T[], passes: (item: T) => boolean): number {
   let lo = 0;
-  let hi = count;
+  let hi = items.length;
   while (lo < hi) {
     const mid = (lo + hi) >>> 1;
-    if (passes(mid)) hi = mid;
+    if (passes(items[mid] as T))
+      hi = mid; // mid < hi <= items.length
     else lo = mid + 1;
   }
   return lo;
@@ -149,83 +158,60 @@ const STALE = Symbol("stale");
  * Build once per version; it reads no layout. */
 export function createPlanSourceMap(root: Element): PlanSourceMap {
   const { runs, length } = collectRuns(root);
-  const firstRun = new Map<number, number>();
-  runs.forEach((run, index) => {
-    if (!firstRun.has(run.line)) firstRun.set(run.line, index);
+  /** Each line's rendered text: from its first run's offset to the run after it. */
+  const extents = new Map<number, { start: number; end: number }>();
+  runs.forEach((run, i) => {
+    if (!extents.has(run.line))
+      extents.set(run.line, { start: run.offset, end: runs[i + 1]?.offset ?? length });
   });
-  let index = indexText(root);
+  let textIndex = indexText(root);
 
-  const startOf = (place: number): number => index.ends[place - 1] ?? 0;
-  const isFresh = (place: number): boolean => {
-    const node = index.nodes[place] as Text;
-    return (
-      root.contains(node) && node.data.length === (index.ends[place] as number) - startOf(place)
-    );
-  };
-  // Mutations keep the root's text, so a stale read means some text node moved: re-index once.
-  const fresh = <T>(lookup: () => T | typeof STALE): T | null => {
+  const isFresh = ({ node, start, end }: IndexedText): boolean =>
+    root.contains(node) && node.data.length === end - start;
+  // Mutations keep the root's text, so one re-index makes every node a lookup reads fresh; a
+  // second STALE cannot happen.
+  const withFreshIndex = <T>(lookup: () => T | typeof STALE): T | null => {
     const answer = lookup();
     if (answer !== STALE) return answer;
-    index = indexText(root);
+    textIndex = indexText(root);
     const retried = lookup();
     return retried === STALE ? null : retried;
   };
 
   const resolve = (offset: number, side: "before" | "after"): [Text, number] | null =>
-    fresh(() => {
-      const place = firstPassing(index.ends.length, (i) =>
-        side === "after" ? offset < (index.ends[i] as number) : offset <= (index.ends[i] as number),
-      );
-      if (place === index.nodes.length) return null;
-      if (!isFresh(place)) return STALE;
-      return [index.nodes[place] as Text, offset - startOf(place)];
+    withFreshIndex(() => {
+      const { texts } = textIndex;
+      const hit =
+        texts[firstPassing(texts, (t) => (side === "after" ? offset < t.end : offset <= t.end))];
+      if (hit === undefined) return null;
+      if (!isFresh(hit)) return STALE;
+      return [hit.node, offset - hit.start];
     });
 
   const offsetAt = (node: Node, offset: number): number | null => {
     if (!root.contains(node)) return null;
-    return fresh(() => {
+    return withFreshIndex(() => {
       const text = node instanceof Text ? node : textFrom(root, node, offset);
       if (text === null) return length;
-      const place = index.places.get(text);
-      if (place === undefined || !isFresh(place)) return STALE;
-      return startOf(place) + (text === node ? offset : 0);
+      const hit = textIndex.byNode.get(text);
+      if (hit === undefined || !isFresh(hit)) return STALE;
+      return hit.start + (text === node ? offset : 0);
     });
   };
 
   const lineAtOffset = (offset: number): number | null => {
     if (length === 0) return null;
     const at = Math.min(offset, length - 1);
-    const next = firstPassing(runs.length, (i) => (runs[i] as Run).offset > at);
+    const next = firstPassing(runs, (run) => run.offset > at);
     return (runs[next - 1] ?? runs[0])?.line ?? null;
   };
 
-  const offsetOfLine = (line: number): number | null => {
-    const at = firstRun.get(line);
-    return at === undefined ? null : (runs[at]?.offset ?? null);
-  };
+  const offsetOfLine = (line: number): number | null => extents.get(line)?.start ?? null;
 
   return {
     lineAt(node, offset) {
       const at = offsetAt(node, offset);
       return at === null ? null : lineAtOffset(at);
-    },
-    domPoint(p, side) {
-      const origin = offsetOfLine(p.line);
-      return origin === null ? null : resolve(origin + p.column, side);
-    },
-    clampedPoint(p) {
-      const at = firstRun.get(p.line);
-      const run = at === undefined ? undefined : runs[at];
-      if (at === undefined || run === undefined) return null;
-      const lineLength = (runs[at + 1]?.offset ?? length) - run.offset;
-      return resolve(run.offset + Math.min(p.column, Math.max(lineLength - 1, 0)), "after");
-    },
-    textPoint(node, offset) {
-      const at = offsetAt(node, offset);
-      const line = at === null ? null : lineAtOffset(at);
-      if (at === null || line === null) return null;
-      const origin = offsetOfLine(line);
-      return { line, column: origin === null ? 0 : Math.max(at - origin, 0) };
     },
     linesOf(range) {
       const rangeStart = offsetAt(range.startContainer, range.startOffset);
@@ -240,11 +226,10 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
       return start === null || end === null ? null : { start, end };
     },
     rangeOf(line) {
-      const at = firstRun.get(line);
-      const run = at === undefined ? undefined : runs[at];
-      if (at === undefined || run === undefined) return null;
-      const start = resolve(run.offset, "after");
-      const end = resolve(runs[at + 1]?.offset ?? length, "before");
+      const extent = extents.get(line);
+      if (extent === undefined) return null;
+      const start = resolve(extent.start, "after");
+      const end = resolve(extent.end, "before");
       if (start === null || end === null) return null;
       const range = root.ownerDocument.createRange();
       range.setStart(...start);
@@ -253,5 +238,22 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
     },
     lineAtOffset,
     offsetOfLine,
+    domPoint(p, side) {
+      const origin = offsetOfLine(p.line);
+      return origin === null ? null : resolve(origin + p.column, side);
+    },
+    clampedPoint(p) {
+      const extent = extents.get(p.line);
+      if (extent === undefined) return null;
+      const last = Math.max(extent.end - extent.start - 1, 0);
+      return resolve(extent.start + Math.min(p.column, last), "after");
+    },
+    textPoint(node, offset) {
+      const at = offsetAt(node, offset);
+      const line = at === null ? null : lineAtOffset(at);
+      if (at === null || line === null) return null;
+      const origin = offsetOfLine(line);
+      return { line, column: origin === null ? 0 : Math.max(at - origin, 0) };
+    },
   };
 }

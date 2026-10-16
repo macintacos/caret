@@ -391,7 +391,7 @@ describe("highlighted code", () => {
     });
   });
 
-  test("at a text-node boundary domPoint resolves before into the earlier node, after into the later", () => {
+  test("domPoint at a text-node boundary: before takes the earlier node, after the later", () => {
     const { root, map } = mount(CODE);
     highlight(root);
     const [x] = find(root, "let x");
@@ -402,6 +402,23 @@ describe("highlighted code", () => {
     expect(after !== null && after[0] === y && after[1] === 0).toBe(true);
   });
 });
+
+const LOOKUP_PLAN = [
+  "A paragraph that", // 1
+  "wraps here.", // 2
+  "", // 3
+  "- item one", // 4
+  "- item two", // 5
+  "", // 6
+  "| h1 | h2 |", // 7
+  "| -- | -- |", // 8
+  "| c1 | c2 |", // 9
+  "", // 10
+  "```js", // 11
+  "let x = 1;", // 12
+  "let y = 2;", // 13
+  "```", // 14
+].join("\n");
 
 describe("text points", () => {
   test("textPoint inverts clampedPoint at every column of every rendered line", () => {
@@ -452,24 +469,19 @@ describe("text points", () => {
     expect(map.clampedPoint({ line: 3, column: 0 }) === null).toBe(true);
     expect(map.domPoint({ line: 3, column: 0 }, "after") === null).toBe(true);
   });
-});
 
-const LOOKUP_PLAN = [
-  "A paragraph that", // 1
-  "wraps here.", // 2
-  "", // 3
-  "- item one", // 4
-  "- item two", // 5
-  "", // 6
-  "| h1 | h2 |", // 7
-  "| -- | -- |", // 8
-  "| c1 | c2 |", // 9
-  "", // 10
-  "```js", // 11
-  "let x = 1;", // 12
-  "let y = 2;", // 13
-  "```", // 14
-].join("\n");
+  test("an element point past the last block reads as the last line", () => {
+    const { root, map } = mount(LOOKUP_PLAN);
+    expect(map.lineAt(root, root.childNodes.length)).toBe(13);
+  });
+
+  test("a point in the structural text before the first line's text is at column 0", () => {
+    const { root, map } = mount("| h1 | h2 |\n| -- | -- |\n| c1 | c2 |\n");
+    const table = root.querySelector("table");
+    if (!(table?.firstChild instanceof Text)) throw new Error("no text before the head");
+    expect(map.textPoint(table.firstChild, 0)).toEqual({ line: 1, column: 0 });
+  });
+});
 
 describe("lookups", () => {
   test("no lookup walks the preview from its root", () => {
@@ -483,18 +495,19 @@ describe("lookups", () => {
       rangeBetween([row, 0], find(root, "let x")),
     ];
     const walks: string[] = [];
-    const rangeProto = Object.getPrototypeOf(document.createRange()) as Range;
-    const setStart = rangeProto.setStart;
-    const createTreeWalker = document.createTreeWalker;
+    // A root walk is a TreeWalker (every one here starts at the root) or a Range from (root, 0);
+    // happy-dom's Range.toString uses no TreeWalker, so setStart is what catches the latter.
+    const setStart = Range.prototype.setStart;
+    const createTreeWalker = Document.prototype.createTreeWalker;
     try {
-      Object.defineProperty(document, "createTreeWalker", {
-        configurable: true,
-        value(...args: Parameters<Document["createTreeWalker"]>) {
-          walks.push("createTreeWalker");
-          return createTreeWalker.apply(document, args);
-        },
-      });
-      rangeProto.setStart = function (this: Range, node: Node, offset: number) {
+      Document.prototype.createTreeWalker = function (
+        this: Document,
+        ...args: Parameters<Document["createTreeWalker"]>
+      ) {
+        walks.push("createTreeWalker");
+        return createTreeWalker.apply(this, args);
+      };
+      Range.prototype.setStart = function (this: Range, node: Node, offset: number) {
         if (node === root) walks.push("setStart(root)");
         setStart.call(this, node, offset);
       };
@@ -510,8 +523,8 @@ describe("lookups", () => {
         if (point !== null) map.textPoint(...point);
       }
     } finally {
-      delete (document as { createTreeWalker?: unknown }).createTreeWalker;
-      rangeProto.setStart = setStart;
+      Document.prototype.createTreeWalker = createTreeWalker;
+      Range.prototype.setStart = setStart;
     }
     expect(walks).toEqual([]);
   });

@@ -224,10 +224,10 @@ maps between the two for comments, the cursor and search.
 - **The map.** `createPlanSourceMap(root)` takes the element whose content is exactly the
   rendered HTML and walks it once per version, storing runs of text offset → line. After a
   `data-source-code` marker, each `\n` in the next element's text that more code follows
-  starts the next line's run. Besides the runs, it indexes the root's text nodes once per
-  version, each with the offset its text ends at. No lookup reads layout. `DiffPlanView`
-  builds it in an effect, after the preview's `{@html}` commits: a render-phase build,
-  such as one the search count pulls, would walk the previous version's DOM.
+  starts the next line's run. Besides the runs, it indexes the root's text nodes at build,
+  each with the offset its text ends at. No lookup reads layout. `DiffPlanView` builds it
+  in an effect, after the preview's `{@html}` commits: a render-phase build, such as one
+  the search count pulls, would walk the previous version's DOM.
 - **Lookups.** `lineAt` gives the line of the character at a DOM point, the last
   character's at the end of the text, and null outside the root or for an empty preview.
   `linesOf` gives the lines of a range's first and last non-whitespace characters (its
@@ -264,9 +264,11 @@ maps between the two for comments, the cursor and search.
   a block's `code` children for token spans built through `textContent`, only when their
   text is identical, with the trailing `\n` kept. `previewRefs.ts` relies on the same
   property when it wraps a reference's text in place. The text-node index survives these
-  swaps because a lookup checks that the node it lands on is still under the root at its
-  indexed length, and re-indexes once when it is not, so the map never hands back a
-  detached node. This rests on the swap keeping the text.
+  swaps because a lookup checks that every indexed node it reads, a node the caller passes
+  in included, is still under the root at its indexed length, and re-indexes once when one
+  is not, so the map never hands back a detached node. This rests on a precondition: a
+  mutation may replace, split, merge or wrap text nodes, keeping the root's text in order;
+  it never edits an indexed node's `data` in place or reorders nodes.
 - **Comment highlight.** The preview's comment highlight reads `rangeOf` and paints a CSS
   Custom Highlight, so it inserts nothing into the root. The painted ranges are live,
   though: a later swap of the text nodes they sit in, such as `previewCode.ts`'s
