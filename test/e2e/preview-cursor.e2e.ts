@@ -90,12 +90,12 @@ const bandLine = async (page: Page): Promise<number> =>
 const textRows = (page: Page, tag: string, word: string) =>
   page.evaluate(
     ([root, t, w]) => {
-      const p = [...document.querySelectorAll(`${root} ${t}`)].find((el) =>
+      const holder = [...document.querySelectorAll(`${root} ${t}`)].find((el) =>
         el.textContent?.includes(w),
       );
-      if (!p) return -1;
+      if (!holder) return -1;
       const range = document.createRange();
-      range.selectNodeContents(p);
+      range.selectNodeContents(holder);
       return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
     },
     [PLAN_PREVIEW, tag, word] as const,
@@ -351,9 +351,9 @@ test.describe("preview keyboard cursor", () => {
     await page.setViewportSize({ width: 1600, height: 900 });
     const id = await daemon.seed({ plan: PLAN });
     const lines = ((await daemon.getReview(id)).body?.currentPlan ?? "").split("\n");
-    const short = lines.findIndex((l) => l.startsWith("A short")) + 1;
+    const shortLine = lines.findIndex((l) => l.startsWith("A short")) + 1;
     await daemon.putDraft(id, {
-      composerScratches: [{ startLine: short, endLine: short, text: "an unsent note" }],
+      composerScratches: [{ startLine: shortLine, endLine: shortLine, text: "an unsent note" }],
     });
     await page.goto("/");
     await awaitPlanReadyForKeys(page);

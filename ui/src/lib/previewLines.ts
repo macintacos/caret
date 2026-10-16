@@ -333,8 +333,13 @@ export function readingPoint(
   let last: VisualLine | undefined;
   for (let k = Math.max(firstBlock, 0); k < blocks.length; k++) {
     const lines = visualLines(blocks[k] as Element, read);
-    const i = indexAtReadingZone(lines.length, (j) => (lines[j] as VisualLine).bottom, scrollerTop);
-    if (i !== null) return textPoint(map, ...lineStart(lines[i] as VisualLine, read));
+    const belowZone = indexAtReadingZone(
+      lines.length,
+      (j) => (lines[j] as VisualLine).bottom,
+      scrollerTop,
+    );
+    if (belowZone !== null)
+      return textPoint(map, ...lineStart(lines[belowZone] as VisualLine, read));
     last = lines.at(-1) ?? last;
   }
   return last === undefined ? null : textPoint(map, ...lineStart(last, read));

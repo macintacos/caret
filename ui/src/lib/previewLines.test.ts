@@ -313,9 +313,9 @@ describe("stepVisualLine", () => {
 describe("visualLineBox", () => {
   test("measures the DOMRects a browser hands back", () => {
     const { root, map } = mount(`${LONG}\n`);
-    const g = grid(root, 20).read;
+    const gridRects = grid(root, 20).read;
     const read: RangeRects = (range) =>
-      g(range).map((b) => new DOMRect(b.left, b.top, b.right - b.left, b.bottom - b.top));
+      gridRects(range).map((b) => new DOMRect(b.left, b.top, b.right - b.left, b.bottom - b.top));
     expect(visualLineBox(root, map, { line: 1, column: 25 }, read)).toMatchObject({
       top: 10,
       bottom: 20,
