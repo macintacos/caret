@@ -118,7 +118,6 @@
   } from "$lib/previewLines.ts";
   import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
   import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
-  import { createPlanSourceMap } from "$lib/planSourceMap.ts";
   import {
     clearCommentHighlight,
     commentSlotIndex,
@@ -410,7 +409,7 @@
   // version switch.
   const previewSourceMap = $derived.by(() => {
     void planPreview?.html;
-    return previewEl && runs("commentThreads") ? createPlanSourceMap(previewEl) : null;
+    return previewEl ? createPlanSourceMap(previewEl) : null;
   });
   // The code highlight pass replaces a block's text nodes after mount and on a theme
   // switch, collapsing any range painted inside them, so the paint follows text changes.
@@ -1448,23 +1447,10 @@
     sound: sound.play,
   });
 
-  // A flip remounts the preview root, so the memo keys on the root as well as the html:
-  // a map over a detached root resolves nothing.
-  let sourceMapMemo: { root: Element; html: string; map: PlanSourceMap } | undefined;
-  function previewSourceMap(): PlanSourceMap | null {
-    const root = previewEl;
-    const html = planPreview?.html;
-    if (root == null || html === undefined) return null;
-    if (sourceMapMemo?.root !== root || sourceMapMemo.html !== html) {
-      sourceMapMemo = { root, html, map: createPlanSourceMap(root) };
-    }
-    return sourceMapMemo.map;
-  }
-
   function previewGeometry(): { root: Element; scroller: HTMLElement; map: PlanSourceMap } | null {
     const root = previewEl;
     const scroller = scrollEl;
-    const map = previewSourceMap();
+    const map = previewSourceMap;
     return root == null || scroller == null || map == null ? null : { root, scroller, map };
   }
 
@@ -1492,7 +1478,7 @@
       return geometry ? stepVisualLine(geometry.root, geometry.map, from, count) : from;
     },
     pointForLine: (line) => {
-      const map = previewSourceMap();
+      const map = previewSourceMap;
       return map && pointForLine(map, line, lineCountOf(linkLayer.text.split("\n")));
     },
     last: () => {
@@ -1542,7 +1528,7 @@
   $effect(() => {
     void previewLayoutRev;
     const p = runs("keyboardCursor") && surface === "preview" ? previewCursor.point() : null;
-    const map = p && previewSourceMap();
+    const map = p && previewSourceMap;
     if (p == null || map == null || scrollEl == null || previewEl == null) {
       previewCursorBox = null;
       return;
