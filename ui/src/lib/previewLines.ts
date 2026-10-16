@@ -120,7 +120,7 @@ function visualLines(block: Element, read: RangeRects): VisualLine[] {
   // Tallest cells first: a middle-aligned shorter cell's rects then join its neighbour's
   // lines instead of seeding lines offset by half a line.
   const groups = cellGroups(block, read).sort((a, b) => extentOf(b) - extentOf(a));
-  let last: (typeof lines)[number] | undefined;
+  let previousLine: (typeof lines)[number] | undefined;
   for (const { node, index, rect, group } of groups.flatMap((g, group) =>
     g.map((r) => ({ ...r, group })),
   )) {
@@ -130,13 +130,13 @@ function visualLines(block: Element, read: RangeRects): VisualLine[] {
     // glyph rects; it still belongs to a neighbour's line it overlaps. Within one cell,
     // tightly set lines overlap too, so overlap never merges a cell's own lines.
     const line =
-      (last !== undefined && holds(last) ? last : lines.find(holds)) ??
+      (previousLine !== undefined && holds(previousLine) ? previousLine : lines.find(holds)) ??
       nearest(
         lines.filter((l) => l.group !== group && rect.top < l.bottom && rect.bottom > l.top),
         mid,
       );
     if (line === undefined) {
-      last = {
+      previousLine = {
         top: rect.top,
         bottom: rect.bottom,
         left: rect.left,
@@ -145,9 +145,9 @@ function visualLines(block: Element, read: RangeRects): VisualLine[] {
         index,
         group,
       };
-      lines.push(last);
+      lines.push(previousLine);
     } else {
-      last = line;
+      previousLine = line;
       line.left = Math.min(line.left, rect.left);
       line.right = Math.max(line.right, rect.right);
       if (index < line.index) Object.assign(line, { node, index });
@@ -181,8 +181,8 @@ function lineIndexAt(
   if (mid === null) return lines.length - 1;
   const index = lines.findIndex((l) => mid >= l.top && mid < l.bottom);
   if (index !== -1) return index;
-  const near = nearest(lines, mid);
-  return near === undefined ? lines.length - 1 : lines.indexOf(near);
+  const nearestLine = nearest(lines, mid);
+  return nearestLine === undefined ? lines.length - 1 : lines.indexOf(nearestLine);
 }
 
 /** The nearest sibling block in `direction` that renders text, with its lines. */
@@ -246,26 +246,26 @@ export function stepVisualLine(
   if (point === null || block === null) return from;
   let lines = visualLines(block, read);
   if (lines.length === 0) return from;
-  let target = lineIndexAt(block, lines, point, read) + count;
-  while (target >= lines.length) {
+  let targetIndex = lineIndexAt(block, lines, point, read) + count;
+  while (targetIndex >= lines.length) {
     const next = textBlockFrom(block, 1, read);
     if (next === null) {
-      target = lines.length - 1;
+      targetIndex = lines.length - 1;
       break;
     }
-    target -= lines.length;
+    targetIndex -= lines.length;
     ({ block, lines } = next);
   }
-  while (target < 0) {
+  while (targetIndex < 0) {
     const prev = textBlockFrom(block, -1, read);
     if (prev === null) {
-      target = 0;
+      targetIndex = 0;
       break;
     }
     ({ block, lines } = prev);
-    target += lines.length;
+    targetIndex += lines.length;
   }
-  return textPoint(map, ...(lines[target] as VisualLine).start) ?? from;
+  return textPoint(map, ...(lines[targetIndex] as VisualLine).start) ?? from;
 }
 
 /** Column 0 of the first line from `line` on that renders text, else of the last one
@@ -304,10 +304,10 @@ export function readingPoint(
   blockBottom: BlockBottom = boundingBottom,
 ): TextPoint | null {
   const blocks = root.children;
-  const first =
+  const firstBlock =
     indexAtReadingZone(blocks.length, (k) => blockBottom(blocks[k] as Element), scrollerTop) ??
     blocks.length - 1;
-  for (let k = Math.max(first, 0); k < blocks.length; k++) {
+  for (let k = Math.max(firstBlock, 0); k < blocks.length; k++) {
     const lines = visualLines(blocks[k] as Element, read);
     const rows = lines.map((l, index) => ({ line: index, bottom: l.bottom }));
     const line = lines[lineAtReadingZone(rows, scrollerTop) ?? lines.length - 1];
@@ -355,12 +355,12 @@ export function cursorBand(
   const box = visualLineBox(root, map, p, read);
   if (box === null) return null;
   const pad = lineHeight > 0 ? Math.max(0, lineHeight - (box.bottom - box.top)) / 2 : 0;
-  const s = scroller.getBoundingClientRect();
-  const r = root.getBoundingClientRect();
+  const scrollerRect = scroller.getBoundingClientRect();
+  const rootRect = root.getBoundingClientRect();
   return {
-    top: box.top - pad - (s.top - scroller.scrollTop),
-    left: r.left - (s.left - scroller.scrollLeft),
-    width: r.width,
+    top: box.top - pad - (scrollerRect.top - scroller.scrollTop),
+    left: rootRect.left - (scrollerRect.left - scroller.scrollLeft),
+    width: rootRect.width,
     height: box.bottom - box.top + 2 * pad,
   };
 }

@@ -1481,25 +1481,28 @@
     headingLines: () => headings.map((h) => h.line),
     halfPage: previewHalfPage,
     seed: () => {
-      const g = previewGeometry();
-      return g && readingPoint(g.root, g.map, g.scroller.getBoundingClientRect().top);
+      const geometry = previewGeometry();
+      return (
+        geometry &&
+        readingPoint(geometry.root, geometry.map, geometry.scroller.getBoundingClientRect().top)
+      );
     },
     step: (from, count) => {
-      const g = previewGeometry();
-      return g ? stepVisualLine(g.root, g.map, from, count) : from;
+      const geometry = previewGeometry();
+      return geometry ? stepVisualLine(geometry.root, geometry.map, from, count) : from;
     },
     pointForLine: (line) => {
       const map = previewSourceMap();
       return map && pointForLine(map, line, lineCountOf(linkLayer.text.split("\n")));
     },
     last: () => {
-      const g = previewGeometry();
-      return g && lastVisualLine(g.root, g.map);
+      const geometry = previewGeometry();
+      return geometry && lastVisualLine(geometry.root, geometry.map);
     },
     follow: (p) => {
-      const g = previewGeometry();
-      const box = g && visualLineBox(g.root, g.map, p);
-      if (g && box) followBox(g.scroller, box);
+      const geometry = previewGeometry();
+      const box = geometry && visualLineBox(geometry.root, geometry.map, p);
+      if (geometry && box) followBox(geometry.scroller, box);
     },
     jump: (p) => {
       const block = previewBlock(p.line);
