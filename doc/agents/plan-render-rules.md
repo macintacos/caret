@@ -272,8 +272,8 @@ maps between the two for comments, the cursor and search.
 - **Comment highlight.** The preview's comment highlight reads `rangeOf` and paints a CSS
   Custom Highlight, so it inserts nothing into the root. The painted ranges are live,
   though: a later swap of the text nodes they sit in, such as `previewCode.ts`'s
-  `replaceChildren`, collapses them. So while a span is active a `MutationObserver` on the
-  root (child-list and character-data, subtree) repaints it.
+  `replaceChildren`, collapses them. So while a span is active the paint is rebuilt on
+  each `previewLayoutRev` bump, of which a text mutation under the root is one.
 
 ## Surfaces
 
@@ -287,6 +287,13 @@ nothing clears them when `SourceView` unmounts. An effect, shortcut, or surface 
 gates through `runsOn`. So a row covers each effect, shortcut `enabled` guard, and
 control-row or lane surface in `DiffPlanView` outside that branch. Anything inside the
 branch unmounts with it and needs no gate.
+
+Everything placed or painted over the preview re-runs on `previewLayoutRev`: the code
+chrome, the comment slots and highlight, the cursor band, the visual selection, and
+search. The signal is one rAF-throttled bump from a `ResizeObserver` on the root and on
+each slot, a text `MutationObserver` on the root, and the theme paint on `<html>`. The
+root's attributes stay unobserved, because the slot reserve writes block styles there. A
+new preview overlay reads the signal rather than observing the root.
 
 Adding `"preview"` to a row switches on the source implementation, which still reads the
 stale `api` and `host`. A port gives the behavior a preview implementation first, then
