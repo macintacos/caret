@@ -192,9 +192,10 @@ exist today.
   through the first block wrapper (`.plan-preview > :first-child > :is(h1, …, h6)`).
   `data-task` stays distinct from the source view's `data-md-checkbox`: one marks an
   `input` in the light DOM, the other a `span` in the shadow root, so no rule is shared.
-  Links, reference chips and inline code wear the source view's chips, and a link labelled
-  with code or a reference gives way to that chip; `coreStyles.test.ts` pins these copies
-  of `coreStyles.ts`'s link rule and reference chip.
+  Links, reference chips and inline code wear the source view's chips, and a link whose
+  label holds code, a reference or an image gives way to it, so a label mixing code and
+  prose shows the code chip alone; `coreStyles.test.ts` pins each copy to the
+  `coreStyles.ts` rule it mirrors.
 - **Code blocks.** A code block renders `<pre><code>` with its escaped text and no class.
   A fence's info string resolves through `fenceGrammar` to a bundled grammar, carried as
   `RenderedPlan.codeLanguages` keyed by the code marker's line, and never as markup; an

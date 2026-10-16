@@ -5,7 +5,8 @@
 // onto :root, a list bullet is a ::marker, and the table's sideways scroll and the image's
 // size cap are layout. The pure halves are units — the mount in
 // ui/src/components/PlanPreview.test.ts, the painted custom properties in
-// ui/src/lib/theme.test.ts, and the rendered HTML in ui/src/lib/planMarkdown.test.ts.
+// ui/src/lib/theme.test.ts, the rendered HTML in ui/src/lib/planMarkdown.test.ts, and the
+// chip declarations' parity with the source view in ui/src/lib/diffview/coreStyles.test.ts.
 
 import type { Page } from "@playwright/test";
 
@@ -225,15 +226,15 @@ function sourceChip(page: Page, member: string, text: string): Promise<ChipBox |
         el.textContent?.includes(text),
       );
       const piece = (attr: string) => row?.querySelector(`[${attr}~="${member}"]`);
-      const [any, start, end] = [piece("data-md"), piece("data-md-start"), piece("data-md-end")];
-      if (!any || !start || !end) return null;
+      const [fill, start, end] = [piece("data-md"), piece("data-md-start"), piece("data-md-end")];
+      if (!fill || !start || !end) return null;
       const em = (el: Element, property: string) => {
         const cs = getComputedStyle(el);
         const px = Number.parseFloat(cs.getPropertyValue(property));
         return (px / Number.parseFloat(cs.fontSize)).toFixed(2);
       };
       return {
-        top: em(any, "padding-top"),
+        top: em(fill, "padding-top"),
         left: em(start, "padding-left"),
         right: em(end, "padding-right"),
         radius: getComputedStyle(start).borderTopLeftRadius,
@@ -285,11 +286,26 @@ test("links and inline code wear the source view's chips", async ({ daemon, page
 
 test("a link labelled with inline code wears the code's chip alone", async ({ daemon, page }) => {
   await openPreview(page, daemon, "See [`the docs`](https://docs.example.test) here.\n");
+  const code = await resolveStyle(page, "backgroundColor", "--chip-code");
   await expect
     .poll(() =>
       stylesOf(page, {
         padding: ["a", "the docs", "padding-left"],
         fill: ["a", "the docs", "background-color"],
+        code: ["code", "the docs", "background-color"],
+      }),
+    )
+    .toEqual({ padding: "0px", fill: "rgba(0, 0, 0, 0)", code });
+});
+
+test("a linked image wears no link chip", async ({ daemon, page }) => {
+  await routeAssets(page);
+  await openPreview(page, daemon, `[![the diagram](${GOOD})](https://docs.example.test)\n`);
+  await expect
+    .poll(() =>
+      stylesOf(page, {
+        padding: ["a:has(img)", "", "padding-left"],
+        fill: ["a:has(img)", "", "background-color"],
       }),
     )
     .toEqual({ padding: "0px", fill: "rgba(0, 0, 0, 0)" });

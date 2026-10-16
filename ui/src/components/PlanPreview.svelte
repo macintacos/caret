@@ -271,6 +271,7 @@
     font-weight: var(--markdown-italic-font-weight);
     text-decoration: var(--markdown-italic-text-decoration);
   }
+  /* Padding, radius and tint pinned to coreStyles.ts's code chip by coreStyles.test.ts. */
   .plan-preview :global(:not(pre) > code) {
     font-family: var(--font-mono);
     padding: var(--chip-pad-block) var(--chip-pad-inline);
@@ -290,8 +291,10 @@
     text-decoration-line: var(--markdown-link-text-decoration, underline);
     text-underline-offset: 0.22em;
   }
-  /* A link labelled with code or a reference gives way to that chip: one range, one chip. */
-  .plan-preview :global(a:not(:has(code, [data-file-ref]))) {
+  /* A link whose label holds code, a reference or an image gives way to it: one range, one
+     chip, pinned by coreStyles.test.ts. A label mixing code and prose drops the pill the
+     source view nests the code in. */
+  .plan-preview :global(a:not(:has(code, [data-file-ref], img))) {
     padding: var(--chip-pad-block) var(--chip-pad-inline);
     border-radius: var(--radius);
     background-color: var(--chip-link);
@@ -427,7 +430,8 @@
   .plan-preview :global(img) {
     max-width: 100%;
   }
-  /* A resolved reference: coreStyles.ts's reference chip and glyph, pinned by coreStyles.test.ts. */
+  /* A resolved reference: coreStyles.ts's reference chip and glyph, pinned by
+     coreStyles.test.ts. */
   .plan-preview :global([data-file-ref]) {
     cursor: pointer;
     padding: var(--chip-pad-block) var(--chip-pad-inline);

@@ -1713,8 +1713,8 @@ test.describe("on the preview", () => {
     return proj;
   }
 
-  /** A source-view reference's computed fill and inline padding, read from inside the
-   * shadow root; null until it is tagged. */
+  /** A source-view reference's computed fill, inline padding and glyph box, read from
+   * inside the shadow root; null until it is tagged. */
   function sourceRef(page: import("@playwright/test").Page, text: string) {
     return page.evaluate((text) => {
       const sh = (document.querySelector(".diffview") as HTMLElement | null)?.shadowRoot;
@@ -1731,6 +1731,10 @@ test.describe("on the preview", () => {
           width: glyph.width,
           margin: glyph.marginRight,
           background: glyph.backgroundColor,
+          mask:
+            glyph.maskImage && glyph.maskImage !== "none"
+              ? glyph.maskImage
+              : glyph.getPropertyValue("-webkit-mask-image"),
         },
       };
     }, text);
@@ -1772,11 +1776,22 @@ test.describe("on the preview", () => {
       const label = refs.filter({ hasText: "the cache" });
       await expect(label).toHaveCSS("background-color", source!.background);
       await expect(label).toHaveCSS("padding-left", source!.padding);
-      const glyph = await label.evaluate((el) => {
-        const cs = getComputedStyle(el, "::before");
-        return { width: cs.width, margin: cs.marginRight, background: cs.backgroundColor };
-      });
-      expect(glyph).toEqual(source!.glyph);
+      await expect
+        .poll(() =>
+          label.evaluate((el) => {
+            const cs = getComputedStyle(el, "::before");
+            return {
+              width: cs.width,
+              margin: cs.marginRight,
+              background: cs.backgroundColor,
+              mask:
+                cs.maskImage && cs.maskImage !== "none"
+                  ? cs.maskImage
+                  : cs.getPropertyValue("-webkit-mask-image"),
+            };
+          }),
+        )
+        .toEqual(source!.glyph);
 
       const pill = page
         .locator(`${PLAN_PREVIEW} code`)
