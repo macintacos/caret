@@ -2,11 +2,22 @@ import "@ui/support/setup.ts";
 import { expect, test } from "bun:test";
 
 import {
+  blankLinesOf,
   type CursorContext,
   type CursorMotion,
+  lineCountOf,
   resolveCursorLine,
   tagCursorRow,
 } from "$lib/diffview/lineCursor.ts";
+
+test("lineCountOf does not count the empty entry a trailing newline leaves", () => {
+  expect(lineCountOf(["a", "b", ""])).toBe(2);
+  expect(lineCountOf([""])).toBe(1);
+});
+
+test("blankLinesOf finds whitespace-only lines, but not the trailing newline's entry", () => {
+  expect(blankLinesOf(["a", "  ", "b", "", ""])).toEqual([2, 4]);
+});
 
 // A 10-line document with headings on lines 1, 4, 8; blank lines on 2, 5, 9; a
 // 4-line half-page; the reading position (seed) at line 3. Individual tests
