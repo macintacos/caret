@@ -1852,6 +1852,10 @@
     commenting.open({ start, end });
     keyboardStore.cursorLine = end; // a line click relocates the cursor (keyboard + mouse coherent)
   }
+  function commentOnPreview(range: Range): void {
+    const lines = previewSourceMap?.linesOf(range);
+    if (lines) openRange(lines.start, lines.end);
+  }
   // Each surface hosts its own composer, so a flip would remount it with its typed text
   // lost: retain the text as a scratch first, which the approve guard still counts.
   function setPlanView(next: PlanView): void {
@@ -2178,6 +2182,7 @@
           bind:root={previewEl}
           fileRefs={previewRefs}
           onFileRefClick={openFileRef}
+          onTextComment={runs("textComments") ? commentOnPreview : undefined}
         />
         {@render codeChrome()}
         <!-- Comment slots sit outside the preview root so it stays exactly the rendered

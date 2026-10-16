@@ -1,10 +1,12 @@
 import "@ui/support/mount.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { EditorView } from "@codemirror/view";
+
 import type { ClientReview, PlanVersion } from "@core/lib/types";
 import { until } from "@test/support/poll.ts";
 import { expectViewRecreated } from "@ui/support/diffview.ts";
-import { logCapture } from "@ui/support/helpers.ts";
+import { logCapture, typeInto } from "@ui/support/helpers.ts";
 import { capture, render } from "@ui/support/mount.ts";
 import { reactiveProps } from "@ui/support/props.svelte.ts";
 import DiffPlanView from "@/components/DiffPlanView.svelte";
@@ -1106,5 +1108,97 @@ describe("DiffPlanView preview cursor", () => {
     flush();
     const cleared = await until(() => band(target) == null);
     expect(cleared).toBe(true);
+  });
+});
+
+describe("DiffPlanView preview text comments", () => {
+  // The paragraph "alpha one" / "alpha two" spans stored lines 3–4 and renders as one <p>.
+  const plan = "# Title\n\nalpha one\nalpha two\n";
+  const realElementsFromPoint = document.elementsFromPoint;
+
+  afterEach(() => {
+    document.getSelection()?.removeAllRanges();
+    document.elementsFromPoint = realElementsFromPoint;
+  });
+
+  /** The text node and offset where `word` starts in the preview. */
+  function pointAt(root: HTMLElement, word: string): [Text, number] {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null)
+      if (node.data.includes(word)) return [node, node.data.indexOf(word)];
+    throw new Error(`no text "${word}" in the preview`);
+  }
+
+  function select(start: [Text, number], end = start): void {
+    const range = document.createRange();
+    range.setStart(...start);
+    range.setEnd(...end);
+    const selection = document.getSelection() as Selection;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  /** Mount on the preview with App's mirror of the controller wired as props, so an
+   * open renders the composer as it does in the app. */
+  async function renderParagraph(created: unknown[] = []) {
+    const p = reactiveProps({
+      ...props({ review: reviewFixture({ currentPlan: plan }) }),
+      pending: undefined as { startLine: number; endLine: number } | undefined,
+      pendingText: "",
+    });
+    const commenting = createSourceCommenting({
+      onCreate: (anchor) => created.push(anchor),
+      onChange: () => {
+        p.pending = commenting.pending();
+        p.pendingText = commenting.pendingText();
+      },
+    });
+    p.commenting = commenting;
+    const mounted = render(DiffPlanView, p);
+    await until(() => toggle(mounted.target) != null);
+    toggle(mounted.target)!.click();
+    await until(() => mounted.target.querySelector(".plan-preview") != null);
+    const root = mounted.target.querySelector<HTMLElement>(".plan-preview")!;
+    await until(() => root.querySelector("p") != null);
+    return { ...mounted, root };
+  }
+
+  const label = (target: HTMLElement) => target.querySelector(".composer .label")?.textContent;
+
+  /** Drag from line 3's last word to line 4's first. */
+  function dragAcrossLines(root: HTMLElement): void {
+    document.elementsFromPoint = () => [];
+    root.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+    const [two, at] = pointAt(root, "alpha two");
+    select(pointAt(root, "one"), [two, at + "alpha".length]);
+    window.dispatchEvent(new PointerEvent("pointerup", { button: 0 }));
+  }
+
+  test("a click on the second stored line's text comments on that line", async () => {
+    const { target, root } = await renderParagraph();
+    select(pointAt(root, "two"));
+    root.querySelector("p")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(await until(() => label(target) === "Line 4")).toBe(true);
+  });
+
+  test("a selection across the paragraph's line break comments on both lines", async () => {
+    const { target, root } = await renderParagraph();
+    dragAcrossLines(root);
+    expect(await until(() => label(target) === "Lines 3–4")).toBe(true);
+  });
+
+  test("submitting a selection's composer creates a comment on its source lines", async () => {
+    const created: unknown[] = [];
+    const { target, root } = await renderParagraph(created);
+    dragAcrossLines(root);
+    await until(() => label(target) === "Lines 3–4");
+    typeInto(
+      EditorView.findFromDOM(target.querySelector(".composer .cm-editor")!)!,
+      "tighten this",
+    );
+    [...target.querySelectorAll<HTMLButtonElement>(".composer button")]
+      .find((b) => b.textContent?.includes("Comment"))!
+      .click();
+    expect(created).toEqual([{ startLine: 3, endLine: 4, comment: "tighten this" }]);
   });
 });

@@ -46,17 +46,18 @@ describe("runsOn", () => {
     expect(BEHAVIORS.some((b) => runsOn(b, "compare"))).toBe(false);
   });
 
-  test("codeChrome, fileReferences, keyboardCursor, commentThreads and headingTracking run on the preview", () => {
+  test("codeChrome, fileReferences, keyboardCursor, commentThreads, textComments and headingTracking run on the preview", () => {
     expect(BEHAVIORS.filter((b) => runsOn(b, "preview"))).toEqual([
       "codeChrome",
       "fileReferences",
       "keyboardCursor",
       "commentThreads",
+      "textComments",
       "headingTracking",
     ]);
   });
 
-  test("line-comment creation gestures stay off the preview", () => {
+  test("the gutter's line-comment drag gestures stay off the preview", () => {
     expect(runsOn("lineComments", "preview")).toBe(false);
   });
 });
