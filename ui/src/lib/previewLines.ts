@@ -3,6 +3,7 @@
 // reading-zone block, and the root's and scroller's to place the cursor band — read only in the
 // blocks a lookup touches, so a cursor step never measures the whole document.
 import { indexAtReadingZone } from "$lib/diffview/scroll.ts";
+import { type Box, contentOrigin, defaultReader, type RectReader } from "$lib/geometry.ts";
 import type { PlanSourceMap } from "$lib/planSourceMap.ts";
 
 /** A cursor position on the preview: a source line, and a character offset into the
@@ -12,22 +13,10 @@ export interface TextPoint {
   column: number;
 }
 
-export interface Box {
-  top: number;
-  bottom: number;
-  left: number;
-  right: number;
-}
-
 /** The client rects of a range's text, one per line fragment. */
 export type RangeRects = (range: Range) => readonly Box[];
 
 const clientRects: RangeRects = (range) => Array.from(range.getClientRects());
-
-/** An element's client rect. */
-export type ElementRect = (el: Element) => Box;
-
-const boundingRect: ElementRect = (el) => el.getBoundingClientRect();
 
 interface VisualLine extends Box {
   /** The earliest text node, in text order, with a rect on the line. */
@@ -322,7 +311,7 @@ export function readingPoint(
   map: PlanSourceMap,
   scrollerTop: number,
   read: RangeRects = clientRects,
-  rect: ElementRect = boundingRect,
+  rect: RectReader = defaultReader,
 ): TextPoint | null {
   const blocks = root.children;
   const firstBlock =
@@ -423,16 +412,16 @@ export function cursorBand(
   p: TextPoint,
   lineHeight: number,
   read: RangeRects = clientRects,
-  rect: ElementRect = boundingRect,
+  rect: RectReader = defaultReader,
 ): BandBox | null {
   const box = visualLineBox(root, map, p, read);
   if (box === null) return null;
   const pad = lineHeight > 0 ? Math.max(0, lineHeight - (box.bottom - box.top)) / 2 : 0;
-  const scrollerRect = rect(scroller);
+  const origin = contentOrigin(scroller, rect(scroller));
   const rootRect = rect(root);
   return {
-    top: box.top - pad - (scrollerRect.top - scroller.scrollTop),
-    left: rootRect.left - (scrollerRect.left - scroller.scrollLeft),
+    top: box.top - pad - origin.top,
+    left: rootRect.left - origin.left,
     width: rootRect.right - rootRect.left,
     height: box.bottom - box.top + 2 * pad,
   };

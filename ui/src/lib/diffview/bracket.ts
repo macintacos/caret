@@ -22,6 +22,8 @@
 // (`bracketLayer`) owns the measuring, the resize re-measure, and the teardown —
 // happy-dom can't lay out, so the action's pixels are exercised by e2e.
 
+import { contentOrigin, defaultReader, type RectReader } from "$lib/geometry.ts";
+
 /** The CSS var carrying the rail color, declared once on the `.diffview` rule. */
 const BAR_COLOR_VAR = "--diffs-decoration-bar-color";
 
@@ -36,15 +38,6 @@ export interface BracketBox {
   top: number;
   height: number;
 }
-
-/** Reads an element's top/bottom in viewport coordinates. Injectable so the
- * geometry is testable without real layout (happy-dom returns all zeros). */
-export type RectReader = (el: HTMLElement) => { top: number; bottom: number };
-
-const defaultReader: RectReader = (el) => {
-  const r = el.getBoundingClientRect();
-  return { top: r.top, bottom: r.bottom };
-};
 
 /**
  * The rail box for a span over the host's `[data-line]` rows, expressed in the
@@ -74,10 +67,7 @@ export function bracketBox(
     if (bottom === undefined || r.bottom > bottom) bottom = r.bottom;
   }
   if (top === undefined || bottom === undefined) return null;
-  // Translate viewport coords into the scroller's content frame: a row's offset
-  // from the content origin is its viewport top minus the scroller's viewport
-  // top, plus how far the content is scrolled.
-  const origin = read(scroller).top - scroller.scrollTop;
+  const origin = contentOrigin(scroller, read(scroller)).top;
   return { top: top - origin, height: Math.max(0, bottom - top) };
 }
 

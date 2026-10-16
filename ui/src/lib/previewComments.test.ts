@@ -2,7 +2,7 @@ import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { selectText } from "@ui/support/selection.ts";
-import type { RectReader } from "$lib/diffview/codeChrome.ts";
+import type { RectReader } from "$lib/geometry.ts";
 import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
 import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
 import {
@@ -154,7 +154,7 @@ describe("previewSlotBoxes", () => {
     // Block i spans y [10+40i, 30+40i], x [100,300]; the scroller's top-left is (8, 5).
     const read: RectReader = (el) => {
       if (el === scroller) return { top: 5, bottom: 1000, left: 8, right: 400 };
-      const i = blocks.indexOf(el);
+      const i = blocks.indexOf(el as HTMLElement);
       return { top: 10 + i * 40, bottom: 30 + i * 40, left: 100, right: 300 };
     };
     // top = 70 - 12 - (5 - 50) = 103 ; left = 100 - 8 = 92

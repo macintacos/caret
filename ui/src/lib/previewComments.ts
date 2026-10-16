@@ -5,8 +5,8 @@
 // rendered HTML the source map and `planPlace` index.
 
 import { shouldCommentOnLineClick } from "$lib/diffview/annotationSlot.ts";
-import { defaultReader, type RectReader } from "$lib/diffview/codeChrome.ts";
 import { highlightsSupported } from "$lib/diffview/searchHighlight.ts";
+import { contentOrigin, defaultReader, type RectReader } from "$lib/geometry.ts";
 import type { SourceSpan } from "$lib/planMarkdown.ts";
 import type { PlanSourceMap } from "$lib/planSourceMap.ts";
 
@@ -183,15 +183,15 @@ export function previewSlotBoxes(
   heights: ReadonlyMap<number, number>,
   read: RectReader = defaultReader,
 ): Map<number, { top: number; left: number; width: number }> {
-  const scrollerRect = read(scroller);
+  const origin = contentOrigin(scroller, read(scroller));
   const boxes = new Map<number, { top: number; left: number; width: number }>();
   for (const [block, height] of heights) {
     const el = root.children[block];
     if (!(el instanceof HTMLElement)) continue;
     const box = read(el);
     boxes.set(block, {
-      top: box.bottom - height - (scrollerRect.top - scroller.scrollTop),
-      left: box.left - (scrollerRect.left - scroller.scrollLeft),
+      top: box.bottom - height - origin.top,
+      left: box.left - origin.left,
       width: box.right - box.left,
     });
   }
