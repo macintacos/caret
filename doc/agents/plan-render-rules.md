@@ -227,7 +227,10 @@ maps between the two for comments, the cursor and search.
   first and last characters when it covers only whitespace), so a triple-click selection
   that ends at the next block's start reports the previous block's line. `rangeOf` gives
   the rendered text a line produced, or null for a line that produced none: blank outside
-  code, link definition, fence, table delimiter row, `hr`, out of range.
+  code, link definition, fence, table delimiter row, `hr`, out of range. `lineAtOffset` is
+  `lineAt` for a caller that counted the root's text itself. `offsetOfLine` gives where a
+  line's text starts, the origin a TextPoint column counts from, at the same first run
+  `rangeOf` starts at.
 - **Edges.**
   - A soft break's `\n` belongs to the line it ends.
   - The structural `\n` marked emits between tags belongs to the preceding run (before the
@@ -323,8 +326,21 @@ the text without moving the cursor off it; a `cursorPoint` on any other line tha
 `ui/src/lib/previewLines.ts` measures visual lines per block from text-node rects, reading
 only the blocks a step crosses, never the whole document. The band
 (`data-caret-preview-cursor`) is an overlay sibling of `.plan-preview`, so the source
-map's text order is untouched. `c`, `V` and Esc sit on their own `keyboardComments` row,
-still source-only.
+map's text order is untouched. `c` and `V` sit on their own `keyboardComments` row, still
+source-only. Esc runs wherever `search` or `keyboardComments` does.
+
+`search` is ported through `ui/src/lib/previewSearch.ts`, which matches the text as
+rendered. A block bounds a match. Prose whitespace collapses as CSS does, so a phrase
+wrapped across source lines matches; code is literal, line by line. A preview match is a
+plain `SearchMatch` whose `line` is the source line it starts on and whose columns are
+TextPoint columns from that line's `offsetOfLine`, so it may run past the line's own text.
+The keyboard takes its match space and its landing as deps; a preview landing places the
+cursor at the match's TextPoint. The highlights are `caret-preview-search` and
+`caret-preview-search-current`, apart from SourceView's `caret-search*` so a flip's
+unmount clear and mount paint never race over one registry key. Matches hold offsets, not
+`Range`s, since the code highlighter's text-node swap collapses ranges; the paint rebuilds
+them on each `previewLayoutRev` bump. A flip swaps the match space under the live index,
+so an effect re-seats it at the cursor with `retrackToNearest`.
 
 `textComments` opens the composer from the preview. `PlanPreview` reports a click as its
 collapsed selection, and a drag as the selection the gesture changed; Shift selects
