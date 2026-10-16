@@ -136,6 +136,8 @@
     paintCommentHighlight,
     paintVisualSelection,
     previewSlotBoxes,
+    sameSlotBoxes,
+    type SlotBox,
     spanRanges,
   } from "$lib/previewComments.ts";
   import { previewFileRefs } from "$lib/previewRefs.ts";
@@ -351,7 +353,7 @@
         ])
       : [],
   );
-  let slotBoxes = $state(new Map<number, { top: number; left: number; width: number }>());
+  let slotBoxes = $state(new Map<number, SlotBox>());
   // Created per root rather than per sync run, so a re-run keeps the padding it holds
   // instead of dropping it for a frame.
   const slotReserve = $derived(previewEl ? createSlotReserve(previewEl) : undefined);
@@ -1088,18 +1090,6 @@
       observer.disconnect();
     };
   });
-
-  function sameSlotBoxes(
-    a: ReadonlyMap<number, { top: number; left: number; width: number }>,
-    b: ReadonlyMap<number, { top: number; left: number; width: number }>,
-  ): boolean {
-    if (a.size !== b.size) return false;
-    for (const [block, box] of b) {
-      const old = a.get(block);
-      if (old?.top !== box.top || old.left !== box.left || old.width !== box.width) return false;
-    }
-    return true;
-  }
 
   // The one-time reference hints (EXC-1061): where to badge the first on-screen
   // file reference and the first on-screen directory reference, in .diff-plan
