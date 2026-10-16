@@ -1,12 +1,20 @@
 import "@ui/support/mount.ts";
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import { until } from "@test/support/poll.ts";
 import { render } from "@ui/support/mount.ts";
 import { reactiveProps } from "@ui/support/props.svelte.ts";
 import { CUSTOM_KEYWORD, customThemeSource } from "@ui/support/theme-file.ts";
 import PlanPreview from "@/components/PlanPreview.svelte";
+import {
+  buildFileRefLayer,
+  type FileRefSpan,
+  type FileRefSpanMap,
+  mergeFileRefSpans,
+} from "$lib/diffview/fileRefs.ts";
+import { buildLinkLayer } from "$lib/diffview/links.ts";
 import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
+import { type PreviewFileRef, previewFileRefs } from "$lib/previewRefs.ts";
 import { addTheme, replaceTheme, type ThemeId } from "$lib/theme.ts";
 import { buildFileTheme } from "$lib/theme-file.ts";
 
@@ -154,6 +162,115 @@ describe("PlanPreview", () => {
     flush();
 
     expect(pre.hasAttribute("data-code-reflow")).toBe(false);
+  });
+});
+
+describe("PlanPreview file references", () => {
+  const PLAN = "See `src/a.ts` and [the doc](src/b.ts).\n";
+
+  function refsFor(text: string): PreviewFileRef[] {
+    const layer = buildLinkLayer(text);
+    const refs: FileRefSpanMap = new Map();
+    for (const [line, spans] of mergeFileRefSpans(buildFileRefLayer(layer.text), layer.fileRefs))
+      refs.set(
+        line,
+        spans.map((s) => ({ ...s, kind: "file" as const })),
+      );
+    return previewFileRefs(refs, layer.text);
+  }
+
+  const tags = (target: HTMLElement) =>
+    [...target.querySelectorAll(".plan-preview [data-file-ref]")].map((el) => el.textContent);
+
+  afterEach(() => {
+    for (const el of document.body.querySelectorAll("[data-link-tooltip]")) el.remove();
+  });
+
+  test("wraps each resolved reference after mount", () => {
+    const { target, flush } = render(PlanPreview, {
+      html: renderPlanMarkdown(PLAN).html,
+      fileRefs: refsFor(PLAN),
+    });
+    flush();
+
+    expect(tags(target)).toEqual(["src/a.ts", "the doc"]);
+  });
+
+  test("re-tags the new DOM when the html changes", () => {
+    const next = "Now `src/c.ts`.\n";
+    const props = reactiveProps({ html: renderPlanMarkdown(PLAN).html, fileRefs: refsFor(PLAN) });
+    const { target, flush } = render(PlanPreview, props);
+    flush();
+
+    props.html = renderPlanMarkdown(next).html;
+    props.fileRefs = refsFor(next);
+    flush();
+
+    expect(tags(target)).toEqual(["src/c.ts"]);
+  });
+
+  test("tags references that resolve after mount", () => {
+    const props = reactiveProps({
+      html: renderPlanMarkdown(PLAN).html,
+      fileRefs: [] as PreviewFileRef[],
+    });
+    const { target, flush } = render(PlanPreview, props);
+    flush();
+    expect(tags(target)).toEqual([]);
+
+    props.fileRefs = refsFor(PLAN);
+    flush();
+
+    expect(tags(target)).toEqual(["src/a.ts", "the doc"]);
+  });
+
+  test("a click on a reference hands its span and element over and cancels the default", () => {
+    const calls: [FileRefSpan, HTMLElement][] = [];
+    const { target, flush } = render(PlanPreview, {
+      html: renderPlanMarkdown(PLAN).html,
+      fileRefs: refsFor(PLAN),
+      onFileRefClick: (ref: FileRefSpan, el: HTMLElement) => calls.push([ref, el]),
+    });
+    flush();
+    const el = target.querySelector("[data-file-ref]") as HTMLElement;
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+
+    el.dispatchEvent(click);
+
+    expect(calls.length).toBe(1);
+    expect(calls[0]?.[0].path).toBe("src/a.ts");
+    expect(calls[0]?.[1] === el).toBe(true);
+    expect(click.defaultPrevented).toBe(true);
+  });
+
+  test("a click on plain text opens nothing", () => {
+    let calls = 0;
+    const { target, flush } = render(PlanPreview, {
+      html: renderPlanMarkdown(PLAN).html,
+      fileRefs: refsFor(PLAN),
+      onFileRefClick: () => calls++,
+    });
+    flush();
+
+    (target.querySelector(".plan-preview p") as HTMLElement).click();
+
+    expect(calls).toBe(0);
+  });
+
+  test("hovering a reference that hides its path shows the path until the pointer leaves", () => {
+    const { target, flush } = render(PlanPreview, {
+      html: renderPlanMarkdown(PLAN).html,
+      fileRefs: refsFor(PLAN),
+    });
+    flush();
+    const label = [...target.querySelectorAll("[data-file-ref]")][1] as HTMLElement;
+    const tips = () => [...document.body.querySelectorAll("[data-link-tooltip]")];
+
+    label.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+    expect(tips().map((t) => t.textContent)).toEqual(["src/b.ts"]);
+
+    label.dispatchEvent(new PointerEvent("pointerout", { bubbles: true }));
+    expect(tips().length).toBe(0);
   });
 });
 

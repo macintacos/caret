@@ -15,9 +15,9 @@ import { DIFFS_CORE_STYLES } from "$lib/diffview/diffsCoreStyles.ts";
 // The vendored Lucide `file` glyph as a CSS mask source (EXC-687). Rendered as a
 // mask rather than an <img> so it takes the ink color of the surrounding text via
 // background-color, matching how Icon.svelte colors an SVG through currentColor.
-const FILE_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(fileIconRaw)}")`;
+export const FILE_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(fileIconRaw)}")`;
 // Its counterpart for a reference the daemon resolved to a directory (EXC-918).
-const FOLDER_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(folderIconRaw)}")`;
+export const FOLDER_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(folderIconRaw)}")`;
 // The task-list checkbox's three states, one vendored Lucide glyph each. Masks for the
 // same reason the file glyph is one: the row's ink is a palette token, and a mask takes
 // it through background-color where an <img> would be stuck with whatever the file draws.

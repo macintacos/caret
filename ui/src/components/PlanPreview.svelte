@@ -3,9 +3,14 @@
   // div[data-source-start][data-source-end] blocks stay direct children for the
   // source-mapped features to find. DiffPlanView decides which text and when; this mounts
   // it, sets what HTML cannot carry, highlights its code blocks once each has mounted
-  // plain, marks the soft-wrapped ones, and styles it.
+  // plain, marks the soft-wrapped ones, tags the resolved file references and opens them
+  // on click, and styles it.
+  import { FILE_ICON_MASK, FOLDER_ICON_MASK } from "$lib/diffview/coreStyles.ts";
+  import type { FileRefSpan } from "$lib/diffview/fileRefs.ts";
   import { highlightTokens } from "$lib/diffview/highlight.ts";
+  import { hideTooltip, showTooltip } from "$lib/diffview/linkInteractions.ts";
   import { applyPreviewReflow, highlightPreviewCode } from "$lib/previewCode.ts";
+  import { type PreviewFileRef, tagPreviewFileRefs } from "$lib/previewRefs.ts";
   import { type ThemeId, themeFor } from "$lib/theme.ts";
 
   interface Props {
@@ -21,6 +26,10 @@
      * geometry and its place-keeping across a flip read it. Bindable, and cleared on
      * unmount, unlike an onReady handle. */
     root?: HTMLDivElement;
+    /** The daemon-resolved references to tag, keyed by their display text. */
+    fileRefs?: readonly PreviewFileRef[];
+    /** A tagged reference was clicked. */
+    onFileRefClick?: (ref: FileRefSpan, el: HTMLElement) => void;
   }
   let {
     html,
@@ -28,6 +37,8 @@
     themeId,
     reflowedBlocks = new Set(),
     root = $bindable(),
+    fileRefs = [],
+    onFileRefClick,
   }: Props = $props();
 
   $effect(() => {
@@ -67,9 +78,50 @@
     void html;
     if (root) applyPreviewReflow(root, reflowedBlocks);
   });
+
+  let tagged = new Map<HTMLElement, FileRefSpan>();
+  $effect(() => {
+    void html;
+    const refs = fileRefs;
+    if (root) tagged = tagPreviewFileRefs(root, refs);
+  });
+
+  function refAt(target: EventTarget | null): [HTMLElement, FileRefSpan] | undefined {
+    const el = target instanceof Element ? target.closest<HTMLElement>("[data-file-ref]") : null;
+    const ref = el ? tagged.get(el) : undefined;
+    return el && ref ? [el, ref] : undefined;
+  }
+
+  // preventDefault so a reference inside a link opens the file, not the URL — as in the
+  // source view, where a reference click also wins over its link.
+  function openRef(event: MouseEvent) {
+    const hit = refAt(event.target);
+    if (!hit) return;
+    event.preventDefault();
+    onFileRefClick?.(hit[1], hit[0]);
+  }
+
+  function showRefTarget(event: PointerEvent) {
+    const hit = refAt(event.target);
+    if (hit?.[1].target !== undefined) showTooltip(hit[0], hit[1].target);
+  }
+
+  function hideRefTarget(event: PointerEvent) {
+    const hit = refAt(event.target);
+    if (hit) hideTooltip(hit[0]);
+  }
 </script>
 
-<div class="plan-preview" bind:this={root} onerrorcapture={hideFailedImage}>{@html html}</div>
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+<div
+  class="plan-preview"
+  bind:this={root}
+  onerrorcapture={hideFailedImage}
+  onclick={openRef}
+  onpointerover={showRefTarget}
+  onpointerout={hideRefTarget}
+  style:--file-ref-icon={FILE_ICON_MASK}
+  style:--folder-ref-icon={FOLDER_ICON_MASK}>{@html html}</div>
 
 <style>
   .plan-preview {
@@ -296,5 +348,44 @@
   }
   .plan-preview :global(img) {
     max-width: 100%;
+  }
+  /* A resolved reference: coreStyles.ts's reference chip and glyph; keep in sync. */
+  .plan-preview :global([data-file-ref]) {
+    cursor: pointer;
+    padding: var(--chip-pad-block) var(--chip-pad-inline);
+    border-radius: var(--radius);
+    background-color: var(--chip-ref);
+  }
+  .plan-preview :global([data-file-ref]::before) {
+    content: "";
+    display: inline-block;
+    width: 0.85em;
+    height: 0.85em;
+    margin-right: 0.25em;
+    vertical-align: -0.1em;
+    background-color: var(--ink-faint);
+    mask: var(--file-ref-icon) no-repeat center / contain;
+  }
+  .plan-preview :global([data-file-ref="directory"]::before) {
+    mask-image: var(--folder-ref-icon);
+  }
+  .plan-preview :global([data-file-ref]:hover) {
+    background-color: var(--accent-wash);
+  }
+  .plan-preview :global([data-file-ref]:hover::before) {
+    background-color: var(--ink);
+  }
+  /* A backticked reference reads as one pill: the code chip takes the reference tint and
+     the hover, and the reference inside it gives up its own box. */
+  .plan-preview :global(code:has(> [data-file-ref])) {
+    background-color: var(--chip-ref);
+  }
+  .plan-preview :global(code:has(> [data-file-ref]:hover)) {
+    background-color: var(--accent-wash);
+  }
+  .plan-preview :global(code > [data-file-ref]),
+  .plan-preview :global(code > [data-file-ref]:hover) {
+    padding: 0;
+    background-color: transparent;
   }
 </style>

@@ -105,6 +105,7 @@
     scrollRowIntoView,
   } from "$lib/diffview/scroll.ts";
   import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
+  import { previewFileRefs } from "$lib/previewRefs.ts";
   import {
     type Annotation,
     type ClientReview,
@@ -441,6 +442,9 @@
     }
     return active.size > 0 ? active : undefined;
   });
+  const previewRefs = $derived(
+    planPreview && fileRefs ? previewFileRefs(fileRefs, linkLayer.text) : [],
+  );
 
   // The file the preview is open on, plus the token it was opened from, which the
   // reveal effect below measures so the clicked filename stays visible beside the
@@ -572,11 +576,11 @@
   // and is swallowed so dismissing never also opens a line comment.
   const CARD_EXEMPT = "[data-folder-tree], [data-file-drawer], [data-file-ref], [data-ref-hint]";
 
-  // Gated on the referenceHints surfaces, not just the state: elsewhere the card is
+  // Gated on the fileReferences surfaces, not just the state: elsewhere the card is
   // off screen with `folderTree` still set, and these handlers would eat an Escape
   // and a click from the visible view.
   $effect(() => {
-    if (!runs("referenceHints") || folderTree === undefined) return;
+    if (!runs("fileReferences") || folderTree === undefined) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       folderTree = undefined;
@@ -608,7 +612,7 @@
   // IS viewport-fixed over the plan, so the divergence tracks the two surfaces'
   // shapes rather than being drift.
   //
-  // Gated on the referenceHints surfaces, not just the state: elsewhere the lane is
+  // Gated on the fileReferences surfaces, not just the state: elsewhere the lane is
   // hidden with `filePreview` still set, and its handler would swallow Escape.
   //
   // Gated on the card too (EXC-1129), which is what gives the two coexisting
@@ -618,7 +622,7 @@
   // is stacked above the lane, so while one is open the lane simply does not listen.
   // Closing it re-runs this effect, and the next Escape reaches the lane.
   $effect(() => {
-    if (!runs("referenceHints") || filePreview === undefined || folderTree !== undefined) return;
+    if (!runs("fileReferences") || filePreview === undefined || folderTree !== undefined) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || drawerClosing) return;
       dismissFilePreview();
@@ -1827,6 +1831,8 @@
           {themeId}
           {reflowedBlocks}
           bind:root={previewEl}
+          fileRefs={previewRefs}
+          onFileRefClick={openFileRef}
         />
         {@render codeChrome()}
       {:else}
@@ -1884,7 +1890,7 @@
              on-screen file reference and one over the first directory reference,
              teaching that a path token opens a preview. Layered over the .diff-plan
              scroll content like the copy button, so they scroll with the rows.
-             Rendered in this branch only, so off the source view both drop — and
+             Rendered on the referenceHints surfaces only, so elsewhere both drop — and
              since nothing renders there, neither flag is spent and the hints survive
              to teach on the next source-view render.
              NOT gated on showShortcutHints, unlike the two hint chips further down:
@@ -1981,8 +1987,8 @@
        beside the plan holding the referenced file's excerpt. It takes layout
        space rather than covering the plan, and wipes in from whichever edge it
        docked to. Only appears for references the daemon resolved to a real file,
-       and only on the referenceHints surfaces. -->
-  {#if runs("referenceHints") && filePreview}
+       and only on the fileReferences surfaces. -->
+  {#if runs("fileReferences") && filePreview}
     <!-- Bound here because the {#if}'s narrowing does not reach into a snippet body. -->
     {@const openRef = filePreview}
     <FileDrawer
@@ -2008,8 +2014,8 @@
 
 <!-- The folder-reference tree (EXC-918). A viewport-fixed card rather than a lane
      in the surface above, so it sits outside that flex row entirely; gated on the
-     referenceHints surfaces like the file lane is. -->
-{#if runs("referenceHints") && folderTree}
+     fileReferences surfaces like the file lane is. -->
+{#if runs("fileReferences") && folderTree}
   {@const openDir = folderTree}
   <!-- A file row opens the SAME lane a filename reference opens (EXC-1137). The
        card converted the row's tree-relative path already. -->
