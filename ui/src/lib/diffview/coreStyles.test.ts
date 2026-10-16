@@ -1486,13 +1486,13 @@ describe("the preview's copies of the link, code and reference chips (EXC-2021)"
   /** The source view's chip for a data-md member, as the one box the preview draws. */
   function sourceChip(member: "link" | "code"): Record<string, string | undefined> {
     const fill = sourceRule("[data-line] [data-md]");
-    const cap = sourceRule("[data-line] [data-md-start]");
-    const end = sourceRule("[data-line] [data-md-end]");
-    expect(end["padding-inline-end"]).toBe(cap["padding-inline-start"]);
+    const startCap = sourceRule("[data-line] [data-md-start]");
+    const endCap = sourceRule("[data-line] [data-md-end]");
+    expect(endCap["padding-inline-end"]).toBe(startCap["padding-inline-start"]);
     return {
       "background-color": declarations(tintRule(member))[`--md-${member}`],
-      padding: `${fill["padding-block"]} ${cap["padding-inline-start"]}`,
-      "border-radius": cap["border-start-start-radius"],
+      padding: `${fill["padding-block"]} ${startCap["padding-inline-start"]}`,
+      "border-radius": startCap["border-start-start-radius"],
     };
   }
 

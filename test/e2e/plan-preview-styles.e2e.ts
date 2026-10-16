@@ -278,10 +278,10 @@ test("links and inline code wear the source view's chips", async ({ daemon, page
 
   await expect.poll(() => previewChip(page, "a", "a link")).toEqual(link);
   await expect.poll(() => previewChip(page, "code", "inline code")).toEqual(code);
-  const tint = await resolveStyle(page, "backgroundColor", "--chip-link");
+  const linkTint = await resolveStyle(page, "backgroundColor", "--chip-link");
   await expect
     .poll(async () => (await stylesOf(page, { fill: ["a", "a link", "background-color"] })).fill)
-    .toBe(tint);
+    .toBe(linkTint);
 });
 
 test("a link labelled with inline code wears the code's chip alone", async ({ daemon, page }) => {
