@@ -46,10 +46,11 @@ describe("runsOn", () => {
     expect(BEHAVIORS.some((b) => runsOn(b, "compare"))).toBe(false);
   });
 
-  test("codeChrome, fileReferences, keyboardCursor, commentThreads, textComments and headingTracking run on the preview", () => {
+  test("codeChrome, fileReferences, search, keyboardCursor, commentThreads, textComments and headingTracking run on the preview", () => {
     expect(BEHAVIORS.filter((b) => runsOn(b, "preview"))).toEqual([
       "codeChrome",
       "fileReferences",
+      "search",
       "keyboardCursor",
       "commentThreads",
       "textComments",

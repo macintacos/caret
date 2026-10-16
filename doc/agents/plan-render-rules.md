@@ -4,9 +4,9 @@
 `ui/src/lib/diffview/`, the `SourceView` / `DiffPlanView` components, and the preview
 renderer `ui/src/lib/planMarkdown.ts`, its source-line map `ui/src/lib/planSourceMap.ts`,
 its code-block highlight pass `ui/src/lib/previewCode.ts`, its reference-tagging pass
-`ui/src/lib/previewRefs.ts`, its comment slots `ui/src/lib/previewComments.ts`, its mount
-`ui/src/components/PlanPreview.svelte`, and the source/preview surface table
-`ui/src/lib/planView.ts`.*
+`ui/src/lib/previewRefs.ts`, its comment slots `ui/src/lib/previewComments.ts`, its search
+`ui/src/lib/previewSearch.ts`, its mount `ui/src/components/PlanPreview.svelte`, and the
+source/preview surface table `ui/src/lib/planView.ts`.*
 
 The **source view** renders a plan as **line-numbered markdown source**. Every decoration
 the reviewer sees is drawn over the characters they would copy. Everything up to § The
@@ -220,14 +220,20 @@ maps between the two for comments, the cursor and search.
 - **The map.** `createPlanSourceMap(root)` takes the element whose content is exactly the
   rendered HTML and walks it once per version, storing runs of text offset → line. After a
   `data-source-code` marker, each `\n` in the next element's text that more code follows
-  starts the next line's run. No lookup reads layout.
+  starts the next line's run. No lookup reads layout. `DiffPlanView` builds it in an
+  effect, after the preview's `{@html}` commits: a render-phase build, such as one the
+  search count pulls, would walk the previous version's DOM.
 - **Lookups.** `lineAt` gives the line of the character at a DOM point, the last
   character's at the end of the text, and null outside the root or for an empty preview.
   `linesOf` gives the lines of a range's first and last non-whitespace characters (its
   first and last characters when it covers only whitespace), so a triple-click selection
   that ends at the next block's start reports the previous block's line. `rangeOf` gives
   the rendered text a line produced, or null for a line that produced none: blank outside
-  code, link definition, fence, table delimiter row, `hr`, out of range.
+  code, link definition, fence, table delimiter row, `hr`, out of range. `lineAtOffset` is
+  `lineAt` for a caller that counted the root's text itself. `offsetOfLine` gives where a
+  line's text starts, the origin a TextPoint column counts from, at the same first run
+  `rangeOf` starts at. Offsets resolve to DOM points through `createTextCursor`, one
+  forward walk over ascending offsets.
 - **Edges.**
   - A soft break's `\n` belongs to the line it ends.
   - The structural `\n` marked emits between tags belongs to the preceding run (before the
@@ -323,8 +329,24 @@ the text without moving the cursor off it; a `cursorPoint` on any other line tha
 `ui/src/lib/previewLines.ts` measures visual lines per block from text-node rects, reading
 only the blocks a step crosses, never the whole document. The band
 (`data-caret-preview-cursor`) is an overlay sibling of `.plan-preview`, so the source
-map's text order is untouched. `c`, `V` and Esc sit on their own `keyboardComments` row,
-still source-only.
+map's text order is untouched. `c` and `V` sit on their own `keyboardComments` row, still
+source-only. Esc runs wherever `search` or `keyboardComments` does.
+
+`search` is ported through `ui/src/lib/previewSearch.ts`, which matches the text as
+rendered, segmented once per map, on the first query, by `createPreviewSearch`. A block,
+raw-HTML ones such as `dd`, `summary` and `section` included, bounds a match. Prose
+whitespace collapses as CSS does, so a phrase wrapped across source lines matches; code is
+literal, line by line. A preview match is a plain `SearchMatch` whose `line` is the source
+line it starts on and whose columns are TextPoint columns from that line's `offsetOfLine`,
+so it may run past the line's own text. The keyboard takes its match space and its landing
+as deps; a preview landing opens every collapsed `<details>` around the match, as
+find-in-page does, and places the cursor at the match's TextPoint. The highlights are
+`caret-preview-search` and `caret-preview-search-current`, apart from SourceView's
+`caret-search*` so a flip's unmount clear and mount paint never race over one registry
+key. Matches hold a line and columns, not `Range`s, since the code highlighter's text-node
+swap collapses ranges; the paint rebuilds them on each `previewLayoutRev` bump. A flip
+swaps the match space under the live index, so an effect re-seats it at the cursor with
+`retrackToNearest`.
 
 `textComments` opens the composer from the preview. `PlanPreview` reports a click as its
 collapsed selection, and a drag as the selection the gesture changed; Shift selects
