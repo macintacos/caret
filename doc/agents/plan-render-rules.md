@@ -302,7 +302,8 @@ highlight run only where the `commentThreads` row runs.
   the block holding its end line; `commentSlotIndex` gives a gap line the block before it
   and a line above every block the first, where `blockIndexForLine` gives a gap line the
   next block. Anchors stay source line ranges; nothing is re-anchored to rendered
-  positions.
+  positions. An unmeasured slot hides with `opacity: 0` and `pointer-events: none`, never
+  `visibility: hidden`, so a composer mounting there can take focus.
 - **Reserve.** `createSlotReserve` holds each slot's height open as `padding-block-end` on
   its block, and the slot sits at the block's bottom less that height. The reserve lives
   as long as the preview root, so a re-sync never drops a block's padding for a frame. The
@@ -324,6 +325,17 @@ only the blocks a step crosses, never the whole document. The band
 (`data-caret-preview-cursor`) is an overlay sibling of `.plan-preview`, so the source
 map's text order is untouched. `c`, `V` and Esc sit on their own `keyboardComments` row,
 still source-only.
+
+`textComments` opens the composer from the preview. `PlanPreview` reports a click as its
+collapsed selection, and a drag as the selection the gesture changed; Shift selects
+natively, and links, file references and form controls keep their own clicks.
+`clampToRoot` in `previewComments.ts` resolves an end over a slot or the code chrome to
+the block under the pointer. `linesOf` maps the range to source lines, and `openRange`,
+the source view's opener, opens the composer there, so the open composer's line highlight
+marks the selection's lines and the feedback matches a source-view comment's.
+`lineComments` stays source-only: its drag readout, gutter drag and hint chips belong to
+the source view's gutter, which the preview has no counterpart for; a native selection
+does that job.
 
 The preview renders a version once. `memoLast` returns the last result for the same text,
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same
