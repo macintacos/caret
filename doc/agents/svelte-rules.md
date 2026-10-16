@@ -182,8 +182,10 @@ imports it — stays green under any invocation.
   nobody — and every content chip clears that floor, nearly all in
   `diffview/coreStyles.ts`: `--chip-ref` fills the resting file-reference chip, and
   `--chip-bold` / `--chip-italic` / `--chip-code` / `--chip-link` the four inline chips,
-  each through its own `--md-*` layer variable.
-  **`--chip-ref` has a second reader, and it is the one exception to "all in coreStyles"**:
+  each through its own `--md-*` layer variable. The plan preview reads `--chip-code`,
+  `--chip-link` and `--chip-ref` too, as copies `coreStyles.test.ts` pins to the source
+  view's rules.
+  **`--chip-ref` also has a reader outside the rendered plan, and it is no pinned copy**:
   the feedback editors tint a recognized reference with it too (`.cm-md-ref` in
   `lib/markdownEditor.ts`, EXC-1177), so one reference reads the same on the side that
   composes it and the side that renders it. It is deliberately not the neutral `--chip`
