@@ -1053,11 +1053,6 @@ describe("DiffPlanView preview cursor", () => {
   // renders as one visual line.
   const twoBlocks = "# H\n\nalpha one\nalpha two\n";
   const label = (target: HTMLElement) => target.querySelector(".composer .label")?.textContent;
-  const clearEnabled = () =>
-    shortcuts
-      .list()
-      .find((e) => e.id === "commenting.clear")
-      ?.enabled?.();
 
   test("c on the preview comments on the lines the cursor's visual line covers", async () => {
     stubLayout();
@@ -1078,7 +1073,7 @@ describe("DiffPlanView preview cursor", () => {
     run("motion.down");
     run("commenting.comment");
     expect(await until(() => label(target) === "Lines 1–4")).toBe(true);
-    expect(clearEnabled()).toBe(false);
+    expect(enabled("commenting.clear")).toBe(false);
   });
 
   test("V on the preview shows the visual hint chip", async () => {
@@ -1148,16 +1143,16 @@ describe("DiffPlanView preview cursor", () => {
     await until(() => live("commenting.visualLine"));
     run("motion.top");
     run("commenting.visualLine");
-    expect(clearEnabled()).toBe(true);
+    expect(enabled("commenting.clear")).toBe(true);
     toggle(target)!.click();
     await until(() => target.querySelector(".plan-preview") != null);
-    expect(clearEnabled()).toBe(false);
+    expect(enabled("commenting.clear")).toBe(false);
     run("motion.top");
     run("commenting.visualLine");
-    expect(clearEnabled()).toBe(true);
+    expect(enabled("commenting.clear")).toBe(true);
     toggle(target)!.click();
     await until(() => target.querySelector(".plan-preview") == null);
-    expect(clearEnabled()).toBe(false);
+    expect(enabled("commenting.clear")).toBe(false);
   });
 
   test("a content switch clears the preview cursor", async () => {

@@ -94,12 +94,6 @@ export function createPreviewCursor(
       : deps.pointForLine(visualAnchor);
   }
 
-  function place(p: TextPoint, scroll: (p: TextPoint) => void): void {
-    store.cursorLine = p.line;
-    store.cursorPoint = p;
-    scroll(p);
-  }
-
   function ordered(a: TextPoint, b: TextPoint): [TextPoint, TextPoint] {
     return before(b, a) ? [b, a] : [a, b];
   }
@@ -194,7 +188,7 @@ export function createPreviewCursor(
       }
       const p = point() ?? deps.seed();
       if (p == null) return;
-      place(p, deps.follow);
+      land(p);
       store.visualAnchor = p.line;
       store.visualAnchorPoint = p;
       deps.sound?.("visualEntered");
