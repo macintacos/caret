@@ -88,7 +88,7 @@
   import type { ThemeId } from "$lib/theme.ts";
   import { bind, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
   import { sound } from "$lib/sound.ts";
-  import type { CursorMotion } from "$lib/diffview/lineCursor.ts";
+  import { type CursorMotion, lineCountOf } from "$lib/diffview/lineCursor.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, slugForLine } from "$lib/toc.ts";
   import { NARROW_WIDTH_PX } from "$lib/layout.ts";
   import {
@@ -99,14 +99,25 @@
     writeDrawerSize,
   } from "$lib/fileDrawer.ts";
   import {
+    followBox,
     lineAtReadingZone,
     REVEAL_MARGIN_BOTTOM,
     revealScrollDelta,
     rowForLine,
     scrollRowIntoView,
   } from "$lib/diffview/scroll.ts";
+  import { createPreviewCursor, type PreviewCursorStore } from "@/state/previewCursor.ts";
+  import {
+    type BandBox,
+    cursorBand,
+    lastVisualLine,
+    pointForLine,
+    readingPoint,
+    stepVisualLine,
+    visualLineBox,
+  } from "$lib/previewLines.ts";
+  import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
   import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
-  import { createPlanSourceMap } from "$lib/planSourceMap.ts";
   import {
     clearCommentHighlight,
     commentSlotIndex,
@@ -395,10 +406,11 @@
   }
 
   // createPlanSourceMap reads only the DOM, so the html read is what rebuilds the map on a
-  // version switch.
+  // version switch. Shared by the comment highlight and the keyboard cursor, and ungated:
+  // each consumer gates on its own row.
   const previewSourceMap = $derived.by(() => {
     void planPreview?.html;
-    return previewEl && runs("commentThreads") ? createPlanSourceMap(previewEl) : null;
+    return previewEl ? createPlanSourceMap(previewEl) : null;
   });
   // The code highlight pass replaces a block's text nodes after mount and on a theme
   // switch, collapsing any range painted inside them, so the paint follows text changes.
@@ -407,7 +419,7 @@
     const map = previewSourceMap;
     const span = activeSpan;
     const root = previewEl;
-    if (!map || !span || !root) {
+    if (!runs("commentThreads") || !map || !span || !root) {
       clearCommentHighlight();
       return;
     }
@@ -1406,12 +1418,14 @@
   // The plan's keyboard surface (EXC-875): the vim line cursor (EXC-788), visual
   // line-select (EXC-790), and the `/` full-text search HUD (EXC-832) in one
   // unit-testable factory (state/planKeyboard). The component owns the reactive store —
-  // the runes live here — and the factory sequences the transitions over it; source
-  // view only (compare and the plan preview have no line cursor). The DOM effects
-  // are injected: the rendered lines, heading lines, the reading position, the half-page
-  // size, scroll-follow, the shared jump, the composer open, and focus/blur.
-  let keyboardStore = $state<PlanKeyboardStore>({
+  // the runes live here — and the factory sequences the transitions over it. The store
+  // is shared with the preview cursor (state/previewCursor), which keeps `cursorLine`
+  // and adds `cursorPoint`; no cursor on compare. The DOM effects are injected: the
+  // rendered lines, heading lines, the reading position, the half-page size,
+  // scroll-follow, the shared jump, the composer open, and focus/blur.
+  let keyboardStore = $state<PlanKeyboardStore & PreviewCursorStore>({
     cursorLine: null,
+    cursorPoint: null,
     visualAnchor: null,
     searchOpen: false,
     searchCommitted: false,
@@ -1432,6 +1446,98 @@
     blur: () => (document.activeElement as HTMLElement | null)?.blur(),
     hintsShown: () => showShortcutHints,
     sound: sound.play,
+  });
+
+  function previewGeometry(): { root: Element; scroller: HTMLElement; map: PlanSourceMap } | null {
+    const root = previewEl;
+    const scroller = scrollEl;
+    const map = previewSourceMap;
+    return root == null || scroller == null || map == null ? null : { root, scroller, map };
+  }
+
+  function previewHalfPage(): number {
+    const lineHeight = previewEl ? Number.parseFloat(getComputedStyle(previewEl).lineHeight) : NaN;
+    if (scrollEl == null || !(lineHeight > 0)) return 10;
+    return Math.max(1, Math.floor(scrollEl.clientHeight / 2 / lineHeight));
+  }
+
+  const planLineCount = $derived(lineCountOf(linkLayer.text.split("\n")));
+  const previewCursor = createPreviewCursor(keyboardStore, {
+    lines: () => linkLayer.text.split("\n"),
+    headingLines: () => headings.map((h) => h.line),
+    halfPage: previewHalfPage,
+    seed: () => {
+      const geometry = previewGeometry();
+      return (
+        geometry &&
+        readingPoint(geometry.root, geometry.map, geometry.scroller.getBoundingClientRect().top)
+      );
+    },
+    step: (from, count) => {
+      const geometry = previewGeometry();
+      return geometry ? stepVisualLine(geometry.root, geometry.map, from, count) : from;
+    },
+    pointForLine: (line) => {
+      const map = previewSourceMap;
+      return map && pointForLine(map, line, planLineCount);
+    },
+    last: () => {
+      const geometry = previewGeometry();
+      return geometry && lastVisualLine(geometry.root, geometry.map);
+    },
+    follow: (p) => {
+      const geometry = previewGeometry();
+      const box = geometry && visualLineBox(geometry.root, geometry.map, p);
+      if (geometry && box) followBox(geometry.scroller, box);
+    },
+    jump: (p) => {
+      const block = previewBlock(p.line);
+      if (previewEl && block) scrollRowIntoView(previewEl, block);
+    },
+  });
+
+  // The band on screen and the source line it marks.
+  let previewCursorBox = $state<({ line: number } & BandBox) | null>(null);
+  // Bumped, rAF-throttled, whenever the preview's layout may have moved the band.
+  let previewLayoutRev = $state(0);
+  $effect(() => {
+    const root = previewEl;
+    if (root == null) return;
+    let raf = 0;
+    const schedule = () => {
+      if (raf === 0)
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          previewLayoutRev++;
+        });
+    };
+    // Text rewraps without resizing the root: reference tagging and code swaps rewrite
+    // nodes, and a theme paint (inline properties on <html>) restyles the markdown.
+    // The root's attributes stay unobserved: the slot reserve writes block styles there.
+    const resize = new ResizeObserver(schedule);
+    resize.observe(root);
+    const text = new MutationObserver(schedule);
+    text.observe(root, { childList: true, subtree: true, characterData: true });
+    const paint = new MutationObserver(schedule);
+    paint.observe(document.documentElement, { attributeFilter: ["style"] });
+    return () => {
+      cancelAnimationFrame(raf);
+      resize.disconnect();
+      text.disconnect();
+      paint.disconnect();
+    };
+  });
+  $effect(() => {
+    void previewLayoutRev;
+    const p = runs("keyboardCursor") && surface === "preview" ? previewCursor.point() : null;
+    const map = p && previewSourceMap;
+    if (p == null || map == null || scrollEl == null || previewEl == null) {
+      previewCursorBox = null;
+      return;
+    }
+    const lineHeight = Number.parseFloat(getComputedStyle(previewEl).lineHeight);
+    const band = cursorBand(previewEl, scrollEl, map, p, lineHeight);
+    previewCursorBox = band && { line: p.line, ...band };
   });
 
   // The live visual selection, ascending — mirrored into SourceView's amber band through
@@ -1468,6 +1574,7 @@
   $effect(() => {
     void contentKey;
     keyboard.clearForContentSwitch();
+    previewCursor.reset();
   });
 
   // Recompute the active heading from the source line at the top of the reading
@@ -1578,29 +1685,37 @@
   // timer, and cancelClose tears it down.
   $effect(() => () => keyboard.cancelClose());
 
-  // Register the live motion + commenting shortcuts on the keyboardCursor surfaces;
-  // teardown unregisters them, so motion is gone elsewhere. Depends only on the
-  // surface — the closures read cursorLine/headings/api live at dispatch, so a
-  // cursor move never re-runs this effect (which would churn the registry).
+  // Register the live motion shortcuts on the keyboardCursor surfaces, driving the
+  // surface's own cursor; teardown unregisters them, so motion is gone elsewhere.
+  // Depends only on the surface — the closures read cursorLine/headings/api live at
+  // dispatch, so a cursor move never re-runs this effect (which would churn the registry).
   // Ctrl+d/Ctrl+u are non-bare, so the dispatcher does not suppress them in an
   // editing context; the enabled guard does, so half-page motions don't fire while
   // the composer is focused.
   $effect(() => {
     if (!runs("keyboardCursor")) return;
+    const move = surface === "preview" ? previewCursor.moveCursor : keyboard.moveCursor;
     const offs: Array<() => void> = [];
     for (const [id, motion] of Object.entries(CURSOR_MOTIONS)) {
       offs.push(
         shortcuts.register(
           bind(id, {
-            run: () => keyboard.moveCursor(motion),
+            run: () => move(motion),
             enabled: () => !defaultIsEditingContext(),
           }),
         ),
       );
     }
+    return () => {
+      for (const off of offs) off();
+    };
+  });
+
+  $effect(() => {
+    if (!runs("keyboardComments")) return;
+    const offs: Array<() => void> = [];
     // Commenting on the focused line / a keyboard-selected range (EXC-790): live entries
-    // bound over EXC-786's reservations, registered in this same effect so they share its
-    // surface gating and editing-context guard. c
+    // bound over EXC-786's reservations, with the motions' editing-context guard. c
     // comments the cursor line (or, in visual mode, the whole selection); V enters visual
     // line-select; Esc closes search / exits visual mode but never clears the line cursor
     // (EXC-834, narrowing EXC-790's Esc reconciliation).
@@ -1745,6 +1860,8 @@
       commenting.cancel(liveText);
       capturePlace();
     }
+    // The preview can neither show nor cancel a visual selection.
+    if (next === "preview") keyboardStore.visualAnchor = null;
     planView = next;
     writePlanView(next);
   }
@@ -2098,6 +2215,18 @@
             {/each}
           </div>
         {/each}
+        {#if previewCursorBox}
+          <div
+            class="preview-cursor"
+            data-caret-preview-cursor
+            data-line={previewCursorBox.line}
+            aria-hidden="true"
+            style:top="{previewCursorBox.top}px"
+            style:left="{previewCursorBox.left}px"
+            style:width="{previewCursorBox.width}px"
+            style:height="{previewCursorBox.height}px"
+          ></div>
+        {/if}
       {:else}
         <!-- Live range readout: a zero-height sticky rail rendered first so it pins to
              the top of the scroll viewport from scroll position 0 without reflowing
@@ -2471,6 +2600,16 @@
     content: '';
     display: block;
     height: 33.333vh;
+  }
+
+  /* Translucent ink, so it reads as the source band over paper without hiding the
+     text beneath it. */
+  .preview-cursor {
+    position: absolute;
+    pointer-events: none;
+    /* Keep in sync with coreStyles.ts's [data-caret-cursor] rules. */
+    background: color-mix(in lab, var(--ink) 7%, transparent);
+    box-shadow: inset 3px 0 0 0 var(--ink);
   }
 
   /* The zero-height sticky rail that carries the live readout. Sticky to the top

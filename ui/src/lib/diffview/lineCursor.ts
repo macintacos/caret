@@ -1,4 +1,4 @@
-// Focused-line cursor model for the plan source view: given the current cursor
+// Focused-line cursor model for the plan source view and preview: given the current cursor
 // line and a motion key, resolve the line to move to; and tag the shadow row
 // the cursor sits on so the override sheet paints its band. The math is pure and
 // DOM-free (directly unit-testable); tagCursorRow is the only DOM touch and
@@ -40,6 +40,27 @@ export interface CursorContext {
 }
 
 const RELATIVE: ReadonlySet<CursorMotion> = new Set(["down", "up", "halfDown", "halfUp"]);
+
+/** The motions that navigate to a named SECTION — the same move a breadcrumb or ToC
+ * pick makes — so they take the top-parked shared jump. Do not widen it on a "navigates
+ * somewhere explicit" reading: gg/G/{/} step the reader THROUGH the document rather than
+ * to a section, and `G` is only right when the last line lands at the bottom. */
+export const JUMP_MOTIONS: ReadonlySet<CursorMotion> = new Set(["nextHeading", "prevHeading"]);
+
+/** Lines the cursor may occupy in `lines` (the text split on "\n"): a trailing newline
+ * leaves a final "" entry that is not a row, so `G` lands on a real one. */
+export function lineCountOf(lines: readonly string[]): number {
+  const n = lines.length;
+  return Math.max(1, lines[n - 1] === "" ? n - 1 : n);
+}
+
+/** The blank (empty or whitespace-only) lines the `{` / `}` motions jump between, capped
+ * to real rows so a trailing newline is not a target. */
+export function blankLinesOf(lines: readonly string[]): number[] {
+  return lines
+    .slice(0, lineCountOf(lines))
+    .flatMap((line, i) => (line.trim() === "" ? [i + 1] : []));
+}
 
 /**
  * The line the cursor should move to for `motion`, clamped to `[1, lineCount]`.
