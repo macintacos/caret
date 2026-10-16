@@ -8,9 +8,10 @@
 // (scrollWidth against clientWidth), the `indeterminate` property a live DOM sets,
 // a `?heading=` deep link landing under the preview, the preview mirroring the
 // heading it reads and the picker jumping it, scroll position across a live
-// daemon.addVersion, and a flip keeping the reader's place — the reading zone's live geometry, wheel scrolling, and an
-// image's late load above the parked block. The pure half stays units: the preference
-// and surface table in ui/src/lib/planView.test.ts, the mount in
+// daemon.addVersion, and a flip keeping the reader's place — the reading zone's live
+// geometry, wheel scrolling, and an image's late load above the parked block. The
+// pure half stays units: the preference and surface table in
+// ui/src/lib/planView.test.ts, the mount in
 // ui/src/components/PlanPreview.test.ts, the toggle's wiring in
 // ui/src/components/DiffPlanView.test.ts, and the place lookups and hold in
 // ui/src/lib/planPlace.test.ts and ui/src/lib/diffview/scroll.test.ts.

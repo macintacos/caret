@@ -89,12 +89,9 @@
   --radius: 6px;
   --radius-lg: 10px;
 
-  /* The chip family's breathing room — the inline-markup pills and the file reference,
-     on the source view and the preview alike. Two numbers because the axes are bounded
-     differently: the inline half is real space that keeps two abutting chips from
-     sharing a cell, while the block half only paints (padding on an inline box never
-     grows its line box) and stays under the line's slack so a dense paragraph does not
-     read as confetti. Em-relative, so each resolves against the chip's own font size. */
+  /* Chip padding (inline-markup pills, file references). Inline keeps abutting chips
+     apart; block only paints (it never grows the line box), so keep it under the
+     line's slack. */
   --chip-pad-inline: 0.32em;
   --chip-pad-block: 0.16em;
 

@@ -22,8 +22,9 @@
   // reviewer diff any two of them (base vs. target) through the SourceDiffView
   // wrapper, switching the split/unified layout at runtime. The gutter and
   // inline annotation cards belong to the source view only, and the heading
-  // surfaces to the source view and the preview — compare mode is a clean diff surface with none of them; the compared versions'
-  // comments surface in the docked panel instead, revealing their line on the side
+  // surfaces to the source view and the preview — compare mode is a clean diff
+  // surface with none of them; the compared versions' comments surface in the
+  // docked panel instead, revealing their line on the side
   // they belong to for the two rendered versions and listing non-interactively for
   // anything in between.
   import { untrack } from "svelte";
