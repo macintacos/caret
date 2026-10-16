@@ -1,17 +1,20 @@
 import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { selectText } from "@ui/support/selection.ts";
 import type { RectReader } from "$lib/diffview/codeChrome.ts";
 import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
 import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
 import {
   clampToRoot,
   clearCommentHighlight,
+  clickedRange,
   commentSlotIndex,
   createSlotReserve,
   groupBySlot,
   paintCommentHighlight,
   previewSlotBoxes,
+  releasedRange,
   spanRanges,
 } from "$lib/previewComments.ts";
 
@@ -31,6 +34,9 @@ function mount(text: string): { root: HTMLElement; map: PlanSourceMap } {
 }
 
 const texts = (ranges: Range[]): string[] => ranges.map((r) => r.toString());
+
+const textIn = (el: Element): Node =>
+  document.createTreeWalker(el, NodeFilter.SHOW_TEXT).nextNode() as Node;
 
 describe("commentSlotIndex", () => {
   // Blocks: a paragraph on 1, a list on 3–5, a fence on 7–10, a paragraph on 12.
@@ -202,6 +208,18 @@ describe("clampToRoot", () => {
     expect(clamped.endOffset).toBe(root.childNodes.length);
   });
 
+  test("spans the gap after the release block up to the start of an upward drag", () => {
+    const { root, map, sibling } = withSibling("one\n\ntwo\n\nthree");
+    const range = document.createRange();
+    range.setStart(textIn(root.children[2] as Element), 2);
+    range.setEnd(sibling, 1);
+
+    const clamped = clampToRoot(range, root, root.children[0] as Element);
+
+    expect(clamped.collapsed).toBe(false);
+    expect(map.linesOf(clamped)).toEqual({ start: 3, end: 5 });
+  });
+
   test("starts a range begun before the root at the root's start", () => {
     const { root } = mount("one\n\ntwo");
     const before = document.createElement("div");
@@ -216,5 +234,93 @@ describe("clampToRoot", () => {
 
     expect(clamped.startContainer === root).toBe(true);
     expect(clamped.startOffset).toBe(0);
+  });
+});
+
+describe("clickedRange", () => {
+  afterEach(() => document.getSelection()?.removeAllRanges());
+
+  test("returns a copy of the collapsed selection a click on text leaves", () => {
+    const { root } = mount("Plain words.");
+    const text = textIn(root);
+    const live = selectText([text, 3]);
+
+    const range = clickedRange(root, text.parentElement, document.getSelection());
+
+    expect(range === live).toBe(false);
+    expect(range?.startContainer === text && range.startOffset === 3).toBe(true);
+  });
+
+  test("returns null for a click on a control, a non-collapsed or an outside selection", () => {
+    const { root } = mount("A [link](https://x.test) here.");
+    const link = root.querySelector("a") as Element;
+    const outside = document.createElement("div");
+    outside.textContent = "out";
+    root.after(outside);
+    mounted.push(outside);
+
+    selectText([link.firstChild as Node, 1]);
+    const onLink = clickedRange(root, link, document.getSelection());
+    selectText([textIn(root), 0], [link.firstChild as Node, 1]);
+    const spread = clickedRange(root, root.querySelector("p"), document.getSelection());
+    selectText([outside.firstChild as Node, 1]);
+    const away = clickedRange(root, root.querySelector("p"), document.getSelection());
+
+    expect([onLink, spread, away]).toEqual([null, null, null]);
+  });
+});
+
+describe("releasedRange", () => {
+  afterEach(() => document.getSelection()?.removeAllRanges());
+  const point = { x: 1, y: 2 };
+  const unread = () => {
+    throw new Error("read without an end outside the root");
+  };
+
+  test("returns a copy of a selection inside the root without a hit test", () => {
+    const { root } = mount("Plain words.");
+    const text = textIn(root);
+    const live = selectText([text, 0], [text, 5]);
+
+    const range = releasedRange(root, null, document.getSelection(), point, unread);
+
+    expect(range === live).toBe(false);
+    expect(String(range)).toBe("Plain");
+  });
+
+  test("returns null for a collapsed, unchanged or outside-anchored selection", () => {
+    const { root } = mount("Plain words.");
+    const text = textIn(root);
+    const outside = document.createElement("div");
+    outside.textContent = "outside";
+    root.after(outside);
+    mounted.push(outside);
+
+    selectText([text, 2]);
+    const collapsed = releasedRange(root, null, document.getSelection(), point, unread);
+    const standing = selectText([text, 0], [text, 5]).cloneRange();
+    const unchanged = releasedRange(root, standing, document.getSelection(), point, unread);
+    selectText([outside.firstChild as Node, 0], [outside.firstChild as Node, 3]);
+    const away = releasedRange(root, null, document.getSelection(), point, unread);
+
+    expect([collapsed, unchanged, away]).toEqual([null, null, null]);
+  });
+
+  test("ends a selection released over an overlay at the block under the point", () => {
+    const { root, map } = mount("one\n\ntwo\n\nthree");
+    const slot = document.createElement("div");
+    slot.textContent = "slot";
+    root.after(slot);
+    mounted.push(slot);
+    selectText([textIn(root), 0], [slot.firstChild as Node, 2]);
+    let asked: [number, number] | undefined;
+
+    const range = releasedRange(root, null, document.getSelection(), point, (x, y) => {
+      asked = [x, y];
+      return [slot, root.children[1] as Element, root];
+    });
+
+    expect(asked).toEqual([1, 2]);
+    expect(range && map.linesOf(range)).toEqual({ start: 1, end: 3 });
   });
 });

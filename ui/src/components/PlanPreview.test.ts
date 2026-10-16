@@ -1,9 +1,12 @@
 import "@ui/support/mount.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { flushSync, mount, unmount } from "svelte";
+
 import { until } from "@test/support/poll.ts";
 import { render } from "@ui/support/mount.ts";
 import { reactiveProps } from "@ui/support/props.svelte.ts";
+import { selectText } from "@ui/support/selection.ts";
 import { CUSTOM_KEYWORD, customThemeSource } from "@ui/support/theme-file.ts";
 import PlanPreview from "@/components/PlanPreview.svelte";
 import {
@@ -299,11 +302,8 @@ function colours(code: Element): Set<string> {
 }
 
 describe("PlanPreview text comments", () => {
-  const realElementsFromPoint = document.elementsFromPoint;
-
   afterEach(() => {
     document.getSelection()?.removeAllRanges();
-    document.elementsFromPoint = realElementsFromPoint;
   });
 
   function setup(text: string) {
@@ -320,24 +320,28 @@ describe("PlanPreview text comments", () => {
     return { root, ranges, refClicks: () => refClicks };
   }
 
-  function select(node: Node, start: number, end = start): Range {
-    const range = document.createRange();
-    range.setStart(node, start);
-    range.setEnd(node, end);
-    const selection = document.getSelection() as Selection;
-    selection.removeAllRanges();
-    selection.addRange(range);
-    return range;
-  }
+  const select = (node: Node, start: number, end = start): Range =>
+    selectText([node, start], [node, end]);
 
   const click = (el: Element) =>
     el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
-  function drag(root: Element, select: () => void, init: PointerEventInit = {}) {
-    document.elementsFromPoint = () => [];
+  const press = (root: Element, init: PointerEventInit = {}) =>
     root.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, ...init }));
-    select();
+  const release = (init: PointerEventInit = {}) =>
     window.dispatchEvent(new PointerEvent("pointerup", { button: 0, ...init }));
+
+  function drag(root: Element, act: () => void, init: PointerEventInit = {}) {
+    press(root, init);
+    act();
+    release(init);
+  }
+
+  function outsideText(): Node {
+    const outside = document.createElement("p");
+    outside.textContent = "outside the preview";
+    document.body.append(outside);
+    return outside.firstChild as Node;
   }
 
   const textOf = (root: Element, selector: string) =>
@@ -434,5 +438,92 @@ describe("PlanPreview text comments", () => {
     drag(root, () => {});
 
     expect(ranges.length).toBe(0);
+  });
+
+  for (const [ending, end] of [
+    ["pointercancel", () => window.dispatchEvent(new PointerEvent("pointercancel"))],
+    ["window blur", () => window.dispatchEvent(new Event("blur"))],
+  ] as const) {
+    test(`a gesture ended by ${ending} reports no later selection`, () => {
+      const { root, ranges } = setup("Plain words here.\n");
+      press(root);
+      end();
+
+      select(textOf(root, "p"), 0, 5);
+      release();
+
+      expect(ranges.length).toBe(0);
+    });
+  }
+
+  test("two presses before one release report once", () => {
+    const { root, ranges } = setup("Plain words here.\n");
+    press(root);
+
+    drag(root, () => select(textOf(root, "p"), 0, 5));
+
+    expect(ranges.length).toBe(1);
+  });
+
+  test("a release after unmount reports nothing", () => {
+    const ranges: Range[] = [];
+    const target = document.createElement("div");
+    document.body.append(target);
+    const instance = mount(PlanPreview, {
+      target,
+      props: {
+        html: renderPlanMarkdown("Plain words here.\n").html,
+        onTextComment: (range: Range) => ranges.push(range),
+      },
+    });
+    flushSync();
+    const root = target.querySelector(".plan-preview") as HTMLElement;
+    press(root);
+    const text = textOf(root, "p");
+    unmount(instance);
+    target.remove();
+
+    select(text, 0, 5);
+    release();
+
+    expect(ranges.length).toBe(0);
+  });
+
+  test("a release whose selection is anchored outside the preview reports nothing", () => {
+    const { root, ranges } = setup("Plain words here.\n");
+
+    drag(root, () => select(outsideText(), 0, 7));
+
+    expect(ranges.length).toBe(0);
+  });
+
+  test("a drag that stays inside a file reference reports it without opening the file", () => {
+    const { root, ranges, refClicks } = setup(PLAN);
+    const ref = root.querySelector("[data-file-ref]") as Element;
+    const text = ref.firstChild as Node;
+
+    drag(root, () => select(text, 0, 2));
+    click(ref);
+
+    expect(ranges.length).toBe(1);
+    expect(refClicks()).toBe(0);
+  });
+
+  test("a Shift press clears a selection anchored outside the preview", () => {
+    const { root } = setup("Plain words here.\n");
+    select(outsideText(), 2);
+
+    press(root, { shiftKey: true });
+
+    expect(document.getSelection()?.rangeCount).toBe(0);
+  });
+
+  test("a Shift press keeps a selection anchored inside the preview", () => {
+    const { root } = setup("Plain words here.\n");
+    const kept = select(textOf(root, "p"), 2);
+
+    press(root, { shiftKey: true });
+
+    expect(document.getSelection()?.getRangeAt(0) === kept).toBe(true);
   });
 });

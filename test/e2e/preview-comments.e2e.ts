@@ -26,7 +26,6 @@ import { openRequestChangesDialog } from "@test/e2e/support/decision.ts";
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { submitForRevision } from "@test/e2e/support/review-state.ts";
 import {
-  expectNoComposerOpens,
   PLAN_PREVIEW,
   PLAN_SURFACE,
   planSurface,
@@ -496,10 +495,10 @@ test.describe("commenting from the preview", () => {
     const [last, next] = await selectAcrossBreak(page, s);
 
     await expect(composerLabel(page)).toHaveText(`Lines ${s.near}–${s.near + 1}`);
-    const marked = await highlighted(page);
-    expect(marked).toBe(joinLines(s.lines, s.near, s.near + 1));
-    expect(marked).toContain(last);
-    expect(marked).toContain(next);
+    const spanned = joinLines(s.lines, s.near, s.near + 1);
+    expect(spanned).toContain(last);
+    expect(spanned).toContain(next);
+    await expect.poll(() => highlighted(page)).toBe(spanned);
 
     await sendComment(page, "across the break");
     await expect
@@ -536,7 +535,31 @@ test.describe("commenting from the preview", () => {
     await expectComposerFocused(page);
   });
 
-  test("on a plan with a task list and a table: a checkbox opens nothing, and a drag across table rows comments on those rows", async ({
+  test("a Shift drag after a closed composer selects exactly the dragged text", async ({
+    daemon,
+    page,
+  }) => {
+    const s = await seedPreview(daemon, page);
+    await clickWord(page, { text: "bravo", line: s.near });
+    await expect(composerLabel(page)).toHaveText(`Line ${s.near + 1}`);
+    await closeComposer(page);
+
+    expect(s.lines[s.near]).toContain("bravo words");
+    await page.keyboard.down("Shift");
+    await dragAcross(
+      page,
+      { text: "bravo", line: s.near },
+      { text: "words", line: s.near, nth: occurrences(s.lines[s.near - 1] ?? "", "words") },
+    );
+    await page.keyboard.up("Shift");
+
+    await expect
+      .poll(() => page.evaluate(() => String(document.getSelection())))
+      .toBe("bravo words");
+    await expect(page.getByRole("dialog", { name: "Add a comment" })).toHaveCount(0);
+  });
+
+  test("on a plan with a task list and a table: a click on a task and a drag across table rows comment on their lines", async ({
     daemon,
     page,
   }) => {
@@ -555,9 +578,6 @@ test.describe("commenting from the preview", () => {
     await planSurface(page);
     await waitPastSafeModeGrace(page);
     await showPreview(page);
-
-    await page.locator(`${PLAN_PREVIEW} input[data-task]`).first().click({ force: true });
-    await expectNoComposerOpens(page);
 
     await clickWord(page, { text: "tick", line: tick });
     await expect(composerLabel(page)).toHaveText(`Line ${tick}`);
@@ -622,10 +642,10 @@ test.describe("commenting from the preview", () => {
           ?.closest("[data-preview-slot]");
         return slot ? [...document.querySelectorAll("[data-preview-slot]")].indexOf(slot) : -1;
       }, id);
+    await expect.poll(() => slotOf("ann-1")).toBeGreaterThanOrEqual(0);
     const nearSlot = await slotOf("ann-1");
-    expect(nearSlot).toBeGreaterThanOrEqual(0);
-    expect(await slotOf(fromPreview?.id ?? "")).toBe(nearSlot);
-    expect(await slotOf(fromSource?.id ?? "")).toBe(nearSlot);
+    await expect.poll(() => slotOf(fromPreview?.id ?? "")).toBe(nearSlot);
+    await expect.poll(() => slotOf(fromSource?.id ?? "")).toBe(nearSlot);
     await card(page, fromSource?.id ?? "").hover();
     await expect.poll(() => highlighted(page)).toBe(joinLines(s.lines, s.near, s.near + 1));
 

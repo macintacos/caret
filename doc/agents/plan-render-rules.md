@@ -329,13 +329,16 @@ still source-only.
 `textComments` opens the composer from the preview. `PlanPreview` reports a click as its
 collapsed selection, and a drag as the selection the gesture changed; Shift selects
 natively, and links, file references and form controls keep their own clicks.
-`clampToRoot` in `previewComments.ts` resolves an end over a slot or the code chrome to
-the block under the pointer. `linesOf` maps the range to source lines, and `openRange`,
-the source view's opener, opens the composer there, so the open composer's line highlight
-marks the selection's lines and the feedback matches a source-view comment's.
-`lineComments` stays source-only: its drag readout, gutter drag and hint chips belong to
-the source view's gutter, which the preview has no counterpart for; a native selection
-does that job.
+`releasedRange` in `previewComments.ts` resolves a release over a slot or the code chrome
+to the block under the pointer, and `clampToRoot` ends the range there, or spans back to
+the anchor when the drag went up. A `pointercancel`, a window blur, a new press or an
+unmount ends the gesture unreported. A Shift press drops a selection anchored outside the
+root, so the native drag starts at the press rather than extending a closed composer's
+caret. `linesOf` maps the range to source lines, and `openRange`, the source view's
+opener, opens the composer there, so the open composer's line highlight marks the
+selection's lines and the feedback matches a source-view comment's. `lineComments` stays
+source-only: its drag readout, gutter drag and hint chips belong to the source view's
+gutter, which the preview has no counterpart for; a native selection does that job.
 
 The preview renders a version once. `memoLast` returns the last result for the same text,
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same

@@ -9,10 +9,12 @@ import { expectViewRecreated } from "@ui/support/diffview.ts";
 import { logCapture, typeInto } from "@ui/support/helpers.ts";
 import { capture, render } from "@ui/support/mount.ts";
 import { reactiveProps } from "@ui/support/props.svelte.ts";
+import { selectText } from "@ui/support/selection.ts";
 import DiffPlanView from "@/components/DiffPlanView.svelte";
 import {
   type ComposerScratch,
   createSourceCommenting,
+  type SourceCommentingDeps,
   scratchKey,
 } from "$lib/diffview/commenting.ts";
 import { shortcuts } from "$lib/shortcuts/index.ts";
@@ -892,6 +894,36 @@ describe("DiffPlanView plan view toggle", () => {
   });
 });
 
+/** Mount `plan` on the preview with App's mirror of the controller wired as props, so an
+ * open or a resume renders the composer as it does in the app. */
+async function renderSlots(
+  plan: string,
+  {
+    onCreate = () => {},
+    ...over
+  }: Record<string, unknown> & { onCreate?: SourceCommentingDeps["onCreate"] } = {},
+) {
+  localStorage.setItem("caret.planView", "preview");
+  const p = reactiveProps({
+    ...props({ review: reviewFixture({ currentPlan: plan }), ...over }),
+    pending: undefined as { startLine: number; endLine: number } | undefined,
+    pendingText: "",
+    scratches: [] as ComposerScratch[],
+  });
+  const commenting = createSourceCommenting({
+    onCreate,
+    onChange: () => {
+      p.pending = commenting.pending();
+      p.pendingText = commenting.pendingText();
+      p.scratches = commenting.scratches();
+    },
+  });
+  p.commenting = commenting;
+  const mounted = render(DiffPlanView, p);
+  await until(() => mounted.target.querySelector(".plan-preview") != null);
+  return { ...mounted, p, commenting };
+}
+
 describe("DiffPlanView preview comment slots", () => {
   // Blocks: heading [1,1], paragraph [3,4], paragraph [6,6]; line 5 is a gap.
   const plan = "# Title\n\nalpha one\nalpha two\n\nbeta\n";
@@ -904,44 +936,20 @@ describe("DiffPlanView preview comment slots", () => {
   const slot = (target: HTMLElement, block: number) =>
     target.querySelector(`[data-preview-slot="${block}"]`);
 
-  /** Mount on the preview with App's mirror of the controller wired as props, so a
-   * resume re-renders the composer as it does in the app. */
-  async function renderSlots(over: Record<string, unknown> = {}) {
-    localStorage.setItem("caret.planView", "preview");
-    const p = reactiveProps({
-      ...props({ review: reviewFixture({ currentPlan: plan }), ...over }),
-      pending: undefined as { startLine: number; endLine: number } | undefined,
-      pendingText: "",
-      scratches: [] as ComposerScratch[],
-    });
-    const commenting = createSourceCommenting({
-      onCreate: () => {},
-      onChange: () => {
-        p.pending = commenting.pending();
-        p.pendingText = commenting.pendingText();
-        p.scratches = commenting.scratches();
-      },
-    });
-    p.commenting = commenting;
-    const mounted = render(DiffPlanView, p);
-    await until(() => mounted.target.querySelector(".plan-preview") != null);
-    return { ...mounted, p, commenting };
-  }
-
   test("a thread renders in the slot of the block holding its end line", async () => {
-    const { target } = await renderSlots({ annotations: [ann("a", 4, "on alpha")] });
+    const { target } = await renderSlots(plan, { annotations: [ann("a", 4, "on alpha")] });
     const found = await until(() => slot(target, 1)?.textContent?.includes("on alpha") ?? false);
     expect(found).toBe(true);
   });
 
   test("a thread ending on a gap line renders in the previous block's slot", async () => {
-    const { target } = await renderSlots({ annotations: [ann("a", 5, "in the gap")] });
+    const { target } = await renderSlots(plan, { annotations: [ann("a", 5, "in the gap")] });
     const found = await until(() => slot(target, 1)?.textContent?.includes("in the gap") ?? false);
     expect(found).toBe(true);
   });
 
   test("two comments in one block share its slot, in line order", async () => {
-    const { target } = await renderSlots({ annotations: [ann("b", 4), ann("a", 3)] });
+    const { target } = await renderSlots(plan, { annotations: [ann("b", 4), ann("a", 3)] });
     await until(() => slot(target, 1)?.querySelectorAll("[data-slot-line]").length === 2);
     const lines = [...slot(target, 1)!.querySelectorAll("[data-slot-line]")].map((el) =>
       el.getAttribute("data-slot-line"),
@@ -951,7 +959,7 @@ describe("DiffPlanView preview comment slots", () => {
   });
 
   test("resuming a draft's marker opens the composer in the preview with its text", async () => {
-    const { target } = await renderSlots({
+    const { target } = await renderSlots(plan, {
       review: reviewFixture({
         currentPlan: plan,
         composerScratches: [{ startLine: 6, endLine: 6, text: "kept draft" }],
@@ -970,7 +978,7 @@ describe("DiffPlanView preview comment slots", () => {
   });
 
   test("a block followed by a slot is padded open, and closes when the comment goes", async () => {
-    const { target, p } = await renderSlots({ annotations: [ann("a", 3)] });
+    const { target, p } = await renderSlots(plan, { annotations: [ann("a", 3)] });
     const wrapper = () =>
       target.querySelector<HTMLElement>(".plan-preview")!.children[1] as HTMLElement;
     const padded = await until(() => wrapper().style.paddingBlockEnd !== "");
@@ -981,7 +989,7 @@ describe("DiffPlanView preview comment slots", () => {
   });
 
   test("flipping to source with the preview's composer open keeps it as a draft", async () => {
-    const { target, commenting } = await renderSlots({
+    const { target, commenting } = await renderSlots(plan, {
       review: reviewFixture({
         currentPlan: plan,
         composerScratches: [{ startLine: 3, endLine: 4, text: "mid flip" }],
@@ -1114,11 +1122,9 @@ describe("DiffPlanView preview cursor", () => {
 describe("DiffPlanView preview text comments", () => {
   // The paragraph "alpha one" / "alpha two" spans stored lines 3–4 and renders as one <p>.
   const plan = "# Title\n\nalpha one\nalpha two\n";
-  const realElementsFromPoint = document.elementsFromPoint;
 
   afterEach(() => {
     document.getSelection()?.removeAllRanges();
-    document.elementsFromPoint = realElementsFromPoint;
   });
 
   /** The text node and offset where `word` starts in the preview. */
@@ -1129,35 +1135,8 @@ describe("DiffPlanView preview text comments", () => {
     throw new Error(`no text "${word}" in the preview`);
   }
 
-  function select(start: [Text, number], end = start): void {
-    const range = document.createRange();
-    range.setStart(...start);
-    range.setEnd(...end);
-    const selection = document.getSelection() as Selection;
-    selection.removeAllRanges();
-    selection.addRange(range);
-  }
-
-  /** Mount on the preview with App's mirror of the controller wired as props, so an
-   * open renders the composer as it does in the app. */
   async function renderParagraph(created: unknown[] = []) {
-    const p = reactiveProps({
-      ...props({ review: reviewFixture({ currentPlan: plan }) }),
-      pending: undefined as { startLine: number; endLine: number } | undefined,
-      pendingText: "",
-    });
-    const commenting = createSourceCommenting({
-      onCreate: (anchor) => created.push(anchor),
-      onChange: () => {
-        p.pending = commenting.pending();
-        p.pendingText = commenting.pendingText();
-      },
-    });
-    p.commenting = commenting;
-    const mounted = render(DiffPlanView, p);
-    await until(() => toggle(mounted.target) != null);
-    toggle(mounted.target)!.click();
-    await until(() => mounted.target.querySelector(".plan-preview") != null);
+    const mounted = await renderSlots(plan, { onCreate: (anchor) => created.push(anchor) });
     const root = mounted.target.querySelector<HTMLElement>(".plan-preview")!;
     await until(() => root.querySelector("p") != null);
     return { ...mounted, root };
@@ -1167,16 +1146,15 @@ describe("DiffPlanView preview text comments", () => {
 
   /** Drag from line 3's last word to line 4's first. */
   function dragAcrossLines(root: HTMLElement): void {
-    document.elementsFromPoint = () => [];
     root.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
     const [two, at] = pointAt(root, "alpha two");
-    select(pointAt(root, "one"), [two, at + "alpha".length]);
+    selectText(pointAt(root, "one"), [two, at + "alpha".length]);
     window.dispatchEvent(new PointerEvent("pointerup", { button: 0 }));
   }
 
   test("a click on the second stored line's text comments on that line", async () => {
     const { target, root } = await renderParagraph();
-    select(pointAt(root, "two"));
+    selectText(pointAt(root, "two"));
     root.querySelector("p")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(await until(() => label(target) === "Line 4")).toBe(true);
   });
