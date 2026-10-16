@@ -246,7 +246,8 @@ maps between the two for comments, the cursor and search.
   markup, even its whole `<pre>`, with spans of the same text leaves the map valid,
   whether it was built before or after. The preview relies on this: `previewCode.ts` swaps
   a block's `code` children for token spans built through `textContent`, only when their
-  text is identical, with the trailing `\n` kept.
+  text is identical, with the trailing `\n` kept. `previewRefs.ts` relies on the same
+  property when it wraps a reference's text in place.
 
 ## Surfaces
 
@@ -273,6 +274,17 @@ is de-indented there), because marked and the source view's stateless fence scan
 disagree on a block's extent. A preview block gets chrome only where the source view has a
 block at the same opening line, so a block with no source-view counterpart gets no chrome:
 an indented or empty block, or a fence the source view's stateless scan does not see.
+
+`headingTracking` reads the preview's reading line through `previewTopLine`. A picker jump
+animates the heading's block to the jump offset with `scrollRowIntoView`, the source
+view's tween. The first preview mount restores `?heading=` with an instant, held landing
+through `keepPlace`. Slugs and the URL helpers are shared unchanged.
+
+File references split from the hint badges into their own row, `fileReferences`.
+`previewRefs.ts` wraps each resolved reference's text in a `span[data-file-ref]`, finding
+it within its source line's rendered range by its display text and occurrence. It changes
+no text, so the source map holds, and it never fetches: the preview reuses the view's
+resolved map and `openFileRef`. The badges stay source-only, under `referenceHints`.
 
 The preview renders a version once. `memoLast` returns the last result for the same text,
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same
@@ -303,8 +315,9 @@ parks is the block the next flip reads back. `ui/src/lib/planPlace.ts` holds the
   moves `scrollTop` too. Each park writes an absolute `scrollTop`, never a delta, so it
   composes with native `overflow-anchor` where a browser has it and still holds in Safari
   26 and earlier, which has none.
-- **A deep link wins.** A resolved `?heading=` jumps on the first source mount, ahead of a
-  place carried from the preview, since the preview cannot honor it.
+- **A carried place beats the URL.** A resolved `?heading=` lands on the first mount of
+  either surface. After that the URL holds the live mirror, so a place carried by a flip
+  wins over it.
 
 Place-keeping is not a `SURFACE_BEHAVIORS` row. It runs at the flip itself, not on a
 surface.
