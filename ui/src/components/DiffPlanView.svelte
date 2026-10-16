@@ -406,8 +406,7 @@
   }
 
   // createPlanSourceMap reads only the DOM, so the html read is what rebuilds the map on a
-  // version switch. Shared by the comment highlight and the keyboard cursor, and ungated:
-  // each consumer gates on its own row.
+  // version switch. Ungated: each consumer gates on its own row.
   const previewSourceMap = $derived.by(() => {
     void planPreview?.html;
     return previewEl ? createPlanSourceMap(previewEl) : null;
@@ -1852,6 +1851,10 @@
     commenting.open({ start, end });
     keyboardStore.cursorLine = end; // a line click relocates the cursor (keyboard + mouse coherent)
   }
+  function commentOnPreview(range: Range): void {
+    const lines = previewSourceMap?.linesOf(range);
+    if (lines) openRange(lines.start, lines.end);
+  }
   // Each surface hosts its own composer, so a flip would remount it with its typed text
   // lost: retain the text as a scratch first, which the approve guard still counts.
   function setPlanView(next: PlanView): void {
@@ -2178,6 +2181,7 @@
           bind:root={previewEl}
           fileRefs={previewRefs}
           onFileRefClick={openFileRef}
+          onTextComment={runs("textComments") ? commentOnPreview : undefined}
         />
         {@render codeChrome()}
         <!-- Comment slots sit outside the preview root so it stays exactly the rendered
@@ -2192,7 +2196,7 @@
             style:top={box ? `${box.top}px` : undefined}
             style:left={box ? `${box.left}px` : undefined}
             style:width={box ? `${box.width}px` : undefined}
-            style:visibility={box ? undefined : "hidden"}
+            data-unmeasured={box ? undefined : ""}
             onpointerover={(e) => pointSlot(e.target)}
             onfocusin={(e) => focusSlot(e.target)}
             onpointerleave={() => (pointerSpan = null)}
@@ -2409,6 +2413,12 @@
     position: absolute;
     padding-block-end: 1em;
     font-size: var(--text-base);
+  }
+  /* Not visibility: hidden — a composer mounting here focuses at once, and a hidden element
+     can't take focus. */
+  .preview-slot[data-unmeasured] {
+    opacity: 0;
+    pointer-events: none;
   }
   /* A view option, not a selection — neutral, like the soft-wrap toggle. */
   .control-row :global(button.preview-toggle[aria-pressed="true"]:not(:disabled)) {
