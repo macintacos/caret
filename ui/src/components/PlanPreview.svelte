@@ -191,6 +191,9 @@
   :global(::highlight(caret-preview-search-current)) {
     background-color: var(--mark-active);
   }
+  :global(::highlight(caret-visual-selection)) {
+    background-color: var(--accent-wash);
+  }
 
   .plan-preview {
     padding-block: 0.5rem;

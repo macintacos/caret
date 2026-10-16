@@ -33,9 +33,9 @@ export const SURFACE_BEHAVIORS = {
   fileReferences: ["source", "preview"], // the file lane and folder card a reference opens
   search: ["source", "preview"], // `/` dock, n/N, match highlights, Esc's close
   keyboardCursor: ["source", "preview"], // cursor motions
-  keyboardComments: ["source"], // c, V, Esc's visual exit
+  keyboardComments: ["source", "preview"], // c, V, Esc's visual exit, visual hint chip
   commentThreads: ["source", "preview"], // inline threads, draft markers, the open composer, the preview's comment highlight, comment reveal
-  lineComments: ["source"], // drag readout, gutter range drag, drag/visual hint chips, hover re-fire
+  lineComments: ["source"], // drag readout, gutter range drag, drag hint chip, hover re-fire
   textComments: ["source", "preview"], // a click or text selection on the plan opens the composer
   headingTracking: ["source", "preview"], // top-visible heading, ?heading= mirror, ToC, breadcrumbs, b and \
 } as const satisfies Record<string, readonly PlanSurface[]>;

@@ -133,6 +133,7 @@
     createSlotReserve,
     groupBySlot,
     paintCommentHighlight,
+    paintVisualSelection,
     previewSlotBoxes,
     spanRanges,
   } from "$lib/previewComments.ts";
@@ -1573,6 +1574,13 @@
     const band = cursorBand(previewEl, scrollEl, map, p, lineHeight);
     previewCursorBox = band && { line: p.line, ...band };
   });
+  $effect(() => {
+    void previewLayoutRev;
+    paintVisualSelection(
+      runs("keyboardComments") && surface === "preview" ? previewCursor.selection() : null,
+    );
+    return () => paintVisualSelection(null);
+  });
 
   // The live visual selection, ascending — mirrored into SourceView's amber band through
   // `selectedRange` while visual mode is active, so extending it with j/k grows the
@@ -1771,15 +1779,18 @@
 
   $effect(() => {
     if (!runs("keyboardComments")) return;
+    const preview = surface === "preview";
+    const comment = preview ? previewCursor.comment : keyboard.commentCursorLine;
+    const enterVisualMode = preview ? previewCursor.enterVisualMode : keyboard.enterVisualMode;
     const offs: Array<() => void> = [];
     // Commenting on the focused line / a keyboard-selected range (EXC-790): live entries
     // bound over EXC-786's reservations, with the motions' editing-context guard. c
-    // comments the cursor line (or, in visual mode, the whole selection); V enters visual
-    // line-select.
+    // comments the cursor line — on the preview, the cursor's visual line — or, in visual
+    // mode, the whole selection; V enters visual line-select.
     offs.push(
       shortcuts.register(
         bind("commenting.comment", {
-          run: () => keyboard.commentCursorLine(),
+          run: () => comment(),
           enabled: () => !defaultIsEditingContext(),
         }),
       ),
@@ -1787,7 +1798,7 @@
     offs.push(
       shortcuts.register(
         bind("commenting.visualLine", {
-          run: () => keyboard.enterVisualMode(),
+          run: () => enterVisualMode(),
           enabled: () => !defaultIsEditingContext(),
         }),
       ),
@@ -1923,9 +1934,10 @@
     if (next !== planView) {
       commenting.cancel(liveText);
       capturePlace();
+      // The surfaces select different units — source lines against visual lines — so a
+      // carried selection would silently change its extent.
+      keyboardStore.visualAnchor = null;
     }
-    // The preview can neither show nor cancel a visual selection.
-    if (next === "preview") keyboardStore.visualAnchor = null;
     planView = next;
     writePlanView(next);
   }
@@ -2208,6 +2220,17 @@
       {#snippet draftMarker(scratch: ComposerScratch)}
         <SourceScratchMarker text={scratch.text} onResume={() => resumeScratch(scratch.key)} />
       {/snippet}
+      <!-- Visual line-select affordance (EXC-790): while V mode is active, a quiet
+           bottom-pinned chip names the two keys — c commits the selection to a
+           comment, Esc cancels — rendered as shadcn Kbd keycaps. Shares the
+           drag-hint's chip chrome; the selection's own highlight already shows the range. -->
+      {#snippet visualHint()}
+        {#if keyboardStore.visualAnchor != null && showShortcutHints}
+          <div class="visual-hint" role="note">
+            Selecting lines — <Kbd class="kbd-sm">c</Kbd> comment · <Kbd class="kbd-sm">Esc</Kbd> cancel
+          </div>
+        {/if}
+      {/snippet}
       {#if showDiff}
         <!-- Compare mode: a diff between the selected version pair. Base is the
              reference version (the default base is the current version) and renders
@@ -2292,6 +2315,7 @@
             style:height="{previewCursorBox.height}px"
           ></div>
         {/if}
+        {@render visualHint()}
       {:else}
         <!-- Live range readout: a zero-height sticky rail rendered first so it pins to
              the top of the scroll viewport from scroll position 0 without reflowing
@@ -2405,15 +2429,7 @@
         {#if hintVisible}
           <div class="drag-hint" role="note">Drag across lines to comment on a range — hold Shift to select text.</div>
         {/if}
-        <!-- Visual line-select affordance (EXC-790): while V mode is active, a quiet
-             bottom-pinned chip names the two keys — c commits the selection to a
-             comment, Esc cancels — rendered as shadcn Kbd keycaps. Shares the
-             drag-hint's chip chrome; the amber selection band already shows the range. -->
-        {#if keyboardStore.visualAnchor != null && showShortcutHints}
-          <div class="visual-hint" role="note">
-            Selecting lines — <Kbd class="kbd-sm">c</Kbd> comment · <Kbd class="kbd-sm">Esc</Kbd> cancel
-          </div>
-        {/if}
+        {@render visualHint()}
       {/if}
     </div>
   </div>
