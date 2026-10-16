@@ -1427,6 +1427,109 @@ describe("the filename-reference chip (EXC-840, tinted EXC-880)", () => {
   });
 });
 
+// PlanPreview.svelte copies the link rule and the reference chip into the light-DOM
+// preview, whose Svelte <style> cannot interpolate this sheet. Each pin compares a
+// preview rule's declarations with the source rule it copies.
+const planPreview = await Bun.file(
+  join(import.meta.dir, "../../components/PlanPreview.svelte"),
+).text();
+const previewSheet = (planPreview.match(/^<style[^>]*>([\s\S]*?)^<\/style>/m)?.[1] ?? "").replace(
+  /\/\*[\s\S]*?\*\//g,
+  "",
+);
+
+/** A rule's declarations (the text between its braces), property → value, whitespace
+ * collapsed. Takes a whole rule, as rulesFor and tintRule return one. */
+function declarations(rule: string): Record<string, string> {
+  const body = rule.slice(rule.indexOf("{") + 1, rule.lastIndexOf("}"));
+  const decls: Record<string, string> = {};
+  for (const decl of body.split(";")) {
+    const colon = decl.indexOf(":");
+    if (colon < 0) continue;
+    decls[decl.slice(0, colon).trim()] = decl
+      .slice(colon + 1)
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  return decls;
+}
+
+/** Every rule in `sheet` whose whole selector is `selector`, merged in source order. */
+function wholeRules(sheet: string, selector: string): Record<string, string> {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+");
+  const pattern = new RegExp(String.raw`(?:^|\})\s*${escaped}\s*(\{[^}]*\})`, "g");
+  return Object.assign({}, ...[...sheet.matchAll(pattern)].map((m) => declarations(m[1] ?? "")));
+}
+
+/** The preview rule whose whole selector is `.plan-preview :global(<target>)`. */
+function previewRule(target: string): Record<string, string> {
+  return wholeRules(previewSheet, `.plan-preview :global(${target})`);
+}
+
+/** Every source rule whose whole selector is `[data-content] <target>`, merged in
+ * source order, with an interpolated mask read as the custom property the preview
+ * binds it to. */
+function sourceRule(target: string): Record<string, string> {
+  const sheet = overrideDecls
+    .replaceAll("$(FILE_ICON_MASK)", "var(--file-ref-icon)")
+    .replaceAll("$(FOLDER_ICON_MASK)", "var(--folder-ref-icon)");
+  return wholeRules(sheet, `[data-content] ${target}`);
+}
+
+/** The source view's chip for a data-md member, as the one box the preview draws. */
+function sourceChip(member: "link" | "code"): Record<string, string> {
+  const fill = sourceRule("[data-line] [data-md]");
+  const cap = sourceRule("[data-line] [data-md-start]");
+  const chip = {
+    "background-color": declarations(tintRule(member))[`--md-${member}`],
+    padding: `${fill["padding-block"]} ${cap["padding-inline-start"]}`,
+    "border-radius": cap["border-start-start-radius"],
+  };
+  // A value missing from the source drops its key, so the pin fails on it.
+  return Object.fromEntries(
+    Object.entries(chip).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  );
+}
+
+function expectPinned(preview: Record<string, string>, source: Record<string, string>) {
+  expect(Object.keys(preview).length).toBeGreaterThan(0);
+  expect(Object.keys(source).length).toBeGreaterThan(0);
+  expect(preview).toEqual(source);
+}
+
+describe("the preview's copies of the link and reference chip (EXC-2021)", () => {
+  test("a link wears the source view's ink, weight, slant and underline", () => {
+    const { "--md-link": _tint, ...ink } = sourceRule('[data-line] [data-md~="link"]');
+    expectPinned(previewRule("a"), ink);
+  });
+
+  test("a link wears the source view's chip", () => {
+    expectPinned(previewRule("a:not(:has(code, [data-file-ref]))"), sourceChip("link"));
+  });
+
+  test("inline code pads and tints like the source view's code chip", () => {
+    const code = previewRule(":not(pre) > code");
+    expectPinned(
+      {
+        "background-color": code["background-color"] ?? "",
+        padding: code.padding ?? "",
+        "border-radius": code["border-radius"] ?? "",
+      },
+      sourceChip("code"),
+    );
+  });
+
+  test.each([
+    "[data-file-ref]",
+    "[data-file-ref]:hover",
+    "[data-file-ref]::before",
+    "[data-file-ref]:hover::before",
+    '[data-file-ref="directory"]::before',
+  ])("%s matches the source view's", (target) => {
+    expectPinned(previewRule(target), sourceRule(target));
+  });
+});
+
 describe("the plan-search highlights (EXC-832, rehued EXC-905)", () => {
   const allMatches = overrideDecls.match(/::highlight\(caret-search\)\s*\{[^}]*\}/)?.[0] ?? "";
   const currentMatch =

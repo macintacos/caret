@@ -273,22 +273,28 @@
   }
   .plan-preview :global(:not(pre) > code) {
     font-family: var(--font-mono);
-    padding: 0.2em 0.4em;
+    padding: var(--chip-pad-block) var(--chip-pad-inline);
     border-radius: var(--radius);
-    background: var(--chip-code);
+    background-color: var(--chip-code);
     color: var(--markdown-code-color, var(--accent-bright));
     font-weight: var(--markdown-code-font-weight);
     font-style: var(--markdown-code-font-style);
     text-decoration: var(--markdown-code-text-decoration);
   }
   .plan-preview :global(a) {
-    /* Mirrors coreStyles.ts's link rule; keep in sync. */
+    /* coreStyles.test.ts pins this to coreStyles.ts's link rule. */
     color: var(--markdown-link-color, color-mix(in lab, var(--ink), var(--accent) 45%));
     font-weight: var(--markdown-link-font-weight);
     font-style: var(--markdown-link-font-style);
     text-decoration: underline dotted;
     text-decoration-line: var(--markdown-link-text-decoration, underline);
     text-underline-offset: 0.22em;
+  }
+  /* A link labelled with code or a reference gives way to that chip: one range, one chip. */
+  .plan-preview :global(a:not(:has(code, [data-file-ref]))) {
+    padding: var(--chip-pad-block) var(--chip-pad-inline);
+    border-radius: var(--radius);
+    background-color: var(--chip-link);
   }
   .plan-preview :global(:is(ul, ol)) {
     padding-inline-start: 2em;
@@ -421,7 +427,7 @@
   .plan-preview :global(img) {
     max-width: 100%;
   }
-  /* A resolved reference: coreStyles.ts's reference chip and glyph; keep in sync. */
+  /* A resolved reference: coreStyles.ts's reference chip and glyph, pinned by coreStyles.test.ts. */
   .plan-preview :global([data-file-ref]) {
     cursor: pointer;
     padding: var(--chip-pad-block) var(--chip-pad-inline);
@@ -436,10 +442,12 @@
     margin-right: 0.25em;
     vertical-align: -0.1em;
     background-color: var(--ink-faint);
+    -webkit-mask: var(--file-ref-icon) no-repeat center / contain;
     mask: var(--file-ref-icon) no-repeat center / contain;
   }
   .plan-preview :global([data-file-ref="directory"]::before) {
-    mask-image: var(--folder-ref-icon);
+    -webkit-mask: var(--folder-ref-icon) no-repeat center / contain;
+    mask: var(--folder-ref-icon) no-repeat center / contain;
   }
   .plan-preview :global([data-file-ref]:hover) {
     background-color: var(--accent-wash);
