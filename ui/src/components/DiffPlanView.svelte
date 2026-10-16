@@ -321,6 +321,8 @@
   const showDiff = $derived(canCompare && compareStore.comparing);
 
   let planView = $state<PlanView>(readPlanView());
+  // Gates the flip fade, so a first paint doesn't fade under App's arrival curtain too.
+  let viewFlipped = $state(false);
   const surface = $derived<PlanSurface>(showDiff ? "compare" : planView);
   const runs = (behavior: SurfaceBehavior): boolean => runsOn(behavior, surface);
 
@@ -1932,6 +1934,7 @@
       // The surfaces select different units — source lines against visual lines — so a
       // carried selection would silently change its extent.
       keyboardStore.visualAnchor = null;
+      viewFlipped = true;
     }
     planView = next;
     writePlanView(next);
@@ -2176,7 +2179,13 @@
     <!-- The gutter composer is the source view only. The compare diff
          is a clean surface with no gutter and no inline annotations; the compared
          versions' comments read in the docked panel instead (EXC-872). -->
-    <div class="diff-plan" bind:this={scrollEl} onmouseenter={showDragHint} role="presentation">
+    <div
+      class="diff-plan"
+      data-view-flip={viewFlipped ? planView : undefined}
+      bind:this={scrollEl}
+      onmouseenter={showDragHint}
+      role="presentation"
+    >
       <!-- The per-code-block chrome, keyed on the block's opening line so a re-anchor
            updates each box's props and leaves the instance — and its copied/checkmark
            state — alone. A snippet rendered in both branches below, not once after the
@@ -2678,6 +2687,26 @@
     min-height: 0;
     overflow: auto;
     background: var(--paper);
+  }
+
+  /* A source/preview flip fades the arriving view in. The scroller outlives the flip and
+     an animation restarts only when its name changes, so each direction names its own.
+     Opacity only: a transform would move the rects the overlays measure mid-flip. */
+  .diff-plan[data-view-flip='source'] {
+    animation: plan-view-in-source var(--dur-enter) var(--ease-out);
+  }
+  .diff-plan[data-view-flip='preview'] {
+    animation: plan-view-in-preview var(--dur-enter) var(--ease-out);
+  }
+  @keyframes plan-view-in-source {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes plan-view-in-preview {
+    from {
+      opacity: 0;
+    }
   }
 
   /* Scroll-beyond-last-line room (EXC-772): an in-flow spacer below the plan
