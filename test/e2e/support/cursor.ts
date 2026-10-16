@@ -10,6 +10,10 @@ import { expect } from "@test/e2e/support/fixtures.ts";
 export const cursor = (page: Page) =>
   page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
 
+/** The preview's cursor band, an overlay sibling of `.plan-preview` carrying the
+ * cursor's source line as data-line. */
+export const previewCursor = (page: Page) => page.locator(".diff-plan [data-caret-preview-cursor]");
+
 const lineOf = async (page: Page): Promise<number> =>
   Number((await cursor(page).getAttribute("data-line")) ?? -1);
 
