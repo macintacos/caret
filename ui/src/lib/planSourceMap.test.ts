@@ -377,4 +377,116 @@ describe("highlighted code", () => {
     highlight(root);
     expectCodeLines(root, createPlanSourceMap(root));
   });
+
+  test("a map built before highlighting hands back connected ranges with the same text", () => {
+    const { root, map } = mount(CODE);
+    const before = [4, 5].map((line) => map.rangeOf(line)?.toString());
+    highlight(root);
+    [4, 5].forEach((line, i) => {
+      const range = map.rangeOf(line);
+      if (range === null) throw new Error(`line ${line} has no range`);
+      expect(range.startContainer.isConnected).toBe(true);
+      expect(range.endContainer.isConnected).toBe(true);
+      expect(range.toString()).toBe(before[i] ?? "");
+    });
+  });
+});
+
+const LOOKUP_PLAN = [
+  "A paragraph that", // 1
+  "wraps here.", // 2
+  "", // 3
+  "- item one", // 4
+  "- item two", // 5
+  "", // 6
+  "| h1 | h2 |", // 7
+  "| -- | -- |", // 8
+  "| c1 | c2 |", // 9
+  "", // 10
+  "```js", // 11
+  "let x = 1;", // 12
+  "let y = 2;", // 13
+  "```", // 14
+].join("\n");
+
+describe("lookups", () => {
+  test("no lookup walks the preview from its root", () => {
+    const { root, map } = mount(LOOKUP_PLAN);
+    const points = ["paragraph", "wraps", "item two", "c2", "let y"].map((n) => find(root, n));
+    const row = root.querySelector("tbody tr");
+    if (row === null) throw new Error("no body row");
+    const [two, at] = find(root, "two");
+    const ranges = [
+      rangeBetween(find(root, "wraps"), [two, at + 3]),
+      rangeBetween([row, 0], find(root, "let x")),
+    ];
+    const walks: string[] = [];
+    const rangeProto = Object.getPrototypeOf(document.createRange()) as Range;
+    const setStart = rangeProto.setStart;
+    const createTreeWalker = document.createTreeWalker;
+    try {
+      Object.defineProperty(document, "createTreeWalker", {
+        configurable: true,
+        value(...args: Parameters<Document["createTreeWalker"]>) {
+          walks.push("createTreeWalker");
+          return createTreeWalker.apply(document, args);
+        },
+      });
+      rangeProto.setStart = function (this: Range, node: Node, offset: number) {
+        if (node === root) walks.push("setStart(root)");
+        setStart.call(this, node, offset);
+      };
+      for (const point of points) map.lineAt(...point);
+      map.lineAt(row, 0);
+      for (const range of ranges) map.linesOf(range);
+      for (let line = 1; line <= 14; line++) {
+        map.rangeOf(line);
+        map.offsetOfLine(line);
+        map.lineAtOffset(line * 5);
+      }
+    } finally {
+      delete (document as { createTreeWalker?: unknown }).createTreeWalker;
+      rangeProto.setStart = setStart;
+    }
+    expect(walks).toEqual([]);
+  });
+});
+
+describe("swapped text", () => {
+  function wrapMiddle(root: Element): { first: Text; middle: Text; span: HTMLSpanElement } {
+    const [first] = find(root, "A paragraph that");
+    const middle = first.splitText(2);
+    middle.splitText(9);
+    const span = document.createElement("span");
+    middle.replaceWith(span);
+    span.append(middle);
+    return { first, middle, span };
+  }
+
+  function expectLineOne(map: PlanSourceMap, text: string): void {
+    const range = map.rangeOf(1);
+    if (range === null) throw new Error("line 1 has no range");
+    expect(range.toString()).toBe(text);
+    expect(range.startContainer.isConnected).toBe(true);
+    expect(range.endContainer.isConnected).toBe(true);
+  }
+
+  test("a wrapped reference keeps its line's range and lookups", () => {
+    const { root, map } = mount(LOOKUP_PLAN);
+    const text = map.rangeOf(1)?.toString() ?? "";
+    const { middle } = wrapMiddle(root);
+    expectLineOne(map, text);
+    expect(map.lineAt(middle, 0)).toBe(1);
+  });
+
+  test("merging the split text back keeps the same answers", () => {
+    const { root, map } = mount(LOOKUP_PLAN);
+    const text = map.rangeOf(1)?.toString() ?? "";
+    const { first, middle, span } = wrapMiddle(root);
+    span.replaceWith(...span.childNodes);
+    root.normalize();
+    expect(first.data.startsWith("A paragraph that") && !middle.isConnected).toBe(true);
+    expectLineOne(map, text);
+    expect(lineOf(map, root, "paragraph")).toBe(1);
+  });
 });
