@@ -1784,9 +1784,9 @@
 
   $effect(() => {
     if (!runs("keyboardComments")) return;
-    const preview = surface === "preview";
-    const comment = preview ? previewCursor.comment : keyboard.commentCursorLine;
-    const enterVisualMode = preview ? previewCursor.enterVisualMode : keyboard.enterVisualMode;
+    const onPreview = surface === "preview";
+    const comment = onPreview ? previewCursor.comment : keyboard.commentCursorLine;
+    const enterVisualMode = onPreview ? previewCursor.enterVisualMode : keyboard.enterVisualMode;
     const offs: Array<() => void> = [];
     // Commenting on the focused line / a keyboard-selected range (EXC-790): live entries
     // bound over EXC-786's reservations, with the motions' editing-context guard. c

@@ -747,15 +747,15 @@ test.describe("commenting from the preview", () => {
     }) => {
       const s = await visualAtNear(daemon, page);
       await expect(hint(page)).toBeVisible();
-      const one = await visualSelectionText(page);
+      const oneLine = await visualSelectionText(page);
       const firstTop = (await bandBox(page)).y;
 
       await page.keyboard.press("j");
       await expect.poll(async () => (await bandBox(page)).y).toBeGreaterThan(firstTop);
       await expect
         .poll(async () => {
-          const two = await visualSelectionText(page);
-          return two.length > one.length && two.startsWith(one.trimEnd());
+          const twoLines = await visualSelectionText(page);
+          return twoLines.length > oneLine.length && twoLines.startsWith(oneLine.trimEnd());
         })
         .toBe(true);
 
