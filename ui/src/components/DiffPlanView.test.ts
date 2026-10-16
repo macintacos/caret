@@ -102,6 +102,22 @@ async function renderAndWaitForPre(
 
 afterEach(() => localStorage.clear());
 
+// A theme paint that moves the elements `moved` picks, as a rewrap would; happy-dom has
+// no layout of its own.
+const realBoundingRect = HTMLElement.prototype.getBoundingClientRect;
+afterEach(() => {
+  HTMLElement.prototype.getBoundingClientRect = realBoundingRect;
+  document.documentElement.style.removeProperty("--caret-test-repaint");
+});
+function repaintMoving(moved: (el: HTMLElement) => boolean): void {
+  HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+    return moved(this)
+      ? ({ top: 40, bottom: 60, left: 0, right: 100, width: 100, height: 20 } as DOMRect)
+      : realBoundingRect.call(this);
+  };
+  document.documentElement.style.setProperty("--caret-test-repaint", "1");
+}
+
 describe("DiffPlanView rendering", () => {
   test("renders the plan source text into the source view", async () => {
     const { target } = render(DiffPlanView, props());
@@ -559,6 +575,17 @@ describe("DiffPlanView code-block chrome", () => {
     expect(copyLabels(target)).toEqual(["Copy code from line 3", "Copy code from line 7"]);
   });
 
+  test("the preview's chrome follows its block when the theme repaints", async () => {
+    const { target } = await renderOnPreview({
+      review: reviewFixture({ currentPlan: planWithBlock("a") }),
+    });
+    await until(() => chromeBoxes(target).length === 1);
+    const top = () => (chromeBoxes(target)[0] as HTMLElement).style.top;
+    const before = top();
+    repaintMoving((el) => el.tagName === "PRE");
+    expect(await until(() => top() !== before)).toBe(true);
+  });
+
   test("a block hovered on one surface is not lit on the other after a flip", async () => {
     const { target } = render(
       DiffPlanView,
@@ -986,6 +1013,17 @@ describe("DiffPlanView preview comment slots", () => {
     p.annotations = [];
     const released = await until(() => wrapper().style.paddingBlockEnd === "");
     expect(released).toBe(true);
+  });
+
+  test("a slot follows its block when the theme repaints", async () => {
+    const { target } = await renderSlots(plan, { annotations: [ann("a", 3)] });
+    const el = () => slot(target, 1) as HTMLElement | null;
+    await until(
+      () => el() != null && !el()!.hasAttribute("data-unmeasured") && el()!.style.top !== "",
+    );
+    const before = el()!.style.top;
+    repaintMoving((e) => e.parentElement?.classList.contains("plan-preview") ?? false);
+    expect(await until(() => el()!.style.top !== before)).toBe(true);
   });
 
   test("flipping to source with the preview's composer open keeps it as a draft", async () => {
