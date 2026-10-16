@@ -4,8 +4,9 @@
 `ui/src/lib/diffview/`, the `SourceView` / `DiffPlanView` components, and the preview
 renderer `ui/src/lib/planMarkdown.ts`, its source-line map `ui/src/lib/planSourceMap.ts`,
 its code-block highlight pass `ui/src/lib/previewCode.ts`, its reference-tagging pass
-`ui/src/lib/previewRefs.ts`, its mount `ui/src/components/PlanPreview.svelte`, and the
-source/preview surface table `ui/src/lib/planView.ts`.*
+`ui/src/lib/previewRefs.ts`, its comment slots `ui/src/lib/previewComments.ts`, its mount
+`ui/src/components/PlanPreview.svelte`, and the source/preview surface table
+`ui/src/lib/planView.ts`.*
 
 The **source view** renders a plan as **line-numbered markdown source**. Every decoration
 the reviewer sees is drawn over the characters they would copy. Everything up to § The
@@ -248,6 +249,11 @@ maps between the two for comments, the cursor and search.
   a block's `code` children for token spans built through `textContent`, only when their
   text is identical, with the trailing `\n` kept. `previewRefs.ts` relies on the same
   property when it wraps a reference's text in place.
+- **Comment highlight.** The preview's comment highlight reads `rangeOf` and paints a CSS
+  Custom Highlight, so it inserts nothing into the root. The painted ranges are live,
+  though: a later swap of the text nodes they sit in, such as `previewCode.ts`'s
+  `replaceChildren`, collapses them. So while a span is active a `MutationObserver` on the
+  root (child-list and character-data, subtree) repaints it.
 
 ## Surfaces
 
@@ -286,6 +292,28 @@ reference's text in a `span[data-file-ref]`, finding it within its source line's
 range by its display text and occurrence. It changes no text, so the source map holds, and
 it never fetches: the preview reuses the view's resolved map and `openFileRef`. The badges
 stay source-only, under `referenceHints`.
+
+`commentThreads` is ported through `ui/src/lib/previewComments.ts`; the slots and the
+highlight run only where the `commentThreads` row runs.
+
+- **Placement.** Threads, the open composer and draft markers render in overlay slots, one
+  per block, positioned beside the preview root rather than inside it, so the root stays
+  exactly the rendered HTML the source map and `planPlace` index. A comment's slot follows
+  the block holding its end line; `commentSlotIndex` gives a gap line the block before it
+  and a line above every block the first, where `blockIndexForLine` gives a gap line the
+  next block. Anchors stay source line ranges; nothing is re-anchored to rendered
+  positions.
+- **Reserve.** `createSlotReserve` holds each slot's height open as `padding-block-end` on
+  its block, and the slot sits at the block's bottom less that height. The reserve lives
+  as long as the preview root, so a re-sync never drops a block's padding for a frame. The
+  overlay state (slot boxes, the pointer and focus spans) resets on a version switch or a
+  flip, as the code chrome's boxes do.
+- **Highlight precedence.** The pointer's comment, else the focused comment in a slot,
+  else the open composer, else the focused annotation, is highlighted as
+  `caret-comment-span` over the `rangeOf` ranges of its lines.
+- **Accepted trade-off.** A padded block's bottom includes its slot, so `previewTopLine`
+  can report a block whose text has scrolled past the reading zone while its slot is still
+  in view, and a flip to source lands on that block's start.
 
 The preview renders a version once. `memoLast` returns the last result for the same text,
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same

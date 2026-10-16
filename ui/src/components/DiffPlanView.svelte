@@ -106,6 +106,16 @@
     scrollRowIntoView,
   } from "$lib/diffview/scroll.ts";
   import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
+  import { createPlanSourceMap } from "$lib/planSourceMap.ts";
+  import {
+    clearCommentHighlight,
+    commentSlotIndex,
+    createSlotReserve,
+    groupBySlot,
+    paintCommentHighlight,
+    previewSlotBoxes,
+    spanRanges,
+  } from "$lib/previewComments.ts";
   import { previewFileRefs } from "$lib/previewRefs.ts";
   import {
     type Annotation,
@@ -113,6 +123,7 @@
     type FileRefKind,
     isLegacyAnnotation,
     isLineAnnotation,
+    type LineAnnotation,
   } from "@core/lib/types";
   import SourceComposer from "@/components/SourceComposer.svelte";
   import SourceScratchMarker from "@/components/SourceScratchMarker.svelte";
@@ -128,7 +139,7 @@
   import PlanPreview from "@/components/PlanPreview.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { memoLast } from "$lib/memoLast.ts";
-  import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
+  import { renderPlanMarkdown, type SourceSpan } from "$lib/planMarkdown.ts";
   import {
     type PlanSurface,
     type PlanView,
@@ -166,12 +177,11 @@
     /** App's mirror of `commenting.scratches()` — the retained drafts, one Resume marker
      * per range. */
     scratches?: ComposerScratch[];
-    /** Hand the host a reveal(line, side) action once the source view mounts, so a
-     * sibling (the comment navigator) can scroll to a commented line. The side is
-     * read only while comparing, where a line number alone names a row on either
-     * document; the source view ignores it. A call before the view paints is a
-     * bounded-retry no-op, and on the plan preview, where the lineComments row does
-     * not run, the reveal is a no-op. */
+    /** Hand the host a reveal(line, side) action once on mount, so a sibling (the
+     * comment navigator) can scroll to a commented line. The side is read only while
+     * comparing, where a line number alone names a row on either document; the source
+     * view ignores it. A call before the view paints is a bounded-retry no-op; on the
+     * plan preview it scrolls to the line's item in its comment slot. */
     onExposeReveal?: (reveal: (line: number, side?: DiffSide) => void) => void;
     /** Report the compared versions upward (null when not comparing), so App can
      * point the single CommentNavigator instance at the cross-version index.
@@ -195,9 +205,8 @@
      * mirror App can resync). */
     settingsRev?: number;
     /** The review the comment editors compose against, forwarded to every composer
-     * this view hosts — the gutter one and each annotation card's edit field. App
-     * builds it, because the adapter id comes from the health probe rather than the
-     * review record. */
+     * this view hosts, on either surface. App builds it, because the adapter id comes
+     * from the health probe rather than the review record. */
     reviewContext?: ReviewContext;
   }
 
@@ -295,6 +304,130 @@
   );
   // The preview's root, bound from PlanPreview: the chrome geometry and capturePlace read it.
   let previewEl = $state<HTMLDivElement | undefined>();
+
+  // The preview's comments, one slot per block they follow, in the order the source view's
+  // annotation row stacks them: thread, then the open composer, then draft markers.
+  type PreviewSlotItem =
+    | { kind: "thread"; line: number; annotations: (typeof lineThreads)[number]["annotations"] }
+    | { kind: "composer"; line: number; start: number }
+    | { kind: "marker"; line: number; start: number; scratch: ComposerScratch };
+  // The open composer supersedes the draft marker on its own line on both surfaces.
+  const draftMarkers = $derived(scratches.filter((s) => s.endLine !== pending?.endLine));
+  const previewSlots = $derived(
+    planPreview && runs("commentThreads")
+      ? groupBySlot<PreviewSlotItem>(planPreview.blocks, [
+          ...lineThreads.map((t) => ({ kind: "thread" as const, ...t })),
+          ...(pending
+            ? [{ kind: "composer" as const, line: pending.endLine, start: pending.startLine }]
+            : []),
+          ...draftMarkers.map((s) => ({
+            kind: "marker" as const,
+            line: s.endLine,
+            start: s.startLine,
+            scratch: s,
+          })),
+        ])
+      : [],
+  );
+  let slotBoxes = $state(new Map<number, { top: number; left: number; width: number }>());
+  // Created per root rather than per sync run, so a re-run keeps the padding it holds
+  // instead of dropping it for a frame.
+  const slotReserve = $derived(previewEl ? createSlotReserve(previewEl) : undefined);
+  $effect(() => {
+    const reserve = slotReserve;
+    return () => reserve?.release();
+  });
+
+  // The comment under the pointer, else the one holding focus in a slot, else the open
+  // composer's range, else the focused annotation: the span the preview highlights.
+  let pointerSpan = $state<SourceSpan | null>(null);
+  let focusSpan = $state<SourceSpan | null>(null);
+  const spanOf = (r: { startLine: number; endLine: number }): SourceSpan => ({
+    start: r.startLine,
+    end: r.endLine,
+  });
+  const pendingSpan = $derived(pending ? spanOf(pending) : null);
+  const focusedAnnotationSpan = $derived.by(() => {
+    const a = lineAnnotations.find((x) => x.id === focusedAnnotation);
+    return a ? spanOf(a) : null;
+  });
+  const activeSpan = $derived(pointerSpan ?? focusSpan ?? pendingSpan ?? focusedAnnotationSpan);
+
+  // A version switch or a flip leaves the boxes on the previous document's coordinates,
+  // and removes slots without the pointerleave/focusout that would clear their spans.
+  $effect(() => {
+    void contentKey;
+    void surface;
+    slotBoxes = new Map();
+    pointerSpan = null;
+    focusSpan = null;
+  });
+
+  const sameSpan = (a: SourceSpan | null, b: SourceSpan | null) =>
+    a?.start === b?.start && a?.end === b?.end;
+
+  function slotSpan(target: EventTarget | null): SourceSpan | null {
+    if (!(target instanceof Element)) return null;
+    const card = target.closest<HTMLElement>("[data-annotation-card]");
+    if (card) {
+      const a = lineAnnotations.find((x) => x.id === card.dataset.annotationCard);
+      return a ? spanOf(a) : null;
+    }
+    const item = target.closest<HTMLElement>("[data-span-start]");
+    return item
+      ? { start: Number(item.dataset.spanStart), end: Number(item.dataset.slotLine) }
+      : null;
+  }
+
+  function pointSlot(target: EventTarget | null): void {
+    const span = slotSpan(target);
+    if (!sameSpan(span, pointerSpan)) pointerSpan = span;
+  }
+
+  function focusSlot(target: EventTarget | null): void {
+    const span = slotSpan(target);
+    if (!sameSpan(span, focusSpan)) focusSpan = span;
+  }
+
+  function leaveSlotFocus(e: FocusEvent & { currentTarget: HTMLElement }): void {
+    if (!(e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)))
+      focusSpan = null;
+  }
+
+  // createPlanSourceMap reads only the DOM, so the html read is what rebuilds the map on a
+  // version switch.
+  const previewSourceMap = $derived.by(() => {
+    void planPreview?.html;
+    return previewEl && runs("commentThreads") ? createPlanSourceMap(previewEl) : null;
+  });
+  // The code highlight pass replaces a block's text nodes after mount and on a theme
+  // switch, collapsing any range painted inside them, so the paint follows text changes.
+  // Attributes stay unobserved: the slot reserve writes block styles, which would loop.
+  $effect(() => {
+    const map = previewSourceMap;
+    const span = activeSpan;
+    const root = previewEl;
+    if (!map || !span || !root) {
+      clearCommentHighlight();
+      return;
+    }
+    const paint = () => paintCommentHighlight(spanRanges(map, span));
+    paint();
+    let raf = 0;
+    const observer = new MutationObserver(() => {
+      if (raf === 0)
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          paint();
+        });
+    });
+    observer.observe(root, { childList: true, subtree: true, characterData: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+      clearCommentHighlight();
+    };
+  });
 
   // Report the compared versions to the host, so App can point the docked comment
   // panel at the cross-version index (EXC-872). The assignment matches what the
@@ -896,6 +1029,51 @@
     };
   });
 
+  // Hold each preview slot's room open under its block and place the slot there, the
+  // chrome sync's shape. The reserve is written before the boxes are measured: padding a
+  // block for the first time shifts its bottom, so measuring first would land a new slot
+  // one margin off.
+  $effect(() => {
+    const scroller = scrollEl;
+    const root = previewEl;
+    const reserve = slotReserve;
+    void previewSlots;
+    void planPreview?.html;
+    if (scroller == null || root == null || reserve === undefined) return;
+    const slotEls = [...scroller.querySelectorAll<HTMLElement>("[data-preview-slot]")];
+    let raf = 0;
+    const sync = () => {
+      raf = 0;
+      const heights = new Map(slotEls.map((el) => [Number(el.dataset.previewSlot), el.offsetHeight]));
+      reserve.set(heights);
+      const next = previewSlotBoxes(root, scroller, heights);
+      if (!sameSlotBoxes(slotBoxes, next)) slotBoxes = next;
+    };
+    const schedule = () => {
+      if (raf === 0) raf = requestAnimationFrame(sync);
+    };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(root);
+    for (const el of slotEls) observer.observe(el);
+    schedule();
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  });
+
+  function sameSlotBoxes(
+    a: ReadonlyMap<number, { top: number; left: number; width: number }>,
+    b: ReadonlyMap<number, { top: number; left: number; width: number }>,
+  ): boolean {
+    if (a.size !== b.size) return false;
+    for (const [block, box] of b) {
+      const old = a.get(block);
+      if (old?.top !== box.top || old.left !== box.left || old.width !== box.width) return false;
+    }
+    return true;
+  }
+
   // The one-time reference hints (EXC-1061): where to badge the first on-screen
   // file reference and the first on-screen directory reference, in .diff-plan
   // content coordinates. Empty once both kinds are retired, and the effect below
@@ -1069,9 +1247,9 @@
 
   // Reveal a commented line for the host (the comment navigator): scroll whichever
   // view is on screen to it. While comparing, the side picks which of the diff's
-  // two documents the line names; otherwise it is ignored and the source view
-  // scrolls; off the lineComments surfaces (the plan preview) it does nothing. Both read their live api, so a call before the view mounts is a
-  // no-op, and both spend the same paint budget waiting for the row.
+  // two documents the line names; otherwise it is ignored and the source view scrolls
+  // to the line, or the preview to the line's item in its comment slot. Each spends the
+  // same paint budget waiting for its target.
   function revealLine(line: number, side?: DiffSide): void {
     if (showDiff) {
       const d = diffApi;
@@ -1082,8 +1260,23 @@
       retryFrames(() => d.scrollToLine(line, side ?? "after"));
       return;
     }
-    if (!runs("lineComments")) return;
+    if (!runs("commentThreads")) return;
+    if (surface === "preview") {
+      retryFrames(() => revealPreviewSlot(line));
+      return;
+    }
     retryScrollTo(line);
+  }
+
+  // False until the line's slot is measured, so retryFrames waits for the sync pass.
+  function revealPreviewSlot(line: number): boolean {
+    const block = planPreview ? commentSlotIndex(planPreview.blocks, line) : null;
+    if (block === null || !slotBoxes.has(block) || !scrollEl) return false;
+    const slot = scrollEl.querySelector<HTMLElement>(`[data-preview-slot="${block}"]`);
+    const item = slot?.querySelector<HTMLElement>(`[data-slot-line="${line}"]`);
+    if (!slot || !item) return false;
+    scrollRowIntoView(slot, item);
+    return true;
   }
 
   // Take the reviewer to a heading they picked in the breadcrumbs bar. The line
@@ -1184,8 +1377,9 @@
   });
 
   // Hand the host the reveal(line) action once. `untrack` keeps onExposeReveal from
-  // becoming a reactive dependency; revealLine closes over the live `api`, so exposing
-  // it before the view paints is safe (the reveal simply no-ops until the api lands).
+  // becoming a reactive dependency; revealLine closes over the live `api` and preview
+  // slots, so exposing it before the view paints is safe (the reveal simply no-ops until
+  // the api lands).
   $effect(() => {
     untrack(() => onExposeReveal)?.(revealLine);
   });
@@ -1543,12 +1737,14 @@
     commenting.open({ start, end });
     keyboardStore.cursorLine = end; // a line click relocates the cursor (keyboard + mouse coherent)
   }
-  // The composer lives in SourceView's rows, so leaving source would drop it:
-  // retain its text as a scratch first, which the approve guard still counts.
+  // Each surface hosts its own composer, so a flip would remount it with its typed text
+  // lost: retain the text as a scratch first, which the approve guard still counts.
   function setPlanView(next: PlanView): void {
     releasePlace();
-    if (planView === "source" && next !== "source") commenting.cancel(liveText);
-    if (next !== planView) capturePlace();
+    if (next !== planView) {
+      commenting.cancel(liveText);
+      capturePlace();
+    }
     planView = next;
     writePlanView(next);
   }
@@ -1805,6 +2001,32 @@
           />
         {/each}
       {/snippet}
+      <!-- A line's comment items, rendered by both surfaces inside each one's own wrapper. -->
+      {#snippet commentThread(annotations: LineAnnotation[])}
+        <SourceAnnotationThread
+          {annotations}
+          {focusedAnnotation}
+          onFocus={onFocusAnnotation}
+          onEdit={onEditAnnotation}
+          onDelete={onDeleteAnnotation}
+          {reviewContext}
+        />
+      {/snippet}
+      {#snippet openComposer(range: { startLine: number; endLine: number })}
+        <SourceComposer
+          startLine={range.startLine}
+          endLine={range.endLine}
+          initial={pendingText}
+          {reviewContext}
+          onInput={(text) => (liveText = text)}
+          onSubmit={(comment) => commenting.submit(comment)}
+          onKeep={(text) => commenting.cancel(text)}
+          onDiscard={() => commenting.discardOpen(liveText)}
+        />
+      {/snippet}
+      {#snippet draftMarker(scratch: ComposerScratch)}
+        <SourceScratchMarker text={scratch.text} onResume={() => resumeScratch(scratch.key)} />
+      {/snippet}
       {#if showDiff}
         <!-- Compare mode: a diff between the selected version pair. Base is the
              reference version (the default base is the current version) and renders
@@ -1841,6 +2063,41 @@
           onFileRefClick={openFileRef}
         />
         {@render codeChrome()}
+        <!-- Comment slots sit outside the preview root so it stays exactly the rendered
+             HTML the source map and place-keeping index. -->
+        {#each previewSlots as slot (slot.block)}
+          {@const box = slotBoxes.get(slot.block)}
+          <div
+            class="preview-slot"
+            role="group"
+            aria-label={`Comments on line ${slot.items[0]?.line}`}
+            data-preview-slot={slot.block}
+            style:top={box ? `${box.top}px` : undefined}
+            style:left={box ? `${box.left}px` : undefined}
+            style:width={box ? `${box.width}px` : undefined}
+            style:visibility={box ? undefined : "hidden"}
+            onpointerover={(e) => pointSlot(e.target)}
+            onfocusin={(e) => focusSlot(e.target)}
+            onpointerleave={() => (pointerSpan = null)}
+            onfocusout={leaveSlotFocus}
+          >
+            {#each slot.items as item (item.kind === "marker" ? item.scratch.key : `${item.kind}:${item.line}`)}
+              {#if item.kind === "thread"}
+                <div data-slot-line={item.line}>{@render commentThread(item.annotations)}</div>
+              {:else if item.kind === "composer"}
+                {#key `${item.start}:${item.line}`}
+                  <div data-slot-line={item.line} data-span-start={item.start}>
+                    {@render openComposer({ startLine: item.start, endLine: item.line })}
+                  </div>
+                {/key}
+              {:else}
+                <div data-slot-line={item.line} data-span-start={item.start}>
+                  {@render draftMarker(item.scratch)}
+                </div>
+              {/if}
+            {/each}
+          </div>
+        {/each}
       {:else}
         <!-- Live range readout: a zero-height sticky rail rendered first so it pins to
              the top of the scroll viewport from scroll position 0 without reflowing
@@ -1919,16 +2176,7 @@
              per line carries that line's slot; multiple comments on a line stack
              inside it as a single ordered thread. -->
         {#each lineThreads as thread (thread.line)}
-          <div use:slotInto={{ host, line: thread.line }}>
-            <SourceAnnotationThread
-              annotations={thread.annotations}
-              {focusedAnnotation}
-              onFocus={onFocusAnnotation}
-              onEdit={onEditAnnotation}
-              onDelete={onDeleteAnnotation}
-              {reviewContext}
-            />
-          </div>
+          <div use:slotInto={{ host, line: thread.line }}>{@render commentThread(thread.annotations)}</div>
         {/each}
         {#if pending}
           <!-- Key the whole composer host container per range, not just the inner
@@ -1943,18 +2191,7 @@
                the dismissed line's text is retained as a scratch by openRange, so
                nothing is lost. -->
           {#key `${pending.startLine}:${pending.endLine}`}
-            <div use:slotInto={{ host, line: pending.endLine }}>
-              <SourceComposer
-                startLine={pending.startLine}
-                endLine={pending.endLine}
-                initial={pendingText}
-                {reviewContext}
-                onInput={(text) => (liveText = text)}
-                onSubmit={(comment) => commenting.submit(comment)}
-                onKeep={(text) => commenting.cancel(text)}
-                onDiscard={() => commenting.discardOpen(liveText)}
-              />
-            </div>
+            <div use:slotInto={{ host, line: pending.endLine }}>{@render openComposer(pending)}</div>
           {/key}
         {/if}
         <!-- Retained scratch drafts: an unsubmitted composer dismissed with typed
@@ -1965,12 +2202,8 @@
         <!-- Markers anchor to endLine (matching the composer/card), so two scratches
              that end on the same line share one library row and stack within it —
              an uncommon overlap, harmless: each stays clickable and resumable. -->
-        {#each scratches as scratch (scratch.key)}
-          {#if pending?.endLine !== scratch.endLine}
-            <div use:slotInto={{ host, line: scratch.endLine }}>
-              <SourceScratchMarker text={scratch.text} onResume={() => resumeScratch(scratch.key)} />
-            </div>
-          {/if}
+        {#each draftMarkers as scratch (scratch.key)}
+          <div use:slotInto={{ host, line: scratch.endLine }}>{@render draftMarker(scratch)}</div>
         {/each}
         <!-- One-time hint: rendered last so it sticks to the bottom of the scroll
              viewport, reading as ambient guidance. Surfaces the drag-to-comment
@@ -2041,6 +2274,13 @@
 {/if}
 
 <style>
+  /* Placed over the room its block's padding holds open; the bottom padding, matching
+     .plan-preview's block margin, is the gap before the next block. */
+  .preview-slot {
+    position: absolute;
+    padding-block-end: 1em;
+    font-size: var(--text-base);
+  }
   /* A view option, not a selection — neutral, like the soft-wrap toggle. */
   .control-row :global(button.preview-toggle[aria-pressed="true"]:not(:disabled)) {
     background: var(--chip-hover);

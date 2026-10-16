@@ -33,7 +33,8 @@ export const SURFACE_BEHAVIORS = {
   fileReferences: ["source", "preview"], // the file lane and folder card a reference opens
   search: ["source"], // `/` dock, n/N, match highlights
   keyboardCursor: ["source"], // cursor motions, `c`, `V`, Esc
-  lineComments: ["source"], // drag readout, gutter range drag, drag/visual hint chips, hover re-fire, comment reveal
+  commentThreads: ["source", "preview"], // inline threads, draft markers, the open composer, the preview's comment highlight, comment reveal
+  lineComments: ["source"], // drag readout, gutter range drag, drag/visual hint chips, hover re-fire
   headingTracking: ["source", "preview"], // top-visible heading, ?heading= mirror, ToC, breadcrumbs, b and \
 } as const satisfies Record<string, readonly PlanSurface[]>;
 
