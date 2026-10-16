@@ -2197,7 +2197,8 @@
             style:top={box ? `${box.top}px` : undefined}
             style:left={box ? `${box.left}px` : undefined}
             style:width={box ? `${box.width}px` : undefined}
-            style:visibility={box ? undefined : "hidden"}
+            style:opacity={box ? undefined : 0}
+            style:pointer-events={box ? undefined : "none"}
             onpointerover={(e) => pointSlot(e.target)}
             onfocusin={(e) => focusSlot(e.target)}
             onpointerleave={() => (pointerSpan = null)}

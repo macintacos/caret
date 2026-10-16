@@ -451,6 +451,11 @@ test.describe("commenting from the preview", () => {
   const composerLabel = (page: Page) =>
     page.getByRole("dialog", { name: "Add a comment" }).locator(".label");
 
+  const expectComposerFocused = (page: Page) =>
+    expect(
+      page.getByRole("dialog", { name: "Add a comment" }).getByRole("textbox", { name: "Comment" }),
+    ).toBeFocused();
+
   const words = (line: string) => line.match(/[\w.]+/g) ?? [];
   const occurrences = (line: string, word: string) =>
     words(line).filter((w) => w.replace(/\.$/, "") === word).length;
@@ -465,7 +470,8 @@ test.describe("commenting from the preview", () => {
 
   async function closeComposer(page: Page) {
     const dialog = page.getByRole("dialog", { name: "Add a comment" });
-    await dialog.getByRole("button", { name: "Discard" }).click();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
   }
 
@@ -527,6 +533,7 @@ test.describe("commenting from the preview", () => {
     expect(words(s.lines[s.near] ?? "")).toContain("bravo");
     await clickWord(page, { text: "bravo", line: s.near });
     await expect(composerLabel(page)).toHaveText(`Line ${s.near + 1}`);
+    await expectComposerFocused(page);
   });
 
   test("on a plan with a task list and a table: a checkbox opens nothing, and a drag across table rows comments on those rows", async ({
@@ -554,6 +561,7 @@ test.describe("commenting from the preview", () => {
 
     await clickWord(page, { text: "tick", line: tick });
     await expect(composerLabel(page)).toHaveText(`Line ${tick}`);
+    await expectComposerFocused(page);
     await closeComposer(page);
 
     await dragAcross(page, { text: "cellone", line: row1 }, { text: "celltwo", line: row2 });
@@ -569,6 +577,7 @@ test.describe("commenting from the preview", () => {
 
     await dragAcross(page, { text: "words.", line: s.near + 2 }, { text: "one", line: itemOne });
     await expect(composerLabel(page)).toHaveText(`Lines ${s.near + 2}–${itemOne}`);
+    await expectComposerFocused(page);
     await closeComposer(page);
 
     await expect(page.locator(`${PLAN_PREVIEW} pre code span`).first()).toBeAttached();
