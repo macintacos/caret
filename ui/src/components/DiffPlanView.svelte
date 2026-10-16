@@ -470,7 +470,7 @@
   );
   // The code highlight pass replaces a block's text nodes after mount and on a theme
   // switch, collapsing any range painted inside them, so the paint re-runs on each
-  // previewLayoutRev bump, a text change among them.
+  // previewLayoutRev bump.
   $effect(() => {
     void previewLayoutRev;
     const map = previewSourceMap;
@@ -1066,14 +1066,12 @@
     };
   });
 
-  // Keep every block's chrome anchored. The preview re-syncs on previewLayoutRev; the
-  // source view has the reference-hint sync's shape: rAF-throttled, re-run from a
-  // ResizeObserver over its content (`geometry.observed`). Content coordinates survive
-  // scrolling by construction, so what has to be caught is anything that changes a block's
-  // box — a library repaint, a block moving into or out of its scroll card, a viewport
-  // resize — and all of them change the rendered height the source's observer watches; the
-  // preview's signal catches those and text rewraps besides. The chrome is a light-DOM
-  // child of .diff-plan, so it scrolls with the rows for free.
+  // Keep every block's chrome anchored. The preview re-anchors on previewLayoutRev; the
+  // source re-syncs, rAF-throttled, from a ResizeObserver over its content
+  // (`geometry.observed`). Content coordinates survive scrolling, so only a block's box
+  // changing matters — a library repaint, a block entering or leaving its scroll card, a
+  // viewport resize — and each changes the rendered height the observer watches. The
+  // chrome is a light-DOM child of .diff-plan, so it scrolls with the rows for free.
   $effect(() => {
     const scroller = scrollEl;
     const geometry = chromeGeometry;
@@ -1084,7 +1082,6 @@
       chromeBoxes = [];
       return;
     }
-    // The preview's geometry has nothing to observe: it re-anchors on the shared signal.
     if (geometry.observed === undefined) {
       void previewLayoutRev;
       chromeBoxes = geometry.boxes(scroller);
