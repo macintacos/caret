@@ -1044,6 +1044,24 @@ describe("DiffPlanView preview cursor", () => {
     expect(band(target)?.getAttribute("data-line")).toBe("1");
   });
 
+  test("a visual selection does not survive a round trip through the preview", async () => {
+    const { target } = render(DiffPlanView, props());
+    await until(() => live("commenting.visualLine"));
+    run("motion.top");
+    run("commenting.visualLine");
+    const enabled = () =>
+      shortcuts
+        .list()
+        .find((e) => e.id === "commenting.clear")
+        ?.enabled?.();
+    expect(enabled()).toBe(true);
+    toggle(target)!.click();
+    await until(() => target.querySelector(".plan-preview") != null);
+    toggle(target)!.click();
+    await until(() => live("commenting.visualLine"));
+    expect(enabled()).toBe(false);
+  });
+
   test("a content switch clears the preview cursor", async () => {
     stubLayout();
     const p = reactiveProps(props());

@@ -10,7 +10,12 @@
 import type { Page } from "@playwright/test";
 
 import { previewToggle } from "@test/e2e/support/chrome.ts";
-import { expectCursorLine, goToTop, previewCursor } from "@test/e2e/support/cursor.ts";
+import {
+  expectCursorLine,
+  goToTop,
+  PREVIEW_BAND,
+  previewCursor,
+} from "@test/e2e/support/cursor.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
   lineOf,
@@ -40,12 +45,38 @@ const PLAN = [
   "",
 ].join("\n\n");
 
+const CODE = ["alpha = 1", "", "beta = 2", "gamma = 3"];
+
+// Each table row pairs a short cell with one that wraps at a narrow width, so a
+// middle-aligned short cell sits between the long cell's lines.
+const SHAPES = [
+  "# Shapes",
+  "Tablestart paragraph.",
+  [
+    "| Step | Note |",
+    "| --- | --- |",
+    "| one | Backfill the orders table in batches of five hundred rows while the old reader keeps serving traffic |",
+    "| two | Flip reads to the new column behind a flag that rollback can drop without touching stored data at all |",
+  ].join("\n"),
+  "Liststart paragraph.",
+  [
+    "- kiwi",
+    "- A list item long enough to wrap across several visual lines at a narrow preview width here",
+    "- fig",
+  ].join("\n"),
+  "Fencestart paragraph.",
+  ["```text", ...CODE, "```"].join("\n"),
+  "Fenceend paragraph.",
+  "",
+].join("\n\n");
+
 const press = async (page: Page, ...keys: string[]) => {
   for (const key of keys) await page.keyboard.press(key);
 };
 
-const bandTop = async (page: Page): Promise<number> =>
-  (await previewCursor(page).boundingBox())?.y ?? Number.NaN;
+/** The band's top in `.diff-plan` content coordinates, which the follow scroll leaves still. */
+const bandTop = (page: Page): Promise<number> =>
+  previewCursor(page).evaluate((el) => (el as HTMLElement).offsetTop);
 
 const bandLine = async (page: Page): Promise<number> =>
   Number(await previewCursor(page).getAttribute("data-line"));
@@ -65,52 +96,78 @@ const bandRows = (page: Page, word: string) =>
     [PLAN_PREVIEW, word] as const,
   );
 
-/** The preview's characters in text order, each with its vertical midpoint. */
-const CHARS_SCRIPT = (root: string) => {
-  const out: { ch: string; mid: number }[] = [];
-  const walker = document.createTreeWalker(document.querySelector(root)!, NodeFilter.SHOW_TEXT);
-  const range = document.createRange();
-  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-    const text = n.textContent ?? "";
-    for (let i = 0; i < text.length; i++) {
-      range.setStart(n, i);
-      range.setEnd(n, i + 1);
-      const r = range.getClientRects()[0];
-      if (r && r.width > 0) out.push({ ch: text[i]!, mid: r.top + r.height / 2 });
-    }
-  }
-  return out;
-};
+/** The preview's characters in text order with their vertical midpoints, and the band's
+ * span, read in one frame so a follow scroll moves both alike. */
+type Snapshot = { chars: { ch: string; mid: number }[]; band: { top: number; bottom: number } };
 
-/** The first dozen characters laid out under the band. */
-const bandText = (page: Page) =>
+const snapshot = (page: Page): Promise<Snapshot> =>
   page.evaluate(
-    ([root, script]) => {
-      const chars = (new Function(`return (${script})`)() as typeof CHARS_SCRIPT)(root);
-      const band = document.querySelector("[data-caret-preview-cursor]")!.getBoundingClientRect();
-      return chars
-        .filter((c) => c.mid > band.top && c.mid < band.bottom)
-        .map((c) => c.ch)
-        .join("")
-        .slice(0, 12);
+    ([root, bandSelector]) => {
+      const chars: Snapshot["chars"] = [];
+      const walker = document.createTreeWalker(document.querySelector(root)!, NodeFilter.SHOW_TEXT);
+      const range = document.createRange();
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        const text = n.textContent ?? "";
+        for (let i = 0; i < text.length; i++) {
+          range.setStart(n, i);
+          range.setEnd(n, i + 1);
+          const r = range.getClientRects()[0];
+          if (r && r.width > 0) chars.push({ ch: text[i]!, mid: r.top + r.height / 2 });
+        }
+      }
+      const { top, bottom } = document.querySelector(bandSelector)!.getBoundingClientRect();
+      return { chars, band: { top, bottom } };
     },
-    [PLAN_PREVIEW, CHARS_SCRIPT.toString()] as const,
+    [PLAN_PREVIEW, PREVIEW_BAND] as const,
   );
 
+const underBand = ({ band }: Snapshot, mid: number) => mid > band.top && mid < band.bottom;
+
 /** Whether the band's vertical span holds `text`'s first character. */
-const bandCovers = (page: Page, text: string) =>
+const covers = (s: Snapshot, text: string) => {
+  const at = s.chars
+    .map((c) => c.ch)
+    .join("")
+    .indexOf(text);
+  return at >= 0 && underBand(s, s.chars[at]!.mid);
+};
+
+const bandCovers = async (page: Page, text: string) => covers(await snapshot(page), text);
+
+/** The first dozen characters laid out under the band. */
+const bandText = async (page: Page) => {
+  const s = await snapshot(page);
+  return s.chars
+    .filter((c) => underBand(s, c.mid))
+    .map((c) => c.ch)
+    .join("")
+    .slice(0, 12);
+};
+
+/** The visual lines a reader sees in the preview's `table` (each row as tall as its tallest
+ * cell) or `ul` (each item's lines). */
+const blockLines = (page: Page, block: "table" | "ul") =>
   page.evaluate(
-    ([root, script, want]) => {
-      const chars = (new Function(`return (${script})`)() as typeof CHARS_SCRIPT)(root);
-      const at = chars
-        .map((c) => c.ch)
-        .join("")
-        .indexOf(want);
-      if (at < 0) return false;
-      const band = document.querySelector("[data-caret-preview-cursor]")!.getBoundingClientRect();
-      return chars[at]!.mid > band.top && chars[at]!.mid < band.bottom;
+    ([root, kind]) => {
+      const lines = (el: Element) => {
+        const tops = new Set<number>();
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        const range = document.createRange();
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+          range.selectNodeContents(n);
+          for (const r of range.getClientRects()) if (r.width > 0) tops.add(Math.round(r.top));
+        }
+        return tops.size;
+      };
+      const el = document.querySelector(`${root} ${kind}`)!;
+      return kind === "table"
+        ? [...el.querySelectorAll("tr")].reduce(
+            (n, tr) => n + Math.max(...[...tr.cells].map(lines)),
+            0,
+          )
+        : [...el.querySelectorAll("li")].reduce((n, li) => n + lines(li), 0);
     },
-    [PLAN_PREVIEW, CHARS_SCRIPT.toString(), text] as const,
+    [PLAN_PREVIEW, block] as const,
   );
 
 async function openPreview(page: Page, daemon: Parameters<typeof openPlanForKeys>[1]) {
@@ -136,19 +193,23 @@ async function stepFrom(page: Page, key: string, from: number): Promise<number> 
   return bandTop(page);
 }
 
-/** Walks the long paragraph with j, returning how many presses reach the next block. */
-async function walkLong(page: Page): Promise<number> {
+/** Presses j until the band covers `text`, asserting each press moves it down; returns a
+ * snapshot per press. */
+async function walkTo(page: Page, text: string): Promise<Snapshot[]> {
   let top = await bandTop(page);
-  let presses = 0;
-  while (!(await bandCovers(page, "Details"))) {
+  const steps: Snapshot[] = [];
+  while (!(await bandCovers(page, text))) {
     const next = await stepFrom(page, "j", top);
     expect(next).toBeGreaterThan(top);
     top = next;
-    presses++;
-    if (presses > 50) throw new Error("j never reached the next heading");
+    steps.push(await snapshot(page));
+    if (steps.length > 80) throw new Error(`j never reached ${text}`);
   }
-  return presses;
+  return steps;
 }
+
+/** Walks the long paragraph with j, returning how many presses reach the next block. */
+const walkLong = async (page: Page) => (await walkTo(page, "Details")).length;
 
 test.describe("preview keyboard cursor", () => {
   test("j/k step one visual line, and the unit follows the width", async ({ page, daemon }) => {
@@ -159,6 +220,7 @@ test.describe("preview keyboard cursor", () => {
     for (const width of [1600, 420]) {
       await page.setViewportSize({ width, height: 900 });
       await toLongParagraph(page);
+      await expect.poll(() => bandRows(page, "Marmalade")).toBeGreaterThan(0);
       const rows = await bandRows(page, "Marmalade");
       expect(await walkLong(page)).toBe(rows);
       counts.push(rows);
@@ -169,7 +231,7 @@ test.describe("preview keyboard cursor", () => {
         expect(next).toBeLessThan(top);
         top = next;
       }
-      expect(await bandCovers(page, "Marmalade")).toBe(true);
+      await expect.poll(() => bandCovers(page, "Marmalade")).toBe(true);
     }
     expect(counts[1]).toBeGreaterThan(counts[0]!);
   });
@@ -220,7 +282,8 @@ test.describe("preview keyboard cursor", () => {
     const start = await bandTop(page);
     await press(page, "Control+d");
     await expect.poll(() => bandTop(page)).not.toBe(start);
-    expect(await bandCovers(page, "Marmalade")).toBe(false);
+    // The band has already moved, so this cannot pass on a stale frame.
+    await expect.poll(() => bandCovers(page, "Marmalade")).toBe(false);
     await press(page, "Control+u");
     await expect.poll(() => bandCovers(page, "Marmalade")).toBe(true);
   });
@@ -232,11 +295,14 @@ test.describe("preview keyboard cursor", () => {
     await expect.poll(() => bandCovers(page, "Overview")).toBe(true);
 
     const inView = () =>
-      page.evaluate((surface) => {
-        const band = document.querySelector("[data-caret-preview-cursor]")!.getBoundingClientRect();
-        const view = document.querySelector(surface)!.getBoundingClientRect();
-        return band.top >= view.top && band.bottom <= view.bottom;
-      }, PLAN_SURFACE);
+      page.evaluate(
+        ([surface, bandSelector]) => {
+          const band = document.querySelector(bandSelector)!.getBoundingClientRect();
+          const view = document.querySelector(surface)!.getBoundingClientRect();
+          return band.top >= view.top && band.bottom <= view.bottom;
+        },
+        [PLAN_SURFACE, PREVIEW_BAND] as const,
+      );
 
     let presses = 0;
     while (!(await bandCovers(page, "quokka"))) {
@@ -244,7 +310,33 @@ test.describe("preview keyboard cursor", () => {
       await expect.poll(inView).toBe(true);
       if (++presses > 80) throw new Error("j never reached the end");
     }
-    expect(await page.locator(PLAN_SURFACE).evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    await expect
+      .poll(() => page.locator(PLAN_SURFACE).evaluate((el) => el.scrollTop))
+      .toBeGreaterThan(0);
+  });
+
+  test("j visits each table row, list line and code line once", async ({ page, daemon }) => {
+    await page.setViewportSize({ width: 420, height: 900 });
+    await openPlanForKeys(page, daemon, SHAPES);
+    await previewToggle(page).click();
+    await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
+    await press(page, "g", "g");
+    await walkTo(page, "Tablestart");
+
+    const table = await walkTo(page, "Liststart");
+    expect(table.length).toBe((await blockLines(page, "table")) + 1);
+
+    const list = await walkTo(page, "Fencestart");
+    expect(list.length).toBe((await blockLines(page, "ul")) + 1);
+
+    const fence = await walkTo(page, "Fenceend");
+    for (const line of CODE) {
+      if (line)
+        expect(
+          fence.some((s) => covers(s, line)),
+          line,
+        ).toBe(true);
+    }
   });
 
   test("the cursor keeps its text across resize, theme and reflow", async ({ page, daemon }) => {
@@ -271,7 +363,7 @@ test.describe("preview keyboard cursor", () => {
       p.append(card);
     }, PLAN_PREVIEW);
     await expect.poll(() => bandTop(page)).toBeGreaterThan(before);
-    expect(await bandCovers(page, recorded)).toBe(true);
+    await expect.poll(() => bandCovers(page, recorded)).toBe(true);
   });
 
   test("preview to source carries the cursor line", async ({ page, daemon }) => {

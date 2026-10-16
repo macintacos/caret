@@ -27,11 +27,15 @@ function build(store: PreviewCursorStore, over: { seed?: TextPoint | null; empty
   const steps: number[] = [];
   const follows: TextPoint[] = [];
   const jumps: TextPoint[] = [];
+  const seeds = { count: 0 };
   const cursor = createPreviewCursor(store, {
     lines: () => TEXT.split("\n"),
     headingLines: () => [1, 6],
     halfPage: () => 3,
-    seed: () => (over.seed === undefined ? at(2) : over.seed),
+    seed: () => {
+      seeds.count++;
+      return over.seed === undefined ? at(2) : over.seed;
+    },
     step: (from, count) => {
       steps.push(count);
       return lines[Math.min(Math.max(indexOf(from) + count, 0), lines.length - 1)] as TextPoint;
@@ -41,7 +45,7 @@ function build(store: PreviewCursorStore, over: { seed?: TextPoint | null; empty
     follow: (p) => follows.push(p),
     jump: (p) => jumps.push(p),
   });
-  return { cursor, steps, follows, jumps };
+  return { cursor, steps, follows, jumps, seeds };
 }
 
 const unplaced = (): PreviewCursorStore => ({ cursorLine: null, cursorPoint: null });
@@ -167,6 +171,22 @@ test("an empty preview leaves the cursor unchanged", () => {
   for (const m of ["top", "bottom", "nextHeading", "nextBlank"] as const) h.cursor.moveCursor(m);
   expect(store).toEqual(unplaced());
   expect(h.follows).toEqual([]);
+});
+
+test("a placed heading or paragraph motion never reads the reading position", () => {
+  const store = placed(at(2));
+  const h = build(store);
+  for (const m of ["nextHeading", "prevHeading", "nextBlank", "prevBlank"] as const)
+    h.cursor.moveCursor(m);
+  expect(h.seeds.count).toBe(0);
+});
+
+test("reset() drops the column, so a return to its line starts at the line's start", () => {
+  const store = placed(at(2));
+  const h = build(store);
+  h.cursor.reset();
+  expect(store.cursorPoint).toBe(null);
+  expect(h.cursor.point()).toEqual(at(1));
 });
 
 describe("point()", () => {

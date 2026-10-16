@@ -8,6 +8,7 @@ import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
 import { highlightPreviewCode } from "$lib/previewCode.ts";
 import {
   type Box,
+  cursorBand,
   lastVisualLine,
   pointForLine,
   type RangeRects,
@@ -254,6 +255,48 @@ describe("stepVisualLine", () => {
     ]);
   });
 
+  test("a paragraph set tighter than its glyph rects still steps every wrapped line", () => {
+    const { root, map } = mount(`${LONG}\n`);
+    // 13px glyph rects at a 12px pitch: each line's rect overlaps the next one's.
+    const read: RangeRects = (range) => {
+      const rows = new Set<number>();
+      for (let k = range.startOffset; k < range.endOffset; k++) rows.add(Math.floor(k / 20));
+      return [...rows].map((r) => ({ top: r * 12, bottom: r * 12 + 13, left: 0, right: 1 }));
+    };
+    expect(walk(root, map, { line: 1, column: 0 }, read)).toEqual([
+      { line: 1, column: 20 },
+      { line: 1, column: 40 },
+    ]);
+  });
+
+  test("a table row with middle-aligned cells steps once per line of its tallest cell", () => {
+    const { root, map } = mount("| a | b |\n|---|---|\n| two | note |\n| xx | yyy |\n");
+    // Glyph rects are shorter than the line pitch, leaving a gap between lines.
+    const box = (top: number): Box => ({ top, bottom: top + 8, left: 0, right: 1 });
+    // "two" sits a half line down beside the two-line "note"; the two-line "xx" sits a
+    // half line down beside the three-line "yyy". Each cell's characters split evenly
+    // across its lines.
+    const lines = new Map<string, Box[]>([
+      ["a", [box(0)]],
+      ["b", [box(0)]],
+      ["two", [box(15)]],
+      ["note", [box(10), box(20)]],
+      ["xx", [box(35), box(45)]],
+      ["yyy", [box(30), box(40), box(50)]],
+    ]);
+    const read: RangeRects = (range) => {
+      const node = range.startContainer as Text;
+      const boxes = lines.get(node.data) ?? [];
+      const of = (k: number) => Math.floor((k * boxes.length) / node.data.length);
+      return boxes.slice(of(range.startOffset), of(range.endOffset - 1) + 1);
+    };
+    const points = [{ line: 1, column: 0 }, ...walk(root, map, { line: 1, column: 0 }, read)];
+    const tops = points.map((p) => visualLineBox(root, map, p, read)?.top);
+    expect(tops).toEqual([0, 10, 20, 30, 40, 50]);
+    const bottoms = points.map((p) => visualLineBox(root, map, p, read)?.bottom);
+    expect(bottoms).toEqual([8, 18, 28, 38, 48, 58]);
+  });
+
   test("a one-line step reads layout only in the blocks it crosses", () => {
     const blocks = Array.from({ length: 300 }, (_, i) => `para ${i}`);
     const { root, map } = mount(`${blocks.join("\n\n")}\n`);
@@ -271,6 +314,33 @@ describe("visualLineBox", () => {
     const p = { line: 1, column: 25 };
     expect(visualLineBox(root, map, p, grid(root, 20).read)).toMatchObject({ top: 10, bottom: 20 });
     expect(visualLineBox(root, map, p, grid(root, 10).read)).toMatchObject({ top: 20, bottom: 30 });
+  });
+});
+
+describe("cursorBand", () => {
+  function stubRect(el: Element, top: number, left: number, width: number) {
+    el.getBoundingClientRect = () => new DOMRect(left, top, width, 1000);
+  }
+
+  test("spans the root in the scroller's content coordinates, padded to the line-height", () => {
+    const { root, map } = mount(`${LONG}\n`);
+    const scroller = document.createElement("div");
+    stubRect(scroller, 100, 5, 500);
+    scroller.scrollTop = 40;
+    stubRect(root, 50, 25, 300);
+    const read = grid(root, 20).read;
+    expect(cursorBand(root, scroller, map, { line: 1, column: 25 }, 16, read)).toEqual({
+      top: 10 - 3 - 60,
+      left: 20,
+      width: 300,
+      height: 16,
+    });
+    expect(cursorBand(root, scroller, map, { line: 1, column: 25 }, 0, read)?.height).toBe(10);
+  });
+
+  test("is null for a point the preview does not render", () => {
+    const { root, map } = mount("");
+    expect(cursorBand(root, root, map, { line: 1, column: 0 }, 16)).toBe(null);
   });
 });
 
@@ -306,11 +376,11 @@ describe("lastVisualLine", () => {
 });
 
 describe("readingPoint", () => {
-  test("is the first visual line at or below the reading zone", () => {
+  test("is the first visual line whose bottom clears the reading zone", () => {
     const { root, map } = mount(`${LONG}\n\n${LONG}\n`);
     const g = grid(root, 20);
     // Rows sit at 0, 10, 20 (block 0) and 30, 40, 50 (block 1); the zone is 13 below the top.
-    expect(readingPoint(root, map, 25, g.read, g.bottom)).toEqual({ line: 3, column: 20 });
+    expect(readingPoint(root, map, 25, g.read, g.bottom)).toEqual({ line: 3, column: 0 });
     expect(readingPoint(root, map, 10, g.read, g.bottom)).toEqual({ line: 1, column: 40 });
   });
 });

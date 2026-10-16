@@ -108,6 +108,8 @@
   } from "$lib/diffview/scroll.ts";
   import { createPreviewCursor, type PreviewCursorStore } from "@/state/previewCursor.ts";
   import {
+    type BandBox,
+    cursorBand,
     lastVisualLine,
     pointForLine,
     readingPoint,
@@ -1416,10 +1418,11 @@
   // The plan's keyboard surface (EXC-875): the vim line cursor (EXC-788), visual
   // line-select (EXC-790), and the `/` full-text search HUD (EXC-832) in one
   // unit-testable factory (state/planKeyboard). The component owns the reactive store —
-  // the runes live here — and the factory sequences the transitions over it; source
-  // view only (compare and the plan preview have no line cursor). The DOM effects
-  // are injected: the rendered lines, heading lines, the reading position, the half-page
-  // size, scroll-follow, the shared jump, the composer open, and focus/blur.
+  // the runes live here — and the factory sequences the transitions over it. The store
+  // is shared with the preview cursor (state/previewCursor), which keeps `cursorLine`
+  // and adds `cursorPoint`; no cursor on compare. The DOM effects are injected: the
+  // rendered lines, heading lines, the reading position, the half-page size,
+  // scroll-follow, the shared jump, the composer open, and focus/blur.
   let keyboardStore = $state<PlanKeyboardStore & PreviewCursorStore>({
     cursorLine: null,
     cursorPoint: null,
@@ -1505,52 +1508,45 @@
   });
 
   // The preview cursor's band, in .diff-plan content coordinates: the visual line's box
-  // across the preview's width, padded to its line-height so consecutive lines abut.
-  let previewCursorBox = $state<
-    { line: number; top: number; left: number; width: number; height: number } | null
-  >(null);
+  // across the preview's width, padded to the root's line-height.
+  let previewCursorBox = $state<({ line: number } & BandBox) | null>(null);
+  // Bumped, rAF-throttled, whenever the preview's layout may have moved the band.
+  let previewLayoutRev = $state(0);
   $effect(() => {
-    const scroller = scrollEl;
     const root = previewEl;
-    // A theme switch re-highlights code, which can reflow it.
-    void themeId;
-    const p = runs("keyboardCursor") && surface === "preview" ? previewCursor.point() : null;
-    if (scroller == null || root == null || p == null) {
-      previewCursorBox = null;
-      return;
-    }
+    if (root == null) return;
     let raf = 0;
-    const sync = () => {
-      raf = 0;
-      const map = previewSourceMap();
-      const box = map && visualLineBox(root, map, p);
-      if (box == null) {
-        previewCursorBox = null;
-        return;
-      }
-      const s = scroller.getBoundingClientRect();
-      const r = root.getBoundingClientRect();
-      const lineHeight = Number.parseFloat(getComputedStyle(root).lineHeight);
-      const pad = lineHeight > 0 ? Math.max(0, lineHeight - (box.bottom - box.top)) / 2 : 0;
-      previewCursorBox = {
-        line: p.line,
-        top: box.top - pad - (s.top - scroller.scrollTop),
-        left: r.left - (s.left - scroller.scrollLeft),
-        width: r.width,
-        height: box.bottom - box.top + 2 * pad,
-      };
-    };
     const schedule = () => {
-      if (raf === 0) raf = requestAnimationFrame(sync);
+      if (raf === 0)
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          previewLayoutRev++;
+        });
     };
-    sync();
-    schedule();
     const observer = new ResizeObserver(schedule);
     observer.observe(root);
     return () => {
       cancelAnimationFrame(raf);
       observer.disconnect();
     };
+  });
+  // A theme's markdown weight and slant can rewrap text without resizing the root.
+  $effect(() => {
+    void themeId;
+    const raf = requestAnimationFrame(() => previewLayoutRev++);
+    return () => cancelAnimationFrame(raf);
+  });
+  $effect(() => {
+    void previewLayoutRev;
+    const p = runs("keyboardCursor") && surface === "preview" ? previewCursor.point() : null;
+    const map = p && previewSourceMap();
+    if (p == null || map == null || scrollEl == null || previewEl == null) {
+      previewCursorBox = null;
+      return;
+    }
+    const lineHeight = Number.parseFloat(getComputedStyle(previewEl).lineHeight);
+    const band = cursorBand(previewEl, scrollEl, map, p, lineHeight);
+    previewCursorBox = band && { line: p.line, ...band };
   });
 
   // The live visual selection, ascending — mirrored into SourceView's amber band through
@@ -1587,7 +1583,7 @@
   $effect(() => {
     void contentKey;
     keyboard.clearForContentSwitch();
-    keyboardStore.cursorPoint = null;
+    previewCursor.reset();
   });
 
   // Recompute the active heading from the source line at the top of the reading
@@ -1873,6 +1869,8 @@
       commenting.cancel(liveText);
       capturePlace();
     }
+    // The preview can neither show nor cancel a visual selection.
+    if (next === "preview") keyboardStore.visualAnchor = null;
     planView = next;
     writePlanView(next);
   }
@@ -2618,7 +2616,8 @@
   .preview-cursor {
     position: absolute;
     pointer-events: none;
-    background: color-mix(in oklab, var(--ink) 7%, transparent);
+    /* Keep in sync with coreStyles.ts's [data-caret-cursor] rules. */
+    background: color-mix(in lab, var(--ink) 7%, transparent);
     box-shadow: inset 3px 0 0 0 var(--ink);
   }
 

@@ -1,4 +1,4 @@
-// Focused-line cursor model for the plan source view: given the current cursor
+// Focused-line cursor model for the plan source view and preview: given the current cursor
 // line and a motion key, resolve the line to move to; and tag the shadow row
 // the cursor sits on so the override sheet paints its band. The math is pure and
 // DOM-free (directly unit-testable); tagCursorRow is the only DOM touch and
