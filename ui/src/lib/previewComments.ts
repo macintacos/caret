@@ -12,7 +12,8 @@ const HIGHLIGHT = "caret-comment-span";
 
 /** The index of the block a comment ending on 1-based `line` renders after: the block
  * holding it, the one before a gap line or past the end, the first for a line above every
- * block; null with no blocks. */
+ * block; null with no blocks — where the source view's card for that line sits;
+ * `blockIndexForLine` sends a gap line forward instead. */
 export function commentSlotIndex(blocks: readonly SourceSpan[], line: number): number | null {
   return blocks.length === 0
     ? null
@@ -32,7 +33,9 @@ export function groupBySlot<T extends { line: number }>(
   for (const item of [...items].sort((a, b) => a.line - b.line)) {
     const block = commentSlotIndex(blocks, item.line);
     if (block === null) continue;
-    slots.set(block, [...(slots.get(block) ?? []), item]);
+    const bucket = slots.get(block);
+    if (bucket) bucket.push(item);
+    else slots.set(block, [item]);
   }
   return [...slots]
     .sort(([a], [b]) => a - b)
@@ -49,20 +52,22 @@ export function spanRanges(map: PlanSourceMap, span: SourceSpan): Range[] {
   return ranges;
 }
 
-/** Paints `ranges` as the comment highlight (`caret-comment-span`), replacing the last;
- * `clearCommentHighlight` removes it. Both no-ops without the Custom Highlight API. */
+/** Paints `ranges` as the comment highlight (`caret-comment-span`), replacing the last; a
+ * no-op without the Custom Highlight API. */
 export function paintCommentHighlight(ranges: readonly Range[]): void {
   if (!highlightsSupported()) return;
   CSS.highlights.set(HIGHLIGHT, new Highlight(...ranges));
 }
 
+/** Removes the comment highlight; a no-op without the Custom Highlight API. */
 export function clearCommentHighlight(): void {
   if (!highlightsSupported()) return;
   CSS.highlights.delete(HIGHLIGHT);
 }
 
 /** Holds each slot's height open under its block's text by padding the block's wrapper
- * (`root.children[block]`); `set` releases blocks no longer listed, `release` all. */
+ * (`root.children[block]`); `set` releases blocks no longer listed, `release` all.
+ * `heights` maps a block index (`root.children` position) to its slot's height in CSS px. */
 export function createSlotReserve(root: Element): {
   set(heights: ReadonlyMap<number, number>): void;
   release(): void;
@@ -83,7 +88,8 @@ export function createSlotReserve(root: Element): {
 }
 
 /** Each slot's box in `scroller` content coordinates: top at its block's bottom less the
- * reserved height, left and width the block's. */
+ * reserved height, left and width the block's. `heights` maps a block index
+ * (`root.children` position) to its slot's height in CSS px. */
 export function previewSlotBoxes(
   root: Element,
   scroller: HTMLElement,

@@ -38,7 +38,7 @@ const PLAN = [
   "# Preview comments",
   NEAR,
   ["- item one", "- item two", "- item three", "- item four", "- item five"].join("\n"),
-  ["```ts", "const answer = 42;", "```"].join("\n"),
+  ["```ts", "const answer = 42;", "const other = 7;", "```"].join("\n"),
   filler("upper"),
   FAR,
   filler("lower"),
@@ -57,7 +57,21 @@ interface Seeded {
 const lineStarting = (lines: string[], prefix: string) =>
   lines.findIndex((l) => l.startsWith(prefix)) + 1;
 
-async function seedPreview(daemon: Daemon, page: Page): Promise<Seeded> {
+type DraftAnnotations = NonNullable<Parameters<Daemon["putDraft"]>[1]["annotations"]>;
+
+/** Seed the plan and its comments, plus any `extra` annotations built from the anchors,
+ * and open the review — on the preview unless `preview` is false. */
+async function seedPreview(
+  daemon: Daemon,
+  page: Page,
+  {
+    extra = () => [],
+    preview = true,
+  }: {
+    extra?: (s: Seeded) => DraftAnnotations;
+    preview?: boolean;
+  } = {},
+): Promise<Seeded> {
   const id = await daemon.seed({ plan: PLAN });
   // The daemon reflows the plan on ingest, so every anchor comes from the stored text.
   const lines = ((await daemon.getReview(id)).body?.currentPlan ?? "").split("\n");
@@ -86,6 +100,7 @@ async function seedPreview(daemon: Daemon, page: Page): Promise<Seeded> {
       },
       { id: "ann-3", startLine: far, endLine: far, comment: "first far thought" },
       { id: "ann-4", startLine: far + 2, endLine: far + 2, comment: "second far thought" },
+      ...extra(seeded),
     ],
     composerScratches: [
       { startLine: seeded.code, endLine: seeded.code, text: "an unsent code note" },
@@ -94,7 +109,7 @@ async function seedPreview(daemon: Daemon, page: Page): Promise<Seeded> {
   await page.goto("/");
   await planSurface(page);
   await waitPastSafeModeGrace(page);
-  await showPreview(page);
+  if (preview) await showPreview(page);
   return seeded;
 }
 
@@ -105,14 +120,12 @@ async function showPreview(page: Page): Promise<void> {
 
 const card = (page: Page, id: string): Locator => page.locator(`[data-annotation-card="${id}"]`);
 
-/** The slot holding `inner`, its rendered block's last text bottom, and the next
- * block's first text top. */
+/** The slot holding card `id`, the last text bottom of the block holding `line`, and the
+ * next block's first text top. */
 function slotAroundBlock(page: Page, line: number, id: string) {
   return page.evaluate(
-    ({ line, id }) => {
-      const blocks = [
-        ...document.querySelectorAll<HTMLElement>(".plan-preview [data-source-start]"),
-      ];
+    ({ line, id, preview }) => {
+      const blocks = [...document.querySelectorAll<HTMLElement>(`${preview} [data-source-start]`)];
       const i = blocks.findIndex(
         (b) => Number(b.dataset.sourceStart) <= line && line <= Number(b.dataset.sourceEnd),
       );
@@ -138,7 +151,7 @@ function slotAroundBlock(page: Page, line: number, id: string) {
         slotBottom: slot?.bottom ?? Number.NaN,
       };
     },
-    { line, id },
+    { line, id, preview: PLAN_PREVIEW },
   );
 }
 
@@ -220,19 +233,27 @@ test("a draft's marker renders after the code block and resumes into the compose
   const s = await seedPreview(daemon, page);
   const marker = page.getByRole("button", { name: "Resume unsent comment" });
   await expect(marker).toBeVisible();
-  const below = await page.evaluate((line) => {
-    const block = [
-      ...document.querySelectorAll<HTMLElement>(".plan-preview [data-source-start]"),
-    ].find((b) => Number(b.dataset.sourceStart) <= line && line <= Number(b.dataset.sourceEnd));
-    const slot = document
-      .querySelector('[aria-label="Resume unsent comment"]')
-      ?.closest("[data-preview-slot]");
-    return (
-      (slot?.getBoundingClientRect().top ?? 0) >=
-      (block?.querySelector("pre")?.getBoundingClientRect().bottom ?? Infinity) - 1
-    );
-  }, s.code);
-  expect(below).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ({ line, preview }) => {
+          const block = [
+            ...document.querySelectorAll<HTMLElement>(`${preview} [data-source-start]`),
+          ].find(
+            (b) => Number(b.dataset.sourceStart) <= line && line <= Number(b.dataset.sourceEnd),
+          );
+          const slot = document
+            .querySelector('[aria-label="Resume unsent comment"]')
+            ?.closest("[data-preview-slot]");
+          return (
+            (slot?.getBoundingClientRect().top ?? 0) >=
+            (block?.querySelector("pre")?.getBoundingClientRect().bottom ?? Infinity) - 1
+          );
+        },
+        { line: s.code, preview: PLAN_PREVIEW },
+      ),
+    )
+    .toBe(true);
 
   await marker.click();
   const composer = page.getByRole("dialog", { name: "Add a comment" });
@@ -315,4 +336,39 @@ test("flipping surfaces keeps every anchor and returns an open composer as a scr
       ]),
     )
     .toEqual([[s.code, s.code, "an unsent code note"]]);
+});
+
+test("a focused comment on a code line stays highlighted once the block is highlighted", async ({
+  daemon,
+  page,
+}) => {
+  await seedPreview(daemon, page, {
+    extra: (s) => [{ id: "ann-code", startLine: s.code, endLine: s.code, comment: "name it" }],
+    preview: false,
+  });
+  await commentTally(page).click();
+  await commentNavigator(page)
+    .getByRole("listitem")
+    .filter({ hasText: "name it" })
+    .getByRole("button")
+    .click();
+  await expect(card(page, "ann-code")).toHaveClass(/focused/);
+
+  await showPreview(page);
+  await expect(page.locator(`${PLAN_PREVIEW} pre code span`).first()).toBeAttached();
+  await expect.poll(() => highlighted(page)).toBe("const answer = 42;");
+});
+
+test("pointer leaving a slot keeps the highlight on the card holding focus", async ({
+  daemon,
+  page,
+}) => {
+  const s = await seedPreview(daemon, page);
+  await card(page, "ann-1").getByRole("button", { name: "Edit" }).focus();
+  await expect.poll(() => highlighted(page)).toBe(joinLines(s.lines, s.near + 1, s.near + 2));
+
+  await card(page, "ann-2").hover();
+  await expect.poll(() => highlighted(page)).toBe("item four");
+  await page.mouse.move(1, 1);
+  await expect.poll(() => highlighted(page)).toBe(joinLines(s.lines, s.near + 1, s.near + 2));
 });

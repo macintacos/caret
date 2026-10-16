@@ -21,13 +21,12 @@ afterEach(() => {
   mounted = [];
 });
 
-function mount(text: string): { root: HTMLElement; map: PlanSourceMap; blocks: number } {
+function mount(text: string): { root: HTMLElement; map: PlanSourceMap } {
   const root = document.createElement("div");
-  const rendered = renderPlanMarkdown(text);
-  root.innerHTML = rendered.html;
+  root.innerHTML = renderPlanMarkdown(text).html;
   document.body.append(root);
   mounted.push(root);
-  return { root, map: createPlanSourceMap(root), blocks: rendered.blocks.length };
+  return { root, map: createPlanSourceMap(root) };
 }
 
 const texts = (ranges: Range[]): string[] => ranges.map((r) => r.toString());
