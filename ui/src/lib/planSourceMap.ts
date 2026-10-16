@@ -1,8 +1,8 @@
 // Maps the mounted preview's text back to the plan's source lines, from the empty
 // `[data-source-line]` markers `renderPlanMarkdown` emits. Offsets count all of the root's
-// text and are resolved against the live DOM at lookup time, so replacing a code block's
-// markup with spans of the same text keeps every answer valid, and each lookup costs time
-// proportional to the preview's text: batch lookups rather than calling per character.
+// text and are resolved against the live DOM at lookup time: the text nodes are indexed
+// once and each one a lookup reads is checked on use, so replacing a code block's markup
+// with spans of the same text re-indexes and keeps every answer valid.
 import type { SourceSpan } from "$lib/planMarkdown.ts";
 
 export interface PlanSourceMap {
@@ -96,33 +96,116 @@ export function createTextCursor(
   };
 }
 
+/** The root's text nodes in document order: where each one's text ends, and each one's place. */
+interface TextIndex {
+  nodes: Text[];
+  ends: number[];
+  places: Map<Text, number>;
+}
+
+function indexText(root: Element): TextIndex {
+  const index: TextIndex = { nodes: [], ends: [], places: new Map() };
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let end = 0;
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    const text = node as Text;
+    end += text.data.length;
+    index.places.set(text, index.nodes.length);
+    index.nodes.push(text);
+    index.ends.push(end);
+  }
+  return index;
+}
+
+/** The first index below `count` that passes, where `passes` is false then true; `count` when none does. */
+function firstPassing(count: number, passes: (index: number) => boolean): number {
+  let lo = 0;
+  let hi = count;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (passes(mid)) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo;
+}
+
+/** The first Text node at or after the boundary point `(node, offset)` under `root`. */
+function textFrom(root: Element, node: Node, offset: number): Text | null {
+  const after = (from: Node): Node | null => {
+    for (let at: Node | null = from; at !== null && at !== root; at = at.parentNode) {
+      if (at.nextSibling !== null) return at.nextSibling;
+    }
+    return null;
+  };
+  let next = node.childNodes[offset] ?? after(node);
+  while (next !== null && !(next instanceof Text)) next = next.firstChild ?? after(next);
+  return next;
+}
+
+/** A lookup's answer when an indexed node it read has been detached or resized. */
+const STALE = Symbol("stale");
+
 /** Builds the map for `root`, whose content is exactly `renderPlanMarkdown(text).html`.
  * Build once per version; it reads no layout. */
 export function createPlanSourceMap(root: Element): PlanSourceMap {
   const { runs, length } = collectRuns(root);
-  const firstRunIndex = (line: number): number => runs.findIndex((run) => run.line === line);
+  const firstRun = new Map<number, number>();
+  runs.forEach((run, index) => {
+    if (!firstRun.has(run.line)) firstRun.set(run.line, index);
+  });
+  let index = indexText(root);
+
+  const startOf = (place: number): number => index.ends[place - 1] ?? 0;
+  const isFresh = (place: number): boolean => {
+    const node = index.nodes[place] as Text;
+    return (
+      root.contains(node) && node.data.length === (index.ends[place] as number) - startOf(place)
+    );
+  };
+  // Mutations keep the root's text, so a stale read means some text node moved: re-index once.
+  const fresh = <T>(lookup: () => T | typeof STALE): T | null => {
+    const answer = lookup();
+    if (answer !== STALE) return answer;
+    index = indexText(root);
+    const retried = lookup();
+    return retried === STALE ? null : retried;
+  };
+
+  const resolve = (offset: number, side: "before" | "after"): [Text, number] | null =>
+    fresh(() => {
+      const place = firstPassing(index.ends.length, (i) =>
+        side === "after" ? offset < (index.ends[i] as number) : offset <= (index.ends[i] as number),
+      );
+      if (place === index.nodes.length) return null;
+      if (!isFresh(place)) return STALE;
+      return [index.nodes[place] as Text, offset - startOf(place)];
+    });
+
+  const offsetAt = (node: Node, offset: number): number | null => {
+    if (!root.contains(node)) return null;
+    return fresh(() => {
+      const text = node instanceof Text ? node : textFrom(root, node, offset);
+      if (text === null) return length;
+      const place = index.places.get(text);
+      if (place === undefined || !isFresh(place)) return STALE;
+      return startOf(place) + (text === node ? offset : 0);
+    });
+  };
 
   const lineAtOffset = (offset: number): number | null => {
     if (length === 0) return null;
     const at = Math.min(offset, length - 1);
-    return (runs.findLast((run) => run.offset <= at) ?? runs[0])?.line ?? null;
-  };
-
-  const offsetOf = (node: Node, offset: number): number | null => {
-    if (!root.contains(node)) return null;
-    const range = root.ownerDocument.createRange();
-    range.setStart(root, 0);
-    range.setEnd(node, offset);
-    return range.toString().length;
+    const next = firstPassing(runs.length, (i) => (runs[i] as Run).offset > at);
+    return (runs[next - 1] ?? runs[0])?.line ?? null;
   };
 
   return {
     lineAt(node, offset) {
-      const at = offsetOf(node, offset);
+      const at = offsetAt(node, offset);
       return at === null ? null : lineAtOffset(at);
     },
     linesOf(range) {
-      const rangeStart = offsetOf(range.startContainer, range.startOffset);
+      const rangeStart = offsetAt(range.startContainer, range.startOffset);
       if (rangeStart === null || !root.contains(range.endContainer)) return null;
       const text = range.toString();
       const [firstChar, lastChar] =
@@ -134,12 +217,11 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
       return start === null || end === null ? null : { start, end };
     },
     rangeOf(line) {
-      const index = firstRunIndex(line);
-      const run = runs[index];
-      if (run === undefined) return null;
-      const pointAt = createTextCursor(root);
-      const start = pointAt(run.offset, "after");
-      const end = pointAt(runs[index + 1]?.offset ?? length, "before");
+      const at = firstRun.get(line);
+      const run = at === undefined ? undefined : runs[at];
+      if (at === undefined || run === undefined) return null;
+      const start = resolve(run.offset, "after");
+      const end = resolve(runs[at + 1]?.offset ?? length, "before");
       if (start === null || end === null) return null;
       const range = root.ownerDocument.createRange();
       range.setStart(...start);
@@ -148,7 +230,8 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
     },
     lineAtOffset,
     offsetOfLine(line) {
-      return runs[firstRunIndex(line)]?.offset ?? null;
+      const at = firstRun.get(line);
+      return at === undefined ? null : (runs[at]?.offset ?? null);
     },
   };
 }
