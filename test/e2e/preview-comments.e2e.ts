@@ -685,7 +685,8 @@ test.describe("commenting from the preview", () => {
       await expect(previewCursor(page)).toHaveAttribute("data-line", String(s.near));
     }
 
-    /** Seeds the preview, then `g g j V`: visual mode anchored on NEAR's first visual line. */
+    /** Seeds the preview, then `g g j V`: visual mode anchored on NEAR's first visual
+     * line. */
     async function visualAtNear(daemon: Daemon, page: Page): Promise<Seeded> {
       const s = await seedPreview(daemon, page);
       await cursorToNear(page, s);

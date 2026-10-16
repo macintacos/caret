@@ -63,8 +63,8 @@ export function paintCommentHighlight(ranges: readonly Range[]): void {
 
 const VISUAL_HIGHLIGHT = "caret-visual-selection";
 
-/** Paints `range` as the keyboard's visual selection (`caret-visual-selection`), replacing
- * the last; a no-op without the Custom Highlight API. */
+/** Paints `range` as the keyboard's visual selection (`caret-visual-selection`),
+ * replacing the last; a no-op without the Custom Highlight API. */
 export function paintVisualSelection(range: Range): void {
   if (!highlightsSupported()) return;
   CSS.highlights.set(VISUAL_HIGHLIGHT, new Highlight(range));

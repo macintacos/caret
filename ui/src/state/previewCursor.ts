@@ -67,8 +67,8 @@ export interface PreviewCursor {
   /** `V`: toggles visual mode, anchoring at the cursor — placed at the reading position
    * when unplaced. */
   enterVisualMode(): void;
-  /** `c`: comments on the cursor's visual line, the reading position's when unplaced, or on
-   * the selection, exiting visual mode. */
+  /** `c`: comments on the cursor's visual line, the reading position's when unplaced,
+   * or on the selection, exiting visual mode. */
   comment(): void;
 }
 
