@@ -254,7 +254,8 @@ test("a slot keeps to its block when a theme switch rewraps the heading above it
     }),
   );
   await page.emulateMedia({ colorScheme: "dark" });
-  await page.setViewportSize({ width: 420, height: 900 });
+  // A width at which the heavy face wraps FAR onto one more line than the thin one.
+  await page.setViewportSize({ width: 505, height: 900 });
   const id = await daemon.seed({
     plan: [`# ${FAR}`, NEAR, "Closing paragraph quokka."].join("\n\n"),
   });

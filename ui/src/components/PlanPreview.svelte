@@ -197,8 +197,9 @@
   }
 
   .plan-preview {
+    max-width: 800px;
     padding-block: 0.5rem;
-    padding-inline: 2ch 0.75rem;
+    padding-inline: calc(2ch + 25px) 0.75rem;
     font-size: var(--text-base);
     overflow-wrap: break-word;
   }

@@ -128,13 +128,15 @@ const snapshot = (page: Page): Promise<Snapshot> =>
 
 const underBand = ({ band }: Snapshot, mid: number) => mid > band.top && mid < band.bottom;
 
-/** Whether the band's vertical span holds `text`'s first character. */
+/** Whether the band's vertical span holds `text`'s first character. Whitespace is ignored:
+ * the space a line wraps at lays out zero-wide, so the snapshot never holds it. */
 const covers = (s: Snapshot, text: string) => {
-  const at = s.chars
+  const chars = s.chars.filter((c) => c.ch.trim());
+  const at = chars
     .map((c) => c.ch)
     .join("")
-    .indexOf(text);
-  return at >= 0 && underBand(s, s.chars[at]!.mid);
+    .indexOf(text.replace(/\s/g, ""));
+  return at >= 0 && underBand(s, chars[at]!.mid);
 };
 
 const bandCovers = async (page: Page, text: string) => covers(await snapshot(page), text);
