@@ -132,13 +132,12 @@ function animateScrollTop(scroller: HTMLElement, top: number, duration: number):
 }
 
 /** Scrolls `container`'s nearest scroll parent so `row` rests near the top,
- * animating unless the user prefers reduced motion. The geometry the
- * single-document and diff reveals and the preview's heading jump share, once each
- * has resolved its own row. */
+ * animating unless the user prefers reduced motion. The geometry every jump shares
+ * once it has resolved its own row. */
 export function scrollRowIntoView(container: HTMLElement, row: Element): void {
   const scroller = nearestScrollParent(container);
   // No identifiable scroll container (e.g. detached/odd layout): fall back to the
-  // library row's own scrollIntoView so the jump still works. There is no element
+  // row's own scrollIntoView so the jump still works. There is no element
   // to tween, so this half keeps the browser's own smooth scroll.
   if (scroller == null) {
     row.scrollIntoView({ block: "start", behavior: prefersReducedMotion() ? "auto" : "smooth" });

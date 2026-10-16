@@ -124,18 +124,6 @@ const CARET_OVERRIDES = `
   :host {
     --caret-card-lift: 0 1px 2px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.28));
   }
-  /* The chip family's breathing room, stated once for every member that has any: the
-     inline-markup pills (EXC-867/868/859) and the file reference (EXC-687/880). Two
-     numbers rather than one because the axes are bounded differently — the inline half
-     is real space that pushes the next glyph along, so it is what keeps two abutting
-     chips from sharing a cell, while the block half only paints (padding on an inline
-     box never grows its line box) and is held under the line box's own slack so a dense
-     paragraph does not read as confetti. Both are em-relative, so they track the type
-     scale rather than a fixed pixel that would crowd at one size and gape at another. */
-  :host {
-    --chip-pad-inline: 0.32em;
-    --chip-pad-block: 0.16em;
-  }
   /* The task-list checkbox's size (EXC-860) — the box the masked Lucide glyph is painted
      into, which every state measures from. Lucide draws its square inset in the viewBox
      (18 of 24 units), so the SQUARE a reader sees is about three quarters of this: the
@@ -374,8 +362,8 @@ const CARET_OVERRIDES = `
 
      Block padding is bounded by the failure mode EXC-855 names: a chip taller than its line
      box reads as confetti in a dense paragraph. It is smaller than the inline half for that
-     reason, and both are stated once, here, as the two --chip-pad-* customs the file-ref
-     chip below reads too — so the family cannot drift apart one rule at a time.
+     reason, and both are stated once, in tokens.css, as the two --chip-pad-* customs the
+     file-ref chip below reads too — so the family cannot drift apart one rule at a time.
 
      Rounded ends ride the GROUP, not the run: an element fragmented into several runs
      gets its radius on the first and last only, so the pill closes once. The pass also

@@ -1713,18 +1713,18 @@ test.describe("on the preview", () => {
     return proj;
   }
 
-  /** The computed fill and cursor of the pill a preview reference reads as: its `<code>`
-   * when backticked, else the reference itself. */
-  function previewPill(page: import("@playwright/test").Page, text: string) {
-    return page.evaluate(
-      ({ sel, text }) => {
-        const ref = [...document.querySelectorAll(sel)].find((el) => el.textContent === text);
-        if (!ref) return null;
-        const cs = getComputedStyle(ref.closest("code") ?? ref);
-        return { background: cs.backgroundColor, cursor: getComputedStyle(ref).cursor };
-      },
-      { sel: `${PLAN_PREVIEW} [data-file-ref]`, text },
-    );
+  /** A source-view reference's computed fill and inline padding, read from inside the
+   * shadow root; null until it is tagged. */
+  function sourceRef(page: import("@playwright/test").Page, text: string) {
+    return page.evaluate((text) => {
+      const sh = (document.querySelector(".diffview") as HTMLElement | null)?.shadowRoot;
+      const ref = [...(sh?.querySelectorAll("[data-file-ref]") ?? [])].find(
+        (el) => el.textContent === text,
+      );
+      if (!ref) return null;
+      const cs = getComputedStyle(ref);
+      return { background: cs.backgroundColor, padding: cs.paddingLeft };
+    }, text);
   }
 
   test("tags the resolved references and leaves the rest plain", async ({ daemon, page }) => {
@@ -1746,33 +1746,34 @@ test.describe("on the preview", () => {
     }
   });
 
-  test("hover matches the source view", async ({ daemon, page }) => {
+  test("a reference rests like the source view's and changes fill on hover", async ({
+    daemon,
+    page,
+  }) => {
     const proj = await makeProject({ "src/cache.ts": CACHE_TS, "src/lib/util.ts": "export {};\n" });
     try {
       await seedFileRefs(page, daemon, proj.dir, PREVIEW_PLAN, 4);
-      const sourceRest = await page.evaluate(() => {
-        const sh = (document.querySelector(".diffview") as HTMLElement).shadowRoot;
-        const ref = [...(sh?.querySelectorAll("[data-file-ref]") ?? [])].find(
-          (el) => el.textContent === "the cache",
-        );
-        return ref ? getComputedStyle(ref).backgroundColor : null;
-      });
+      await page.mouse.move(0, 0);
+      let source: Awaited<ReturnType<typeof sourceRef>> = null;
+      await expect.poll(async () => (source = await sourceRef(page, "the cache"))).not.toBeNull();
       await previewToggle(page).click();
-      await expect(page.locator(`${PLAN_PREVIEW} [data-file-ref]`)).toHaveCount(4);
+      const refs = page.locator(`${PLAN_PREVIEW} [data-file-ref]`);
+      await expect(refs).toHaveCount(4);
 
-      await page.mouse.move(0, 0);
-      const rest = await previewPill(page, "src/cache.ts:42");
-      await page.locator(PLAN_PREVIEW).getByText("src/cache.ts:42", { exact: true }).hover();
-      const hover = await previewPill(page, "src/cache.ts:42");
-      expect(rest?.cursor).toBe("pointer");
-      expect(hover?.cursor).toBe("pointer");
-      expect(hover?.background).not.toBe(rest?.background);
+      const label = refs.filter({ hasText: "the cache" });
+      await expect(label).toHaveCSS("background-color", source!.background);
+      await expect(label).toHaveCSS("padding-left", source!.padding);
 
-      await page.mouse.move(0, 0);
-      expect(sourceRest).not.toBeNull();
-      expect((await previewPill(page, "the cache"))?.background).toBe(sourceRest!);
+      const pill = page
+        .locator(`${PLAN_PREVIEW} code`)
+        .filter({ has: page.locator("[data-file-ref]"), hasText: "src/cache.ts:42" });
+      const pillRef = pill.locator("[data-file-ref]");
+      await expect(pillRef).toHaveCSS("cursor", "pointer");
+      const rest = await pill.evaluate((el) => getComputedStyle(el).backgroundColor);
+      await pillRef.hover();
+      await expect(pill).not.toHaveCSS("background-color", rest);
 
-      await page.locator(PLAN_PREVIEW).getByText("the cache", { exact: true }).hover();
+      await label.hover();
       await expect(page.locator("[data-link-tooltip]")).toHaveText("src/cache.ts");
       await page.mouse.move(0, 0);
       await expect(page.locator("[data-link-tooltip]")).toHaveCount(0);

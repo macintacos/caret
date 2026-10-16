@@ -20,9 +20,9 @@
   //
   // When the review has multiple stored versions, a compare control lets the
   // reviewer diff any two of them (base vs. target) through the SourceDiffView
-  // wrapper, switching the split/unified layout at runtime. The heading surfaces,
-  // gutter, and inline annotation cards belong to the source view only —
-  // compare mode is a clean diff surface with none of them; the compared versions'
+  // wrapper, switching the split/unified layout at runtime. The gutter and
+  // inline annotation cards belong to the source view only, and the heading
+  // surfaces to the source view and the preview — compare mode is a clean diff surface with none of them; the compared versions'
   // comments surface in the docked panel instead, revealing their line on the side
   // they belong to for the two rendered versions and listing non-interactively for
   // anything in between.
@@ -442,8 +442,12 @@
     }
     return active.size > 0 ? active : undefined;
   });
+  // The view's one resolved map, re-keyed by display text for the preview, which never
+  // resolves on its own.
   const previewRefs = $derived(
-    planPreview && fileRefs ? previewFileRefs(fileRefs, linkLayer.text) : [],
+    runs("fileReferences") && planPreview && fileRefs
+      ? previewFileRefs(fileRefs, linkLayer.text)
+      : [],
   );
 
   // The file the preview is open on, plus the token it was opened from, which the
@@ -1028,7 +1032,8 @@
 
   // Gates the live `?heading=` mirror until the deep-link restore has consumed any
   // incoming `?heading=`. Without it, the mirror effect (activeLine starts null)
-  // could clear the param before onSourceReady reads it, depending on which
+  // could clear the param before the first surface's restore (`onSourceReady`, or the
+  // preview's restore effect below) reads it, depending on which
   // post-mount effect runs first.
   let restored = $state(false);
 
@@ -1193,13 +1198,13 @@
   let scrollEl = $state<HTMLElement | undefined>();
   // Opens the breadcrumbs bar's trailing crumb, handed over by the bar itself
   // (EXC-947). Undefined until the bar first mounts, and it keeps the last closure
-  // afterwards — leaving source unmounts the bar without clearing this. What makes
+  // afterwards — entering compare unmounts the bar without clearing this. What makes
   // `b` inert there is the binding's own headingTracking guard; the closure would
   // no-op anyway, since it reads a `barEl` the unmount set back to null.
   let openHeadingNav: (() => void) | undefined;
   // Opens the contents popup, handed over by PlanToc the same way (EXC-1097). Its
   // closure only sets the popup's own `open` flag, so the stale-closure question the
-  // bar's comment answers does not arise here; `\` is inert off source for the one
+  // bar's comment answers does not arise here; `\` is inert on compare for the one
   // reason that matters — the binding's headingTracking guard.
   let openToc: (() => void) | undefined;
 
@@ -1438,7 +1443,7 @@
 
   // Mirror the active heading's slug into `?heading=` so a copied URL reopens the
   // review at the section being read (composing with deepLink.ts's `?review=`).
-  // A surface off the headingTracking row (compare) tracks no heading (and drops
+  // A surface off the headingTracking row tracks no heading (and drops
   // the breadcrumbs bar), so the param clears there.
   // Held until restore consumes any incoming `?heading=` (see `restored`).
   $effect(() => {
@@ -1714,7 +1719,7 @@
   <!-- Heading breadcrumbs (EXC-946): where in the plan the reviewer is, and the
        menus to move sideways or deeper — the drill-down surface beside the ToC's
        whole-shape one. It rides the activeLine the scroll observer below tracks
-       and jumps through scrollToLine. Off the headingTracking row no heading is
+       and jumps through `pickHeading`. Off the headingTracking row no heading is
        tracked (and `?heading=` clears), so the bar is dropped there rather than
        left showing a stale trail. -->
   {#if runs("headingTracking")}
@@ -1890,9 +1895,10 @@
              on-screen file reference and one over the first directory reference,
              teaching that a path token opens a preview. Layered over the .diff-plan
              scroll content like the copy button, so they scroll with the rows.
-             Rendered on the referenceHints surfaces only, so elsewhere both drop — and
-             since nothing renders there, neither flag is spent and the hints survive
-             to teach on the next source-view render.
+             Rendered on the referenceHints surfaces only, so elsewhere both drop —
+             nothing renders there, so no badge is shown off the source view. Opening a
+             reference on the preview still retires its kind through `openFileRef`,
+             since the reader has learned the gesture.
              NOT gated on showShortcutHints, unlike the two hint chips further down:
              that pref governs keyboard-shortcut affordances, and this teaches a
              mouse gesture. Keyed on the kind — never on a value a poll tick changes

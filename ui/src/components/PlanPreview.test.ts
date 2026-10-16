@@ -272,6 +272,20 @@ describe("PlanPreview file references", () => {
     label.dispatchEvent(new PointerEvent("pointerout", { bubbles: true }));
     expect(tips().length).toBe(0);
   });
+
+  test("a hovered reference's tooltip goes when the html is replaced", () => {
+    const props = reactiveProps({ html: renderPlanMarkdown(PLAN).html, fileRefs: refsFor(PLAN) });
+    const { target, flush } = render(PlanPreview, props);
+    flush();
+    const label = [...target.querySelectorAll("[data-file-ref]")][1] as HTMLElement;
+    label.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
+
+    props.html = renderPlanMarkdown("Plain.\n").html;
+    props.fileRefs = [];
+    flush();
+
+    expect(document.body.querySelectorAll("[data-link-tooltip]").length).toBe(0);
+  });
 });
 
 function codeOf(target: HTMLElement): HTMLElement {

@@ -7,17 +7,19 @@ import { createPlanSourceMap } from "$lib/planSourceMap.ts";
 const FILE_REF_ATTR = "data-file-ref";
 
 /** A resolved reference as the preview finds it: the text its display line shows for it,
- * and how many earlier occurrences of that text the display line holds. */
+ * how many earlier occurrences of that text the display line holds, and how many in all. */
 export interface PreviewFileRef {
   line: number;
   text: string;
   nth: number;
+  count: number;
   span: FileRefSpan;
 }
 
 /** Start offsets of the non-overlapping occurrences of `needle` in `haystack`. */
 function occurrences(haystack: string, needle: string): number[] {
   const found: number[] = [];
+  if (needle === "") return found;
   for (
     let i = haystack.indexOf(needle);
     i !== -1;
@@ -36,8 +38,9 @@ export function previewFileRefs(refs: FileRefSpanMap, displayText: string): Prev
     const display = lines[line - 1] ?? "";
     return spans.map((span) => {
       const text = display.slice(span.startCol, span.endCol);
-      const nth = occurrences(display, text).filter((i) => i + text.length <= span.startCol).length;
-      return { line, text, nth, span };
+      const all = occurrences(display, text);
+      const nth = all.filter((i) => i + text.length <= span.startCol).length;
+      return { line, text, nth, count: all.length, span };
     });
   });
 }
@@ -58,12 +61,23 @@ function unwrap(root: HTMLElement): void {
   }
 }
 
+interface Slice {
+  node: Text;
+  from: number;
+  to: number;
+}
+
 /** The text nodes `range` covers, each with the slice of it inside the range. */
-function rangeSlices(root: HTMLElement, range: Range): { node: Text; from: number; to: number }[] {
-  const slices: { node: Text; from: number; to: number }[] = [];
+function rangeSlices(root: HTMLElement, range: Range): Slice[] {
+  const slices: Slice[] = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  for (let n = walker.nextNode(); n !== null; n = walker.nextNode()) {
+  // Starting at the range's start skips the walk over everything before it; an element
+  // start is re-filtered by intersectsNode, so its children before startOffset drop out.
+  walker.currentNode = range.startContainer;
+  const first = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer : null;
+  for (let n = first ?? walker.nextNode(); n !== null; n = walker.nextNode()) {
     const node = n as Text;
+    if (range.comparePoint(node, 0) > 0) break;
     if (!range.intersectsNode(node)) continue;
     const from = node === range.startContainer ? range.startOffset : 0;
     const to = node === range.endContainer ? range.endOffset : node.length;
@@ -72,15 +86,15 @@ function rangeSlices(root: HTMLElement, range: Range): { node: Text; from: numbe
   return slices;
 }
 
-// ponytail: finds a reference only where its display text is rendered verbatim inside one
-// text node. A label carrying inline markup (`[**x**](a.ts)`), a backslash-escaped path, or
-// a match crossing an element boundary stays plain; the upgrade is for the renderer to
+// ponytail: a reference stays plain unless its text is rendered verbatim inside one text
+// node, and the display line and rendered line agree on how many times that text occurs
+// (an escape or an image can change either count). The upgrade is for the renderer to
 // mark candidate runs.
-function findHit(root: HTMLElement, range: Range, ref: PreviewFileRef): Hit | null {
-  const slices = rangeSlices(root, range);
+function findHit(slices: Slice[], ref: PreviewFileRef): Hit | null {
   const text = slices.map((s) => s.node.data.slice(s.from, s.to)).join("");
-  const at = occurrences(text, ref.text)[ref.nth];
-  if (at === undefined || ref.text === "") return null;
+  const found = occurrences(text, ref.text);
+  const at = found[ref.nth];
+  if (at === undefined || found.length !== ref.count) return null;
   let offset = 0;
   for (const { node, from, to } of slices) {
     if (at >= offset && at + ref.text.length <= offset + to - from) {
@@ -112,16 +126,26 @@ export function tagPreviewFileRefs(
 ): Map<HTMLElement, FileRefSpan> {
   unwrap(root);
   const map = createPlanSourceMap(root);
+  const slicesByLine = new Map<number, Slice[]>();
   const hits = refs.flatMap((ref) => {
-    const range = map.rangeOf(ref.line);
-    const hit = range === null ? null : findHit(root, range, ref);
+    let slices = slicesByLine.get(ref.line);
+    if (slices === undefined) {
+      const range = map.rangeOf(ref.line);
+      slices = range === null ? [] : rangeSlices(root, range);
+      slicesByLine.set(ref.line, slices);
+    }
+    const hit = findHit(slices, ref);
     return hit === null ? [] : [hit];
   });
-  // Right to left, so a split never shifts a later hit's offsets in the same node.
-  hits.sort((a, b) =>
-    a.node === b.node ? b.start - a.start : a.node.compareDocumentPosition(b.node) & 2 ? -1 : 1,
-  );
+  // Right to left within a node, so a split never shifts a later hit's offsets; a split
+  // leaves other nodes' offsets alone, so their relative order doesn't matter.
+  hits.sort((a, b) => b.start - a.start);
   const tagged = new Map<HTMLElement, FileRefSpan>();
-  for (const hit of hits) tagged.set(wrap(hit), hit.ref.span);
+  const lowest = new Map<Text, number>();
+  for (const hit of hits) {
+    if (hit.end > (lowest.get(hit.node) ?? Infinity)) continue;
+    lowest.set(hit.node, hit.start);
+    tagged.set(wrap(hit), hit.ref.span);
+  }
   return tagged;
 }

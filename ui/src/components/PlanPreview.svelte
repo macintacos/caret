@@ -83,7 +83,12 @@
   $effect(() => {
     void html;
     const refs = fileRefs;
-    if (root) tagged = tagPreviewFileRefs(root, refs);
+    const el = root;
+    if (!el) return;
+    tagged = tagPreviewFileRefs(el, refs);
+    // A replaced or unmounted wrapper fires no pointerout, so its body-mounted bubble
+    // would otherwise outlive it.
+    return () => hideTooltip(el);
   });
 
   function refAt(target: EventTarget | null): [HTMLElement, FileRefSpan] | undefined {
@@ -112,6 +117,8 @@
   }
 </script>
 
+<!-- References are pointer-only here, as on the source view, where only the hint badge is a
+  keyboard opener; the click is delegated from the root. -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div
   class="plan-preview"

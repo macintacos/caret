@@ -159,4 +159,41 @@ describe("tagPreviewFileRefs", () => {
     expect(() => tagPreviewFileRefs(root, [...refs, missing])).not.toThrow();
     expect(wrappers(root).length).toBe(0);
   });
+
+  test("tags nothing for an empty link label", () => {
+    const { root, refs } = prepare("See [](src/a.ts) here.");
+    tagPreviewFileRefs(root, refs);
+    expect(wrappers(root).length).toBe(0);
+  });
+
+  test("leaves a reference plain when an escape elsewhere on its line hides an occurrence", () => {
+    const { root, refs } = prepare("Edit my\\_file.py then `my_file.py`.");
+    tagPreviewFileRefs(root, refs);
+    expect(wrappers(root).some((el) => el.parentElement?.tagName === "P")).toBe(false);
+  });
+
+  test("tags only the unambiguous reference when an escape shifts occurrences into another match", () => {
+    const { root, refs } = prepare("Edit my\\_file.py (src/my_file.py) and `my_file.py`.");
+    expect(() => tagPreviewFileRefs(root, refs)).not.toThrow();
+    expect(wrappers(root).map((el) => el.textContent)).toEqual(["src/my_file.py"]);
+  });
+
+  test("tags every reference in a long plan", () => {
+    const sections = Array.from({ length: 40 }, (_, i) =>
+      [
+        `## S${i}`,
+        "",
+        `See \`src/f${i}.ts\` and (src/g${i}.ts).`,
+        "",
+        "```ts",
+        "const x = 1;",
+        "```",
+      ].join("\n"),
+    );
+    const { root, refs } = prepare(sections.join("\n\n"));
+    tagPreviewFileRefs(root, refs);
+    expect(wrappers(root).map((el) => el.textContent)).toEqual(
+      sections.flatMap((_, i) => [`src/f${i}.ts`, `src/g${i}.ts`]),
+    );
+  });
 });

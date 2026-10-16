@@ -11,6 +11,9 @@
 // would then run the width of the row. What the pointer is over decides — see
 // spanAtPointer — and for the same reason hover tracks pointer movement *within* a
 // token rather than only its enter/leave.
+//
+// The tooltip itself (showTooltip / hideTooltip) is also exported to the plan preview,
+// a light-DOM consumer that mounts it on the body.
 
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import type { LinkSpan, LinkSpanMap } from "$lib/diffview/links.ts";
@@ -101,14 +104,13 @@ function tooltipMount(tokenElement: HTMLElement): ParentNode {
 /** Reveals the hover tooltip: a caret-surface bubble carrying the full target —
  * a link's href, or a file reference's path when its label hides it — mounted in
  * the token's root (the diffview shadow root) so it renders inside the same tree
- * as the code. Its colors come from the --diffs-link-tooltip-* bridge vars on the
- * .diffview rule in styles/diffview.css, which inherit through the shadow boundary;
- * a body-mounted bubble sits outside .diffview and reads their var() fallbacks,
- * which must match those declarations.
+ * as the code, or on the body for a light-DOM token (the preview's). Its colours are
+ * caret's raised-paper tokens, which inherit into the shadow root.
  *
  * The reveal is motionless — wiring the motion tokens (--dur-micro / --ease-out)
  * is a deliberate follow-up. The bubble does not reposition on scroll (no scroll
- * listener is added); dismissal relies on hideTooltip from onTokenLeave. */
+ * listener is added); dismissal relies on hideTooltip from the caller's pointer
+ * leave (onTokenLeave here, PlanPreview's pointerout). */
 export function showTooltip(tokenElement: HTMLElement, href: string): void {
   const mount = tooltipMount(tokenElement);
   hideTooltip(tokenElement);
@@ -124,9 +126,9 @@ export function showTooltip(tokenElement: HTMLElement, href: string): void {
     "max-width: 80ch",
     "padding: 4px 8px",
     "border-radius: var(--radius-lg)",
-    "background: var(--diffs-link-tooltip-bg, var(--paper-raised))",
-    "color: var(--diffs-link-tooltip-fg, var(--ink))",
-    "border: 1px solid var(--diffs-link-tooltip-border, color-mix(in lab, var(--paper-raised), var(--ink) 14%))",
+    "background: var(--paper-raised)",
+    "color: var(--ink)",
+    "border: 1px solid color-mix(in lab, var(--paper-raised), var(--ink) 14%)",
     "box-shadow: var(--shadow-chip)",
     "font-family: var(--font-mono)",
     "font-size: var(--text-2xs)",

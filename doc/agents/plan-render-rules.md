@@ -3,9 +3,9 @@
 *Audience: coding agents and contributors changing how a plan is rendered —
 `ui/src/lib/diffview/`, the `SourceView` / `DiffPlanView` components, and the preview
 renderer `ui/src/lib/planMarkdown.ts`, its source-line map `ui/src/lib/planSourceMap.ts`,
-its code-block highlight pass `ui/src/lib/previewCode.ts`, its mount
-`ui/src/components/PlanPreview.svelte`, and the source/preview surface table
-`ui/src/lib/planView.ts`.*
+its code-block highlight pass `ui/src/lib/previewCode.ts`, its reference-tagging pass
+`ui/src/lib/previewRefs.ts`, its mount `ui/src/components/PlanPreview.svelte`, and the
+source/preview surface table `ui/src/lib/planView.ts`.*
 
 The **source view** renders a plan as **line-numbered markdown source**. Every decoration
 the reviewer sees is drawn over the characters they would copy. Everything up to § The
@@ -278,13 +278,14 @@ an indented or empty block, or a fence the source view's stateless scan does not
 `headingTracking` reads the preview's reading line through `previewTopLine`. A picker jump
 animates the heading's block to the jump offset with `scrollRowIntoView`, the source
 view's tween. The first preview mount restores `?heading=` with an instant, held landing
-through `keepPlace`. Slugs and the URL helpers are shared unchanged.
+through `keepPlace`. Both surfaces share `toc.ts`'s slugs and `state/headingLink.ts`.
 
-File references split from the hint badges into their own row, `fileReferences`.
-`previewRefs.ts` wraps each resolved reference's text in a `span[data-file-ref]`, finding
-it within its source line's rendered range by its display text and occurrence. It changes
-no text, so the source map holds, and it never fetches: the preview reuses the view's
-resolved map and `openFileRef`. The badges stay source-only, under `referenceHints`.
+`fileReferences` gates the lane and folder card a reference opens; the hint badges are a
+separate, source-only row, `referenceHints`. `previewRefs.ts` wraps each resolved
+reference's text in a `span[data-file-ref]`, finding it within its source line's rendered
+range by its display text and occurrence. It changes no text, so the source map holds, and
+it never fetches: the preview reuses the view's resolved map and `openFileRef`. The badges
+stay source-only, under `referenceHints`.
 
 The preview renders a version once. `memoLast` returns the last result for the same text,
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same
