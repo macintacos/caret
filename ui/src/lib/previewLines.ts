@@ -362,6 +362,49 @@ export function visualLineBox(
     : { top: line.top, bottom: line.bottom, left: line.left, right: line.right };
 }
 
+type DomPoint = [Node, number];
+
+/** The first character of `p`'s visual line, and the first of the next line in its block
+ * or else the block's end. */
+function lineBounds(
+  root: Element,
+  map: PlanSourceMap,
+  p: TextPoint,
+  read: RangeRects,
+): [DomPoint, DomPoint] | null {
+  const point = domPoint(root, map, p);
+  const block = point === null ? null : blockOf(root, point[0]);
+  if (point === null || block === null) return null;
+  const lines = visualLines(block, read);
+  const index = lineIndexAt(block, lines, point, read);
+  const line = lines[index];
+  if (line === undefined) return null;
+  const next = lines[index + 1];
+  return [
+    lineStart(line, read),
+    next === undefined ? [block, block.childNodes.length] : lineStart(next, read),
+  ];
+}
+
+/** The text of the visual lines from `from`'s through `to`'s, `from` not after `to`: from
+ * the first character of `from`'s line to the first of the line after `to`'s, or to the
+ * end of `to`'s block. Null when either point cannot be placed. */
+export function visualLineRange(
+  root: Element,
+  map: PlanSourceMap,
+  from: TextPoint,
+  to: TextPoint,
+  read: RangeRects = clientRects,
+): Range | null {
+  const start = lineBounds(root, map, from, read)?.[0];
+  const end = lineBounds(root, map, to, read)?.[1];
+  if (start === undefined || end === undefined) return null;
+  const range = root.ownerDocument.createRange();
+  range.setStart(...start);
+  range.setEnd(...end);
+  return range;
+}
+
 /** A cursor band's box in a scroller's content coordinates. */
 export interface BandBox {
   top: number;

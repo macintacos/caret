@@ -17,6 +17,7 @@ import {
   stepVisualLine,
   type TextPoint,
   visualLineBox,
+  visualLineRange,
 } from "$lib/previewLines.ts";
 
 const ROW = 10;
@@ -403,5 +404,74 @@ describe("readingPoint", () => {
     const padded: ElementRect = (el) =>
       el === root.firstElementChild ? { ...g.rect(el), bottom: 300 } : g.rect(el);
     expect(readingPoint(root, map, 25, g.read, padded)).toEqual({ line: 3, column: 0 });
+  });
+});
+
+describe("visualLineRange", () => {
+  test("a point's own line runs to the next line's first character", () => {
+    const { root, map } = mount(`${LONG}\n`);
+    const p = { line: 1, column: 25 };
+    const range = visualLineRange(root, map, p, p, grid(root, 20).read);
+    expect(range?.toString()).toBe(LONG.slice(20, 40));
+  });
+
+  test("spans from the first point's line through the second's", () => {
+    const { root, map } = mount(`${LONG}\n`);
+    const range = visualLineRange(
+      root,
+      map,
+      { line: 1, column: 5 },
+      { line: 1, column: 25 },
+      grid(root, 20).read,
+    );
+    expect(range?.toString()).toBe(LONG.slice(0, 40));
+  });
+
+  test("a block's last visual line ends at the block's end", () => {
+    const { root, map } = mount(`${LONG}\n`);
+    const p = { line: 1, column: 45 };
+    const range = visualLineRange(root, map, p, p, grid(root, 20).read);
+    expect(range?.toString().trimEnd()).toBe(LONG.slice(40));
+  });
+
+  test("spans the blocks between two blocks' lines", () => {
+    const { root, map } = mount(`${LONG}\n\nmiddle\n\n${LONG}\n`);
+    const range = visualLineRange(
+      root,
+      map,
+      { line: 1, column: 0 },
+      { line: 5, column: 45 },
+      grid(root, 20).read,
+    ) as Range;
+    expect(range.toString()).toContain("middle");
+    expect(map.linesOf(range)).toEqual({ start: 1, end: 5 });
+  });
+
+  test("a visual line across a soft break covers both source lines, as a drag does", () => {
+    const { root, map } = mount("aaaaaaaaaa bbbbbbbbbb\ncccccccccc dddddddddd\n");
+    const { read } = grid(root, 15);
+    const range = visualLineRange(
+      root,
+      map,
+      { line: 1, column: 15 },
+      { line: 1, column: 15 },
+      read,
+    ) as Range;
+    expect(map.linesOf(range)).toEqual({ start: 1, end: 2 });
+    const nodeWith = (needle: string) =>
+      [...(root.querySelector("p")?.childNodes ?? [])].find((n) =>
+        n.textContent?.includes(needle),
+      ) as Text;
+    const drag = document.createRange();
+    drag.setStart(nodeWith("bbbb"), 15);
+    drag.setEnd(nodeWith("cccc"), 8);
+    expect(drag.toString()).toBe(range.toString());
+    expect(map.linesOf(drag)).toEqual({ start: 1, end: 2 });
+  });
+
+  test("is null for a point the preview does not render", () => {
+    const { root, map } = mount("");
+    const p = { line: 1, column: 0 };
+    expect(visualLineRange(root, map, p, p) === null).toBe(true);
   });
 });
