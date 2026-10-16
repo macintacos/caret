@@ -138,11 +138,11 @@
     const current = new AbortController();
     gesture = current;
     const { signal } = current;
-    const end = () => current.abort();
+    const endGesture = () => current.abort();
     window.addEventListener(
       "pointerup",
       (up) => {
-        end();
+        endGesture();
         const range =
           root &&
           releasedRange(root, before, document.getSelection(), { x: up.clientX, y: up.clientY });
@@ -150,8 +150,8 @@
       },
       { signal },
     );
-    window.addEventListener("pointercancel", end, { signal });
-    window.addEventListener("blur", end, { signal });
+    window.addEventListener("pointercancel", endGesture, { signal });
+    window.addEventListener("blur", endGesture, { signal });
   }
 
   function showRefTarget(event: PointerEvent) {

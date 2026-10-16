@@ -431,14 +431,14 @@ test.describe("commenting from the preview", () => {
 
   /** A real mouse drag from `from`'s first character to `to`'s last (or to a point). */
   async function dragAcross(page: Page, from: Word, to: Word | { x: number; y: number }) {
-    const a = await wordRect(page, from);
-    const end =
+    const fromRect = await wordRect(page, from);
+    const releasePoint =
       "text" in to
         ? await wordRect(page, to).then((b) => ({ x: b.right - 1, y: (b.top + b.bottom) / 2 }))
         : to;
-    await page.mouse.move(a.left + 1, (a.top + a.bottom) / 2);
+    await page.mouse.move(fromRect.left + 1, (fromRect.top + fromRect.bottom) / 2);
     await page.mouse.down();
-    await page.mouse.move(end.x, end.y, { steps: 12 });
+    await page.mouse.move(releasePoint.x, releasePoint.y, { steps: 12 });
     await page.mouse.up();
   }
 
@@ -476,13 +476,13 @@ test.describe("commenting from the preview", () => {
 
   /** A selection over the end of stored line `near` and the start of `near + 1`. */
   async function selectAcrossBreak(page: Page, s: Seeded) {
-    const first = s.lines[s.near - 1] ?? "";
-    const last = (words(first).at(-1) ?? "").replace(/[.,]$/, "");
+    const nearLine = s.lines[s.near - 1] ?? "";
+    const last = (words(nearLine).at(-1) ?? "").replace(/[.,]$/, "");
     const next = (words(s.lines[s.near] ?? "")[0] ?? "").replace(/[.,]$/, "");
     await dragAcross(
       page,
-      { text: last, line: s.near, nth: occurrences(first, last) - 1 },
-      { text: next, line: s.near, nth: occurrences(first, next) },
+      { text: last, line: s.near, nth: occurrences(nearLine, last) - 1 },
+      { text: next, line: s.near, nth: occurrences(nearLine, next) },
     );
     return [last, next];
   }
