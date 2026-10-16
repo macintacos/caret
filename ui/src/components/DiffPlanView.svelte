@@ -177,12 +177,11 @@
     /** App's mirror of `commenting.scratches()` — the retained drafts, one Resume marker
      * per range. */
     scratches?: ComposerScratch[];
-    /** Hand the host a reveal(line, side) action once on mount, so a
-     * sibling (the comment navigator) can scroll to a commented line. The side is
-     * read only while comparing, where a line number alone names a row on either
-     * document; the source view ignores it. A call before the view paints is a
-     * bounded-retry no-op; on the plan preview it scrolls to the line's item in its
-     * comment slot. */
+    /** Hand the host a reveal(line, side) action once on mount, so a sibling (the
+     * comment navigator) can scroll to a commented line. The side is read only while
+     * comparing, where a line number alone names a row on either document; the source
+     * view ignores it. A call before the view paints is a bounded-retry no-op; on the
+     * plan preview it scrolls to the line's item in its comment slot. */
     onExposeReveal?: (reveal: (line: number, side?: DiffSide) => void) => void;
     /** Report the compared versions upward (null when not comparing), so App can
      * point the single CommentNavigator instance at the cross-version index.
@@ -206,9 +205,8 @@
      * mirror App can resync). */
     settingsRev?: number;
     /** The review the comment editors compose against, forwarded to every composer
-     * this view hosts, on either surface. App
-     * builds it, because the adapter id comes from the health probe rather than the
-     * review record. */
+     * this view hosts, on either surface. App builds it, because the adapter id comes
+     * from the health probe rather than the review record. */
     reviewContext?: ReviewContext;
   }
 
@@ -1379,8 +1377,9 @@
   });
 
   // Hand the host the reveal(line) action once. `untrack` keeps onExposeReveal from
-  // becoming a reactive dependency; revealLine closes over the live `api` and preview slots, so exposing
-  // it before the view paints is safe (the reveal simply no-ops until the api lands).
+  // becoming a reactive dependency; revealLine closes over the live `api` and preview
+  // slots, so exposing it before the view paints is safe (the reveal simply no-ops until
+  // the api lands).
   $effect(() => {
     untrack(() => onExposeReveal)?.(revealLine);
   });
