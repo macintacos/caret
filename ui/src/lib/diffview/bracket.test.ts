@@ -35,16 +35,16 @@ function build(
   const host = document.createElement("div");
   const root = host.attachShadow({ mode: "open" });
   scroller.append(host);
-  const tops = new Map<Element, Box>();
-  tops.set(scroller, { top: scrollerTop, bottom: scrollerTop + 1000, left: 0, right: 0 });
+  const rects = new Map<Element, Box>();
+  rects.set(scroller, { top: scrollerTop, bottom: scrollerTop + 1000, left: 0, right: 0 });
   lines.forEach((n, i) => {
     const row = document.createElement("div");
     row.setAttribute("data-line", String(n));
     root.append(row);
     const top = rowTop + i * 20;
-    tops.set(row, { top, bottom: top + 20, left: 0, right: 0 });
+    rects.set(row, { top, bottom: top + 20, left: 0, right: 0 });
   });
-  const read: RectReader = (el) => tops.get(el) ?? { top: 0, bottom: 0, left: 0, right: 0 };
+  const read: RectReader = (el) => rects.get(el) ?? { top: 0, bottom: 0, left: 0, right: 0 };
   return { host, scroller, read };
 }
 
