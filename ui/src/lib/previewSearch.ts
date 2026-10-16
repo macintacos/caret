@@ -64,16 +64,16 @@ function collectSegments(root: Element): Segment[] {
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
     const element = node instanceof Element ? node : node.parentElement;
     if (element === null || (node instanceof Element && node.tagName !== "BR")) continue;
-    const nearest = element.closest(BLOCK);
-    if (nearest !== block) flush();
-    block = nearest;
+    const nearestBlock = element.closest(BLOCK);
+    if (nearestBlock !== block) flush();
+    block = nearestBlock;
     if (!(node instanceof Text)) {
       addSpace(offset, offset);
       continue;
     }
-    const code = nearest?.tagName === "PRE";
+    const inCode = nearestBlock?.tagName === "PRE";
     for (const char of node.data) {
-      if (!code) addProse(char, offset);
+      if (!inCode) addProse(char, offset);
       else if (char === "\n") flush();
       else push(char, offset, offset + 1);
       offset++;
@@ -125,11 +125,11 @@ export function createPreviewSearch(root: Element, map: PlanSourceMap): PreviewS
 /** Opens every closed `<details>` hiding `match`'s start, as find-in-page does; a
  * `<details>` whose own `<summary>` holds the start stays closed, since a summary shows. */
 export function openMatchDetails(root: Element, map: PlanSourceMap, match: SearchMatch): void {
-  const start = previewMatchRanges(root, map, [match])[0]?.startContainer.parentElement;
-  for (let el = start?.closest("details"); el && root.contains(el); ) {
-    const summary = el.querySelector(":scope > summary");
-    if (!el.open && !summary?.contains(start ?? null)) el.open = true;
-    el = el.parentElement?.closest("details");
+  const startElement = previewMatchRanges(root, map, [match])[0]?.startContainer.parentElement;
+  for (let details = startElement?.closest("details"); details && root.contains(details); ) {
+    const summary = details.querySelector(":scope > summary");
+    if (!details.open && !summary?.contains(startElement ?? null)) details.open = true;
+    details = details.parentElement?.closest("details");
   }
 }
 
@@ -140,12 +140,12 @@ export function previewMatchRanges(
   map: PlanSourceMap,
   matches: readonly SearchMatch[],
 ): (Range | null)[] {
-  const at = createTextCursor(root);
-  return matches.map((m) => {
-    const origin = map.offsetOfLine(m.line);
+  const pointAt = createTextCursor(root);
+  return matches.map((match) => {
+    const origin = map.offsetOfLine(match.line);
     if (origin === null) return null;
-    const start = at(origin + m.startCol, "after");
-    const end = at(origin + m.endCol, "before");
+    const start = pointAt(origin + match.startCol, "after");
+    const end = pointAt(origin + match.endCol, "before");
     if (start === null || end === null) return null;
     const range = root.ownerDocument.createRange();
     range.setStart(...start);

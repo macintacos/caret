@@ -100,7 +100,7 @@ export function createTextCursor(
  * Build once per version; it reads no layout. */
 export function createPlanSourceMap(root: Element): PlanSourceMap {
   const { runs, length } = collectRuns(root);
-  const firstRun = (line: number): number => runs.findIndex((run) => run.line === line);
+  const firstRunIndex = (line: number): number => runs.findIndex((run) => run.line === line);
 
   const lineAtOffset = (offset: number): number | null => {
     if (length === 0) return null;
@@ -134,12 +134,12 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
       return start === null || end === null ? null : { start, end };
     },
     rangeOf(line) {
-      const index = firstRun(line);
+      const index = firstRunIndex(line);
       const run = runs[index];
       if (run === undefined) return null;
-      const at = createTextCursor(root);
-      const start = at(run.offset, "after");
-      const end = at(runs[index + 1]?.offset ?? length, "before");
+      const pointAt = createTextCursor(root);
+      const start = pointAt(run.offset, "after");
+      const end = pointAt(runs[index + 1]?.offset ?? length, "before");
       if (start === null || end === null) return null;
       const range = root.ownerDocument.createRange();
       range.setStart(...start);
@@ -148,7 +148,7 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
     },
     lineAtOffset,
     offsetOfLine(line) {
-      return runs[firstRun(line)]?.offset ?? null;
+      return runs[firstRunIndex(line)]?.offset ?? null;
     },
   };
 }
