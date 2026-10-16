@@ -123,6 +123,7 @@
     readingPoint,
     stepVisualLine,
     visualLineBox,
+    visualLineRange,
   } from "$lib/previewLines.ts";
   import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
   import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
@@ -1440,6 +1441,7 @@
     cursorLine: null,
     cursorPoint: null,
     visualAnchor: null,
+    visualAnchorPoint: null,
     searchOpen: false,
     searchCommitted: false,
     searchQuery: "",
@@ -1519,6 +1521,12 @@
       const block = previewBlock(p.line);
       if (previewEl && block) scrollRowIntoView(previewEl, block);
     },
+    selection: (from, to) => {
+      const geometry = previewGeometry();
+      return geometry && visualLineRange(geometry.root, geometry.map, from, to);
+    },
+    comment: commentOnPreview,
+    sound: sound.play,
   });
 
   // The band on screen and the source line it marks.
