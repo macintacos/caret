@@ -102,19 +102,11 @@ async function renderAndWaitForPre(
 
 afterEach(() => localStorage.clear());
 
-// A theme paint that moves the elements `moved` picks, as a rewrap would; happy-dom has
-// no layout of its own.
-const realBoundingRect = HTMLElement.prototype.getBoundingClientRect;
-afterEach(() => {
-  HTMLElement.prototype.getBoundingClientRect = realBoundingRect;
-  document.documentElement.style.removeProperty("--caret-test-repaint");
-});
-function repaintMoving(moved: (el: HTMLElement) => boolean): void {
-  HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
-    return moved(this)
-      ? ({ top: 40, bottom: 60, left: 0, right: 100, width: 100, height: 20 } as DOMRect)
-      : realBoundingRect.call(this);
-  };
+afterEach(() => document.documentElement.style.removeProperty("--caret-test-repaint"));
+/** A theme paint that moves `els`, as a rewrap would; happy-dom has no layout of its
+ * own. */
+function repaintMoving(els: Iterable<HTMLElement>): void {
+  for (const el of els) el.getBoundingClientRect = () => new DOMRect(0, 40, 100, 20);
   document.documentElement.style.setProperty("--caret-test-repaint", "1");
 }
 
@@ -541,8 +533,8 @@ async function renderOnPreview(over = {}) {
 
 describe("DiffPlanView code-block chrome", () => {
   // The chrome's pixel geometry is real layout, owned by codeChrome.ts's unit tests and
-  // the Playwright e2e — happy-dom has none. Here: the host-side wiring, that the boxes
-  // mounted over a document do not outlive it.
+  // the Playwright e2e — happy-dom has none. Here: the host-side wiring — what re-anchors
+  // the boxes, and that they do not outlive their document.
   const planWithBlock = (body: string, lead = "") =>
     `# Title\n\n${lead}\`\`\`ts\n${body}\n\`\`\`\n`;
 
@@ -582,7 +574,7 @@ describe("DiffPlanView code-block chrome", () => {
     await until(() => chromeBoxes(target).length === 1);
     const top = () => (chromeBoxes(target)[0] as HTMLElement).style.top;
     const before = top();
-    repaintMoving((el) => el.tagName === "PRE");
+    repaintMoving(target.querySelectorAll<HTMLElement>(".plan-preview pre"));
     expect(await until(() => top() !== before)).toBe(true);
   });
 
@@ -1022,8 +1014,20 @@ describe("DiffPlanView preview comment slots", () => {
       () => el() != null && !el()!.hasAttribute("data-unmeasured") && el()!.style.top !== "",
     );
     const before = el()!.style.top;
-    repaintMoving((e) => e.parentElement?.classList.contains("plan-preview") ?? false);
+    repaintMoving(target.querySelectorAll<HTMLElement>(".plan-preview > *"));
     expect(await until(() => el()!.style.top !== before)).toBe(true);
+  });
+
+  test("a switch to a review of the same plan text measures its slot again", async () => {
+    const { target, p, flush } = await renderSlots(plan, { annotations: [ann("a", 3)] });
+    const measured = () => {
+      const el = slot(target, 1);
+      return el != null && !el.hasAttribute("data-unmeasured");
+    };
+    await until(measured);
+    p.review = reviewFixture({ id: "other-review", currentPlan: plan });
+    flush();
+    expect(await until(measured)).toBe(true);
   });
 
   test("flipping to source with the preview's composer open keeps it as a draft", async () => {

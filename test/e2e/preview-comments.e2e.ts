@@ -201,6 +201,16 @@ function offsetInScroller(page: Page, id: string): Promise<number> {
   );
 }
 
+/** How many visual lines the preview's heading renders on; -1 with none. */
+const headingRows = (page: Page) =>
+  page.evaluate((preview) => {
+    const h1 = document.querySelector(`${preview} h1`);
+    if (!h1) return -1;
+    const range = document.createRange();
+    range.selectNodeContents(h1);
+    return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+  }, PLAN_PREVIEW);
+
 test("each thread renders after its block without overlapping the next", async ({
   daemon,
   page,
@@ -318,16 +328,6 @@ test("a slot that grows re-places itself under its block, clear of the next", as
     })
     .toBe(true);
 });
-
-/** The rendered heading's distinct line tops. */
-const headingRows = (page: Page) =>
-  page.evaluate((preview) => {
-    const h1 = document.querySelector(`${preview} h1`);
-    if (!h1) return -1;
-    const range = document.createRange();
-    range.selectNodeContents(h1);
-    return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
-  }, PLAN_PREVIEW);
 
 test("hovering or expanding a card highlights exactly its lines' rendered text", async ({
   daemon,
