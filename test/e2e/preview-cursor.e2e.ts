@@ -1,8 +1,11 @@
 // The keyboard cursor on the plan preview. It steps visual lines — each wrapped line on
 // screen — so everything here is layout: line boxes that only exist at a real width, the
-// follow scroll, and the band staying on its text across a resize, a theme switch and a
-// reflow. happy-dom has no layout, so the pure half — the motion resolution over fake
-// rects — lives in ui/src/lib/previewLines.test.ts and ui/src/state/previewCursor.test.ts.
+// follow scroll, and the band staying on its text across a resize, a comment card growing
+// above it and a theme switch that rewraps it. happy-dom has no layout, so the pure half
+// stays units: the motion resolution over fake rects in ui/src/lib/previewLines.test.ts and
+// ui/src/state/previewCursor.test.ts, the registry wiring and band mount in
+// ui/src/components/DiffPlanView.test.ts ("DiffPlanView preview cursor"), and the surface
+// pin in ui/src/lib/planView.test.ts.
 //
 // The daemon reflows the plan on ingest, so text is located by content and line counts
 // are read from the DOM.
@@ -18,11 +21,13 @@ import {
 } from "@test/e2e/support/cursor.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
+  awaitPlanReadyForKeys,
   lineOf,
   openPlanForKeys,
   PLAN_PREVIEW,
   PLAN_SURFACE,
 } from "@test/e2e/support/source-view.ts";
+import { caretThemeVariant, selectThemeFile } from "@test/e2e/support/themes.ts";
 
 // No phrase repeats, so text recorded under the band identifies one place.
 const LONG = [
@@ -81,11 +86,11 @@ const bandTop = (page: Page): Promise<number> =>
 const bandLine = async (page: Page): Promise<number> =>
   Number(await previewCursor(page).getAttribute("data-line"));
 
-/** The visual-line count of the preview paragraph holding `word`. */
-const bandRows = (page: Page, word: string) =>
+/** The visual-line count of the preview `tag` element holding `word`. */
+const textRows = (page: Page, tag: string, word: string) =>
   page.evaluate(
-    ([root, w]) => {
-      const p = [...document.querySelectorAll(`${root} p`)].find((el) =>
+    ([root, t, w]) => {
+      const p = [...document.querySelectorAll(`${root} ${t}`)].find((el) =>
         el.textContent?.includes(w),
       );
       if (!p) return -1;
@@ -93,7 +98,7 @@ const bandRows = (page: Page, word: string) =>
       range.selectNodeContents(p);
       return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
     },
-    [PLAN_PREVIEW, word] as const,
+    [PLAN_PREVIEW, tag, word] as const,
   );
 
 /** The preview's characters in text order with their vertical midpoints, and the band's
@@ -220,8 +225,8 @@ test.describe("preview keyboard cursor", () => {
     for (const width of [1600, 420]) {
       await page.setViewportSize({ width, height: 900 });
       await toLongParagraph(page);
-      await expect.poll(() => bandRows(page, "Marmalade")).toBeGreaterThan(0);
-      const rows = await bandRows(page, "Marmalade");
+      await expect.poll(() => textRows(page, "p", "Marmalade")).toBeGreaterThan(0);
+      const rows = await textRows(page, "p", "Marmalade");
       expect(await walkLong(page)).toBe(rows);
       counts.push(rows);
 
@@ -339,9 +344,22 @@ test.describe("preview keyboard cursor", () => {
     }
   });
 
-  test("the cursor keeps its text across resize, theme and reflow", async ({ page, daemon }) => {
+  test("the cursor keeps its text across a resize and a comment card growing above it", async ({
+    page,
+    daemon,
+  }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
-    await openPreview(page, daemon);
+    const id = await daemon.seed({ plan: PLAN });
+    const lines = ((await daemon.getReview(id)).body?.currentPlan ?? "").split("\n");
+    const short = lines.findIndex((l) => l.startsWith("A short")) + 1;
+    await daemon.putDraft(id, {
+      composerScratches: [{ startLine: short, endLine: short, text: "an unsent note" }],
+    });
+    await page.goto("/");
+    await awaitPlanReadyForKeys(page);
+    await previewToggle(page).click();
+    await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
+
     await toLongParagraph(page);
     let top = await stepFrom(page, "j", await bandTop(page));
     top = await stepFrom(page, "j", top);
@@ -350,19 +368,50 @@ test.describe("preview keyboard cursor", () => {
     await page.setViewportSize({ width: 420, height: 900 });
     await expect.poll(() => bandCovers(page, recorded)).toBe(true);
 
-    await page.emulateMedia({ colorScheme: "light" });
-    await expect.poll(() => bandCovers(page, recorded)).toBe(true);
-
     const before = await bandTop(page);
-    await page.evaluate((root) => {
-      const p = [...document.querySelectorAll(`${root} p`)].find((el) =>
-        el.textContent?.includes("A short"),
-      )!;
-      const card = document.createElement("div");
-      card.style.height = "200px";
-      p.append(card);
-    }, PLAN_PREVIEW);
+    await page.getByRole("button", { name: "Resume unsent comment" }).click();
+    await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
     await expect.poll(() => bandTop(page)).toBeGreaterThan(before);
+    await expect.poll(() => bandCovers(page, recorded)).toBe(true);
+  });
+
+  test("the cursor keeps its text when a theme switch rewraps its heading", async ({
+    page,
+    daemon,
+  }) => {
+    // Only the heading's weight and slant differ, and only the light theme's widen it.
+    await selectThemeFile(
+      page,
+      daemon,
+      caretThemeVariant("thin", "dark", {
+        accent: "#ff0000",
+        markdown: { heading1: { color: "#ff80bf" } },
+      }),
+    );
+    await selectThemeFile(
+      page,
+      daemon,
+      caretThemeVariant("heavy", "light", {
+        accent: "#ff0000",
+        markdown: { heading1: { color: "#ff80bf", fontStyle: ["bold", "italic"] } },
+      }),
+    );
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.setViewportSize({ width: 420, height: 900 });
+    await openPlanForKeys(page, daemon, `# ${LONG}\n\nClosing paragraph quokka.\n`);
+    await previewToggle(page).click();
+    await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
+
+    await press(page, "g", "g");
+    await expect.poll(() => bandCovers(page, "Marmalade")).toBe(true);
+    let top = await stepFrom(page, "j", await bandTop(page));
+    top = await stepFrom(page, "j", top);
+    await stepFrom(page, "j", top);
+    const recorded = await bandText(page);
+    const rows = await textRows(page, "h1", "Marmalade");
+
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect.poll(() => textRows(page, "h1", "Marmalade")).not.toBe(rows);
     await expect.poll(() => bandCovers(page, recorded)).toBe(true);
   });
 

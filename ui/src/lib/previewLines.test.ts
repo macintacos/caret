@@ -9,6 +9,7 @@ import { highlightPreviewCode } from "$lib/previewCode.ts";
 import {
   type Box,
   cursorBand,
+  type ElementRect,
   lastVisualLine,
   pointForLine,
   type RangeRects,
@@ -39,8 +40,8 @@ interface Grid {
   read: RangeRects;
   /** The root child index of every range handed to `read`, in order. */
   blocksRead: number[];
-  /** Each block's bottom edge. */
-  bottom: (block: Element) => number;
+  /** Each block's rect; only its bottom edge is laid out. */
+  rect: ElementRect;
 }
 
 /** Lays each block's text out as a monospace grid `width` characters wide, one `ROW`
@@ -108,7 +109,8 @@ function grid(root: Element, width: number): Grid {
     }
     return [...rows.values()];
   };
-  return { read, blocksRead, bottom: (block) => bottoms.get(block) ?? 0 };
+  const rect: ElementRect = (el) => ({ top: 0, bottom: bottoms.get(el) ?? 0, left: 0, right: 0 });
+  return { read, blocksRead, rect };
 }
 
 /** The point at the start of the first occurrence of `needle`. */
@@ -309,6 +311,17 @@ describe("stepVisualLine", () => {
 });
 
 describe("visualLineBox", () => {
+  test("measures the DOMRects a browser hands back", () => {
+    const { root, map } = mount(`${LONG}\n`);
+    const g = grid(root, 20).read;
+    const read: RangeRects = (range) =>
+      g(range).map((b) => new DOMRect(b.left, b.top, b.right - b.left, b.bottom - b.top));
+    expect(visualLineBox(root, map, { line: 1, column: 25 }, read)).toMatchObject({
+      top: 10,
+      bottom: 20,
+    });
+  });
+
   test("after a reflow, boxes the row now holding the point's character", () => {
     const { root, map } = mount(`${LONG}\n`);
     const p = { line: 1, column: 25 };
@@ -318,24 +331,24 @@ describe("visualLineBox", () => {
 });
 
 describe("cursorBand", () => {
-  function stubRect(el: Element, top: number, left: number, width: number) {
-    el.getBoundingClientRect = () => new DOMRect(left, top, width, 1000);
-  }
-
   test("spans the root in the scroller's content coordinates, padded to the line-height", () => {
     const { root, map } = mount(`${LONG}\n`);
     const scroller = document.createElement("div");
-    stubRect(scroller, 100, 5, 500);
     scroller.scrollTop = 40;
-    stubRect(root, 50, 25, 300);
+    const rect: ElementRect = (el) =>
+      el === scroller
+        ? { top: 100, bottom: 1100, left: 5, right: 505 }
+        : { top: 50, bottom: 1050, left: 25, right: 325 };
     const read = grid(root, 20).read;
-    expect(cursorBand(root, scroller, map, { line: 1, column: 25 }, 16, read)).toEqual({
+    expect(cursorBand(root, scroller, map, { line: 1, column: 25 }, 16, read, rect)).toEqual({
       top: 10 - 3 - 60,
       left: 20,
       width: 300,
       height: 16,
     });
-    expect(cursorBand(root, scroller, map, { line: 1, column: 25 }, 0, read)?.height).toBe(10);
+    expect(cursorBand(root, scroller, map, { line: 1, column: 25 }, 0, read, rect)?.height).toBe(
+      10,
+    );
   });
 
   test("is null for a point the preview does not render", () => {
@@ -380,7 +393,15 @@ describe("readingPoint", () => {
     const { root, map } = mount(`${LONG}\n\n${LONG}\n`);
     const g = grid(root, 20);
     // Rows sit at 0, 10, 20 (block 0) and 30, 40, 50 (block 1); the zone is 13 below the top.
-    expect(readingPoint(root, map, 25, g.read, g.bottom)).toEqual({ line: 3, column: 0 });
-    expect(readingPoint(root, map, 10, g.read, g.bottom)).toEqual({ line: 1, column: 40 });
+    expect(readingPoint(root, map, 25, g.read, g.rect)).toEqual({ line: 3, column: 0 });
+    expect(readingPoint(root, map, 10, g.read, g.rect)).toEqual({ line: 1, column: 40 });
+  });
+
+  test("passes over a block whose padding, not its text, reaches the reading zone", () => {
+    const { root, map } = mount(`${LONG}\n\n${LONG}\n`);
+    const g = grid(root, 20);
+    const padded: ElementRect = (el) =>
+      el === root.firstElementChild ? { ...g.rect(el), bottom: 300 } : g.rect(el);
+    expect(readingPoint(root, map, 25, g.read, padded)).toEqual({ line: 3, column: 0 });
   });
 });

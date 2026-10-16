@@ -406,7 +406,8 @@
   }
 
   // createPlanSourceMap reads only the DOM, so the html read is what rebuilds the map on a
-  // version switch.
+  // version switch. Shared by the comment highlight and the keyboard cursor, and ungated:
+  // each consumer gates on its own row.
   const previewSourceMap = $derived.by(() => {
     void planPreview?.html;
     return previewEl ? createPlanSourceMap(previewEl) : null;
@@ -418,7 +419,7 @@
     const map = previewSourceMap;
     const span = activeSpan;
     const root = previewEl;
-    if (!map || !span || !root) {
+    if (!runs("commentThreads") || !map || !span || !root) {
       clearCommentHighlight();
       return;
     }
@@ -1460,8 +1461,7 @@
     return Math.max(1, Math.floor(scrollEl.clientHeight / 2 / lineHeight));
   }
 
-  // The same cursor over the preview's visual lines: shares keyboardStore, so a flip
-  // carries `cursorLine` across unchanged.
+  const planLineCount = $derived(lineCountOf(linkLayer.text.split("\n")));
   const previewCursor = createPreviewCursor(keyboardStore, {
     lines: () => linkLayer.text.split("\n"),
     headingLines: () => headings.map((h) => h.line),
@@ -1479,7 +1479,7 @@
     },
     pointForLine: (line) => {
       const map = previewSourceMap;
-      return map && pointForLine(map, line, lineCountOf(linkLayer.text.split("\n")));
+      return map && pointForLine(map, line, planLineCount);
     },
     last: () => {
       const geometry = previewGeometry();
@@ -1496,8 +1496,7 @@
     },
   });
 
-  // The preview cursor's band, in .diff-plan content coordinates: the visual line's box
-  // across the preview's width, padded to the root's line-height.
+  // The band on screen and the source line it marks.
   let previewCursorBox = $state<({ line: number } & BandBox) | null>(null);
   // Bumped, rAF-throttled, whenever the preview's layout may have moved the band.
   let previewLayoutRev = $state(0);
@@ -1512,18 +1511,21 @@
           previewLayoutRev++;
         });
     };
-    const observer = new ResizeObserver(schedule);
-    observer.observe(root);
+    // Text rewraps without resizing the root: reference tagging and code swaps rewrite
+    // nodes, and a theme paint (inline properties on <html>) restyles the markdown.
+    // The root's attributes stay unobserved: the slot reserve writes block styles there.
+    const resize = new ResizeObserver(schedule);
+    resize.observe(root);
+    const text = new MutationObserver(schedule);
+    text.observe(root, { childList: true, subtree: true, characterData: true });
+    const paint = new MutationObserver(schedule);
+    paint.observe(document.documentElement, { attributeFilter: ["style"] });
     return () => {
       cancelAnimationFrame(raf);
-      observer.disconnect();
+      resize.disconnect();
+      text.disconnect();
+      paint.disconnect();
     };
-  });
-  // A theme's markdown weight and slant can rewrap text without resizing the root.
-  $effect(() => {
-    void themeId;
-    const raf = requestAnimationFrame(() => previewLayoutRev++);
-    return () => cancelAnimationFrame(raf);
   });
   $effect(() => {
     void previewLayoutRev;

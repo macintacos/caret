@@ -318,11 +318,12 @@ highlight run only where the `commentThreads` row runs.
 `keyboardCursor` is ported too. The preview cursor is `cursorLine` plus `cursorPoint`, a
 column into the text that line renders, so a resize, theme switch or inserted card reflows
 the text without moving the cursor off it; a `cursorPoint` on any other line than
-`cursorLine` reads as that line's start. `ui/src/lib/previewLines.ts` measures visual
-lines per block from text-node rects, reading only the blocks a step crosses, never the
-whole document. The band (`data-caret-preview-cursor`) is an overlay sibling of
-`.plan-preview`, so the source map's text order is untouched. `c`, `V` and Esc sit on
-their own `keyboardComments` row, still source-only.
+`cursorLine` reads as the start of that line, or of the next one that renders text.
+`ui/src/lib/previewLines.ts` measures visual lines per block from text-node rects, reading
+only the blocks a step crosses, never the whole document. The band
+(`data-caret-preview-cursor`) is an overlay sibling of `.plan-preview`, so the source
+map's text order is untouched. `c`, `V` and Esc sit on their own `keyboardComments` row,
+still source-only.
 
 The preview renders a version once. `memoLast` returns the last result for the same text,
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same

@@ -1,8 +1,8 @@
 // Visual lines of the mounted preview: each line of text as wrapped on screen. Geometry
-// comes from the client rects of text — block rects only to binary-search the reading-zone
-// block, and the root's and scroller's to place the cursor band — and is read only in the
+// comes from the client rects of text — element rects only to binary-search the
+// reading-zone block, and the root's and scroller's to place the cursor band — read only in the
 // blocks a lookup touches, so a cursor step never measures the whole document.
-import { indexAtReadingZone, lineAtReadingZone } from "$lib/diffview/scroll.ts";
+import { indexAtReadingZone } from "$lib/diffview/scroll.ts";
 import type { PlanSourceMap } from "$lib/planSourceMap.ts";
 
 /** A cursor position on the preview: a source line, and a character offset into the
@@ -24,14 +24,21 @@ export type RangeRects = (range: Range) => readonly Box[];
 
 const clientRects: RangeRects = (range) => Array.from(range.getClientRects());
 
-type BlockBottom = (block: Element) => number;
+/** An element's client rect. */
+export type ElementRect = (el: Element) => Box;
 
-const boundingBottom: BlockBottom = (block) => block.getBoundingClientRect().bottom;
+const boundingRect: ElementRect = (el) => el.getBoundingClientRect();
 
 interface VisualLine extends Box {
-  /** The first character, in text order, laid out on the line. */
-  start: [Text, number];
+  /** The earliest text node, in text order, with a rect on the line. */
+  node: Text;
 }
+
+/** The first character, in text order, laid out on `line`. */
+const lineStart = (line: VisualLine, read: RangeRects): [Text, number] => [
+  line.node,
+  firstOffsetFrom(line.node, line.top, read),
+];
 
 function rangeOver(node: Text, start: number, end: number): Range {
   const range = node.ownerDocument.createRange();
@@ -113,52 +120,65 @@ function nearest<L extends Box>(lines: readonly L[], mid: number): L | undefined
   return best;
 }
 
-// ponytail: per-keypress block measurement — cache per layout generation if a huge
-// highlighted code block makes held j stutter
+interface LineDraft extends Box {
+  node: Text;
+  /** `node`'s position in the block's text order. */
+  index: number;
+  /** The cell group that seeded the line. */
+  group: number;
+}
+
+/** The line `rect` joins: `previous` if it holds the rect's midpoint, else any line that
+ * holds it, else the nearest line from another cell that it overlaps. A middle-aligned
+ * cell's midpoint can fall in the gap between a taller neighbour's glyph rects; it still
+ * belongs to a neighbour's line it overlaps. Within one cell, tightly set lines overlap
+ * too, so overlap never merges a cell's own lines. */
+function joinLine(
+  lines: readonly LineDraft[],
+  previous: LineDraft | undefined,
+  rect: Box,
+  group: number,
+): LineDraft | undefined {
+  const mid = midOf(rect);
+  const holds = (l: Box) => mid >= l.top && mid < l.bottom;
+  if (previous !== undefined && holds(previous)) return previous;
+  return (
+    lines.find(holds) ??
+    nearest(
+      lines.filter((l) => l.group !== group && rect.top < l.bottom && rect.bottom > l.top),
+      mid,
+    )
+  );
+}
+
+// ponytail: every lookup re-reads its blocks' rects — the cursor's block three times a
+// keypress (the step, the follow, the band); cache per layout generation if a huge
+// block makes held j stutter
+/** The block's visual lines top to bottom, each with the first text node laid out on it. */
 function visualLines(block: Element, read: RangeRects): VisualLine[] {
-  const lines: (Box & { node: Text; index: number; group: number })[] = [];
+  const lines: LineDraft[] = [];
   // Tallest cells first: a middle-aligned shorter cell's rects then join its neighbour's
   // lines instead of seeding lines offset by half a line.
   const groups = cellGroups(block, read).sort((a, b) => extentOf(b) - extentOf(a));
-  let previousLine: (typeof lines)[number] | undefined;
-  for (const { node, index, rect, group } of groups.flatMap((g, group) =>
-    g.map((r) => ({ ...r, group })),
-  )) {
-    const mid = midOf(rect);
-    const holds = (l: Box) => mid >= l.top && mid < l.bottom;
-    // A middle-aligned cell's midpoint can fall in the gap between a taller neighbour's
-    // glyph rects; it still belongs to a neighbour's line it overlaps. Within one cell,
-    // tightly set lines overlap too, so overlap never merges a cell's own lines.
-    const line =
-      (previousLine !== undefined && holds(previousLine) ? previousLine : lines.find(holds)) ??
-      nearest(
-        lines.filter((l) => l.group !== group && rect.top < l.bottom && rect.bottom > l.top),
-        mid,
-      );
-    if (line === undefined) {
-      previousLine = {
-        top: rect.top,
-        bottom: rect.bottom,
-        left: rect.left,
-        right: rect.right,
-        node,
-        index,
-        group,
-      };
-      lines.push(previousLine);
-    } else {
-      previousLine = line;
-      line.left = Math.min(line.left, rect.left);
-      line.right = Math.max(line.right, rect.right);
-      if (index < line.index) Object.assign(line, { node, index });
+  let previous: LineDraft | undefined;
+  groups.forEach((cells, group) => {
+    for (const { node, index, rect } of cells) {
+      const line = joinLine(lines, previous, rect, group);
+      if (line === undefined) {
+        const { top, bottom, left, right } = rect;
+        previous = { top, bottom, left, right, node, index, group };
+        lines.push(previous);
+      } else {
+        previous = line;
+        line.left = Math.min(line.left, rect.left);
+        line.right = Math.max(line.right, rect.right);
+        if (index < line.index) Object.assign(line, { node, index });
+      }
     }
-  }
+  });
   return lines
     .sort((a, b) => a.top - b.top)
-    .map(({ node, index: _, group: __, ...box }) => ({
-      ...box,
-      start: [node, firstOffsetFrom(node, box.top, read)],
-    }));
+    .map((l) => ({ top: l.top, bottom: l.bottom, left: l.left, right: l.right, node: l.node }));
 }
 
 /** The vertical midpoint of the first character at or after the point that has a rect. */
@@ -171,6 +191,8 @@ function charMid(block: Element, node: Text, offset: number, read: RangeRects): 
   return null;
 }
 
+/** The index of the line holding the point's character, else the nearest line; the last
+ * when nothing at or after it is laid out. */
 function lineIndexAt(
   block: Element,
   lines: readonly VisualLine[],
@@ -203,12 +225,11 @@ function textBlockFrom(
 }
 
 /** `p` as a DOM point, its column clamped to the line's text. */
-function domPoint(map: PlanSourceMap, p: TextPoint): [Text, number] | null {
+function domPoint(root: Element, map: PlanSourceMap, p: TextPoint): [Text, number] | null {
   const range = map.rangeOf(p.line);
   if (range === null || !(range.startContainer instanceof Text)) return null;
   let remaining = Math.min(p.column, Math.max(range.toString().length - 1, 0));
-  const doc = range.startContainer.ownerDocument;
-  const walker = doc.createTreeWalker(doc, NodeFilter.SHOW_TEXT);
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   walker.currentNode = range.startContainer;
   let node: Text = range.startContainer;
   let offset = range.startOffset;
@@ -222,6 +243,7 @@ function domPoint(map: PlanSourceMap, p: TextPoint): [Text, number] | null {
   }
 }
 
+/** `domPoint`'s inverse. */
 function textPoint(map: PlanSourceMap, node: Text, offset: number): TextPoint | null {
   const line = map.lineAt(node, offset);
   if (line === null) return null;
@@ -241,7 +263,7 @@ export function stepVisualLine(
   count: number,
   read: RangeRects = clientRects,
 ): TextPoint {
-  const point = domPoint(map, from);
+  const point = domPoint(root, map, from);
   let block = point === null ? null : blockOf(root, point[0]);
   if (point === null || block === null) return from;
   let lines = visualLines(block, read);
@@ -265,7 +287,7 @@ export function stepVisualLine(
     ({ block, lines } = prev);
     targetIndex += lines.length;
   }
-  return textPoint(map, ...(lines[targetIndex] as VisualLine).start) ?? from;
+  return textPoint(map, ...lineStart(lines[targetIndex] as VisualLine, read)) ?? from;
 }
 
 /** Column 0 of the first line from `line` on that renders text, else of the last one
@@ -289,31 +311,33 @@ export function lastVisualLine(
 ): TextPoint | null {
   for (let block = root.lastElementChild; block !== null; block = block.previousElementSibling) {
     const last = visualLines(block, read).at(-1);
-    if (last !== undefined) return textPoint(map, ...last.start);
+    if (last !== undefined) return textPoint(map, ...lineStart(last, read));
   }
   return null;
 }
 
 /** The start of the first visual line whose bottom clears the reading zone of a scroller
- * whose top edge is at `scrollerTop`, in the block there or the next with text. */
+ * whose top edge is at `scrollerTop`: from the reading-zone block on, the first visual line
+ * below the zone, else the document's last. */
 export function readingPoint(
   root: Element,
   map: PlanSourceMap,
   scrollerTop: number,
   read: RangeRects = clientRects,
-  blockBottom: BlockBottom = boundingBottom,
+  rect: ElementRect = boundingRect,
 ): TextPoint | null {
   const blocks = root.children;
   const firstBlock =
-    indexAtReadingZone(blocks.length, (k) => blockBottom(blocks[k] as Element), scrollerTop) ??
+    indexAtReadingZone(blocks.length, (k) => rect(blocks[k] as Element).bottom, scrollerTop) ??
     blocks.length - 1;
+  let last: VisualLine | undefined;
   for (let k = Math.max(firstBlock, 0); k < blocks.length; k++) {
     const lines = visualLines(blocks[k] as Element, read);
-    const rows = lines.map((l, index) => ({ line: index, bottom: l.bottom }));
-    const line = lines[lineAtReadingZone(rows, scrollerTop) ?? lines.length - 1];
-    if (line !== undefined) return textPoint(map, ...line.start);
+    const i = indexAtReadingZone(lines.length, (j) => (lines[j] as VisualLine).bottom, scrollerTop);
+    if (i !== null) return textPoint(map, ...lineStart(lines[i] as VisualLine, read));
+    last = lines.at(-1) ?? last;
   }
-  return null;
+  return last === undefined ? null : textPoint(map, ...lineStart(last, read));
 }
 
 /** The box of the visual line holding `p`'s character. */
@@ -323,7 +347,7 @@ export function visualLineBox(
   p: TextPoint,
   read: RangeRects = clientRects,
 ): Box | null {
-  const point = domPoint(map, p);
+  const point = domPoint(root, map, p);
   const block = point === null ? null : blockOf(root, point[0]);
   if (point === null || block === null) return null;
   const lines = visualLines(block, read);
@@ -351,16 +375,17 @@ export function cursorBand(
   p: TextPoint,
   lineHeight: number,
   read: RangeRects = clientRects,
+  rect: ElementRect = boundingRect,
 ): BandBox | null {
   const box = visualLineBox(root, map, p, read);
   if (box === null) return null;
   const pad = lineHeight > 0 ? Math.max(0, lineHeight - (box.bottom - box.top)) / 2 : 0;
-  const scrollerRect = scroller.getBoundingClientRect();
-  const rootRect = root.getBoundingClientRect();
+  const scrollerRect = rect(scroller);
+  const rootRect = rect(root);
   return {
     top: box.top - pad - (scrollerRect.top - scroller.scrollTop),
     left: rootRect.left - (scrollerRect.left - scroller.scrollLeft),
-    width: rootRect.width,
+    width: rootRect.right - rootRect.left,
     height: box.bottom - box.top + 2 * pad,
   };
 }

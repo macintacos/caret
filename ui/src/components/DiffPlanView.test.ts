@@ -1044,6 +1044,37 @@ describe("DiffPlanView preview cursor", () => {
     expect(band(target)?.getAttribute("data-line")).toBe("1");
   });
 
+  async function paintedBand(): Promise<HTMLElement> {
+    stubLayout();
+    const { target } = await renderOnPreview();
+    await until(() => live("motion.top"));
+    run("motion.top");
+    await until(() => band(target) != null);
+    return target;
+  }
+  function moveLayout(): void {
+    Range.prototype.getClientRects = () =>
+      [{ top: 40, bottom: 60, left: 0, right: 100 }] as unknown as DOMRectList;
+  }
+  const bandTop = (target: HTMLElement) => (band(target) as HTMLElement | null)?.style.top;
+
+  test("the band follows a repaint of the theme's properties", async () => {
+    const target = await paintedBand();
+    const before = bandTop(target);
+    moveLayout();
+    document.documentElement.style.setProperty("--caret-test-repaint", "1");
+    expect(await until(() => bandTop(target) !== before)).toBe(true);
+    document.documentElement.style.removeProperty("--caret-test-repaint");
+  });
+
+  test("the band follows a rewrite of the preview's text", async () => {
+    const target = await paintedBand();
+    const before = bandTop(target);
+    moveLayout();
+    target.querySelector(".plan-preview p")?.append(" more");
+    expect(await until(() => bandTop(target) !== before)).toBe(true);
+  });
+
   test("a visual selection does not survive a round trip through the preview", async () => {
     const { target } = render(DiffPlanView, props());
     await until(() => live("commenting.visualLine"));
