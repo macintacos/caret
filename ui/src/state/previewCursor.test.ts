@@ -51,6 +51,19 @@ function build(store: PreviewCursorStore, over: { seed?: TextPoint | null; empty
 const unplaced = (): PreviewCursorStore => ({ cursorLine: null, cursorPoint: null });
 const placed = (p: TextPoint): PreviewCursorStore => ({ cursorLine: p.line, cursorPoint: p });
 
+describe("placeAt", () => {
+  test("places the cursor on the point and follows it", () => {
+    const store = unplaced();
+    const h = build(store);
+    const p = { line: 3, column: 7 };
+    h.cursor.placeAt(p);
+    expect(store.cursorLine).toBe(3);
+    expect(store.cursorPoint).toEqual(p);
+    expect(h.follows).toEqual([p]);
+    expect(h.cursor.point()).toEqual(p);
+  });
+});
+
 describe("an unplaced cursor", () => {
   for (const motion of ["down", "up", "halfDown", "halfUp"] as const) {
     test(`${motion} reveals at the reading position without stepping`, () => {

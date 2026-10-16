@@ -6,7 +6,7 @@
 // The three surfaces are one machine: they share the reading-position seed
 // (`cursorLine ?? readingLine()`), the Esc-priority chain (Esc closes search, THEN exits
 // visual — never clears the cursor), and the content-switch reset. The pure sinks
-// (resolveCursorLine, findMatches, nearestMatchIndex, matchStepFromLine, stepIndex) do
+// (resolveCursorLine, nearestMatchIndex, matchStepFromLine, stepIndex) do
 // the arithmetic; this factory only sequences them and mutates the store.
 
 import { normalizeRange } from "$lib/diffview/commenting.ts";
@@ -18,7 +18,6 @@ import {
   resolveCursorLine,
 } from "$lib/diffview/lineCursor.ts";
 import {
-  findMatches,
   matchStepFromLine,
   nearestMatchIndex,
   type SearchMatch,
@@ -62,6 +61,12 @@ export interface PlanKeyboardDeps {
   halfPage(): number;
   /** Scroll the view to keep `line` visible — the keyboard cursor's follow scroll. */
   follow(line: number): void;
+  /** Every match for `query` over the text the reader sees, in document order. */
+  matchesFor(query: string): SearchMatch[];
+  /** Bring `match` into view once the cursor's line is on it: the source view follows the
+   * line; the preview also pins the cursor's column to the match, so it lands on the
+   * match's visual line. */
+  followMatch(match: SearchMatch): void;
   /** Scroll `line` to the top of the view — the shared jump every navigation to an
    * explicit place takes (a heading pick, a deep link), the counterpart to `follow`'s
    * scrolloff-only nudge. */
@@ -136,10 +141,10 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
   const clearTimer = deps.clearTimer ?? ((h) => clearTimeout(h));
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
 
-  // Matches over the SAME rendered text the cursor uses, so a match's line maps straight
-  // onto the line cursor and its shadow-row highlight.
+  // The host picks the match space, so each surface searches the text its reader sees; a
+  // match's line still maps straight onto the line cursor.
   function matches(): SearchMatch[] {
-    return store.searchQuery === "" ? [] : findMatches(deps.lines(), store.searchQuery);
+    return store.searchQuery === "" ? [] : deps.matchesFor(store.searchQuery);
   }
 
   // The shared seed every search/motion transition starts from.
@@ -178,7 +183,8 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
   function revealMatch(): boolean {
     const m = matches()[store.searchIndex];
     if (m == null) return false;
-    reveal(m.line);
+    store.cursorLine = m.line;
+    deps.followMatch(m);
     return true;
   }
 

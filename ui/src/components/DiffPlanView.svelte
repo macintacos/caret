@@ -89,6 +89,7 @@
   import { bind, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
   import { sound } from "$lib/sound.ts";
   import { type CursorMotion, lineCountOf } from "$lib/diffview/lineCursor.ts";
+  import { findMatches } from "$lib/diffview/planSearch.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, slugForLine } from "$lib/toc.ts";
   import { NARROW_WIDTH_PX } from "$lib/layout.ts";
   import {
@@ -1439,6 +1440,8 @@
     readingLine: () => topVisibleLine(),
     halfPage: cursorHalfPage,
     follow: (line) => api?.followCursorLine(line),
+    matchesFor: (query) => findMatches(linkLayer.text.split("\n"), query),
+    followMatch: (m) => api?.followCursorLine(m.line),
     jump: (line) => api?.scrollToLine(line),
     openComposer: openRange,
     focusField: focusSearchField,

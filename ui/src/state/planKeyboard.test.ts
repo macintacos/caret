@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 
 import { createPlanKeyboard, type PlanKeyboardStore } from "@/state/planKeyboard.svelte.ts";
 import type { CursorMotion } from "$lib/diffview/lineCursor.ts";
+import { findMatches, type SearchMatch } from "$lib/diffview/planSearch.ts";
 import type { SoundEvent } from "$lib/sound.ts";
 
 // A plan whose lines carry known "alpha" matches: line 3 has two, line 5 has one
@@ -35,6 +36,7 @@ function build(
     hints?: boolean;
     headings?: number[];
     halfPage?: number;
+    matchesFor?: (query: string) => SearchMatch[];
   } = {},
 ) {
   let text = over.text ?? "";
@@ -47,6 +49,7 @@ function build(
   const composerOpens: Array<{ startLine: number; endLine: number }> = [];
   const scheduled: Array<{ fn: () => void; handle: number }> = [];
   const sounds: SoundEvent[] = [];
+  const landed: SearchMatch[] = [];
   let nextHandle = 1;
   let focused = 0;
   let blurred = 0;
@@ -57,6 +60,11 @@ function build(
     readingLine: () => reading,
     halfPage: () => halfPage,
     follow: (line) => followed.push(line),
+    matchesFor: over.matchesFor ?? ((query) => findMatches(text.split("\n"), query)),
+    followMatch: (m) => {
+      landed.push(m);
+      followed.push(m.line);
+    },
     jump: (line) => jumped.push(line),
     openComposer: (startLine, endLine) => {
       composerOpens.push({ startLine, endLine });
@@ -85,6 +93,7 @@ function build(
   return {
     keyboard,
     followed,
+    landed,
     jumped,
     composerOpens,
     sounds,
@@ -208,6 +217,35 @@ describe("commitSearch", () => {
     expect(store.searchCommitted).toBe(false);
     expect(store.searchIndex).toBe(-1);
     expect(h.followed).toEqual([]);
+  });
+});
+
+describe("an injected match space", () => {
+  const crafted: SearchMatch[] = [
+    { line: 3, startCol: 0, endCol: 1 },
+    { line: 3, startCol: 4, endCol: 5 },
+    { line: 9, startCol: 2, endCol: 3 },
+  ];
+
+  test("commit and n/N land on the matches matchesFor returns", () => {
+    store.searchQuery = "x";
+    const h = build(store, { text: PLAN, reading: 8, matchesFor: () => crafted });
+    h.keyboard.commitSearch();
+    expect(store.cursorLine).toBe(9);
+    h.keyboard.stepSearch(1);
+    expect(store.cursorLine).toBe(3);
+    h.keyboard.stepSearch(-1);
+    expect(store.cursorLine).toBe(9);
+  });
+
+  test("each landing hands its exact match to followMatch", () => {
+    store.searchQuery = "x";
+    const h = build(store, { text: PLAN, reading: 8, matchesFor: () => crafted });
+    h.keyboard.commitSearch();
+    h.keyboard.stepSearch(1);
+    h.keyboard.stepSearch(1);
+    expect(h.landed).toEqual([crafted[2], crafted[0], crafted[1]] as SearchMatch[]);
+    expect(h.landed[0]).toBe(crafted[2] as SearchMatch);
   });
 });
 
