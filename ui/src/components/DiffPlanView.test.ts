@@ -8,7 +8,11 @@ import { logCapture } from "@ui/support/helpers.ts";
 import { capture, render } from "@ui/support/mount.ts";
 import { reactiveProps } from "@ui/support/props.svelte.ts";
 import DiffPlanView from "@/components/DiffPlanView.svelte";
-import { createSourceCommenting, scratchKey } from "$lib/diffview/commenting.ts";
+import {
+  type ComposerScratch,
+  createSourceCommenting,
+  scratchKey,
+} from "$lib/diffview/commenting.ts";
 import { shortcuts } from "$lib/shortcuts/index.ts";
 
 // Default props: no-op handlers and an empty annotation set, so the rendering
@@ -883,5 +887,110 @@ describe("DiffPlanView plan view toggle", () => {
     const { target, commenting } = await openComposer("half a thought");
     toggle(target)!.click();
     expect(commenting.scratches().map((s) => s.text)).toEqual(["half a thought"]);
+  });
+});
+
+describe("DiffPlanView preview comment slots", () => {
+  // Blocks: heading [1,1], paragraph [3,4], paragraph [6,6]; line 5 is a gap.
+  const plan = "# Title\n\nalpha one\nalpha two\n\nbeta\n";
+  const ann = (id: string, line: number, comment = id) => ({
+    id,
+    startLine: line,
+    endLine: line,
+    comment,
+  });
+  const slot = (target: HTMLElement, block: number) =>
+    target.querySelector(`[data-preview-slot="${block}"]`);
+
+  /** Mount on the preview with App's mirror of the controller wired as props, so a
+   * resume re-renders the composer as it does in the app. */
+  async function renderSlots(over: Record<string, unknown> = {}) {
+    localStorage.setItem("caret.planView", "preview");
+    const p = reactiveProps({
+      ...props({ review: reviewFixture({ currentPlan: plan }), ...over }),
+      pending: undefined as { startLine: number; endLine: number } | undefined,
+      pendingText: "",
+      scratches: [] as ComposerScratch[],
+    });
+    const commenting = createSourceCommenting({
+      onCreate: () => {},
+      onChange: () => {
+        p.pending = commenting.pending();
+        p.pendingText = commenting.pendingText();
+        p.scratches = commenting.scratches();
+      },
+    });
+    p.commenting = commenting;
+    const mounted = render(DiffPlanView, p);
+    await until(() => mounted.target.querySelector(".plan-preview") != null);
+    return { ...mounted, p, commenting };
+  }
+
+  test("a thread renders in the slot of the block holding its end line", async () => {
+    const { target } = await renderSlots({ annotations: [ann("a", 4, "on alpha")] });
+    const found = await until(() => slot(target, 1)?.textContent?.includes("on alpha") ?? false);
+    expect(found).toBe(true);
+  });
+
+  test("a thread ending on a gap line renders in the previous block's slot", async () => {
+    const { target } = await renderSlots({ annotations: [ann("a", 5, "in the gap")] });
+    const found = await until(() => slot(target, 1)?.textContent?.includes("in the gap") ?? false);
+    expect(found).toBe(true);
+  });
+
+  test("two comments in one block share its slot, in line order", async () => {
+    const { target } = await renderSlots({ annotations: [ann("b", 4), ann("a", 3)] });
+    await until(() => slot(target, 1)?.querySelectorAll("[data-slot-line]").length === 2);
+    const lines = [...slot(target, 1)!.querySelectorAll("[data-slot-line]")].map((el) =>
+      el.getAttribute("data-slot-line"),
+    );
+    expect(lines).toEqual(["3", "4"]);
+    expect(target.querySelectorAll("[data-preview-slot]").length).toBe(1);
+  });
+
+  test("resuming a draft's marker opens the composer in the preview with its text", async () => {
+    const { target } = await renderSlots({
+      review: reviewFixture({
+        currentPlan: plan,
+        composerScratches: [{ startLine: 6, endLine: 6, text: "kept draft" }],
+      }),
+    });
+    const resume = () =>
+      [...(slot(target, 2)?.querySelectorAll("button") ?? [])].find((b) =>
+        b.textContent?.includes("Resume"),
+      );
+    expect(await until(() => resume() !== undefined)).toBe(true);
+    resume()!.click();
+    const opened = await until(
+      () => slot(target, 2)?.querySelector(".cm-content")?.textContent === "kept draft",
+    );
+    expect(opened).toBe(true);
+  });
+
+  test("a block followed by a slot is padded open, and closes when the comment goes", async () => {
+    const { target, p } = await renderSlots({ annotations: [ann("a", 3)] });
+    const wrapper = () =>
+      target.querySelector<HTMLElement>(".plan-preview")!.children[1] as HTMLElement;
+    const padded = await until(() => wrapper().style.paddingBlockEnd !== "");
+    expect(padded).toBe(true);
+    p.annotations = [];
+    const released = await until(() => wrapper().style.paddingBlockEnd === "");
+    expect(released).toBe(true);
+  });
+
+  test("flipping to source with the preview's composer open keeps it as a draft", async () => {
+    const { target, commenting } = await renderSlots({
+      review: reviewFixture({
+        currentPlan: plan,
+        composerScratches: [{ startLine: 3, endLine: 4, text: "mid flip" }],
+      }),
+    });
+    await until(() => commenting.scratches().length > 0);
+    commenting.resume(scratchKey(3, 4));
+    await until(() => slot(target, 1)?.querySelector(".cm-content") != null);
+    toggle(target)!.click();
+    expect(commenting.scratches()).toEqual([
+      { key: scratchKey(3, 4), startLine: 3, endLine: 4, text: "mid flip" },
+    ]);
   });
 });
