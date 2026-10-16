@@ -315,6 +315,15 @@ highlight run only where the `commentThreads` row runs.
   can report a block whose text has scrolled past the reading zone while its slot is still
   in view, and a flip to source lands on that block's start.
 
+`keyboardCursor` is the second ported behavior. The preview cursor is `cursorLine` plus
+`cursorPoint`, a column into the text that line renders, so a resize, theme switch or
+inserted card reflows the text without moving the cursor off it; a `cursorPoint` on any
+other line than `cursorLine` reads as that line's start. `ui/src/lib/previewLines.ts`
+measures visual lines per block from text-node rects, reading only the blocks a step
+crosses, never the whole document. The band (`data-caret-preview-cursor`) is an overlay
+sibling of `.plan-preview`, so the source map's text order is untouched. `c`, `V` and Esc
+sit on their own `keyboardComments` row, still source-only.
+
 The preview renders a version once. `memoLast` returns the last result for the same text,
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same
 version every tick; without the memo each tick would re-lex and re-sanitize the whole
@@ -347,6 +356,8 @@ parks is the block the next flip reads back. `ui/src/lib/planPlace.ts` holds the
 - **A carried place beats the URL.** A resolved `?heading=` lands on the first mount of
   either surface. After that the URL holds the live mirror, so a place carried by a flip
   wins over it.
+- **The keyboard cursor rides along** through `cursorLine`, with no flip code of its own;
+  the next motion scrolls to it. Place-keeping does not follow the cursor.
 
 Place-keeping is not a `SURFACE_BEHAVIORS` row. It runs at the flip itself, not on a
 surface.
