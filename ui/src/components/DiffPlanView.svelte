@@ -86,7 +86,12 @@
     SourceViewOptions,
   } from "$lib/diffview/types.ts";
   import type { ThemeId } from "$lib/theme.ts";
-  import { bind, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
+  import {
+    ariaKeyshortcutsFor,
+    bind,
+    defaultIsEditingContext,
+    shortcuts,
+  } from "$lib/shortcuts/index.ts";
   import { sound } from "$lib/sound.ts";
   import { type CursorMotion, lineCountOf } from "$lib/diffview/lineCursor.ts";
   import { findMatches } from "$lib/diffview/planSearch.ts";
@@ -1817,10 +1822,11 @@
     setHeadingSlug(runs("headingTracking") ? slug : null);
   });
 
-  // The compare-toggle + plan-search shortcuts, live entries over EXC-786's
+  // The compare-toggle, preview-toggle + plan-search shortcuts, live entries over EXC-786's
   // reservations. Registered while the single-version view is mounted (i.e. an active
   // review), so they no-op with no review; the enabled guards mirror each control's
   // own availability — `d` toggles compare only when there are versions to compare,
+  // `p` flips the view only off compare, where its button shows,
   // `/` opens search only on the search surfaces, and n/N cycle only while a
   // search is committed. Mount-once: the closures read compareStore/surface/search*
   // live at dispatch, so a version or view change never churns the registry.
@@ -1832,6 +1838,11 @@
           run: () => compare.setComparing(!compareStore.comparing),
           enabled: () => canCompare,
         }),
+      ),
+    );
+    offs.push(
+      shortcuts.register(
+        bind("actions.togglePreview", { run: togglePlanView, enabled: () => !showDiff }),
       ),
     );
     // `/` opens the plan search (EXC-832). Plan-content only; not gated on the plan
@@ -1924,6 +1935,9 @@
     }
     planView = next;
     writePlanView(next);
+  }
+  function togglePlanView(): void {
+    setPlanView(planView === "preview" ? "source" : "preview");
   }
   function resumeScratch(key: string): void {
     commenting.cancel(liveText); // retain the open composer's text before switching
@@ -2085,9 +2099,13 @@
       size="sm"
       class="preview-toggle float-chip"
       aria-pressed={planView === "preview"}
-      onclick={() => setPlanView(planView === "preview" ? "source" : "preview")}
+      aria-keyshortcuts={ariaKeyshortcutsFor("actions.togglePreview")}
+      onclick={togglePlanView}
     >
       Preview
+      {#if showShortcutHints}
+        <Kbd class="kbd-sm" aria-hidden="true">p</Kbd>
+      {/if}
     </Button>
   {/if}
   <!-- Heading breadcrumbs (EXC-946): where in the plan the reviewer is, and the

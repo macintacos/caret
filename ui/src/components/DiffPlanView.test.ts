@@ -859,6 +859,37 @@ describe("DiffPlanView plan view toggle", () => {
       .list()
       .find((e) => e.id === id)
       ?.enabled?.();
+  const togglePreview = () =>
+    shortcuts
+      .list()
+      .find((e) => e.id === "actions.togglePreview")
+      ?.run?.();
+
+  test("p flips to the preview and back", async () => {
+    const { target } = render(DiffPlanView, props());
+    await until(() => toggle(target) != null);
+    togglePreview();
+    await until(() => target.querySelector(".plan-preview") != null);
+    expect(toggle(target)?.getAttribute("aria-pressed")).toBe("true");
+    togglePreview();
+    await until(() => target.querySelector(".plan-preview") == null);
+    expect(toggle(target)?.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  test("the toggle advertises p with a cap", async () => {
+    const { target } = render(DiffPlanView, props());
+    await until(() => toggle(target) != null);
+    expect(toggle(target)?.getAttribute("aria-keyshortcuts")).toBe("p");
+    expect(toggle(target)?.querySelector("[data-slot='kbd']")?.textContent).toBe("p");
+  });
+
+  test("p is off while comparing", async () => {
+    const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
+    await until(() => toggle(target) != null);
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    await until(() => toggle(target) == null);
+    expect(enabled("actions.togglePreview")).toBe(false);
+  });
 
   test("the preview keeps the search dock and its shortcut", async () => {
     const { target } = render(DiffPlanView, props());

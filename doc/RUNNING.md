@@ -157,13 +157,13 @@ Caret shows a plan version in one of two views:
   covers. `/` search works in the preview too, over the text as rendered: a phrase wrapped
   across source lines matches, while link addresses and markdown markers do not.
 
-The **Preview** button beside **Versions** switches between them. It is pressed while the
-preview shows. Your browser remembers the choice, so it holds across reviews and restarts.
-Switching views with a comment open keeps its text as a draft, which you resume in either
-view. In the preview, comments and drafts show after the block where they end, and
-hovering or focusing one highlights the text it covers. Select or click text in the
-preview to comment on the source lines it came from; hold Shift to select text without
-opening a comment.
+The **Preview** button beside **Versions** switches between them, as does `p`. It is
+pressed while the preview shows. Your browser remembers the choice, so it holds across
+reviews and restarts. Switching views with a comment open keeps its text as a draft, which
+you resume in either view. In the preview, comments and drafts show after the block where
+they end, and hovering or focusing one highlights the text it covers. Select or click text
+in the preview to comment on the source lines it came from; hold Shift to select text
+without opening a comment.
 
 Switching keeps your place: the other view opens at the part of the plan you were reading.
 A heading link opens at its heading in either view, and the address bar follows the
