@@ -23,6 +23,24 @@ export interface PlanSourceMap {
   /** Where `line`'s text starts, in characters into the root's text — the origin a
    * TextPoint column counts from; null wherever `rangeOf(line)` is null. */
   offsetOfLine(line: number): number | null;
+  /** `p` as a DOM point. The column may run past the line's own text, as a search match's
+   * does across a soft break. At a boundary between text nodes "after" resolves into the
+   * later one, "before" the earlier. Null where `offsetOfLine(p.line)` is null, and where
+   * `p` is at or past the end of the preview's text for "after", or past it for "before". */
+  domPoint(p: TextPoint, side: "before" | "after"): [Text, number] | null;
+  /** `domPoint(p, "after")` with the column clamped to the line's text, so it names one of
+   * the characters `rangeOf(p.line)` covers. Null where `rangeOf` is. */
+  clampedPoint(p: TextPoint): [Text, number] | null;
+  /** `clampedPoint`'s inverse: `lineAt`'s line, and the characters from that line's start
+   * to the point (never negative). Null where `lineAt` is. */
+  textPoint(node: Node, offset: number): TextPoint | null;
+}
+
+/** A cursor position on the preview: a source line, and a character offset into the
+ * text that line renders (`PlanSourceMap.rangeOf(line)`). */
+export interface TextPoint {
+  line: number;
+  column: number;
 }
 
 /** A source line's text starts at `offset` and runs to the next run's. Offsets ascend. */
@@ -76,24 +94,6 @@ function collectRuns(root: Node): { runs: Run[]; length: number } {
   };
   walk(root);
   return { runs, length: offset };
-}
-
-/** Resolves ascending offsets into `root`'s text in one forward walk. At a boundary
- * between two text nodes "after" resolves into the later one, "before" the earlier. */
-export function createTextCursor(
-  root: Element,
-): (offset: number, side: "before" | "after") => [Text, number] | null {
-  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let node = walker.nextNode() as Text | null;
-  let seen = 0;
-  return (offset, side) => {
-    for (; node !== null; node = walker.nextNode() as Text | null) {
-      const end = seen + node.data.length;
-      if (side === "after" ? offset < end : offset <= end) return [node, offset - seen];
-      seen = end;
-    }
-    return null;
-  };
 }
 
 /** The root's text nodes in document order: where each one's text ends, and each one's place. */
@@ -199,10 +199,33 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
     return (runs[next - 1] ?? runs[0])?.line ?? null;
   };
 
+  const offsetOfLine = (line: number): number | null => {
+    const at = firstRun.get(line);
+    return at === undefined ? null : (runs[at]?.offset ?? null);
+  };
+
   return {
     lineAt(node, offset) {
       const at = offsetAt(node, offset);
       return at === null ? null : lineAtOffset(at);
+    },
+    domPoint(p, side) {
+      const origin = offsetOfLine(p.line);
+      return origin === null ? null : resolve(origin + p.column, side);
+    },
+    clampedPoint(p) {
+      const at = firstRun.get(p.line);
+      const run = at === undefined ? undefined : runs[at];
+      if (at === undefined || run === undefined) return null;
+      const lineLength = (runs[at + 1]?.offset ?? length) - run.offset;
+      return resolve(run.offset + Math.min(p.column, Math.max(lineLength - 1, 0)), "after");
+    },
+    textPoint(node, offset) {
+      const at = offsetAt(node, offset);
+      const line = at === null ? null : lineAtOffset(at);
+      if (at === null || line === null) return null;
+      const origin = offsetOfLine(line);
+      return { line, column: origin === null ? 0 : Math.max(at - origin, 0) };
     },
     linesOf(range) {
       const rangeStart = offsetAt(range.startContainer, range.startOffset);
@@ -229,9 +252,6 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
       return range;
     },
     lineAtOffset,
-    offsetOfLine(line) {
-      const at = firstRun.get(line);
-      return at === undefined ? null : (runs[at]?.offset ?? null);
-    },
+    offsetOfLine,
   };
 }

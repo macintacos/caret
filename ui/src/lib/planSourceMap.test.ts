@@ -390,6 +390,68 @@ describe("highlighted code", () => {
       expect(range.toString()).toBe(before[i] ?? "");
     });
   });
+
+  test("at a text-node boundary domPoint resolves before into the earlier node, after into the later", () => {
+    const { root, map } = mount(CODE);
+    highlight(root);
+    const [x] = find(root, "let x");
+    const [y] = find(root, "let y");
+    const before = map.domPoint({ line: 5, column: 0 }, "before");
+    const after = map.domPoint({ line: 5, column: 0 }, "after");
+    expect(before !== null && before[0] === x && before[1] === x.data.length).toBe(true);
+    expect(after !== null && after[0] === y && after[1] === 0).toBe(true);
+  });
+});
+
+describe("text points", () => {
+  test("textPoint inverts clampedPoint at every column of every rendered line", () => {
+    const { map } = mount(LOOKUP_PLAN);
+    let checked = 0;
+    for (let line = 1; line <= 14; line++) {
+      const length = map.rangeOf(line)?.toString().length ?? 0;
+      for (let column = 0; column < length; column++, checked++) {
+        const point = map.clampedPoint({ line, column });
+        if (point === null) throw new Error(`line ${line} column ${column} has no point`);
+        expect(map.textPoint(...point)).toEqual({ line, column });
+      }
+    }
+    expect(checked > 0).toBe(true);
+  });
+
+  test("clampedPoint clamps a column past the line to its last character", () => {
+    const { map } = mount(LOOKUP_PLAN);
+    const length = map.rangeOf(1)?.toString().length ?? 0;
+    expect(map.clampedPoint({ line: 1, column: 999 })).toEqual(
+      map.clampedPoint({ line: 1, column: length - 1 }),
+    );
+  });
+
+  test("domPoint with a column past a soft-broken line's text lands in the next line", () => {
+    const { map } = mount("one\ntwo\n");
+    const point = map.domPoint({ line: 1, column: 5 }, "after");
+    if (point === null) throw new Error("no point");
+    expect(map.lineAt(...point)).toBe(2);
+  });
+
+  test("at the end of the preview's text only before resolves, to the last text node's end", () => {
+    const { root, map } = mount(LOOKUP_PLAN);
+    const column = map.rangeOf(13)?.toString().length ?? 0;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const texts: Text[] = [];
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode())
+      texts.push(node as Text);
+    const last = texts.at(-1);
+    if (last === undefined) throw new Error("no text node");
+    const point = map.domPoint({ line: 13, column }, "before");
+    expect(point !== null && point[0] === last && point[1] === last.data.length).toBe(true);
+    expect(map.domPoint({ line: 13, column }, "after") === null).toBe(true);
+  });
+
+  test("a line with no text has no DOM point", () => {
+    const { map } = mount(LOOKUP_PLAN);
+    expect(map.clampedPoint({ line: 3, column: 0 }) === null).toBe(true);
+    expect(map.domPoint({ line: 3, column: 0 }, "after") === null).toBe(true);
+  });
 });
 
 const LOOKUP_PLAN = [
@@ -443,6 +505,9 @@ describe("lookups", () => {
         map.rangeOf(line);
         map.offsetOfLine(line);
         map.lineAtOffset(line * 5);
+        map.domPoint({ line, column: 2 }, "before");
+        const point = map.clampedPoint({ line, column: 2 });
+        if (point !== null) map.textPoint(...point);
       }
     } finally {
       delete (document as { createTreeWalker?: unknown }).createTreeWalker;
