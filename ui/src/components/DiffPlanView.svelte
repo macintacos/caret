@@ -347,11 +347,11 @@
     end: r.endLine,
   });
   const pendingSpan = $derived(pending ? spanOf(pending) : null);
-  const focusedSpan = $derived.by(() => {
+  const focusedAnnotationSpan = $derived.by(() => {
     const a = lineAnnotations.find((x) => x.id === focusedAnnotation);
     return a ? spanOf(a) : null;
   });
-  const activeSpan = $derived(pointerSpan ?? focusSpan ?? pendingSpan ?? focusedSpan);
+  const activeSpan = $derived(pointerSpan ?? focusSpan ?? pendingSpan ?? focusedAnnotationSpan);
 
   // A version switch or a flip leaves the boxes on the previous document's coordinates,
   // and removes slots without the pointerleave/focusout that would clear their spans.
