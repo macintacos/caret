@@ -353,6 +353,9 @@
         ])
       : [],
   );
+  // One string per set of slotted blocks: previewSlots re-derives on every annotation
+  // poll, and re-observing on each would bump the layout signal with nothing moved.
+  const previewSlotKey = $derived(previewSlots.map((s) => s.block).join());
   let slotBoxes = $state(new Map<number, SlotBox>());
   // Created per root rather than per sync run, so a re-run keeps the padding it holds
   // instead of dropping it for a frame.
@@ -426,36 +429,81 @@
     void planPreview?.html;
     previewSourceMap = previewEl ? createPlanSourceMap(previewEl) : null;
   });
+  // Bumped, rAF-throttled, whenever the preview's layout or text may have moved: everything
+  // placed or painted over the preview re-runs from it. The slot sync, the one reader that
+  // moves blocks, is declared first; a reader declared before it measures a frame late.
+  let previewLayoutRev = $state(0);
+  $effect(() => {
+    const root = previewEl;
+    if (root == null) return;
+    let raf = 0;
+    const schedule = () => {
+      if (raf === 0)
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          previewLayoutRev++;
+        });
+    };
+    const resize = new ResizeObserver(schedule);
+    resize.observe(root);
+    // Slots sit outside the root: one growing moves nothing the root shows until the slot
+    // sync pads its block.
+    void previewSlotKey;
+    for (const el of scrollEl?.querySelectorAll<HTMLElement>("[data-preview-slot]") ?? [])
+      resize.observe(el);
+    // Text rewraps without resizing the root: reference tagging and code swaps rewrite
+    // nodes, and a theme paint (inline properties on <html>) restyles the markdown.
+    // The root's attributes stay unobserved: the slot reserve writes block styles there.
+    const text = new MutationObserver(schedule);
+    text.observe(root, { childList: true, subtree: true, characterData: true });
+    const paint = new MutationObserver(schedule);
+    paint.observe(document.documentElement, { attributeFilter: ["style"] });
+    return () => {
+      cancelAnimationFrame(raf);
+      resize.disconnect();
+      text.disconnect();
+      paint.disconnect();
+    };
+  });
   const previewSearch = $derived(
     previewEl && previewSourceMap ? createPreviewSearch(previewEl, previewSourceMap) : null,
   );
   // The code highlight pass replaces a block's text nodes after mount and on a theme
-  // switch, collapsing any range painted inside them, so the paint follows text changes.
-  // Attributes stay unobserved: the slot reserve writes block styles, which would loop.
+  // switch, collapsing any range painted inside them, so the paint re-runs on each
+  // previewLayoutRev bump.
   $effect(() => {
+    void previewLayoutRev;
     const map = previewSourceMap;
     const span = activeSpan;
-    const root = previewEl;
-    if (!runs("commentThreads") || !map || !span || !root) {
+    if (!runs("commentThreads") || !map || !span) {
       clearCommentHighlight();
       return;
     }
-    const paint = () => paintCommentHighlight(spanRanges(map, span));
-    paint();
-    let raf = 0;
-    const observer = new MutationObserver(() => {
-      if (raf === 0)
-        raf = requestAnimationFrame(() => {
-          raf = 0;
-          paint();
-        });
-    });
-    observer.observe(root, { childList: true, subtree: true, characterData: true });
-    return () => {
-      cancelAnimationFrame(raf);
-      observer.disconnect();
-      clearCommentHighlight();
-    };
+    paintCommentHighlight(spanRanges(map, span));
+    return clearCommentHighlight;
+  });
+  // Hold each preview slot's room open under its block and place the slot there, on each
+  // previewLayoutRev bump. The slot set, the document and a review switch trigger it
+  // directly too, so a new or reset slot is measured in the same flush rather than held
+  // unmeasured for a frame. The reserve is written before the boxes are measured: padding
+  // a block for the first time shifts its bottom, so measuring first would land a new slot
+  // one margin off.
+  $effect(() => {
+    const scroller = scrollEl;
+    const root = previewEl;
+    const reserve = slotReserve;
+    void previewLayoutRev;
+    void previewSlotKey;
+    void planPreview?.html;
+    void contentKey;
+    if (scroller == null || root == null || reserve === undefined) return;
+    const slotEls = [...scroller.querySelectorAll<HTMLElement>("[data-preview-slot]")];
+    const heights = new Map(
+      slotEls.map((el) => [Number(el.dataset.previewSlot), el.offsetHeight]),
+    );
+    reserve.set(heights);
+    const next = previewSlotBoxes(root, scroller, heights);
+    if (!sameSlotBoxes(untrack(() => slotBoxes), next)) slotBoxes = next;
   });
 
   // Report the compared versions to the host, so App can point the docked comment
@@ -935,8 +983,9 @@
   let chromeBoxes = $state<ChromeBox[]>([]);
 
   // A version switch, a fresh SourceView, or a flip between source and preview leaves the
-  // boxes holding the previous document's coordinates and code, and the first re-sync is a
-  // frame away — long enough to paint them over rows they were never measured on.
+  // boxes holding the previous document's coordinates and code, and on the source the first
+  // re-sync is a frame away — long enough to paint them over rows they were never measured
+  // on.
   $effect(() => {
     void contentKey;
     void host;
@@ -944,10 +993,10 @@
     chromeBoxes = [];
   });
 
-  // The chrome's geometry on the surface on screen: what to observe for resizes, the
-  // hit-test, and the anchors. Undefined where no chrome renders — off the codeChrome
-  // row, before the surface mounts, or with no fenced block. A preview block joins a
-  // source block by `start`, so one the source view does not see gets no chrome.
+  // The chrome's geometry on the surface on screen: on the source, what to observe for
+  // resizes; the hit-test, and the anchors. Undefined where no chrome renders — off the
+  // codeChrome row, before the surface mounts, or with no fenced block. A preview block
+  // joins a source block by `start`, so one the source view does not see gets no chrome.
   const chromeGeometry = $derived.by(
     (): ChromeGeometry | undefined => {
       const blocks = codeBlocks;
@@ -957,7 +1006,7 @@
         const root = previewEl;
         if (root == null) return undefined;
         return {
-          observed: root,
+          observed: undefined,
           blockAt: (x, y) => previewCodeBlockAtPoint(root, x, y),
           boxes: (scroller) =>
             previewCodeChromeAnchors(root, scroller, reflowedBlocks).filter((b) =>
@@ -1017,13 +1066,12 @@
     };
   });
 
-  // Keep every block's chrome anchored, the same shape as the reference-hint sync below:
-  // rAF-throttled, re-run from a ResizeObserver over the surface's content
-  // (`geometry.observed`). Content coordinates survive scrolling by construction, so what
-  // has to be caught is anything that changes a block's box — a library repaint, a block
-  // moving into or out of its scroll card, a viewport resize — and all of them change the
-  // rendered height the observer watches. The chrome is a light-DOM child of .diff-plan,
-  // so it scrolls with the rows for free.
+  // Keep every block's chrome anchored. The preview re-anchors on previewLayoutRev; the
+  // source re-syncs, rAF-throttled, from a ResizeObserver over its content
+  // (`geometry.observed`). Content coordinates survive scrolling, so only a block's box
+  // changing matters — a library repaint, a block entering or leaving its scroll card, a
+  // viewport resize — and each changes the rendered height the observer watches. The
+  // chrome is a light-DOM child of .diff-plan, so it scrolls with the rows for free.
   $effect(() => {
     const scroller = scrollEl;
     const geometry = chromeGeometry;
@@ -1032,6 +1080,11 @@
     void reflowedBlocks;
     if (scroller == null || geometry === undefined) {
       chromeBoxes = [];
+      return;
+    }
+    if (geometry.observed === undefined) {
+      void previewLayoutRev;
+      chromeBoxes = geometry.boxes(scroller);
       return;
     }
     let raf = 0;
@@ -1043,8 +1096,7 @@
       if (raf === 0) raf = requestAnimationFrame(sync);
     };
     // The source rows are tagged and carded on a frame off SourceView's MutationObserver,
-    // so there is nothing to measure for the first few frames after a document arrives;
-    // on the preview the first sync measures.
+    // so there is nothing to measure for the first few frames after a document arrives.
     const cancelFrames = retryFrames(() => {
       sync();
       return chromeBoxes.length > 0;
@@ -1053,39 +1105,6 @@
     observer.observe(geometry.observed);
     return () => {
       cancelFrames();
-      cancelAnimationFrame(raf);
-      observer.disconnect();
-    };
-  });
-
-  // Hold each preview slot's room open under its block and place the slot there, the
-  // chrome sync's shape. The reserve is written before the boxes are measured: padding a
-  // block for the first time shifts its bottom, so measuring first would land a new slot
-  // one margin off.
-  $effect(() => {
-    const scroller = scrollEl;
-    const root = previewEl;
-    const reserve = slotReserve;
-    void previewSlots;
-    void planPreview?.html;
-    if (scroller == null || root == null || reserve === undefined) return;
-    const slotEls = [...scroller.querySelectorAll<HTMLElement>("[data-preview-slot]")];
-    let raf = 0;
-    const sync = () => {
-      raf = 0;
-      const heights = new Map(slotEls.map((el) => [Number(el.dataset.previewSlot), el.offsetHeight]));
-      reserve.set(heights);
-      const next = previewSlotBoxes(root, scroller, heights);
-      if (!sameSlotBoxes(slotBoxes, next)) slotBoxes = next;
-    };
-    const schedule = () => {
-      if (raf === 0) raf = requestAnimationFrame(sync);
-    };
-    const observer = new ResizeObserver(schedule);
-    observer.observe(root);
-    for (const el of slotEls) observer.observe(el);
-    schedule();
-    return () => {
       cancelAnimationFrame(raf);
       observer.disconnect();
     };
@@ -1523,36 +1542,6 @@
 
   // The band on screen and the source line it marks.
   let previewCursorBox = $state<({ line: number } & BandBox) | null>(null);
-  // Bumped, rAF-throttled, whenever the preview's layout may have moved the band or
-  // collapsed a painted highlight's ranges (search, the visual selection).
-  let previewLayoutRev = $state(0);
-  $effect(() => {
-    const root = previewEl;
-    if (root == null) return;
-    let raf = 0;
-    const schedule = () => {
-      if (raf === 0)
-        raf = requestAnimationFrame(() => {
-          raf = 0;
-          previewLayoutRev++;
-        });
-    };
-    // Text rewraps without resizing the root: reference tagging and code swaps rewrite
-    // nodes, and a theme paint (inline properties on <html>) restyles the markdown.
-    // The root's attributes stay unobserved: the slot reserve writes block styles there.
-    const resize = new ResizeObserver(schedule);
-    resize.observe(root);
-    const text = new MutationObserver(schedule);
-    text.observe(root, { childList: true, subtree: true, characterData: true });
-    const paint = new MutationObserver(schedule);
-    paint.observe(document.documentElement, { attributeFilter: ["style"] });
-    return () => {
-      cancelAnimationFrame(raf);
-      resize.disconnect();
-      text.disconnect();
-      paint.disconnect();
-    };
-  });
   $effect(() => {
     void previewLayoutRev;
     const p = runs("keyboardCursor") && surface === "preview" ? previewCursor.point() : null;
