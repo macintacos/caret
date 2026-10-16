@@ -90,6 +90,12 @@
   import { sound } from "$lib/sound.ts";
   import { type CursorMotion, lineCountOf } from "$lib/diffview/lineCursor.ts";
   import { findMatches } from "$lib/diffview/planSearch.ts";
+  import {
+    clearPreviewSearch,
+    findPreviewMatches,
+    paintPreviewSearch,
+    previewMatchRanges,
+  } from "$lib/previewSearch.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, slugForLine } from "$lib/toc.ts";
   import { NARROW_WIDTH_PX } from "$lib/layout.ts";
   import {
@@ -1440,8 +1446,16 @@
     readingLine: () => topVisibleLine(),
     halfPage: cursorHalfPage,
     follow: (line) => api?.followCursorLine(line),
-    matchesFor: (query) => findMatches(linkLayer.text.split("\n"), query),
-    followMatch: (m) => api?.followCursorLine(m.line),
+    matchesFor: (query) =>
+      surface === "preview"
+        ? previewEl && previewSourceMap
+          ? findPreviewMatches(previewEl, previewSourceMap, query)
+          : []
+        : findMatches(linkLayer.text.split("\n"), query),
+    followMatch: (m) =>
+      surface === "preview"
+        ? previewCursor.placeAt({ line: m.line, column: m.startCol })
+        : api?.followCursorLine(m.line),
     jump: (line) => api?.scrollToLine(line),
     openComposer: openRange,
     focusField: focusSearchField,
@@ -1500,7 +1514,8 @@
 
   // The band on screen and the source line it marks.
   let previewCursorBox = $state<({ line: number } & BandBox) | null>(null);
-  // Bumped, rAF-throttled, whenever the preview's layout may have moved the band.
+  // Bumped, rAF-throttled, whenever the preview's layout may have moved the band or
+  // collapsed the search highlight's ranges.
   let previewLayoutRev = $state(0);
   $effect(() => {
     const root = previewEl;
@@ -1551,10 +1566,31 @@
       : undefined,
   );
 
-  // Matches for the current query over the rendered text (linkLayer.text) — the pill
-  // counter, the strong highlight, and the cursor jump all read the SAME lines the
-  // cursor uses, so a match's line maps straight onto the line cursor and its row.
+  // Matches for the current query over the text the surface shows — linkLayer.text on the
+  // source, the rendered text on the preview. Either way a match's line is a source line,
+  // so the pill counter, the highlight, and the cursor jump all share it.
   const searchMatches = $derived(keyboard.matches());
+
+  $effect(() => {
+    void previewLayoutRev;
+    const map = previewSourceMap;
+    const root = previewEl;
+    const matches = searchMatches;
+    if (!runs("search") || surface !== "preview" || !map || !root || matches.length === 0) return;
+    paintPreviewSearch(previewMatchRanges(root, map, matches), keyboardStore.searchIndex);
+    return clearPreviewSearch;
+  });
+
+  // A flip swaps the match space under the live index (the source misses a wrapped
+  // phrase, the preview a URL), so re-seat it at the cursor. The map read re-runs this
+  // once the preview root has mounted and its matches exist.
+  $effect(() => {
+    void surface;
+    void previewSourceMap;
+    untrack(() => {
+      if (keyboardStore.searchOpen) keyboard.retrackToNearest();
+    });
+  });
 
   // Re-track the current match to the nearest one at the reading position whenever the
   // QUERY changes while the field is being edited (search open, not yet committed) — so
@@ -1719,8 +1755,7 @@
     // Commenting on the focused line / a keyboard-selected range (EXC-790): live entries
     // bound over EXC-786's reservations, with the motions' editing-context guard. c
     // comments the cursor line (or, in visual mode, the whole selection); V enters visual
-    // line-select; Esc closes search / exits visual mode but never clears the line cursor
-    // (EXC-834, narrowing EXC-790's Esc reconciliation).
+    // line-select.
     offs.push(
       shortcuts.register(
         bind("commenting.comment", {
@@ -1737,20 +1772,23 @@
         }),
       ),
     );
-    // Gated on something to clear so Esc neither shadows other Esc handlers nor
-    // preventDefaults with nothing to do; a focused editor keeps Esc regardless
-    // (the dispatcher suppresses bare keys in an editing context).
-    offs.push(
-      shortcuts.register(
-        bind("commenting.clear", {
-          run: () => keyboard.clearSelectionOrCursor(),
-          enabled: () => keyboardStore.searchOpen || keyboardStore.visualAnchor != null,
-        }),
-      ),
-    );
     return () => {
       for (const off of offs) off();
     };
+  });
+
+  // Esc closes search / exits visual mode but never clears the line cursor (EXC-834,
+  // narrowing EXC-790's Esc reconciliation). Gated on something to clear so Esc neither
+  // shadows other Esc handlers nor preventDefaults with nothing to do; a focused editor
+  // keeps Esc regardless (the dispatcher suppresses bare keys in an editing context).
+  $effect(() => {
+    if (!runs("search") && !runs("keyboardComments")) return;
+    return shortcuts.register(
+      bind("commenting.clear", {
+        run: () => keyboard.clearSelectionOrCursor(),
+        enabled: () => keyboardStore.searchOpen || keyboardStore.visualAnchor != null,
+      }),
+    );
   });
 
   // Mirror the active heading's slug into `?heading=` so a copied URL reopens the

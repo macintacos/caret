@@ -841,13 +841,13 @@ describe("DiffPlanView plan view toggle", () => {
       .find((e) => e.id === id)
       ?.enabled?.();
 
-  test("the preview drops the search dock and its shortcut", async () => {
+  test("the preview keeps the search dock and its shortcut", async () => {
     const { target } = render(DiffPlanView, props());
     await until(() => target.querySelector(".search-dock") != null);
     toggle(target)!.click();
     await until(() => target.querySelector(".plan-preview") != null);
-    expect(target.querySelector(".search-dock") != null).toBe(false);
-    expect(enabled("actions.search")).toBe(false);
+    expect(target.querySelector(".search-dock") != null).toBe(true);
+    expect(enabled("actions.search")).toBe(true);
   });
 
   test("the preview keeps the contents trigger and the heading shortcuts", async () => {
@@ -1033,6 +1033,20 @@ describe("DiffPlanView preview cursor", () => {
       false,
       false,
     ]);
+  });
+
+  test("Esc closes the preview's search pill", async () => {
+    await renderOnPreview();
+    await until(() => live("actions.search"));
+    run("actions.search");
+    const enabled = () =>
+      shortcuts
+        .list()
+        .find((e) => e.id === "commenting.clear")
+        ?.enabled?.();
+    expect(await until(() => enabled() === true)).toBe(true);
+    run("commenting.clear");
+    expect(await until(() => enabled() === false)).toBe(true);
   });
 
   test("the source view runs the motions and the line comments", async () => {
