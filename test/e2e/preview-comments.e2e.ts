@@ -2,14 +2,17 @@
 // reading flow after the block holding their anchor's end line, hovering or focusing a
 // comment highlights exactly the rendered text its source lines produced, a card edits
 // and deletes as it does in the source view, a navigator pick scrolls the preview, and
-// a selection or plain click on rendered text opens a comment on its source lines.
+// a selection or plain click on rendered text opens a comment on its source lines, and
+// so do `c` and `V` on the keyboard cursor's visual lines.
 //
 // What needs a real browser here: the Custom Highlight API's ranges over live text
-// nodes, real hover, real mouse drags and clicks building native selections, the slots'
-// placement and the reveal's scroll geometry, the discard popover, the CodeMirror
-// editor, and persistence through the daemon across surface flips. The pure half stays
-// units: slot grouping, span ranges, slot boxes and the selection clamp in
-// ui/src/lib/previewComments.test.ts, the click/selection reporting in
+// nodes, real hover, real mouse drags and clicks building native selections, real
+// wrapping under keyboard visual mode and comments, the slots' placement and the
+// reveal's scroll geometry, the discard popover, the CodeMirror editor, and persistence
+// through the daemon across surface flips. The pure half stays units: visual-line text
+// ranges in ui/src/lib/previewLines.test.ts, visual mode and `c` in
+// ui/src/state/previewCursor.test.ts, slot grouping, span ranges, slot boxes and the
+// selection clamp in ui/src/lib/previewComments.test.ts, the click/selection reporting in
 // ui/src/components/PlanPreview.test.ts, the mount and its wiring in
 // ui/src/components/DiffPlanView.test.ts, and the surface table in
 // ui/src/lib/planView.test.ts.
@@ -22,6 +25,7 @@ import {
   discardConfirm,
   previewToggle,
 } from "@test/e2e/support/chrome.ts";
+import { previewCursor } from "@test/e2e/support/cursor.ts";
 import { openRequestChangesDialog } from "@test/e2e/support/decision.ts";
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { submitForRevision } from "@test/e2e/support/review-state.ts";
@@ -663,5 +667,115 @@ test.describe("commenting from the preview", () => {
     expect(entries).toHaveLength(2);
     expect(entries[0]).toContain(">");
     expect(entries[1]).toBe(entries[0]);
+  });
+
+  test.describe("from the keyboard", () => {
+    /** The visual selection highlight's text, or "" when nothing is painted. */
+    const visualSelectionText = (page: Page) =>
+      page.evaluate(() =>
+        [...(CSS.highlights.get("caret-visual-selection") ?? [])].map((r) => r.toString()).join(""),
+      );
+
+    /** `g g j`: the cursor band on NEAR's first visual line. */
+    async function cursorToNear(page: Page, s: Seeded) {
+      await page.keyboard.press("g");
+      await page.keyboard.press("g");
+      await expect(previewCursor(page)).toHaveAttribute("data-line", "1");
+      await page.keyboard.press("j");
+      await expect(previewCursor(page)).toHaveAttribute("data-line", String(s.near));
+    }
+
+    async function bandBox(page: Page) {
+      const box = await previewCursor(page).boundingBox();
+      if (!box) throw new Error("the cursor band is not rendered");
+      return box;
+    }
+
+    /** Drag from "Nearby" to 2px inside `box`'s right edge at its middle. */
+    const dragToBandEnd = (
+      page: Page,
+      s: Seeded,
+      box: { x: number; y: number; width: number; height: number },
+    ) =>
+      dragAcross(
+        page,
+        { text: "Nearby", line: s.near },
+        { x: box.x + box.width - 2, y: box.y + box.height / 2 },
+      );
+
+    const hint = (page: Page) => page.locator(".visual-hint");
+
+    test("c comments on the lines the cursor's visual line covers, as a drag across that line does", async ({
+      daemon,
+      page,
+    }) => {
+      const s = await seedPreview(daemon, page);
+      await cursorToNear(page, s);
+      await page.keyboard.press("c");
+      const label = await composerLabel(page).textContent();
+      expect(label).toMatch(/^Lines? /);
+      await closeComposer(page);
+
+      await dragToBandEnd(page, s, await bandBox(page));
+      await expect(composerLabel(page)).toHaveText(label ?? "");
+    });
+
+    test("V and j extend the selection over visual lines, and c comments on what a drag over the same text does", async ({
+      daemon,
+      page,
+    }) => {
+      const s = await seedPreview(daemon, page);
+      await cursorToNear(page, s);
+      await page.keyboard.press("V");
+      await expect.poll(() => visualSelectionText(page)).toMatch(/^Nearby/);
+      await expect(hint(page)).toBeVisible();
+      const one = await visualSelectionText(page);
+      const firstTop = (await bandBox(page)).y;
+
+      await page.keyboard.press("j");
+      await expect.poll(async () => (await bandBox(page)).y).toBeGreaterThan(firstTop);
+      await expect.poll(() => visualSelectionText(page)).not.toBe(one);
+      const two = await visualSelectionText(page);
+      expect(two.startsWith(one.trimEnd())).toBe(true);
+      expect(two.length).toBeGreaterThan(one.length);
+
+      const box = await bandBox(page);
+      await page.keyboard.press("c");
+      const label = (await composerLabel(page).textContent()) ?? "";
+      expect(label).toMatch(/^Lines? /);
+      await expect.poll(() => visualSelectionText(page)).toBe("");
+      await expect(hint(page)).toHaveCount(0);
+
+      await closeComposer(page);
+      await dragToBandEnd(page, s, box);
+      await expect(composerLabel(page)).toHaveText(label);
+
+      await sendComment(page, "from the keys");
+      const [start, end = start] = (label.match(/\d+/g) ?? []).map(Number);
+      await expect
+        .poll(async () =>
+          (await daemon.getReview(s.id)).body?.annotations
+            ?.filter((a) => a.comment === "from the keys")
+            .map((a) => ("startLine" in a ? [a.startLine, a.endLine] : [])),
+        )
+        .toEqual([[start, end]]);
+    });
+
+    test("Esc and a second V exit visual mode on the preview", async ({ daemon, page }) => {
+      const s = await seedPreview(daemon, page);
+      await cursorToNear(page, s);
+      await page.keyboard.press("V");
+      await expect.poll(() => visualSelectionText(page)).toMatch(/^Nearby/);
+
+      await page.keyboard.press("Escape");
+      await expect.poll(() => visualSelectionText(page)).toBe("");
+      await expect(hint(page)).toHaveCount(0);
+      await expect(previewCursor(page)).toHaveAttribute("data-line", String(s.near));
+
+      await page.keyboard.press("V");
+      await expect.poll(() => visualSelectionText(page)).toMatch(/^Nearby/);
+      await page.keyboard.press("V");
+      await expect.poll(() => visualSelectionText(page)).toBe("");
+    });
   });
 });
