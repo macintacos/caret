@@ -18,6 +18,7 @@ import "$lib/diffview/refHint.ts";
 import "$lib/fileDrawer.ts";
 import "$lib/planView.ts";
 import "$lib/prefs.ts";
+import "$lib/previewFontSizePref.ts";
 import "$lib/shortcutHintsPref.ts";
 import "$lib/soundPref.ts";
 import "$lib/updatesPref.ts";

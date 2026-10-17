@@ -183,13 +183,17 @@ exist today.
 - **`[/]`** renders as `data-task="slashed"`. `indeterminate` has no attribute form, so
   `PlanPreview.svelte` sets the property on each such input after every mount of new HTML.
 - **Column.** The preview's text column is a fixed width with its inline padding, both in
-  its own em, so every line wraps at the same word at any zoom, text size or window width,
-  and a window narrower than the column scrolls `.diff-plan` sideways. In a wider plan the
-  root's end padding takes up the rest, so a row runs to the plan's right edge, as a
-  source row does, for the hover, a click and a drag alike. What a click cites depends on
-  where text wraps. macOS's system font respaces its glyphs by point size, so a text-size
-  preference, which moves the root font size alone, can still move a word near a line's
-  end; page zoom does not.
+  its own em, so every line wraps at the same word at any zoom, text size, base font size
+  or window width, and a window narrower than the column scrolls `.diff-plan` sideways. In
+  a wider plan the root's end padding takes up the rest, so a row runs to the plan's right
+  edge, as a source row does, for the hover, a click and a drag alike. What a click cites
+  depends on where text wraps. macOS's system font respaces its glyphs by point size, so a
+  text-size preference, which moves the root font size alone, can still move a word near a
+  line's end; page zoom does not.
+- **Type scale.** The preview multiplies each `--text-*` step by `--preview-scale`, the
+  Appearance setting's base font size (15px by default, `previewFontSizePref.ts`) over
+  `--text-base`. `.diff-plan` declares it, so the overlays sized to the preview's rows,
+  the "+", the drag bar and the slot gap, scale with them.
 - **Styling** lives in `PlanPreview.svelte`'s scoped stylesheet: every rule is rooted at
   `.plan-preview` and painted from tokens and the theme's `--markdown-*` properties, with
   the source view's fallbacks except an unstyled heading (weight 600) and quote

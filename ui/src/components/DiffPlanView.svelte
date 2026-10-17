@@ -72,6 +72,7 @@
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { buildLinkLayer } from "$lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
+  import { readPreviewFontSize } from "$lib/previewFontSizePref.ts";
   import { readDiffIndicators, writeDiffIndicators } from "$lib/diffIndicatorsPref.ts";
   import { type CompareStore, createCompare } from "@/state/compare.svelte.ts";
   import { createPlanKeyboard, type PlanKeyboardStore } from "@/state/planKeyboard.svelte.ts";
@@ -309,16 +310,19 @@
     }
   });
 
-  // A Settings change to the diff prefs (App bumps settingsRev) re-reads them into the
-  // reactive compare store, so an open diff reflows live — the immediate-apply promise
-  // reaching the prefs that live in this view's own store rather than an App mirror.
-  // Skipped on the initial mount (settingsRev starts 0; compare.init already seeded
-  // these); the in-view picker mutates the store directly and never bumps settingsRev,
-  // so its choice is never clobbered.
+  let previewFontSize = $state(readPreviewFontSize());
+
+  // A Settings change to the diff prefs or the preview's font size (App bumps settingsRev)
+  // re-reads them into this view's state, so an open diff reflows and the preview resizes
+  // live — the immediate-apply promise reaching the prefs that live in this view rather
+  // than an App mirror. Skipped on the initial mount (settingsRev starts 0;
+  // compare.init already seeded these); the in-view picker mutates the store directly
+  // and never bumps settingsRev, so its choice is never clobbered.
   $effect(() => {
     if (settingsRev === 0) return;
     compareStore.diffStyle = readDiffStyle();
     compareStore.diffIndicators = readDiffIndicators();
+    previewFontSize = readPreviewFontSize();
   });
 
   const canCompare = $derived(compare.canCompare(review.versions));
@@ -2376,6 +2380,7 @@
     <div
       class="diff-plan"
       data-view-flip={viewFlipped ? planView : undefined}
+      style:--preview-font-size={previewFontSize}
       bind:this={scrollEl}
       onmouseenter={showDragHint}
       role="presentation"
@@ -2757,7 +2762,7 @@
      .plan-preview's block margin, is the gap before the next block. */
   .preview-slot {
     position: absolute;
-    padding-block-end: 1em;
+    padding-block-end: calc(var(--text-base) * var(--preview-scale));
     font-size: var(--text-base);
   }
   /* Not visibility: hidden — a composer mounting here focuses at once, and a hidden element
@@ -2945,6 +2950,10 @@
     min-height: 0;
     overflow: auto;
     background: var(--paper);
+    /* What the preview multiplies each --text-* step by: the base font size the settings
+       set over --text-base, 13.12px at the 16px root. Here rather than on the preview, so
+       the overlays sized to its rows scale with them. */
+    --preview-scale: calc(var(--preview-font-size) / 13.12);
   }
 
   /* A source/preview flip fades the arriving view in. The scroller outlives the flip and
@@ -3012,7 +3021,7 @@
     display: flex;
     justify-content: center;
     padding-block: 0.22lh;
-    font-size: var(--text-base);
+    font-size: calc(var(--text-base) * var(--preview-scale));
     pointer-events: none;
   }
   .preview-drag-bar::after {
@@ -3046,7 +3055,7 @@
     inline-size: 1lh;
     block-size: 1lh;
     padding: 0;
-    font-size: var(--text-base);
+    font-size: calc(var(--text-base) * var(--preview-scale));
     line-height: inherit;
     border: none;
     border-radius: var(--radius);

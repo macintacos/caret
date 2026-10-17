@@ -20,6 +20,12 @@ import { readDiffIndicators, writeDiffIndicators } from "$lib/diffIndicatorsPref
 import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
 import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
 import type { IconName } from "$lib/icons.ts";
+import {
+  PREVIEW_FONT_SIZES,
+  type PreviewFontSize,
+  readPreviewFontSize,
+  writePreviewFontSize,
+} from "$lib/previewFontSizePref.ts";
 import { readShortcutHints, writeShortcutHints } from "$lib/shortcutHintsPref.ts";
 import {
   readSoundEnabled,
@@ -322,6 +328,19 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     control: { kind: "select", options: diffIndicatorOptions },
     read: readDiffIndicators,
     write: writeDiffIndicators,
+  }),
+  stagedField<PreviewFontSize>({
+    key: "previewFontSize",
+    category: "Appearance",
+    section: "Preview",
+    label: "Base font size",
+    description: "Body text size; headings and code scale from it.",
+    control: {
+      kind: "select",
+      options: PREVIEW_FONT_SIZES.map((size) => ({ value: size, label: `${size} px` })),
+    },
+    read: readPreviewFontSize,
+    write: writePreviewFontSize,
   }),
   // The one off-switch for every sound caret makes (EXC-1100). The sound layer reads
   // the same preference on every play, so flipping this silences the app on the next

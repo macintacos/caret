@@ -20,9 +20,14 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { openSettings } from "@test/e2e/support/chrome.ts";
+import { openSettings, previewToggle } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { planSurface, rowColors, seedAndOpen } from "@test/e2e/support/source-view.ts";
+import {
+  PLAN_PREVIEW,
+  planSurface,
+  rowColors,
+  seedAndOpen,
+} from "@test/e2e/support/source-view.ts";
 import { caretThemeFile } from "@test/support/theme.ts";
 
 const CARET_DARK_ACCENT = caretThemeFile("dark").palette.accent;
@@ -526,6 +531,36 @@ test("changing the diff Layout in Settings reflows an open compare diff live", a
     .click();
   await page.getByRole("option", { name: "Unified" }).click();
   await expect(pre).toHaveAttribute("data-diff-type", "single");
+});
+
+test("the base font size sets the preview's text live, its headings scale with it, and it persists", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: "# Sizes\n\nBody text at the base size.\n" });
+  await page.goto("/");
+  await planSurface(page);
+  await previewToggle(page).click();
+  const preview = page.locator(PLAN_PREVIEW);
+  const sizes = () =>
+    preview.evaluate((root) => {
+      const px = (el: Element | null) =>
+        el ? Number.parseFloat(getComputedStyle(el).fontSize) : 0;
+      return { base: px(root), heading: px(root.querySelector("h1")) };
+    });
+  const before = await sizes();
+  expect(before.base).toBeCloseTo(15, 2);
+
+  const dialog = await openSettings(page);
+  await dialog.getByRole("button", { name: "Base font size" }).click();
+  await page.getByRole("option", { name: "18 px" }).click();
+  await expect.poll(async () => (await sizes()).base).toBeCloseTo(18, 2);
+  const after = await sizes();
+  expect(after.heading / after.base).toBeCloseTo(before.heading / before.base, 3);
+
+  await page.reload();
+  await expect(preview).toBeVisible();
+  await expect.poll(async () => (await sizes()).base).toBeCloseTo(18, 2);
 });
 
 test("Esc closes the settings modal", async ({ daemon, page }) => {

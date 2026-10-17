@@ -167,7 +167,8 @@ shows a **+** beside it. Click the line or its **+** to comment on every source 
 text on it, as `c` does, or drag across wrapped lines to comment on all of theirs. The
 lines stay shaded while you write the comment. Hold Shift to select text without opening a
 comment. The preview keeps its width, so each wrapped line holds the same words at any
-zoom, and a narrow window scrolls it sideways.
+zoom, and a narrow window scrolls it sideways. **Settings → Base font size** sets the
+preview's body text, 15px by default, and its headings and code scale with it.
 
 Switching keeps your place: the other view opens at the part of the plan you were reading.
 A heading link opens at its heading in either view, and the address bar follows the

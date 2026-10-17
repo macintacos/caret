@@ -227,17 +227,17 @@
     background-color: var(--accent-wash);
   }
 
-  /* In the preview's own em, so every line wraps at the same word at any zoom, text size or
-     window width (a narrow window scrolls sideways): what a row cites must not move. The
-     text is 13.12px at the default 16px root, so this is an 800px column with 2ch + 25px
-     and 0.75rem of padding there. The end padding takes up any wider plan, so a row
-     reaches the plan's right edge, as a source row does. */
+  /* In the preview's own em, so every line wraps at the same word at any zoom, text size,
+     base font size or window width (a narrow window scrolls sideways): what a row cites
+     must not move. The text is 15px at the default base font size, so this is an 800px
+     column with 2ch + 25px and 12px of padding there. The end padding takes up any wider
+     plan, so a row reaches the plan's right edge, as a source row does. */
   .plan-preview {
-    --column: calc(800em / 13.12);
+    --column: calc(800em / 15);
     min-width: var(--column);
     padding-block: 0.5rem;
-    padding-inline: calc(2ch + 25em / 13.12) max(0.75em / 0.82, 100% - var(--column) + 0.75em / 0.82);
-    font-size: var(--text-base);
+    padding-inline: calc(2ch + 25em / 15) max(0.8em, 100% - var(--column) + 0.8em);
+    font-size: calc(var(--text-base) * var(--preview-scale));
     overflow-wrap: break-word;
   }
   .plan-preview[data-comment-drag] :global(::selection) {
@@ -259,42 +259,42 @@
     border-block-end: 1px solid var(--rule-strong);
   }
   .plan-preview :global(h1) {
-    font-size: var(--text-xl);
+    font-size: calc(var(--text-xl) * var(--preview-scale));
     color: var(--markdown-heading1-color, var(--accent));
     font-weight: var(--markdown-heading1-font-weight, 600);
     font-style: var(--markdown-heading1-font-style);
     text-decoration: var(--markdown-heading1-text-decoration);
   }
   .plan-preview :global(h2) {
-    font-size: var(--text-lg);
+    font-size: calc(var(--text-lg) * var(--preview-scale));
     color: var(--markdown-heading2-color, var(--accent));
     font-weight: var(--markdown-heading2-font-weight, 600);
     font-style: var(--markdown-heading2-font-style);
     text-decoration: var(--markdown-heading2-text-decoration);
   }
   .plan-preview :global(h3) {
-    font-size: var(--text-md);
+    font-size: calc(var(--text-md) * var(--preview-scale));
     color: var(--markdown-heading3-color, var(--accent));
     font-weight: var(--markdown-heading3-font-weight, 600);
     font-style: var(--markdown-heading3-font-style);
     text-decoration: var(--markdown-heading3-text-decoration);
   }
   .plan-preview :global(h4) {
-    font-size: var(--text-base);
+    font-size: calc(var(--text-base) * var(--preview-scale));
     color: var(--markdown-heading4-color, var(--accent));
     font-weight: var(--markdown-heading4-font-weight, 600);
     font-style: var(--markdown-heading4-font-style);
     text-decoration: var(--markdown-heading4-text-decoration);
   }
   .plan-preview :global(h5) {
-    font-size: var(--text-sm);
+    font-size: calc(var(--text-sm) * var(--preview-scale));
     color: var(--markdown-heading5-color, var(--accent));
     font-weight: var(--markdown-heading5-font-weight, 600);
     font-style: var(--markdown-heading5-font-style);
     text-decoration: var(--markdown-heading5-text-decoration);
   }
   .plan-preview :global(h6) {
-    font-size: var(--text-xs);
+    font-size: calc(var(--text-xs) * var(--preview-scale));
     color: var(--markdown-heading6-color, var(--accent));
     font-weight: var(--markdown-heading6-font-weight, 600);
     font-style: var(--markdown-heading6-font-style);
@@ -458,7 +458,7 @@
     border-radius: var(--radius);
     background-color: var(--code-panel);
     font-family: var(--font-mono);
-    font-size: var(--text-sm);
+    font-size: calc(var(--text-sm) * var(--preview-scale));
     line-height: var(--leading-relaxed);
   }
   .plan-preview :global([data-source-code] + pre > code) {
