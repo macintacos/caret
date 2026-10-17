@@ -6,11 +6,12 @@
 // What needs a real browser here: focus staying on the toggle across a flip,
 // persistence across a real page.reload(), a long paragraph's layout wrap
 // (scrollWidth against clientWidth), the `indeterminate` property a live DOM sets,
-// the `?heading=` deep link held across a preview mount and honored on the first
-// source mount, scroll position across a live daemon.addVersion, and a flip keeping
-// the reader's place — the reading zone's live geometry, wheel scrolling, and an
-// image's late load above the parked block. The pure half stays units: the preference
-// and surface table in ui/src/lib/planView.test.ts, the mount in
+// a `?heading=` deep link landing under the preview, the preview mirroring the
+// heading it reads and the picker jumping it, scroll position across a live
+// daemon.addVersion, and a flip keeping the reader's place — the reading zone's live
+// geometry, wheel scrolling, and an image's late load above the parked block. The
+// pure half stays units: the preference and surface table in
+// ui/src/lib/planView.test.ts, the mount in
 // ui/src/components/PlanPreview.test.ts, the toggle's wiring in
 // ui/src/components/DiffPlanView.test.ts, and the place lookups and hold in
 // ui/src/lib/planPlace.test.ts and ui/src/lib/diffview/scroll.test.ts.
@@ -20,6 +21,7 @@ import type { Locator, Page } from "@playwright/test";
 import { currentCrumb, previewToggle as toggle } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
 import {
+  jumpToHeading,
   lineCenterY,
   lineOf,
   PLAN_SURFACE,
@@ -103,21 +105,91 @@ test("compare hides the toggle, then hands back the preview and re-arms heading 
   await expect(currentCrumb(page)).toHaveText("Echo");
 });
 
-test("a ?heading= deep link waits under the preview for the first source mount", async ({
-  daemon,
-  page,
-}) => {
+const lineOfHeading = (heading: string) => SECTIONED.split("\n").indexOf(heading) + 1;
+const BRAVO_LINE = lineOfHeading("## Bravo");
+const ECHO_LINE = lineOfHeading("## Echo");
+const headingParam = (page: Page) => new URL(page.url()).searchParams.get("heading");
+
+async function seedOnPreview(daemon: Daemon, page: Page): Promise<string> {
   const id = await daemon.seed({ plan: SECTIONED });
   await page.goto("/");
   await planSurface(page);
   await turnPreviewOn(page);
+  return id;
+}
+
+test("a ?heading= deep link lands under the preview", async ({ daemon, page }) => {
+  const id = await seedOnPreview(daemon, page);
 
   await page.goto(`/?review=${id}&heading=echo`);
-  await expect(page.locator(PREVIEW)).toBeVisible();
-  expect(new URL(page.url()).searchParams.get("heading")).toBe("echo");
+
+  await expect.poll(() => parkedAt(page, ECHO_LINE)).toBe(true);
+  await expect(currentCrumb(page)).toHaveText("Echo");
+  await expect.poll(() => headingParam(page)).toBe("echo");
+});
+
+test("the preview mirrors the heading it reads, and that URL opens there in either view", async ({
+  daemon,
+  page,
+}) => {
+  await seedOnPreview(daemon, page);
+  await expect(currentCrumb(page)).toHaveText("Alpha");
+  await expect
+    .poll(async () => {
+      await wheelPlan(page, 300, PREVIEW);
+      return currentCrumb(page).textContent();
+    })
+    .toBe("Bravo");
+  await expect.poll(() => headingParam(page)).toBe("bravo");
+  const url = page.url();
+
+  await page.goto(url);
+  await expect.poll(() => parkedAt(page, BRAVO_LINE)).toBe(true);
+
+  await page.evaluate(() => localStorage.setItem("caret.planView", "source"));
+  await page.goto(url);
+  await expect.poll(() => sourceTopLine(page)).toBe(BRAVO_LINE);
+  await expect(currentCrumb(page)).toHaveText("Bravo");
+});
+
+test("the contents popup jumps the preview", async ({ daemon, page }) => {
+  await seedOnPreview(daemon, page);
+
+  await page.keyboard.press("\\");
+  await page.getByRole("option").filter({ hasText: "Echo" }).click();
+
+  await expect.poll(() => parkedAt(page, ECHO_LINE)).toBe(true);
+  await expect(currentCrumb(page)).toHaveText("Echo");
+  await expect.poll(() => headingParam(page)).toBe("echo");
+});
+
+test("the breadcrumbs jump the preview", async ({ daemon, page }) => {
+  await seedOnPreview(daemon, page);
+
+  await jumpToHeading(page, "Bravo");
+
+  await expect.poll(() => parkedAt(page, BRAVO_LINE)).toBe(true);
+  await expect(currentCrumb(page)).toHaveText("Bravo");
+});
+
+test("a flip back to source keeps the place over the mirrored heading", async ({
+  daemon,
+  page,
+}) => {
+  await seedOnPreview(daemon, page);
+  await jumpToHeading(page, "Echo");
+  await expect.poll(() => parkedAt(page, ECHO_LINE)).toBe(true);
+  await wheelPlan(page, 600, PREVIEW);
+  const start = await present(
+    async () => (await previewTopBlock(page))?.start,
+    "no preview block at the reading zone",
+  );
+  expect(start).toBeGreaterThan(ECHO_LINE + 2);
+  await expect.poll(() => headingParam(page)).toBe("echo");
 
   await toggle(page).click();
-  await expect(currentCrumb(page)).toHaveText("Echo");
+
+  await expect.poll(() => sourceTopLine(page)).toBe(start);
 });
 
 test("a new version re-renders the preview without losing scroll", async ({ daemon, page }) => {

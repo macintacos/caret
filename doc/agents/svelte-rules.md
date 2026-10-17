@@ -215,8 +215,8 @@ imports it — stays green under any invocation.
   anchors, vim motions and the drag gestures are character-indexed, and the search marks
   paint over DOM ranges — so what the shift costs is that a chip's glyphs no longer sit on
   the same pixel column as the same glyphs one row up. Spend `--chip-pad-inline` /
-  `--chip-pad-block` (`diffview/coreStyles.ts`), never a fresh number, and hang the inline
-  half on `data-md-start` / `data-md-end` rather than on every run: a pill fragmented into
+  `--chip-pad-block` (`styles/tokens.css`), never a fresh number, and hang the inline half
+  on `data-md-start` / `data-md-end` rather than on every run: a pill fragmented into
   several elements would otherwise open a gap around each interior fragment. A pill broken
   across rows pads its break edge the same way, on `data-md-wrap-start` /
   `data-md-wrap-end`, but takes no radius there.

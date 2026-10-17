@@ -105,17 +105,6 @@
      selection-drag band, brand-tied yet quieter; the accent token's light/dark
      variants carry it correctly in both schemes. */
   --diffs-decoration-bar-color: color-mix(in lab, var(--accent) 75%, transparent);
-
-  /* The link-hover tooltip surface (lib/diffview/linkInteractions.ts): a bubble
-     carrying a hovered link's full href, mounted INSIDE the diff shadow root so the
-     native title bubble is gone. Custom properties inherit through the shadow
-     boundary, so it reads these three directly and borrows the rest (radius, shadow,
-     font) the same way. A floating panel reads on raised paper, not the sunk diff
-     surface. amber is deliberately absent — the tooltip is neutral chrome, not a
-     brand surface. */
-  --diffs-link-tooltip-bg: var(--paper-raised);
-  --diffs-link-tooltip-fg: var(--ink);
-  --diffs-link-tooltip-border: color-mix(in lab, var(--paper-raised), var(--ink) 14%);
 }
 
 /* The comment-span bracket overlay: a host-side layer of rounded rails marking each
