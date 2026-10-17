@@ -210,7 +210,12 @@ exist today.
   `coreStyles.ts` rule it mirrors. A table wears the source view's table card: the code
   panel's fill, no frame, `--table-rule` between columns and rows (pinned the same way),
   an uppercase `--ink-soft` header that never wraps, and cells aligned on their first
-  line.
+  line. The header row stays at the top of the plan's view while its rows pass under it:
+  `position: sticky` would pin it inside the table, which scrolls sideways, so a
+  scroll-driven animation on the table's view timeline slides it down instead, as far as
+  the view scrolls, and stops it on the last row at the `--pin-travel` `PlanPreview`
+  measures. Pinned, it takes the card's fill and a rule beneath; at rest it stays clear,
+  so a band over its own row shows through.
 - **Code blocks.** A code block renders `<pre><code>` with its escaped text and no class.
   A fence's info string resolves through `fenceGrammar` to a bundled grammar, carried as
   `RenderedPlan.codeLanguages` keyed by the code marker's line, and never as markup; an
@@ -444,7 +449,10 @@ selection anchored outside the root, so the native drag starts at the press rath
 extending a closed composer's caret. `visualLineRange` gives the rows' text, in either
 order, `linesOf` its lines, and `openRange`, the source view's opener, opens the composer
 there, so the feedback matches a source-view comment's; the open composer's highlight
-marks those lines' text, which can run past the rows.
+marks those lines' text, which can run past the rows. A pinned table header is chrome, as
+the source view's pinned file header is: `rowAt` reads no row on it, and the visual lines
+read its text where the row sits in its table, so they keep their order and place however
+far the view scrolls.
 
 The pointer draws the source view's hover language over the preview, rAF-throttled,
 re-read under a still pointer on a scroll and on each `previewLayoutRev` bump, and cleared

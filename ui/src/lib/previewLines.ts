@@ -12,7 +12,28 @@ export type { TextPoint };
 /** The client rects of a range's text, one per line fragment. */
 export type RangeRects = (range: Range) => readonly Box[];
 
-const clientRects: RangeRects = (range) => Array.from(range.getClientRects());
+/** How far `el`'s table header row has slid down its table to stay in view (PlanPreview.svelte
+ * pins it); 0 outside one, or at rest. */
+function pinShift(el: Element | null): number {
+  const row = el?.closest("thead > tr");
+  const table = row?.closest("table");
+  return row && table ? row.getBoundingClientRect().top - table.getBoundingClientRect().top : 0;
+}
+
+/** A pinned header row's text is read where the row sits in its table, so lines keep their
+ * place and order however far the view scrolls. */
+const clientRects: RangeRects = (range) => {
+  const shift = pinShift(range.startContainer.parentElement);
+  const rects = Array.from(range.getClientRects());
+  return shift === 0
+    ? rects
+    : rects.map((r) => ({
+        top: r.top - shift,
+        bottom: r.bottom - shift,
+        left: r.left,
+        right: r.right,
+      }));
+};
 
 interface VisualLine extends Box {
   /** The earliest text node, in text order, with a rect on the line. */
@@ -540,10 +561,19 @@ export function lineAfter(
 const padTo = (lineHeight: number, line: Box): number =>
   lineHeight > 0 ? Math.max(0, lineHeight - (line.bottom - line.top)) / 2 : 0;
 
+/** Whether `y` falls on a table header row in `block` while it is pinned over its rows:
+ * chrome then, as the source view's pinned file header is, not a row. */
+const onPinnedHeader = (block: Element, y: number, rect: RectReader): boolean =>
+  Array.from(block.querySelectorAll("thead > tr")).some((row) => {
+    const { top, bottom } = rect(row);
+    return top <= y && y < bottom && pinShift(row) > 0;
+  });
+
 /** The start of the visual line at viewport height `y`, in the first block whose bottom
  * passes `y`, else the last: the line holding `y`, else the nearest. A block with no text
- * gives way to the next block with text, else the previous. Null when nothing renders text.
- * Reads the rects of O(log n) blocks, so a pointer move never measures the whole plan. */
+ * gives way to the next block with text, else the previous. Null when nothing renders text,
+ * or `y` is on a pinned table header. Reads the rects of O(log n) blocks, so a pointer move
+ * never measures the whole plan. */
 export function rowAt(
   root: Element,
   map: PlanSourceMap,
@@ -560,7 +590,7 @@ export function rowAt(
     else lo = mid + 1;
   }
   const block = blocks[Math.min(lo, blocks.length - 1)];
-  if (block === undefined) return null;
+  if (block === undefined || onPinnedHeader(block, y, rect)) return null;
   const own = visualLines(block, read);
   const lines =
     own.length > 0 ? own : (textBlockFrom(block, 1, read) ?? textBlockFrom(block, -1, read))?.lines;

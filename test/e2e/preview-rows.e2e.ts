@@ -41,8 +41,12 @@ const PLAN = [
 
 /** Seeds the plan, opens it on the preview, and returns the stored lines PROSE and the
  * list start on. */
-async function openRows(daemon: Daemon, page: Page): Promise<{ prose: number; list: number }> {
-  const id = await daemon.seed({ plan: PLAN });
+async function openRows(
+  daemon: Daemon,
+  page: Page,
+  plan = PLAN,
+): Promise<{ prose: number; list: number }> {
+  const id = await daemon.seed({ plan });
   // The daemon reflows the plan on ingest, so lines come from the stored text.
   const lines = ((await daemon.getReview(id)).body?.currentPlan ?? "").split("\n");
   await page.goto("/");
@@ -441,6 +445,70 @@ test("a click on a list item opens the composer between it and the next", async 
     return box.y >= first.y + first.height - 1 && second.y > box.y + box.height - 1;
   };
   await expect.poll(between).toBe(true);
+});
+
+const LONG_TABLE = [
+  "Before the table.",
+  [
+    "| Name | Value |",
+    "| --- | --- |",
+    ...Array.from({ length: 60 }, (_, i) => `| row ${i + 1} | value ${i + 1} |`),
+  ].join("\n"),
+  filler,
+].join("\n\n");
+
+/** The long table's header row's viewport box, and the middle of each body row's text. */
+function tableRows(
+  page: Page,
+): Promise<{ header: { top: number; bottom: number }; mids: number[] }> {
+  return page.evaluate((preview) => {
+    const table = document.querySelector(`${preview} table`) as HTMLElement;
+    const { top, bottom } = (
+      table.querySelector("thead > tr") as HTMLElement
+    ).getBoundingClientRect();
+    const mids = [...table.querySelectorAll("tbody > tr")].map((row) => {
+      const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node && !node.textContent?.trim()) node = walker.nextNode();
+      const range = document.createRange();
+      range.selectNodeContents(node as Node);
+      const r = range.getBoundingClientRect();
+      return (r.top + r.bottom) / 2;
+    });
+    return { header: { top, bottom }, mids };
+  }, PLAN_PREVIEW);
+}
+
+test("a table's pinned header picks no row, and a row half under it is its own where it shows", async ({
+  daemon,
+  page,
+}) => {
+  await openRows(daemon, page, LONG_TABLE);
+  const viewTop = await page.locator(PLAN_SURFACE).evaluate((el) => el.getBoundingClientRect().top);
+  const x = await textX(page);
+  await page.mouse.move(x, 300);
+  await page.mouse.wheel(0, (await tableRows(page)).header.top - viewTop + 400);
+  await expect
+    .poll(async () => Math.abs((await tableRows(page)).header.top - viewTop) < 1)
+    .toBe(true);
+  await expect(page.locator(PREVIEW_HOVER)).toHaveCount(1);
+
+  const { header, mids } = await tableRows(page);
+  await page.mouse.click(x, (header.top + header.bottom) / 2);
+  await expect(page.locator(PREVIEW_HOVER)).toHaveCount(0);
+
+  const index = mids.findIndex((mid) => mid > header.bottom + 20);
+  const mid = mids[index];
+  if (mid === undefined) throw new Error("no row clears the pinned header");
+  const [line] = await linesOnRow(page, mid);
+  // Its text's top half under the header, its bottom half showing.
+  await page.mouse.wheel(0, mid - header.bottom + 3);
+  await expect
+    .poll(async () => Math.abs(((await tableRows(page)).mids[index] ?? 0) - (header.bottom - 3)))
+    .toBeLessThan(1);
+  await page.mouse.move(x, header.bottom + 3);
+  await expect(page.locator(PREVIEW_HOVER)).toHaveAttribute("data-line", String(line));
+  await expect(composerLabel(page)).toHaveCount(0);
 });
 
 test("beside a comment, either side, is the comment's rather than a row's", async ({

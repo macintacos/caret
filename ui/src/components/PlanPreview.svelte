@@ -94,6 +94,22 @@
     if (root) applyPreviewReflow(root, reflowedBlocks);
   });
 
+  // How far a table's pinned header row may slide before it sits on the last row.
+  $effect(() => {
+    void html;
+    const el = root;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const { target } of entries) {
+        const row = target.querySelector(":scope > thead > tr");
+        if (target instanceof HTMLElement && row instanceof HTMLElement)
+          target.style.setProperty("--pin-travel", `${target.clientHeight - row.offsetHeight}px`);
+      }
+    });
+    for (const table of el.querySelectorAll("table")) observer.observe(table);
+    return () => observer.disconnect();
+  });
+
   let tagged = new Map<HTMLElement, FileRefSpan>();
   $effect(() => {
     void html;
@@ -453,17 +469,57 @@
   }
   /* display: block lets a wide table scroll without a wrapper element. The source view's
      table card: the code panel's fill, no frame, and one faint rule between columns and
-     between rows, the header's included. */
+     between rows, the header's included. Separate borders, since a collapsed one stays
+     behind a pinned header row as a see-through slit; no block-axis scroll, since that row
+     can overhang the bottom by a rounding pixel. */
   .plan-preview :global(table) {
     --table-rule: color-mix(in lab, var(--paper-sunk), var(--ink) 12%);
     display: block;
     width: max-content;
     max-width: 100%;
-    overflow: auto;
-    border-collapse: collapse;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-collapse: separate;
+    border-spacing: 0;
     border-radius: var(--radius);
     background-color: var(--code-panel);
     font-variant-numeric: tabular-nums;
+    view-timeline: --table block;
+  }
+  /* The header row stays at the top of the plan's view while its table's rows pass under
+     it, above their bands. Not position: sticky, which would pin it inside the table, its
+     nearest scroll container: the table crossing the view's top edge slides it down as far
+     as the view scrolls, until --pin-travel (the script's measure) sets it on the last row. */
+  .plan-preview :global(thead > tr) {
+    position: relative;
+    z-index: 1;
+    animation-name: pin-header;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: --table;
+    animation-range: exit-crossing 0px exit-crossing var(--pin-travel, 0px);
+  }
+  /* Filled and ruled from its first pixel pinned; clear at rest, so a band over the
+     header's own row shows through. The fill reaches a pixel above the row, over the sliver
+     a fractional view top leaves when the row's layer snaps to the pixel grid. */
+  .plan-preview :global(th) {
+    animation-name: pin-fill;
+    animation-fill-mode: both;
+    animation-timeline: --table;
+    animation-range: exit-crossing 0px exit-crossing 1px;
+  }
+  @keyframes pin-header {
+    to {
+      translate: 0 var(--pin-travel, 0px);
+    }
+  }
+  @keyframes pin-fill {
+    to {
+      background-color: var(--code-panel);
+      box-shadow:
+        inset 0 -1px var(--table-rule),
+        0 -1px var(--code-panel);
+    }
   }
   /* A row reads along its cells' first lines, as a source row does. */
   .plan-preview :global(:is(th, td)) {
