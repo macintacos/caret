@@ -1,8 +1,8 @@
 // The preview's comments: where each comment renders, the room a slot holds open under its
-// block, the slot's box, the highlight over a comment's rendered text, and the click or
-// drag selection a new comment starts from, kept inside the root. Slots live outside the
-// preview root, so the root stays exactly the rendered HTML the source map and `planPlace`
-// index.
+// block, the slot's box, the highlight over a comment's rendered text, the keyboard's
+// visual selection, and the click or drag selection a new comment starts from, kept
+// inside the root. Slots live outside the preview root, so the root stays exactly the
+// rendered HTML the source map and `planPlace` index.
 
 import { shouldCommentOnLineClick } from "$lib/diffview/annotationSlot.ts";
 import { defaultReader, type RectReader } from "$lib/diffview/codeChrome.ts";
@@ -59,6 +59,21 @@ export function spanRanges(map: PlanSourceMap, span: SourceSpan): Range[] {
 export function paintCommentHighlight(ranges: readonly Range[]): void {
   if (!highlightsSupported()) return;
   CSS.highlights.set(HIGHLIGHT, new Highlight(...ranges));
+}
+
+const VISUAL_HIGHLIGHT = "caret-visual-selection";
+
+/** Paints `range` as the keyboard's visual selection (`caret-visual-selection`),
+ * replacing the last; a no-op without the Custom Highlight API. */
+export function paintVisualSelection(range: Range): void {
+  if (!highlightsSupported()) return;
+  CSS.highlights.set(VISUAL_HIGHLIGHT, new Highlight(range));
+}
+
+/** Clears the visual selection; a no-op without the Custom Highlight API. */
+export function clearVisualSelection(): void {
+  if (!highlightsSupported()) return;
+  CSS.highlights.delete(VISUAL_HIGHLIGHT);
 }
 
 /** `range` with any end outside `root` pulled back inside it. `range` must start or end

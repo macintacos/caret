@@ -181,7 +181,8 @@
 
 <style>
   /* Light-DOM: the source view's shadow-adopted highlight rules can't reach the preview,
-     so it carries its own. --mark is caret's content-highlight wash. */
+     so it carries its own. --mark is caret's content-highlight wash; the keyboard's
+     visual selection is a selection, so it takes --accent-wash. */
   :global(::highlight(caret-comment-span)) {
     background-color: var(--mark);
   }
@@ -190,6 +191,9 @@
   }
   :global(::highlight(caret-preview-search-current)) {
     background-color: var(--mark-active);
+  }
+  :global(::highlight(caret-visual-selection)) {
+    background-color: var(--accent-wash);
   }
 
   .plan-preview {
