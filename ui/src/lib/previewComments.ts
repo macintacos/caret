@@ -1,8 +1,10 @@
-// The preview's comment slots: where each comment renders, the room a slot holds open
-// under its block, the slot's box, and the highlight over a comment's rendered text.
-// Slots live outside the preview root, so the root stays exactly the rendered HTML the
-// source map and `planPlace` index.
+// The preview's comments: where each comment renders, the room a slot holds open under its
+// block, the slot's box, the highlight over a comment's rendered text, and the click or
+// drag selection a new comment starts from, kept inside the root. Slots live outside the
+// preview root, so the root stays exactly the rendered HTML the source map and `planPlace`
+// index.
 
+import { shouldCommentOnLineClick } from "$lib/diffview/annotationSlot.ts";
 import { defaultReader, type RectReader } from "$lib/diffview/codeChrome.ts";
 import { highlightsSupported } from "$lib/diffview/searchHighlight.ts";
 import type { SourceSpan } from "$lib/planMarkdown.ts";
@@ -57,6 +59,76 @@ export function spanRanges(map: PlanSourceMap, span: SourceSpan): Range[] {
 export function paintCommentHighlight(ranges: readonly Range[]): void {
   if (!highlightsSupported()) return;
   CSS.highlights.set(HIGHLIGHT, new Highlight(...ranges));
+}
+
+/** `range` with any end outside `root` pulled back inside it. `range` must start or end
+ * inside `root`, and `releaseBlock` must be a direct child of `root`: the block under the
+ * release point, which a slot or the code chrome draws over. A start outside moves to the
+ * root's start. An end outside moves to the end of `releaseBlock`, or of `root` when there
+ * is none — unless that falls before the start (a drag up onto a block above the anchor),
+ * when the range runs from there to the original start instead. */
+export function clampToRoot(range: Range, root: Element, releaseBlock: Element | null): Range {
+  const clamped = range.cloneRange();
+  if (!root.contains(clamped.startContainer)) clamped.setStart(root, 0);
+  if (!root.contains(clamped.endContainer)) {
+    const end = releaseBlock ?? root;
+    const start = [clamped.startContainer, clamped.startOffset] as const;
+    clamped.setEnd(end, end.childNodes.length);
+    if (clamped.collapsed && clamped.comparePoint(...start) > 0) clamped.setEnd(...start);
+  }
+  return clamped;
+}
+
+const INTERACTIVE = "a, button, input, label, select, summary, textarea";
+
+/** The collapsed range a plain click on `target` in `root` leaves, copied; null when the
+ * click hit a control or left a selection, or the selection lies outside `root`. */
+export function clickedRange(
+  root: Element,
+  target: EventTarget | null,
+  selection: Selection | null,
+): Range | null {
+  const interactive = target instanceof Element && target.closest(INTERACTIVE) !== null;
+  if (!selection?.rangeCount || !root.contains(selection.anchorNode)) return null;
+  return shouldCommentOnLineClick({
+    numberColumn: false,
+    linkConsumed: interactive,
+    selectionCollapsed: selection.isCollapsed,
+  })
+    ? selection.getRangeAt(0).cloneRange()
+    : null;
+}
+
+/** Every element under a viewport point, topmost first. */
+export type PointReader = (x: number, y: number) => readonly Element[];
+const elementsAt: PointReader = (x, y) => document.elementsFromPoint(x, y);
+
+/** The selection a drag released at `point` leaves, copied and clamped to `root`; null when
+ * it is collapsed, anchored outside `root`, or still `before` (the press landed inside a
+ * standing selection). `read` runs only when an end lies outside `root`: a slot draws over
+ * its block's reserved padding and the chrome over its `pre`, so the block is under the
+ * pointer too. */
+export function releasedRange(
+  root: Element,
+  before: Range | null,
+  selection: Selection | null,
+  point: { x: number; y: number },
+  read: PointReader = elementsAt,
+): Range | null {
+  if (!selection?.rangeCount || !root.contains(selection.anchorNode)) return null;
+  const range = selection.getRangeAt(0);
+  if (range.collapsed || (before && sameRange(range, before))) return null;
+  if (root.contains(range.startContainer) && root.contains(range.endContainer))
+    return range.cloneRange();
+  const releaseBlock = read(point.x, point.y).find((el) => el.parentElement === root) ?? null;
+  return clampToRoot(range, root, releaseBlock);
+}
+
+function sameRange(a: Range, b: Range): boolean {
+  return (
+    a.compareBoundaryPoints(Range.START_TO_START, b) === 0 &&
+    a.compareBoundaryPoints(Range.END_TO_END, b) === 0
+  );
 }
 
 /** Removes the comment highlight; a no-op without the Custom Highlight API. */

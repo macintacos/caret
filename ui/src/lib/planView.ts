@@ -36,6 +36,7 @@ export const SURFACE_BEHAVIORS = {
   keyboardComments: ["source"], // c, V, Esc
   commentThreads: ["source", "preview"], // inline threads, draft markers, the open composer, the preview's comment highlight, comment reveal
   lineComments: ["source"], // drag readout, gutter range drag, drag/visual hint chips, hover re-fire
+  textComments: ["source", "preview"], // a click or text selection on the plan opens the composer
   headingTracking: ["source", "preview"], // top-visible heading, ?heading= mirror, ToC, breadcrumbs, b and \
 } as const satisfies Record<string, readonly PlanSurface[]>;
 
