@@ -1,13 +1,14 @@
 // Deterministic feedback formatting. The result is sent verbatim as the
 // `deny.message` the model reads when changes are requested, so the shape must
 // be stable and readable: an optional general comment, then a numbered list of
-// inline comments. Both shapes cite an abbreviated quote — the selection's first
-// and last few words around an ellipsis — so the agent can locate the feedback by
-// content without the full selection's token cost. A legacy annotation cites it
-// inline; a line-anchored annotation pairs it with the annotation's 1-based line
-// reference. A feedback line reference indexes the plan version caret stored, and the
-// abbreviated quote paired with it is what the agent matches against its own text. So it
-// finds the feedback even when its own line numbering differs.
+// inline comments. A legacy annotation cites an abbreviated quote — the selection's
+// first and last few words around an ellipsis — inline, its only anchor. A
+// line-anchored annotation cites its 1-based line reference. A feedback line reference
+// indexes the plan version caret stored, and an abbreviated quote rides with it only
+// when the agent may not hold that version line for line. caret knows it does when it
+// wrote that text to the agent's plan file or the rewrap changed nothing
+// (PlanVersion.agentCopyMatches); otherwise the quote is what the agent matches against
+// its own text, so it finds the feedback even when its line numbering differs.
 // (Pinned across its three surfaces by test/structure/line-anchor-claim.test.ts.)
 
 import {
@@ -61,17 +62,26 @@ function abbreviate(text: string): string {
   return `${head} … ${tail}`;
 }
 
+/** How a line-anchored entry points the agent at its lines. `"line"` is the line
+ * reference alone, for a version the agent holds line for line; `"line-and-quote"`
+ * adds the abbreviated quote, for one whose numbering may differ from the agent's. */
+export type LineCitation = "line" | "line-and-quote";
+
 /** Renders one annotation (comment already trimmed and non-blank) as a numbered
- * entry. Legacy annotations stay on one line; line-anchored ones span a header,
- * a single abbreviated quote line, and the comment, each continuation line
- * indented under the number. The quote line is omitted when the range is a stale
- * anchor with nothing to quote. */
-function entry(a: Annotation, n: number, planLines: string[]): string {
+ * entry. Legacy annotations stay on one line, quoted whatever the citation: the
+ * quote is their only anchor. Line-anchored ones span a header, an abbreviated
+ * quote line under `"line-and-quote"`, and the comment, each continuation line
+ * indented under the number. The quote line is also omitted when the range is a
+ * stale anchor with nothing to quote. */
+function entry(a: Annotation, n: number, planLines: string[], citation: LineCitation): string {
   if (isLegacyAnnotation(a)) {
     return `${n}. On "${abbreviate(a.quote)}": ${a.comment.trim()}`;
   }
   const lines = [`${n}. ${lineHeader(a.startLine, a.endLine)}`];
-  const quote = abbreviate(quotedLines(a.startLine, a.endLine, planLines).join(" "));
+  const quote =
+    citation === "line-and-quote"
+      ? abbreviate(quotedLines(a.startLine, a.endLine, planLines).join(" "))
+      : "";
   if (quote) lines.push(`   > ${quote}`);
   lines.push(`   ${a.comment.trim()}`);
   return lines.join("\n");
@@ -328,14 +338,16 @@ export function coveredLineCount(annotations: Annotation[]): number {
 /**
  * Formats annotations + a general comment into a single feedback string.
  * `planText` is the stored plan version the annotations anchor into, used to
- * quote a line-anchored annotation's source lines. Annotations with blank
- * comments are skipped; numbering follows array order. Returns "" when there is
- * nothing to say.
+ * quote a line-anchored annotation's source lines; `citation` decides whether it
+ * does, and defaults to quoting, the safe choice when nothing says the agent's
+ * numbering matches. Annotations with blank comments are skipped; numbering follows
+ * array order. Returns "" when there is nothing to say.
  */
 export function formatFeedback(
   annotations: Annotation[],
   generalComment: string,
   planText: string,
+  citation: LineCitation = "line-and-quote",
 ): string {
   const general = generalComment.trim();
   const planLines = planText.split("\n");
@@ -346,7 +358,7 @@ export function formatFeedback(
   if (general) sections.push(general);
 
   if (inline.length > 0) {
-    const entries = inline.map((a, i) => entry(a, i + 1, planLines));
+    const entries = inline.map((a, i) => entry(a, i + 1, planLines, citation));
     sections.push(["Inline comments:", "", ...entries].join("\n"));
   }
 

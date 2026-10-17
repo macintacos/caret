@@ -11,7 +11,7 @@ import { PLAN_REJECTED_MESSAGE } from "@core/config/constants";
 import type { Annotation, ApproveVariantId } from "@core/lib/types";
 import { HttpError, resolveReview } from "$lib/api.ts";
 import { writeApproveMode } from "$lib/approveModePref.ts";
-import { formatFeedback } from "$lib/feedback.ts";
+import { formatFeedback, type LineCitation } from "$lib/feedback.ts";
 
 export { HttpError };
 
@@ -37,6 +37,8 @@ export interface ResolveDeps {
   /** The active review's current plan text, used to quote a line-anchored
    * annotation's source lines into the deny feedback. */
   planText: () => string;
+  /** How that feedback cites a line-anchored annotation on the active version. */
+  citation: () => LineCitation;
   /** Flush any pending draft before submitting (snapshot-before-await). */
   flushPending: () => Promise<void>;
   /** Drop the resolved review and auto-advance. */
@@ -138,7 +140,9 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
     },
 
     requestChanges(generalComment) {
-      return deny(() => formatFeedback(deps.annotations(), generalComment, deps.planText()));
+      return deny(() =>
+        formatFeedback(deps.annotations(), generalComment, deps.planText(), deps.citation()),
+      );
     },
 
     reject() {

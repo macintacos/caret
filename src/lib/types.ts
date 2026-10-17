@@ -126,6 +126,11 @@ export interface PlanVersion {
    * with the deny that closed this version. Optional because pre-existing
    * on-disk versions predate the field. */
   generalComment?: string;
+  /** Whether the agent holds this version's text line for line: caret wrote it to the
+   * agent's plan file, or the canonical rewrap left the incoming text unchanged. When
+   * true, a feedback line reference needs no quote to land. Optional because
+   * pre-existing on-disk versions predate the field; absent reads as false. */
+  agentCopyMatches?: boolean;
   createdAt: number;
 }
 
@@ -201,6 +206,8 @@ export interface ClientReview {
    * optional PlanVersion field in toClientReview). Served on every GET so the
    * source view rehydrates the reviewer's line-anchored drafts on load. */
   composerScratches: PersistedScratch[];
+  /** The current version's `agentCopyMatches`, coerced to false when absent. */
+  agentCopyMatches: boolean;
   createdAt: number;
   updatedAt: number;
   decision?: Decision;
@@ -610,6 +617,7 @@ export function toClientReview(review: Review): ClientReview {
     versions: review.versions,
     generalCommentDraft: review.generalCommentDraft ?? "",
     composerScratches: cur.composerScratches ?? [],
+    agentCopyMatches: cur.agentCopyMatches ?? false,
     createdAt: review.createdAt,
     updatedAt: review.updatedAt,
     decision: review.decision,

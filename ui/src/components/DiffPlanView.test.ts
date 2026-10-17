@@ -53,6 +53,7 @@ function reviewFixture(over: Partial<ClientReview> = {}): ClientReview {
     versions: [],
     generalCommentDraft: "",
     composerScratches: [],
+    agentCopyMatches: false,
     createdAt: 0,
     updatedAt: 0,
     ...over,

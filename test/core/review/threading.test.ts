@@ -324,6 +324,41 @@ test("a new thread stores prettier-formatted plan text", async () => {
   expect(stored).not.toBe(UNWRAPPED);
 });
 
+// ---- whether the agent holds the stored text line for line ------------------
+
+test("a version written back to the agent's plan file matches the agent's copy", async () => {
+  const planFilePath = join(dir, "agent-plan.md");
+  writeFileSync(planFilePath, UNWRAPPED);
+  const r = await routeIncomingPlan(input({ plan: UNWRAPPED, planFilePath }), store);
+  expect(store.get(r.id)?.versions[0]?.agentCopyMatches).toBe(true);
+});
+
+test("a rewrapped version with no plan file does not match the agent's copy", async () => {
+  const r = await routeIncomingPlan(input({ plan: UNWRAPPED }), store);
+  expect(store.get(r.id)?.versions[0]?.agentCopyMatches).toBe(false);
+});
+
+test("a rewrapped version whose plan file was refused does not match the agent's copy", async () => {
+  const planFilePath = join(dir, "missing.md");
+  const r = await routeIncomingPlan(input({ plan: UNWRAPPED, planFilePath }), store);
+  expect(store.get(r.id)?.versions[0]?.agentCopyMatches).toBe(false);
+});
+
+test("a version the rewrap leaves unchanged matches the agent's copy without a plan file", async () => {
+  const canonical = await formatPlanMarkdown(UNWRAPPED);
+  const r = await routeIncomingPlan(input({ plan: canonical }), store);
+  expect(store.get(r.id)?.versions[0]?.agentCopyMatches).toBe(true);
+});
+
+test("a revision written back to the agent's plan file matches the agent's copy", async () => {
+  const a = await routeIncomingPlan(input(), store);
+  await reject(a.id);
+  const planFilePath = join(dir, "revision.md");
+  writeFileSync(planFilePath, UNWRAPPED);
+  await routeIncomingPlan(input({ plan: UNWRAPPED, planFilePath }), store);
+  expect(store.get(a.id)?.versions[1]?.agentCopyMatches).toBe(true);
+});
+
 test("a revision stores prettier-formatted plan text", async () => {
   const a = await routeIncomingPlan(input(), store);
   await reject(a.id);

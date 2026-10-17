@@ -92,6 +92,21 @@ describe("formatFeedback", () => {
     );
   });
 
+  test("cites a line-anchored entry by reference alone when the agent's copy matches", () => {
+    const out = formatFeedback([lineAnn(4, 6, "split this up")], "", PLAN, "line");
+    expect(out).toBe(["Inline comments:", "", "1. Lines 4-6:", "   split this up"].join("\n"));
+  });
+
+  test("a legacy annotation keeps its quote even when the agent's copy matches", () => {
+    const out = formatFeedback(
+      [ann({ quote: "deploy on Friday", comment: "risky" })],
+      "",
+      PLAN,
+      "line",
+    );
+    expect(out).toBe(["Inline comments:", "", '1. On "deploy on Friday": risky'].join("\n"));
+  });
+
   test("a short multi-line range collapses onto a single quote line", () => {
     // Lines 4-5 flatten to six words (== head + tail), kept whole but on one line.
     const out = formatFeedback([lineAnn(4, 5, "merge these")], "", PLAN);

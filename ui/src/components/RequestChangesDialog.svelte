@@ -10,7 +10,13 @@
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { type ComposerScratch, rangeLabel } from "$lib/diffview/commenting.ts";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
-  import { formatFeedback, pendingInline, pendingLineCount, sourceLines } from "$lib/feedback.ts";
+  import {
+    formatFeedback,
+    type LineCitation,
+    pendingInline,
+    pendingLineCount,
+    sourceLines,
+  } from "$lib/feedback.ts";
   import { isSubmitChord } from "$lib/keys.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import ConfirmPopover from "@/components/ConfirmPopover.svelte";
@@ -31,6 +37,8 @@
     // The active review's current plan text, so the preview quotes a
     // line-anchored annotation's source lines exactly as the agent will see them.
     planText: string;
+    // How the preview cites those lines; must match what the resolve flow sends.
+    citation: LineCitation;
     // Retained, unsubmitted composer drafts ("scratches", EXC-634). They are not
     // committed comments and are not sent unless the reviewer Saves one here.
     scratches: ComposerScratch[];
@@ -57,6 +65,7 @@
     annotations,
     generalComment,
     planText,
+    citation,
     scratches,
     onGeneralCommentInput,
     onSubmit,
@@ -69,7 +78,7 @@
   }: Props = $props();
 
   // Live preview of exactly what the agent will receive.
-  let preview = $derived(formatFeedback(annotations, generalComment, planText));
+  let preview = $derived(formatFeedback(annotations, generalComment, planText, citation));
   // The committed inline comments actually reaching the agent (non-blank), each
   // listed below for a per-comment Discard or Mark-as-draft.
   let inlineComments = $derived(pendingInline(annotations));

@@ -95,3 +95,16 @@ test("toClientReview serves only the current version's scratches, not a stale pr
   // The current version (v2) carries no scratches; v1's must not leak through.
   expect(toClientReview(review).composerScratches).toEqual([]);
 });
+
+test("toClientReview serves whether the agent's copy matches the current version", () => {
+  const review = reviewWithVersions([
+    { version: 1, plan: "# a\n", annotations: [], agentCopyMatches: false, createdAt: 1 },
+    { version: 2, plan: "# b\n", annotations: [], agentCopyMatches: true, createdAt: 2 },
+  ]);
+  expect(toClientReview(review).agentCopyMatches).toBe(true);
+});
+
+test("toClientReview reads a version stored without the match flag as not matching", () => {
+  const review = reviewWithVersions([{ version: 1, plan: "# a\n", annotations: [], createdAt: 1 }]);
+  expect(toClientReview(review).agentCopyMatches).toBe(false);
+});

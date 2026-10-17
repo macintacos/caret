@@ -11,6 +11,7 @@
   import { getHealth, getThemes, getUpdate, getUpdateChanges, markSeen } from "$lib/api.ts";
   import { approveVariants, pickApproveMode } from "$lib/approve.ts";
   import { readApproveMode } from "$lib/approveModePref.ts";
+  import type { LineCitation } from "$lib/feedback.ts";
   import { uiLog } from "$lib/log.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
   import { withPlanHandoff } from "$lib/planHandoff.ts";
@@ -290,6 +291,7 @@
     activeVersion: () => active?.version,
     annotations: () => work.annotations,
     planText: () => active?.currentPlan ?? "",
+    citation: () => citation,
     flushPending: () => autosave.flushPending(),
     // A resolve that empties the queue swaps the whole window, so it crossfades; one that
     // lands on the next plan leaves the view mounted and is the curtain's route. What is
@@ -336,6 +338,9 @@
   });
   const alerts = createAlerts(alertStore, { sound: sound.play });
   let active = $derived(selection.active);
+  // Shared by the resolve flow and the Request Changes preview, so the preview shows
+  // exactly what is sent.
+  let citation = $derived<LineCitation>(active?.agentCopyMatches ? "line" : "line-and-quote");
   // What every feedback editor needs to resolve a reference: the review it belongs
   // to, the working directory a file lookup roots at, and the adapter a skill
   // lookup is scoped to. Assembled here because only App holds all three — the
@@ -900,6 +905,7 @@
       annotations={autosave.annotations}
       generalComment={autosave.generalCommentDraft}
       planText={active?.currentPlan ?? ""}
+      {citation}
       {scratches}
       {reviewContext}
       onGeneralCommentInput={autosave.editGeneralComment}
