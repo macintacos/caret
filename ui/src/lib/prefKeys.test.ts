@@ -16,6 +16,7 @@ import "$lib/diffStylePref.ts";
 import "$lib/diffview/dragHint.ts";
 import "$lib/diffview/refHint.ts";
 import "$lib/fileDrawer.ts";
+import "$lib/planView.ts";
 import "$lib/prefs.ts";
 import "$lib/shortcutHintsPref.ts";
 import "$lib/soundPref.ts";

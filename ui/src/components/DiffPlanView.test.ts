@@ -176,7 +176,7 @@ async function openComposer(text: string) {
   // overlay case the mount harness says to flush for.
   flush();
   commenting.open({ start: 2, end: 2 });
-  return { sounds, discard: () => find() as HTMLButtonElement };
+  return { target, commenting, sounds, discard: () => find() as HTMLButtonElement };
 }
 
 describe("DiffPlanView gutter composer", () => {
@@ -697,5 +697,81 @@ describe("DiffPlanView plan search (EXC-832)", () => {
     target.querySelector<HTMLButtonElement>("[aria-label='Close search']")?.click();
     const gone = await until(() => target.querySelector(".plan-search") == null);
     expect(gone).toBe(true);
+  });
+});
+
+describe("DiffPlanView plan view toggle", () => {
+  const toggle = (target: HTMLElement) =>
+    target.querySelector<HTMLButtonElement>(".control-row .preview-toggle");
+
+  test("a fresh mount reads the source view with the toggle unpressed", async () => {
+    const { target } = render(DiffPlanView, props());
+    await until(() => shadow(target)?.textContent?.includes("hello world") ?? false);
+    expect(toggle(target)?.getAttribute("aria-pressed")).toBe("false");
+    expect(target.querySelector(".plan-preview") != null).toBe(false);
+  });
+
+  async function renderOnPreview(over = {}): Promise<HTMLElement> {
+    const { target } = render(DiffPlanView, props(over));
+    await until(() => toggle(target) != null);
+    toggle(target)!.click();
+    await until(() => target.querySelector(".plan-preview") != null);
+    return target;
+  }
+
+  test("the toggle switches to the preview and remembers it", async () => {
+    const target = await renderOnPreview();
+    expect(target.querySelector(".plan-preview")?.textContent).toContain("hello world");
+    expect(toggle(target)?.getAttribute("aria-pressed")).toBe("true");
+    expect(localStorage.getItem("caret.planView")).toBe("preview");
+  });
+
+  test("the preview drops the source-only controls", async () => {
+    const controls = [".control-row [data-slot='popover-trigger']", ".search-dock"];
+    const { target } = render(DiffPlanView, props());
+    const shown = await until(() => controls.every((s) => target.querySelector(s) != null));
+    expect(shown).toBe(true);
+    toggle(target)!.click();
+    await until(() => target.querySelector(".plan-preview") != null);
+    expect(controls.filter((s) => target.querySelector(s) != null)).toEqual([]);
+    expect(
+      shortcuts
+        .list()
+        .find((e) => e.id === "actions.search")
+        ?.enabled?.(),
+    ).toBe(false);
+  });
+
+  test("hovering the preview does not arm the drag hint for the source view", async () => {
+    const target = await renderOnPreview();
+    target.querySelector(".diff-plan")!.dispatchEvent(new MouseEvent("mouseenter"));
+    toggle(target)!.click();
+    await until(() => shadow(target)?.textContent?.includes("hello world") ?? false);
+    expect(target.querySelector(".drag-hint") != null).toBe(false);
+  });
+
+  test("a remembered preview opens on the preview", async () => {
+    localStorage.setItem("caret.planView", "preview");
+    const { target } = render(DiffPlanView, props());
+    const opened = await until(() => target.querySelector(".plan-preview") != null);
+    expect(opened).toBe(true);
+  });
+
+  test("compare mode hides the toggle and leaving it restores the preview", async () => {
+    localStorage.setItem("caret.planView", "preview");
+    const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
+    await until(() => target.querySelector(".plan-preview") != null);
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    await until(() => toggle(target) == null);
+    expect(target.querySelector(".plan-preview") != null).toBe(false);
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    const restored = await until(() => target.querySelector(".plan-preview") != null);
+    expect(restored).toBe(true);
+  });
+
+  test("flipping with a typed composer open keeps the text as a scratch", async () => {
+    const { target, commenting } = await openComposer("half a thought");
+    toggle(target)!.click();
+    expect(commenting.scratches().map((s) => s.text)).toEqual(["half a thought"]);
   });
 });

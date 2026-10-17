@@ -13,10 +13,15 @@
   // the contentKey is unchanged, so scroll survives the 2s poll re-delivering the
   // same version.
   //
+  // A toggle in the control row swaps the source view for a plan preview of the same text
+  // rendered as HTML (PlanPreview), remembered per browser. The source view's own
+  // behaviors — gutter, cursor, search, heading tracking, reference and code chrome —
+  // run only on the surfaces planView.ts's SURFACE_BEHAVIORS lists for them.
+  //
   // When the review has multiple stored versions, a compare control lets the
   // reviewer diff any two of them (base vs. target) through the SourceDiffView
   // wrapper, switching the split/unified layout at runtime. The heading surfaces,
-  // gutter, and inline annotation cards belong to the single-version view only —
+  // gutter, and inline annotation cards belong to the source view only —
   // compare mode is a clean diff surface with none of them; the compared versions'
   // comments surface in the docked panel instead, revealing their line on the side
   // they belong to for the two rendered versions and listing non-interactively for
@@ -108,6 +113,18 @@
   import FileDrawer from "@/components/FileDrawer.svelte";
   import FilePreview from "@/components/FilePreview.svelte";
   import FolderTree from "@/components/FolderTree.svelte";
+  import PlanPreview from "@/components/PlanPreview.svelte";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import { memoLast } from "$lib/memoLast.ts";
+  import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
+  import {
+    type PlanSurface,
+    type PlanView,
+    readPlanView,
+    runsOn,
+    type SurfaceBehavior,
+    writePlanView,
+  } from "$lib/planView.ts";
 
   interface Props {
     /** The review whose current plan version is rendered. */
@@ -140,8 +157,9 @@
     /** Hand the host a reveal(line, side) action once the source view mounts, so a
      * sibling (the comment navigator) can scroll to a commented line. The side is
      * read only while comparing, where a line number alone names a row on either
-     * document; the single-version view ignores it. A call before the view paints
-     * is a bounded-retry no-op. */
+     * document; the source view ignores it. A call before the view paints is a
+     * bounded-retry no-op, and on the plan preview, where the lineComments row does
+     * not run, the reveal is a no-op. */
     onExposeReveal?: (reveal: (line: number, side?: DiffSide) => void) => void;
     /** Report the compared versions upward (null when not comparing), so App can
      * point the single CommentNavigator instance at the cross-version index.
@@ -249,6 +267,18 @@
 
   const canCompare = $derived(compare.canCompare(review.versions));
   const showDiff = $derived(canCompare && compareStore.comparing);
+
+  let planView = $state<PlanView>(readPlanView());
+  const surface = $derived<PlanSurface>(showDiff ? "compare" : planView);
+  const runs = (behavior: SurfaceBehavior): boolean => runsOn(behavior, surface);
+
+  // The plan preview renders the stored text, so its blocks' source spans count the
+  // same lines the source view numbers. Memoized: the 2s poll hands a fresh `review`
+  // each tick, which would otherwise re-lex and re-sanitize the whole plan.
+  const renderPreview = memoLast(renderPlanMarkdown);
+  const planPreview = $derived(
+    surface === "preview" ? renderPreview(review.currentPlan) : null,
+  );
 
   // Report the compared versions to the host, so App can point the docked comment
   // panel at the cross-version index (EXC-872). The assignment matches what the
@@ -401,7 +431,7 @@
   // The file the preview is open on, plus the token it was opened from, which the
   // reveal effect below measures so the clicked filename stays visible beside the
   // drawer. It closes on Escape (the dismissal effect below) or on the pane's own
-  // close button; compare mode hides the lane without clearing this — the dismissal
+  // close button; leaving the source view hides the lane without clearing this — the dismissal
   // effect carries the matching guard.
   //
   // `token` is optional because there are two openers. A plan reference (EXC-687)
@@ -459,7 +489,7 @@
   //
   // The RECT rather than the element: the card places itself once and never
   // tracks the token, and the plan surface it belongs to is torn out whenever
-  // compare mode opens — a detached element measures all zeros, which would park
+  // the source view gives way — a detached element measures all zeros, which would park
   // the card in the viewport's corner and keep the dead subtree alive besides.
   let folderTree = $state<{ path: string; rect: DOMRect } | undefined>();
 
@@ -528,13 +558,11 @@
   // and is swallowed so dismissing never also opens a line comment.
   const CARD_EXEMPT = "[data-folder-tree], [data-file-drawer], [data-file-ref], [data-ref-hint]";
 
-  // Gated on `showDiff` as well as the state, matching the card's own render
-  // condition below and the lane's effect further down: compare mode takes the
-  // card off screen while leaving `folderTree` set, and both handlers here
-  // swallow what they act on — so left registered they would eat one Escape and
-  // one click from the compare view the reader is actually looking at.
+  // Gated on the referenceHints surfaces, not just the state: elsewhere the card is
+  // off screen with `folderTree` still set, and these handlers would eat an Escape
+  // and a click from the visible view.
   $effect(() => {
-    if (showDiff || folderTree === undefined) return;
+    if (!runs("referenceHints") || folderTree === undefined) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       folderTree = undefined;
@@ -566,10 +594,8 @@
   // IS viewport-fixed over the plan, so the divergence tracks the two surfaces'
   // shapes rather than being drift.
   //
-  // Gated on `showDiff` to match the pane's own render condition below, not just on
-  // the state: compare mode hides the lane while leaving `filePreview` set, and an
-  // unrendered pane's handler would swallow Escape from whatever the reader is
-  // actually looking at.
+  // Gated on the referenceHints surfaces, not just the state: elsewhere the lane is
+  // hidden with `filePreview` still set, and its handler would swallow Escape.
   //
   // Gated on the card too (EXC-1129), which is what gives the two coexisting
   // surfaces an Escape ORDER. Both handlers are capture-phase listeners on the same
@@ -578,7 +604,7 @@
   // is stacked above the lane, so while one is open the lane simply does not listen.
   // Closing it re-runs this effect, and the next Escape reaches the lane.
   $effect(() => {
-    if (showDiff || filePreview === undefined || folderTree !== undefined) return;
+    if (!runs("referenceHints") || filePreview === undefined || folderTree !== undefined) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || drawerClosing) return;
       dismissFilePreview();
@@ -685,7 +711,10 @@
   });
 
   // The imperative API the SourceView hands us once mounted: scroll-to-line plus
-  // the host element whose annotation slots we project comments into.
+  // the host element whose annotation slots we project comments into. Never cleared —
+  // it outlives SourceView on the plan preview and in compare — so anything outside
+  // SourceView's branch that reads it (or `host`) gates through runs(…); that gate,
+  // not a null check, is what keeps a detached shadow root inert.
   let api = $state<SourceViewApi | undefined>();
   const host = $derived(api?.host);
   // The compare view's counterpart, captured the same way. Undefined until the
@@ -738,7 +767,7 @@
     const scroller = scrollEl;
     const el = host;
     const blocks = codeBlocks;
-    if (scroller == null || el == null || blocks.length === 0) {
+    if (!runs("codeChrome") || scroller == null || el == null || blocks.length === 0) {
       hoveredBlockStart = undefined;
       return;
     }
@@ -782,10 +811,10 @@
     // A wrap toggle changes a block's height: depending on it re-measures now rather than
     // waiting for the ResizeObserver to report the new box.
     void reflowedBlocks;
-    // Nothing to anchor on the compare surface — it renders no chrome, and its rows are a
-    // different document, so syncing there would walk the single-version view's torn-out
-    // shadow root.
-    if (showDiff || scroller == null || el == null || blocks.length === 0) {
+    // Nothing to anchor off the codeChrome surfaces — they render no chrome, and their
+    // content is a different document, so syncing there would walk the source view's
+    // torn-out shadow root.
+    if (!runs("codeChrome") || scroller == null || el == null || blocks.length === 0) {
       chromeBoxes = [];
       return;
     }
@@ -852,10 +881,10 @@
     const el = host;
     const refs = fileRefs;
     const key = contentKey;
-    // Nothing to teach on the compare surface, and its rows are a different
-    // document — syncing there would walk the single-version view's torn-out
+    // Nothing to teach off the referenceHints surfaces, and their content is a
+    // different document — syncing there would walk the source view's torn-out
     // shadow root for a badge that cannot render anyway.
-    if (showDiff || scroller == null || el == null || refs === undefined) return;
+    if (!runs("referenceHints") || scroller == null || el == null || refs === undefined) return;
     // A different document: its rows are not the ones the current hints chose, so
     // start the choice over rather than re-anchoring onto whatever now sits there.
     if (measured?.host !== el || measured.key !== key) {
@@ -909,7 +938,7 @@
   $effect(() => {
     const scroller = scrollEl;
     const el = host;
-    if (scroller == null || el == null) return;
+    if (!runs("lineComments") || scroller == null || el == null) return;
     let raf = 0;
     let lastX = 0;
     let lastY = 0;
@@ -989,8 +1018,8 @@
 
   // Reveal a commented line for the host (the comment navigator): scroll whichever
   // view is on screen to it. While comparing, the side picks which of the diff's
-  // two documents the line names; otherwise it is ignored and the single-version
-  // view scrolls. Both read their live api, so a call before the view mounts is a
+  // two documents the line names; otherwise it is ignored and the source view
+  // scrolls; off the lineComments surfaces (the plan preview) it does nothing. Both read their live api, so a call before the view mounts is a
   // no-op, and both spend the same paint budget waiting for the row.
   function revealLine(line: number, side?: DiffSide): void {
     if (showDiff) {
@@ -1002,6 +1031,7 @@
       retryFrames(() => d.scrollToLine(line, side ?? "after"));
       return;
     }
+    if (!runs("lineComments")) return;
     retryScrollTo(line);
   }
 
@@ -1045,21 +1075,21 @@
   let scrollEl = $state<HTMLElement | undefined>();
   // Opens the breadcrumbs bar's trailing crumb, handed over by the bar itself
   // (EXC-947). Undefined until the bar first mounts, and it keeps the last closure
-  // afterwards — entering compare mode unmounts the bar without clearing this. What
-  // makes `b` inert there is the binding's own !showDiff guard; the closure would
+  // afterwards — leaving source unmounts the bar without clearing this. What makes
+  // `b` inert there is the binding's own headingTracking guard; the closure would
   // no-op anyway, since it reads a `barEl` the unmount set back to null.
   let openHeadingNav: (() => void) | undefined;
   // Opens the contents popup, handed over by PlanToc the same way (EXC-1097). Its
   // closure only sets the popup's own `open` flag, so the stale-closure question the
-  // bar's comment answers does not arise here; `\` is inert in compare mode for the
-  // one reason that matters — the binding's !showDiff guard.
+  // bar's comment answers does not arise here; `\` is inert off source for the one
+  // reason that matters — the binding's headingTracking guard.
   let openToc: (() => void) | undefined;
 
   // The plan's keyboard surface (EXC-875): the vim line cursor (EXC-788), visual
   // line-select (EXC-790), and the `/` full-text search HUD (EXC-832) in one
   // unit-testable factory (state/planKeyboard). The component owns the reactive store —
-  // the runes live here — and the factory sequences the transitions over it; single-
-  // version view only (compare mode is a read-only diff with no cursor). The DOM effects
+  // the runes live here — and the factory sequences the transitions over it; source
+  // view only (compare and the plan preview have no line cursor). The DOM effects
   // are injected: the rendered lines, heading lines, the reading position, the half-page
   // size, scroll-follow, the shared jump, the composer open, and focus/blur.
   let keyboardStore = $state<PlanKeyboardStore>({
@@ -1108,7 +1138,7 @@
   // is read UNTRACKED so a same-query n/N step never re-runs this.
   $effect(() => {
     void searchMatches;
-    if (!keyboardStore.searchOpen || keyboardStore.searchCommitted) return;
+    if (!runs("search") || !keyboardStore.searchOpen || keyboardStore.searchCommitted) return;
     untrack(() => keyboard.retrackToNearest());
   });
 
@@ -1148,6 +1178,8 @@
   }
 
   $effect(() => {
+    // Reading the surface re-arms (and re-seeds) tracking on the way back to source.
+    if (!runs("headingTracking")) return;
     const el = scrollEl;
     if (!el) return;
     // depend on the heading set so tracking re-arms after a version change
@@ -1222,15 +1254,15 @@
   // timer, and cancelClose tears it down.
   $effect(() => () => keyboard.cancelClose());
 
-  // Register the live motion + commenting shortcuts while the single-version view is
-  // up; teardown unregisters them, so motion is gone in compare mode. Depends only
-  // on showDiff — the closures read cursorLine/headings/api live at dispatch, so a
+  // Register the live motion + commenting shortcuts on the keyboardCursor surfaces;
+  // teardown unregisters them, so motion is gone elsewhere. Depends only on the
+  // surface — the closures read cursorLine/headings/api live at dispatch, so a
   // cursor move never re-runs this effect (which would churn the registry).
   // Ctrl+d/Ctrl+u are non-bare, so the dispatcher does not suppress them in an
   // editing context; the enabled guard does, so half-page motions don't fire while
   // the composer is focused.
   $effect(() => {
-    if (showDiff) return;
+    if (!runs("keyboardCursor")) return;
     const offs: Array<() => void> = [];
     for (const [id, motion] of Object.entries(CURSOR_MOTIONS)) {
       offs.push(
@@ -1244,7 +1276,7 @@
     }
     // Commenting on the focused line / a keyboard-selected range (EXC-790): live entries
     // bound over EXC-786's reservations, registered in this same effect so they share its
-    // compare-mode gating (unregistered once showDiff) and editing-context guard. c
+    // surface gating and editing-context guard. c
     // comments the cursor line (or, in visual mode, the whole selection); V enters visual
     // line-select; Esc closes search / exits visual mode but never clears the line cursor
     // (EXC-834, narrowing EXC-790's Esc reconciliation).
@@ -1282,21 +1314,21 @@
 
   // Mirror the active heading's slug into `?heading=` so a copied URL reopens the
   // review at the section being read (composing with deepLink.ts's `?review=`).
-  // Compare mode tracks no heading (and drops the breadcrumbs bar), so the param
-  // clears there.
+  // A surface off the headingTracking row tracks no heading (and drops the
+  // breadcrumbs bar), so the param clears there.
   // Held until restore consumes any incoming `?heading=` (see `restored`).
   $effect(() => {
     if (!restored) return;
     const slug = activeLine != null ? slugForLine(headings, activeLine) : null;
-    setHeadingSlug(showDiff ? null : slug);
+    setHeadingSlug(runs("headingTracking") ? slug : null);
   });
 
   // The compare-toggle + plan-search shortcuts, live entries over EXC-786's
   // reservations. Registered while the single-version view is mounted (i.e. an active
   // review), so they no-op with no review; the enabled guards mirror each control's
   // own availability — `d` toggles compare only when there are versions to compare,
-  // `/` opens search only in the single-version plan view, and n/N cycle only while a
-  // search is committed. Mount-once: the closures read compareStore/showDiff/search*
+  // `/` opens search only on the search surfaces, and n/N cycle only while a
+  // search is committed. Mount-once: the closures read compareStore/surface/search*
   // live at dispatch, so a version or view change never churns the registry.
   $effect(() => {
     const offs: Array<() => void> = [];
@@ -1314,7 +1346,7 @@
       shortcuts.register(
         bind("actions.search", {
           run: () => keyboard.openSearch(),
-          enabled: () => !showDiff,
+          enabled: () => runs("search"),
         }),
       ),
     );
@@ -1327,7 +1359,7 @@
         bind("actions.searchNext", {
           run: () => keyboard.stepSearch(1),
           enabled: () =>
-            !showDiff &&
+            runs("search") &&
             !defaultIsEditingContext() &&
             (keyboardStore.searchCommitted || keyboardStore.lastQuery !== ""),
         }),
@@ -1338,7 +1370,7 @@
         bind("actions.searchPrev", {
           run: () => keyboard.stepSearch(-1),
           enabled: () =>
-            !showDiff &&
+            runs("search") &&
             !defaultIsEditingContext() &&
             (keyboardStore.searchCommitted || keyboardStore.lastQuery !== ""),
         }),
@@ -1346,18 +1378,21 @@
     );
     // The two heading surfaces, one key each: `b` opens the breadcrumbs bar's
     // trailing crumb (EXC-947), `\` the contents popup (EXC-1097). Both are gated
-    // on the same `!showDiff` those surfaces render behind, so neither fires in
-    // compare mode. The optional calls cover the first render in compare mode,
-    // where the `{#if !showDiff}` below never creates either surface, so neither
-    // has handed an open action back yet.
+    // on the same headingTracking row those surfaces render behind, so neither
+    // fires elsewhere. The optional calls cover a first render off that row, where
+    // the template below never creates either surface, so neither has handed an
+    // open action back yet.
     offs.push(
       shortcuts.register(
-        bind("actions.headingNav", { run: () => openHeadingNav?.(), enabled: () => !showDiff }),
+        bind("actions.headingNav", {
+          run: () => openHeadingNav?.(),
+          enabled: () => runs("headingTracking"),
+        }),
       ),
     );
     offs.push(
       shortcuts.register(
-        bind("actions.contents", { run: () => openToc?.(), enabled: () => !showDiff }),
+        bind("actions.contents", { run: () => openToc?.(), enabled: () => runs("headingTracking") }),
       ),
     );
     return () => {
@@ -1377,6 +1412,13 @@
     commenting.cancel(liveText); // retain any in-progress text; no-op when closed
     commenting.open({ start, end });
     keyboardStore.cursorLine = end; // a line click relocates the cursor (keyboard + mouse coherent)
+  }
+  // The composer lives in SourceView's rows, so leaving source would drop it:
+  // retain its text as a scratch first, which the approve guard still counts.
+  function setPlanView(next: PlanView): void {
+    if (planView === "source" && next !== "source") commenting.cancel(liveText);
+    planView = next;
+    writePlanView(next);
   }
   function resumeScratch(key: string): void {
     commenting.cancel(liveText); // retain the open composer's text before switching
@@ -1412,7 +1454,7 @@
   let hintVisible = $state(false);
 
   function showDragHint(): void {
-    if (!hintDismissed) hintVisible = true;
+    if (runs("lineComments") && !hintDismissed) hintVisible = true;
   }
   function retireDragHint(): void {
     hintVisible = false;
@@ -1497,15 +1539,15 @@
 
 <!-- Control row above the surface. The version-compare picker is always shown; its
      toggle disables itself when there are no other versions to compare (EXC-664).
-     The heading breadcrumbs and the working-directory path each earn their place
-     conditionally alongside it. -->
+     The Preview toggle (off compare only), the heading breadcrumbs and the
+     working-directory path each earn their place conditionally alongside it. -->
 <div class="control-row" class:comparing={compareStore.comparing}>
   <!-- The plan's table of contents (EXC-1095): every heading at once, the
        see-the-whole-shape surface the breadcrumbs bar beside it is not. It reads
        the SAME headings and activeLine that bar does, so neither tracks a scroll
-       of its own, and it is gated on the same !showDiff — compare mode tracks no
-       heading, so a contents popup there would open on a stale plan. -->
-  {#if !showDiff}
+       of its own, and it is gated on the same headingTracking row — elsewhere no
+       heading is tracked, so a contents popup there would open on a stale plan. -->
+  {#if runs("headingTracking")}
     <PlanToc
       {headings}
       {activeLine}
@@ -1530,13 +1572,26 @@
     onSetDiffStyle={compare.setDiffStyle}
     onSetDiffIndicators={compare.setDiffIndicators}
   />
+  <!-- The source / preview switch. Outside any branch on planView, so it keeps
+       focus across a flip. -->
+  {#if !showDiff}
+    <Button
+      variant="secondary"
+      size="sm"
+      class="preview-toggle float-chip"
+      aria-pressed={planView === "preview"}
+      onclick={() => setPlanView(planView === "preview" ? "source" : "preview")}
+    >
+      Preview
+    </Button>
+  {/if}
   <!-- Heading breadcrumbs (EXC-946): where in the plan the reviewer is, and the
        menus to move sideways or deeper — the drill-down surface beside the ToC's
        whole-shape one. It rides the activeLine the scroll observer below tracks
-       and jumps through scrollToLine. Compare mode tracks no heading (and clears
-       `?heading=`), so the bar is dropped there rather than left showing a stale
-       trail. -->
-  {#if !showDiff}
+       and jumps through scrollToLine. Off the headingTracking row no heading is
+       tracked (and `?heading=` clears), so the bar is dropped there rather than
+       left showing a stale trail. -->
+  {#if runs("headingTracking")}
     <PlanBreadcrumbs
       {headings}
       {activeLine}
@@ -1566,14 +1621,14 @@
   bind:clientHeight={surfaceHeight}
 >
   <div class="plan-pane">
-    <!-- The vim `/` search dock (EXC-832), top-right of the plan (single-version only).
+    <!-- The vim `/` search dock (EXC-832), top-right of the plan (search surfaces only).
          Absolutely positioned within .plan-pane so it stays put over the scrolling
          plan, and so it tracks the plan's edge rather than the drawer's when one is
          open. Holds either the "/ to search" hint chip (Show Hints on) or the open search
          pill; pressing `/` swaps the chip for the pill, which expands from this same
          top-right corner (its CSS enter animation), reading as the chip growing into the
          field. Esc/✕ swaps back to the chip. -->
-    {#if !showDiff}
+    {#if runs("search")}
       <div class="search-dock">
         {#if keyboardStore.searchOpen}
           <PlanSearch
@@ -1595,7 +1650,7 @@
         {/if}
       </div>
     {/if}
-    <!-- The gutter composer is the single-version surface only. The compare diff
+    <!-- The gutter composer is the source view only. The compare diff
          is a clean surface with no gutter and no inline annotations; the compared
          versions' comments read in the docked panel instead (EXC-872). -->
     <div class="diff-plan" bind:this={scrollEl} onmouseenter={showDragHint} role="presentation">
@@ -1624,6 +1679,8 @@
           }}
           onReady={(a) => (diffApi = a)}
         />
+      {:else if planPreview}
+        <PlanPreview html={planPreview.html} />
       {:else}
         <!-- Live range readout: a zero-height sticky rail rendered first so it pins to
              the top of the scroll viewport from scroll position 0 without reflowing
@@ -1692,9 +1749,9 @@
              on-screen file reference and one over the first directory reference,
              teaching that a path token opens a preview. Layered over the .diff-plan
              scroll content like the copy button, so they scroll with the rows.
-             Rendered in this branch only, so compare mode drops both — and since
-             nothing renders there, neither flag is spent and the hints survive to
-             teach on the next single-version render.
+             Rendered in this branch only, so off the source view both drop — and
+             since nothing renders there, neither flag is spent and the hints survive
+             to teach on the next source-view render.
              NOT gated on showShortcutHints, unlike the two hint chips further down:
              that pref governs keyboard-shortcut affordances, and this teaches a
              mouse gesture. Keyed on the kind — never on a value a poll tick changes
@@ -1788,9 +1845,9 @@
   <!-- The filename-reference preview (EXC-687, docked since EXC-937): a lane
        beside the plan holding the referenced file's excerpt. It takes layout
        space rather than covering the plan, and wipes in from whichever edge it
-       docked to. Only appears for references the daemon resolved to a real file;
-       compare mode has no preview, so it is gated on the single-version view. -->
-  {#if !showDiff && filePreview}
+       docked to. Only appears for references the daemon resolved to a real file,
+       and only on the referenceHints surfaces. -->
+  {#if runs("referenceHints") && filePreview}
     <!-- Bound here because the {#if}'s narrowing does not reach into a snippet body. -->
     {@const openRef = filePreview}
     <FileDrawer
@@ -1815,10 +1872,9 @@
 </div>
 
 <!-- The folder-reference tree (EXC-918). A viewport-fixed card rather than a lane
-     in the surface above, so it sits outside that flex row entirely; compare mode
-     has no reference affordances, so it is gated on the single-version view like
-     the preview is. -->
-{#if !showDiff && folderTree}
+     in the surface above, so it sits outside that flex row entirely; gated on the
+     referenceHints surfaces like the file lane is. -->
+{#if runs("referenceHints") && folderTree}
   {@const openDir = folderTree}
   <!-- A file row opens the SAME lane a filename reference opens (EXC-1137). The
        card converted the row's tree-relative path already. -->
@@ -1837,6 +1893,12 @@
 {/if}
 
 <style>
+  /* A view option, not a selection — neutral, like the soft-wrap toggle. */
+  .control-row :global(button.preview-toggle[aria-pressed="true"]:not(:disabled)) {
+    background: var(--chip-hover);
+    color: var(--ink);
+  }
+
   /* The control bar above the surface. Carries the bar chrome (raised paper,
      hairline rule) for the version-compare picker: the "Versions" toggle sits at
      the left, and (in compare mode) the layout / indicator toggles are pushed to
