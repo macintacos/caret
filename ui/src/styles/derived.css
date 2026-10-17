@@ -42,4 +42,9 @@
      noticed, worn through the .count-attention atom. Reach for it when a surface
      does the novelty job and needs a fill rather than just ink. */
   --attention-wash: color-mix(in lab, var(--attention) 18%, transparent);
+
+  /* The fenced-code panel: the ground the preview's code blocks sit on. The source
+     view still mixes the same 6% in coreStyles.ts and diffview.css; change them
+     together. */
+  --code-panel: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
 }

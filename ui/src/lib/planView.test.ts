@@ -46,7 +46,7 @@ describe("runsOn", () => {
     expect(BEHAVIORS.some((b) => runsOn(b, "compare"))).toBe(false);
   });
 
-  test("no behavior runs on the preview yet", () => {
-    expect(BEHAVIORS.some((b) => runsOn(b, "preview"))).toBe(false);
+  test("only codeChrome runs on the preview", () => {
+    expect(BEHAVIORS.filter((b) => runsOn(b, "preview"))).toEqual(["codeChrome"]);
   });
 });

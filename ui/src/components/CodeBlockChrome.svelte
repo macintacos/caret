@@ -3,8 +3,8 @@
   // caret-owned box at the block's top-right rather than a control per affordance, so
   // both buttons derive the corner once (positioning and the hover key live in
   // DiffPlanView / lib/diffview/codeChrome.ts). It sits in the .diff-plan light DOM, a
-  // sibling of the diff surface, so — unlike the motionless shadow render surface — it
-  // may animate; app.css's reduced-motion kill-switch collapses that.
+  // sibling of the source view or the preview, so — unlike the motionless shadow render
+  // surface — it may animate; app.css's reduced-motion kill-switch collapses that.
   //
   // The box is mounted for every block rather than only the hovered one, so the controls
   // are discoverable without a hover to find them.
