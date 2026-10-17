@@ -155,8 +155,9 @@ Caret shows a plan version in one of two views:
 
 The **Preview** button beside **Versions** switches between them. It is pressed while the
 preview shows. Your browser remembers the choice, so it holds across reviews and restarts.
-Switching away from the source view with a comment open keeps its text as a draft, which
-you resume in the source view.
+Switching views with a comment open keeps its text as a draft, which you resume in either
+view. In the preview, comments and drafts show after the block where they end, and
+hovering or focusing one highlights the text it covers.
 
 Switching keeps your place: the other view opens at the part of the plan you were reading.
 A heading link opens at its heading in either view, and the address bar follows the

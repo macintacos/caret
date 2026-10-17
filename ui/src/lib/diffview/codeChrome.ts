@@ -15,7 +15,8 @@ export type RectReader = (el: HTMLElement) => Box;
 
 type Box = { top: number; bottom: number; left: number; right: number };
 
-const defaultReader: RectReader = (el) => {
+/** The live reader: `el`'s viewport rect via getBoundingClientRect. */
+export const defaultReader: RectReader = (el) => {
   const r = el.getBoundingClientRect();
   return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
 };

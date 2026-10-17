@@ -18,7 +18,7 @@ const CURRENT = "caret-search-current";
 
 /** Whether the CSS Custom Highlight API is available (Chromium/WebKit; absent in
  * happy-dom and pre-2022 engines). */
-function highlightsSupported(): boolean {
+export function highlightsSupported(): boolean {
   return typeof Highlight === "function" && typeof CSS !== "undefined" && CSS.highlights != null;
 }
 
