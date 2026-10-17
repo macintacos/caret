@@ -2159,6 +2159,48 @@ test("lifecycle events are logged at info: listen, review created, resolved", as
   expect(info.some((r) => r.step === "resolve" && r.msg.includes("resolved: deny"))).toBe(true);
 });
 
+describe("review-text logging", () => {
+  const plan = "# Title\n\nFirst line.\n\nSecond line.";
+  const SENT = "SECRET FEEDBACK\n\nInline comments:\n\n1. Line 3:\n   > First line.\n   tighten";
+  const extra = (r: RecordedEmit) => (r.extra ?? {}) as Record<string, unknown>;
+  const commentRecord = (recs: RecordedEmit[]) =>
+    recs.find((r) => r.step === "resolve" && extra(r).comment === "tighten") as RecordedEmit;
+
+  async function denyWithComment(opts: BootOptions, feedback = SENT) {
+    const { recs, log } = recordingLog();
+    await boot({ log, ...opts });
+    const { id } = await newReview({ plan });
+    await d.draft(id, {
+      annotations: [{ id: "a1", startLine: 3, endLine: 3, comment: "tighten" }],
+    });
+    await resolve(id, { behavior: "deny", feedback });
+    return recs;
+  }
+
+  test("is off by default: a resolve never logs the text it sends the agent", async () => {
+    const recs = await denyWithComment({});
+    expectNeverLogsBody(recs, ["SECRET FEEDBACK", "First line.", "tighten"]);
+  });
+
+  test("logs the text a resolve sends the agent at info, line by line", async () => {
+    const recs = await denyWithComment({ logReviewText: true });
+    const sent = recs.find((r) => r.step === "resolve" && extra(r).text !== undefined);
+    expect(sent?.level).toBe("info");
+    expect(extra(sent as RecordedEmit).text).toEqual(SENT.split("\n"));
+  });
+
+  test("logs each inline comment's stored lines at debug", async () => {
+    const comment = commentRecord(await denyWithComment({ logReviewText: true }));
+    expect(comment.level).toBe("debug");
+    expect(extra(comment)).toMatchObject({ lines: ["First line."], cited: true, quoted: true });
+  });
+
+  test("marks a comment the sent text does not cite", async () => {
+    const recs = await denyWithComment({ logReviewText: true }, "Changes requested.");
+    expect(extra(commentRecord(recs)).cited).toBe(false);
+  });
+});
+
 /** A routePlan that always throws, for the handler-exception tests below. */
 async function throwingRoutePlan(): Promise<never> {
   throw new Error("kaboom");

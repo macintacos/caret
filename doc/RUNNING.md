@@ -157,13 +157,20 @@ Caret shows a plan version in one of two views:
   covers. `/` search works in the preview too, over the text as rendered: a phrase wrapped
   across source lines matches, while link addresses and markdown markers do not.
 
-The **Preview** button beside **Versions** switches between them. It is pressed while the
-preview shows. Your browser remembers the choice, so it holds across reviews and restarts.
-Switching views with a comment open keeps its text as a draft, which you resume in either
-view. In the preview, comments and drafts show after the block where they end, and
-hovering or focusing one highlights the text it covers. Select or click text in the
-preview to comment on the source lines it came from; hold Shift to select text without
-opening a comment.
+The **Preview** button beside **Versions** switches between them, as does `p`. It is
+pressed while the preview shows. Your browser remembers the choice, so it holds across
+reviews and restarts. Switching views with a comment open keeps its text as a draft, which
+you resume in either view. In the preview, comments and drafts show right under the last
+wrapped line they're on, and hovering or focusing one highlights the text it covers.
+Hovering the preview, anywhere out to its right edge, shades the wrapped line under the
+pointer and shows a **+** beside it. Click the line or its **+** to comment on every
+source line with text on it, as `c` does, or drag across wrapped lines to comment on all
+of theirs; `V` shades its selection the same way, with the **+** on the cursor's line. The
+lines stay shaded while you write the comment. In either view, clicking and dragging pick
+lines, not text: hold Shift to select text, which opens no comment. The preview keeps its
+width, so each wrapped line holds the same words at any zoom, and a narrow window scrolls
+it sideways. **Settings → Base font size** sets the preview's body text, 15px by default,
+and its headings and code scale with it.
 
 Switching keeps your place: the other view opens at the part of the plan you were reading.
 A heading link opens at its heading in either view, and the address bar follows the

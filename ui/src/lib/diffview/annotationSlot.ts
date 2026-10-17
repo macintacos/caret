@@ -59,15 +59,16 @@ export function groupAnnotationsByLine<A>(
 /**
  * Whether a plain click on a source line should open a comment composer.
  * Number-column clicks are already owned by the gutter `+`/selection, and link
- * clicks and active text selections belong to the reader — so commenting stands
- * down for all three.
+ * clicks, active text selections and Shift clicks, which select text, belong to the
+ * reader — so commenting stands down for all four.
  */
 export function shouldCommentOnLineClick(opts: {
   numberColumn: boolean;
   linkConsumed: boolean;
   selectionCollapsed: boolean;
+  shiftKey: boolean;
 }): boolean {
-  return !opts.numberColumn && !opts.linkConsumed && opts.selectionCollapsed;
+  return !opts.numberColumn && !opts.linkConsumed && opts.selectionCollapsed && !opts.shiftKey;
 }
 
 export interface SlotIntoParams {

@@ -8,6 +8,7 @@ import type { Annotation } from "@core/lib/types";
 import { capture, flushUntil, render } from "@ui/support/mount.ts";
 import RequestChangesDialog from "@/components/RequestChangesDialog.svelte";
 import type { ComposerScratch } from "$lib/diffview/commenting.ts";
+import type { LineCitation } from "$lib/feedback.ts";
 
 // Now composed on the shared Modal (bits-ui Dialog): its content portals to
 // document.body on a deferred tick, so structure/render is asserted against the
@@ -44,6 +45,7 @@ const baseProps = {
   annotations: [] as Annotation[],
   generalComment: "",
   planText: "",
+  citation: "line-and-quote" as LineCitation,
   scratches: [] as ComposerScratch[],
   onGeneralCommentInput: () => {},
   onSubmit: () => {},
@@ -166,6 +168,18 @@ describe("RequestChangesDialog render", () => {
     await mount({ ...baseProps, generalComment: "needs more detail" });
     expect(q(".preview")).not.toBeNull();
     expect(sendButton()?.disabled).toBe(false);
+  });
+
+  test("the preview cites a line-anchored comment by reference alone when the agent's copy matches", async () => {
+    await mount({
+      ...baseProps,
+      annotations: [lineAnn("a1", 3, 3, "reconsider")],
+      planText: ["# Title", "", "First body line."].join("\n"),
+      citation: "line",
+    });
+    const preview = q(".preview pre")?.textContent ?? "";
+    expect(preview).toContain("Line 3:");
+    expect(preview).not.toContain("First body line.");
   });
 });
 

@@ -22,6 +22,8 @@ import {
 } from "@/config/paths.ts";
 import { migratePrefsFile } from "@/config/prefs.ts";
 import {
+  daemonLogLevel,
+  devLogReviewText,
   getPort,
   heartbeatMs,
   idleMs,
@@ -83,7 +85,7 @@ export async function runDaemon(opts: {
     log.info("settings", `settings changed: ${changes.join("; ")}`),
   );
   const log = createDaemonLogger(
-    () => svc.current().logging.level,
+    () => daemonLogLevel(svc.current()),
     undefined,
     () => svc.current().logging.redact,
     { maxSize: () => logMaxSize(svc.current()), keep: () => logKeep(svc.current()) },
@@ -264,6 +266,9 @@ export async function runDaemon(opts: {
       tokenFile,
       hostname: boot.daemon.host,
       hostnames: boot.daemon.hostnames,
+      // Reviewer prose in the log: a from-source build only, so a stray env var can
+      // never turn it on for an installed caret.
+      logReviewText: devLogReviewText() && built.install === "dev",
       buildId,
       assetDigest,
       commit: built.commit,

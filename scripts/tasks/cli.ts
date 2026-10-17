@@ -143,6 +143,10 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
         "pose as a build behind a newer release or trunk, with mocked What's new content",
       ).choices(["release", "commit"] as const),
     )
+    .option(
+      "--no-plan-file",
+      "submit plans as text with no plan file, so feedback quotes the lines it cites",
+    )
     .action(async (opts) => {
       await actions.dev({
         numVersions: opts.numVersions,
@@ -153,6 +157,7 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
         fresh: opts.fresh ?? false,
         plain: opts.plain ?? false,
         update: opts.update,
+        planFile: opts.planFile,
       });
     });
 

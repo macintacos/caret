@@ -53,6 +53,7 @@ describe("tasks CLI: dev command", () => {
       persist: false,
       fresh: false,
       plain: false,
+      planFile: true,
     });
   });
 
@@ -63,6 +64,7 @@ describe("tasks CLI: dev command", () => {
       persist: false,
       fresh: false,
       plain: false,
+      planFile: true,
     });
   });
 
@@ -73,6 +75,7 @@ describe("tasks CLI: dev command", () => {
       persist: false,
       fresh: false,
       plain: false,
+      planFile: true,
     });
   });
 
@@ -83,6 +86,7 @@ describe("tasks CLI: dev command", () => {
       persist: false,
       fresh: false,
       plain: false,
+      planFile: true,
     });
   });
 
@@ -95,6 +99,7 @@ describe("tasks CLI: dev command", () => {
       persist: true,
       fresh: false,
       plain: false,
+      planFile: true,
     });
   });
 
@@ -105,6 +110,7 @@ describe("tasks CLI: dev command", () => {
       persist: false,
       fresh: false,
       plain: true,
+      planFile: true,
     });
   });
 
@@ -115,11 +121,16 @@ describe("tasks CLI: dev command", () => {
       persist: false,
       fresh: true,
       plain: false,
+      planFile: true,
     });
   });
 
   test("parses --update", async () => {
     expect((await parseDevArgs(["--update", "commit"])).update).toBe("commit");
+  });
+
+  test("parses --no-plan-file", async () => {
+    expect((await parseDevArgs(["--no-plan-file"])).planFile).toBe(false);
   });
 });
 

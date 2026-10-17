@@ -120,6 +120,11 @@ Concretely:
   censored.** The `DENY_KEYS` set in `src/redact/core.ts` censors `plan`, `prompt`,
   `feedback`, and `hostnames` values unconditionally — toggle or no toggle. Never log them
   under any key.
+- **One dev-only exception.** A from-source daemon with `CARET_DEV_LOG_REVIEW_TEXT=1`,
+  which `mise run dev` sets, logs the text each resolve sends the agent (`text`) and each
+  inline comment's stored lines (`lines`, `comment`) — `src/daemon/review-text-log.ts` —
+  so a developer can check what the agent receives. No installed caret writes them. Keep
+  any such record behind that gate.
 - **New identifying keys must be added to `DENY_KEYS` explicitly.** Matching is exact-key
   only, so a hostname, user, email, or similar identifying key you introduce will leak
   until you add it to the set. `DENY_KEYS` and the censoring graph-walk live **once** in

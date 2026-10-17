@@ -1,20 +1,18 @@
 import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { selectText } from "@ui/support/selection.ts";
 import type { RectReader } from "$lib/geometry.ts";
 import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
 import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
+import { previewCodeBlocks } from "$lib/previewCode.ts";
 import {
-  clampToRoot,
   clearCommentHighlight,
-  clickedRange,
   commentSlotIndex,
-  createSlotReserve,
+  createSlotGaps,
   groupBySlot,
   paintCommentHighlight,
-  previewSlotBoxes,
-  releasedRange,
+  type SlotGap,
+  slotGap,
   spanRanges,
 } from "$lib/previewComments.ts";
 
@@ -34,9 +32,6 @@ function mount(text: string): { root: HTMLElement; map: PlanSourceMap } {
 }
 
 const texts = (ranges: Range[]): string[] => ranges.map((r) => r.toString());
-
-const textIn = (el: Element): Node =>
-  document.createTreeWalker(el, NodeFilter.SHOW_TEXT).nextNode() as Node;
 
 describe("commentSlotIndex", () => {
   // Blocks: a paragraph on 1, a list on 3–5, a fence on 7–10, a paragraph on 12.
@@ -69,28 +64,23 @@ describe("commentSlotIndex", () => {
 });
 
 describe("groupBySlot", () => {
-  const blocks = [
-    { start: 1, end: 2 },
-    { start: 4, end: 6 },
-  ];
-
-  test("groups by block ascending, by line within a block, input order on a line", () => {
+  test("groups by line ascending, keeping input order on a line", () => {
     const items = [
       { line: 6, id: "c" },
       { line: 1, id: "a" },
       { line: 5, id: "b1" },
       { line: 5, id: "b2" },
     ];
-    expect(groupBySlot(blocks, items)).toEqual([
-      { block: 0, items: [{ line: 1, id: "a" }] },
+    expect(groupBySlot(items)).toEqual([
+      { line: 1, items: [{ line: 1, id: "a" }] },
       {
-        block: 1,
+        line: 5,
         items: [
           { line: 5, id: "b1" },
           { line: 5, id: "b2" },
-          { line: 6, id: "c" },
         ],
       },
+      { line: 6, items: [{ line: 6, id: "c" }] },
     ]);
   });
 });
@@ -129,198 +119,192 @@ describe("comment highlight", () => {
   });
 });
 
-describe("createSlotReserve", () => {
-  test("pads listed blocks and releases the rest", () => {
-    const { root } = mount("a\n\nb");
-    const [first, second] = [...root.children] as HTMLElement[];
-    const reserve = createSlotReserve(root);
-    reserve.set(new Map([[1, 40]]));
-    expect(second?.style.paddingBlockEnd).toBe("40px");
-    expect(first?.style.paddingBlockEnd).toBe("");
-    reserve.set(new Map([[0, 10]]));
-    expect(second?.style.paddingBlockEnd).toBe("");
-    expect(first?.style.paddingBlockEnd).toBe("10px");
-    reserve.release();
-    expect(first?.style.paddingBlockEnd).toBe("");
-  });
-});
-
-describe("previewSlotBoxes", () => {
-  test("puts a slot at its block's bottom less the reserve, in scrolled content coords", () => {
-    const { root } = mount("a\n\nb");
-    const blocks = [...root.children];
-    const scroller = document.createElement("div");
-    scroller.scrollTop = 50;
-    // Block i spans y [10+40i, 30+40i], x [100,300]; the scroller's top-left is (8, 5).
-    const read: RectReader = (el) => {
-      if (el === scroller) return { top: 5, bottom: 1000, left: 8, right: 400 };
-      const i = blocks.indexOf(el);
-      return { top: 10 + i * 40, bottom: 30 + i * 40, left: 100, right: 300 };
-    };
-    // top = 70 - 12 - (5 - 50) = 103 ; left = 100 - 8 = 92
-    expect(previewSlotBoxes(root, scroller, new Map([[1, 12]]), read)).toEqual(
-      new Map([[1, { top: 103, left: 92, width: 200 }]]),
-    );
-  });
-});
-
-describe("clampToRoot", () => {
-  function withSibling(text: string) {
+describe("slotGap", () => {
+  test("lines with no row after theirs in their block open after commentSlotIndex's block", () => {
+    const text = "one\n\n\n\n---\n\ntwo\n";
     const { root, map } = mount(text);
-    const sibling = document.createElement("div");
-    sibling.textContent = "slot";
-    root.after(sibling);
-    mounted.push(sibling);
-    return { root, map, sibling };
+    const { blocks } = renderPlanMarkdown(text);
+    const unlaid = () => [];
+
+    expect(slotGap(root, map, blocks, { start: 1, end: 1 }, unlaid)).toEqual({ block: 0 });
+    expect(slotGap(root, map, blocks, { start: 3, end: 3 }, unlaid)).toEqual({ block: 0 });
+    expect(slotGap(root, map, blocks, { start: 5, end: 5 }, unlaid)).toEqual({ block: 1 });
+  });
+
+  test("lines ending on one that renders no text open after the block their text ends in", () => {
+    const text = "para one\n\n```ts\ncode\n```\n";
+    const { root, map } = mount(text);
+    const { blocks } = renderPlanMarkdown(text);
+
+    expect(slotGap(root, map, blocks, { start: 1, end: 3 }, () => [])).toEqual({ block: 0 });
+  });
+});
+
+describe("createSlotGaps", () => {
+  const gapsIn = (root: Element) => [...root.querySelectorAll<HTMLElement>("[data-preview-gap]")];
+  type Open = { at: SlotGap; height: number };
+  const row = (line: number, column: number, height = 12): Open => ({
+    at: { before: { line, column } },
+    height,
+  });
+  const after = (block: number, height = 12): Open => ({ at: { block }, height });
+
+  test("opens a gap of its height before the next row's first character, splitting the text", () => {
+    const { root, map } = mount("one two three\n");
+
+    createSlotGaps(root).set(map, new Map([[1, row(1, 4)]]));
+
+    const [gap] = gapsIn(root);
+    expect(gap?.previousSibling?.textContent).toBe("one ");
+    expect(gap?.nextSibling?.textContent).toBe("two three");
+    expect(gap?.style.height).toBe("12px");
+    expect(root.textContent).toBe(mount("one two three\n").root.textContent);
+  });
+
+  test("climbs out of the elements the next row opens, so a list item's gap opens between the items", () => {
+    const { root, map } = mount("- one\n- two\n");
+
+    createSlotGaps(root).set(map, new Map([[1, row(2, 0)]]));
+
+    const [gap] = gapsIn(root);
+    expect(gap?.parentElement?.tagName).toBe("UL");
+    expect(gap?.nextElementSibling?.textContent).toBe("two");
+  });
+
+  /** The point at the start of the first text node holding `needle`. */
+  function pointAt(root: Element, map: PlanSourceMap, needle: string) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode())
+      if (node.textContent?.includes(needle)) return map.textPoint(node, 0);
+    throw new Error(`no text holds ${needle}`);
   }
 
-  test("returns a range inside the root unchanged", () => {
-    const { root } = mount("one\ntwo");
-    const range = document.createRange();
-    range.selectNodeContents(root);
+  test("keeps a code block's marker with its pre, opening before the marker", () => {
+    const { root, map } = mount("1. Edit foo:\n   ```ts\n   const x = 1;\n   ```\n");
+    const before = pointAt(root, map, "const x");
+    if (before === null) throw new Error("the code line has no point");
 
-    const clamped = clampToRoot(range, root, null);
+    createSlotGaps(root).set(map, new Map([[1, { at: { before }, height: 12 }]]));
 
-    expect(clamped.compareBoundaryPoints(Range.START_TO_START, range)).toBe(0);
-    expect(clamped.compareBoundaryPoints(Range.END_TO_END, range)).toBe(0);
+    expect(previewCodeBlocks(root).length).toBe(1);
+    expect(gapsIn(root)[0]?.nextElementSibling?.hasAttribute("data-source-code")).toBe(true);
   });
 
-  test("ends a range released past the root at the release block's end", () => {
-    const { root, map, sibling } = withSibling("one\ntwo\n\nthree");
-    const range = document.createRange();
-    range.setStart(root, 0);
-    range.setEnd(sibling, 1);
+  test("opens a table's gap between its rows, wherever in the next row its first line starts", () => {
+    const { root, map } = mount("| a | b |\n| - | - |\n| p | q |\n| r | s |\n");
+    const before = pointAt(root, map, "s");
+    if (before === null) throw new Error("the cell has no point");
 
-    const clamped = clampToRoot(range, root, root.children[0] as Element);
+    createSlotGaps(root).set(map, new Map([[3, { at: { before }, height: 12 }]]));
 
-    expect(map.linesOf(clamped)).toEqual({ start: 1, end: 2 });
+    const [gap] = gapsIn(root);
+    expect(gap?.parentElement?.tagName).toBe("TBODY");
+    expect(gap?.nextElementSibling?.textContent).toContain("r");
   });
 
-  test("ends a range released past the root with no block at the root's end", () => {
-    const { root, sibling } = withSibling("one\n\ntwo");
-    const range = document.createRange();
-    range.setStart(root, 0);
-    range.setEnd(sibling, 1);
+  test("opens a block's gap after all of its content", () => {
+    const { root, map } = mount("one\n\ntwo\n");
 
-    const clamped = clampToRoot(range, root, null);
+    createSlotGaps(root).set(map, new Map([[1, after(0)]]));
 
-    expect(clamped.endContainer === root).toBe(true);
-    expect(clamped.endOffset).toBe(root.childNodes.length);
+    expect(root.children[0]?.lastElementChild?.hasAttribute("data-preview-gap")).toBe(true);
   });
 
-  test("spans the gap after the release block up to the start of an upward drag", () => {
-    const { root, map, sibling } = withSibling("one\n\ntwo\n\nthree");
-    const range = document.createRange();
-    range.setStart(textIn(root.children[2] as Element), 2);
-    range.setEnd(sibling, 1);
+  test("a set with the same points and heights writes nothing", () => {
+    const { root, map } = mount(
+      "one two three\n\n- a\n- b\n\n1. Edit:\n   ```ts\n   const x = 1;\n   ```\n\n| p | q |\n| - | - |\n| r | s |\n| t | u |\n",
+    );
+    const gaps = createSlotGaps(root);
+    const code = pointAt(root, map, "const x");
+    const cell = pointAt(root, map, "u");
+    if (code === null || cell === null) throw new Error("a fixture line has no point");
+    const listed = new Map<number, Open>([
+      [1, row(1, 4)],
+      [3, after(1, 20)],
+      [4, row(4, 0)],
+      [6, { at: { before: code }, height: 12 }],
+      [13, { at: { before: cell }, height: 12 }],
+    ]);
+    gaps.set(map, listed);
+    const writes = new MutationObserver(() => {});
+    writes.observe(root, { subtree: true, childList: true, attributes: true, characterData: true });
 
-    const clamped = clampToRoot(range, root, root.children[0] as Element);
+    gaps.set(map, listed);
 
-    expect(clamped.collapsed).toBe(false);
-    expect(map.linesOf(clamped)).toEqual({ start: 3, end: 5 });
+    expect(writes.takeRecords()).toEqual([]);
+    writes.disconnect();
   });
 
-  test("starts a range begun before the root at the root's start", () => {
-    const { root } = mount("one\n\ntwo");
-    const before = document.createElement("div");
-    before.textContent = "above";
-    root.before(before);
-    mounted.push(before);
-    const range = document.createRange();
-    range.setStart(before, 0);
-    range.setEnd(root, root.childNodes.length);
+  test("stacks gaps at one point in line order, whichever opened first", () => {
+    const { root, map } = mount("one two three\n");
+    const gaps = createSlotGaps(root);
 
-    const clamped = clampToRoot(range, root, null);
+    gaps.set(map, new Map([[5, row(1, 4)]]));
+    gaps.set(
+      map,
+      new Map([
+        [3, row(1, 4)],
+        [5, row(1, 4)],
+      ]),
+    );
 
-    expect(clamped.startContainer === root).toBe(true);
-    expect(clamped.startOffset).toBe(0);
-  });
-});
-
-describe("clickedRange", () => {
-  afterEach(() => document.getSelection()?.removeAllRanges());
-
-  test("returns a copy of the collapsed selection a click on text leaves", () => {
-    const { root } = mount("Plain words.");
-    const text = textIn(root);
-    const live = selectText([text, 3]);
-
-    const range = clickedRange(root, text.parentElement, document.getSelection());
-
-    expect(range === live).toBe(false);
-    expect(range?.startContainer === text && range.startOffset === 3).toBe(true);
+    expect(gapsIn(root).map((g) => g.dataset.previewGap)).toEqual(["3", "5"]);
+    expect(gapsIn(root)[1]?.nextSibling?.textContent).toBe("two three");
   });
 
-  test("returns null for a click on a control, a non-collapsed or an outside selection", () => {
-    const { root } = mount("A [link](https://x.test) here.");
-    const link = root.querySelector("a") as Element;
-    const outside = document.createElement("div");
-    outside.textContent = "out";
-    root.after(outside);
-    mounted.push(outside);
+  test("moves a gap whose point changed, closes the unlisted, and closes all on release", () => {
+    const { root, map } = mount("one two three\n\nfour\n");
+    const gaps = createSlotGaps(root);
+    gaps.set(
+      map,
+      new Map([
+        [1, row(1, 4)],
+        [3, after(1)],
+      ]),
+    );
 
-    selectText([link.firstChild as Node, 1]);
-    const onLink = clickedRange(root, link, document.getSelection());
-    selectText([textIn(root), 0], [link.firstChild as Node, 1]);
-    const spread = clickedRange(root, root.querySelector("p"), document.getSelection());
-    selectText([outside.firstChild as Node, 1]);
-    const away = clickedRange(root, root.querySelector("p"), document.getSelection());
+    gaps.set(map, new Map([[1, row(1, 8)]]));
+    const [moved, ...rest] = gapsIn(root);
+    const afterMove = [moved?.nextSibling?.textContent, rest.length];
+    gaps.release();
 
-    expect([onLink, spread, away]).toEqual([null, null, null]);
-  });
-});
-
-describe("releasedRange", () => {
-  afterEach(() => document.getSelection()?.removeAllRanges());
-  const point = { x: 1, y: 2 };
-  const unread = () => {
-    throw new Error("read without an end outside the root");
-  };
-
-  test("returns a copy of a selection inside the root without a hit test", () => {
-    const { root } = mount("Plain words.");
-    const text = textIn(root);
-    const live = selectText([text, 0], [text, 5]);
-
-    const range = releasedRange(root, null, document.getSelection(), point, unread);
-
-    expect(range === live).toBe(false);
-    expect(String(range)).toBe("Plain");
+    expect(afterMove).toEqual(["three", 0]);
+    expect(gapsIn(root)).toEqual([]);
   });
 
-  test("returns null for a collapsed, unchanged or outside-anchored selection", () => {
-    const { root } = mount("Plain words.");
-    const text = textIn(root);
-    const outside = document.createElement("div");
-    outside.textContent = "outside";
-    root.after(outside);
-    mounted.push(outside);
+  test("reopens a gap its block's html replaced", () => {
+    const { root, map } = mount("one two three\n");
+    const gaps = createSlotGaps(root);
+    gaps.set(map, new Map([[1, row(1, 4)]]));
 
-    selectText([text, 2]);
-    const collapsed = releasedRange(root, null, document.getSelection(), point, unread);
-    const standing = selectText([text, 0], [text, 5]).cloneRange();
-    const unchanged = releasedRange(root, standing, document.getSelection(), point, unread);
-    selectText([outside.firstChild as Node, 0], [outside.firstChild as Node, 3]);
-    const away = releasedRange(root, null, document.getSelection(), point, unread);
+    root.innerHTML = renderPlanMarkdown("one two three\n").html;
+    const remapped = createPlanSourceMap(root);
+    gaps.set(remapped, new Map([[1, row(1, 4)]]));
 
-    expect([collapsed, unchanged, away]).toEqual([null, null, null]);
+    expect(gapsIn(root).length).toBe(1);
   });
 
-  test("ends a selection released over an overlay at the block under the point", () => {
-    const { root, map } = mount("one\n\ntwo\n\nthree");
-    const slot = document.createElement("div");
-    slot.textContent = "slot";
-    root.after(slot);
-    mounted.push(slot);
-    selectText([textIn(root), 0], [slot.firstChild as Node, 2]);
-    let asked: [number, number] | undefined;
+  test("boxes each slot at its gap's top, across the root and padded to its block, in scrolled content coords", () => {
+    const { root, map } = mount("a\n\nb");
+    const gaps = createSlotGaps(root);
+    gaps.set(map, new Map([[3, after(1)]]));
+    const [gap] = gapsIn(root);
+    const block = root.children[1];
+    const scroller = document.createElement("div");
+    scroller.scrollTop = 50;
+    // The gap's top is at 58 and its block spans x [100,300], in a root spanning x
+    // [60,500]; the scroller's top-left is (8, 5).
+    const read: RectReader = (el) => {
+      if (el === scroller) return { top: 5, bottom: 1000, left: 8, right: 600 };
+      if (el === root) return { top: 0, bottom: 1000, left: 60, right: 500 };
+      if (el === gap) return { top: 58, bottom: 70, left: 100, right: 300 };
+      if (el === block) return { top: 40, bottom: 70, left: 100, right: 300 };
+      return { top: 0, bottom: 0, left: 0, right: 0 };
+    };
 
-    const range = releasedRange(root, null, document.getSelection(), point, (x, y) => {
-      asked = [x, y];
-      return [slot, root.children[1] as Element, root];
-    });
-
-    expect(asked).toEqual([1, 2]);
-    expect(range && map.linesOf(range)).toEqual({ start: 1, end: 3 });
+    // top = 58 - (5 - 50) = 103 ; left = 60 - 8 = 52
+    expect(gaps.boxes(scroller, read)).toEqual(
+      new Map([[3, { top: 103, left: 52, width: 440, padStart: 40, padEnd: 200 }]]),
+    );
   });
 });

@@ -4,13 +4,13 @@
   // source-mapped features to find. DiffPlanView decides which text and when; this mounts
   // it, sets what HTML cannot carry, highlights its code blocks once each has mounted
   // plain, marks the soft-wrapped ones, tags the resolved file references and opens them
-  // on click, reports a plain click or a text selection for a comment, and styles it.
+  // on click, reports the rows a plain click or a comment drag covers, and styles it.
   import { FILE_ICON_MASK, FOLDER_ICON_MASK } from "$lib/diffview/coreStyles.ts";
   import type { FileRefSpan } from "$lib/diffview/fileRefs.ts";
   import { highlightTokens } from "$lib/diffview/highlight.ts";
   import { hideTooltip, showTooltip } from "$lib/diffview/linkInteractions.ts";
   import { applyPreviewReflow, highlightPreviewCode } from "$lib/previewCode.ts";
-  import { clickedRange, releasedRange } from "$lib/previewComments.ts";
+  import type { TextPoint } from "$lib/previewLines.ts";
   import { type PreviewFileRef, tagPreviewFileRefs } from "$lib/previewRefs.ts";
   import { type ThemeId, themeFor } from "$lib/theme.ts";
 
@@ -23,17 +23,24 @@
     themeId?: ThemeId;
     /** Opening fence lines of the soft-wrapped blocks, shared with the source view. */
     reflowedBlocks?: ReadonlySet<number>;
-    /** The element whose content is exactly the rendered HTML: DiffPlanView's chrome
-     * geometry and its place-keeping across a flip read it. Bindable, and cleared on
-     * unmount, unlike an onReady handle. */
+    /** The element whose content is the rendered HTML, plus the comment slots' empty gaps:
+     * DiffPlanView's chrome geometry and its place-keeping across a flip read it.
+     * Bindable, and cleared on unmount, unlike an onReady handle. */
     root?: HTMLDivElement;
     /** The daemon-resolved references to tag, keyed by their display text. */
     fileRefs?: readonly PreviewFileRef[];
     /** A tagged reference was clicked. */
     onFileRefClick?: (ref: FileRefSpan, el: HTMLElement) => void;
-    /** A plain click (collapsed) or a text selection, clamped to the root; DiffPlanView
-     * maps it to source lines. */
-    onTextComment?: (range: Range) => void;
+    /** The visual line at a viewport height, as the point it starts at: rows span the
+     * column, so the height alone picks one. */
+    rowAt?: (y: number) => TextPoint | null;
+    /** A plain click, or a comment drag's release: the rows from the press's through the
+     * release's, in either order. DiffPlanView maps them to source lines. */
+    onTextComment?: (from: TextPoint, to: TextPoint) => void;
+    /** A comment drag's press row once the pointer leaves it; null when the drag ends. */
+    onCommentDrag?: (anchor: TextPoint | null) => void;
+    /** Shift is held: the pointer selects text, so it shows the text cursor. */
+    selectText?: boolean;
   }
   let {
     html,
@@ -43,7 +50,10 @@
     root = $bindable(),
     fileRefs = [],
     onFileRefClick,
+    rowAt,
     onTextComment,
+    onCommentDrag,
+    selectText = false,
   }: Props = $props();
 
   $effect(() => {
@@ -84,6 +94,22 @@
     if (root) applyPreviewReflow(root, reflowedBlocks);
   });
 
+  // How far a table's pinned header row may slide before it sits on the last row.
+  $effect(() => {
+    void html;
+    const el = root;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const { target } of entries) {
+        const row = target.querySelector(":scope > thead > tr");
+        if (target instanceof HTMLElement && row instanceof HTMLElement)
+          target.style.setProperty("--pin-travel", `${target.clientHeight - row.offsetHeight}px`);
+      }
+    });
+    for (const table of el.querySelectorAll("table")) observer.observe(table);
+    return () => observer.disconnect();
+  });
+
   let tagged = new Map<HTMLElement, FileRefSpan>();
   $effect(() => {
     void html;
@@ -102,51 +128,86 @@
     return el && ref ? [el, ref] : undefined;
   }
 
+  // A drag that started on a reference comments on its rows; the click its release fires
+  // must not open the file too.
+  let dragged = false;
+
   function onRootClick(event: MouseEvent) {
-    const selection = document.getSelection();
     const hit = refAt(event.target);
-    if (hit) {
-      // preventDefault so a reference inside a link opens the file, not the URL — as in
-      // the source view, where a reference click also wins over its link. A drag that
-      // stayed inside the reference was already reported on release.
-      event.preventDefault();
-      if (selection?.isCollapsed !== false) onFileRefClick?.(hit[1], hit[0]);
-      return;
-    }
-    const range = root && onTextComment ? clickedRange(root, event.target, selection) : null;
-    if (range) onTextComment?.(range);
+    if (!hit) return;
+    // preventDefault so a reference inside a link opens the file, not the URL — as in the
+    // source view, where a reference click also wins over its link.
+    event.preventDefault();
+    if (!dragged && document.getSelection()?.isCollapsed !== false)
+      onFileRefClick?.(hit[1], hit[0]);
   }
 
   let gesture: AbortController | undefined;
   $effect(() => () => gesture?.abort());
 
-  // Shift bows out so the browser selects natively — the copy escape hatch the source
-  // view's body drag has (lineDrag.ts); a selection left outside the root (a closed
-  // composer's) is dropped first, or the native drag would extend from it. The release
-  // listens on window, since a drag can end over a slot; a native drag-and-drop ends in
-  // pointercancel instead, so every terminator ends the gesture.
-  function armSelection(event: PointerEvent) {
+  const CONTROLS = "a, button, input, label, select, summary, textarea";
+  const USER_SELECT = ["user-select", "-webkit-user-select"];
+  const sameRow = (a: TextPoint | null | undefined, b: TextPoint) =>
+    a?.line === b.line && a.column === b.column;
+  /** Whether a press landed on its target's own scrollbar, a wide table's or code block's,
+   * past the client box of an element that scrolls. */
+  const onScrollbar = ({ target, offsetX, offsetY }: PointerEvent) =>
+    target instanceof HTMLElement &&
+    (target.scrollWidth > target.clientWidth || target.scrollHeight > target.clientHeight) &&
+    (offsetX >= target.clientWidth || offsetY >= target.clientHeight);
+
+  // A plain press selects rows, as the source view's body drag selects lines (lineDrag.ts):
+  // released on its own row it is a click on that row, on another a drag across the rows
+  // between. Native selection is held off while it runs, so it paints no text. Shift bows
+  // out so the browser selects text — the copy escape hatch — dropping a selection left
+  // outside the root (a closed composer's) first, or the native drag would extend from it.
+  // Controls keep their own clicks, a scrollbar its scroll, and a reference its click. The
+  // release listens on window, since a drag can end over a slot, and every terminator ends
+  // the gesture.
+  function armRows(event: PointerEvent) {
     gesture?.abort();
-    if (!onTextComment || event.button !== 0) return;
+    dragged = false;
     const selection = document.getSelection();
     if (event.shiftKey) {
       if (selection?.rangeCount && !root?.contains(selection.anchorNode))
         selection.removeAllRanges();
       return;
     }
-    const before = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+    const el = root;
+    const control = event.target instanceof Element && event.target.closest(CONTROLS) !== null;
+    if (!onTextComment || !el || event.button !== 0 || control || onScrollbar(event)) return;
+    const anchor = rowAt?.(event.clientY);
+    if (!anchor) return;
+    const comment = onTextComment;
+    const onRef = refAt(event.target) !== undefined;
+    if (selection?.rangeCount && el.contains(selection.anchorNode)) selection.removeAllRanges();
+    for (const prop of USER_SELECT) el.style.setProperty(prop, "none");
     const current = new AbortController();
     gesture = current;
     const { signal } = current;
     const endGesture = () => current.abort();
+    let dragging = false;
+    signal.addEventListener("abort", () => {
+      for (const prop of USER_SELECT) el.style.removeProperty(prop);
+      if (dragging) onCommentDrag?.(null);
+    });
+    window.addEventListener(
+      "pointermove",
+      (move) => {
+        if (dragging || sameRow(rowAt?.(move.clientY), anchor)) return;
+        dragging = true;
+        onCommentDrag?.(anchor);
+      },
+      { signal },
+    );
     window.addEventListener(
       "pointerup",
       (up) => {
+        const row = rowAt?.(up.clientY) ?? anchor;
+        dragged = dragging || !sameRow(row, anchor);
         endGesture();
-        const range =
-          root &&
-          releasedRange(root, before, document.getSelection(), { x: up.clientX, y: up.clientY });
-        if (range) onTextComment?.(range);
+        if (dragged) comment(anchor, row);
+        else if (!onRef) comment(anchor, anchor);
       },
       { signal },
     );
@@ -173,16 +234,17 @@
   bind:this={root}
   onerrorcapture={hideFailedImage}
   onclick={onRootClick}
-  onpointerdown={armSelection}
+  onpointerdown={armRows}
   onpointerover={showRefTarget}
   onpointerout={hideRefTarget}
+  data-rows={onTextComment ? "" : undefined}
+  data-select-text={selectText ? "" : undefined}
   style:--file-ref-icon={FILE_ICON_MASK}
   style:--folder-ref-icon={FOLDER_ICON_MASK}>{@html html}</div>
 
 <style>
   /* Light-DOM: the source view's shadow-adopted highlight rules can't reach the preview,
-     so it carries its own. --mark is caret's content-highlight wash; the keyboard's
-     visual selection is a selection, so it takes --accent-wash. */
+     so it carries its own. --mark is caret's content-highlight wash. */
   :global(::highlight(caret-comment-span)) {
     background-color: var(--mark);
   }
@@ -192,15 +254,34 @@
   :global(::highlight(caret-preview-search-current)) {
     background-color: var(--mark-active);
   }
-  :global(::highlight(caret-visual-selection)) {
-    background-color: var(--accent-wash);
-  }
 
+  /* In the preview's own em, so every line wraps at the same word at any zoom, text size,
+     base font size or window width (a narrow window scrolls sideways): what a row cites
+     must not move. The text is 15px at the default base font size, so this is an 800px
+     column with 2ch + 25px and 12px of padding there. The end padding takes up any wider
+     plan, so a row reaches the plan's right edge, as a source row does. */
   .plan-preview {
+    --column: calc(800em / 15);
+    min-width: var(--column);
     padding-block: 0.5rem;
-    padding-inline: 2ch 0.75rem;
-    font-size: var(--text-base);
+    padding-inline: calc(2ch + 25em / 15) max(0.8em, 100% - var(--column) + 0.8em);
+    font-size: calc(var(--text-base) * var(--preview-scale));
     overflow-wrap: break-word;
+  }
+  /* A comment slot's room in the text (previewComments.ts's gaps): a row of its own, in a
+     table a table row. */
+  .plan-preview :global([data-preview-gap]) {
+    display: block;
+  }
+  .plan-preview :global(:is(table, thead, tbody, tfoot) > [data-preview-gap]) {
+    display: table-row;
+  }
+  /* A press selects rows, as a source row's does; Shift selects text. */
+  .plan-preview[data-rows] {
+    cursor: pointer;
+  }
+  .plan-preview[data-rows][data-select-text] {
+    cursor: text;
   }
   /* The child rules are :global because {@html} content gets no Svelte scoping. */
   .plan-preview :global(:is(p, blockquote, ul, ol, table, pre, hr)) {
@@ -218,42 +299,42 @@
     border-block-end: 1px solid var(--rule-strong);
   }
   .plan-preview :global(h1) {
-    font-size: var(--text-xl);
+    font-size: calc(var(--text-xl) * var(--preview-scale));
     color: var(--markdown-heading1-color, var(--accent));
     font-weight: var(--markdown-heading1-font-weight, 600);
     font-style: var(--markdown-heading1-font-style);
     text-decoration: var(--markdown-heading1-text-decoration);
   }
   .plan-preview :global(h2) {
-    font-size: var(--text-lg);
+    font-size: calc(var(--text-lg) * var(--preview-scale));
     color: var(--markdown-heading2-color, var(--accent));
     font-weight: var(--markdown-heading2-font-weight, 600);
     font-style: var(--markdown-heading2-font-style);
     text-decoration: var(--markdown-heading2-text-decoration);
   }
   .plan-preview :global(h3) {
-    font-size: var(--text-md);
+    font-size: calc(var(--text-md) * var(--preview-scale));
     color: var(--markdown-heading3-color, var(--accent));
     font-weight: var(--markdown-heading3-font-weight, 600);
     font-style: var(--markdown-heading3-font-style);
     text-decoration: var(--markdown-heading3-text-decoration);
   }
   .plan-preview :global(h4) {
-    font-size: var(--text-base);
+    font-size: calc(var(--text-base) * var(--preview-scale));
     color: var(--markdown-heading4-color, var(--accent));
     font-weight: var(--markdown-heading4-font-weight, 600);
     font-style: var(--markdown-heading4-font-style);
     text-decoration: var(--markdown-heading4-text-decoration);
   }
   .plan-preview :global(h5) {
-    font-size: var(--text-sm);
+    font-size: calc(var(--text-sm) * var(--preview-scale));
     color: var(--markdown-heading5-color, var(--accent));
     font-weight: var(--markdown-heading5-font-weight, 600);
     font-style: var(--markdown-heading5-font-style);
     text-decoration: var(--markdown-heading5-text-decoration);
   }
   .plan-preview :global(h6) {
-    font-size: var(--text-xs);
+    font-size: calc(var(--text-xs) * var(--preview-scale));
     color: var(--markdown-heading6-color, var(--accent));
     font-weight: var(--markdown-heading6-font-weight, 600);
     font-style: var(--markdown-heading6-font-style);
@@ -386,20 +467,80 @@
     border: 0;
     background: var(--ink-soft);
   }
-  /* display: block lets a wide table scroll without a wrapper element. */
+  /* display: block lets a wide table scroll without a wrapper element. The source view's
+     table card: the code panel's fill, no frame, and one faint rule between columns and
+     between rows, the header's included. Separate borders, since a collapsed one stays
+     behind a pinned header row as a see-through slit; no block-axis scroll, since that row
+     can overhang the bottom by a rounding pixel. */
   .plan-preview :global(table) {
+    --table-rule: color-mix(in lab, var(--paper-sunk), var(--ink) 12%);
     display: block;
     width: max-content;
     max-width: 100%;
-    overflow: auto;
-    border-collapse: collapse;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: var(--radius);
+    background-color: var(--code-panel);
+    font-variant-numeric: tabular-nums;
+    view-timeline: --table block;
   }
+  /* The header row stays at the top of the plan's view while its table's rows pass under
+     it, above their bands. Not position: sticky, which would pin it inside the table, its
+     nearest scroll container: the table crossing the view's top edge slides it down as far
+     as the view scrolls, until --pin-travel (the script's measure) sets it on the last row. */
+  .plan-preview :global(thead > tr) {
+    position: relative;
+    z-index: 1;
+    animation-name: pin-header;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: --table;
+    animation-range: exit-crossing 0px exit-crossing var(--pin-travel, 0px);
+  }
+  /* Filled and ruled from its first pixel pinned; clear at rest, so a band over the
+     header's own row shows through. The fill reaches a pixel above the row, over the sliver
+     a fractional view top leaves when the row's layer snaps to the pixel grid. */
+  .plan-preview :global(th) {
+    animation-name: pin-fill;
+    animation-fill-mode: both;
+    animation-timeline: --table;
+    animation-range: exit-crossing 0px exit-crossing 1px;
+  }
+  @keyframes pin-header {
+    to {
+      translate: 0 var(--pin-travel, 0px);
+    }
+  }
+  @keyframes pin-fill {
+    to {
+      background-color: var(--code-panel);
+      box-shadow:
+        inset 0 -1px var(--table-rule),
+        0 -1px var(--code-panel);
+    }
+  }
+  /* A row reads along its cells' first lines, as a source row does. */
   .plan-preview :global(:is(th, td)) {
     padding: 0.375em 0.8em;
-    border: 1px solid var(--rule-strong);
+    vertical-align: baseline;
   }
+  .plan-preview :global(:is(th, td) + :is(th, td)) {
+    border-inline-start: 1px solid var(--table-rule);
+  }
+  .plan-preview :global(td) {
+    border-block-start: 1px solid var(--table-rule);
+  }
+  /* The source view's header cap: uppercase in --ink-soft. A label never wraps, so a
+     column is at least as wide as its header. */
   .plan-preview :global(th) {
+    font-size: calc(var(--text-xs) * var(--preview-scale));
     font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--ink-soft);
   }
   /* Chromium's UA sheet centres a header cell; start it like a body cell. */
   .plan-preview :global(th:not([align])) {
@@ -417,7 +558,7 @@
     border-radius: var(--radius);
     background-color: var(--code-panel);
     font-family: var(--font-mono);
-    font-size: var(--text-sm);
+    font-size: calc(var(--text-sm) * var(--preview-scale));
     line-height: var(--leading-relaxed);
   }
   .plan-preview :global([data-source-code] + pre > code) {

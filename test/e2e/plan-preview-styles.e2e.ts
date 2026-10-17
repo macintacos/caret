@@ -472,6 +472,76 @@ test("a table has headers, borders, column alignment and scrolls on its own", as
     .toEqual({ overflow: "auto", scrolls: true, planScrolls: false });
 });
 
+const LONG_TABLE_PLAN = [
+  "Before the table.",
+  [
+    "| Name | Value |",
+    "| --- | --- |",
+    ...Array.from({ length: 60 }, (_, i) => `| row ${i + 1} | value ${i + 1} |`),
+  ].join("\n"),
+  ...Array.from({ length: 30 }, (_, i) => `After paragraph ${i + 1}.`),
+].join("\n\n");
+
+/** The long table's header row against the plan's view: where it sits, how far it has left
+ * its table's top, how far it is from the table's last row, and whether its cells paint the
+ * table's fill. Fills compare as painted bytes: an animated colour serializes in another
+ * space than the same colour cascaded. */
+function headerPin(page: Page) {
+  return page.evaluate(
+    ([root, surface]) => {
+      const table = document.querySelector(`${root} table`) as HTMLElement;
+      const row = table.querySelector("thead > tr") as HTMLElement;
+      const cell = row.querySelector("th") as HTMLElement;
+      const view = (document.querySelector(surface) as HTMLElement).getBoundingClientRect();
+      const box = row.getBoundingClientRect();
+      const tableTop = table.getBoundingClientRect().top;
+      const ctx = document.createElement("canvas").getContext("2d") as CanvasRenderingContext2D;
+      const painted = (el: Element) => {
+        ctx.clearRect(0, 0, 1, 1);
+        ctx.fillStyle = getComputedStyle(el).backgroundColor;
+        ctx.fillRect(0, 0, 1, 1);
+        return [...ctx.getImageData(0, 0, 1, 1).data];
+      };
+      const [cellFill, tableFill] = [painted(cell), painted(table)];
+      return {
+        fromViewTop: box.top - view.top,
+        fromTableTop: box.top - tableTop,
+        aboveTableEnd: tableTop + table.clientHeight - box.bottom,
+        filled: cellFill.every((byte, i) => Math.abs(byte - (tableFill[i] as number)) <= 1),
+      };
+    },
+    [PLAN_PREVIEW, PLAN_SURFACE] as const,
+  );
+}
+
+test("a long table's header stays at the top of the view while its rows pass under it, and leaves with the last", async ({
+  daemon,
+  page,
+}) => {
+  await openPreview(page, daemon, LONG_TABLE_PLAN);
+  const at = await headerPin(page);
+  expect(at).toMatchObject({ fromTableTop: 0, filled: false });
+
+  const preview = await page.locator(PLAN_PREVIEW).boundingBox();
+  await page.mouse.move((preview?.x ?? 0) + 200, (preview?.y ?? 0) + 200);
+  await page.mouse.wheel(0, at.fromViewTop + 400);
+  await expect
+    .poll(async () => {
+      const pinned = await headerPin(page);
+      return { atViewTop: Math.abs(pinned.fromViewTop) < 1, filled: pinned.filled };
+    })
+    .toEqual({ atViewTop: true, filled: true });
+
+  const pinned = await headerPin(page);
+  await page.mouse.wheel(0, pinned.aboveTableEnd + 10);
+  await expect
+    .poll(async () => {
+      const leaving = await headerPin(page);
+      return { onLastRow: Math.abs(leaving.aboveTableEnd) <= 1, offTop: leaving.fromViewTop < 0 };
+    })
+    .toEqual({ onLastRow: true, offTop: true });
+});
+
 test("nested quotes carry a rule, and a thematic break draws a bar", async ({ daemon, page }) => {
   await openPreview(page, daemon, `> outer quote\n>\n> > inner quote\n\n---\n\nAfter the break.\n`);
   const inkSoft = await resolveStyle(page, "color", "--ink-soft");

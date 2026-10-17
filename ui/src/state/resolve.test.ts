@@ -8,6 +8,7 @@ import {
   isNetworkFailure,
   type ResolveStore,
 } from "@/state/resolve.svelte.ts";
+import type { LineCitation } from "$lib/feedback.ts";
 
 interface SubmitCall {
   id: string;
@@ -36,6 +37,7 @@ function build(
     versionAfterFlush?: number;
     annotations?: Annotation[];
     planText?: string;
+    citation?: LineCitation;
   } = {},
 ) {
   const activeId = "activeId" in opts ? (opts.activeId ?? null) : "r1";
@@ -50,6 +52,7 @@ function build(
     activeVersion: () => version,
     annotations: () => opts.annotations ?? [],
     planText: () => opts.planText ?? "",
+    citation: () => opts.citation ?? "line-and-quote",
     flushPending: async () => {
       flushOrder.push("flush");
       if (opts.versionAfterFlush !== undefined) version = opts.versionAfterFlush;
@@ -262,6 +265,16 @@ describe("requestChanges", () => {
     // The plan text reaches the formatter: the quoted source line is present.
     expect(submits[0]!.body.feedback).toContain("Line 2:");
     expect(submits[0]!.body.feedback).toContain("> warm the cache on boot");
+  });
+
+  test("cites a line-anchored annotation by reference alone when the agent's copy matches", async () => {
+    const store = makeStore();
+    const annotations: Annotation[] = [{ id: "l1", startLine: 2, endLine: 2, comment: "tighten" }];
+    const planText = ["# Heading", "warm the cache on boot", "more text"].join("\n");
+    const resolve = build(store, { annotations, planText, citation: "line" });
+    await resolve.requestChanges("");
+    expect(submits[0]!.body.feedback).toContain("Line 2:");
+    expect(submits[0]!.body.feedback).not.toContain("warm the cache on boot");
   });
 
   test("flushes the pending draft before formatting + submitting", async () => {

@@ -23,7 +23,7 @@ import {
 } from "@test/e2e/support/decision.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { awaitDenied, submitForRevision } from "@test/e2e/support/review-state.ts";
-import { seedAndOpen } from "@test/e2e/support/source-view.ts";
+import { planSurface, seedAndOpen } from "@test/e2e/support/source-view.ts";
 
 const FEEDBACK = "Please tighten the verification section.";
 
@@ -82,6 +82,33 @@ test("a line-anchored annotation reaches Decision.feedback as a line reference p
   const feedback = await submitForRevision(page, dialog, daemon, id);
   expect(feedback).toContain("Lines 7-8:");
   expect(feedback).toContain("> The cache layer … full cold cost.");
+  expect(feedback).toContain("explain the cold cost");
+});
+
+test("a line-anchored annotation reaches Decision.feedback as a line reference alone when the agent holds the stored plan", async ({
+  daemon,
+  page,
+}) => {
+  // Seeding the stored text back in leaves the rewrap nothing to change, so the agent's
+  // copy matches the stored version line for line.
+  const first = await daemon.seed();
+  const stored = (await daemon.getReview(first)).body?.currentPlan ?? "";
+  await daemon.resolve(first, "allow");
+  const id = await daemon.seed({ plan: stored });
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "explain the cold cost" }],
+  });
+  await page.goto("/");
+  await planSurface(page);
+  await waitPastSafeModeGrace(page);
+
+  const dialog = await openRequestChangesDialog(page);
+  await expect(dialog.locator(".preview pre")).toContainText("Lines 7-8:");
+  await expect(dialog.locator(".preview pre")).not.toContainText("The cache layer");
+
+  const feedback = await submitForRevision(page, dialog, daemon, id);
+  expect(feedback).toContain("Lines 7-8:");
+  expect(feedback).not.toContain("The cache layer");
   expect(feedback).toContain("explain the cold cost");
 });
 

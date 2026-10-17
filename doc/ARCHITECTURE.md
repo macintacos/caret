@@ -394,14 +394,16 @@ It **blocks until you decide**. A change request comes back as the tool result: 
 reviewer's feedback, plus an instruction to revise and call again and not to implement
 anything until a call returns an approval. The plan itself is deliberately not echoed back
 — the agent still holds it, in its own tool-call arguments or in its file. A feedback line
-reference indexes the plan version caret stored, and the abbreviated quote paired with it
-is what the agent matches against its own text. That stored version is reflowed to caret's
-90-column shape at ingest (see [Plan formatting](CONFIGURING.md#plan-formatting-rumdl)),
-so the numbers are caret's, not yours — unless the plan came in by `path`, where caret
-writes that reflowed text back onto the file, so the numbers match once the agent re-reads
-it. So the loop is call, read the feedback, revise, call again, until an approval returns.
-An approval may carry reviewer notes of its own, in a clearly labeled section, to fold in
-as the work proceeds; that is not another round, the plan is already approved.
+reference indexes the plan version caret stored, and an abbreviated quote rides with it
+only when the agent may not hold that version line for line. That stored version is
+reflowed to caret's 90-column shape at ingest (see
+[Plan formatting](CONFIGURING.md#plan-formatting-rumdl)), so the numbers are caret's, not
+yours, and each comes with a short quote to match against your own text — unless the plan
+came in by `path`, where caret writes that reflowed text back onto the file, so the
+numbers match once the agent re-reads it and no quote is sent. So the loop is call, read
+the feedback, revise, call again, until an approval returns. An approval may carry
+reviewer notes of its own, in a clearly labeled section, to fold in as the work proceeds;
+that is not another round, the plan is already approved.
 
 With `path`, that loop runs on the file instead of regenerating the plan. Write the plan
 once. On a change request, re-read the file, make targeted edits, and call again with the

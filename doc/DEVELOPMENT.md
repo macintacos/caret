@@ -240,6 +240,8 @@ it off. The config keys are documented in full under
 | `--fresh`           | —                       | —                        | off       | Boot as a brand-new user — see below.                                                     |
 | `--update <kind>`   | `CARET_DEV_UPDATE`      | —                        | off       | Pose as behind an update, `release` or `commit` — see below.                              |
 | `--plain`           | —                       | —                        | off       | Skip the dev console and stream logs straight to the terminal, so they scroll and pipe.   |
+| `--no-plan-file` | — | — | plan file | Submit plans as text, with no plan file — see below. |
+| — | `CARET_DEV_LOG_LEVEL` | — | `debug` | The daemon's log level for the session. |
 
 † A positive `CARET_DEV_NEW_REVIEW_MS` also arms the seeder, not just sets its cadence.
 
@@ -292,6 +294,21 @@ an installed caret can't be made to pose.
 
 The toast shows once per update, per browser. Add `--fresh` to see it again, or open
 What's new from **Settings → Updates**.
+
+#### What the agent receives
+
+The dev log shows the text each review sends the agent at `info`, and at `debug` each
+inline comment with the stored lines its line reference points at, whether the sent text
+cites it (`cited`), and whether the feedback quoted those lines (`quoted`). Only a
+from-source daemon under `mise run dev` writes these; every other log keeps reviewer prose
+and plan text out.
+
+The driver writes each plan to a file under the state dir and names it as the agent's plan
+file, the way Claude Code does. caret rewrites that file with the text you review, so a
+comment's line reference matches the agent's copy and goes without a quote.
+`--no-plan-file` submits plans as text instead, the way Codex or the `review_plan` tool
+does: caret has no file to rewrite, so each comment also carries an abbreviated quote of
+the lines it cites.
 
 #### The three plans, and injecting a fourth
 

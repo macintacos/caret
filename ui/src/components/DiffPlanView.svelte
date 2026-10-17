@@ -72,6 +72,7 @@
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { buildLinkLayer } from "$lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
+  import { readPreviewFontSize } from "$lib/previewFontSizePref.ts";
   import { readDiffIndicators, writeDiffIndicators } from "$lib/diffIndicatorsPref.ts";
   import { type CompareStore, createCompare } from "@/state/compare.svelte.ts";
   import { createPlanKeyboard, type PlanKeyboardStore } from "@/state/planKeyboard.svelte.ts";
@@ -86,7 +87,12 @@
     SourceViewOptions,
   } from "$lib/diffview/types.ts";
   import type { ThemeId } from "$lib/theme.ts";
-  import { bind, defaultIsEditingContext, shortcuts } from "$lib/shortcuts/index.ts";
+  import {
+    ariaKeyshortcutsFor,
+    bind,
+    defaultIsEditingContext,
+    shortcuts,
+  } from "$lib/shortcuts/index.ts";
   import { sound } from "$lib/sound.ts";
   import { type CursorMotion, lineCountOf } from "$lib/diffview/lineCursor.ts";
   import { findMatches } from "$lib/diffview/planSearch.ts";
@@ -119,25 +125,28 @@
     type BandBox,
     cursorBand,
     lastVisualLine,
+    linesBand,
     pointForLine,
     readingPoint,
+    rowAt,
+    spanBands,
     stepVisualLine,
+    type TextPoint,
     visualLineBox,
     visualLineRange,
+    withinLines,
   } from "$lib/previewLines.ts";
   import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
   import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
   import {
     clearCommentHighlight,
-    clearVisualSelection,
-    commentSlotIndex,
-    createSlotReserve,
+    createSlotGaps,
     groupBySlot,
     paintCommentHighlight,
-    paintVisualSelection,
-    previewSlotBoxes,
     sameSlotBoxes,
     type SlotBox,
+    type SlotGap,
+    slotGap,
     spanRanges,
   } from "$lib/previewComments.ts";
   import { previewFileRefs } from "$lib/previewRefs.ts";
@@ -300,22 +309,27 @@
     }
   });
 
-  // A Settings change to the diff prefs (App bumps settingsRev) re-reads them into the
-  // reactive compare store, so an open diff reflows live — the immediate-apply promise
-  // reaching the prefs that live in this view's own store rather than an App mirror.
-  // Skipped on the initial mount (settingsRev starts 0; compare.init already seeded
-  // these); the in-view picker mutates the store directly and never bumps settingsRev,
-  // so its choice is never clobbered.
+  let previewFontSize = $state(readPreviewFontSize());
+
+  // A Settings change to the diff prefs or the preview's font size (App bumps settingsRev)
+  // re-reads them into this view's state, so an open diff reflows and the preview resizes
+  // live — the immediate-apply promise reaching the prefs that live in this view rather
+  // than an App mirror. Skipped on the initial mount (settingsRev starts 0;
+  // compare.init already seeded these); the in-view picker mutates the store directly
+  // and never bumps settingsRev, so its choice is never clobbered.
   $effect(() => {
     if (settingsRev === 0) return;
     compareStore.diffStyle = readDiffStyle();
     compareStore.diffIndicators = readDiffIndicators();
+    previewFontSize = readPreviewFontSize();
   });
 
   const canCompare = $derived(compare.canCompare(review.versions));
   const showDiff = $derived(canCompare && compareStore.comparing);
 
   let planView = $state<PlanView>(readPlanView());
+  // Gates the flip fade, so a first paint doesn't fade under App's arrival curtain too.
+  let viewFlipped = $state(false);
   const surface = $derived<PlanSurface>(showDiff ? "compare" : planView);
   const runs = (behavior: SurfaceBehavior): boolean => runsOn(behavior, surface);
 
@@ -329,17 +343,21 @@
   // The preview's root, bound from PlanPreview: the chrome geometry and capturePlace read it.
   let previewEl = $state<HTMLDivElement | undefined>();
 
-  // The preview's comments, one slot per block they follow, in the order the source view's
-  // annotation row stacks them: thread, then the open composer, then draft markers.
+  // The preview's comments, one slot per line they end on, in the order the source view's
+  // annotation row stacks them: thread, then the open composer, then draft markers. A
+  // slot's `start` is its earliest item's, so its gap opens under the row their text
+  // ends on.
   type PreviewSlotItem =
     | { kind: "thread"; line: number; annotations: (typeof lineThreads)[number]["annotations"] }
     | { kind: "composer"; line: number; start: number }
     | { kind: "marker"; line: number; start: number; scratch: ComposerScratch };
+  const itemStart = (item: PreviewSlotItem) =>
+    item.kind === "thread" ? Math.min(...item.annotations.map((a) => a.startLine)) : item.start;
   // The open composer supersedes the draft marker on its own line on both surfaces.
   const draftMarkers = $derived(scratches.filter((s) => s.endLine !== pending?.endLine));
   const previewSlots = $derived(
     planPreview && runs("commentThreads")
-      ? groupBySlot<PreviewSlotItem>(planPreview.blocks, [
+      ? groupBySlot<PreviewSlotItem>([
           ...lineThreads.map((t) => ({ kind: "thread" as const, ...t })),
           ...(pending
             ? [{ kind: "composer" as const, line: pending.endLine, start: pending.startLine }]
@@ -350,19 +368,19 @@
             start: s.startLine,
             scratch: s,
           })),
-        ])
+        ]).map((slot) => ({ ...slot, start: Math.min(...slot.items.map(itemStart)) }))
       : [],
   );
-  // One string per set of slotted blocks: previewSlots re-derives on every annotation
-  // poll, and re-observing on each would bump the layout signal with nothing moved.
-  const previewSlotKey = $derived(previewSlots.map((s) => s.block).join());
+  // One string per set of slot spans: previewSlots re-derives on every annotation poll, and
+  // re-observing and re-placing on each would bump the layout signal with nothing moved.
+  const previewSlotKey = $derived(previewSlots.map((s) => `${s.start}-${s.line}`).join());
   let slotBoxes = $state(new Map<number, SlotBox>());
-  // Created per root rather than per sync run, so a re-run keeps the padding it holds
-  // instead of dropping it for a frame.
-  const slotReserve = $derived(previewEl ? createSlotReserve(previewEl) : undefined);
+  // Created per root rather than per sync run, so a re-run keeps the gaps it holds open
+  // instead of closing them for a frame.
+  const slotGaps = $derived(previewEl ? createSlotGaps(previewEl) : undefined);
   $effect(() => {
-    const reserve = slotReserve;
-    return () => reserve?.release();
+    const gaps = slotGaps;
+    return () => gaps?.release();
   });
 
   // The comment under the pointer, else the one holding focus in a slot, else the open
@@ -421,6 +439,18 @@
       focusSpan = null;
   }
 
+  // A slot item removed under the pointer fires no pointerleave, nor in WebKit a focusout,
+  // so its removal re-reads both spans: focus has left it by then, and the pointer's next
+  // pointerover sets its span again.
+  function releasesSpans(_item: HTMLElement): { destroy(): void } {
+    return {
+      destroy() {
+        pointerSpan = null;
+        focusSpan = slotSpan(document.activeElement);
+      },
+    };
+  }
+
   // The map reads the DOM, so it is built in an effect, after the `{@html}` commits: a
   // derived can be read mid-render over the previous version. Ungated: each consumer
   // gates on its own row.
@@ -447,13 +477,14 @@
     const resize = new ResizeObserver(schedule);
     resize.observe(root);
     // Slots sit outside the root: one growing moves nothing the root shows until the slot
-    // sync pads its block.
+    // sync grows its gap.
     void previewSlotKey;
     for (const el of scrollEl?.querySelectorAll<HTMLElement>("[data-preview-slot]") ?? [])
       resize.observe(el);
     // Text rewraps without resizing the root: reference tagging and code swaps rewrite
     // nodes, and a theme paint (inline properties on <html>) restyles the markdown.
-    // The root's attributes stay unobserved: the slot reserve writes block styles there.
+    // Attributes under the root stay unobserved: the slot gaps write their heights there,
+    // and the root's resize already reports each.
     const text = new MutationObserver(schedule);
     text.observe(root, { childList: true, subtree: true, characterData: true });
     const paint = new MutationObserver(schedule);
@@ -475,34 +506,43 @@
     void previewLayoutRev;
     const map = previewSourceMap;
     const span = activeSpan;
-    if (!runs("commentThreads") || !map || !span) {
+    // The open composer's rows wear the cited rows' band instead.
+    const banded = draftRows !== null && sameSpan(span, pendingSpan);
+    if (!runs("commentThreads") || !map || !span || banded) {
       clearCommentHighlight();
       return;
     }
     paintCommentHighlight(spanRanges(map, span));
     return clearCommentHighlight;
   });
-  // Hold each preview slot's room open under its block and place the slot there, on each
-  // previewLayoutRev bump. The slot set, the document and a review switch trigger it
-  // directly too, so a new or reset slot is measured in the same flush rather than held
-  // unmeasured for a frame. The reserve is written before the boxes are measured: padding
-  // a block for the first time shifts its bottom, so measuring first would land a new slot
-  // one margin off.
+  // Hold each preview slot's room open in the text under the row its comments end on and
+  // place the slot there, on each previewLayoutRev bump. The slot set, the document and a
+  // review switch trigger it directly too, so a new or reset slot is measured in the same
+  // flush rather than held unmeasured for a frame. Every gap is read from the text before
+  // any opens, and opened before the boxes are measured: a gap moves everything below it.
   $effect(() => {
-    const scroller = scrollEl;
-    const root = previewEl;
-    const reserve = slotReserve;
+    const geometry = previewGeometry();
+    const gaps = slotGaps;
+    const blocks = planPreview?.blocks;
     void previewLayoutRev;
     void previewSlotKey;
-    void planPreview?.html;
     void contentKey;
-    if (scroller == null || root == null || reserve === undefined) return;
-    const slotEls = [...scroller.querySelectorAll<HTMLElement>("[data-preview-slot]")];
+    if (geometry === null || gaps === undefined || blocks === undefined) return;
+    const { root, scroller, map } = geometry;
     const heights = new Map(
-      slotEls.map((el) => [Number(el.dataset.previewSlot), el.offsetHeight]),
+      [...scroller.querySelectorAll<HTMLElement>("[data-preview-slot]")].map((el) => [
+        Number(el.dataset.previewSlot),
+        el.offsetHeight,
+      ]),
     );
-    reserve.set(heights);
-    const next = previewSlotBoxes(root, scroller, heights);
+    const open = new Map<number, { at: SlotGap; height: number }>();
+    for (const { start, line } of untrack(() => previewSlots)) {
+      const at = slotGap(root, map, blocks, { start, end: line });
+      const height = heights.get(line);
+      if (at !== null && height !== undefined) open.set(line, { at, height });
+    }
+    gaps.set(map, open);
+    const next = gaps.boxes(scroller);
     if (!sameSlotBoxes(untrack(() => slotBoxes), next)) slotBoxes = next;
   });
 
@@ -1306,9 +1346,8 @@
 
   // False until the line's slot is measured, so retryFrames waits for the sync pass.
   function revealPreviewSlot(line: number): boolean {
-    const block = planPreview ? commentSlotIndex(planPreview.blocks, line) : null;
-    if (block === null || !slotBoxes.has(block) || !scrollEl) return false;
-    const slot = scrollEl.querySelector<HTMLElement>(`[data-preview-slot="${block}"]`);
+    if (!slotBoxes.has(line) || !scrollEl) return false;
+    const slot = scrollEl.querySelector<HTMLElement>(`[data-preview-slot="${line}"]`);
     const item = slot?.querySelector<HTMLElement>(`[data-slot-line="${line}"]`);
     if (!slot || !item) return false;
     scrollRowIntoView(slot, item);
@@ -1486,7 +1525,8 @@
     sound: sound.play,
   });
 
-  function previewGeometry(): { root: Element; scroller: HTMLElement; map: PlanSourceMap } | null {
+  type PreviewGeometry = { root: Element; scroller: HTMLElement; map: PlanSourceMap };
+  function previewGeometry(): PreviewGeometry | null {
     const root = previewEl;
     const scroller = scrollEl;
     const map = previewSourceMap;
@@ -1540,31 +1580,266 @@
     sound: sound.play,
   });
 
-  // The band on screen and the source line it marks.
-  let previewCursorBox = $state<({ line: number } & BandBox) | null>(null);
+  // The band on screen and the point it marks. A step glides it, as the pointer glides
+  // the hover; a layout bump lands it.
+  let previewCursorBox = $state.raw<({ point: TextPoint; glide: boolean } & BandBox) | null>(
+    null,
+  );
+  let cursorLayout = -1;
   $effect(() => {
-    void previewLayoutRev;
+    const rev = previewLayoutRev;
     const p = runs("keyboardCursor") && surface === "preview" ? previewCursor.point() : null;
     const map = p && previewSourceMap;
+    const previous = untrack(() => previewCursorBox);
+    const sameLayout = rev === cursorLayout;
+    cursorLayout = rev;
     if (p == null || map == null || scrollEl == null || previewEl == null) {
       previewCursorBox = null;
       return;
     }
-    const lineHeight = Number.parseFloat(getComputedStyle(previewEl).lineHeight);
-    const band = cursorBand(previewEl, scrollEl, map, p, lineHeight);
-    previewCursorBox = band && { line: p.line, ...band };
+    const band = cursorBand(previewEl, scrollEl, map, p, lineHeightOf(previewEl));
+    const glide =
+      sameLayout && previous !== null && glidesFrom(previewEl, map, previous.point, p);
+    previewCursorBox = band && { point: p, glide, ...band };
   });
+
+  // Shift held: a press on either surface selects text rather than rows, so the pointer
+  // shows the text cursor.
+  let selectingText = $state(false);
+  $effect(() => {
+    const track = (event: KeyboardEvent) => (selectingText = event.shiftKey);
+    const reset = () => (selectingText = false);
+    window.addEventListener("keydown", track);
+    window.addEventListener("keyup", track);
+    window.addEventListener("blur", reset);
+    return () => {
+      window.removeEventListener("keydown", track);
+      window.removeEventListener("keyup", track);
+      window.removeEventListener("blur", reset);
+    };
+  });
+
+  // The pointer over the preview, for the hover band over the visual line under it, the
+  // "+" beside that line, and a comment drag's band over the rows its release cites.
+  // rAF-throttled like the source view's [data-hovered], re-read under a still pointer on
+  // scroll, and cleared when the pointer leaves the plan. Only a move glides the bands; a
+  // scroll, press or release lands them in place.
+  type PreviewPointer = { x: number; y: number; pressed: boolean; glide: boolean };
+  let pointer = $state.raw<PreviewPointer | null>(null);
+  let plusEl = $state<HTMLButtonElement | undefined>();
+  $effect(() => {
+    const scroller = scrollEl;
+    if (scroller == null || surface !== "preview" || !runs("textComments")) return;
+    let raf = 0;
+    let at: PreviewPointer | null = null;
+    const schedule = () => {
+      if (raf === 0)
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          pointer = at;
+        });
+    };
+    // On window, so a drag that leaves the plan keeps its band.
+    const onPointer = (event: PointerEvent) => {
+      // Pressing the "+" keeps its line hovered until the click lands.
+      const onPlus = event.target instanceof Node && plusEl?.contains(event.target) === true;
+      if (event.type === "pointerdown" && onPlus) return;
+      const { clientX: x, clientY: y, buttons, type } = event;
+      at = { x, y, pressed: buttons !== 0, glide: type === "pointermove" };
+      schedule();
+    };
+    const onScroll = () => {
+      if (at === null) return;
+      at = { ...at, glide: false };
+      schedule();
+    };
+    const onLeave = (event: PointerEvent) => {
+      if (event.buttons !== 0) return;
+      at = null;
+      schedule();
+    };
+    const events = ["pointermove", "pointerdown", "pointerup", "pointercancel"] as const;
+    for (const type of events) window.addEventListener(type, onPointer, { passive: true });
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    scroller.addEventListener("pointerleave", onLeave, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      pointer = null;
+      for (const type of events) window.removeEventListener(type, onPointer);
+      scroller.removeEventListener("scroll", onScroll);
+      scroller.removeEventListener("pointerleave", onLeave);
+    };
+  });
+
+  function previewRowAt(y: number): TextPoint | null {
+    const geometry = previewGeometry();
+    return geometry && rowAt(geometry.root, geometry.map, y);
+  }
+
+  const lineHeightOf = (el: Element) => Number.parseFloat(getComputedStyle(el).lineHeight);
+
+  type PreviewHover = {
+    row: TextPoint;
+    band: BandBox;
+    /** The "+"'s lane: the preview's left padding, pinned to the scroller's visible left
+     * edge when a narrow window scrolls the column sideways, as the source gutter is. */
+    plus: { left: number; width: number };
+    glide: boolean;
+  };
+  let hover = $state.raw<PreviewHover | null>(null);
+  let hoverLayout = -1;
+  $effect(() => {
+    const rev = previewLayoutRev;
+    const at = pointer;
+    const geometry = previewGeometry();
+    const previous = untrack(() => hover);
+    hover =
+      at && !at.pressed && geometry
+        ? hoverAt(geometry, at, previous, rev === hoverLayout)
+        : null;
+    hoverLayout = rev;
+  });
+
+  /** The hover a still pointer `at` shows: over the preview root's text and padding, and
+   * over the "+", which keeps its line; not over a slot or the code chrome. */
+  function hoverAt(
+    geometry: PreviewGeometry,
+    at: PreviewPointer,
+    previous: PreviewHover | null,
+    sameLayout: boolean,
+  ): PreviewHover | null {
+    const target = document.elementFromPoint(at.x, at.y);
+    const onPlus = target !== null && plusEl?.contains(target) === true;
+    if (!onPlus && (target === null || !geometry.root.contains(target))) return null;
+    const row = onPlus ? previous?.row : rowAt(geometry.root, geometry.map, at.y);
+    return row ? rowHover(geometry, row, previous, at.glide && sameLayout) : null;
+  }
+
+  /** Whether a band moving from `from`'s row to `to`'s glides: a flick or a jump of more
+   * than two rows lands in place, as gliding that far would trail the pointer or key. */
+  const glidesFrom = (root: Element, map: PlanSourceMap, from: TextPoint, to: TextPoint) =>
+    withinLines(root, map, from, to, 2);
+
+  /** The hover over `row`, gliding from `previous` when `glide` allows and the two are near. */
+  function rowHover(
+    { root, scroller, map }: PreviewGeometry,
+    row: TextPoint,
+    previous: PreviewHover | null,
+    glide: boolean,
+  ): PreviewHover | null {
+    const band = cursorBand(root, scroller, map, row, lineHeightOf(root));
+    if (!band) return null;
+    return {
+      row,
+      band,
+      plus: laneBeside({ root, scroller }, band),
+      glide: glide && previous !== null && glidesFrom(root, map, previous.row, row),
+    };
+  }
+
+  function laneBeside(
+    { root, scroller }: Pick<PreviewGeometry, "root" | "scroller">,
+    band: BandBox,
+  ): PreviewHover["plus"] {
+    return {
+      left: Math.max(band.left, scroller.scrollLeft),
+      width: Number.parseFloat(getComputedStyle(root).paddingInlineStart),
+    };
+  }
+
+  // The keyboard cursor's band wins its own line, as [data-caret-cursor] does in source.
+  const hoverBandShown = $derived(
+    hover != null &&
+      (previewCursorBox == null || Math.abs(hover.band.top - previewCursorBox.top) > 1),
+  );
+
+  /** A comment drag: one band over the rows from its press's through the pointer's, and the
+   * hover over the pointer's row, whose "+" rides with it as the source gutter's does. */
+  type PreviewDrag = { band: BandBox; end: PreviewHover };
+  let dragAnchor = $state.raw<TextPoint | null>(null);
+  let drag = $state.raw<PreviewDrag | null>(null);
+  let dragLayout = -1;
+  $effect(() => {
+    const rev = previewLayoutRev;
+    const anchor = dragAnchor;
+    const at = pointer;
+    const geometry = previewGeometry();
+    const previous = untrack(() => drag?.end ?? null);
+    drag =
+      anchor && at && geometry ? dragAt(geometry, anchor, at, previous, rev === dragLayout) : null;
+    dragLayout = rev;
+  });
+
+  function dragAt(
+    geometry: PreviewGeometry,
+    anchor: TextPoint,
+    at: PreviewPointer,
+    previous: PreviewHover | null,
+    sameLayout: boolean,
+  ): PreviewDrag | null {
+    const { root, scroller, map } = geometry;
+    const row = rowAt(root, map, at.y);
+    const end = row && rowHover(geometry, row, previous, at.glide && sameLayout);
+    const start = cursorBand(root, scroller, map, anchor, lineHeightOf(root));
+    if (!end || !start) return null;
+    return { band: spanBands(start, end.band), end };
+  }
+
+  /** Visual mode banded as a drag is: from the anchor's row through the cursor's, which
+   * carries the "+" and glides as the cursor does. An open composer hides it, as the
+   * source's `selectedRange` does. */
+  let visual = $state.raw<PreviewDrag | null>(null);
   $effect(() => {
     void previewLayoutRev;
-    // An open composer hides the selection, as the source's `selectedRange` does.
-    const range =
-      runs("keyboardComments") && surface === "preview" && pending == null
-        ? previewCursor.selection()
-        : null;
-    if (range === null) return;
-    paintVisualSelection(range);
-    return clearVisualSelection;
+    const cursor = previewCursorBox;
+    const anchor =
+      cursor && runs("keyboardComments") && pending == null ? previewCursor.anchor() : null;
+    const geometry = previewGeometry();
+    visual = anchor && cursor && geometry ? visualAt(geometry, anchor, cursor) : null;
   });
+
+  function visualAt(
+    geometry: PreviewGeometry,
+    anchor: TextPoint,
+    cursor: NonNullable<typeof previewCursorBox>,
+  ): PreviewDrag | null {
+    const { root, scroller, map } = geometry;
+    const start = cursorBand(root, scroller, map, anchor, lineHeightOf(root));
+    if (!start) return null;
+    const end = {
+      row: cursor.point,
+      band: cursor,
+      plus: laneBeside(geometry, cursor),
+      glide: cursor.glide,
+    };
+    return { band: spanBands(start, cursor), end };
+  }
+  const plusAt = $derived(drag?.end ?? visual?.end ?? hover);
+
+  /** The rows a comment cites, banded, with the source gutter's selection bar down the "+"
+   * lane: a drag's while it runs, then the open composer's while it drafts, else visual
+   * mode's, as the source view's `selectedRange` holds its lines. */
+  type CitedRows = { band: BandBox; lane: PreviewHover["plus"]; glide: boolean };
+  let draftRows = $state.raw<CitedRows | null>(null);
+  $effect(() => {
+    void previewLayoutRev;
+    const geometry = previewGeometry();
+    draftRows = geometry && pending ? rowsOfLines(geometry, spanOf(pending)) : null;
+  });
+
+  function rowsOfLines(geometry: PreviewGeometry, lines: SourceSpan): CitedRows | null {
+    const { root, scroller, map } = geometry;
+    const band = linesBand(root, scroller, map, lines, lineHeightOf(root));
+    return band && { band, lane: laneBeside(geometry, band), glide: false };
+  }
+  const rowsOf = (d: PreviewDrag): CitedRows => ({
+    band: d.band,
+    lane: d.end.plus,
+    glide: d.end.glide,
+  });
+  const citedRows = $derived<CitedRows | null>(
+    drag ? rowsOf(drag) : (draftRows ?? (visual && rowsOf(visual))),
+  );
 
   // The live visual selection, ascending — mirrored into SourceView's amber band through
   // `selectedRange` while visual mode is active, so extending it with j/k grows the
@@ -1817,10 +2092,11 @@
     setHeadingSlug(runs("headingTracking") ? slug : null);
   });
 
-  // The compare-toggle + plan-search shortcuts, live entries over EXC-786's
+  // The compare-toggle, preview-toggle + plan-search shortcuts, live entries over EXC-786's
   // reservations. Registered while the single-version view is mounted (i.e. an active
   // review), so they no-op with no review; the enabled guards mirror each control's
   // own availability — `d` toggles compare only when there are versions to compare,
+  // `p` flips the view only off compare, where its button shows,
   // `/` opens search only on the search surfaces, and n/N cycle only while a
   // search is committed. Mount-once: the closures read compareStore/surface/search*
   // live at dispatch, so a version or view change never churns the registry.
@@ -1832,6 +2108,11 @@
           run: () => compare.setComparing(!compareStore.comparing),
           enabled: () => canCompare,
         }),
+      ),
+    );
+    offs.push(
+      shortcuts.register(
+        bind("actions.togglePreview", { run: togglePlanView, enabled: () => !showDiff }),
       ),
     );
     // `/` opens the plan search (EXC-832). Plan-content only; not gated on the plan
@@ -1911,6 +2192,13 @@
     const lines = previewSourceMap?.linesOf(range);
     if (lines) openRange(lines.start, lines.end);
   }
+  // A mouse comment cites every source line with text on the rows it covers, as `c` and
+  // `V` do over the same rows.
+  function commentOnRows(from: TextPoint, to: TextPoint): void {
+    const geometry = previewGeometry();
+    const range = geometry && visualLineRange(geometry.root, geometry.map, from, to);
+    if (range) commentOnPreview(range);
+  }
   // Each surface hosts its own composer, so a flip would remount it with its typed text
   // lost: retain the text as a scratch first, which the approve guard still counts.
   function setPlanView(next: PlanView): void {
@@ -1921,9 +2209,13 @@
       // The surfaces select different units — source lines against visual lines — so a
       // carried selection would silently change its extent.
       keyboardStore.visualAnchor = null;
+      viewFlipped = true;
     }
     planView = next;
     writePlanView(next);
+  }
+  function togglePlanView(): void {
+    setPlanView(planView === "preview" ? "source" : "preview");
   }
   function resumeScratch(key: string): void {
     commenting.cancel(liveText); // retain the open composer's text before switching
@@ -2085,9 +2377,13 @@
       size="sm"
       class="preview-toggle float-chip"
       aria-pressed={planView === "preview"}
-      onclick={() => setPlanView(planView === "preview" ? "source" : "preview")}
+      aria-keyshortcuts={ariaKeyshortcutsFor("actions.togglePreview")}
+      onclick={togglePlanView}
     >
       Preview
+      {#if showShortcutHints}
+        <Kbd class="kbd-sm" aria-hidden="true">p</Kbd>
+      {/if}
     </Button>
   {/if}
   <!-- Heading breadcrumbs (EXC-946): where in the plan the reviewer is, and the
@@ -2158,7 +2454,14 @@
     <!-- The gutter composer is the source view only. The compare diff
          is a clean surface with no gutter and no inline annotations; the compared
          versions' comments read in the docked panel instead (EXC-872). -->
-    <div class="diff-plan" bind:this={scrollEl} onmouseenter={showDragHint} role="presentation">
+    <div
+      class="diff-plan"
+      data-view-flip={viewFlipped ? planView : undefined}
+      style:--preview-font-size={previewFontSize}
+      bind:this={scrollEl}
+      onmouseenter={showDragHint}
+      role="presentation"
+    >
       <!-- The per-code-block chrome, keyed on the block's opening line so a re-anchor
            updates each box's props and leaves the instance — and its copied/checkmark
            state — alone. A snippet rendered in both branches below, not once after the
@@ -2249,21 +2552,48 @@
           bind:root={previewEl}
           fileRefs={previewRefs}
           onFileRefClick={openFileRef}
-          onTextComment={runs("textComments") ? commentOnPreview : undefined}
+          rowAt={previewRowAt}
+          onTextComment={runs("textComments") ? commentOnRows : undefined}
+          onCommentDrag={(anchor) => (dragAnchor = anchor)}
+          selectText={selectingText}
         />
+        <!-- Before the chrome and slots, which the cited rows' band runs under. -->
+        {#if citedRows}
+          <div
+            class="preview-drag"
+            data-caret-preview-drag
+            data-glide={citedRows.glide ? "" : undefined}
+            aria-hidden="true"
+            style:top="{citedRows.band.top}px"
+            style:left="{citedRows.band.left}px"
+            style:width="{citedRows.band.width}px"
+            style:height="{citedRows.band.height}px"
+          ></div>
+          <div
+            class="preview-drag-bar"
+            data-caret-preview-drag-bar
+            data-glide={citedRows.glide ? "" : undefined}
+            aria-hidden="true"
+            style:top="{citedRows.band.top}px"
+            style:left="{citedRows.lane.left}px"
+            style:width="{citedRows.lane.width}px"
+            style:height="{citedRows.band.height}px"
+          ></div>
+        {/if}
         {@render codeChrome()}
-        <!-- Comment slots sit outside the preview root so it stays exactly the rendered
-             HTML the source map and place-keeping index. -->
-        {#each previewSlots as slot (slot.block)}
-          {@const box = slotBoxes.get(slot.block)}
+        <!-- Comment slots sit outside the preview root, which holds only the rendered HTML
+             the source map and place-keeping index and the slots' empty gaps. -->
+        {#each previewSlots as slot (slot.line)}
+          {@const box = slotBoxes.get(slot.line)}
           <div
             class="preview-slot"
             role="group"
             aria-label={`Comments on line ${slot.items[0]?.line}`}
-            data-preview-slot={slot.block}
+            data-preview-slot={slot.line}
             style:top={box ? `${box.top}px` : undefined}
             style:left={box ? `${box.left}px` : undefined}
             style:width={box ? `${box.width}px` : undefined}
+            style:padding-inline={box ? `${box.padStart}px ${box.padEnd}px` : undefined}
             data-unmeasured={box ? undefined : ""}
             onpointerover={(e) => pointSlot(e.target)}
             onfocusin={(e) => focusSlot(e.target)}
@@ -2272,15 +2602,17 @@
           >
             {#each slot.items as item (item.kind === "marker" ? item.scratch.key : `${item.kind}:${item.line}`)}
               {#if item.kind === "thread"}
-                <div data-slot-line={item.line}>{@render commentThread(item.annotations)}</div>
+                <div data-slot-line={item.line} use:releasesSpans>
+                  {@render commentThread(item.annotations)}
+                </div>
               {:else if item.kind === "composer"}
                 {#key `${item.start}:${item.line}`}
-                  <div data-slot-line={item.line} data-span-start={item.start}>
+                  <div data-slot-line={item.line} data-span-start={item.start} use:releasesSpans>
                     {@render openComposer({ startLine: item.start, endLine: item.line })}
                   </div>
                 {/key}
               {:else}
-                <div data-slot-line={item.line} data-span-start={item.start}>
+                <div data-slot-line={item.line} data-span-start={item.start} use:releasesSpans>
                   {@render draftMarker(item.scratch)}
                 </div>
               {/if}
@@ -2291,13 +2623,57 @@
           <div
             class="preview-cursor"
             data-caret-preview-cursor
-            data-line={previewCursorBox.line}
+            data-line={previewCursorBox.point.line}
+            data-glide={previewCursorBox.glide ? "" : undefined}
             aria-hidden="true"
             style:top="{previewCursorBox.top}px"
             style:left="{previewCursorBox.left}px"
             style:width="{previewCursorBox.width}px"
             style:height="{previewCursorBox.height}px"
           ></div>
+        {/if}
+        <!-- Hidden rather than gone under the cursor's row, so it glides off it. -->
+        {#if hover}
+          <div
+            class="preview-hover"
+            data-caret-preview-hover
+            data-line={hover.row.line}
+            data-glide={hover.glide ? "" : undefined}
+            aria-hidden="true"
+            style:visibility={hoverBandShown ? undefined : "hidden"}
+            style:top="{hover.band.top}px"
+            style:left="{hover.band.left}px"
+            style:width="{hover.band.width}px"
+            style:height="{hover.band.height}px"
+          ></div>
+        {/if}
+        {#if plusAt}
+          {@const row = plusAt.row}
+          <!-- Visual mode's "+" comments on its selection, as `c` does. -->
+          {@const selection = plusAt === visual?.end}
+          <div
+            class="preview-plus"
+            data-glide={plusAt.glide ? "" : undefined}
+            style:top="{plusAt.band.top}px"
+            style:left="{plusAt.plus.left}px"
+            style:width="{plusAt.plus.width}px"
+            style:height="{plusAt.band.height}px"
+          >
+            <button
+              type="button"
+              bind:this={plusEl}
+              aria-label="Add a comment"
+              onclick={() =>
+                selection ? previewCursor.comment() : commentOnRows(row, row)}
+            >
+              <!-- The source gutter's glyph: @pierre/diffs' diffs-icon-plus. -->
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M8 3a.75.75 0 0 1 .75.75v3.5h3.5a.75.75 0 0 1 0 1.5h-3.5v3.5a.75.75 0 0 1-1.5 0v-3.5h-3.5a.75.75 0 0 1 0-1.5h3.5v-3.5A.75.75 0 0 1 8 3"
+                />
+              </svg>
+            </button>
+          </div>
         {/if}
         {@render visualHint()}
       {:else}
@@ -2339,6 +2715,7 @@
           {searchMatches}
           currentMatchIndex={keyboardStore.searchIndex}
           {reflowedBlocks}
+          selectText={selectingText}
         />
         <!-- The comment-span bracket overlay: rounded gutter rails marking each
              comment's covered lines. It layers over the .diff-plan scroll content
@@ -2472,7 +2849,7 @@
      .plan-preview's block margin, is the gap before the next block. */
   .preview-slot {
     position: absolute;
-    padding-block-end: 1em;
+    padding-block-end: calc(var(--text-base) * var(--preview-scale));
     font-size: var(--text-base);
   }
   /* Not visibility: hidden — a composer mounting here focuses at once, and a hidden element
@@ -2660,6 +3037,30 @@
     min-height: 0;
     overflow: auto;
     background: var(--paper);
+    /* What the preview multiplies each --text-* step by: the base font size the settings
+       set over --text-base, 13.12px at the 16px root. Here rather than on the preview, so
+       the overlays sized to its rows scale with them. */
+    --preview-scale: calc(var(--preview-font-size) / 13.12);
+  }
+
+  /* A source/preview flip fades the arriving view in. The scroller outlives the flip and
+     an animation restarts only when its name changes, so each direction names its own.
+     Opacity only: a transform would move the rects the overlays measure mid-flip. */
+  .diff-plan[data-view-flip='source'] {
+    animation: plan-view-in-source var(--dur-enter) var(--ease-out);
+  }
+  .diff-plan[data-view-flip='preview'] {
+    animation: plan-view-in-preview var(--dur-enter) var(--ease-out);
+  }
+  @keyframes plan-view-in-source {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes plan-view-in-preview {
+    from {
+      opacity: 0;
+    }
   }
 
   /* Scroll-beyond-last-line room (EXC-772): an in-flow spacer below the plan
@@ -2681,6 +3082,87 @@
     /* Keep in sync with coreStyles.ts's [data-caret-cursor] rules. */
     background: color-mix(in lab, var(--ink) 7%, transparent);
     box-shadow: inset 3px 0 0 0 var(--ink);
+  }
+
+  /* The source view's hover grey: the library mixes 3% (light) or 9% (dark) of
+     --diffs-bg-hover-override, which diffview.css binds to --ink, into the row. */
+  .preview-hover {
+    position: absolute;
+    pointer-events: none;
+    background: light-dark(
+      color-mix(in lab, var(--ink) 3%, transparent),
+      color-mix(in lab, var(--ink) 9%, transparent)
+    );
+  }
+  /* The keyboard visual selection's wash. */
+  .preview-drag {
+    position: absolute;
+    pointer-events: none;
+    background: var(--accent-wash);
+  }
+  /* The source gutter's selection ticks as one bar, centred in the "+" lane and inset at
+     each end as a tick is in its row. Keep in sync with coreStyles.ts's
+     [data-selected-line]::after rule. */
+  .preview-drag-bar {
+    position: absolute;
+    display: flex;
+    justify-content: center;
+    padding-block: 0.22lh;
+    font-size: calc(var(--text-base) * var(--preview-scale));
+    pointer-events: none;
+  }
+  .preview-drag-bar::after {
+    content: "";
+    width: 3px;
+    border-radius: var(--radius);
+    background-color: var(--accent);
+    opacity: 0.45;
+  }
+  /* One shape morphing between rows, on the tint-or-pop tier, in step with the cursor's
+     follow scroll; the global reduced-motion rule collapses it to a jump. */
+  :is(.preview-cursor, .preview-hover, .preview-drag, .preview-drag-bar, .preview-plus)[data-glide] {
+    transition-property: top, left, width, height;
+    transition-duration: var(--dur-micro);
+    transition-timing-function: var(--ease-out);
+  }
+  /* Centred in the preview's left padding, one preview line square. */
+  .preview-plus {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  /* Keep in sync with coreStyles.ts's [data-utility-button] rules and the library's. */
+  .preview-plus > button {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 1lh;
+    block-size: 1lh;
+    padding: 0;
+    font-size: calc(var(--text-base) * var(--preview-scale));
+    line-height: inherit;
+    border: none;
+    border-radius: var(--radius);
+    background-color: var(--accent);
+    color: var(--accent-ink);
+    fill: currentColor;
+    cursor: pointer;
+    pointer-events: auto;
+    box-shadow:
+      0 1px 1.5px #0000003d,
+      0 2px 5px #0000004d,
+      inset 0 1px 0 #ffffff4d;
+  }
+  .preview-plus > button:hover {
+    background-color: var(--accent-bright);
+  }
+  .preview-plus > button:focus-visible {
+    background-color: var(--accent-bright);
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 
   /* The zero-height sticky rail that carries the live readout. Sticky to the top

@@ -1,15 +1,12 @@
 import "@ui/support/mount.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { EditorView } from "@codemirror/view";
-
 import type { ClientReview, PlanVersion } from "@core/lib/types";
 import { until } from "@test/support/poll.ts";
 import { expectViewRecreated } from "@ui/support/diffview.ts";
-import { logCapture, typeInto } from "@ui/support/helpers.ts";
+import { logCapture } from "@ui/support/helpers.ts";
 import { capture, render } from "@ui/support/mount.ts";
 import { reactiveProps } from "@ui/support/props.svelte.ts";
-import { selectText } from "@ui/support/selection.ts";
 import DiffPlanView from "@/components/DiffPlanView.svelte";
 import {
   type ComposerScratch,
@@ -53,6 +50,7 @@ function reviewFixture(over: Partial<ClientReview> = {}): ClientReview {
     versions: [],
     generalCommentDraft: "",
     composerScratches: [],
+    agentCopyMatches: false,
     createdAt: 0,
     updatedAt: 0,
     ...over,
@@ -859,6 +857,37 @@ describe("DiffPlanView plan view toggle", () => {
       .list()
       .find((e) => e.id === id)
       ?.enabled?.();
+  const togglePreview = () =>
+    shortcuts
+      .list()
+      .find((e) => e.id === "actions.togglePreview")
+      ?.run?.();
+
+  test("p flips to the preview and back", async () => {
+    const { target } = render(DiffPlanView, props());
+    await until(() => toggle(target) != null);
+    togglePreview();
+    await until(() => target.querySelector(".plan-preview") != null);
+    expect(toggle(target)?.getAttribute("aria-pressed")).toBe("true");
+    togglePreview();
+    await until(() => target.querySelector(".plan-preview") == null);
+    expect(toggle(target)?.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  test("the toggle advertises p with a cap", async () => {
+    const { target } = render(DiffPlanView, props());
+    await until(() => toggle(target) != null);
+    expect(toggle(target)?.getAttribute("aria-keyshortcuts")).toBe("p");
+    expect(toggle(target)?.querySelector("[data-slot='kbd']")?.textContent).toBe("p");
+  });
+
+  test("p is off while comparing", async () => {
+    const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
+    await until(() => toggle(target) != null);
+    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
+    await until(() => toggle(target) == null);
+    expect(enabled("actions.togglePreview")).toBe(false);
+  });
 
   test("the preview keeps the search dock and its shortcut", async () => {
     const { target } = render(DiffPlanView, props());
@@ -952,29 +981,33 @@ describe("DiffPlanView preview comment slots", () => {
     endLine: line,
     comment,
   });
-  const slot = (target: HTMLElement, block: number) =>
-    target.querySelector(`[data-preview-slot="${block}"]`);
+  const slot = (target: HTMLElement, line: number) =>
+    target.querySelector(`[data-preview-slot="${line}"]`);
+  const gap = (target: HTMLElement, line: number) =>
+    target.querySelector(`.plan-preview [data-preview-gap="${line}"]`);
 
-  test("a thread renders in the slot of the block holding its end line", async () => {
+  test("a thread renders in the slot of its end line", async () => {
     const { target } = await renderSlots(plan, { annotations: [ann("a", 4, "on alpha")] });
-    const found = await until(() => slot(target, 1)?.textContent?.includes("on alpha") ?? false);
+    const found = await until(() => slot(target, 4)?.textContent?.includes("on alpha") ?? false);
     expect(found).toBe(true);
   });
 
-  test("a thread ending on a gap line renders in the previous block's slot", async () => {
+  test("a thread ending on a gap line holds its room open after the previous block", async () => {
     const { target } = await renderSlots(plan, { annotations: [ann("a", 5, "in the gap")] });
-    const found = await until(() => slot(target, 1)?.textContent?.includes("in the gap") ?? false);
+    const found = await until(() => slot(target, 5)?.textContent?.includes("in the gap") ?? false);
+    const blocks = target.querySelector(".plan-preview")!.children;
     expect(found).toBe(true);
+    expect(blocks[1]?.contains(gap(target, 5))).toBe(true);
   });
 
-  test("two comments in one block share its slot, in line order", async () => {
-    const { target } = await renderSlots(plan, { annotations: [ann("b", 4), ann("a", 3)] });
-    await until(() => slot(target, 1)?.querySelectorAll("[data-slot-line]").length === 2);
-    const lines = [...slot(target, 1)!.querySelectorAll("[data-slot-line]")].map((el) =>
-      el.getAttribute("data-slot-line"),
-    );
-    expect(lines).toEqual(["3", "4"]);
-    expect(target.querySelectorAll("[data-preview-slot]").length).toBe(1);
+  test("comments ending on one line share its slot, and each line has its own, in line order", async () => {
+    const { target } = await renderSlots(plan, {
+      annotations: [ann("b", 4), ann("a", 3), { ...ann("c", 4), startLine: 3 }],
+    });
+    await until(() => target.querySelectorAll("[data-annotation-card]").length === 3);
+    const slots = [...target.querySelectorAll<HTMLElement>("[data-preview-slot]")];
+    expect(slots.map((el) => el.dataset.previewSlot)).toEqual(["3", "4"]);
+    expect(slot(target, 4)?.querySelectorAll("[data-annotation-card]").length).toBe(2);
   });
 
   test("resuming a draft's marker opens the composer in the preview with its text", async () => {
@@ -985,31 +1018,29 @@ describe("DiffPlanView preview comment slots", () => {
       }),
     });
     const resume = () =>
-      [...(slot(target, 2)?.querySelectorAll("button") ?? [])].find((b) =>
+      [...(slot(target, 6)?.querySelectorAll("button") ?? [])].find((b) =>
         b.textContent?.includes("Resume"),
       );
     expect(await until(() => resume() !== undefined)).toBe(true);
     resume()!.click();
     const opened = await until(
-      () => slot(target, 2)?.querySelector(".cm-content")?.textContent === "kept draft",
+      () => slot(target, 6)?.querySelector(".cm-content")?.textContent === "kept draft",
     );
     expect(opened).toBe(true);
   });
 
-  test("a block followed by a slot is padded open, and closes when the comment goes", async () => {
+  test("a slot holds its room open in the preview, and closes it when the comment goes", async () => {
     const { target, p } = await renderSlots(plan, { annotations: [ann("a", 3)] });
-    const wrapper = () =>
-      target.querySelector<HTMLElement>(".plan-preview")!.children[1] as HTMLElement;
-    const padded = await until(() => wrapper().style.paddingBlockEnd !== "");
-    expect(padded).toBe(true);
+    const opened = await until(() => gap(target, 3) !== null);
+    expect(opened).toBe(true);
     p.annotations = [];
-    const released = await until(() => wrapper().style.paddingBlockEnd === "");
-    expect(released).toBe(true);
+    const closed = await until(() => gap(target, 3) === null);
+    expect(closed).toBe(true);
   });
 
   test("a slot follows its block when the theme repaints", async () => {
     const { target } = await renderSlots(plan, { annotations: [ann("a", 3)] });
-    const el = () => slot(target, 1) as HTMLElement | null;
+    const el = () => slot(target, 3) as HTMLElement | null;
     await until(
       () => el() != null && !el()!.hasAttribute("data-unmeasured") && el()!.style.top !== "",
     );
@@ -1021,7 +1052,7 @@ describe("DiffPlanView preview comment slots", () => {
   test("a switch to a review of the same plan text measures its slot again", async () => {
     const { target, p, flush } = await renderSlots(plan, { annotations: [ann("a", 3)] });
     const measured = () => {
-      const el = slot(target, 1);
+      const el = slot(target, 3);
       return el != null && !el.hasAttribute("data-unmeasured");
     };
     await until(measured);
@@ -1039,7 +1070,7 @@ describe("DiffPlanView preview comment slots", () => {
     });
     await until(() => commenting.scratches().length > 0);
     commenting.resume(scratchKey(3, 4));
-    await until(() => slot(target, 1)?.querySelector(".cm-content") != null);
+    await until(() => slot(target, 4)?.querySelector(".cm-content") != null);
     toggle(target)!.click();
     expect(commenting.scratches()).toEqual([
       { key: scratchKey(3, 4), startLine: 3, endLine: 4, text: "mid flip" },
@@ -1242,67 +1273,5 @@ describe("DiffPlanView preview cursor", () => {
     await search(target, "beta");
     await until(() => band(target)?.getAttribute("data-line") === "7");
     expect(band(target)?.getAttribute("data-line")).toBe("7");
-  });
-});
-
-describe("DiffPlanView preview text comments", () => {
-  // The paragraph "alpha one" / "alpha two" spans stored lines 3–4 and renders as one <p>.
-  const plan = "# Title\n\nalpha one\nalpha two\n";
-
-  afterEach(() => {
-    document.getSelection()?.removeAllRanges();
-  });
-
-  /** The text node and offset where `word` starts in the preview. */
-  function pointAt(root: HTMLElement, word: string): [Text, number] {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null)
-      if (node.data.includes(word)) return [node, node.data.indexOf(word)];
-    throw new Error(`no text "${word}" in the preview`);
-  }
-
-  async function renderParagraph(created: unknown[] = []) {
-    const mounted = await renderSlots(plan, { onCreate: (anchor) => created.push(anchor) });
-    const root = mounted.target.querySelector<HTMLElement>(".plan-preview")!;
-    await until(() => root.querySelector("p") != null);
-    return { ...mounted, root };
-  }
-
-  const label = (target: HTMLElement) => target.querySelector(".composer .label")?.textContent;
-
-  /** Drag from line 3's last word to line 4's first. */
-  function dragAcrossLines(root: HTMLElement): void {
-    root.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
-    const [two, at] = pointAt(root, "alpha two");
-    selectText(pointAt(root, "one"), [two, at + "alpha".length]);
-    window.dispatchEvent(new PointerEvent("pointerup", { button: 0 }));
-  }
-
-  test("a click on the second stored line's text comments on that line", async () => {
-    const { target, root } = await renderParagraph();
-    selectText(pointAt(root, "two"));
-    root.querySelector("p")!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    expect(await until(() => label(target) === "Line 4")).toBe(true);
-  });
-
-  test("a selection across the paragraph's line break comments on both lines", async () => {
-    const { target, root } = await renderParagraph();
-    dragAcrossLines(root);
-    expect(await until(() => label(target) === "Lines 3–4")).toBe(true);
-  });
-
-  test("submitting a selection's composer creates a comment on its source lines", async () => {
-    const created: unknown[] = [];
-    const { target, root } = await renderParagraph(created);
-    dragAcrossLines(root);
-    await until(() => label(target) === "Lines 3–4");
-    typeInto(
-      EditorView.findFromDOM(target.querySelector(".composer .cm-editor")!)!,
-      "tighten this",
-    );
-    [...target.querySelectorAll<HTMLButtonElement>(".composer button")]
-      .find((b) => b.textContent?.includes("Comment"))!
-      .click();
-    expect(created).toEqual([{ startLine: 3, endLine: 4, comment: "tighten this" }]);
   });
 });

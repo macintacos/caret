@@ -1430,8 +1430,9 @@ describe("the filename-reference chip (EXC-840, tinted EXC-880)", () => {
   });
 });
 
-// PlanPreview.svelte copies the link rule, the link and code chips, and the reference
-// chip into the light-DOM preview, whose Svelte <style> cannot interpolate this sheet.
+// PlanPreview.svelte copies the link rule, the link and code chips, the reference chip and
+// the table card's rule ink into the light-DOM preview, whose Svelte <style> cannot
+// interpolate this sheet.
 // A rule pins to the source rule it copies; the one-box link and code chips pin to a
 // chip assembled from the source's tint, fill and cap rules. A declaration added through
 // a selector list escapes the pin on either side.
@@ -1535,6 +1536,12 @@ describe("the preview's copies of the link, code and reference chips (EXC-2021)"
     '[data-file-ref="directory"]::before',
   ])("%s matches the source view's", (target) => {
     expectPinned(previewRule(target), sourceRule(target));
+  });
+
+  test("a table rules its columns and rows in the source view's table card ink", () => {
+    const rule = sourceRule("> [data-table-card]")["--table-rule"];
+    expect(rule).toBeDefined();
+    expect(previewRule("table")["--table-rule"]).toBe(rule);
   });
 });
 

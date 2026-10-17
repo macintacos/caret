@@ -102,12 +102,13 @@ export function approvedMessage(notes?: string, planFilePath?: string): string {
 /** Tool result returned to the agent on a change request: the reviewer feedback
  * and a resubmit instruction. The plan itself is NOT echoed — the agent already has
  * it in the args of its own call to `tool`, or in the file at `planFilePath`. A feedback
- * line reference indexes the plan version caret stored, and the abbreviated quote paired
- * with it is what the agent matches against its own text. That stored version is
- * rumdl-reflowed to 90 columns at ingest (src/plan/markdown.ts). With a plan file, caret
- * mirrors that canonical text onto it, so once the agent re-reads the file the numbers
- * usually line up (the write-back is best-effort); without one, they need not line up with
- * the agent's own copy at all.
+ * line reference indexes the plan version caret stored, and an abbreviated quote rides
+ * with it only when the agent may not hold that version line for line. That stored
+ * version is rumdl-reflowed to 90 columns at ingest (src/plan/markdown.ts). With a plan
+ * file, caret mirrors that canonical text onto it, so once the agent re-reads the file the
+ * numbers line up and no quote is sent; when there is no file, or the best-effort
+ * write-back fails, they need not line up with the agent's own copy, and the quote is what
+ * the agent matches against its own text.
  * (Pinned across its three surfaces by
  * test/structure/line-anchor-claim.test.ts.) */
 export function deniedMessage(feedback: string, tool: string, planFilePath?: string): string {

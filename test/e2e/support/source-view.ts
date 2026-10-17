@@ -29,6 +29,76 @@ export const PLAN_SURFACE = ".diff-plan";
  * a role-less container, so its class is the handle. */
 export const PLAN_PREVIEW = ".plan-preview";
 
+/** The preview's hover band, an overlay sibling of `.plan-preview` carrying the first
+ * source line of the row under the pointer as data-line. */
+export const PREVIEW_HOVER = `${PLAN_SURFACE} [data-caret-preview-hover]`;
+
+/** A comment drag's band, across the rows it covers. */
+export const PREVIEW_DRAG = `${PLAN_SURFACE} [data-caret-preview-drag]`;
+
+/** A comment drag's bar down the preview's "+" lane, the length of its band. */
+export const PREVIEW_DRAG_BAR = `${PLAN_SURFACE} [data-caret-preview-drag-bar]`;
+
+/** Counts, from the call on, the moves of the overlay at `selector` that glide rather than
+ * land: the transitions of its `top` that start. One counter per selector a page. */
+export async function glideCounter(page: Page, selector: string): Promise<() => Promise<number>> {
+  await page.evaluate((selector) => {
+    const w = window as { glides?: Record<string, number> };
+    w.glides ??= {};
+    const counts = w.glides;
+    counts[selector] = 0;
+    document.addEventListener("transitionrun", (event) => {
+      const { target, propertyName } = event;
+      if (propertyName === "top" && target instanceof Element && target.matches(selector))
+        counts[selector] = (counts[selector] ?? 0) + 1;
+    });
+  }, selector);
+  return () =>
+    page.evaluate(
+      (selector) => (window as { glides?: Record<string, number> }).glides?.[selector] ?? 0,
+      selector,
+    );
+}
+
+/** The source lines with rendered prose on the preview row at viewport height `y`,
+ * ascending — read from the renderer's data-source-line markers, so a row's comment can
+ * be checked against the text a reader sees on it. Prose only: a code block's lines share
+ * one marker. */
+export function linesOnRow(page: Page, y: number): Promise<number[]> {
+  return page.evaluate(
+    ({ y, preview }) => {
+      const root = document.querySelector(preview);
+      if (!root) return [];
+      const lines = new Set<number>();
+      let line = 0;
+      const walker = document.createTreeWalker(
+        root,
+        NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+      );
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node instanceof HTMLElement) {
+          if (node.dataset.sourceLine) line = Number(node.dataset.sourceLine);
+          continue;
+        }
+        if (!node.textContent?.trim()) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const rects = [...range.getClientRects()];
+        if (rects.some((r) => r.width > 0 && r.top <= y && y < r.bottom)) lines.add(line);
+      }
+      return [...lines].sort((a, b) => a - b);
+    },
+    { y, preview: PLAN_PREVIEW },
+  );
+}
+
+/** The composer's label for a comment on `lines`: their first through their last. */
+export function rowLabel(lines: readonly number[]): string {
+  const first = Math.min(...lines);
+  const last = Math.max(...lines);
+  return first === last ? `Line ${first}` : `Lines ${first}–${last}`;
+}
+
 /**
  * A banded code row's gutter→content seam-fill strip, as Chromium serializes it: a shadow
  * layer pulled left by the two insets, with no blur and no spread.

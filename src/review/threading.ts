@@ -59,12 +59,11 @@ export async function routeIncomingPlan(
   // version (new thread or revision); best-effort, and skipped when the agent
   // rewrote the file after caret read it.
   const { planFilePath } = input;
-  const planFile = planFilePath
-    ? {
-        planFileCurrent:
-          writeCanonicalPlanFile({ ...input, planFilePath }, plan, sessionLog) !== "changed",
-      }
-    : {};
+  const written = planFilePath
+    ? writeCanonicalPlanFile({ ...input, planFilePath }, plan, sessionLog)
+    : undefined;
+  const planFile = written ? { planFileCurrent: written !== "changed" } : {};
+  const agentCopyMatches = written === "written" || plan === (input.plan ?? "");
   const now = Date.now();
 
   const [latest, ...older] = store.bySession(sessionId);
@@ -88,7 +87,7 @@ export async function routeIncomingPlan(
   if (latest && (latest.status === "rejected" || latest.status === "pending")) {
     const version = latest.versions.length + 1;
     await store.update(latest.id, (r) => {
-      r.versions.push({ version, plan, annotations: [], createdAt: now });
+      r.versions.push({ version, plan, annotations: [], agentCopyMatches, createdAt: now });
       r.title = deriveTitle(plan);
       r.status = "pending";
       // Re-point at the pane that actually submitted this revision; a submission
@@ -124,7 +123,7 @@ export async function routeIncomingPlan(
     title: deriveTitle(plan),
     status: "pending",
     cmux: input.cmux,
-    versions: [{ version: 1, plan, annotations: [], createdAt: now }],
+    versions: [{ version: 1, plan, annotations: [], agentCopyMatches, createdAt: now }],
     createdAt: now,
     updatedAt: now,
   };

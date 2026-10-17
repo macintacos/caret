@@ -1713,8 +1713,9 @@ test.describe("on the preview", () => {
     return proj;
   }
 
-  /** A source-view reference's computed fill, inline padding and glyph box, read from
-   * inside the shadow root; null until it is tagged. */
+  /** A source-view reference's computed fill, and its inline padding and glyph box in its
+   * own em, since the preview sets its text larger; read from inside the shadow root,
+   * null until it is tagged. */
   function sourceRef(page: import("@playwright/test").Page, text: string) {
     return page.evaluate((text) => {
       const sh = (document.querySelector(".diffview") as HTMLElement | null)?.shadowRoot;
@@ -1724,12 +1725,14 @@ test.describe("on the preview", () => {
       if (!ref) return null;
       const cs = getComputedStyle(ref);
       const glyph = getComputedStyle(ref, "::before");
+      const em = (px: string) =>
+        Math.round((Number.parseFloat(px) / Number.parseFloat(cs.fontSize)) * 100) / 100;
       return {
         background: cs.backgroundColor,
-        padding: cs.paddingLeft,
+        padding: em(cs.paddingLeft),
         glyph: {
-          width: glyph.width,
-          margin: glyph.marginRight,
+          width: em(glyph.width),
+          margin: em(glyph.marginRight),
           background: glyph.backgroundColor,
           mask:
             glyph.maskImage && glyph.maskImage !== "none"
@@ -1774,24 +1777,29 @@ test.describe("on the preview", () => {
       await expect(refs).toHaveCount(4);
 
       const label = refs.filter({ hasText: "the cache" });
-      await expect(label).toHaveCSS("background-color", source!.background);
-      await expect(label).toHaveCSS("padding-left", source!.padding);
       await expect
         .poll(() =>
           label.evaluate((el) => {
-            const cs = getComputedStyle(el, "::before");
+            const cs = getComputedStyle(el);
+            const glyph = getComputedStyle(el, "::before");
+            const em = (px: string) =>
+              Math.round((Number.parseFloat(px) / Number.parseFloat(cs.fontSize)) * 100) / 100;
             return {
-              width: cs.width,
-              margin: cs.marginRight,
               background: cs.backgroundColor,
-              mask:
-                cs.maskImage && cs.maskImage !== "none"
-                  ? cs.maskImage
-                  : cs.getPropertyValue("-webkit-mask-image"),
+              padding: em(cs.paddingLeft),
+              glyph: {
+                width: em(glyph.width),
+                margin: em(glyph.marginRight),
+                background: glyph.backgroundColor,
+                mask:
+                  glyph.maskImage && glyph.maskImage !== "none"
+                    ? glyph.maskImage
+                    : glyph.getPropertyValue("-webkit-mask-image"),
+              },
             };
           }),
         )
-        .toEqual(source!.glyph);
+        .toEqual(source!);
 
       const pill = page
         .locator(`${PLAN_PREVIEW} code`)

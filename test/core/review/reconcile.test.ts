@@ -31,6 +31,7 @@ function clientReview(over: Partial<ClientReview> = {}): ClientReview {
     versions: [],
     generalCommentDraft: "",
     composerScratches: [],
+    agentCopyMatches: false,
     createdAt: 1,
     updatedAt: 1,
     ...over,

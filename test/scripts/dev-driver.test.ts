@@ -115,6 +115,13 @@ test("hookStdin takes an explicit session id for extra reviews", () => {
   expect(parsed.session_id).toBe("caret-dev-extra-1");
 });
 
+test("hookStdin names the agent's plan file when given one", () => {
+  const parsed = JSON.parse(hookStdin("# P", DEV_SESSION, "/plans/p.md")) as {
+    tool_input: { planFilePath?: string };
+  };
+  expect(parsed.tool_input.planFilePath).toBe("/plans/p.md");
+});
+
 // ---- seed fixture invariant (EXC-556) ----
 
 test("the seeded fixture has no untagged code blocks", () => {
@@ -538,6 +545,23 @@ test("a revision round-trips through the real runReview hook path and logs to ca
   expectNeverLogsBody(log, "needs a rollout plan");
   expect(log).toContain('"feedbackChars":20');
   expect(log).toContain(DEV_SESSION);
+});
+
+test("with a plan dir, a dev review goes through the agent's plan file like Claude Code's", async () => {
+  await boot();
+  const planDir = join(dir, "plans");
+  const deps = devReviewDeps(base, () => {}, planDir);
+  const reviewing = runReview(devHookInput(PLAN_V1, DEV_SESSION, deps.planDir), deps);
+  const id = await waitFor(async () => {
+    const list = (await (await fetch(`${base}/api/reviews`)).json()) as Array<{ id: string }>;
+    return list[0]?.id;
+  });
+  const review = (await d.getReview(id)) as { currentPlan: string; agentCopyMatches: boolean };
+  // caret rewrote the file the driver wrote with the text the reviewer sees.
+  expect(await Bun.file(join(planDir, `${DEV_SESSION}.md`)).text()).toBe(review.currentPlan);
+  expect(review.agentCopyMatches).toBe(true);
+  await resolve(id, "allow");
+  await reviewing;
 });
 
 test("bootstrapReview grows the primary review to several varied versions before the loop", async () => {

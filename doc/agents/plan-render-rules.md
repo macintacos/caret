@@ -182,6 +182,18 @@ exist today.
   `title`; anything else renders as its alt text.
 - **`[/]`** renders as `data-task="slashed"`. `indeterminate` has no attribute form, so
   `PlanPreview.svelte` sets the property on each such input after every mount of new HTML.
+- **Column.** The preview's text column is a fixed width with its inline padding, both in
+  its own em, so every line wraps at the same word at any zoom, text size, base font size
+  or window width, and a window narrower than the column scrolls `.diff-plan` sideways. In
+  a wider plan the root's end padding takes up the rest, so a row runs to the plan's right
+  edge, as a source row does, for the hover, a click and a drag alike. What a click cites
+  depends on where text wraps. macOS's system font respaces its glyphs by point size, so a
+  text-size preference, which moves the root font size alone, can still move a word near a
+  line's end; page zoom does not.
+- **Type scale.** The preview multiplies each `--text-*` step by `--preview-scale`, the
+  Appearance setting's base font size (15px by default, `previewFontSizePref.ts`) over
+  `--text-base`. `.diff-plan` declares it, so the overlays sized to the preview's rows,
+  the "+", the drag bar and the slot gap, scale with them.
 - **Styling** lives in `PlanPreview.svelte`'s scoped stylesheet: every rule is rooted at
   `.plan-preview` and painted from tokens and the theme's `--markdown-*` properties, with
   the source view's fallbacks except an unstyled heading (weight 600) and quote
@@ -195,7 +207,15 @@ exist today.
   Links, reference chips and inline code wear the source view's chips, and a link whose
   label holds code, a reference or an image gives way to it, so a label mixing code and
   prose shows the code chip alone; `coreStyles.test.ts` pins each copy to the
-  `coreStyles.ts` rule it mirrors.
+  `coreStyles.ts` rule it mirrors. A table wears the source view's table card: the code
+  panel's fill, no frame, `--table-rule` between columns and rows (pinned the same way),
+  an uppercase `--ink-soft` header that never wraps, and cells aligned on their first
+  line. The header row stays at the top of the plan's view while its rows pass under it:
+  `position: sticky` would pin it inside the table, which scrolls sideways, so a
+  scroll-driven animation on the table's view timeline slides it down instead, as far as
+  the view scrolls, and stops it on the last row at the `--pin-travel` `PlanPreview`
+  measures. Pinned, it takes the card's fill and a rule beneath; at rest it stays clear,
+  so a band over its own row shows through.
 - **Code blocks.** A code block renders `<pre><code>` with its escaped text and no class.
   A fence's info string resolves through `fenceGrammar` to a bundled grammar, carried as
   `RenderedPlan.codeLanguages` keyed by the code marker's line, and never as markup; an
@@ -293,13 +313,15 @@ stale `api` and `host`. A port gives the behavior a preview implementation first
 adds `"preview"` to its row.
 
 Everything placed or painted over the preview re-runs on `previewLayoutRev`: the code
-chrome, the comment slots and highlight, the cursor band, the visual selection, and
-search. The signal is one rAF-throttled bump from a `ResizeObserver` on the root and on
-each slot, a text `MutationObserver` on the root, and the theme paint on `<html>`. The
-root's attributes stay unobserved, because the slot reserve writes block styles there. A
-new preview overlay reads the signal rather than observing the root. The slot sync, the
-one effect that moves blocks, is declared ahead of every overlay that measures them; a
-reader declared before it measures a frame late, so declare a new overlay after it.
+chrome, the comment slots and highlight, the cursor band, the hover band and its "+", a
+cited rows' band and bar, the visual selection, and search. The signal is one
+rAF-throttled bump from a `ResizeObserver` on the root and on each slot, a text
+`MutationObserver` on the root, and the theme paint on `<html>`. Attributes under the root
+stay unobserved, because the slot gaps write their heights there and the root's resize
+reports each. A new preview overlay reads the signal rather than observing the root. The
+slot sync, the one effect that moves text, is declared ahead of every overlay that
+measures it; a reader declared before it measures a frame late, so declare a new overlay
+after it.
 
 `codeChrome` is the first ported behavior. `codeChrome.ts` gives it a light-DOM geometry
 over the preview's `pre`s, keyed by the opening fence line (the code marker's line minus
@@ -326,24 +348,48 @@ stay source-only, under `referenceHints`.
 highlight run only where the `commentThreads` row runs.
 
 - **Placement.** Threads, the open composer and draft markers render in overlay slots, one
-  per block, positioned beside the preview root rather than inside it, so the root stays
-  exactly the rendered HTML the source map and `planPlace` index. A comment's slot follows
-  the block holding its end line; `commentSlotIndex` gives a gap line the block before it
-  and a line above every block the first, where `blockIndexForLine` gives a gap line the
-  next block. Anchors stay source line ranges; nothing is re-anchored to rendered
-  positions. An unmeasured slot hides with `opacity: 0` and `pointer-events: none`, never
+  per line they end on, positioned beside the preview root rather than inside it. A slot
+  sits under the last visual row its comments hold, the row their band ends on, so a
+  composer opens right under the rows a click, drag, `c` or `V` banded, and the thread it
+  sends stays there. `heldRows` gives those rows: the ones their text is laid out on, less
+  an end row that also holds another line's text. A click cites every line on its row, and
+  the last of them usually runs on into the next row, which holds the line after it too,
+  so the comment holds the clicked row alone. When every row is shared that way, it holds
+  them all. `lineAfter` finds where the next row starts within that block, past the rest
+  of a table row; on a block's last row the slot follows that block, and for lines that
+  render no text the block `commentSlotIndex` gives, which takes a gap line to the block
+  before it and a line above every block to the first, where `blockIndexForLine` sends a
+  gap line forward. Anchors stay source line ranges; nothing is re-anchored to rendered
+  positions. A slot spans the root, padded in to its block's sides, so the space beside a
+  comment is the comment's, as an annotation row is in the source view, and no row's. An
+  unmeasured slot hides with `opacity: 0` and `pointer-events: none`, never
   `visibility: hidden`, so a composer mounting there can take focus.
-- **Reserve.** `createSlotReserve` holds each slot's height open as `padding-block-end` on
-  its block, and the slot sits at the block's bottom less that height. The reserve lives
-  as long as the preview root, so a re-sync never drops a block's padding for a frame. The
-  overlay state (slot boxes, the pointer and focus spans) resets on a version switch or a
-  flip, as the code chrome's boxes do.
+- **Gaps.** `createSlotGaps` holds each slot's height open with an empty
+  `span[data-preview-gap]` in the text, a block row of its own (a table row in a table),
+  and the slot sits at its top. A gap opens before the next row's first character,
+  splitting its text node there, moved out of each element that character opens, so a list
+  item's gap opens between the items, never under the next one's bullet, and before the
+  source-line markers leading it, so a code block's marker stays directly before its `pre`
+  for `previewCodeBlocks`, the code chrome and the panel's `[data-source-code] + pre`
+  rules. A gap in a table opens before the next table row, never between its cells. A
+  block's last row's gap opens after all of its content. Gaps hold no text and splitting
+  keeps the text in order, so the source map, search and the visual lines read past them,
+  and the root is otherwise the rendered HTML the map and `planPlace` index. The gaps live
+  as long as the preview root and `set` writes only what moved, so a re-sync over settled
+  layout writes nothing and never closes a gap for a frame. The overlay state (slot boxes,
+  the pointer and focus spans) resets on a version switch or a flip, as the code chrome's
+  boxes do. A slot item's removal re-reads the two spans: a removed item fires no
+  pointerleave, nor in WebKit a focusout, so a discarded composer's lines would otherwise
+  stay highlighted.
 - **Highlight precedence.** The pointer's comment, else the focused comment in a slot,
   else the open composer, else the focused annotation, is highlighted as
   `caret-comment-span` over the `rangeOf` ranges of its lines.
-- **Accepted trade-off.** A padded block's bottom includes its slot, so `previewTopLine`
-  can report a block whose text has scrolled past the reading zone while its slot is still
+- **Accepted trade-off.** A block's bottom includes its slots' gaps, so `previewTopLine`
+  can report a block whose text has scrolled past the reading zone while a slot is still
   in view, and a flip to source lands on that block's start.
+- **Reveals.** A scroll flight holds scroll anchoring off while it runs: a slot above the
+  anchor growing, as a card's does when a reveal focuses it, would otherwise move the view
+  in one step, which the flight reads as the reader taking over.
 
 `keyboardCursor` is ported too. The preview cursor is `cursorLine` plus `cursorPoint`, a
 column into the text that line renders, so a resize, theme switch or inserted card reflows
@@ -352,7 +398,8 @@ the text without moving the cursor off it; a `cursorPoint` on any other line tha
 `ui/src/lib/previewLines.ts` measures visual lines per block from text-node rects, reading
 only the blocks a step crosses, never the whole document. The band
 (`data-caret-preview-cursor`) is an overlay sibling of `.plan-preview`, so the source
-map's text order is untouched.
+map's text order is untouched. It glides a step as the hover band glides between rows,
+below.
 
 `search` is ported through `ui/src/lib/previewSearch.ts`, which matches the text as
 rendered, segmented once per map, on the first query, by `createPreviewSearch`. A block,
@@ -375,24 +422,59 @@ swaps the match space under the live index, so an effect re-seats it at the curs
 read as the cursor's point is. `visualLineRange` gives the text from the anchor's visual
 line through the cursor's, or the cursor's line alone for `c`, and `commentOnPreview`
 (`linesOf`, then `openRange`) opens the composer on it, so a keyboard comment anchors
-where a mouse selection over the same text does. The selection paints as the
-`caret-visual-selection` highlight, a key of its own, rebuilt on each `previewLayoutRev`
-bump as search's are. A flip ends visual mode, because the two surfaces select different
-units: whole source lines against visual lines.
+where a click or drag over the same visual lines does. Visual mode paints as a drag does:
+the band and bar from the anchor's row through the cursor's, which glides as the cursor
+does, with the "+" on the cursor's row; that "+" comments on the selection as `c` does. An
+open composer's rows take the band instead. A flip ends visual mode, because the two
+surfaces select different units: whole source lines against visual lines.
 
-`textComments` opens the composer from the preview. `PlanPreview` reports a click as its
-collapsed selection, and a drag as the selection the gesture changed; Shift selects
-natively, and links, file references and form controls keep their own clicks.
-`releasedRange` in `previewComments.ts` resolves a release over a slot or the code chrome
-to the block under the pointer, and `clampToRoot` ends the range there, or spans back to
-the anchor when the drag went up. A `pointercancel`, a window blur, a new press or an
-unmount ends the gesture unreported. A Shift press drops a selection anchored outside the
-root, so the native drag starts at the press rather than extending a closed composer's
-caret. `linesOf` maps the range to source lines, and `openRange`, the source view's
-opener, opens the composer there, so the open composer's line highlight marks the
-selection's lines and the feedback matches a source-view comment's. `lineComments` stays
-source-only: its drag readout, gutter drag and drag hint chip belong to the source view's
-gutter, which the preview has no counterpart for; a native selection does that job.
+`textComments` opens the composer from the preview on rows, the preview's visual lines: a
+click or drag cites every source line with text on the rows it covers, as `c` and `V` do.
+A row spans the root, so `rowAt` reads the one under the pointer from its height alone:
+the line holding it in the first block whose bottom passes it, else the nearest, with a
+block that renders no text giving way to the next block with text, else the previous. A
+plain press selects rows, never text, as a source row's press selects lines: it holds
+native selection off while it runs and drops one standing in the root, and the root shows
+the pointer cursor, as a source row does. `PlanPreview` reports a release on the press's
+row as a click on it, both ends that row, and one on another row as a drag from the
+press's row through the release's; the drag reports its press row once the pointer leaves
+it. Shift selects text instead and comments on nothing, in both views, and while it is
+held both show the text cursor. Links and form controls keep their own clicks, a wide
+table's or code block's scrollbar its scroll, and a file reference its click, though a
+drag may start on one. A drag no longer autoscrolls past the plan's edge, as the source
+view's body drag never has. A release over a slot or the code chrome cites the nearest row
+of the block under it, the code chrome's nearest code row. A `pointercancel`, a window
+blur, a new press or an unmount ends the gesture unreported. A Shift press drops a
+selection anchored outside the root, so the native drag starts at the press rather than
+extending a closed composer's caret. `visualLineRange` gives the rows' text, in either
+order, `linesOf` its lines, and `openRange`, the source view's opener, opens the composer
+there, so the feedback matches a source-view comment's; the open composer's highlight
+marks those lines' text, which can run past the rows. A pinned table header is chrome, as
+the source view's pinned file header is: `rowAt` reads no row on it, and the visual lines
+read its text where the row sits in its table, so they keep their order and place however
+far the view scrolls.
+
+The pointer draws the source view's hover language over the preview, rAF-throttled,
+re-read under a still pointer on a scroll and on each `previewLayoutRev` bump, and cleared
+when it leaves the plan. A full-bleed band (`data-caret-preview-hover`) in the source's
+hover grey covers the row under the pointer, except the keyboard cursor's row, which its
+own band keeps; the hover band hides there rather than unmounting, so it glides off. A "+"
+in the root's left padding opens the composer on what a click on that row cites, pinned to
+the scroller's visible left edge when a narrow window scrolls the column sideways. A
+comment drag paints one full-bleed band (`data-caret-preview-drag`) in the visual
+selection's wash, from its press row through the pointer's and across the margins and
+slots between them, drawn before the chrome and slots so they sit on it. The "+" rides on
+the pointer's row, and a faded accent bar (`data-caret-preview-drag-bar`), the source
+gutter's selection ticks drawn as one, runs the band's length down the "+" lane. The
+bands, the cursor's too, glide between rows on `--dur-micro`, the cursor follow scroll's
+duration, and land in place on an entry, a scroll, a press or release, a layout bump, or a
+jump of more than two rows. `withinLines` counts those rows as visual lines, not pixels,
+so a heading's margins never turn its neighbour into a jump. Once the composer opens, the
+band and bar hold the rows its lines hold while it drafts, as the source view's
+`selectedRange` holds its lines, and the text highlight a focused comment gets gives way
+to them. `lineComments` stays source-only: its drag readout, gutter drag and drag hint
+chip belong to the source view's gutter, and the preview's drag band, bar and "+" are
+`textComments`' own.
 
 The preview renders a version once. `memoLast` returns the last result for the same text,
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same

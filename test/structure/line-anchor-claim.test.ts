@@ -31,8 +31,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const CLAIM =
-  "A feedback line reference indexes the plan version caret stored, and the " +
-  "abbreviated quote paired with it is what the agent matches against its own text.";
+  "A feedback line reference indexes the plan version caret stored, and an abbreviated " +
+  "quote rides with it only when the agent may not hold that version line for line.";
 
 // From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");

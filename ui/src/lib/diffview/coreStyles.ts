@@ -185,6 +185,11 @@ const CARET_OVERRIDES = `
     background-color: color-mix(in lab, var(--paper), var(--ink) 7%);
   }
 
+  /* Shift selects text rather than lines (SourceView's selectText). */
+  :host([data-select-text]) [data-interactive-lines] [data-line] {
+    cursor: text;
+  }
+
   /* Multi-line selection affordance (GitHub-style). During a click-drag range
      select, the library renders the "+" button only in the row under the pointer
      (the one it flags [data-hovered]); the other selected rows would otherwise

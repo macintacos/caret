@@ -49,7 +49,7 @@ ${"the reviewer asked for a paragraph of prose and the agent wrote it as one ver
 Prose between the blocks.
 
 \`\`\`text
-const value = computeThreshold(alpha, beta, gamma, delta, epsilon, zeta, eta, nu);
+const value = computeThreshold(alpha, beta, gamma, delta);
 \`\`\`
 
 Closing prose after the blocks.

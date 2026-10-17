@@ -1,14 +1,13 @@
-// The preview's comments: where each comment renders, the room a slot holds open under its
-// block, the slot's box, the highlight over a comment's rendered text, the keyboard's
-// visual selection, and the click or drag selection a new comment starts from, kept
-// inside the root. Slots live outside the preview root, so the root stays exactly the
-// rendered HTML the source map and `planPlace` index.
+// The preview's comments: the slot each line's comments render in, the gap a slot holds
+// open in the text under the row they end on, the slot's box, and the highlight over a
+// comment's rendered text. Slots live outside the preview root, so it holds only the
+// rendered HTML the source map and `planPlace` index, and the gaps, which hold no text.
 
-import { shouldCommentOnLineClick } from "$lib/diffview/annotationSlot.ts";
 import { highlightsSupported } from "$lib/diffview/searchHighlight.ts";
 import { contentOrigin, defaultReader, type RectReader } from "$lib/geometry.ts";
 import type { SourceSpan } from "$lib/planMarkdown.ts";
-import type { PlanSourceMap } from "$lib/planSourceMap.ts";
+import type { PlanSourceMap, TextPoint } from "$lib/planSourceMap.ts";
+import { heldRows, lineAfter, type RangeRects, textEnds } from "$lib/previewLines.ts";
 
 const HIGHLIGHT = "caret-comment-span";
 
@@ -25,23 +24,18 @@ export function commentSlotIndex(blocks: readonly SourceSpan[], line: number): n
       );
 }
 
-/** `items` grouped by the block each renders after, blocks ascending; within a block by
- * line, keeping input order on a line. */
+/** `items` grouped by line, ascending, keeping input order on a line: one slot per line,
+ * as the source view has one annotation row per line. */
 export function groupBySlot<T extends { line: number }>(
-  blocks: readonly SourceSpan[],
   items: readonly T[],
-): { block: number; items: T[] }[] {
+): { line: number; items: T[] }[] {
   const slots = new Map<number, T[]>();
   for (const item of [...items].sort((a, b) => a.line - b.line)) {
-    const block = commentSlotIndex(blocks, item.line);
-    if (block === null) continue;
-    const bucket = slots.get(block);
+    const bucket = slots.get(item.line);
     if (bucket) bucket.push(item);
-    else slots.set(block, [item]);
+    else slots.set(item.line, [item]);
   }
-  return [...slots]
-    .sort(([a], [b]) => a - b)
-    .map(([block, slotItems]) => ({ block, items: slotItems }));
+  return [...slots].map(([line, slotItems]) => ({ line, items: slotItems }));
 }
 
 /** The rendered text of each line in `span` that produced any, in order. */
@@ -61,145 +55,189 @@ export function paintCommentHighlight(ranges: readonly Range[]): void {
   CSS.highlights.set(HIGHLIGHT, new Highlight(...ranges));
 }
 
-const VISUAL_HIGHLIGHT = "caret-visual-selection";
-
-/** Paints `range` as the keyboard's visual selection (`caret-visual-selection`),
- * replacing the last; a no-op without the Custom Highlight API. */
-export function paintVisualSelection(range: Range): void {
-  if (!highlightsSupported()) return;
-  CSS.highlights.set(VISUAL_HIGHLIGHT, new Highlight(range));
-}
-
-/** Clears the visual selection; a no-op without the Custom Highlight API. */
-export function clearVisualSelection(): void {
-  if (!highlightsSupported()) return;
-  CSS.highlights.delete(VISUAL_HIGHLIGHT);
-}
-
-/** `range` with any end outside `root` pulled back inside it. `range` must start or end
- * inside `root`, and `releaseBlock` must be a direct child of `root`: the block under the
- * release point, which a slot or the code chrome draws over. A start outside moves to the
- * root's start. An end outside moves to the end of `releaseBlock`, or of `root` when there
- * is none — unless that falls before the start (a drag up onto a block above the anchor),
- * when the range runs from there to the original start instead. */
-export function clampToRoot(range: Range, root: Element, releaseBlock: Element | null): Range {
-  const clamped = range.cloneRange();
-  if (!root.contains(clamped.startContainer)) clamped.setStart(root, 0);
-  if (!root.contains(clamped.endContainer)) {
-    const end = releaseBlock ?? root;
-    const start = [clamped.startContainer, clamped.startOffset] as const;
-    clamped.setEnd(end, end.childNodes.length);
-    if (clamped.collapsed && clamped.comparePoint(...start) > 0) clamped.setEnd(...start);
-  }
-  return clamped;
-}
-
-const INTERACTIVE = "a, button, input, label, select, summary, textarea";
-
-/** The collapsed range a plain click on `target` in `root` leaves, copied; null when the
- * click hit a control or left a selection, or the selection lies outside `root`. */
-export function clickedRange(
-  root: Element,
-  target: EventTarget | null,
-  selection: Selection | null,
-): Range | null {
-  const interactive = target instanceof Element && target.closest(INTERACTIVE) !== null;
-  if (!selection?.rangeCount || !root.contains(selection.anchorNode)) return null;
-  return shouldCommentOnLineClick({
-    numberColumn: false,
-    linkConsumed: interactive,
-    selectionCollapsed: selection.isCollapsed,
-  })
-    ? selection.getRangeAt(0).cloneRange()
-    : null;
-}
-
-/** Every element under a viewport point, topmost first. */
-export type PointReader = (x: number, y: number) => readonly Element[];
-const elementsAt: PointReader = (x, y) => document.elementsFromPoint(x, y);
-
-/** The selection a drag released at `point` leaves, copied and clamped to `root`; null when
- * it is collapsed, anchored outside `root`, or still `before` (the press landed inside a
- * standing selection). `read` runs only when an end lies outside `root`: a slot draws over
- * its block's reserved padding and the chrome over its `pre`, so the block is under the
- * pointer too. */
-export function releasedRange(
-  root: Element,
-  before: Range | null,
-  selection: Selection | null,
-  point: { x: number; y: number },
-  read: PointReader = elementsAt,
-): Range | null {
-  if (!selection?.rangeCount || !root.contains(selection.anchorNode)) return null;
-  const range = selection.getRangeAt(0);
-  if (range.collapsed || (before && sameRange(range, before))) return null;
-  if (root.contains(range.startContainer) && root.contains(range.endContainer))
-    return range.cloneRange();
-  const releaseBlock = read(point.x, point.y).find((el) => el.parentElement === root) ?? null;
-  return clampToRoot(range, root, releaseBlock);
-}
-
-function sameRange(a: Range, b: Range): boolean {
-  return (
-    a.compareBoundaryPoints(Range.START_TO_START, b) === 0 &&
-    a.compareBoundaryPoints(Range.END_TO_END, b) === 0
-  );
-}
-
 /** Removes the comment highlight; a no-op without the Custom Highlight API. */
 export function clearCommentHighlight(): void {
   if (!highlightsSupported()) return;
   CSS.highlights.delete(HIGHLIGHT);
 }
 
-/** Holds each slot's height open under its block's text by padding the block's wrapper
- * (`root.children[block]`); `set` releases blocks no longer listed, `release` all.
- * `heights` maps a block index (`root.children` position) to its slot's height in CSS px. */
-export function createSlotReserve(root: Element): {
-  set(heights: ReadonlyMap<number, number>): void;
+/** Where a slot's gap opens: before the first character of a visual line, `lineAfter`'s,
+ * or after all of a block's content (its `root.children` position). */
+export type SlotGap = { before: TextPoint } | { block: number };
+
+/** A comment slot's box in a scroller's content coordinates, with the inline padding that
+ * sets its content over its block's. */
+export type SlotBox = {
+  top: number;
+  left: number;
+  width: number;
+  padStart: number;
+  padEnd: number;
+};
+
+/** Where the slot for comments on `span` opens its gap: under the last visual row it holds,
+ * the row `linesBand` ends on, else — on its block's last row — after that block, or with
+ * no text after `commentSlotIndex`'s block for its end. */
+export function slotGap(
+  root: Element,
+  map: PlanSourceMap,
+  blocks: readonly SourceSpan[],
+  span: SourceSpan,
+  read?: RangeRects,
+): SlotGap | null {
+  const end = heldRows(root, map, span, read)?.[1] ?? textEnds(map, span)?.[1];
+  const before = end && lineAfter(root, map, end, read);
+  if (before) return { before };
+  const block = commentSlotIndex(blocks, end?.line ?? span.end);
+  return block === null ? null : { block };
+}
+
+const GAP = "data-preview-gap";
+
+const isGap = (node: Node | null): node is HTMLElement =>
+  node instanceof HTMLElement && node.hasAttribute(GAP);
+
+/** A node that puts nothing on a row of its own: a gap, a source-line marker or other
+ * element with no text (a task's box), or whitespace. */
+const isBlank = (node: Node): boolean => (node.textContent ?? "").trim() === "";
+
+/** The boundary a gap opens at: between two nodes, or inside a text node, to split. */
+type GapPoint = { parent: Node; next: Node | null } | { text: Text; offset: number };
+
+const isMarker = (node: Node | null): node is Element =>
+  node instanceof Element && node.hasAttribute("data-source-line");
+
+/** The boundary before `node`, moved out of each element it opens — so a list item's gap
+ * opens between the items, not under the next one's bullet — but never out of its block,
+ * and before the source-line markers that lead it: a code block's must stay directly
+ * before its `pre`. */
+function boundaryBefore(root: Element, node: Node): GapPoint | null {
+  let next = node;
+  for (;;) {
+    const parent = next.parentNode;
+    if (parent === null) return null;
+    let leads = true;
+    for (let n = next.previousSibling; n !== null && leads; n = n.previousSibling)
+      leads = isBlank(n);
+    if (parent.parentNode === root || !leads) {
+      while (isMarker(next.previousSibling)) next = next.previousSibling;
+      return { parent, next };
+    }
+    next = parent;
+  }
+}
+
+/** Where `at` opens: a table row's gap before that row, never between its cells, whichever
+ * cell its first line starts in; a split inside the next row's text elsewhere. */
+function gapPoint(root: Element, map: PlanSourceMap, at: SlotGap): GapPoint | null {
+  if ("block" in at) {
+    const block = root.children[at.block];
+    return block === undefined ? null : { parent: block, next: null };
+  }
+  const point = map.clampedPoint(at.before);
+  if (point === null) return null;
+  const [text, offset] = point;
+  const row = text.parentElement?.closest("tr");
+  if (row != null && root.contains(row)) return boundaryBefore(root, row);
+  return offset > 0 ? { text, offset } : boundaryBefore(root, text);
+}
+
+/** The first node after `gap` that is not a gap. */
+function pastGaps(gap: Node): Node | null {
+  let next = gap.nextSibling;
+  while (isGap(next)) next = next.nextSibling;
+  return next;
+}
+
+/** Puts `gap` at `point`, splitting the text there; gaps already at that boundary stack in
+ * key order. */
+function place(gap: HTMLElement, key: number, point: GapPoint): void {
+  const next = "text" in point ? point.text.splitText(point.offset) : point.next;
+  const parent = "text" in point ? next?.parentNode : point.parent;
+  if (parent == null) return;
+  let before = next;
+  for (
+    let prev = next === null ? parent.lastChild : next.previousSibling;
+    isGap(prev) && prev !== gap && Number(prev.getAttribute(GAP)) > key;
+    prev = prev.previousSibling
+  )
+    before = prev;
+  parent.insertBefore(gap, before);
+}
+
+/** The gaps the preview's comment slots hold open in its text, one per slot, keyed by the
+ * slot's line and as tall as the slot: under the row its comments end on, or after their
+ * block. A gap holds no text, so the source map, search and the visual lines read past it.
+ * Splitting a text node to open one keeps the root's text in order, as the source map
+ * requires. `set` writes only what changed, so a re-sync over a settled layout leaves the
+ * DOM, and the layout signal that observes it, alone. */
+export function createSlotGaps(root: Element): {
+  set(map: PlanSourceMap, gaps: ReadonlyMap<number, { at: SlotGap; height: number }>): void;
+  boxes(scroller: HTMLElement, read?: RectReader): Map<number, SlotBox>;
   release(): void;
 } {
-  let padded = new Set<number>();
-  const pad = (block: number, value: string): void => {
-    const el = root.children[block];
-    // Writing only on change keeps a re-sync from dirtying layout.
-    if (el instanceof HTMLElement && el.style.paddingBlockEnd !== value)
-      el.style.paddingBlockEnd = value;
+  const open = new Map<number, HTMLElement>();
+  const close = (key: number): void => {
+    open.get(key)?.remove();
+    open.delete(key);
   };
-  const set = (heights: ReadonlyMap<number, number>): void => {
-    for (const block of padded) if (!heights.has(block)) pad(block, "");
-    for (const [block, height] of heights) pad(block, `${height}px`);
-    padded = new Set(heights.keys());
+
+  const set = (
+    map: PlanSourceMap,
+    gaps: ReadonlyMap<number, { at: SlotGap; height: number }>,
+  ): void => {
+    for (const key of [...open.keys()]) if (!gaps.has(key)) close(key);
+    for (const [key, { at, height }] of [...gaps].sort(([a], [b]) => a - b)) {
+      const point = gapPoint(root, map, at);
+      if (point === null) {
+        close(key);
+        continue;
+      }
+      let gap = open.get(key);
+      if (gap === undefined || !root.contains(gap)) {
+        gap = root.ownerDocument.createElement("span");
+        gap.setAttribute(GAP, String(key));
+        gap.setAttribute("aria-hidden", "true");
+        open.set(key, gap);
+      }
+      const sits =
+        "parent" in point && gap.parentNode === point.parent && pastGaps(gap) === point.next;
+      if (!sits) place(gap, key, point);
+      const px = `${height}px`;
+      if (gap.style.height !== px) gap.style.height = px;
+    }
   };
-  return { set, release: () => set(new Map()) };
+
+  /** Each open gap's slot box in `scroller` content coordinates: at the gap's top, across
+   * `root` as the rows above and below it run, padded in to its block's sides. */
+  const boxes = (scroller: HTMLElement, read: RectReader = defaultReader): Map<number, SlotBox> => {
+    const origin = contentOrigin(scroller, read(scroller));
+    const across = read(root);
+    const out = new Map<number, SlotBox>();
+    for (const [key, gap] of open) {
+      let block: Element | null = gap;
+      while (block !== null && block.parentElement !== root) block = block.parentElement;
+      if (block === null) continue;
+      const box = read(block);
+      out.set(key, {
+        top: read(gap).top - origin.top,
+        left: across.left - origin.left,
+        width: across.right - across.left,
+        padStart: box.left - across.left,
+        padEnd: across.right - box.right,
+      });
+    }
+    return out;
+  };
+
+  const release = (): void => {
+    for (const key of [...open.keys()]) close(key);
+  };
+
+  return { set, boxes, release };
 }
 
-/** A comment slot's box in a scroller's content coordinates. */
-export type SlotBox = { top: number; left: number; width: number };
-
-/** Each slot's box in `scroller` content coordinates: top at its block's bottom less the
- * reserved height, left and width the block's. `heights` maps a block index
- * (`root.children` position) to its slot's height in CSS px. */
-export function previewSlotBoxes(
-  root: Element,
-  scroller: HTMLElement,
-  heights: ReadonlyMap<number, number>,
-  read: RectReader = defaultReader,
-): Map<number, SlotBox> {
-  const origin = contentOrigin(scroller, read(scroller));
-  const boxes = new Map<number, SlotBox>();
-  for (const [block, height] of heights) {
-    const el = root.children[block];
-    if (!(el instanceof HTMLElement)) continue;
-    const box = read(el);
-    boxes.set(block, {
-      top: box.bottom - height - origin.top,
-      left: box.left - origin.left,
-      width: box.right - box.left,
-    });
-  }
-  return boxes;
-}
+const SLOT_SIDES = ["top", "left", "width", "padStart", "padEnd"] as const;
 
 /** Whether `a` and `b` place the same blocks at exactly the same boxes. */
 export function sameSlotBoxes(
@@ -209,7 +247,7 @@ export function sameSlotBoxes(
   if (a.size !== b.size) return false;
   for (const [block, box] of b) {
     const old = a.get(block);
-    if (old?.top !== box.top || old.left !== box.left || old.width !== box.width) return false;
+    if (old === undefined || SLOT_SIDES.some((side) => old[side] !== box[side])) return false;
   }
   return true;
 }

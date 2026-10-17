@@ -62,8 +62,8 @@ export interface PreviewCursor {
   placeAt(p: TextPoint): void;
   /** Drops the preview's column, so a content switch leaves no point behind. */
   reset(): void;
-  /** The visual selection's text, null outside visual mode. */
-  selection(): Range | null;
+  /** The visual anchor's point, null outside visual mode; resolved as `point()` is. */
+  anchor(): TextPoint | null;
   /** `V`: toggles visual mode, anchoring at the cursor — placed at the reading position
    * when unplaced. */
   enterVisualMode(): void;
@@ -168,12 +168,7 @@ export function createPreviewCursor(
       land(p);
     },
 
-    selection() {
-      const anchor = anchorPoint();
-      if (anchor == null) return null;
-      const p = point();
-      return p == null ? null : deps.selection(...ordered(anchor, p));
-    },
+    anchor: anchorPoint,
 
     enterVisualMode() {
       if (store.visualAnchor != null) {
