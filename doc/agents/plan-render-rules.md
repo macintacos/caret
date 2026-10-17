@@ -370,7 +370,9 @@ highlight run only where the `commentThreads` row runs.
   as long as the preview root and `set` writes only what moved, so a re-sync over settled
   layout writes nothing and never closes a gap for a frame. The overlay state (slot boxes,
   the pointer and focus spans) resets on a version switch or a flip, as the code chrome's
-  boxes do.
+  boxes do. A slot item's removal re-reads the two spans: a removed item fires no
+  pointerleave, nor in WebKit a focusout, so a discarded composer's lines would otherwise
+  stay highlighted.
 - **Highlight precedence.** The pointer's comment, else the focused comment in a slot,
   else the open composer, else the focused annotation, is highlighted as
   `caret-comment-span` over the `rangeOf` ranges of its lines.

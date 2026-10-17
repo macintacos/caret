@@ -394,6 +394,29 @@ test("a click opens the composer right under the row clicked, inside its paragra
     .toBeLessThan(2);
 });
 
+test("a click's composer, discarded, leaves the text it cited unmarked", async ({
+  daemon,
+  page,
+}) => {
+  const { prose } = await openRows(daemon, page);
+  const [first] = await rowsOf(page, prose);
+  if (first === undefined) throw new Error("the paragraph did not render");
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+
+  await page.mouse.click(await textX(page), first);
+  await composer.getByRole("button", { name: "Discard" }).click();
+  await expect(composer).toHaveCount(0);
+  await page.mouse.move(1, 1);
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        highlight: CSS.highlights.get("caret-comment-span")?.size ?? 0,
+        selected: document.getSelection()?.toString() ?? "",
+      })),
+    )
+    .toEqual({ highlight: 0, selected: "" });
+});
+
 test("a click on a list item opens the composer between it and the next", async ({
   daemon,
   page,

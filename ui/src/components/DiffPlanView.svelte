@@ -439,6 +439,18 @@
       focusSpan = null;
   }
 
+  // A slot item removed under the pointer fires no pointerleave, nor in WebKit a focusout,
+  // so its removal re-reads both spans: focus has left it by then, and the pointer's next
+  // pointerover sets its span again.
+  function releasesSpans(_item: HTMLElement): { destroy(): void } {
+    return {
+      destroy() {
+        pointerSpan = null;
+        focusSpan = slotSpan(document.activeElement);
+      },
+    };
+  }
+
   // The map reads the DOM, so it is built in an effect, after the `{@html}` commits: a
   // derived can be read mid-render over the previous version. Ungated: each consumer
   // gates on its own row.
@@ -2590,15 +2602,17 @@
           >
             {#each slot.items as item (item.kind === "marker" ? item.scratch.key : `${item.kind}:${item.line}`)}
               {#if item.kind === "thread"}
-                <div data-slot-line={item.line}>{@render commentThread(item.annotations)}</div>
+                <div data-slot-line={item.line} use:releasesSpans>
+                  {@render commentThread(item.annotations)}
+                </div>
               {:else if item.kind === "composer"}
                 {#key `${item.start}:${item.line}`}
-                  <div data-slot-line={item.line} data-span-start={item.start}>
+                  <div data-slot-line={item.line} data-span-start={item.start} use:releasesSpans>
                     {@render openComposer({ startLine: item.start, endLine: item.line })}
                   </div>
                 {/key}
               {:else}
-                <div data-slot-line={item.line} data-span-start={item.start}>
+                <div data-slot-line={item.line} data-span-start={item.start} use:releasesSpans>
                   {@render draftMarker(item.scratch)}
                 </div>
               {/if}
