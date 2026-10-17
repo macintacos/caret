@@ -36,6 +36,7 @@ import {
   revealGutterPlus,
   selectGutterRange,
 } from "@test/e2e/support/source-view.ts";
+import { caretThemeVariant, selectThemeFile } from "@test/e2e/support/themes.ts";
 import { SCROLL_OFFSET_TOP } from "@ui/src/lib/layout.ts";
 
 const NEAR =
@@ -200,6 +201,16 @@ function offsetInScroller(page: Page, id: string): Promise<number> {
   );
 }
 
+/** How many visual lines the preview's heading renders on; -1 with none. */
+const headingRows = (page: Page) =>
+  page.evaluate((preview) => {
+    const h1 = document.querySelector(`${preview} h1`);
+    if (!h1) return -1;
+    const range = document.createRange();
+    range.selectNodeContents(h1);
+    return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+  }, PLAN_PREVIEW);
+
 test("each thread renders after its block without overlapping the next", async ({
   daemon,
   page,
@@ -219,6 +230,105 @@ test("each thread renders after its block without overlapping the next", async (
       })
       .toBe(true);
   }
+});
+
+test("a slot keeps to its block when a theme switch rewraps the heading above it", async ({
+  daemon,
+  page,
+}) => {
+  // Only the heading's weight and slant differ, and only the light theme's widen it.
+  await selectThemeFile(
+    page,
+    daemon,
+    caretThemeVariant("thin", "dark", {
+      accent: "#ff0000",
+      markdown: { heading1: { color: "#ff80bf" } },
+    }),
+  );
+  await selectThemeFile(
+    page,
+    daemon,
+    caretThemeVariant("heavy", "light", {
+      accent: "#ff0000",
+      markdown: { heading1: { color: "#ff80bf", fontStyle: ["bold", "italic"] } },
+    }),
+  );
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.setViewportSize({ width: 420, height: 900 });
+  const id = await daemon.seed({
+    plan: [`# ${FAR}`, NEAR, "Closing paragraph quokka."].join("\n\n"),
+  });
+  const lines = ((await daemon.getReview(id)).body?.currentPlan ?? "").split("\n");
+  const near = lineStarting(lines, "Nearby paragraph");
+  // The blank's 0-based index after NEAR is NEAR's last 1-based line.
+  const endLine = lines.indexOf("", near);
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-theme", startLine: endLine, endLine, comment: "follow the rewrap" }],
+  });
+  await page.goto("/");
+  await planSurface(page);
+  await waitPastSafeModeGrace(page);
+  await showPreview(page);
+
+  const slotStaysInPlace = async () => {
+    const g = await slotAroundBlock(page, endLine, "ann-theme");
+    return g.slotTop >= g.blockBottom - 1 && g.slotBottom <= g.nextTop + 1;
+  };
+  await expect.poll(slotStaysInPlace).toBe(true);
+  const topBefore = (await slotAroundBlock(page, endLine, "ann-theme")).slotTop;
+  const rowsBefore = await headingRows(page);
+
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect.poll(() => headingRows(page)).not.toBe(rowsBefore);
+  await expect
+    .poll(async () => (await slotAroundBlock(page, endLine, "ann-theme")).slotTop)
+    .not.toBe(topBefore);
+  await expect.poll(slotStaysInPlace).toBe(true);
+});
+
+test("a slot that grows re-places itself under its block, clear of the next", async ({
+  daemon,
+  page,
+}) => {
+  const s = await seedPreview(daemon, page);
+  const marker = page.getByRole("button", { name: "Resume unsent comment" });
+  await expect(marker).toBeVisible();
+  const slotBox = () =>
+    page.evaluate(
+      ({ line, preview }) => {
+        const blocks = [
+          ...document.querySelectorAll<HTMLElement>(`${preview} [data-source-start]`),
+        ];
+        const i = blocks.findIndex(
+          (b) => Number(b.dataset.sourceStart) <= line && line <= Number(b.dataset.sourceEnd),
+        );
+        const slot = document
+          .querySelector('[aria-label="Resume unsent comment"], [aria-label="Add a comment"]')
+          ?.closest("[data-preview-slot]")
+          ?.getBoundingClientRect();
+        return {
+          codeBottom: blocks[i]?.querySelector("pre")?.getBoundingClientRect().bottom ?? Infinity,
+          nextTop: blocks[i + 1]?.getBoundingClientRect().top ?? Number.NaN,
+          slotTop: slot?.top ?? Number.NaN,
+          slotBottom: slot?.bottom ?? Number.NaN,
+          height: slot?.height ?? 0,
+        };
+      },
+      { line: s.code, preview: PLAN_PREVIEW },
+    );
+  await expect.poll(async () => (await slotBox()).height).toBeGreaterThan(0);
+  const heightBefore = (await slotBox()).height;
+
+  await marker.click();
+  await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
+  await expect
+    .poll(async () => {
+      const g = await slotBox();
+      return (
+        g.height > heightBefore && g.slotTop >= g.codeBottom - 1 && g.slotBottom <= g.nextTop + 1
+      );
+    })
+    .toBe(true);
 });
 
 test("hovering or expanding a card highlights exactly its lines' rendered text", async ({

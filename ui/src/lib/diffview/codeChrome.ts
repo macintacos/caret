@@ -25,9 +25,10 @@ export interface CodeChromeAnchor {
 export type ChromeBox = CodeChromeAnchor & { text: string };
 
 /** The chrome's geometry on one surface: what to observe for resizes, the hit-test by
- * block `start`, and the finished boxes. */
+ * block `start`, and the finished boxes. `observed` is undefined where the host re-anchors
+ * on a layout signal of its own. */
 export interface ChromeGeometry {
-  observed: HTMLElement;
+  observed: HTMLElement | undefined;
   blockAt(x: number, y: number): number | undefined;
   boxes(scroller: HTMLElement): ChromeBox[];
 }
