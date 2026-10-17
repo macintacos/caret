@@ -96,7 +96,8 @@ export interface LinkLayer {
 
 const SAFE_SCHEME = /^https?:\/\//i;
 
-function isSafeUrl(url: string): boolean {
+/** The one URL scheme gate the source view and the plan preview share. */
+export function isSafeUrl(url: string): boolean {
   return SAFE_SCHEME.test(url);
 }
 
