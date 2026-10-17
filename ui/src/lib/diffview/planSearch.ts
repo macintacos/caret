@@ -1,12 +1,16 @@
-// Pure full-text search over the plan source for the vim-style `/` search
-// (EXC-832). Node- and DOM-free (directly unit-testable), mirroring lineCursor.ts's
-// shape: this module only computes the match spans, the "nearest" match to commit
-// to, and index stepping for n/N. The painting (searchHighlight.ts) and the search
-// pill consume these results. Search is vim smartcase and literal (no regex).
+// Pure full-text search for the vim-style `/` search (EXC-832). Node- and DOM-free
+// (directly unit-testable), mirroring lineCursor.ts's shape: `findMatches` is the source
+// view's match space (previewSearch.ts supplies the preview's); the shared match type and
+// n/N stepping serve both. The painting (searchHighlight.ts on the source view,
+// previewSearch.ts on the preview) and the search pill consume these results. Search is
+// vim smartcase and literal (no regex).
 
-/** A match span on a single source line. `line` is 1-based (matching the
- * @pierre/diffs `data-line` numbering the source view paints); `startCol`/`endCol`
- * are 0-based, half-open `[startCol, endCol)` into that line's text. */
+/** A match span. `line` is the 1-based source line the match starts on (matching the
+ * @pierre/diffs `data-line` numbering the source view paints); `startCol`/`endCol` are
+ * 0-based and half-open. On the source view `[startCol, endCol)` indexes that line's text.
+ * On the preview it counts from that line's first rendered character
+ * (`PlanSourceMap.offsetOfLine`, a TextPoint column) and may run past the line's own text,
+ * across a soft break. */
 export interface SearchMatch {
   line: number;
   startCol: number;

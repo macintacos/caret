@@ -180,10 +180,16 @@
   style:--folder-ref-icon={FOLDER_ICON_MASK}>{@html html}</div>
 
 <style>
-  /* Light-DOM: the search highlight's rule is shadow-adopted and can't reach the preview.
-     --mark is caret's content-highlight wash. */
+  /* Light-DOM: the source view's shadow-adopted highlight rules can't reach the preview,
+     so it carries its own. --mark is caret's content-highlight wash. */
   :global(::highlight(caret-comment-span)) {
     background-color: var(--mark);
+  }
+  :global(::highlight(caret-preview-search)) {
+    background-color: var(--mark);
+  }
+  :global(::highlight(caret-preview-search-current)) {
+    background-color: var(--mark-active);
   }
 
   .plan-preview {

@@ -31,9 +31,9 @@ export const SURFACE_BEHAVIORS = {
   codeChrome: ["source", "preview"], // copy / soft-wrap chrome over fenced code
   referenceHints: ["source"], // ref-hint badges
   fileReferences: ["source", "preview"], // the file lane and folder card a reference opens
-  search: ["source"], // `/` dock, n/N, match highlights
+  search: ["source", "preview"], // `/` dock, n/N, match highlights, Esc's close
   keyboardCursor: ["source", "preview"], // cursor motions
-  keyboardComments: ["source"], // c, V, Esc
+  keyboardComments: ["source"], // c, V, Esc's visual exit
   commentThreads: ["source", "preview"], // inline threads, draft markers, the open composer, the preview's comment highlight, comment reveal
   lineComments: ["source"], // drag readout, gutter range drag, drag/visual hint chips, hover re-fire
   textComments: ["source", "preview"], // a click or text selection on the plan opens the composer

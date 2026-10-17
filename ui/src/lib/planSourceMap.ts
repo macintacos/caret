@@ -17,6 +17,12 @@ export interface PlanSourceMap {
    * included; null for a line nothing starts on — blank outside code, a link definition,
    * a fence, a delimiter row, `hr`, out of range. */
   rangeOf(line: number): Range | null;
+  /** `lineAt` for a caller that counted the root's text itself: the source line of the
+   * character `offset` characters in; null for an empty preview. */
+  lineAtOffset(offset: number): number | null;
+  /** Where `line`'s text starts, in characters into the root's text — the origin a
+   * TextPoint column counts from; null wherever `rangeOf(line)` is null. */
+  offsetOfLine(line: number): number | null;
 }
 
 /** A source line's text starts at `offset` and runs to the next run's. Offsets ascend. */
@@ -72,24 +78,29 @@ function collectRuns(root: Node): { runs: Run[]; length: number } {
   return { runs, length: offset };
 }
 
-/** The text position `offset` characters into `root`. At a boundary between two text
- * nodes, "after" resolves into the later one, "before" into the earlier. */
-function pointAt(root: Element, offset: number, side: "before" | "after"): [Text, number] | null {
+/** Resolves ascending offsets into `root`'s text in one forward walk. At a boundary
+ * between two text nodes "after" resolves into the later one, "before" the earlier. */
+export function createTextCursor(
+  root: Element,
+): (offset: number, side: "before" | "after") => [Text, number] | null {
   const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode() as Text | null;
   let seen = 0;
-  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-    const text = node as Text;
-    const end = seen + text.data.length;
-    if (side === "after" ? offset < end : offset <= end) return [text, offset - seen];
-    seen = end;
-  }
-  return null;
+  return (offset, side) => {
+    for (; node !== null; node = walker.nextNode() as Text | null) {
+      const end = seen + node.data.length;
+      if (side === "after" ? offset < end : offset <= end) return [node, offset - seen];
+      seen = end;
+    }
+    return null;
+  };
 }
 
 /** Builds the map for `root`, whose content is exactly `renderPlanMarkdown(text).html`.
  * Build once per version; it reads no layout. */
 export function createPlanSourceMap(root: Element): PlanSourceMap {
   const { runs, length } = collectRuns(root);
+  const firstRunIndex = (line: number): number => runs.findIndex((run) => run.line === line);
 
   const lineAtOffset = (offset: number): number | null => {
     if (length === 0) return null;
@@ -123,16 +134,21 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
       return start === null || end === null ? null : { start, end };
     },
     rangeOf(line) {
-      const index = runs.findIndex((run) => run.line === line);
+      const index = firstRunIndex(line);
       const run = runs[index];
       if (run === undefined) return null;
-      const start = pointAt(root, run.offset, "after");
-      const end = pointAt(root, runs[index + 1]?.offset ?? length, "before");
+      const pointAt = createTextCursor(root);
+      const start = pointAt(run.offset, "after");
+      const end = pointAt(runs[index + 1]?.offset ?? length, "before");
       if (start === null || end === null) return null;
       const range = root.ownerDocument.createRange();
       range.setStart(...start);
       range.setEnd(...end);
       return range;
+    },
+    lineAtOffset,
+    offsetOfLine(line) {
+      return runs[firstRunIndex(line)]?.offset ?? null;
     },
   };
 }

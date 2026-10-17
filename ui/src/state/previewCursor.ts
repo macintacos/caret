@@ -46,6 +46,8 @@ export interface PreviewCursor {
   point(): TextPoint | null;
   /** No-op when nothing resolves; heading motions jump, the rest follow. */
   moveCursor(motion: CursorMotion): void;
+  /** Places the cursor on `p` and follows it — a landing with no motion. */
+  placeAt(p: TextPoint): void;
   /** Drops the preview's column, so a content switch leaves no point behind. */
   reset(): void;
 }
@@ -93,6 +95,12 @@ export function createPreviewCursor(
     }
   }
 
+  function land(p: TextPoint, scroll: (p: TextPoint) => void = deps.follow): void {
+    store.cursorLine = p.line;
+    store.cursorPoint = p;
+    scroll(p);
+  }
+
   function resolve(motion: CursorMotion, from: TextPoint | null): TextPoint | null {
     const stepBy = (count: () => number) => (from == null ? deps.seed() : deps.step(from, count()));
     switch (motion) {
@@ -127,9 +135,11 @@ export function createPreviewCursor(
     moveCursor(motion) {
       const p = resolve(motion, point());
       if (p == null) return;
-      store.cursorLine = p.line;
-      store.cursorPoint = p;
-      (JUMP_MOTIONS.has(motion) ? deps.jump : deps.follow)(p);
+      land(p, JUMP_MOTIONS.has(motion) ? deps.jump : deps.follow);
+    },
+
+    placeAt(p) {
+      land(p);
     },
   };
 }

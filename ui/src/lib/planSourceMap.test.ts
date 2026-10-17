@@ -275,6 +275,53 @@ describe("rangeOf", () => {
   });
 });
 
+describe("offset accessors", () => {
+  const PLAN = [
+    "A paragraph that", // 1
+    "wraps here.", // 2
+    "", // 3
+    "- item one", // 4
+    "- item two", // 5
+    "", // 6
+    "| h1 | h2 |", // 7
+    "| -- | -- |", // 8
+    "| c1 | c2 |", // 9
+    "", // 10
+    "```js", // 11
+    "let x = 1;", // 12
+    "let y = 2;", // 13
+    "```", // 14
+  ].join("\n");
+
+  test("lineAtOffset agrees with lineAt at every character", () => {
+    const { root, map } = mount(PLAN);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let offset = 0;
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      const text = node as Text;
+      for (let i = 0; i < text.data.length; i++, offset++) {
+        expect(map.lineAtOffset(offset)).toBe(map.lineAt(text, i));
+      }
+    }
+    expect(offset > 0).toBe(true);
+  });
+
+  test("offsetOfLine is where rangeOf's text starts, and null where it has none", () => {
+    const { root, map } = mount(PLAN);
+    for (let line = 1; line <= 16; line++) {
+      const range = map.rangeOf(line);
+      if (range === null) {
+        expect(map.offsetOfLine(line)).toBe(null);
+        continue;
+      }
+      const before = document.createRange();
+      before.setStart(root, 0);
+      before.setEnd(range.startContainer, range.startOffset);
+      expect(map.offsetOfLine(line)).toBe(before.toString().length);
+    }
+  });
+});
+
 describe("comments", () => {
   test("a comment under the root moves no line or range", () => {
     const { root } = mount("one\n\ntwo\n");

@@ -841,13 +841,13 @@ describe("DiffPlanView plan view toggle", () => {
       .find((e) => e.id === id)
       ?.enabled?.();
 
-  test("the preview drops the search dock and its shortcut", async () => {
+  test("the preview keeps the search dock and its shortcut", async () => {
     const { target } = render(DiffPlanView, props());
     await until(() => target.querySelector(".search-dock") != null);
     toggle(target)!.click();
     await until(() => target.querySelector(".plan-preview") != null);
-    expect(target.querySelector(".search-dock") != null).toBe(false);
-    expect(enabled("actions.search")).toBe(false);
+    expect(target.querySelector(".search-dock") != null).toBe(true);
+    expect(enabled("actions.search")).toBe(true);
   });
 
   test("the preview keeps the contents trigger and the heading shortcuts", async () => {
@@ -1013,6 +1013,11 @@ describe("DiffPlanView preview cursor", () => {
       .list()
       .find((e) => e.id === id)
       ?.run?.();
+  const enabled = (id: string) =>
+    shortcuts
+      .list()
+      .find((e) => e.id === id)
+      ?.enabled?.();
   const band = (target: HTMLElement) => target.querySelector("[data-caret-preview-cursor]");
 
   // happy-dom has no layout: every text range reads as one 20px line.
@@ -1033,6 +1038,15 @@ describe("DiffPlanView preview cursor", () => {
       false,
       false,
     ]);
+  });
+
+  test("Esc closes the preview's search pill", async () => {
+    await renderOnPreview();
+    await until(() => live("actions.search"));
+    run("actions.search");
+    expect(await until(() => enabled("commenting.clear") === true)).toBe(true);
+    run("commenting.clear");
+    expect(await until(() => enabled("commenting.clear") === false)).toBe(true);
   });
 
   test("the source view runs the motions and the line comments", async () => {
@@ -1090,17 +1104,12 @@ describe("DiffPlanView preview cursor", () => {
     await until(() => live("commenting.visualLine"));
     run("motion.top");
     run("commenting.visualLine");
-    const enabled = () =>
-      shortcuts
-        .list()
-        .find((e) => e.id === "commenting.clear")
-        ?.enabled?.();
-    expect(enabled()).toBe(true);
+    expect(enabled("commenting.clear")).toBe(true);
     toggle(target)!.click();
     await until(() => target.querySelector(".plan-preview") != null);
     toggle(target)!.click();
     await until(() => live("commenting.visualLine"));
-    expect(enabled()).toBe(false);
+    expect(enabled("commenting.clear")).toBe(false);
   });
 
   test("a content switch clears the preview cursor", async () => {
@@ -1116,6 +1125,38 @@ describe("DiffPlanView preview cursor", () => {
     flush();
     const cleared = await until(() => band(target) == null);
     expect(cleared).toBe(true);
+  });
+
+  async function search(target: HTMLElement, query: string): Promise<void> {
+    await until(() => live("actions.search"));
+    run("actions.search");
+    await until(() => target.querySelector("input[aria-label='Search plan']") != null);
+    const field = target.querySelector<HTMLInputElement>("input[aria-label='Search plan']")!;
+    field.value = query;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  }
+
+  test("a search committed across a version switch lands on the new version's text", async () => {
+    stubLayout();
+    const p = reactiveProps(props({ review: reviewFixture({ currentPlan: "# A\n\ngadget\n" }) }));
+    const { target, flush } = render(DiffPlanView, p);
+    await until(() => toggle(target) != null);
+    toggle(target)!.click();
+    await until(() => target.querySelector(".plan-preview") != null);
+    await search(target, "gadget");
+    await until(() => band(target) != null);
+    p.review = reviewFixture({
+      version: 2,
+      currentPlan: "# B\n\nalpha\n\ngamma\n\nbeta\n",
+    });
+    flush();
+    await until(
+      () => target.querySelector(".plan-preview")?.textContent?.includes("beta") === true,
+    );
+    await search(target, "beta");
+    await until(() => band(target)?.getAttribute("data-line") === "7");
+    expect(band(target)?.getAttribute("data-line")).toBe("7");
   });
 });
 
