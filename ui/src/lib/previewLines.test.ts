@@ -9,6 +9,7 @@ import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
 import { highlightPreviewCode } from "$lib/previewCode.ts";
 import {
   cursorBand,
+  heldRows,
   lastVisualLine,
   lineAfter,
   linesBand,
@@ -416,29 +417,63 @@ describe("linesBand", () => {
       null,
     );
   });
+
+  test("leaves out an end row that also holds another line's text", () => {
+    const { root, map } = mount(`${LONG}\n${LONG}\n`);
+    const band = linesBand(root, root, map, { start: 1, end: 1 }, 0, grid(root, 20).read, flat);
+    expect(band).toEqual({ top: 0, left: 0, width: 300, height: 2 * ROW });
+  });
+});
+
+describe("heldRows", () => {
+  test("are the starts of the rows the lines are laid out on, less an end row another line shares", () => {
+    const { root, map } = mount(`${LONG}\n${LONG}\n`);
+    const { read } = grid(root, 20);
+    // Line 1 ends on the third 20-column row, at its tenth cell; line 2 runs on from there.
+    expect(heldRows(root, map, { start: 1, end: 1 }, read)).toEqual([
+      { line: 1, column: 0 },
+      { line: 1, column: 20 },
+    ]);
+    expect(heldRows(root, map, { start: 2, end: 2 }, read)).toEqual([
+      { line: 2, column: 9 },
+      { line: 2, column: 49 },
+    ]);
+    expect(heldRows(root, map, { start: 1, end: 2 }, read)).toEqual([
+      { line: 1, column: 0 },
+      { line: 2, column: 49 },
+    ]);
+  });
+
+  test("keep every row the lines are laid out on when each also holds another line's text", () => {
+    const { root, map } = mount(`${LONG}\n${"x".repeat(25)}\n${LONG}\n`);
+    // Line 2 starts on line 1's last row and ends on line 3's first.
+    expect(heldRows(root, map, { start: 2, end: 2 }, grid(root, 20).read)).toEqual([
+      { line: 1, column: 40 },
+      { line: 2, column: 9 },
+    ]);
+  });
+
+  test("is null when none of the lines renders text", () => {
+    const { root, map } = mount(`${LONG}\n\n\n\nmiddle\n`);
+    expect(heldRows(root, map, { start: 2, end: 3 }, grid(root, 20).read)).toBe(null);
+  });
 });
 
 describe("lineAfter", () => {
-  test("is the start of the row after the one the lines' text ends on, inside its block", () => {
+  test("is the start of the row after a point's, inside its block", () => {
     const { root, map } = mount(`${LONG}\n${LONG}\n`);
     // Line 1 ends on the third 20-column row, at its tenth cell; line 2 runs on from there.
-    expect(lineAfter(root, map, { start: 1, end: 1 }, grid(root, 20).read)).toEqual({
+    expect(lineAfter(root, map, { line: 1, column: 45 }, grid(root, 20).read)).toEqual({
       line: 2,
       column: 9,
     });
   });
 
-  test("lines with no text at the end give way to the last line with text", () => {
-    const { root, map } = mount(`${LONG}\n${LONG}\n\nmiddle\n`);
-    expect(lineAfter(root, map, { start: 2, end: 3 }, grid(root, 20).read)).toBe(null);
-    expect(lineAfter(root, map, { start: 1, end: 1 }, grid(root, 20).read)).not.toBe(null);
-  });
-
-  test("is null on a block's last row, and when none of the lines renders text", () => {
+  test("is null on a block's last row, and for a point the preview does not render", () => {
     const { root, map } = mount(`${LONG}\n\n\n\nmiddle\n`);
     const { read } = grid(root, 20);
-    expect(lineAfter(root, map, { start: 1, end: 1 }, read)).toBe(null);
-    expect(lineAfter(root, map, { start: 2, end: 3 }, read)).toBe(null);
+    expect(lineAfter(root, map, { line: 1, column: 45 }, read)).toBe(null);
+    expect(lineAfter(root, map, { line: 2, column: 0 }, read)).toBe(null);
   });
 });
 

@@ -160,8 +160,8 @@ Caret shows a plan version in one of two views:
 The **Preview** button beside **Versions** switches between them, as does `p`. It is
 pressed while the preview shows. Your browser remembers the choice, so it holds across
 reviews and restarts. Switching views with a comment open keeps its text as a draft, which
-you resume in either view. In the preview, comments and drafts show right under the
-wrapped line where they end, and hovering or focusing one highlights the text it covers.
+you resume in either view. In the preview, comments and drafts show right under the last
+wrapped line they're on, and hovering or focusing one highlights the text it covers.
 Hovering the preview, anywhere out to its right edge, shades the wrapped line under the
 pointer and shows a **+** beside it. Click the line or its **+** to comment on every
 source line with text on it, as `c` does, or drag across wrapped lines to comment on all

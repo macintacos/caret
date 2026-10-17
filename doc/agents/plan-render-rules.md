@@ -341,18 +341,21 @@ highlight run only where the `commentThreads` row runs.
 
 - **Placement.** Threads, the open composer and draft markers render in overlay slots, one
   per line they end on, positioned beside the preview root rather than inside it. A slot
-  sits under the visual row its comments' text ends on, the row their band ends on, so a
+  sits under the last visual row its comments hold, the row their band ends on, so a
   composer opens right under the rows a click, drag, `c` or `V` banded, and the thread it
-  sends stays there. `lineAfter` finds where the next row starts within that block, past
-  the rest of a table row; on a block's last row the slot follows the block its text ends
-  in, and for lines that render no text the block `commentSlotIndex` gives, which takes a
-  gap line to the block before it and a line above every block to the first, where
-  `blockIndexForLine` sends a gap line forward. Anchors stay source line ranges; nothing
-  is re-anchored to rendered positions. A slot spans the root, padded in to its block's
-  sides, so the space beside a comment is the comment's, as an annotation row is in the
-  source view, and no row's. An unmeasured slot hides with `opacity: 0` and
-  `pointer-events: none`, never `visibility: hidden`, so a composer mounting there can
-  take focus.
+  sends stays there. `heldRows` gives those rows: the ones their text is laid out on, less
+  an end row that also holds another line's text. A click cites every line on its row, and
+  the last of them usually runs on into the next row, which holds the line after it too,
+  so the comment holds the clicked row alone. When every row is shared that way, it holds
+  them all. `lineAfter` finds where the next row starts within that block, past the rest
+  of a table row; on a block's last row the slot follows that block, and for lines that
+  render no text the block `commentSlotIndex` gives, which takes a gap line to the block
+  before it and a line above every block to the first, where `blockIndexForLine` sends a
+  gap line forward. Anchors stay source line ranges; nothing is re-anchored to rendered
+  positions. A slot spans the root, padded in to its block's sides, so the space beside a
+  comment is the comment's, as an annotation row is in the source view, and no row's. An
+  unmeasured slot hides with `opacity: 0` and `pointer-events: none`, never
+  `visibility: hidden`, so a composer mounting there can take focus.
 - **Gaps.** `createSlotGaps` holds each slot's height open with an empty
   `span[data-preview-gap]` in the text, a block row of its own (a table row in a table),
   and the slot sits at its top. A gap opens before the next row's first character,
@@ -454,11 +457,11 @@ bands, the cursor's too, glide between rows on `--dur-micro`, the cursor follow 
 duration, and land in place on an entry, a scroll, a press or release, a layout bump, or a
 jump of more than two rows. `withinLines` counts those rows as visual lines, not pixels,
 so a heading's margins never turn its neighbour into a jump. Once the composer opens, the
-band and bar hold its lines' rows while it drafts, as the source view's `selectedRange`
-holds its lines, and the text highlight a focused comment gets gives way to them.
-`lineComments` stays source-only: its drag readout, gutter drag and drag hint chip belong
-to the source view's gutter, and the preview's drag band, bar and "+" are `textComments`'
-own.
+band and bar hold the rows its lines hold while it drafts, as the source view's
+`selectedRange` holds its lines, and the text highlight a focused comment gets gives way
+to them. `lineComments` stays source-only: its drag readout, gutter drag and drag hint
+chip belong to the source view's gutter, and the preview's drag band, bar and "+" are
+`textComments`' own.
 
 The preview renders a version once. `memoLast` returns the last result for the same text,
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same

@@ -331,7 +331,13 @@ function locate(root: Element, map: PlanSourceMap, p: TextPoint, read: RangeRect
   return line === undefined ? null : { block, lines, index, line };
 }
 
-/** Both points located, the upper first: an earlier block, or an earlier line of one. */
+/** Whether `a` sits above `b`: in an earlier block, or on an earlier line of the same one. */
+const above = (a: Located, b: Located): boolean =>
+  a.block === b.block
+    ? a.index < b.index
+    : (a.block.compareDocumentPosition(b.block) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+/** Both points located, the upper first. */
 function locateBoth(
   root: Element,
   map: PlanSourceMap,
@@ -342,12 +348,18 @@ function locateBoth(
   const first = locate(root, map, a, read);
   const second = locate(root, map, b, read);
   if (first === null || second === null) return null;
-  const below =
-    first.block === second.block
-      ? second.index < first.index
-      : (second.block.compareDocumentPosition(first.block) & Node.DOCUMENT_POSITION_FOLLOWING) !==
-        0;
-  return below ? [second, first] : [first, second];
+  return above(second, first) ? [second, first] : [first, second];
+}
+
+/** The visual line next to `at`'s in `direction`, across blocks with no text. */
+function beside(at: Located, direction: 1 | -1, read: RangeRects): Located | null {
+  const index = at.index + direction;
+  const line = at.lines[index];
+  if (line !== undefined) return { ...at, index, line };
+  const next = textBlockFrom(at.block, direction, read);
+  if (next === null) return null;
+  const nextIndex = direction === 1 ? 0 : next.lines.length - 1;
+  return { ...next, index: nextIndex, line: next.lines[nextIndex] as VisualLine };
 }
 
 /** Whether `a`'s and `b`'s visual lines are at most `count` apart, in either order, however
@@ -393,8 +405,11 @@ export function visualLineRange(
   read: RangeRects = clientRects,
 ): Range | null {
   const located = locateBoth(root, map, from, to, read);
-  if (located === null) return null;
-  const [first, last] = located;
+  return located && linesRange(root, ...located, read);
+}
+
+/** `visualLineRange` over located lines, `first` the upper. */
+function linesRange(root: Element, first: Located, last: Located, read: RangeRects): Range {
   const range = root.ownerDocument.createRange();
   const startRow = rowOf(first.block, first.line);
   if (startRow !== null) range.setStart(startRow, 0);
@@ -465,8 +480,30 @@ export function textEnds(
   ];
 }
 
-/** The band over the visual lines source lines `start` through `end` are laid out on, from
- * their text's first character's through its last's. Null when none of them renders text. */
+/** The starts of the first and last visual lines source lines `start` through `end` hold:
+ * those their text is laid out on, less an end line that also holds another line's text —
+ * a click cites every line on its row, so the rows it cites hold just that row — unless
+ * that leaves none. Null when none of them renders text. */
+export function heldRows(
+  root: Element,
+  map: PlanSourceMap,
+  span: SourceSpan,
+  read: RangeRects = clientRects,
+): [TextPoint, TextPoint] | null {
+  const ends = textEnds(map, span);
+  const located = ends && locateBoth(root, map, ...ends, read);
+  if (!located) return null;
+  const [first, last] = located;
+  const linesOn = (at: Located) => map.linesOf(linesRange(root, at, at, read));
+  const top = (linesOn(first)?.start ?? span.start) < span.start ? beside(first, 1, read) : first;
+  const bottom = (linesOn(last)?.end ?? span.end) > span.end ? beside(last, -1, read) : last;
+  const held = top && bottom && !above(bottom, top) ? [top, bottom] : located;
+  const [upper, lower] = held.map((at) => map.textPoint(...lineStart(at.line, read)));
+  return upper && lower ? [upper, lower] : null;
+}
+
+/** The band over the visual lines source lines `start` through `end` hold, `heldRows`'.
+ * Null when none of them renders text. */
 export function linesBand(
   root: Element,
   scroller: Element,
@@ -476,23 +513,21 @@ export function linesBand(
   read: RangeRects = clientRects,
   rect: RectReader = defaultReader,
 ): BandBox | null {
-  const ends = textEnds(map, span);
-  if (ends === null) return null;
-  const [top, bottom] = ends.map((p) => cursorBand(root, scroller, map, p, lineHeight, read, rect));
+  const rows = heldRows(root, map, span, read);
+  if (rows === null) return null;
+  const [top, bottom] = rows.map((p) => cursorBand(root, scroller, map, p, lineHeight, read, rect));
   return top && bottom ? spanBands(top, bottom) : null;
 }
 
-/** The start of the visual line after the one source lines `start` through `end` end on —
- * the line `linesBand`'s bottom row holds — within its block, past the rest of its table
- * row in a table. Null when that line is its block's last, or none of them renders text. */
+/** The start of the visual line after `p`'s, within its block, past the rest of its table
+ * row in a table. Null on its block's last line, or where `p` cannot be placed. */
 export function lineAfter(
   root: Element,
   map: PlanSourceMap,
-  span: SourceSpan,
+  p: TextPoint,
   read: RangeRects = clientRects,
 ): TextPoint | null {
-  const last = textEnds(map, span)?.[1];
-  const at = last && locate(root, map, last, read);
+  const at = locate(root, map, p, read);
   if (!at) return null;
   const row = rowOf(at.block, at.line);
   const next = at.lines

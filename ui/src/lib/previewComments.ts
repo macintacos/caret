@@ -7,7 +7,7 @@ import { highlightsSupported } from "$lib/diffview/searchHighlight.ts";
 import { contentOrigin, defaultReader, type RectReader } from "$lib/geometry.ts";
 import type { SourceSpan } from "$lib/planMarkdown.ts";
 import type { PlanSourceMap, TextPoint } from "$lib/planSourceMap.ts";
-import { lineAfter, type RangeRects, textEnds } from "$lib/previewLines.ts";
+import { heldRows, lineAfter, type RangeRects, textEnds } from "$lib/previewLines.ts";
 
 const HIGHLIGHT = "caret-comment-span";
 
@@ -75,9 +75,9 @@ export type SlotBox = {
   padEnd: number;
 };
 
-/** Where the slot for comments on `span` opens its gap: under the visual row its text ends
- * on, the row `linesBand` ends on, else — on its block's last row — after the block its
- * text ends in, or with no text after `commentSlotIndex`'s block for its end. */
+/** Where the slot for comments on `span` opens its gap: under the last visual row it holds,
+ * the row `linesBand` ends on, else — on its block's last row — after that block, or with
+ * no text after `commentSlotIndex`'s block for its end. */
 export function slotGap(
   root: Element,
   map: PlanSourceMap,
@@ -85,9 +85,10 @@ export function slotGap(
   span: SourceSpan,
   read?: RangeRects,
 ): SlotGap | null {
-  const before = lineAfter(root, map, span, read);
-  if (before !== null) return { before };
-  const block = commentSlotIndex(blocks, textEnds(map, span)?.[1].line ?? span.end);
+  const end = heldRows(root, map, span, read)?.[1] ?? textEnds(map, span)?.[1];
+  const before = end && lineAfter(root, map, end, read);
+  if (before) return { before };
+  const block = commentSlotIndex(blocks, end?.line ?? span.end);
   return block === null ? null : { block };
 }
 

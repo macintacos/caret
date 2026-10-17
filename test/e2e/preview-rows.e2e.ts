@@ -353,13 +353,15 @@ test("a row shows the pointer cursor, and the text cursor while Shift is held", 
   await expect.poll(cursor).toBe("pointer");
 });
 
-test("a click opens the composer right under the rows it cites, inside its paragraph, and the sent comment stays there", async ({
+test("a click opens the composer right under the row clicked, inside its paragraph, and the sent comment stays there", async ({
   daemon,
   page,
 }) => {
   const { prose } = await openRows(daemon, page);
   const [first, second] = await rowsOf(page, prose);
   if (first === undefined || second === undefined) throw new Error("the paragraph did not wrap");
+  // The row ends a few words into the second stored line it cites, which runs on below it.
+  expect(await linesOnRow(page, first)).toHaveLength(2);
 
   await page.mouse.click(await textX(page), first);
   const composer = page.getByRole("dialog", { name: "Add a comment" });
@@ -378,8 +380,9 @@ test("a click opens the composer right under the rows it cites, inside its parag
   await expect.poll(under).toBe(true);
   const box = await composer.boundingBox();
   if (!box) throw new Error("the composer did not render");
-  // The paragraph runs on under the composer.
+  // The clicked row alone sits above it; the paragraph runs on under it.
   const rows = await rowsOf(page, prose);
+  expect(rows.filter((y) => y < box.y)).toHaveLength(1);
   expect(rows.filter((y) => y > box.y + box.height).length).toBeGreaterThan(0);
 
   await composer.getByRole("textbox", { name: "Comment" }).fill("right here");
