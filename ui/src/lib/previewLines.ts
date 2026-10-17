@@ -4,6 +4,7 @@
 // blocks a lookup touches, so a cursor step never measures the whole document.
 import { indexAtReadingZone } from "$lib/diffview/scroll.ts";
 import { type Box, contentOrigin, defaultReader, type RectReader } from "$lib/geometry.ts";
+import type { SourceSpan } from "$lib/planMarkdown.ts";
 import type { PlanSourceMap, TextPoint } from "$lib/planSourceMap.ts";
 
 export type { TextPoint };
@@ -311,14 +312,16 @@ export function visualLineBox(
   );
 }
 
+interface Located {
+  block: Element;
+  lines: VisualLine[];
+  index: number;
+  line: VisualLine;
+}
+
 /** `p`'s block, that block's visual lines, and the one holding `p`; null when `p` cannot
  * be placed or its block lays out no text. */
-function locate(
-  root: Element,
-  map: PlanSourceMap,
-  p: TextPoint,
-  read: RangeRects,
-): { block: Element; lines: VisualLine[]; index: number; line: VisualLine } | null {
+function locate(root: Element, map: PlanSourceMap, p: TextPoint, read: RangeRects): Located | null {
   const point = map.clampedPoint(p);
   const block = point === null ? null : blockOf(root, point[0]);
   if (point === null || block === null) return null;
@@ -328,6 +331,25 @@ function locate(
   return line === undefined ? null : { block, lines, index, line };
 }
 
+/** Both points located, the upper first: an earlier block, or an earlier line of one. */
+function locateBoth(
+  root: Element,
+  map: PlanSourceMap,
+  a: TextPoint,
+  b: TextPoint,
+  read: RangeRects,
+): [Located, Located] | null {
+  const first = locate(root, map, a, read);
+  const second = locate(root, map, b, read);
+  if (first === null || second === null) return null;
+  const below =
+    first.block === second.block
+      ? second.index < first.index
+      : (second.block.compareDocumentPosition(first.block) & Node.DOCUMENT_POSITION_FOLLOWING) !==
+        0;
+  return below ? [second, first] : [first, second];
+}
+
 /** The table row holding `line`, inside `block`. A row is one source line, and its
  * middle-aligned cells put DOM order out of step with visual order. */
 function rowOf(block: Element, line: VisualLine): Element | null {
@@ -335,9 +357,9 @@ function rowOf(block: Element, line: VisualLine): Element | null {
   return row != null && block.contains(row) ? row : null;
 }
 
-/** The text of the visual lines from `from`'s through `to`'s, `from` not after `to`: from
- * the first character of `from`'s line to the first of the line after `to`'s, or to the
- * end of `to`'s block. Null when either point cannot be placed. */
+/** The text of the visual lines from `from`'s through `to`'s, in either order: from the
+ * first character of the upper point's line to the first of the line after the lower's,
+ * or to the end of the lower's block. Null when either point cannot be placed. */
 export function visualLineRange(
   root: Element,
   map: PlanSourceMap,
@@ -345,9 +367,9 @@ export function visualLineRange(
   to: TextPoint,
   read: RangeRects = clientRects,
 ): Range | null {
-  const first = locate(root, map, from, read);
-  const last = locate(root, map, to, read);
-  if (first === null || last === null) return null;
+  const located = locateBoth(root, map, from, to, read);
+  if (located === null) return null;
+  const [first, last] = located;
   const range = root.ownerDocument.createRange();
   const startRow = rowOf(first.block, first.line);
   if (startRow !== null) range.setStart(startRow, 0);
@@ -382,7 +404,7 @@ export function cursorBand(
 ): BandBox | null {
   const box = visualLineBox(root, map, p, read);
   if (box === null) return null;
-  const pad = lineHeight > 0 ? Math.max(0, lineHeight - (box.bottom - box.top)) / 2 : 0;
+  const pad = padTo(lineHeight, box);
   const origin = contentOrigin(scroller, rect(scroller));
   const rootRect = rect(root);
   return {
@@ -391,4 +413,74 @@ export function cursorBand(
     width: rootRect.right - rootRect.left,
     height: box.bottom - box.top + 2 * pad,
   };
+}
+
+/** One band from the higher of `a` and `b`'s tops to the lower of their bottoms. */
+export function spanBands(a: BandBox, b: BandBox): BandBox {
+  const top = Math.min(a.top, b.top);
+  return { ...a, top, height: Math.max(a.top + a.height, b.top + b.height) - top };
+}
+
+/** The band over the visual lines source lines `start` through `end` are laid out on, from
+ * the first with text's first character through the last's last non-space one: a soft
+ * break after it can wrap onto the next row. Null when none of them renders text. */
+export function linesBand(
+  root: Element,
+  scroller: Element,
+  map: PlanSourceMap,
+  { start, end }: SourceSpan,
+  lineHeight: number,
+  read: RangeRects = clientRects,
+  rect: RectReader = defaultReader,
+): BandBox | null {
+  let first = start;
+  while (first <= end && map.rangeOf(first) === null) first++;
+  let last = end;
+  while (last >= first && map.rangeOf(last) === null) last--;
+  if (first > last) return null;
+  const text = map.rangeOf(last)?.toString().trimEnd() ?? "";
+  const lastColumn = Math.max(text.length - 1, 0);
+  const top = cursorBand(root, scroller, map, { line: first, column: 0 }, lineHeight, read, rect);
+  const bottom = cursorBand(
+    root,
+    scroller,
+    map,
+    { line: last, column: lastColumn },
+    lineHeight,
+    read,
+    rect,
+  );
+  return top && bottom && spanBands(top, bottom);
+}
+
+/** How far a band over `line` reaches past it on each side to fill `lineHeight`. */
+const padTo = (lineHeight: number, line: Box): number =>
+  lineHeight > 0 ? Math.max(0, lineHeight - (line.bottom - line.top)) / 2 : 0;
+
+/** The start of the visual line at viewport height `y`, in the first block whose bottom
+ * passes `y`, else the last: the line holding `y`, else the nearest. A block with no text
+ * gives way to the next block with text, else the previous. Null when nothing renders text.
+ * Reads the rects of O(log n) blocks, so a pointer move never measures the whole plan. */
+export function rowAt(
+  root: Element,
+  map: PlanSourceMap,
+  y: number,
+  read: RangeRects = clientRects,
+  rect: RectReader = defaultReader,
+): TextPoint | null {
+  const blocks = root.children;
+  let lo = 0;
+  let hi = blocks.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (rect(blocks[mid] as Element).bottom > y) hi = mid;
+    else lo = mid + 1;
+  }
+  const block = blocks[Math.min(lo, blocks.length - 1)];
+  if (block === undefined) return null;
+  const own = visualLines(block, read);
+  const lines =
+    own.length > 0 ? own : (textBlockFrom(block, 1, read) ?? textBlockFrom(block, -1, read))?.lines;
+  const line = lines?.find((l) => y >= l.top && y < l.bottom) ?? nearest(lines ?? [], y);
+  return line === undefined ? null : map.textPoint(...lineStart(line, read));
 }

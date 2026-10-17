@@ -4,13 +4,14 @@
   // source-mapped features to find. DiffPlanView decides which text and when; this mounts
   // it, sets what HTML cannot carry, highlights its code blocks once each has mounted
   // plain, marks the soft-wrapped ones, tags the resolved file references and opens them
-  // on click, reports a plain click or a text selection for a comment, and styles it.
+  // on click, reports the rows a plain click or a comment drag covers, and styles it.
   import { FILE_ICON_MASK, FOLDER_ICON_MASK } from "$lib/diffview/coreStyles.ts";
   import type { FileRefSpan } from "$lib/diffview/fileRefs.ts";
   import { highlightTokens } from "$lib/diffview/highlight.ts";
   import { hideTooltip, showTooltip } from "$lib/diffview/linkInteractions.ts";
   import { applyPreviewReflow, highlightPreviewCode } from "$lib/previewCode.ts";
-  import { clickedRange, releasedRange } from "$lib/previewComments.ts";
+  import { isCommentClick, isCommentDrag } from "$lib/previewComments.ts";
+  import type { TextPoint } from "$lib/previewLines.ts";
   import { type PreviewFileRef, tagPreviewFileRefs } from "$lib/previewRefs.ts";
   import { type ThemeId, themeFor } from "$lib/theme.ts";
 
@@ -31,9 +32,14 @@
     fileRefs?: readonly PreviewFileRef[];
     /** A tagged reference was clicked. */
     onFileRefClick?: (ref: FileRefSpan, el: HTMLElement) => void;
-    /** A plain click (collapsed) or a text selection, clamped to the root; DiffPlanView
-     * maps it to source lines. */
-    onTextComment?: (range: Range) => void;
+    /** The visual line at a viewport height, as the point it starts at: rows span the
+     * column, so the height alone picks one. */
+    rowAt?: (y: number) => TextPoint | null;
+    /** A plain click, or a comment drag's release: the rows from the press's through the
+     * release's, in either order. DiffPlanView maps them to source lines. */
+    onTextComment?: (from: TextPoint, to: TextPoint) => void;
+    /** A comment drag's press row once the drag selects text; null when it ends. */
+    onCommentDrag?: (anchor: TextPoint | null) => void;
   }
   let {
     html,
@@ -43,7 +49,9 @@
     root = $bindable(),
     fileRefs = [],
     onFileRefClick,
+    rowAt,
     onTextComment,
+    onCommentDrag,
   }: Props = $props();
 
   $effect(() => {
@@ -113,18 +121,23 @@
       if (selection?.isCollapsed !== false) onFileRefClick?.(hit[1], hit[0]);
       return;
     }
-    const range = root && onTextComment ? clickedRange(root, event.target, selection) : null;
-    if (range) onTextComment?.(range);
+    if (!root || !isCommentClick(root, event.target, selection)) return;
+    const row = rowAt?.(event.clientY);
+    if (row) onTextComment?.(row, row);
   }
 
   let gesture: AbortController | undefined;
   $effect(() => () => gesture?.abort());
+  // DiffPlanView paints the rows a comment drag cites, so the native selection, which
+  // covers less, stays hidden while it runs.
+  let commentDragging = $state(false);
 
   // Shift bows out so the browser selects natively — the copy escape hatch the source
   // view's body drag has (lineDrag.ts); a selection left outside the root (a closed
   // composer's) is dropped first, or the native drag would extend from it. The release
   // listens on window, since a drag can end over a slot; a native drag-and-drop ends in
-  // pointercancel instead, so every terminator ends the gesture.
+  // pointercancel instead, so every terminator ends the gesture. The press's row is read
+  // at the press, before a drag can autoscroll it away from the pointer.
   function armSelection(event: PointerEvent) {
     gesture?.abort();
     if (!onTextComment || event.button !== 0) return;
@@ -135,18 +148,35 @@
       return;
     }
     const before = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+    const anchor = rowAt?.(event.clientY) ?? null;
     const current = new AbortController();
     gesture = current;
     const { signal } = current;
     const endGesture = () => current.abort();
+    const dragging = () => root != null && isCommentDrag(root, before, document.getSelection());
+    let reported = false;
+    signal.addEventListener("abort", () => {
+      if (!reported) return;
+      commentDragging = false;
+      onCommentDrag?.(null);
+    });
+    window.addEventListener(
+      "pointermove",
+      () => {
+        if (reported || anchor === null || !dragging()) return;
+        reported = true;
+        commentDragging = true;
+        onCommentDrag?.(anchor);
+      },
+      { signal },
+    );
     window.addEventListener(
       "pointerup",
       (up) => {
+        const commented = dragging();
         endGesture();
-        const range =
-          root &&
-          releasedRange(root, before, document.getSelection(), { x: up.clientX, y: up.clientY });
-        if (range) onTextComment?.(range);
+        const row = anchor && commented ? rowAt?.(up.clientY) : null;
+        if (anchor && row) onTextComment?.(anchor, row);
       },
       { signal },
     );
@@ -176,6 +206,7 @@
   onpointerdown={armSelection}
   onpointerover={showRefTarget}
   onpointerout={hideRefTarget}
+  data-comment-drag={commentDragging ? "" : undefined}
   style:--file-ref-icon={FILE_ICON_MASK}
   style:--folder-ref-icon={FOLDER_ICON_MASK}>{@html html}</div>
 
@@ -196,12 +227,21 @@
     background-color: var(--accent-wash);
   }
 
+  /* In the preview's own em, so every line wraps at the same word at any zoom, text size or
+     window width (a narrow window scrolls sideways): what a row cites must not move. The
+     text is 13.12px at the default 16px root, so this is an 800px column with 2ch + 25px
+     and 0.75rem of padding there. The end padding takes up any wider plan, so a row
+     reaches the plan's right edge, as a source row does. */
   .plan-preview {
-    max-width: 800px;
+    --column: calc(800em / 13.12);
+    min-width: var(--column);
     padding-block: 0.5rem;
-    padding-inline: calc(2ch + 25px) 0.75rem;
+    padding-inline: calc(2ch + 25em / 13.12) max(0.75em / 0.82, 100% - var(--column) + 0.75em / 0.82);
     font-size: var(--text-base);
     overflow-wrap: break-word;
+  }
+  .plan-preview[data-comment-drag] :global(::selection) {
+    background-color: transparent;
   }
   /* The child rules are :global because {@html} content gets no Svelte scoping. */
   .plan-preview :global(:is(p, blockquote, ul, ol, table, pre, hr)) {

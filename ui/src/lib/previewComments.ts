@@ -1,8 +1,8 @@
 // The preview's comments: where each comment renders, the room a slot holds open under its
 // block, the slot's box, the highlight over a comment's rendered text, the keyboard's
-// visual selection, and the click or drag selection a new comment starts from, kept
-// inside the root. Slots live outside the preview root, so the root stays exactly the
-// rendered HTML the source map and `planPlace` index.
+// visual selection, and whether a click or drag starts a new comment. Slots live outside
+// the preview root, so the root stays exactly the rendered HTML the source map and
+// `planPlace` index.
 
 import { shouldCommentOnLineClick } from "$lib/diffview/annotationSlot.ts";
 import { highlightsSupported } from "$lib/diffview/searchHighlight.ts";
@@ -76,67 +76,35 @@ export function clearVisualSelection(): void {
   CSS.highlights.delete(VISUAL_HIGHLIGHT);
 }
 
-/** `range` with any end outside `root` pulled back inside it. `range` must start or end
- * inside `root`, and `releaseBlock` must be a direct child of `root`: the block under the
- * release point, which a slot or the code chrome draws over. A start outside moves to the
- * root's start. An end outside moves to the end of `releaseBlock`, or of `root` when there
- * is none — unless that falls before the start (a drag up onto a block above the anchor),
- * when the range runs from there to the original start instead. */
-export function clampToRoot(range: Range, root: Element, releaseBlock: Element | null): Range {
-  const clamped = range.cloneRange();
-  if (!root.contains(clamped.startContainer)) clamped.setStart(root, 0);
-  if (!root.contains(clamped.endContainer)) {
-    const end = releaseBlock ?? root;
-    const start = [clamped.startContainer, clamped.startOffset] as const;
-    clamped.setEnd(end, end.childNodes.length);
-    if (clamped.collapsed && clamped.comparePoint(...start) > 0) clamped.setEnd(...start);
-  }
-  return clamped;
-}
-
 const INTERACTIVE = "a, button, input, label, select, summary, textarea";
 
-/** The collapsed range a plain click on `target` in `root` leaves, copied; null when the
- * click hit a control or left a selection, or the selection lies outside `root`. */
-export function clickedRange(
+/** Whether a plain click on `target` in `root` starts a comment: it left the selection
+ * collapsed inside `root`, and hit no control. */
+export function isCommentClick(
   root: Element,
   target: EventTarget | null,
   selection: Selection | null,
-): Range | null {
+): boolean {
   const interactive = target instanceof Element && target.closest(INTERACTIVE) !== null;
-  if (!selection?.rangeCount || !root.contains(selection.anchorNode)) return null;
+  if (!selection?.rangeCount || !root.contains(selection.anchorNode)) return false;
   return shouldCommentOnLineClick({
     numberColumn: false,
     linkConsumed: interactive,
     selectionCollapsed: selection.isCollapsed,
-  })
-    ? selection.getRangeAt(0).cloneRange()
-    : null;
+  });
 }
 
-/** Every element under a viewport point, topmost first. */
-export type PointReader = (x: number, y: number) => readonly Element[];
-const elementsAt: PointReader = (x, y) => document.elementsFromPoint(x, y);
-
-/** The selection a drag released at `point` leaves, copied and clamped to `root`; null when
- * it is collapsed, anchored outside `root`, or still `before` (the press landed inside a
- * standing selection). `read` runs only when an end lies outside `root`: a slot draws over
- * its block's reserved padding and the chrome over its `pre`, so the block is under the
- * pointer too. */
-export function releasedRange(
+/** Whether a release ends a comment drag: it left a selection anchored inside `root`, not
+ * collapsed and not still `before` (the press landed inside a standing selection). Its
+ * end may lie outside `root`, over a slot or the code chrome. */
+export function isCommentDrag(
   root: Element,
   before: Range | null,
   selection: Selection | null,
-  point: { x: number; y: number },
-  read: PointReader = elementsAt,
-): Range | null {
-  if (!selection?.rangeCount || !root.contains(selection.anchorNode)) return null;
+): boolean {
+  if (!selection?.rangeCount || !root.contains(selection.anchorNode)) return false;
   const range = selection.getRangeAt(0);
-  if (range.collapsed || (before && sameRange(range, before))) return null;
-  if (root.contains(range.startContainer) && root.contains(range.endContainer))
-    return range.cloneRange();
-  const releaseBlock = read(point.x, point.y).find((el) => el.parentElement === root) ?? null;
-  return clampToRoot(range, root, releaseBlock);
+  return !range.collapsed && !(before && sameRange(range, before));
 }
 
 function sameRange(a: Range, b: Range): boolean {
@@ -174,12 +142,20 @@ export function createSlotReserve(root: Element): {
   return { set, release: () => set(new Map()) };
 }
 
-/** A comment slot's box in a scroller's content coordinates. */
-export type SlotBox = { top: number; left: number; width: number };
+/** A comment slot's box in a scroller's content coordinates, with the inline padding that
+ * sets its content over its block's. */
+export type SlotBox = {
+  top: number;
+  left: number;
+  width: number;
+  padStart: number;
+  padEnd: number;
+};
 
 /** Each slot's box in `scroller` content coordinates: top at its block's bottom less the
- * reserved height, left and width the block's. `heights` maps a block index
- * (`root.children` position) to its slot's height in CSS px. */
+ * reserved height, across `root` as the rows above and below it run, padded in to the
+ * block's sides. `heights` maps a block index (`root.children` position) to its slot's
+ * height in CSS px. */
 export function previewSlotBoxes(
   root: Element,
   scroller: HTMLElement,
@@ -187,6 +163,7 @@ export function previewSlotBoxes(
   read: RectReader = defaultReader,
 ): Map<number, SlotBox> {
   const origin = contentOrigin(scroller, read(scroller));
+  const across = read(root);
   const boxes = new Map<number, SlotBox>();
   for (const [block, height] of heights) {
     const el = root.children[block];
@@ -194,12 +171,16 @@ export function previewSlotBoxes(
     const box = read(el);
     boxes.set(block, {
       top: box.bottom - height - origin.top,
-      left: box.left - origin.left,
-      width: box.right - box.left,
+      left: across.left - origin.left,
+      width: across.right - across.left,
+      padStart: box.left - across.left,
+      padEnd: across.right - box.right,
     });
   }
   return boxes;
 }
+
+const SLOT_SIDES = ["top", "left", "width", "padStart", "padEnd"] as const;
 
 /** Whether `a` and `b` place the same blocks at exactly the same boxes. */
 export function sameSlotBoxes(
@@ -209,7 +190,7 @@ export function sameSlotBoxes(
   if (a.size !== b.size) return false;
   for (const [block, box] of b) {
     const old = a.get(block);
-    if (old?.top !== box.top || old.left !== box.left || old.width !== box.width) return false;
+    if (old === undefined || SLOT_SIDES.some((side) => old[side] !== box[side])) return false;
   }
   return true;
 }

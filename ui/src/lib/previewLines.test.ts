@@ -10,9 +10,11 @@ import { highlightPreviewCode } from "$lib/previewCode.ts";
 import {
   cursorBand,
   lastVisualLine,
+  linesBand,
   pointForLine,
   type RangeRects,
   readingPoint,
+  rowAt,
   stepVisualLine,
   type TextPoint,
   visualLineBox,
@@ -363,6 +365,36 @@ describe("cursorBand", () => {
   });
 });
 
+describe("linesBand", () => {
+  // The root's own box, so a band's top is its first row's top and its height counts rows.
+  const flat: RectReader = () => ({ top: 0, bottom: 1000, left: 0, right: 300 });
+
+  test("spans every row the lines are laid out on, across blocks", () => {
+    const { root, map } = mount(`${LONG}\n\nmiddle\n\n${LONG}\n`);
+    const band = linesBand(root, root, map, { start: 1, end: 5 }, 0, grid(root, 20).read, flat);
+    expect(band).toEqual({ top: 0, left: 0, width: 300, height: 7 * ROW });
+  });
+
+  test("ends on the row of a line's last character, not the soft break that wraps past it", () => {
+    const { root, map } = mount("aaaaaaaaaa bbbbbbbbbb\ncccccccccc dddddddddd\n");
+    const band = linesBand(root, root, map, { start: 1, end: 1 }, 0, grid(root, 21).read, flat);
+    expect(band).toEqual({ top: 0, left: 0, width: 300, height: ROW });
+  });
+
+  test("lines with no text at either end give way to the lines with text between", () => {
+    const { root, map } = mount(`${LONG}\n\nmiddle\n\n${LONG}\n`);
+    const band = linesBand(root, root, map, { start: 2, end: 4 }, 0, grid(root, 20).read, flat);
+    expect(band).toEqual({ top: 3 * ROW, left: 0, width: 300, height: ROW });
+  });
+
+  test("is null when none of the lines renders text", () => {
+    const { root, map } = mount(`${LONG}\n\n\n\nmiddle\n`);
+    expect(linesBand(root, root, map, { start: 2, end: 3 }, 0, grid(root, 20).read, flat)).toBe(
+      null,
+    );
+  });
+});
+
 describe("pointForLine", () => {
   const PLAN = "# Head\n\npara\n\n";
 
@@ -495,9 +527,81 @@ describe("visualLineRange", () => {
     expect(map.linesOf(span)).toEqual({ start: 1, end: 5 });
   });
 
+  test("spans the same lines when the points come in either order", () => {
+    const { root, map } = mount(`${LONG}\n\nmiddle\n\n${LONG}\n`);
+    const read = grid(root, 20).read;
+    const up = visualLineRange(
+      root,
+      map,
+      { line: 5, column: 45 },
+      { line: 1, column: 25 },
+      read,
+    ) as Range;
+    expect(up.toString().startsWith(LONG.slice(20, 40))).toBe(true);
+    expect(map.linesOf(up)).toEqual({ start: 1, end: 5 });
+  });
+
   test("is null for a point the preview does not render", () => {
     const { root, map } = mount("");
     const p = { line: 1, column: 0 };
     expect(visualLineRange(root, map, p, p) === null).toBe(true);
+  });
+});
+
+describe("rowAt", () => {
+  test("is the start of the visual line under the height, wherever its block wraps", () => {
+    const { root, map } = mount(`${LONG}\n`);
+    const narrow = grid(root, 20);
+    expect(rowAt(root, map, 15, narrow.read, narrow.rect)).toEqual({ line: 1, column: 20 });
+    const wide = grid(root, 30);
+    expect(rowAt(root, map, 15, wide.read, wide.rect)).toEqual({ line: 1, column: 30 });
+  });
+
+  test("above every block is the first line, and past the end the last", () => {
+    const { root, map } = mount(`${LONG}\n\ntail\n`);
+    const g = grid(root, 20);
+    expect(rowAt(root, map, -5, g.read, g.rect)).toEqual({ line: 1, column: 0 });
+    expect(rowAt(root, map, 35, g.read, g.rect)).toEqual({ line: 3, column: 0 });
+    expect(rowAt(root, map, 500, g.read, g.rect)).toEqual({ line: 3, column: 0 });
+  });
+
+  test("over a block's padding below its text, such as a comment slot's, is its last line", () => {
+    const { root, map } = mount(`${LONG}\n\ntail\n`);
+    const g = grid(root, 20);
+    // The first block's slot pads it to 300, which pushes the second block down after it.
+    const padded: RectReader = (el) => ({
+      ...g.rect(el),
+      bottom: el === root.firstElementChild ? 300 : 310,
+    });
+    expect(rowAt(root, map, 100, g.read, padded)).toEqual({ line: 1, column: 40 });
+  });
+
+  test("over a block with no text, is the next block's first line, else the previous block's last", () => {
+    const box = (top: number): Box => ({ top, bottom: top + 10, left: 0, right: 1 });
+    const read = readByText(
+      new Map([
+        ["one", [box(0)]],
+        ["two", [box(20)]],
+      ]),
+    );
+    const stacked =
+      (root: Element): RectReader =>
+      (el) => ({ top: 0, bottom: ([...root.children].indexOf(el) + 1) * 10, left: 0, right: 0 });
+
+    const between = mount("one\n\n---\n\ntwo\n");
+    expect(rowAt(between.root, between.map, 15, read, stacked(between.root))).toEqual({
+      line: 5,
+      column: 0,
+    });
+    const last = mount("one\n\n---\n");
+    expect(rowAt(last.root, last.map, 15, read, stacked(last.root))).toEqual({
+      line: 1,
+      column: 0,
+    });
+  });
+
+  test("is null when nothing renders text", () => {
+    const { root, map } = mount("");
+    expect(rowAt(root, map, 5)).toBe(null);
   });
 });

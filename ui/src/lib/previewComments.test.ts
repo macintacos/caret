@@ -6,15 +6,14 @@ import type { RectReader } from "$lib/geometry.ts";
 import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
 import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
 import {
-  clampToRoot,
   clearCommentHighlight,
-  clickedRange,
   commentSlotIndex,
   createSlotReserve,
   groupBySlot,
+  isCommentClick,
+  isCommentDrag,
   paintCommentHighlight,
   previewSlotBoxes,
-  releasedRange,
   spanRanges,
 } from "$lib/previewComments.ts";
 
@@ -146,112 +145,38 @@ describe("createSlotReserve", () => {
 });
 
 describe("previewSlotBoxes", () => {
-  test("puts a slot at its block's bottom less the reserve, in scrolled content coords", () => {
+  test("puts a slot at its block's bottom less the reserve, across the root and padded to its block, in scrolled content coords", () => {
     const { root } = mount("a\n\nb");
     const blocks = [...root.children];
     const scroller = document.createElement("div");
     scroller.scrollTop = 50;
-    // Block i spans y [10+40i, 30+40i], x [100,300]; the scroller's top-left is (8, 5).
+    // Block i spans y [10+40i, 30+40i], x [100,300], in a root spanning x [60,500]; the
+    // scroller's top-left is (8, 5).
     const read: RectReader = (el) => {
-      if (el === scroller) return { top: 5, bottom: 1000, left: 8, right: 400 };
+      if (el === scroller) return { top: 5, bottom: 1000, left: 8, right: 600 };
+      if (el === root) return { top: 0, bottom: 1000, left: 60, right: 500 };
       const i = blocks.indexOf(el);
       return { top: 10 + i * 40, bottom: 30 + i * 40, left: 100, right: 300 };
     };
-    // top = 70 - 12 - (5 - 50) = 103 ; left = 100 - 8 = 92
+    // top = 70 - 12 - (5 - 50) = 103 ; left = 60 - 8 = 52
     expect(previewSlotBoxes(root, scroller, new Map([[1, 12]]), read)).toEqual(
-      new Map([[1, { top: 103, left: 92, width: 200 }]]),
+      new Map([[1, { top: 103, left: 52, width: 440, padStart: 40, padEnd: 200 }]]),
     );
   });
 });
 
-describe("clampToRoot", () => {
-  function withSibling(text: string) {
-    const { root, map } = mount(text);
-    const sibling = document.createElement("div");
-    sibling.textContent = "slot";
-    root.after(sibling);
-    mounted.push(sibling);
-    return { root, map, sibling };
-  }
-
-  test("returns a range inside the root unchanged", () => {
-    const { root } = mount("one\ntwo");
-    const range = document.createRange();
-    range.selectNodeContents(root);
-
-    const clamped = clampToRoot(range, root, null);
-
-    expect(clamped.compareBoundaryPoints(Range.START_TO_START, range)).toBe(0);
-    expect(clamped.compareBoundaryPoints(Range.END_TO_END, range)).toBe(0);
-  });
-
-  test("ends a range released past the root at the release block's end", () => {
-    const { root, map, sibling } = withSibling("one\ntwo\n\nthree");
-    const range = document.createRange();
-    range.setStart(root, 0);
-    range.setEnd(sibling, 1);
-
-    const clamped = clampToRoot(range, root, root.children[0] as Element);
-
-    expect(map.linesOf(clamped)).toEqual({ start: 1, end: 2 });
-  });
-
-  test("ends a range released past the root with no block at the root's end", () => {
-    const { root, sibling } = withSibling("one\n\ntwo");
-    const range = document.createRange();
-    range.setStart(root, 0);
-    range.setEnd(sibling, 1);
-
-    const clamped = clampToRoot(range, root, null);
-
-    expect(clamped.endContainer === root).toBe(true);
-    expect(clamped.endOffset).toBe(root.childNodes.length);
-  });
-
-  test("spans the gap after the release block up to the start of an upward drag", () => {
-    const { root, map, sibling } = withSibling("one\n\ntwo\n\nthree");
-    const range = document.createRange();
-    range.setStart(textIn(root.children[2] as Element), 2);
-    range.setEnd(sibling, 1);
-
-    const clamped = clampToRoot(range, root, root.children[0] as Element);
-
-    expect(clamped.collapsed).toBe(false);
-    expect(map.linesOf(clamped)).toEqual({ start: 3, end: 5 });
-  });
-
-  test("starts a range begun before the root at the root's start", () => {
-    const { root } = mount("one\n\ntwo");
-    const before = document.createElement("div");
-    before.textContent = "above";
-    root.before(before);
-    mounted.push(before);
-    const range = document.createRange();
-    range.setStart(before, 0);
-    range.setEnd(root, root.childNodes.length);
-
-    const clamped = clampToRoot(range, root, null);
-
-    expect(clamped.startContainer === root).toBe(true);
-    expect(clamped.startOffset).toBe(0);
-  });
-});
-
-describe("clickedRange", () => {
+describe("isCommentClick", () => {
   afterEach(() => document.getSelection()?.removeAllRanges());
 
-  test("returns a copy of the collapsed selection a click on text leaves", () => {
+  test("is a click on text that leaves the selection collapsed in the root", () => {
     const { root } = mount("Plain words.");
     const text = textIn(root);
-    const live = selectText([text, 3]);
+    selectText([text, 3]);
 
-    const range = clickedRange(root, text.parentElement, document.getSelection());
-
-    expect(range === live).toBe(false);
-    expect(range?.startContainer === text && range.startOffset === 3).toBe(true);
+    expect(isCommentClick(root, text.parentElement, document.getSelection())).toBe(true);
   });
 
-  test("returns null for a click on a control, a non-collapsed or an outside selection", () => {
+  test("is not a click on a control, nor one leaving a spread or an outside selection", () => {
     const { root } = mount("A [link](https://x.test) here.");
     const link = root.querySelector("a") as Element;
     const outside = document.createElement("div");
@@ -260,35 +185,36 @@ describe("clickedRange", () => {
     mounted.push(outside);
 
     selectText([link.firstChild as Node, 1]);
-    const onLink = clickedRange(root, link, document.getSelection());
+    const onLink = isCommentClick(root, link, document.getSelection());
     selectText([textIn(root), 0], [link.firstChild as Node, 1]);
-    const spread = clickedRange(root, root.querySelector("p"), document.getSelection());
+    const spread = isCommentClick(root, root.querySelector("p"), document.getSelection());
     selectText([outside.firstChild as Node, 1]);
-    const away = clickedRange(root, root.querySelector("p"), document.getSelection());
+    const away = isCommentClick(root, root.querySelector("p"), document.getSelection());
 
-    expect([onLink, spread, away]).toEqual([null, null, null]);
+    expect([onLink, spread, away]).toEqual([false, false, false]);
   });
 });
 
-describe("releasedRange", () => {
+describe("isCommentDrag", () => {
   afterEach(() => document.getSelection()?.removeAllRanges());
-  const point = { x: 1, y: 2 };
-  const unread = () => {
-    throw new Error("read without an end outside the root");
-  };
 
-  test("returns a copy of a selection inside the root without a hit test", () => {
-    const { root } = mount("Plain words.");
+  test("is a release leaving a new selection anchored in the root, wherever it ends", () => {
+    const { root } = mount("one\n\ntwo");
+    const slot = document.createElement("div");
+    slot.textContent = "slot";
+    root.after(slot);
+    mounted.push(slot);
     const text = textIn(root);
-    const live = selectText([text, 0], [text, 5]);
 
-    const range = releasedRange(root, null, document.getSelection(), point, unread);
+    selectText([text, 0], [text, 2]);
+    const inside = isCommentDrag(root, null, document.getSelection());
+    selectText([text, 0], [slot.firstChild as Node, 2]);
+    const overSlot = isCommentDrag(root, null, document.getSelection());
 
-    expect(range === live).toBe(false);
-    expect(String(range)).toBe("Plain");
+    expect([inside, overSlot]).toEqual([true, true]);
   });
 
-  test("returns null for a collapsed, unchanged or outside-anchored selection", () => {
+  test("is not a collapsed, unchanged or outside-anchored selection", () => {
     const { root } = mount("Plain words.");
     const text = textIn(root);
     const outside = document.createElement("div");
@@ -297,30 +223,12 @@ describe("releasedRange", () => {
     mounted.push(outside);
 
     selectText([text, 2]);
-    const collapsed = releasedRange(root, null, document.getSelection(), point, unread);
+    const collapsed = isCommentDrag(root, null, document.getSelection());
     const standing = selectText([text, 0], [text, 5]).cloneRange();
-    const unchanged = releasedRange(root, standing, document.getSelection(), point, unread);
+    const unchanged = isCommentDrag(root, standing, document.getSelection());
     selectText([outside.firstChild as Node, 0], [outside.firstChild as Node, 3]);
-    const away = releasedRange(root, null, document.getSelection(), point, unread);
+    const away = isCommentDrag(root, null, document.getSelection());
 
-    expect([collapsed, unchanged, away]).toEqual([null, null, null]);
-  });
-
-  test("ends a selection released over an overlay at the block under the point", () => {
-    const { root, map } = mount("one\n\ntwo\n\nthree");
-    const slot = document.createElement("div");
-    slot.textContent = "slot";
-    root.after(slot);
-    mounted.push(slot);
-    selectText([textIn(root), 0], [slot.firstChild as Node, 2]);
-    let asked: [number, number] | undefined;
-
-    const range = releasedRange(root, null, document.getSelection(), point, (x, y) => {
-      asked = [x, y];
-      return [slot, root.children[1] as Element, root];
-    });
-
-    expect(asked).toEqual([1, 2]);
-    expect(range && map.linesOf(range)).toEqual({ start: 1, end: 3 });
+    expect([collapsed, unchanged, away]).toEqual([false, false, false]);
   });
 });

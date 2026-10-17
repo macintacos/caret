@@ -17,6 +17,7 @@ import {
 } from "$lib/diffview/fileRefs.ts";
 import { buildLinkLayer } from "$lib/diffview/links.ts";
 import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
+import type { TextPoint } from "$lib/previewLines.ts";
 import { type PreviewFileRef, previewFileRefs } from "$lib/previewRefs.ts";
 import { addTheme, replaceTheme, type ThemeId } from "$lib/theme.ts";
 import { buildFileTheme } from "$lib/theme-file.ts";
@@ -306,28 +307,36 @@ describe("PlanPreview text comments", () => {
     document.getSelection()?.removeAllRanges();
   });
 
+  /** A stand-in for the layout: the row at height y starts line y. */
+  const rowAt = (y: number): TextPoint => ({ line: y, column: 0 });
+
   function setup(text: string) {
-    const ranges: Range[] = [];
+    const rows: [TextPoint, TextPoint][] = [];
+    const drags: (TextPoint | null)[] = [];
     let refClicks = 0;
     const { target, flush } = render(PlanPreview, {
       html: renderPlanMarkdown(text).html,
       fileRefs: refsFor(text),
       onFileRefClick: () => refClicks++,
-      onTextComment: (range: Range) => ranges.push(range),
+      rowAt,
+      onTextComment: (from: TextPoint, to: TextPoint) => rows.push([from, to]),
+      onCommentDrag: (anchor: TextPoint | null) => drags.push(anchor),
     });
     flush();
     const root = target.querySelector(".plan-preview") as HTMLElement;
-    return { root, ranges, refClicks: () => refClicks };
+    return { root, rows, drags, refClicks: () => refClicks, flush };
   }
 
   const select = (node: Node, start: number, end = start): Range =>
     selectText([node, start], [node, end]);
 
-  const click = (el: Element) =>
-    el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  const click = (el: Element, init: MouseEventInit = {}) =>
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, ...init }));
 
   const press = (root: Element, init: PointerEventInit = {}) =>
     root.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, ...init }));
+  const move = (init: PointerEventInit = {}) =>
+    window.dispatchEvent(new PointerEvent("pointermove", { buttons: 1, ...init }));
   const release = (init: PointerEventInit = {}) =>
     window.dispatchEvent(new PointerEvent("pointerup", { button: 0, ...init }));
 
@@ -349,32 +358,28 @@ describe("PlanPreview text comments", () => {
       .createTreeWalker(root.querySelector(selector) as Element, NodeFilter.SHOW_TEXT)
       .nextNode() as Node;
 
-  test("a click on plain text reports the collapsed selection it leaves", () => {
-    const { root, ranges } = setup("Plain words here.\n");
-    const node = textOf(root, "p");
-    select(node, 3);
+  test("a click on plain text reports the row under the pointer as both ends", () => {
+    const { root, rows } = setup("Plain words here.\n");
+    select(textOf(root, "p"), 3);
 
-    click(root.querySelector("p") as Element);
+    click(root.querySelector("p") as Element, { clientX: 4, clientY: 7 });
 
-    expect(ranges.length).toBe(1);
-    expect(ranges[0]?.collapsed).toBe(true);
-    expect(ranges[0]?.startContainer === node).toBe(true);
-    expect(ranges[0]?.startOffset).toBe(3);
+    expect(rows).toEqual([[rowAt(7), rowAt(7)]]);
   });
 
   test("a click on a file reference opens the file instead", () => {
-    const { root, ranges, refClicks } = setup(PLAN);
+    const { root, rows, refClicks } = setup(PLAN);
     const ref = root.querySelector("[data-file-ref]") as Element;
     select(ref.firstChild as Node, 1);
 
     click(ref);
 
     expect(refClicks()).toBe(1);
-    expect(ranges.length).toBe(0);
+    expect(rows.length).toBe(0);
   });
 
   test("a click inside a link, button or input reports nothing", () => {
-    const { root, ranges } = setup("A [link](https://x.test) and - [ ] box.\n\n- [ ] task\n");
+    const { root, rows } = setup("A [link](https://x.test) and - [ ] box.\n\n- [ ] task\n");
     const button = document.createElement("button");
     button.textContent = "go";
     root.querySelector("p")?.append(button);
@@ -384,128 +389,176 @@ describe("PlanPreview text comments", () => {
       click(el);
     }
 
-    expect(ranges.length).toBe(0);
+    expect(rows.length).toBe(0);
   });
 
   test("a click that leaves a selection reports nothing", () => {
-    const { root, ranges } = setup("Plain words here.\n");
+    const { root, rows } = setup("Plain words here.\n");
     select(textOf(root, "p"), 0, 5);
 
     click(root.querySelector("p") as Element);
 
-    expect(ranges.length).toBe(0);
+    expect(rows.length).toBe(0);
   });
 
-  test("a drag that selects text reports the selection", () => {
-    const { root, ranges } = setup("Plain words here.\n");
-    let selected: Range | undefined;
+  test("a drag that selects text reports the rows from its press to its release", () => {
+    const { root, rows } = setup("Plain words here.\n");
 
-    drag(root, () => {
-      selected = select(textOf(root, "p"), 0, 5);
-    });
+    press(root, { clientX: 1, clientY: 2 });
+    select(textOf(root, "p"), 0, 5);
+    release({ clientX: 3, clientY: 9 });
 
-    expect(ranges.map((r) => r.toString())).toEqual([String(selected)]);
+    expect(rows).toEqual([[rowAt(2), rowAt(9)]]);
+  });
+
+  test("a drag reports its press row once it selects text, and null when it ends", () => {
+    const { root, drags } = setup("Plain words here.\n");
+
+    press(root, { clientX: 1, clientY: 2 });
+    move();
+    const unselected = [...drags];
+    select(textOf(root, "p"), 0, 5);
+    move();
+    move();
+    const selecting = [...drags];
+    release();
+
+    expect(unselected).toEqual([]);
+    expect(selecting).toEqual([rowAt(2)]);
+    expect(drags).toEqual([rowAt(2), null]);
+  });
+
+  test("a comment drag marks the root, which hides the native selection, until it ends", () => {
+    const { root, flush } = setup("Plain words here.\n");
+
+    press(root);
+    select(textOf(root, "p"), 0, 5);
+    move();
+    flush();
+    const during = root.hasAttribute("data-comment-drag");
+    release();
+    flush();
+
+    expect([during, root.hasAttribute("data-comment-drag")]).toEqual([true, false]);
   });
 
   test("a Shift drag leaves the native selection alone", () => {
-    const { root, ranges } = setup("Plain words here.\n");
+    const { root, rows, drags } = setup("Plain words here.\n");
 
-    drag(root, () => select(textOf(root, "p"), 0, 5), { shiftKey: true });
+    drag(
+      root,
+      () => {
+        select(textOf(root, "p"), 0, 5);
+        move({ shiftKey: true });
+      },
+      { shiftKey: true },
+    );
 
-    expect(ranges.length).toBe(0);
+    expect(rows.length).toBe(0);
+    expect(drags.length).toBe(0);
   });
 
   test("a press that leaves the selection collapsed reports nothing", () => {
-    const { root, ranges } = setup("Plain words here.\n");
+    const { root, rows } = setup("Plain words here.\n");
 
     drag(root, () => select(textOf(root, "p"), 2));
 
-    expect(ranges.length).toBe(0);
+    expect(rows.length).toBe(0);
   });
 
   test("a secondary-button drag reports nothing", () => {
-    const { root, ranges } = setup("Plain words here.\n");
+    const { root, rows } = setup("Plain words here.\n");
 
     drag(root, () => select(textOf(root, "p"), 0, 5), { button: 2 });
 
-    expect(ranges.length).toBe(0);
+    expect(rows.length).toBe(0);
   });
 
   test("a press inside a standing selection does not report it again", () => {
-    const { root, ranges } = setup("Plain words here.\n");
+    const { root, rows, drags } = setup("Plain words here.\n");
     select(textOf(root, "p"), 0, 5);
 
-    drag(root, () => {});
+    drag(root, () => move());
 
-    expect(ranges.length).toBe(0);
+    expect(rows.length).toBe(0);
+    expect(drags.length).toBe(0);
   });
 
   for (const [ending, end] of [
     ["pointercancel", () => window.dispatchEvent(new PointerEvent("pointercancel"))],
     ["window blur", () => window.dispatchEvent(new Event("blur"))],
   ] as const) {
-    test(`a gesture ended by ${ending} reports no later selection`, () => {
-      const { root, ranges } = setup("Plain words here.\n");
-      press(root);
+    test(`a gesture ended by ${ending} ends its drag and reports no later selection`, () => {
+      const { root, rows, drags } = setup("Plain words here.\n");
+      press(root, { clientX: 1, clientY: 2 });
+      select(textOf(root, "p"), 0, 5);
+      move();
       end();
 
-      select(textOf(root, "p"), 0, 5);
+      select(textOf(root, "p"), 0, 7);
       release();
 
-      expect(ranges.length).toBe(0);
+      expect(drags).toEqual([rowAt(2), null]);
+      expect(rows.length).toBe(0);
     });
   }
 
   test("two presses before one release report once", () => {
-    const { root, ranges } = setup("Plain words here.\n");
+    const { root, rows } = setup("Plain words here.\n");
     press(root);
 
     drag(root, () => select(textOf(root, "p"), 0, 5));
 
-    expect(ranges.length).toBe(1);
+    expect(rows.length).toBe(1);
   });
 
   test("a release after unmount reports nothing", () => {
-    const ranges: Range[] = [];
+    const rows: [TextPoint, TextPoint][] = [];
+    const drags: (TextPoint | null)[] = [];
     const target = document.createElement("div");
     document.body.append(target);
     const instance = mount(PlanPreview, {
       target,
       props: {
         html: renderPlanMarkdown("Plain words here.\n").html,
-        onTextComment: (range: Range) => ranges.push(range),
+        rowAt,
+        onTextComment: (from: TextPoint, to: TextPoint) => rows.push([from, to]),
+        onCommentDrag: (anchor: TextPoint | null) => drags.push(anchor),
       },
     });
     flushSync();
     const root = target.querySelector(".plan-preview") as HTMLElement;
-    press(root);
+    press(root, { clientX: 1, clientY: 2 });
     const text = textOf(root, "p");
+    select(text, 0, 5);
+    move();
     unmount(instance);
     target.remove();
 
-    select(text, 0, 5);
+    select(text, 0, 7);
     release();
 
-    expect(ranges.length).toBe(0);
+    expect(drags).toEqual([rowAt(2), null]);
+    expect(rows.length).toBe(0);
   });
 
   test("a release whose selection is anchored outside the preview reports nothing", () => {
-    const { root, ranges } = setup("Plain words here.\n");
+    const { root, rows } = setup("Plain words here.\n");
 
     drag(root, () => select(outsideText(), 0, 7));
 
-    expect(ranges.length).toBe(0);
+    expect(rows.length).toBe(0);
   });
 
   test("a drag that stays inside a file reference reports it without opening the file", () => {
-    const { root, ranges, refClicks } = setup(PLAN);
+    const { root, rows, refClicks } = setup(PLAN);
     const ref = root.querySelector("[data-file-ref]") as Element;
     const text = ref.firstChild as Node;
 
     drag(root, () => select(text, 0, 2));
     click(ref);
 
-    expect(ranges.length).toBe(1);
+    expect(rows.length).toBe(1);
     expect(refClicks()).toBe(0);
   });
 

@@ -124,9 +124,13 @@
     type BandBox,
     cursorBand,
     lastVisualLine,
+    linesBand,
     pointForLine,
     readingPoint,
+    rowAt,
+    spanBands,
     stepVisualLine,
+    type TextPoint,
     visualLineBox,
     visualLineRange,
   } from "$lib/previewLines.ts";
@@ -482,7 +486,9 @@
     void previewLayoutRev;
     const map = previewSourceMap;
     const span = activeSpan;
-    if (!runs("commentThreads") || !map || !span) {
+    // The open composer's rows wear the cited rows' band instead.
+    const banded = draftRows !== null && sameSpan(span, pendingSpan);
+    if (!runs("commentThreads") || !map || !span || banded) {
       clearCommentHighlight();
       return;
     }
@@ -1493,7 +1499,8 @@
     sound: sound.play,
   });
 
-  function previewGeometry(): { root: Element; scroller: HTMLElement; map: PlanSourceMap } | null {
+  type PreviewGeometry = { root: Element; scroller: HTMLElement; map: PlanSourceMap };
+  function previewGeometry(): PreviewGeometry | null {
     const root = previewEl;
     const scroller = scrollEl;
     const map = previewSourceMap;
@@ -1572,6 +1579,186 @@
     paintVisualSelection(range);
     return clearVisualSelection;
   });
+
+  // The pointer over the preview, for the hover band over the visual line under it, the
+  // "+" beside that line, and a comment drag's band over the rows its release cites.
+  // rAF-throttled like the source view's [data-hovered], re-read under a still pointer on
+  // scroll, and cleared when the pointer leaves the plan. Only a move glides the bands; a
+  // scroll, press or release lands them in place.
+  type PreviewPointer = { x: number; y: number; pressed: boolean; glide: boolean };
+  let pointer = $state.raw<PreviewPointer | null>(null);
+  let plusEl = $state<HTMLButtonElement | undefined>();
+  $effect(() => {
+    const scroller = scrollEl;
+    if (scroller == null || surface !== "preview" || !runs("textComments")) return;
+    let raf = 0;
+    let at: PreviewPointer | null = null;
+    const schedule = () => {
+      if (raf === 0)
+        raf = requestAnimationFrame(() => {
+          raf = 0;
+          pointer = at;
+        });
+    };
+    // On window, so a drag that leaves the plan keeps its band.
+    const onPointer = (event: PointerEvent) => {
+      // Pressing the "+" keeps its line hovered until the click lands.
+      const onPlus = event.target instanceof Node && plusEl?.contains(event.target) === true;
+      if (event.type === "pointerdown" && onPlus) return;
+      const { clientX: x, clientY: y, buttons, type } = event;
+      at = { x, y, pressed: buttons !== 0, glide: type === "pointermove" };
+      schedule();
+    };
+    const onScroll = () => {
+      if (at === null) return;
+      at = { ...at, glide: false };
+      schedule();
+    };
+    const onLeave = (event: PointerEvent) => {
+      if (event.buttons !== 0) return;
+      at = null;
+      schedule();
+    };
+    const events = ["pointermove", "pointerdown", "pointerup", "pointercancel"] as const;
+    for (const type of events) window.addEventListener(type, onPointer, { passive: true });
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    scroller.addEventListener("pointerleave", onLeave, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      pointer = null;
+      for (const type of events) window.removeEventListener(type, onPointer);
+      scroller.removeEventListener("scroll", onScroll);
+      scroller.removeEventListener("pointerleave", onLeave);
+    };
+  });
+
+  function previewRowAt(y: number): TextPoint | null {
+    const geometry = previewGeometry();
+    return geometry && rowAt(geometry.root, geometry.map, y);
+  }
+
+  const lineHeightOf = (el: Element) => Number.parseFloat(getComputedStyle(el).lineHeight);
+
+  type PreviewHover = {
+    row: TextPoint;
+    band: BandBox;
+    /** The "+"'s lane: the preview's left padding, pinned to the scroller's visible left
+     * edge when a narrow window scrolls the column sideways, as the source gutter is. */
+    plus: { left: number; width: number };
+    glide: boolean;
+  };
+  let hover = $state.raw<PreviewHover | null>(null);
+  let hoverLayout = -1;
+  $effect(() => {
+    const rev = previewLayoutRev;
+    const at = pointer;
+    const geometry = previewGeometry();
+    const previous = untrack(() => hover);
+    hover =
+      at && !at.pressed && geometry
+        ? hoverAt(geometry, at, previous, rev === hoverLayout)
+        : null;
+    hoverLayout = rev;
+  });
+
+  /** The hover a still pointer `at` shows: over the preview root's text and padding, and
+   * over the "+", which keeps its line; not over a slot or the code chrome. */
+  function hoverAt(
+    geometry: PreviewGeometry,
+    at: PreviewPointer,
+    previous: PreviewHover | null,
+    sameLayout: boolean,
+  ): PreviewHover | null {
+    const target = document.elementFromPoint(at.x, at.y);
+    const onPlus = target !== null && plusEl?.contains(target) === true;
+    if (!onPlus && (target === null || !geometry.root.contains(target))) return null;
+    const row = onPlus ? previous?.row : rowAt(geometry.root, geometry.map, at.y);
+    return row ? rowHover(geometry, row, previous, at.glide && sameLayout) : null;
+  }
+
+  /** The hover over `row`, gliding from `previous` when `glide` allows and the two are near. */
+  function rowHover(
+    { root, scroller, map }: PreviewGeometry,
+    row: TextPoint,
+    previous: PreviewHover | null,
+    glide: boolean,
+  ): PreviewHover | null {
+    const lineHeight = lineHeightOf(root);
+    const band = cursorBand(root, scroller, map, row, lineHeight);
+    if (!band) return null;
+    // A flick lands in place: gliding across several lines would trail the pointer.
+    const near = previous !== null && Math.abs(band.top - previous.band.top) <= 2 * lineHeight;
+    return { row, band, plus: laneBeside({ root, scroller }, band), glide: glide && near };
+  }
+
+  function laneBeside(
+    { root, scroller }: Pick<PreviewGeometry, "root" | "scroller">,
+    band: BandBox,
+  ): PreviewHover["plus"] {
+    return {
+      left: Math.max(band.left, scroller.scrollLeft),
+      width: Number.parseFloat(getComputedStyle(root).paddingInlineStart),
+    };
+  }
+
+  // The keyboard cursor's band wins its own line, as [data-caret-cursor] does in source.
+  const hoverBandShown = $derived(
+    hover != null &&
+      (previewCursorBox == null || Math.abs(hover.band.top - previewCursorBox.top) > 1),
+  );
+
+  /** A comment drag: one band over the rows from its press's through the pointer's, and the
+   * hover over the pointer's row, whose "+" rides with it as the source gutter's does. */
+  type PreviewDrag = { band: BandBox; end: PreviewHover };
+  let dragAnchor = $state.raw<TextPoint | null>(null);
+  let drag = $state.raw<PreviewDrag | null>(null);
+  let dragLayout = -1;
+  $effect(() => {
+    const rev = previewLayoutRev;
+    const anchor = dragAnchor;
+    const at = pointer;
+    const geometry = previewGeometry();
+    const previous = untrack(() => drag?.end ?? null);
+    drag =
+      anchor && at && geometry ? dragAt(geometry, anchor, at, previous, rev === dragLayout) : null;
+    dragLayout = rev;
+  });
+
+  function dragAt(
+    geometry: PreviewGeometry,
+    anchor: TextPoint,
+    at: PreviewPointer,
+    previous: PreviewHover | null,
+    sameLayout: boolean,
+  ): PreviewDrag | null {
+    const { root, scroller, map } = geometry;
+    const row = rowAt(root, map, at.y);
+    const end = row && rowHover(geometry, row, previous, at.glide && sameLayout);
+    const start = cursorBand(root, scroller, map, anchor, lineHeightOf(root));
+    if (!end || !start) return null;
+    return { band: spanBands(start, end.band), end };
+  }
+  const plusAt = $derived(drag?.end ?? hover);
+
+  /** The rows a comment cites, banded, with the source gutter's selection bar down the "+"
+   * lane: a drag's while it runs, then the open composer's while it drafts, as the source
+   * view's `selectedRange` holds its lines. */
+  type CitedRows = { band: BandBox; lane: PreviewHover["plus"]; glide: boolean };
+  let draftRows = $state.raw<CitedRows | null>(null);
+  $effect(() => {
+    void previewLayoutRev;
+    const geometry = previewGeometry();
+    draftRows = geometry && pending ? rowsOfLines(geometry, spanOf(pending)) : null;
+  });
+
+  function rowsOfLines(geometry: PreviewGeometry, lines: SourceSpan): CitedRows | null {
+    const { root, scroller, map } = geometry;
+    const band = linesBand(root, scroller, map, lines, lineHeightOf(root));
+    return band && { band, lane: laneBeside(geometry, band), glide: false };
+  }
+  const citedRows = $derived<CitedRows | null>(
+    drag ? { band: drag.band, lane: drag.end.plus, glide: drag.end.glide } : draftRows,
+  );
 
   // The live visual selection, ascending — mirrored into SourceView's amber band through
   // `selectedRange` while visual mode is active, so extending it with j/k grows the
@@ -1923,6 +2110,13 @@
   function commentOnPreview(range: Range): void {
     const lines = previewSourceMap?.linesOf(range);
     if (lines) openRange(lines.start, lines.end);
+  }
+  // A mouse comment cites every source line with text on the rows it covers, as `c` and
+  // `V` do over the same rows.
+  function commentOnRows(from: TextPoint, to: TextPoint): void {
+    const geometry = previewGeometry();
+    const range = geometry && visualLineRange(geometry.root, geometry.map, from, to);
+    if (range) commentOnPreview(range);
   }
   // Each surface hosts its own composer, so a flip would remount it with its typed text
   // lost: retain the text as a scratch first, which the approve guard still counts.
@@ -2276,8 +2470,33 @@
           bind:root={previewEl}
           fileRefs={previewRefs}
           onFileRefClick={openFileRef}
-          onTextComment={runs("textComments") ? commentOnPreview : undefined}
+          rowAt={previewRowAt}
+          onTextComment={runs("textComments") ? commentOnRows : undefined}
+          onCommentDrag={(anchor) => (dragAnchor = anchor)}
         />
+        <!-- Before the chrome and slots, which the cited rows' band runs under. -->
+        {#if citedRows}
+          <div
+            class="preview-drag"
+            data-caret-preview-drag
+            data-glide={citedRows.glide ? "" : undefined}
+            aria-hidden="true"
+            style:top="{citedRows.band.top}px"
+            style:left="{citedRows.band.left}px"
+            style:width="{citedRows.band.width}px"
+            style:height="{citedRows.band.height}px"
+          ></div>
+          <div
+            class="preview-drag-bar"
+            data-caret-preview-drag-bar
+            data-glide={citedRows.glide ? "" : undefined}
+            aria-hidden="true"
+            style:top="{citedRows.band.top}px"
+            style:left="{citedRows.lane.left}px"
+            style:width="{citedRows.lane.width}px"
+            style:height="{citedRows.band.height}px"
+          ></div>
+        {/if}
         {@render codeChrome()}
         <!-- Comment slots sit outside the preview root so it stays exactly the rendered
              HTML the source map and place-keeping index. -->
@@ -2291,6 +2510,7 @@
             style:top={box ? `${box.top}px` : undefined}
             style:left={box ? `${box.left}px` : undefined}
             style:width={box ? `${box.width}px` : undefined}
+            style:padding-inline={box ? `${box.padStart}px ${box.padEnd}px` : undefined}
             data-unmeasured={box ? undefined : ""}
             onpointerover={(e) => pointSlot(e.target)}
             onfocusin={(e) => focusSlot(e.target)}
@@ -2325,6 +2545,44 @@
             style:width="{previewCursorBox.width}px"
             style:height="{previewCursorBox.height}px"
           ></div>
+        {/if}
+        {#if hover && hoverBandShown}
+          <div
+            class="preview-hover"
+            data-caret-preview-hover
+            data-line={hover.row.line}
+            data-glide={hover.glide ? "" : undefined}
+            aria-hidden="true"
+            style:top="{hover.band.top}px"
+            style:left="{hover.band.left}px"
+            style:width="{hover.band.width}px"
+            style:height="{hover.band.height}px"
+          ></div>
+        {/if}
+        {#if plusAt}
+          {@const row = plusAt.row}
+          <div
+            class="preview-plus"
+            data-glide={plusAt.glide ? "" : undefined}
+            style:top="{plusAt.band.top}px"
+            style:left="{plusAt.plus.left}px"
+            style:width="{plusAt.plus.width}px"
+            style:height="{plusAt.band.height}px"
+          >
+            <button
+              type="button"
+              bind:this={plusEl}
+              aria-label="Add a comment"
+              onclick={() => commentOnRows(row, row)}
+            >
+              <!-- The source gutter's glyph: @pierre/diffs' diffs-icon-plus. -->
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M8 3a.75.75 0 0 1 .75.75v3.5h3.5a.75.75 0 0 1 0 1.5h-3.5v3.5a.75.75 0 0 1-1.5 0v-3.5h-3.5a.75.75 0 0 1 0-1.5h3.5v-3.5A.75.75 0 0 1 8 3"
+                />
+              </svg>
+            </button>
+          </div>
         {/if}
         {@render visualHint()}
       {:else}
@@ -2728,6 +2986,87 @@
     /* Keep in sync with coreStyles.ts's [data-caret-cursor] rules. */
     background: color-mix(in lab, var(--ink) 7%, transparent);
     box-shadow: inset 3px 0 0 0 var(--ink);
+  }
+
+  /* The source view's hover grey: the library mixes 3% (light) or 9% (dark) of
+     --diffs-bg-hover-override, which diffview.css binds to --ink, into the row. */
+  .preview-hover {
+    position: absolute;
+    pointer-events: none;
+    background: light-dark(
+      color-mix(in lab, var(--ink) 3%, transparent),
+      color-mix(in lab, var(--ink) 9%, transparent)
+    );
+  }
+  /* The keyboard visual selection's wash. */
+  .preview-drag {
+    position: absolute;
+    pointer-events: none;
+    background: var(--accent-wash);
+  }
+  /* The source gutter's selection ticks as one bar, centred in the "+" lane and inset at
+     each end as a tick is in its row. Keep in sync with coreStyles.ts's
+     [data-selected-line]::after rule. */
+  .preview-drag-bar {
+    position: absolute;
+    display: flex;
+    justify-content: center;
+    padding-block: 0.22lh;
+    font-size: var(--text-base);
+    pointer-events: none;
+  }
+  .preview-drag-bar::after {
+    content: "";
+    width: 3px;
+    border-radius: var(--radius);
+    background-color: var(--accent);
+    opacity: 0.45;
+  }
+  /* One shape morphing between hovered lines, on the tint-or-pop tier; the global
+     reduced-motion rule collapses it to a jump. */
+  :is(.preview-hover, .preview-drag, .preview-drag-bar, .preview-plus)[data-glide] {
+    transition-property: top, left, width, height;
+    transition-duration: var(--dur-micro);
+    transition-timing-function: var(--ease-out);
+  }
+  /* Centred in the preview's left padding, one preview line square. */
+  .preview-plus {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  /* Keep in sync with coreStyles.ts's [data-utility-button] rules and the library's. */
+  .preview-plus > button {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 1lh;
+    block-size: 1lh;
+    padding: 0;
+    font-size: var(--text-base);
+    line-height: inherit;
+    border: none;
+    border-radius: var(--radius);
+    background-color: var(--accent);
+    color: var(--accent-ink);
+    fill: currentColor;
+    cursor: pointer;
+    pointer-events: auto;
+    box-shadow:
+      0 1px 1.5px #0000003d,
+      0 2px 5px #0000004d,
+      inset 0 1px 0 #ffffff4d;
+  }
+  .preview-plus > button:hover {
+    background-color: var(--accent-bright);
+  }
+  .preview-plus > button:focus-visible {
+    background-color: var(--accent-bright);
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 
   /* The zero-height sticky rail that carries the live readout. Sticky to the top

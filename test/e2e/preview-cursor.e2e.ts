@@ -177,6 +177,13 @@ const blockLines = (page: Page, block: "table" | "ul") =>
     [PLAN_PREVIEW, block] as const,
   );
 
+/** Sets the preview column's width, which no window width changes, so the text wraps at
+ * another measure. */
+const setColumnWidth = (page: Page, width: number) =>
+  page.locator(PLAN_PREVIEW).evaluate((el, w) => {
+    (el as HTMLElement).style.setProperty("--column", `${w}px`);
+  }, width);
+
 async function openPreview(page: Page, daemon: Parameters<typeof openPlanForKeys>[1]) {
   await openPlanForKeys(page, daemon, PLAN);
   await previewToggle(page).click();
@@ -224,8 +231,8 @@ test.describe("preview keyboard cursor", () => {
     await openPreview(page, daemon);
 
     const counts: number[] = [];
-    for (const width of [1600, 420]) {
-      await page.setViewportSize({ width, height: 900 });
+    for (const width of [800, 420]) {
+      await setColumnWidth(page, width);
       await toLongParagraph(page);
       await expect.poll(() => textRows(page, "p", "Marmalade")).toBeGreaterThan(0);
       const rows = await textRows(page, "p", "Marmalade");
@@ -246,6 +253,7 @@ test.describe("preview keyboard cursor", () => {
   test("every motion works on the preview", async ({ page, daemon }) => {
     await page.setViewportSize({ width: 420, height: 500 });
     await openPreview(page, daemon);
+    await setColumnWidth(page, 420);
 
     await press(page, "g", "g");
     await expect.poll(() => bandCovers(page, "Overview")).toBe(true);
@@ -298,6 +306,7 @@ test.describe("preview keyboard cursor", () => {
   test("the view follows the cursor", async ({ page, daemon }) => {
     await page.setViewportSize({ width: 420, height: 500 });
     await openPreview(page, daemon);
+    await setColumnWidth(page, 420);
     await press(page, "g", "g");
     await expect.poll(() => bandCovers(page, "Overview")).toBe(true);
 
@@ -327,6 +336,7 @@ test.describe("preview keyboard cursor", () => {
     await openPlanForKeys(page, daemon, SHAPES);
     await previewToggle(page).click();
     await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
+    await setColumnWidth(page, 420);
     await press(page, "g", "g");
     await walkTo(page, "Tablestart");
 
@@ -367,7 +377,7 @@ test.describe("preview keyboard cursor", () => {
     top = await stepFrom(page, "j", top);
     const recorded = await bandText(page);
 
-    await page.setViewportSize({ width: 420, height: 900 });
+    await setColumnWidth(page, 420);
     await expect.poll(() => bandCovers(page, recorded)).toBe(true);
 
     const before = await bandTop(page);
@@ -403,6 +413,7 @@ test.describe("preview keyboard cursor", () => {
     await openPlanForKeys(page, daemon, `# ${LONG}\n\nClosing paragraph quokka.\n`);
     await previewToggle(page).click();
     await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
+    await setColumnWidth(page, 420);
 
     await press(page, "g", "g");
     await expect.poll(() => bandCovers(page, "Marmalade")).toBe(true);
