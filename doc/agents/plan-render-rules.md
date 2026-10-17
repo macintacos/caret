@@ -367,7 +367,8 @@ the text without moving the cursor off it; a `cursorPoint` on any other line tha
 `ui/src/lib/previewLines.ts` measures visual lines per block from text-node rects, reading
 only the blocks a step crosses, never the whole document. The band
 (`data-caret-preview-cursor`) is an overlay sibling of `.plan-preview`, so the source
-map's text order is untouched.
+map's text order is untouched. It glides a step as the hover band glides between rows,
+below.
 
 `search` is ported through `ui/src/lib/previewSearch.ts`, which matches the text as
 rendered, segmented once per map, on the first query, by `createPreviewSearch`. A block,
@@ -418,21 +419,23 @@ The pointer draws the source view's hover language over the preview, rAF-throttl
 re-read under a still pointer on a scroll and on each `previewLayoutRev` bump, and cleared
 when it leaves the plan. A full-bleed band (`data-caret-preview-hover`) in the source's
 hover grey covers the row under the pointer, except the keyboard cursor's row, which its
-own band keeps. A "+" in the root's left padding opens the composer on what a click on
-that row cites, pinned to the scroller's visible left edge when a narrow window scrolls
-the column sideways. A comment drag paints one full-bleed band (`data-caret-preview-drag`)
-in the visual selection's wash, from its press row through the pointer's and across the
-margins and slots between them, drawn before the chrome and slots so they sit on it. It
-hides the native selection, which covers less, while it runs. The "+" rides on the
-pointer's row, and a faded accent bar (`data-caret-preview-drag-bar`), the source gutter's
-selection ticks drawn as one, runs the band's length down the "+" lane. The bands glide
-between rows on `--dur-micro`, and land in place on an entry, a scroll, a press or
-release, a layout bump, or a jump of more than two lines. Once the composer opens, the
-band and bar hold its lines' rows while it drafts, as the source view's `selectedRange`
-holds its lines, and the text highlight a focused comment gets gives way to them.
-`lineComments` stays source-only: its drag readout, gutter drag and drag hint chip belong
-to the source view's gutter, and the preview's drag band, bar and "+" are `textComments`'
-own.
+own band keeps; the hover band hides there rather than unmounting, so it glides off. A "+"
+in the root's left padding opens the composer on what a click on that row cites, pinned to
+the scroller's visible left edge when a narrow window scrolls the column sideways. A
+comment drag paints one full-bleed band (`data-caret-preview-drag`) in the visual
+selection's wash, from its press row through the pointer's and across the margins and
+slots between them, drawn before the chrome and slots so they sit on it. It hides the
+native selection, which covers less, while it runs. The "+" rides on the pointer's row,
+and a faded accent bar (`data-caret-preview-drag-bar`), the source gutter's selection
+ticks drawn as one, runs the band's length down the "+" lane. The bands, the cursor's too,
+glide between rows on `--dur-micro`, the cursor follow scroll's duration, and land in
+place on an entry, a scroll, a press or release, a layout bump, or a jump of more than two
+rows. `withinLines` counts those rows as visual lines, not pixels, so a heading's margins
+never turn its neighbour into a jump. Once the composer opens, the band and bar hold its
+lines' rows while it drafts, as the source view's `selectedRange` holds its lines, and the
+text highlight a focused comment gets gives way to them. `lineComments` stays source-only:
+its drag readout, gutter drag and drag hint chip belong to the source view's gutter, and
+the preview's drag band, bar and "+" are `textComments`' own.
 
 The preview renders a version once. `memoLast` returns the last result for the same text,
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same

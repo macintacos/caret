@@ -1,7 +1,8 @@
 // The keyboard cursor on the plan preview. It steps visual lines — each wrapped line on
 // screen — so everything here is layout: line boxes that only exist at a real width, the
-// follow scroll, and the band staying on its text across a resize, a comment card growing
-// above it and a theme switch that rewraps it. happy-dom has no layout, so the pure half
+// follow scroll, the band's glide from row to row and the hover's off its row, and the
+// band staying on its text across a resize, a comment card growing above it and a theme
+// switch that rewraps it. happy-dom has no layout, so the pure half
 // stays units: the motion resolution over fake rects in ui/src/lib/previewLines.test.ts and
 // ui/src/state/previewCursor.test.ts, the registry wiring and band mount in
 // ui/src/components/DiffPlanView.test.ts ("DiffPlanView preview cursor"), and the surface
@@ -22,10 +23,12 @@ import {
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
   awaitPlanReadyForKeys,
+  glideCounter,
   lineOf,
   openPlanForKeys,
   PLAN_PREVIEW,
   PLAN_SURFACE,
+  PREVIEW_HOVER,
 } from "@test/e2e/support/source-view.ts";
 import { caretThemeVariant, selectThemeFile } from "@test/e2e/support/themes.ts";
 
@@ -225,7 +228,47 @@ async function walkTo(page: Page, text: string): Promise<Snapshot[]> {
 /** Walks the long paragraph with j, returning how many presses reach the next block. */
 const walkLong = async (page: Page) => (await walkTo(page, "Details")).length;
 
+test.describe("preview cursor motion", () => {
+  test("j and k glide the band a row, a heading's included, and a jump lands it", async ({
+    page,
+    daemon,
+  }) => {
+    await openPreview(page, daemon);
+    await press(page, "g", "g");
+    await expect.poll(() => bandCovers(page, "Overview")).toBe(true);
+
+    const glides = await glideCounter(page, PREVIEW_BAND);
+    await press(page, "j");
+    await expect.poll(() => bandCovers(page, "A short")).toBe(true);
+    await press(page, "k");
+    await expect.poll(() => bandCovers(page, "Overview")).toBe(true);
+    expect(await glides()).toBe(2);
+
+    await press(page, "G");
+    await expect.poll(() => bandCovers(page, "quokka")).toBe(true);
+    expect(await glides()).toBe(2);
+  });
+
+  test("the hover band glides off the cursor's row onto the next", async ({ page, daemon }) => {
+    await openPreview(page, daemon);
+    await press(page, "g", "g");
+    await expect.poll(() => bandCovers(page, "Overview")).toBe(true);
+    const cursorRow = await previewCursor(page).boundingBox();
+    const next = await page.locator(`${PLAN_PREVIEW} p`).first().boundingBox();
+    if (!cursorRow || !next) throw new Error("the preview did not render");
+    const x = next.x + 100;
+    await page.mouse.move(x, cursorRow.y + cursorRow.height / 2);
+
+    const glides = await glideCounter(page, PREVIEW_HOVER);
+    await page.mouse.move(x, next.y + next.height / 2);
+    await expect.poll(glides).toBe(1);
+  });
+});
+
 test.describe("preview keyboard cursor", () => {
+  // Each step reads where the band comes to rest, so it lands rather than glides.
+  test.beforeEach(({ page }) => page.emulateMedia({ reducedMotion: "reduce" }));
+
   test("j/k step one visual line, and the unit follows the width", async ({ page, daemon }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await openPreview(page, daemon);

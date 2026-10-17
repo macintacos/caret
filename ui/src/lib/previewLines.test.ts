@@ -19,6 +19,7 @@ import {
   type TextPoint,
   visualLineBox,
   visualLineRange,
+  withinLines,
 } from "$lib/previewLines.ts";
 
 const ROW = 10;
@@ -315,6 +316,27 @@ describe("stepVisualLine", () => {
     g.blocksRead.length = 0;
     expect(stepVisualLine(root, map, from, 1, g.read)).toEqual(at(root, map, "para 151"));
     expect([...new Set(g.blocksRead)].sort((a, b) => a - b)).toEqual([150, 151]);
+  });
+});
+
+describe("withinLines", () => {
+  test("counts the visual lines between two points either way, across blocks", () => {
+    const { root, map } = mount(`${LONG}\n\n${LONG}\n`);
+    const { read } = grid(root, 20);
+    const lastOfFirst = { line: 1, column: 40 };
+    const firstOfSecond = { line: 3, column: 0 };
+    expect(withinLines(root, map, lastOfFirst, firstOfSecond, 1, read)).toBe(true);
+    expect(withinLines(root, map, firstOfSecond, lastOfFirst, 1, read)).toBe(true);
+    expect(withinLines(root, map, { line: 1, column: 20 }, firstOfSecond, 1, read)).toBe(false);
+    expect(withinLines(root, map, firstOfSecond, { line: 1, column: 20 }, 2, read)).toBe(true);
+  });
+
+  test("a block with no text between two lines adds none", () => {
+    const { root, map } = mount("one\n\n![a](https://x.test/a.png)\n\n---\n\ntwo\n");
+    const { read } = grid(root, 20);
+    expect(withinLines(root, map, { line: 1, column: 0 }, { line: 7, column: 0 }, 1, read)).toBe(
+      true,
+    );
   });
 });
 

@@ -16,6 +16,7 @@ import type { Page } from "@playwright/test";
 import { previewToggle } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import {
+  glideCounter,
   linesOnRow,
   PLAN_PREVIEW,
   PLAN_SURFACE,
@@ -175,6 +176,26 @@ test("the hover band follows the pointer from row to row and under a wheel scrol
   await expect.poll(() => bandHolds(page, y)).toBe(true);
 });
 
+test("the hover band glides between neighbouring rows, a heading's and a paragraph's alike", async ({
+  daemon,
+  page,
+}) => {
+  const { prose } = await openRows(daemon, page);
+  const [heading] = await rowsOf(page, 1);
+  const [first] = await rowsOf(page, prose);
+  if (heading === undefined || first === undefined) throw new Error("the plan did not render");
+  const x = await textX(page);
+  await page.mouse.move(x, heading);
+  await expect.poll(() => bandHolds(page, heading)).toBe(true);
+
+  const glides = await glideCounter(page, PREVIEW_HOVER);
+  for (const y of [first, heading]) {
+    await page.mouse.move(x, y);
+    await expect.poll(() => bandHolds(page, y)).toBe(true);
+  }
+  expect(await glides()).toBe(2);
+});
+
 test("a click on a row holding two stored lines comments on both", async ({ daemon, page }) => {
   const { prose } = await openRows(daemon, page);
   const y = await mixedRow(page, prose);
@@ -189,6 +210,8 @@ test("a drag from beside the column paints one band over its rows, a bar down th
   daemon,
   page,
 }) => {
+  // The bands are measured mid-drag, so they land rather than glide.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const { prose, list } = await openRows(daemon, page);
   const [from] = await rowsOf(page, prose);
   const [to] = await rowsOf(page, list);

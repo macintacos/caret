@@ -134,6 +134,7 @@
     type TextPoint,
     visualLineBox,
     visualLineRange,
+    withinLines,
   } from "$lib/previewLines.ts";
   import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
   import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
@@ -1558,19 +1559,27 @@
     sound: sound.play,
   });
 
-  // The band on screen and the source line it marks.
-  let previewCursorBox = $state<({ line: number } & BandBox) | null>(null);
+  // The band on screen and the point it marks. A step glides it, as the pointer glides
+  // the hover; a layout bump lands it.
+  let previewCursorBox = $state.raw<({ point: TextPoint; glide: boolean } & BandBox) | null>(
+    null,
+  );
+  let cursorLayout = -1;
   $effect(() => {
-    void previewLayoutRev;
+    const rev = previewLayoutRev;
     const p = runs("keyboardCursor") && surface === "preview" ? previewCursor.point() : null;
     const map = p && previewSourceMap;
+    const previous = untrack(() => previewCursorBox);
+    const sameLayout = rev === cursorLayout;
+    cursorLayout = rev;
     if (p == null || map == null || scrollEl == null || previewEl == null) {
       previewCursorBox = null;
       return;
     }
-    const lineHeight = Number.parseFloat(getComputedStyle(previewEl).lineHeight);
-    const band = cursorBand(previewEl, scrollEl, map, p, lineHeight);
-    previewCursorBox = band && { line: p.line, ...band };
+    const band = cursorBand(previewEl, scrollEl, map, p, lineHeightOf(previewEl));
+    const glide =
+      sameLayout && previous !== null && glidesFrom(previewEl, map, previous.point, p);
+    previewCursorBox = band && { point: p, glide, ...band };
   });
   $effect(() => {
     void previewLayoutRev;
@@ -1680,6 +1689,11 @@
     return row ? rowHover(geometry, row, previous, at.glide && sameLayout) : null;
   }
 
+  /** Whether a band moving from `from`'s row to `to`'s glides: a flick or a jump of more
+   * than two rows lands in place, as gliding that far would trail the pointer or key. */
+  const glidesFrom = (root: Element, map: PlanSourceMap, from: TextPoint, to: TextPoint) =>
+    withinLines(root, map, from, to, 2);
+
   /** The hover over `row`, gliding from `previous` when `glide` allows and the two are near. */
   function rowHover(
     { root, scroller, map }: PreviewGeometry,
@@ -1687,12 +1701,14 @@
     previous: PreviewHover | null,
     glide: boolean,
   ): PreviewHover | null {
-    const lineHeight = lineHeightOf(root);
-    const band = cursorBand(root, scroller, map, row, lineHeight);
+    const band = cursorBand(root, scroller, map, row, lineHeightOf(root));
     if (!band) return null;
-    // A flick lands in place: gliding across several lines would trail the pointer.
-    const near = previous !== null && Math.abs(band.top - previous.band.top) <= 2 * lineHeight;
-    return { row, band, plus: laneBeside({ root, scroller }, band), glide: glide && near };
+    return {
+      row,
+      band,
+      plus: laneBeside({ root, scroller }, band),
+      glide: glide && previous !== null && glidesFrom(root, map, previous.row, row),
+    };
   }
 
   function laneBeside(
@@ -2543,7 +2559,8 @@
           <div
             class="preview-cursor"
             data-caret-preview-cursor
-            data-line={previewCursorBox.line}
+            data-line={previewCursorBox.point.line}
+            data-glide={previewCursorBox.glide ? "" : undefined}
             aria-hidden="true"
             style:top="{previewCursorBox.top}px"
             style:left="{previewCursorBox.left}px"
@@ -2551,13 +2568,15 @@
             style:height="{previewCursorBox.height}px"
           ></div>
         {/if}
-        {#if hover && hoverBandShown}
+        <!-- Hidden rather than gone under the cursor's row, so it glides off it. -->
+        {#if hover}
           <div
             class="preview-hover"
             data-caret-preview-hover
             data-line={hover.row.line}
             data-glide={hover.glide ? "" : undefined}
             aria-hidden="true"
+            style:visibility={hoverBandShown ? undefined : "hidden"}
             style:top="{hover.band.top}px"
             style:left="{hover.band.left}px"
             style:width="{hover.band.width}px"
@@ -3031,9 +3050,9 @@
     background-color: var(--accent);
     opacity: 0.45;
   }
-  /* One shape morphing between hovered lines, on the tint-or-pop tier; the global
-     reduced-motion rule collapses it to a jump. */
-  :is(.preview-hover, .preview-drag, .preview-drag-bar, .preview-plus)[data-glide] {
+  /* One shape morphing between rows, on the tint-or-pop tier, in step with the cursor's
+     follow scroll; the global reduced-motion rule collapses it to a jump. */
+  :is(.preview-cursor, .preview-hover, .preview-drag, .preview-drag-bar, .preview-plus)[data-glide] {
     transition-property: top, left, width, height;
     transition-duration: var(--dur-micro);
     transition-timing-function: var(--ease-out);

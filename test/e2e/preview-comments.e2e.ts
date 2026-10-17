@@ -829,6 +829,9 @@ test.describe("commenting from the preview", () => {
   });
 
   test.describe("from the keyboard", () => {
+    // A drag aims at where the cursor band comes to rest, so it lands rather than glides.
+    test.beforeEach(({ page }) => page.emulateMedia({ reducedMotion: "reduce" }));
+
     /** The visual selection highlight's text, or "" when nothing is painted. */
     const visualSelectionText = (page: Page) =>
       page.evaluate(() =>

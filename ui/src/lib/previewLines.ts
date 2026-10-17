@@ -350,6 +350,31 @@ function locateBoth(
   return below ? [second, first] : [first, second];
 }
 
+/** Whether `a`'s and `b`'s visual lines are at most `count` apart, in either order, however
+ * far apart a block's margins set them. False when either cannot be placed. */
+export function withinLines(
+  root: Element,
+  map: PlanSourceMap,
+  a: TextPoint,
+  b: TextPoint,
+  count: number,
+  read: RangeRects = clientRects,
+): boolean {
+  const located = locateBoth(root, map, a, b, read);
+  if (located === null) return false;
+  const [first, last] = located;
+  let apart = -first.index;
+  let { block, lines } = first;
+  while (block !== last.block) {
+    apart += lines.length;
+    if (apart > count) return false;
+    const next = textBlockFrom(block, 1, read);
+    if (next === null) return false;
+    ({ block, lines } = next);
+  }
+  return apart + last.index <= count;
+}
+
 /** The table row holding `line`, inside `block`. A row is one source line, and its
  * middle-aligned cells put DOM order out of step with visual order. */
 function rowOf(block: Element, line: VisualLine): Element | null {

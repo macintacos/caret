@@ -39,6 +39,27 @@ export const PREVIEW_DRAG = `${PLAN_SURFACE} [data-caret-preview-drag]`;
 /** A comment drag's bar down the preview's "+" lane, the length of its band. */
 export const PREVIEW_DRAG_BAR = `${PLAN_SURFACE} [data-caret-preview-drag-bar]`;
 
+/** Counts, from the call on, the moves of the overlay at `selector` that glide rather than
+ * land: the transitions of its `top` that start. One counter per selector a page. */
+export async function glideCounter(page: Page, selector: string): Promise<() => Promise<number>> {
+  await page.evaluate((selector) => {
+    const w = window as { glides?: Record<string, number> };
+    w.glides ??= {};
+    const counts = w.glides;
+    counts[selector] = 0;
+    document.addEventListener("transitionrun", (event) => {
+      const { target, propertyName } = event;
+      if (propertyName === "top" && target instanceof Element && target.matches(selector))
+        counts[selector] = (counts[selector] ?? 0) + 1;
+    });
+  }, selector);
+  return () =>
+    page.evaluate(
+      (selector) => (window as { glides?: Record<string, number> }).glides?.[selector] ?? 0,
+      selector,
+    );
+}
+
 /** The source lines with rendered prose on the preview row at viewport height `y`,
  * ascending — read from the renderer's data-source-line markers, so a row's comment can
  * be checked against the text a reader sees on it. Prose only: a code block's lines share
