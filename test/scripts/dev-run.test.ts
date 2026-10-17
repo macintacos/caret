@@ -99,6 +99,20 @@ test("childEnvFor hands --update to the daemon as CARET_DEV_UPDATE", () => {
   expect(env.CARET_DEV_UPDATE).toBe("release");
 });
 
+test("childEnvFor has the daemon log what each review sends the agent, at debug", () => {
+  withEnv({ CARET_DEV_LOG_LEVEL: undefined }, () => {
+    const env = childEnvFor("/tmp/world", { kind: "ephemeral" });
+    expect(env.CARET_DEV_LOG_REVIEW_TEXT).toBe("1");
+    expect(env.CARET_DEV_LOG_LEVEL).toBe("debug");
+  });
+});
+
+test("childEnvFor keeps a CARET_DEV_LOG_LEVEL the developer already set", () => {
+  withEnv({ CARET_DEV_LOG_LEVEL: "info" }, () => {
+    expect(childEnvFor("/tmp/world", { kind: "ephemeral" }).CARET_DEV_LOG_LEVEL).toBe("info");
+  });
+});
+
 // ---- makeCleanup ----
 
 function fakeKillable() {
@@ -271,7 +285,14 @@ describe("runDev supervision", () => {
       // The driver ran in-process with the discovered base and the parsed opts —
       // no argv round-trip, no re-parse.
       expect(driverCalls).toEqual([
-        { base: "http://127.0.0.1:40123", numVersions: 4, notify: true, settings: DEFAULTS },
+        {
+          base: "http://127.0.0.1:40123",
+          numVersions: 4,
+          notify: true,
+          settings: DEFAULTS,
+          // Each submission names a plan file, as Claude Code does, inside the dev world.
+          planDir: join(calls[0]?.env?.XDG_STATE_HOME as string, "caret", "plans"),
+        },
       ]);
 
       // The in-process driver sees the isolated dev state dir — its hook logging
@@ -480,6 +501,22 @@ describe("runDev supervision", () => {
       expect(started).toBe(0);
       expect(calls[0]?.stderr).toBe("inherit");
       expect(calls.at(-1)?.stdout).toBe("inherit");
+
+      rmSync(calls[0]?.env?.XDG_STATE_HOME as string, { recursive: true, force: true });
+    });
+  });
+
+  test("--no-plan-file has the driver submit plans as text only", async () => {
+    await withCleanDevEnv(async () => {
+      const { spawn, calls } = capturingSpawn(0);
+      const driverCalls: DriverOptions[] = [];
+      const deps = baseDeps({ spawn, runDriver: (o) => driverCalls.push(o) });
+
+      await expect(
+        runDev({ numVersions: 4, notify: false, persist: false, planFile: false }, deps),
+      ).rejects.toBeInstanceOf(ExitSignal);
+
+      expect(driverCalls[0]?.planDir).toBeUndefined();
 
       rmSync(calls[0]?.env?.XDG_STATE_HOME as string, { recursive: true, force: true });
     });

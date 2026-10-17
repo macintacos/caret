@@ -22,6 +22,7 @@ import {
   ownNames,
 } from "@/daemon/guards.ts";
 import { createLiveness, type LivenessDeps } from "@/daemon/liveness.ts";
+import { logReviewText } from "@/daemon/review-text-log.ts";
 import {
   ConfigPatchSchema,
   DraftBodySchema,
@@ -225,6 +226,9 @@ export interface CreateServerOptions {
    * (EXC-961). Defaults to the real spawn; injectable so tests assert on the
    * argv without spawning. Fire-and-forget — it never delays a response. */
   markPaneRead?: (pane: CmuxPane) => void;
+  /** Log what each resolve sends the agent (review-text-log.ts). Reviewer prose and
+   * plan text, so only `mise run dev` turns it on. Omitted (default) → never logged. */
+  logReviewText?: boolean;
   /** Leveled lifecycle logger (see log.ts CaretLogger); defaults to a no-op so
    * tests stay quiet. Lifecycle events log at info, handler failures at error. */
   log?: CaretLogger;
@@ -284,6 +288,7 @@ interface ResolvedOptions {
   onUpdatesEnabled: (() => void) | undefined;
   onDecisionAwaited: ((id: string) => void) | undefined;
   markPaneRead: (pane: CmuxPane) => void;
+  logReviewText: boolean;
   log: CaretLogger;
 }
 
@@ -322,6 +327,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     onUpdatesEnabled: opts.onUpdatesEnabled,
     onDecisionAwaited: opts.onDecisionAwaited,
     markPaneRead: opts.markPaneRead ?? ((pane) => clearCmuxMark(pane, { log: opts.log })),
+    logReviewText: opts.logReviewText ?? false,
     log: opts.log ?? noopLogger,
   };
 }
@@ -1093,6 +1099,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       sessionId: existing.sessionId,
       acceptMode: decision.acceptMode,
     });
+    if (cfg.logReviewText) logReviewText(route.log, currentVersion(existing), decision);
     return Response.json({ ok: true });
   }
 

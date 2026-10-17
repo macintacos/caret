@@ -16,9 +16,10 @@ export const DEV_SESSION = `caret-dev-${process.pid}`;
 
 /** The hook stdin a real PermissionRequest session would pipe to `caret
  * review` — the fixed dev session by default, or an explicit session id for
- * the extra-review seeder. */
-export function hookStdin(plan: string, sessionId = DEV_SESSION): string {
-  return JSON.stringify({ session_id: sessionId, cwd: process.cwd(), tool_input: { plan } });
+ * the extra-review seeder — naming the agent's plan file when there is one. */
+export function hookStdin(plan: string, sessionId = DEV_SESSION, planFilePath?: string): string {
+  const toolInput = planFilePath ? { plan, planFilePath } : { plan };
+  return JSON.stringify({ session_id: sessionId, cwd: process.cwd(), tool_input: toolInput });
 }
 
 /** Append a "Revision N" section quoting the reviewer's feedback. The feedback

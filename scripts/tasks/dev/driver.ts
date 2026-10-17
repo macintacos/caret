@@ -17,6 +17,9 @@
 // machine it drives lives in scripts/tasks/dev/protocol.ts, and the key handler
 // in scripts/tasks/dev/inject.ts.
 
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { claudeAdapter } from "@/adapters/claude/index.ts";
 import { NEVER_IDLE_MS, VANITY_HOST } from "@/config/constants.ts";
 import { DEFAULT_PORT, devSeeder, loadSettings, type Settings } from "@/config/settings.ts";
@@ -50,9 +53,22 @@ import {
   parseNumVersions,
 } from "@/tasks/dev/protocol.ts";
 
-/** Parse the dev hook stdin for `plan` as `caret review` would. */
-export const devHookInput = (plan: string, sessionId?: string): ParsedHookInput =>
-  parseHook(claudeAdapter.parseHookInput, hookStdin(plan, sessionId));
+/** Parse the dev hook stdin for `plan` as `caret review` would. With `planDir`, the plan
+ * is first written to `<planDir>/<session>.md` and named as the agent's plan file, as
+ * Claude Code does; without it the review is text-only. */
+export function devHookInput(
+  plan: string,
+  sessionId = DEV_SESSION,
+  planDir?: string,
+): ParsedHookInput {
+  let planFilePath: string | undefined;
+  if (planDir) {
+    mkdirSync(planDir, { recursive: true });
+    planFilePath = join(planDir, `${sessionId}.md`);
+    writeFileSync(planFilePath, plan);
+  }
+  return parseHook(claudeAdapter.parseHookInput, hookStdin(plan, sessionId, planFilePath));
+}
 
 /** Where the driver's progress lines go. Injectable because the suites drive these
  * functions directly, and a review's worth of dev chatter otherwise lands in the
@@ -67,6 +83,8 @@ const log: DriverLog = (msg) => {
  * one dependency it already takes. */
 export interface DevDeps extends ReviewDeps {
   log: DriverLog;
+  /** Where each submission's plan file goes (see devHookInput); absent → text-only. */
+  planDir?: string;
 }
 
 /** ReviewDeps for dev — the analog of prodReviewDeps (src/commands/review.ts) with the
@@ -76,9 +94,10 @@ export interface DevDeps extends ReviewDeps {
  * dev surface), and timeoutMs is NEVER_IDLE_MS (the max setTimeout delay — a
  * larger value overflows and clamps to ~1ms) so an idle session never churns
  * fail-safe denies. */
-export function devReviewDeps(base: string, sink: DriverLog = log): DevDeps {
+export function devReviewDeps(base: string, sink: DriverLog = log, planDir?: string): DevDeps {
   return {
     log: sink,
+    planDir,
     // Prefixed like the driver's other lines rather than reproducing the hook's exact
     // stderr wording — nothing parses this one, `mise run dev` just shows it.
     announceUrl: (url) => sink(`review this plan at ${url}`),
@@ -109,7 +128,7 @@ export async function runExtraReview(
 ): Promise<void> {
   let state: DriverState = { plan, revision: 0 };
   for (;;) {
-    const out = await runReview(devHookInput(state.plan, sessionId), deps);
+    const out = await runReview(devHookInput(state.plan, sessionId, deps.planDir), deps);
     const next = nextPlan(state, out, plan);
     if (next.action === "reseed") return; // approved: this thread is done
     if (next.action === "wait") return; // rejected (EXC-685): the agent waits — thread done
@@ -249,7 +268,10 @@ export async function bootstrapReview(
   const plans = demoVersions(fixture.plan, fixture.versions, fixture.edits);
   for (let i = 0; i < plans.length; i++) {
     // runReview blocks on the decision long-poll; the deny is what unblocks it.
-    const reviewing = runReview(devHookInput(plans[i] as string, fixture.session), deps);
+    const reviewing = runReview(
+      devHookInput(plans[i] as string, fixture.session, deps.planDir),
+      deps,
+    );
     const feedback = `Bootstrap revision ${i + 1} for the dev review.`;
     await denyPendingReview(base, fixture.session, feedback);
     await reviewing;
@@ -276,6 +298,8 @@ export interface DriverOptions {
   notify: boolean;
   /** Settings snapshot the seeder's cadence and pending cap come from. */
   settings: Settings;
+  /** Where each submission's plan file goes; absent → text-only (`--no-plan-file`). */
+  planDir?: string;
   /** Subscribe to shortcut keys (`n`, `r`). Under `mise run dev` the terminal UI
    * owns the keyboard — only one reader can hold raw stdin — and forwards them
    * here; the standalone entry below reads stdin itself. Absent, the driver
@@ -296,7 +320,7 @@ async function runFixtureLoop(
   let state = initial;
   for (;;) {
     // Never throws: every abnormal path inside runReview becomes a deny.
-    const out = await runReview(devHookInput(state.plan, fixture.session), deps);
+    const out = await runReview(devHookInput(state.plan, fixture.session, deps.planDir), deps);
     const next = nextPlan(state, out, fixture.plan);
     if (next.action === "wait") {
       // Reject (EXC-685): the agent waits for the user's next message instead of
@@ -362,7 +386,7 @@ export async function run(opts: DriverOptions): Promise<void> {
   // The canonical demo plan — the primary fixture's final ("current") version —
   // which every extra review, seeded or injected, is retitled from.
   const basePlan = (fixtures[0] as LoadedFixture).plan;
-  const deps = devReviewDeps(base);
+  const deps = devReviewDeps(base, log, opts.planDir);
   // Extra-review seeder (EXC-427), OFF by default: when armed it seeds a
   // genuinely-new review — fresh session, fresh review id — every interval
   // tick, so backgrounding the tab demos a real "new plan" desktop

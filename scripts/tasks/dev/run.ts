@@ -61,6 +61,10 @@ export interface RunDevOptions {
   plain?: boolean;
   /** --update: the mocked update the daemon poses as behind (CARET_DEV_UPDATE). */
   update?: "release" | "commit";
+  /** False under --no-plan-file: the driver submits plans as text, the way a review
+   * with no plan file arrives, so feedback keeps its quotes. Optional; absent counts
+   * as true, a plan file per review the way Claude Code sends one. */
+  planFile?: boolean;
 }
 
 /** The daemon argv, adding `--ephemeral` only in ephemeral port mode (a fixed
@@ -97,6 +101,9 @@ export function childEnvFor(
     XDG_STATE_HOME: stateDirPath,
     // Residency the way production reaches it: CARET_SUPERVISED is the whole predicate.
     [SUPERVISED_VAR]: "1",
+    // What each review sends the agent, with each comment's resolved lines at debug.
+    CARET_DEV_LOG_REVIEW_TEXT: "1",
+    CARET_DEV_LOG_LEVEL: process.env.CARET_DEV_LOG_LEVEL ?? "debug",
   };
   if (portMode.kind === "fixed") env.CARET_PORT = String(portMode.port);
   // The daemon child reads its own dev config (config.dev.toml, or one inside the
@@ -488,6 +495,7 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
       numVersions: opts.numVersions,
       notify: opts.notify,
       settings,
+      planDir: opts.planFile === false ? undefined : join(worldDir, "plans"),
       // The console holds raw stdin and forwards keys. Without it (--plain) the
       // keys still work, read line-mode from the terminal — so `n` and `r` need
       // Enter, since raw mode with no console would swallow Ctrl-C. Not a TTY at

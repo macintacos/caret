@@ -64,6 +64,7 @@ const HeartbeatMs = z.number().int().positive().lt(MAX_HEARTBEAT_MS);
 // nonnegative because 0 legitimately means "rotate, archive nothing".
 const LogMaxSize = z.number().int().min(MIN_LOG_MAX_SIZE).max(MAX_LOG_MAX_SIZE);
 const LogKeep = z.number().int().nonnegative();
+const LogLevel = z.enum(["debug", "info", "warn", "error"]);
 // EXC-1570: a bind address — an IP literal (IPv6 unbracketed, as Bun.serve takes it) or
 // localhost. No zone id (`fe80::1%en0`): isIP accepts it, but no URL can carry it.
 // localhost becomes 127.0.0.1: Bun binds it to ::1 alone on macOS, where the
@@ -109,7 +110,7 @@ const Dev = z
 const SettingsSchema = z.object({
   logging: z
     .object({
-      level: z.enum(["debug", "info", "warn", "error"]).default("info"), // EXC-398
+      level: LogLevel.default("info"), // EXC-398
       redact: z.boolean().default(false), // EXC-399: raw by default; `caret redact` covers after-the-fact
       max_size: LogMaxSize.default(DEFAULT_LOG_MAX_SIZE), // EXC-1068: bytes; over this a live log is archived
       keep: LogKeep.default(DEFAULT_LOG_KEEP), // EXC-1068: gzipped archives retained per log
@@ -491,4 +492,18 @@ export function devSeeder(notify: boolean, s: Settings = settings().current()): 
     maxPending: s.dev.notify.max_pending,
     intervalInvalid: envInterval === null, // classifyEnv: null ⟺ set-but-invalid
   };
+}
+
+/** The daemon's log level: CARET_DEV_LOG_LEVEL > [logging].level > info. `mise run dev`
+ * sets it to debug unless already set; an unusable value falls through. */
+export function daemonLogLevel(s: Settings = settings().current()): Settings["logging"]["level"] {
+  const env = LogLevel.safeParse(process.env.CARET_DEV_LOG_LEVEL);
+  return env.success ? env.data : s.logging.level;
+}
+
+/** Whether the daemon logs the text each resolve sends the agent: only when
+ * CARET_DEV_LOG_REVIEW_TEXT is "1", which `mise run dev` sets. No [dev] key: reviewer
+ * prose must never reach a log through a config file an installed caret reads. */
+export function devLogReviewText(): boolean {
+  return process.env.CARET_DEV_LOG_REVIEW_TEXT === "1";
 }
