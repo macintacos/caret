@@ -32,6 +32,18 @@ describe("PlanPreview", () => {
     expect(checkbox(target, 'input[data-task="slashed"]').indeterminate).toBe(true);
   });
 
+  test("hides an image that fails to load", () => {
+    const { target, flush } = render(PlanPreview, {
+      html: renderPlanMarkdown("![shot](https://example.com/a.png)\n").html,
+    });
+    flush();
+
+    const img = target.querySelector("img") as HTMLImageElement;
+    img.dispatchEvent(new Event("error"));
+
+    expect(img.hidden).toBe(true);
+  });
+
   test("keeps the source-mapped blocks as direct children of the container", () => {
     const { target, flush } = render(PlanPreview, {
       html: renderPlanMarkdown("# Title\n\nBody\n").html,
