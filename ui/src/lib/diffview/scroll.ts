@@ -1,5 +1,6 @@
 // Scroll-to-line, active-line resolution, the keyboard cursor's follow scroll,
-// and the composer reveal — the source view's scrolling. @pierre/diffs
+// the composer reveal, and the instant park a view flip lands with — the plan's
+// scrolling. @pierre/diffs
 // renders each line as a <div data-line="N"> inside the container's shadow root;
 // jumping to a heading finds that row and scrolls the surrounding scroll container
 // so the row rests near the top, and the reverse — which line currently occupies
@@ -15,10 +16,7 @@
 import { quadOut } from "svelte/easing";
 
 import type { DiffSide } from "$lib/diffview/types.ts";
-
-/** Breathing room (px) above a jumped-to row so the heading isn't flush against
- * the very top edge of the scroll container. */
-export const SCROLL_OFFSET_TOP = 12;
+import { READING_ZONE_SLOP, SCROLL_OFFSET_TOP } from "$lib/layout.ts";
 
 /** Duration (ms) of a jump to a place — the JS mirror of --dur-travel. */
 export const SCROLL_ANIM_MS = 240;
@@ -49,13 +47,6 @@ export function scrollTweenTop(g: {
   const t = Math.min(1, Math.max(0, g.elapsed / g.duration));
   return g.from + (g.to - g.from) * quadOut(t);
 }
-
-/** Sub-pixel margin (px) below the reading-zone line. A jumped heading parks with
- * its top on that line, and the row above ends its bottom exactly there; the
- * browser rounds scrollTop to device pixels, so without this margin the prior
- * row's bottom can round a fraction past the line and steal the active slot — the
- * off-by-one this guards against. Kept well under a source line's height. */
-const READING_ZONE_SLOP = 1;
 
 /** Nearest scrollable ancestor of `el` (the element that actually scrolls). */
 function nearestScrollParent(el: HTMLElement): HTMLElement | undefined {
@@ -153,13 +144,30 @@ function scrollRowIntoView(container: HTMLElement, row: HTMLElement): void {
     return;
   }
 
-  // scrollTop that puts the row's top SCROLL_OFFSET_TOP below the container's top
-  // edge. scrollTop + (row.top - container.top) is the row's absolute offset in
-  // the scroll content, invariant of the current scroll position.
-  const rowRect = row.getBoundingClientRect();
+  animateScrollTop(scroller, parkedTop(scroller, row), SCROLL_ANIM_MS);
+}
+
+/** The scrollTop that puts `el`'s top SCROLL_OFFSET_TOP below `scroller`'s top
+ * edge. scrollTop + (el.top - scroller.top) is the element's absolute offset in
+ * the scroll content, invariant of the current scroll position. */
+function parkedTop(scroller: HTMLElement, el: Element): number {
+  const elRect = el.getBoundingClientRect();
   const hostRect = scroller.getBoundingClientRect();
-  const top = Math.max(0, scroller.scrollTop + (rowRect.top - hostRect.top) - SCROLL_OFFSET_TOP);
-  animateScrollTop(scroller, top, SCROLL_ANIM_MS);
+  return Math.max(0, scroller.scrollTop + (elRect.top - hostRect.top) - SCROLL_OFFSET_TOP);
+}
+
+/** Parks `el` where a jump would, instantly. An absolute write, never a delta, so
+ * it composes with the browser's own scroll anchoring; skipped within
+ * SCROLL_TAKEOVER_SLOP so a re-park of a settled view does not fight the same
+ * set/get rounding drift. */
+export function parkAt(scroller: HTMLElement, el: Element): void {
+  const top = parkedTop(scroller, el);
+  if (Math.abs(scroller.scrollTop - top) > SCROLL_TAKEOVER_SLOP) scroller.scrollTop = top;
+}
+
+/** The source view's row for 1-based `line`, or null when it is not rendered. */
+export function rowForLine(container: HTMLElement, line: number): HTMLElement | null {
+  return container.shadowRoot?.querySelector<HTMLElement>(`[data-line="${line}"]`) ?? null;
 }
 
 /**
@@ -169,7 +177,7 @@ function scrollRowIntoView(container: HTMLElement, row: HTMLElement): void {
  * range or the view has not painted yet).
  */
 export function scrollToLine(container: HTMLElement, line: number): boolean {
-  const row = container.shadowRoot?.querySelector<HTMLElement>(`[data-line="${line}"]`);
+  const row = rowForLine(container, line);
   if (row == null) return false;
   scrollRowIntoView(container, row);
   return true;
@@ -368,4 +376,27 @@ export function lineAtReadingZone(
     if (row.bottom > readingZone) return row.line;
   }
   return null;
+}
+
+/**
+ * lineAtReadingZone over `count` indexed elements, by binary search: the first
+ * index whose viewport bottom (`bottomOf(i)`) clears the reading zone, or null
+ * when none does. Requires bottoms non-decreasing in index order — flat, stacked
+ * siblings — and reads O(log count) of them, so a long document is not measured
+ * block by block.
+ */
+export function indexAtReadingZone(
+  count: number,
+  bottomOf: (i: number) => number,
+  containerTop: number,
+): number | null {
+  const readingZone = containerTop + SCROLL_OFFSET_TOP + READING_ZONE_SLOP;
+  let lo = 0;
+  let hi = count;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (bottomOf(mid) > readingZone) hi = mid;
+    else lo = mid + 1;
+  }
+  return lo < count ? lo : null;
 }
