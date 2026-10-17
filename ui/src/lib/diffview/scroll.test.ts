@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   CURSOR_SCROLLOFF,
   FOLLOW_ANIM_MS,
+  followBox,
   followCursorLine,
   followScrollDelta,
   indexAtReadingZone,
@@ -621,6 +622,41 @@ describe("followCursorLine", () => {
     row.scrollIntoView = () => (scrolledIntoView = true);
     expect(followCursorLine(host, 5)).toBe(true);
     expect(scrolledIntoView).toBe(true);
+  });
+});
+
+describe("followBox", () => {
+  /** A scroller spanning viewport [100, 700]. */
+  function scroller(): HTMLElement {
+    const el = document.createElement("div");
+    el.getBoundingClientRect = () => rect(100, 700);
+    document.body.append(el);
+    return el;
+  }
+
+  test("tweens by the overshoot when the box passes the bottom band", async () => {
+    const el = scroller();
+    followBox(el, { top: 650, bottom: 670 });
+    now = FOLLOW_ANIM_MS;
+    await frames(1);
+    expect(el.scrollTop).toBe(670 - (700 - CURSOR_SCROLLOFF * 20));
+  });
+
+  test("tweens up by the overshoot when the box passes the top band", async () => {
+    const el = scroller();
+    el.scrollTop = 500;
+    followBox(el, { top: 150, bottom: 170 });
+    now = FOLLOW_ANIM_MS;
+    await frames(1);
+    expect(el.scrollTop).toBe(500 + 150 - (100 + CURSOR_SCROLLOFF * 20));
+  });
+
+  test("does not scroll when the box is comfortably inside the band", async () => {
+    const el = scroller();
+    followBox(el, { top: 300, bottom: 320 });
+    now = FOLLOW_ANIM_MS;
+    await frames(1);
+    expect(el.scrollTop).toBe(0);
   });
 });
 

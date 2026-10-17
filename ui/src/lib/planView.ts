@@ -32,7 +32,8 @@ export const SURFACE_BEHAVIORS = {
   referenceHints: ["source"], // ref-hint badges
   fileReferences: ["source", "preview"], // the file lane and folder card a reference opens
   search: ["source"], // `/` dock, n/N, match highlights
-  keyboardCursor: ["source"], // cursor motions, `c`, `V`, Esc
+  keyboardCursor: ["source", "preview"], // cursor motions
+  keyboardComments: ["source"], // c, V, Esc
   commentThreads: ["source", "preview"], // inline threads, draft markers, the open composer, the preview's comment highlight, comment reveal
   lineComments: ["source"], // drag readout, gutter range drag, drag/visual hint chips, hover re-fire
   headingTracking: ["source", "preview"], // top-visible heading, ?heading= mirror, ToC, breadcrumbs, b and \

@@ -994,3 +994,117 @@ describe("DiffPlanView preview comment slots", () => {
     ]);
   });
 });
+
+describe("DiffPlanView preview cursor", () => {
+  const live = (id: string): boolean =>
+    shortcuts.list().find((e) => e.id === id)?.run !== undefined;
+  const run = (id: string) =>
+    shortcuts
+      .list()
+      .find((e) => e.id === id)
+      ?.run?.();
+  const band = (target: HTMLElement) => target.querySelector("[data-caret-preview-cursor]");
+
+  // happy-dom has no layout: every text range reads as one 20px line.
+  const realRects = Range.prototype.getClientRects;
+  afterEach(() => {
+    Range.prototype.getClientRects = realRects;
+  });
+  function stubLayout(): void {
+    Range.prototype.getClientRects = () =>
+      [{ top: 0, bottom: 20, left: 0, right: 100 }] as unknown as DOMRectList;
+  }
+
+  test("the preview runs the motions but not the line comments", async () => {
+    await renderOnPreview();
+    await until(() => live("motion.down"));
+    expect(["motion.down", "commenting.comment", "commenting.visualLine"].map(live)).toEqual([
+      true,
+      false,
+      false,
+    ]);
+  });
+
+  test("the source view runs the motions and the line comments", async () => {
+    render(DiffPlanView, props());
+    await until(() => live("commenting.comment"));
+    expect(["motion.down", "commenting.comment", "commenting.visualLine"].map(live)).toEqual([
+      true,
+      true,
+      true,
+    ]);
+  });
+
+  test("gg paints the cursor band on the preview's first line", async () => {
+    stubLayout();
+    const { target } = await renderOnPreview();
+    await until(() => live("motion.top"));
+    run("motion.top");
+    await until(() => band(target) != null);
+    expect(band(target)?.getAttribute("data-line")).toBe("1");
+  });
+
+  async function paintedBand(): Promise<HTMLElement> {
+    stubLayout();
+    const { target } = await renderOnPreview();
+    await until(() => live("motion.top"));
+    run("motion.top");
+    await until(() => band(target) != null);
+    return target;
+  }
+  function moveLayout(): void {
+    Range.prototype.getClientRects = () =>
+      [{ top: 40, bottom: 60, left: 0, right: 100 }] as unknown as DOMRectList;
+  }
+  const bandTop = (target: HTMLElement) => (band(target) as HTMLElement | null)?.style.top;
+
+  test("the band follows a repaint of the theme's properties", async () => {
+    const target = await paintedBand();
+    const before = bandTop(target);
+    moveLayout();
+    document.documentElement.style.setProperty("--caret-test-repaint", "1");
+    expect(await until(() => bandTop(target) !== before)).toBe(true);
+    document.documentElement.style.removeProperty("--caret-test-repaint");
+  });
+
+  test("the band follows a rewrite of the preview's text", async () => {
+    const target = await paintedBand();
+    const before = bandTop(target);
+    moveLayout();
+    target.querySelector(".plan-preview p")?.append(" more");
+    expect(await until(() => bandTop(target) !== before)).toBe(true);
+  });
+
+  test("a visual selection does not survive a round trip through the preview", async () => {
+    const { target } = render(DiffPlanView, props());
+    await until(() => live("commenting.visualLine"));
+    run("motion.top");
+    run("commenting.visualLine");
+    const enabled = () =>
+      shortcuts
+        .list()
+        .find((e) => e.id === "commenting.clear")
+        ?.enabled?.();
+    expect(enabled()).toBe(true);
+    toggle(target)!.click();
+    await until(() => target.querySelector(".plan-preview") != null);
+    toggle(target)!.click();
+    await until(() => live("commenting.visualLine"));
+    expect(enabled()).toBe(false);
+  });
+
+  test("a content switch clears the preview cursor", async () => {
+    stubLayout();
+    const p = reactiveProps(props());
+    const { target, flush } = render(DiffPlanView, p);
+    await until(() => toggle(target) != null);
+    toggle(target)!.click();
+    await until(() => live("motion.top"));
+    run("motion.top");
+    expect(await until(() => band(target) != null)).toBe(true);
+    p.review = reviewFixture({ version: 2, currentPlan: "# Other\n\nnew text\n" });
+    flush();
+    const cleared = await until(() => band(target) == null);
+    expect(cleared).toBe(true);
+  });
+});

@@ -10,7 +10,13 @@
 // the arithmetic; this factory only sequences them and mutates the store.
 
 import { normalizeRange } from "$lib/diffview/commenting.ts";
-import { type CursorMotion, resolveCursorLine } from "$lib/diffview/lineCursor.ts";
+import {
+  blankLinesOf,
+  type CursorMotion,
+  JUMP_MOTIONS,
+  lineCountOf,
+  resolveCursorLine,
+} from "$lib/diffview/lineCursor.ts";
 import {
   findMatches,
   matchStepFromLine,
@@ -125,12 +131,6 @@ export interface PlanKeyboard {
 // drives the teardown.
 const CLOSE_ANIM_MS = 140;
 
-/** The motions that navigate to a named SECTION — the same move a breadcrumb or ToC
- * pick makes — so they take the top-parked shared jump. Do not widen it on a "navigates
- * somewhere explicit" reading: gg/G/{/} step the reader THROUGH the document rather than
- * to a section, and `G` is only right when the last line lands at the bottom. */
-const JUMP_MOTIONS: ReadonlySet<CursorMotion> = new Set(["nextHeading", "prevHeading"]);
-
 export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardDeps): PlanKeyboard {
   const setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
   const clearTimer = deps.clearTimer ?? ((h) => clearTimeout(h));
@@ -145,26 +145,6 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
   // The shared seed every search/motion transition starts from.
   function seedLine(): number {
     return store.cursorLine ?? deps.readingLine() ?? 1;
-  }
-
-  // Lines the cursor may occupy. deps.lines() is the text split on "\n", so a trailing
-  // newline leaves a final "" entry that is not a row — trimmed so `G` lands on a real
-  // one.
-  function lineCount(): number {
-    const lines = deps.lines();
-    const n = lines.length;
-    return Math.max(1, lines[n - 1] === "" ? n - 1 : n);
-  }
-
-  // The blank (empty or whitespace-only) source lines the `{` / `}` motions jump between —
-  // the plan's paragraph boundaries, capped to real rows so a trailing newline is not a
-  // target.
-  function blankLines(): number[] {
-    const count = lineCount();
-    return deps
-      .lines()
-      .slice(0, count)
-      .flatMap((line, i) => (line.trim() === "" ? [i + 1] : []));
   }
 
   // `scroll` picks WHICH scroll: the scrolloff follow by default (a match reveal, the
@@ -226,11 +206,12 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     matches,
 
     moveCursor(motion) {
+      const lines = deps.lines();
       const line = resolveCursorLine(motion, {
         cursor: store.cursorLine,
-        lineCount: lineCount(),
+        lineCount: lineCountOf(lines),
         headingLines: deps.headingLines(),
-        blankLines: blankLines(),
+        blankLines: blankLinesOf(lines),
         halfPage: deps.halfPage(),
         seed: deps.readingLine() ?? 1,
       });

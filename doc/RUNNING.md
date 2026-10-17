@@ -151,7 +151,9 @@ Caret shows a plan version in one of two views:
   row.
 - The **preview** renders the plan as a document: headings, lists, tables, and links as
   they would appear on a page. Code blocks are highlighted and keep the source view's copy
-  and wrap buttons. Cited files open, and the contents and breadcrumbs work there too.
+  and wrap buttons. Cited files open, and the contents and breadcrumbs work there too. So
+  do the keyboard cursor and its motions, stepping one wrapped line at a time, though
+  commenting from the keyboard (`c`, `V`) stays in the source view.
 
 The **Preview** button beside **Versions** switches between them. It is pressed while the
 preview shows. Your browser remembers the choice, so it holds across reviews and restarts.

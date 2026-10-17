@@ -1,14 +1,22 @@
-// The focused-line cursor (EXC-788, EXC-790): SourceView tags the focused row's content
-// cell data-caret-cursor.
+// The keyboard cursor's markers: SourceView tags the focused row's content cell
+// data-caret-cursor (EXC-788, EXC-790); the preview draws a band carrying the cursor's
+// source line.
 
 import type { Page } from "@playwright/test";
 
 import { expect } from "@test/e2e/support/fixtures.ts";
+import { PLAN_SURFACE } from "@test/e2e/support/source-view.ts";
 
 /** The cursor marker's content cell. Playwright's CSS engine pierces the library's
  * open shadow root, so a plain descendant selector reaches it. */
 export const cursor = (page: Page) =>
   page.locator(".diffview [data-content] [data-line][data-caret-cursor]");
+
+/** The preview's cursor band, an overlay sibling of `.plan-preview` carrying the
+ * cursor's source line as data-line. */
+export const PREVIEW_BAND = `${PLAN_SURFACE} [data-caret-preview-cursor]`;
+
+export const previewCursor = (page: Page) => page.locator(PREVIEW_BAND);
 
 const lineOf = async (page: Page): Promise<number> =>
   Number((await cursor(page).getAttribute("data-line")) ?? -1);
