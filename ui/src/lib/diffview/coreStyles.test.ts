@@ -18,6 +18,9 @@ import { join } from "node:path";
 // a drift fails the unit suite rather than only showing in the shadow DOM.
 
 const coreStyles = await Bun.file(join(import.meta.dir, "coreStyles.ts")).text();
+const planPreview = await Bun.file(
+  join(import.meta.dir, "../../components/PlanPreview.svelte"),
+).text();
 
 // The body of the CARET_OVERRIDES template literal — the override stylesheet that
 // wins over the library core sheet in each view's shadow root.
@@ -1424,6 +1427,114 @@ describe("the filename-reference chip (EXC-840, tinted EXC-880)", () => {
   test("the hover swap is instant — the diff surface stays motionless", () => {
     expect(tokenRule).not.toMatch(/transition|animation/);
     expect(hoverRule).not.toMatch(/transition|animation/);
+  });
+});
+
+// PlanPreview.svelte copies the link rule, the link and code chips, and the reference
+// chip into the light-DOM preview, whose Svelte <style> cannot interpolate this sheet.
+// A rule pins to the source rule it copies; the one-box link and code chips pin to a
+// chip assembled from the source's tint, fill and cap rules. A declaration added through
+// a selector list escapes the pin on either side.
+describe("the preview's copies of the link, code and reference chips (EXC-2021)", () => {
+  // Anchored to line starts, as motion.test.ts's styleBlock, so CSS in a script string is
+  // never read.
+  const previewSheet = (planPreview.match(/^<style[^>]*>([\s\S]*?)^<\/style>/m)?.[1] ?? "").replace(
+    /\/\*[\s\S]*?\*\//g,
+    "",
+  );
+  const sourceSheet = overrideDecls
+    .replaceAll("$(FILE_ICON_MASK)", "var(--file-ref-icon)")
+    .replaceAll("$(FOLDER_ICON_MASK)", "var(--folder-ref-icon)");
+
+  /** A rule's declarations (the text between its braces), property → value, whitespace
+   * collapsed. Takes a whole rule, as rulesFor and tintRule return one. */
+  function declarations(rule: string): Record<string, string> {
+    const body = rule.slice(rule.indexOf("{") + 1, rule.lastIndexOf("}"));
+    const decls: Record<string, string> = {};
+    for (const decl of body.split(";")) {
+      const colon = decl.indexOf(":");
+      if (colon < 0) continue;
+      decls[decl.slice(0, colon).trim()] = decl
+        .slice(colon + 1)
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+    return decls;
+  }
+
+  /** Every rule in `sheet` whose whole selector is `selector`, merged in source order.
+   * Exact, unlike `rulesFor`'s tail match, so a nested variant such as
+   * `[data-file-ref][data-md~="code"]` never merges in. */
+  function wholeRules(sheet: string, selector: string): Record<string, string> {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+");
+    const pattern = new RegExp(String.raw`(?<=^|\})\s*${escaped}\s*(\{[^}]*\})`, "g");
+    return Object.assign({}, ...[...sheet.matchAll(pattern)].map((m) => declarations(m[1] ?? "")));
+  }
+
+  /** The preview rule whose whole selector is `.plan-preview :global(<target>)`. */
+  function previewRule(target: string): Record<string, string> {
+    return wholeRules(previewSheet, `.plan-preview :global(${target})`);
+  }
+
+  /** Every source rule whose whole selector is `[data-content] <target>`, merged in
+   * source order, with an interpolated mask read as the custom property the preview
+   * binds it to. */
+  function sourceRule(target: string): Record<string, string> {
+    return wholeRules(sourceSheet, `[data-content] ${target}`);
+  }
+
+  /** The source view's chip for a data-md member, as the one box the preview draws. */
+  function sourceChip(member: "link" | "code"): Record<string, string | undefined> {
+    const fill = sourceRule("[data-line] [data-md]");
+    const startCap = sourceRule("[data-line] [data-md-start]");
+    const endCap = sourceRule("[data-line] [data-md-end]");
+    expect(endCap["padding-inline-end"]).toBe(startCap["padding-inline-start"]);
+    return {
+      "background-color": declarations(tintRule(member))[`--md-${member}`],
+      padding: `${fill["padding-block"]} ${startCap["padding-inline-start"]}`,
+      "border-radius": startCap["border-start-start-radius"],
+    };
+  }
+
+  /** Both sides non-empty first: two missed selectors compare {} to {} and pass. */
+  function expectPinned(
+    preview: Record<string, string | undefined>,
+    source: Record<string, string | undefined>,
+  ) {
+    expect(Object.keys(preview).length).toBeGreaterThan(0);
+    expect(Object.keys(source).length).toBeGreaterThan(0);
+    expect(preview).toEqual(source);
+  }
+
+  test("a link wears the source view's ink, weight, slant and underline", () => {
+    const { "--md-link": _tint, ...ink } = sourceRule('[data-line] [data-md~="link"]');
+    expectPinned(previewRule("a"), ink);
+  });
+
+  test("a link wears the source view's chip", () => {
+    expectPinned(previewRule("a:not(:has(code, [data-file-ref], img))"), sourceChip("link"));
+  });
+
+  test("inline code pads and tints like the source view's code chip", () => {
+    const code = previewRule(":not(pre) > code");
+    expectPinned(
+      {
+        "background-color": code["background-color"] ?? "",
+        padding: code.padding ?? "",
+        "border-radius": code["border-radius"] ?? "",
+      },
+      sourceChip("code"),
+    );
+  });
+
+  test.each([
+    "[data-file-ref]",
+    "[data-file-ref]:hover",
+    "[data-file-ref]::before",
+    "[data-file-ref]:hover::before",
+    '[data-file-ref="directory"]::before',
+  ])("%s matches the source view's", (target) => {
+    expectPinned(previewRule(target), sourceRule(target));
   });
 });
 

@@ -5,7 +5,8 @@
 // onto :root, a list bullet is a ::marker, and the table's sideways scroll and the image's
 // size cap are layout. The pure halves are units — the mount in
 // ui/src/components/PlanPreview.test.ts, the painted custom properties in
-// ui/src/lib/theme.test.ts, and the rendered HTML in ui/src/lib/planMarkdown.test.ts.
+// ui/src/lib/theme.test.ts, the rendered HTML in ui/src/lib/planMarkdown.test.ts, and the
+// chip declarations' parity with the source view in ui/src/lib/diffview/coreStyles.test.ts.
 
 import type { Page } from "@playwright/test";
 
@@ -209,6 +210,105 @@ test("a theme that styles no markdown element paints the preview in caret's own 
       // A quote is set apart by soft ink and its rule, not by the source view's subdue.
       quote: { color: inkSoft, weight: "400", slant: "normal", opacity: "1" },
     });
+});
+
+/** A chip's box: its paddings in ems of its own font-size, and its corner radius. */
+type ChipBox = { top: string; left: string; right: string; radius: string };
+
+/** The source view's chip box for `member`, assembled from the pieces the decoration pass
+ * tags on the row holding `text`: the start cap carries the left padding and radius, the
+ * end cap the right padding. Null until the row is tagged. */
+function sourceChip(page: Page, member: string, text: string): Promise<ChipBox | null> {
+  return page.evaluate(
+    ([member, text]) => {
+      const sh = document.querySelector(".diffview")?.shadowRoot;
+      const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find((el) =>
+        el.textContent?.includes(text),
+      );
+      const piece = (attr: string) => row?.querySelector(`[${attr}~="${member}"]`);
+      const [fill, start, end] = [piece("data-md"), piece("data-md-start"), piece("data-md-end")];
+      if (!fill || !start || !end) return null;
+      const em = (el: Element, property: string) => {
+        const cs = getComputedStyle(el);
+        const px = Number.parseFloat(cs.getPropertyValue(property));
+        return (px / Number.parseFloat(cs.fontSize)).toFixed(2);
+      };
+      return {
+        top: em(fill, "padding-top"),
+        left: em(start, "padding-left"),
+        right: em(end, "padding-right"),
+        radius: getComputedStyle(start).borderTopLeftRadius,
+      };
+    },
+    [member, text] as const,
+  );
+}
+
+/** The preview's chip box for the `tag` element holding `text`, read like `sourceChip`. */
+function previewChip(page: Page, tag: string, text: string): Promise<ChipBox | null> {
+  return page.evaluate(
+    ([root, tag, text]) => {
+      const el = [...document.querySelectorAll(`${root} ${tag}`)].find((e) =>
+        e.textContent?.includes(text),
+      );
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      const em = (px: string) =>
+        (Number.parseFloat(px) / Number.parseFloat(cs.fontSize)).toFixed(2);
+      return {
+        top: em(cs.paddingTop),
+        left: em(cs.paddingLeft),
+        right: em(cs.paddingRight),
+        radius: cs.borderTopLeftRadius,
+      };
+    },
+    [PLAN_PREVIEW, tag, text] as const,
+  );
+}
+
+test("links and inline code wear the source view's chips", async ({ daemon, page }) => {
+  await openPlan(page, daemon, PLAN);
+  await expect.poll(() => sourceChip(page, "link", "a link")).not.toBeNull();
+  await expect.poll(() => sourceChip(page, "code", "inline code")).not.toBeNull();
+  const [link, code] = await Promise.all([
+    sourceChip(page, "link", "a link"),
+    sourceChip(page, "code", "inline code"),
+  ]);
+  await showPreview(page);
+
+  await expect.poll(() => previewChip(page, "a", "a link")).toEqual(link);
+  await expect.poll(() => previewChip(page, "code", "inline code")).toEqual(code);
+  const linkTint = await resolveStyle(page, "backgroundColor", "--chip-link");
+  await expect
+    .poll(async () => (await stylesOf(page, { fill: ["a", "a link", "background-color"] })).fill)
+    .toBe(linkTint);
+});
+
+test("a link labelled with inline code wears the code's chip alone", async ({ daemon, page }) => {
+  await openPreview(page, daemon, "See [`the docs`](https://docs.example.test) here.\n");
+  const code = await resolveStyle(page, "backgroundColor", "--chip-code");
+  await expect
+    .poll(() =>
+      stylesOf(page, {
+        padding: ["a", "the docs", "padding-left"],
+        fill: ["a", "the docs", "background-color"],
+        code: ["code", "the docs", "background-color"],
+      }),
+    )
+    .toEqual({ padding: "0px", fill: "rgba(0, 0, 0, 0)", code });
+});
+
+test("a linked image wears no link chip", async ({ daemon, page }) => {
+  await routeAssets(page);
+  await openPreview(page, daemon, `[![the diagram](${GOOD})](https://docs.example.test)\n`);
+  await expect
+    .poll(() =>
+      stylesOf(page, {
+        padding: ["a:has(img)", "", "padding-left"],
+        fill: ["a:has(img)", "", "background-color"],
+      }),
+    )
+    .toEqual({ padding: "0px", fill: "rgba(0, 0, 0, 0)" });
 });
 
 test("a heading level without its own style takes the heading style", async ({ daemon, page }) => {
