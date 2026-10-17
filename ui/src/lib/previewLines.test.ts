@@ -10,6 +10,7 @@ import { highlightPreviewCode } from "$lib/previewCode.ts";
 import {
   cursorBand,
   lastVisualLine,
+  lineAfter,
   linesBand,
   pointForLine,
   type RangeRects,
@@ -414,6 +415,30 @@ describe("linesBand", () => {
     expect(linesBand(root, root, map, { start: 2, end: 3 }, 0, grid(root, 20).read, flat)).toBe(
       null,
     );
+  });
+});
+
+describe("lineAfter", () => {
+  test("is the start of the row after the one the lines' text ends on, inside its block", () => {
+    const { root, map } = mount(`${LONG}\n${LONG}\n`);
+    // Line 1 ends on the third 20-column row, at its tenth cell; line 2 runs on from there.
+    expect(lineAfter(root, map, { start: 1, end: 1 }, grid(root, 20).read)).toEqual({
+      line: 2,
+      column: 9,
+    });
+  });
+
+  test("lines with no text at the end give way to the last line with text", () => {
+    const { root, map } = mount(`${LONG}\n${LONG}\n\nmiddle\n`);
+    expect(lineAfter(root, map, { start: 2, end: 3 }, grid(root, 20).read)).toBe(null);
+    expect(lineAfter(root, map, { start: 1, end: 1 }, grid(root, 20).read)).not.toBe(null);
+  });
+
+  test("is null on a block's last row, and when none of the lines renders text", () => {
+    const { root, map } = mount(`${LONG}\n\n\n\nmiddle\n`);
+    const { read } = grid(root, 20);
+    expect(lineAfter(root, map, { start: 1, end: 1 }, read)).toBe(null);
+    expect(lineAfter(root, map, { start: 2, end: 3 }, read)).toBe(null);
   });
 });
 

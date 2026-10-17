@@ -276,34 +276,22 @@ describe("visual mode and keyboard comments", () => {
     expect(h.sounds).toEqual(["visualEntered", "visualExited"]);
   });
 
-  test("selection() is null outside visual mode", () => {
-    const h = build(placed(at(2)));
-    expect(h.cursor.selection() === null).toBe(true);
-    expect(h.selections).toEqual([]);
+  test("anchor() is null outside visual mode", () => {
+    expect(build(placed(at(2))).cursor.anchor()).toBe(null);
   });
 
-  test("selection() runs from the anchor down to the cursor", () => {
+  test("anchor() stays on the point V anchored at as the cursor moves", () => {
     const h = build(placed(at(2)));
     h.cursor.enterVisualMode();
     h.cursor.moveCursor("down");
-    expect(h.cursor.selection() === h.range).toBe(true);
-    expect(h.selections).toEqual([[at(2), at(3)]]);
-  });
-
-  test("selection() runs from the cursor down to an anchor below it", () => {
-    const h = build(placed(at(2)));
-    h.cursor.enterVisualMode();
-    h.cursor.moveCursor("up");
-    h.cursor.selection();
-    expect(h.selections).toEqual([[at(1), at(2)]]);
+    expect(h.cursor.anchor()).toEqual(at(2));
+    expect(h.cursor.point()).toEqual(at(3));
   });
 
   test("an anchor whose point is not on its line reads as that line's start", () => {
     for (const visualAnchorPoint of [null, at(2)]) {
       const store = { ...placed(at(6)), visualAnchor: 6, visualAnchorPoint };
-      const h = build(store);
-      h.cursor.selection();
-      expect(h.selections).toEqual([[at(4), at(6)]]);
+      expect(build(store).cursor.anchor()).toEqual(at(4));
     }
   });
 

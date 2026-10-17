@@ -216,6 +216,30 @@ describe("scrollToLine", () => {
     expect(scroller.scrollTop).toBe(1234);
   });
 
+  test("holds scroll anchoring off in flight, so content growing above can't read as a takeover, and hands it back on landing or letting go", async () => {
+    const landing = (await jumpLine5ToMidFlight()).scroller;
+    const inFlight = landing.style.overflowAnchor;
+    await settle();
+    const letGo = (await jumpLine5ToMidFlight()).scroller;
+    letGo.scrollTop = 1234;
+    await settle();
+
+    expect([inFlight, landing.style.overflowAnchor, letGo.style.overflowAnchor]).toEqual([
+      "none",
+      "",
+      "",
+    ]);
+  });
+
+  test("a jump that cuts a flight short hands scroll anchoring back, even under reduced motion", async () => {
+    const { host, scroller } = await jumpLine5ToMidFlight();
+    stubRow(host, 9, 900);
+
+    withReducedMotion(() => expect(scrollToLine(host, 9)).toBe(true));
+
+    expect(scroller.style.overflowAnchor).toBe("");
+  });
+
   test("returns false when no row carries the requested line", () => {
     const { host, scroller } = harness([1, 2, 3]);
     expect(scrollToLine(host, 99)).toBe(false);

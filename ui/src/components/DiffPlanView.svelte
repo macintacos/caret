@@ -140,15 +140,13 @@
   import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
   import {
     clearCommentHighlight,
-    clearVisualSelection,
-    commentSlotIndex,
-    createSlotReserve,
+    createSlotGaps,
     groupBySlot,
     paintCommentHighlight,
-    paintVisualSelection,
-    previewSlotBoxes,
     sameSlotBoxes,
     type SlotBox,
+    type SlotGap,
+    slotGap,
     spanRanges,
   } from "$lib/previewComments.ts";
   import { previewFileRefs } from "$lib/previewRefs.ts";
@@ -345,17 +343,21 @@
   // The preview's root, bound from PlanPreview: the chrome geometry and capturePlace read it.
   let previewEl = $state<HTMLDivElement | undefined>();
 
-  // The preview's comments, one slot per block they follow, in the order the source view's
-  // annotation row stacks them: thread, then the open composer, then draft markers.
+  // The preview's comments, one slot per line they end on, in the order the source view's
+  // annotation row stacks them: thread, then the open composer, then draft markers. A
+  // slot's `start` is its earliest item's, so its gap opens under the row their text
+  // ends on.
   type PreviewSlotItem =
     | { kind: "thread"; line: number; annotations: (typeof lineThreads)[number]["annotations"] }
     | { kind: "composer"; line: number; start: number }
     | { kind: "marker"; line: number; start: number; scratch: ComposerScratch };
+  const itemStart = (item: PreviewSlotItem) =>
+    item.kind === "thread" ? Math.min(...item.annotations.map((a) => a.startLine)) : item.start;
   // The open composer supersedes the draft marker on its own line on both surfaces.
   const draftMarkers = $derived(scratches.filter((s) => s.endLine !== pending?.endLine));
   const previewSlots = $derived(
     planPreview && runs("commentThreads")
-      ? groupBySlot<PreviewSlotItem>(planPreview.blocks, [
+      ? groupBySlot<PreviewSlotItem>([
           ...lineThreads.map((t) => ({ kind: "thread" as const, ...t })),
           ...(pending
             ? [{ kind: "composer" as const, line: pending.endLine, start: pending.startLine }]
@@ -366,19 +368,19 @@
             start: s.startLine,
             scratch: s,
           })),
-        ])
+        ]).map((slot) => ({ ...slot, start: Math.min(...slot.items.map(itemStart)) }))
       : [],
   );
-  // One string per set of slotted blocks: previewSlots re-derives on every annotation
-  // poll, and re-observing on each would bump the layout signal with nothing moved.
-  const previewSlotKey = $derived(previewSlots.map((s) => s.block).join());
+  // One string per set of slot spans: previewSlots re-derives on every annotation poll, and
+  // re-observing and re-placing on each would bump the layout signal with nothing moved.
+  const previewSlotKey = $derived(previewSlots.map((s) => `${s.start}-${s.line}`).join());
   let slotBoxes = $state(new Map<number, SlotBox>());
-  // Created per root rather than per sync run, so a re-run keeps the padding it holds
-  // instead of dropping it for a frame.
-  const slotReserve = $derived(previewEl ? createSlotReserve(previewEl) : undefined);
+  // Created per root rather than per sync run, so a re-run keeps the gaps it holds open
+  // instead of closing them for a frame.
+  const slotGaps = $derived(previewEl ? createSlotGaps(previewEl) : undefined);
   $effect(() => {
-    const reserve = slotReserve;
-    return () => reserve?.release();
+    const gaps = slotGaps;
+    return () => gaps?.release();
   });
 
   // The comment under the pointer, else the one holding focus in a slot, else the open
@@ -463,13 +465,14 @@
     const resize = new ResizeObserver(schedule);
     resize.observe(root);
     // Slots sit outside the root: one growing moves nothing the root shows until the slot
-    // sync pads its block.
+    // sync grows its gap.
     void previewSlotKey;
     for (const el of scrollEl?.querySelectorAll<HTMLElement>("[data-preview-slot]") ?? [])
       resize.observe(el);
     // Text rewraps without resizing the root: reference tagging and code swaps rewrite
     // nodes, and a theme paint (inline properties on <html>) restyles the markdown.
-    // The root's attributes stay unobserved: the slot reserve writes block styles there.
+    // Attributes under the root stay unobserved: the slot gaps write their heights there,
+    // and the root's resize already reports each.
     const text = new MutationObserver(schedule);
     text.observe(root, { childList: true, subtree: true, characterData: true });
     const paint = new MutationObserver(schedule);
@@ -500,27 +503,34 @@
     paintCommentHighlight(spanRanges(map, span));
     return clearCommentHighlight;
   });
-  // Hold each preview slot's room open under its block and place the slot there, on each
-  // previewLayoutRev bump. The slot set, the document and a review switch trigger it
-  // directly too, so a new or reset slot is measured in the same flush rather than held
-  // unmeasured for a frame. The reserve is written before the boxes are measured: padding
-  // a block for the first time shifts its bottom, so measuring first would land a new slot
-  // one margin off.
+  // Hold each preview slot's room open in the text under the row its comments end on and
+  // place the slot there, on each previewLayoutRev bump. The slot set, the document and a
+  // review switch trigger it directly too, so a new or reset slot is measured in the same
+  // flush rather than held unmeasured for a frame. Every gap is read from the text before
+  // any opens, and opened before the boxes are measured: a gap moves everything below it.
   $effect(() => {
-    const scroller = scrollEl;
-    const root = previewEl;
-    const reserve = slotReserve;
+    const geometry = previewGeometry();
+    const gaps = slotGaps;
+    const blocks = planPreview?.blocks;
     void previewLayoutRev;
     void previewSlotKey;
-    void planPreview?.html;
     void contentKey;
-    if (scroller == null || root == null || reserve === undefined) return;
-    const slotEls = [...scroller.querySelectorAll<HTMLElement>("[data-preview-slot]")];
+    if (geometry === null || gaps === undefined || blocks === undefined) return;
+    const { root, scroller, map } = geometry;
     const heights = new Map(
-      slotEls.map((el) => [Number(el.dataset.previewSlot), el.offsetHeight]),
+      [...scroller.querySelectorAll<HTMLElement>("[data-preview-slot]")].map((el) => [
+        Number(el.dataset.previewSlot),
+        el.offsetHeight,
+      ]),
     );
-    reserve.set(heights);
-    const next = previewSlotBoxes(root, scroller, heights);
+    const open = new Map<number, { at: SlotGap; height: number }>();
+    for (const { start, line } of untrack(() => previewSlots)) {
+      const at = slotGap(root, map, blocks, { start, end: line });
+      const height = heights.get(line);
+      if (at !== null && height !== undefined) open.set(line, { at, height });
+    }
+    gaps.set(map, open);
+    const next = gaps.boxes(scroller);
     if (!sameSlotBoxes(untrack(() => slotBoxes), next)) slotBoxes = next;
   });
 
@@ -1324,9 +1334,8 @@
 
   // False until the line's slot is measured, so retryFrames waits for the sync pass.
   function revealPreviewSlot(line: number): boolean {
-    const block = planPreview ? commentSlotIndex(planPreview.blocks, line) : null;
-    if (block === null || !slotBoxes.has(block) || !scrollEl) return false;
-    const slot = scrollEl.querySelector<HTMLElement>(`[data-preview-slot="${block}"]`);
+    if (!slotBoxes.has(line) || !scrollEl) return false;
+    const slot = scrollEl.querySelector<HTMLElement>(`[data-preview-slot="${line}"]`);
     const item = slot?.querySelector<HTMLElement>(`[data-slot-line="${line}"]`);
     if (!slot || !item) return false;
     scrollRowIntoView(slot, item);
@@ -1581,16 +1590,21 @@
       sameLayout && previous !== null && glidesFrom(previewEl, map, previous.point, p);
     previewCursorBox = band && { point: p, glide, ...band };
   });
+
+  // Shift held: a press on either surface selects text rather than rows, so the pointer
+  // shows the text cursor.
+  let selectingText = $state(false);
   $effect(() => {
-    void previewLayoutRev;
-    // An open composer hides the selection, as the source's `selectedRange` does.
-    const range =
-      runs("keyboardComments") && surface === "preview" && pending == null
-        ? previewCursor.selection()
-        : null;
-    if (range === null) return;
-    paintVisualSelection(range);
-    return clearVisualSelection;
+    const track = (event: KeyboardEvent) => (selectingText = event.shiftKey);
+    const reset = () => (selectingText = false);
+    window.addEventListener("keydown", track);
+    window.addEventListener("keyup", track);
+    window.addEventListener("blur", reset);
+    return () => {
+      window.removeEventListener("keydown", track);
+      window.removeEventListener("keyup", track);
+      window.removeEventListener("blur", reset);
+    };
   });
 
   // The pointer over the preview, for the hover band over the visual line under it, the
@@ -1758,11 +1772,41 @@
     if (!end || !start) return null;
     return { band: spanBands(start, end.band), end };
   }
-  const plusAt = $derived(drag?.end ?? hover);
+
+  /** Visual mode banded as a drag is: from the anchor's row through the cursor's, which
+   * carries the "+" and glides as the cursor does. An open composer hides it, as the
+   * source's `selectedRange` does. */
+  let visual = $state.raw<PreviewDrag | null>(null);
+  $effect(() => {
+    void previewLayoutRev;
+    const cursor = previewCursorBox;
+    const anchor =
+      cursor && runs("keyboardComments") && pending == null ? previewCursor.anchor() : null;
+    const geometry = previewGeometry();
+    visual = anchor && cursor && geometry ? visualAt(geometry, anchor, cursor) : null;
+  });
+
+  function visualAt(
+    geometry: PreviewGeometry,
+    anchor: TextPoint,
+    cursor: NonNullable<typeof previewCursorBox>,
+  ): PreviewDrag | null {
+    const { root, scroller, map } = geometry;
+    const start = cursorBand(root, scroller, map, anchor, lineHeightOf(root));
+    if (!start) return null;
+    const end = {
+      row: cursor.point,
+      band: cursor,
+      plus: laneBeside(geometry, cursor),
+      glide: cursor.glide,
+    };
+    return { band: spanBands(start, cursor), end };
+  }
+  const plusAt = $derived(drag?.end ?? visual?.end ?? hover);
 
   /** The rows a comment cites, banded, with the source gutter's selection bar down the "+"
-   * lane: a drag's while it runs, then the open composer's while it drafts, as the source
-   * view's `selectedRange` holds its lines. */
+   * lane: a drag's while it runs, then the open composer's while it drafts, else visual
+   * mode's, as the source view's `selectedRange` holds its lines. */
   type CitedRows = { band: BandBox; lane: PreviewHover["plus"]; glide: boolean };
   let draftRows = $state.raw<CitedRows | null>(null);
   $effect(() => {
@@ -1776,8 +1820,13 @@
     const band = linesBand(root, scroller, map, lines, lineHeightOf(root));
     return band && { band, lane: laneBeside(geometry, band), glide: false };
   }
+  const rowsOf = (d: PreviewDrag): CitedRows => ({
+    band: d.band,
+    lane: d.end.plus,
+    glide: d.end.glide,
+  });
   const citedRows = $derived<CitedRows | null>(
-    drag ? { band: drag.band, lane: drag.end.plus, glide: drag.end.glide } : draftRows,
+    drag ? rowsOf(drag) : (draftRows ?? (visual && rowsOf(visual))),
   );
 
   // The live visual selection, ascending — mirrored into SourceView's amber band through
@@ -2494,6 +2543,7 @@
           rowAt={previewRowAt}
           onTextComment={runs("textComments") ? commentOnRows : undefined}
           onCommentDrag={(anchor) => (dragAnchor = anchor)}
+          selectText={selectingText}
         />
         <!-- Before the chrome and slots, which the cited rows' band runs under. -->
         {#if citedRows}
@@ -2519,15 +2569,15 @@
           ></div>
         {/if}
         {@render codeChrome()}
-        <!-- Comment slots sit outside the preview root so it stays exactly the rendered
-             HTML the source map and place-keeping index. -->
-        {#each previewSlots as slot (slot.block)}
-          {@const box = slotBoxes.get(slot.block)}
+        <!-- Comment slots sit outside the preview root, which holds only the rendered HTML
+             the source map and place-keeping index and the slots' empty gaps. -->
+        {#each previewSlots as slot (slot.line)}
+          {@const box = slotBoxes.get(slot.line)}
           <div
             class="preview-slot"
             role="group"
             aria-label={`Comments on line ${slot.items[0]?.line}`}
-            data-preview-slot={slot.block}
+            data-preview-slot={slot.line}
             style:top={box ? `${box.top}px` : undefined}
             style:left={box ? `${box.left}px` : undefined}
             style:width={box ? `${box.width}px` : undefined}
@@ -2585,6 +2635,8 @@
         {/if}
         {#if plusAt}
           {@const row = plusAt.row}
+          <!-- Visual mode's "+" comments on its selection, as `c` does. -->
+          {@const selection = plusAt === visual?.end}
           <div
             class="preview-plus"
             data-glide={plusAt.glide ? "" : undefined}
@@ -2597,7 +2649,8 @@
               type="button"
               bind:this={plusEl}
               aria-label="Add a comment"
-              onclick={() => commentOnRows(row, row)}
+              onclick={() =>
+                selection ? previewCursor.comment() : commentOnRows(row, row)}
             >
               <!-- The source gutter's glyph: @pierre/diffs' diffs-icon-plus. -->
               <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
@@ -2648,6 +2701,7 @@
           {searchMatches}
           currentMatchIndex={keyboardStore.searchIndex}
           {reflowedBlocks}
+          selectText={selectingText}
         />
         <!-- The comment-span bracket overlay: rounded gutter rails marking each
              comment's covered lines. It layers over the .diff-plan scroll content

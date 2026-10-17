@@ -28,6 +28,7 @@ import {
   openPlanForKeys,
   PLAN_PREVIEW,
   PLAN_SURFACE,
+  PREVIEW_DRAG,
   PREVIEW_HOVER,
 } from "@test/e2e/support/source-view.ts";
 import { caretThemeVariant, selectThemeFile } from "@test/e2e/support/themes.ts";
@@ -247,6 +248,19 @@ test.describe("preview cursor motion", () => {
     await press(page, "G");
     await expect.poll(() => bandCovers(page, "quokka")).toBe(true);
     expect(await glides()).toBe(2);
+  });
+
+  test("in visual mode, k glides the selection's band up a row", async ({ page, daemon }) => {
+    await openPreview(page, daemon);
+    await press(page, "g", "g", "j");
+    await expect.poll(() => bandCovers(page, "A short")).toBe(true);
+    await press(page, "V");
+    await expect(page.locator(PREVIEW_DRAG)).toHaveCount(1);
+
+    const glides = await glideCounter(page, PREVIEW_DRAG);
+    await press(page, "k");
+    await expect.poll(() => bandCovers(page, "Overview")).toBe(true);
+    await expect.poll(glides).toBe(1);
   });
 
   test("the hover band glides off the cursor's row onto the next", async ({ page, daemon }) => {

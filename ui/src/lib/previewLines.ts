@@ -446,36 +446,59 @@ export function spanBands(a: BandBox, b: BandBox): BandBox {
   return { ...a, top, height: Math.max(a.top + a.height, b.top + b.height) - top };
 }
 
-/** The band over the visual lines source lines `start` through `end` are laid out on, from
- * the first with text's first character through the last's last non-space one: a soft
- * break after it can wrap onto the next row. Null when none of them renders text. */
-export function linesBand(
-  root: Element,
-  scroller: Element,
+/** The first and last characters of source lines `start` through `end` that render text:
+ * the first with text's first, the last's last non-space one, which a soft break after it
+ * can wrap past. Null when none of them renders text. */
+export function textEnds(
   map: PlanSourceMap,
   { start, end }: SourceSpan,
-  lineHeight: number,
-  read: RangeRects = clientRects,
-  rect: RectReader = defaultReader,
-): BandBox | null {
+): [TextPoint, TextPoint] | null {
   let first = start;
   while (first <= end && map.rangeOf(first) === null) first++;
   let last = end;
   while (last >= first && map.rangeOf(last) === null) last--;
   if (first > last) return null;
   const text = map.rangeOf(last)?.toString().trimEnd() ?? "";
-  const lastColumn = Math.max(text.length - 1, 0);
-  const top = cursorBand(root, scroller, map, { line: first, column: 0 }, lineHeight, read, rect);
-  const bottom = cursorBand(
-    root,
-    scroller,
-    map,
-    { line: last, column: lastColumn },
-    lineHeight,
-    read,
-    rect,
-  );
-  return top && bottom && spanBands(top, bottom);
+  return [
+    { line: first, column: 0 },
+    { line: last, column: Math.max(text.length - 1, 0) },
+  ];
+}
+
+/** The band over the visual lines source lines `start` through `end` are laid out on, from
+ * their text's first character's through its last's. Null when none of them renders text. */
+export function linesBand(
+  root: Element,
+  scroller: Element,
+  map: PlanSourceMap,
+  span: SourceSpan,
+  lineHeight: number,
+  read: RangeRects = clientRects,
+  rect: RectReader = defaultReader,
+): BandBox | null {
+  const ends = textEnds(map, span);
+  if (ends === null) return null;
+  const [top, bottom] = ends.map((p) => cursorBand(root, scroller, map, p, lineHeight, read, rect));
+  return top && bottom ? spanBands(top, bottom) : null;
+}
+
+/** The start of the visual line after the one source lines `start` through `end` end on —
+ * the line `linesBand`'s bottom row holds — within its block, past the rest of its table
+ * row in a table. Null when that line is its block's last, or none of them renders text. */
+export function lineAfter(
+  root: Element,
+  map: PlanSourceMap,
+  span: SourceSpan,
+  read: RangeRects = clientRects,
+): TextPoint | null {
+  const last = textEnds(map, span)?.[1];
+  const at = last && locate(root, map, last, read);
+  if (!at) return null;
+  const row = rowOf(at.block, at.line);
+  const next = at.lines
+    .slice(at.index + 1)
+    .find((line) => row === null || !row.contains(line.node));
+  return next === undefined ? null : map.textPoint(...lineStart(next, read));
 }
 
 /** How far a band over `line` reaches past it on each side to fill `lineHeight`. */

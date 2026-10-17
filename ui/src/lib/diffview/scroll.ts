@@ -82,6 +82,9 @@ const SCROLL_TAKEOVER_SLOP = 1;
 // SCROLL_ANIM_MS and a detached scroller absorbs the writes — so the handle is
 // cleared on every exit path instead, and undefined means nothing is in flight.
 let jumpFrame: number | undefined;
+// The scroller in flight, whose scroll anchoring the flight holds off until it ends —
+// cut short by the next scroll included.
+let jumpScroller: HTMLElement | undefined;
 
 /** Tweens `scroller` to `top` over `duration`, or moves outright under reduced
  * motion. Both of the plan's scrolls run through here — the jump to a place and
@@ -98,6 +101,8 @@ let jumpFrame: number | undefined;
 function animateScrollTop(scroller: HTMLElement, top: number, duration: number): void {
   if (jumpFrame !== undefined) cancelAnimationFrame(jumpFrame);
   jumpFrame = undefined;
+  jumpScroller?.style.removeProperty("overflow-anchor");
+  jumpScroller = undefined;
   // Assignment, not scrollTo({ behavior: "instant" }): nothing sets scroll-behavior
   // on the plan surface, and base.css forces it to `auto !important` under reduced
   // motion — the path where a smooth behavior would actually defeat the guarantee.
@@ -111,16 +116,26 @@ function animateScrollTop(scroller: HTMLElement, top: number, duration: number):
   // What the previous frame left behind, read back so the browser's own rounding
   // and end-of-range clamping don't read as a third party taking over.
   let written = from;
+  // Scroll anchoring is suspended in flight: content growing above the anchor, such as
+  // a preview comment slot opening wider as its card focuses, would otherwise move the
+  // scroller in one step and read as a takeover.
+  scroller.style.overflowAnchor = "none";
+  jumpScroller = scroller;
+  const land = (): void => {
+    scroller.style.removeProperty("overflow-anchor");
+    jumpFrame = undefined;
+    jumpScroller = undefined;
+  };
 
   function step(): void {
     if (Math.abs(scroller.scrollTop - written) > SCROLL_TAKEOVER_SLOP) {
-      jumpFrame = undefined;
+      land();
       return;
     }
     const elapsed = performance.now() - start;
     if (elapsed >= duration) {
       scroller.scrollTop = top;
-      jumpFrame = undefined;
+      land();
       return;
     }
     scroller.scrollTop = scrollTweenTop({ from, to: top, elapsed, duration });

@@ -10,7 +10,6 @@
   import { highlightTokens } from "$lib/diffview/highlight.ts";
   import { hideTooltip, showTooltip } from "$lib/diffview/linkInteractions.ts";
   import { applyPreviewReflow, highlightPreviewCode } from "$lib/previewCode.ts";
-  import { isCommentClick, isCommentDrag } from "$lib/previewComments.ts";
   import type { TextPoint } from "$lib/previewLines.ts";
   import { type PreviewFileRef, tagPreviewFileRefs } from "$lib/previewRefs.ts";
   import { type ThemeId, themeFor } from "$lib/theme.ts";
@@ -24,9 +23,9 @@
     themeId?: ThemeId;
     /** Opening fence lines of the soft-wrapped blocks, shared with the source view. */
     reflowedBlocks?: ReadonlySet<number>;
-    /** The element whose content is exactly the rendered HTML: DiffPlanView's chrome
-     * geometry and its place-keeping across a flip read it. Bindable, and cleared on
-     * unmount, unlike an onReady handle. */
+    /** The element whose content is the rendered HTML, plus the comment slots' empty gaps:
+     * DiffPlanView's chrome geometry and its place-keeping across a flip read it.
+     * Bindable, and cleared on unmount, unlike an onReady handle. */
     root?: HTMLDivElement;
     /** The daemon-resolved references to tag, keyed by their display text. */
     fileRefs?: readonly PreviewFileRef[];
@@ -38,8 +37,10 @@
     /** A plain click, or a comment drag's release: the rows from the press's through the
      * release's, in either order. DiffPlanView maps them to source lines. */
     onTextComment?: (from: TextPoint, to: TextPoint) => void;
-    /** A comment drag's press row once the drag selects text; null when it ends. */
+    /** A comment drag's press row once the pointer leaves it; null when the drag ends. */
     onCommentDrag?: (anchor: TextPoint | null) => void;
+    /** Shift is held: the pointer selects text, so it shows the text cursor. */
+    selectText?: boolean;
   }
   let {
     html,
@@ -52,6 +53,7 @@
     rowAt,
     onTextComment,
     onCommentDrag,
+    selectText = false,
   }: Props = $props();
 
   $effect(() => {
@@ -110,62 +112,74 @@
     return el && ref ? [el, ref] : undefined;
   }
 
+  // A drag that started on a reference comments on its rows; the click its release fires
+  // must not open the file too.
+  let dragged = false;
+
   function onRootClick(event: MouseEvent) {
-    const selection = document.getSelection();
     const hit = refAt(event.target);
-    if (hit) {
-      // preventDefault so a reference inside a link opens the file, not the URL — as in
-      // the source view, where a reference click also wins over its link. A drag that
-      // stayed inside the reference was already reported on release.
-      event.preventDefault();
-      if (selection?.isCollapsed !== false) onFileRefClick?.(hit[1], hit[0]);
-      return;
-    }
-    if (!root || !isCommentClick(root, event.target, selection)) return;
-    const row = rowAt?.(event.clientY);
-    if (row) onTextComment?.(row, row);
+    if (!hit) return;
+    // preventDefault so a reference inside a link opens the file, not the URL — as in the
+    // source view, where a reference click also wins over its link.
+    event.preventDefault();
+    if (!dragged && document.getSelection()?.isCollapsed !== false)
+      onFileRefClick?.(hit[1], hit[0]);
   }
 
   let gesture: AbortController | undefined;
   $effect(() => () => gesture?.abort());
-  // DiffPlanView paints the rows a comment drag cites, so the native selection, which
-  // covers less, stays hidden while it runs.
-  let commentDragging = $state(false);
 
-  // Shift bows out so the browser selects natively — the copy escape hatch the source
-  // view's body drag has (lineDrag.ts); a selection left outside the root (a closed
-  // composer's) is dropped first, or the native drag would extend from it. The release
-  // listens on window, since a drag can end over a slot; a native drag-and-drop ends in
-  // pointercancel instead, so every terminator ends the gesture. The press's row is read
-  // at the press, before a drag can autoscroll it away from the pointer.
-  function armSelection(event: PointerEvent) {
+  const CONTROLS = "a, button, input, label, select, summary, textarea";
+  const USER_SELECT = ["user-select", "-webkit-user-select"];
+  const sameRow = (a: TextPoint | null | undefined, b: TextPoint) =>
+    a?.line === b.line && a.column === b.column;
+  /** Whether a press landed on its target's own scrollbar, a wide table's or code block's,
+   * past the client box of an element that scrolls. */
+  const onScrollbar = ({ target, offsetX, offsetY }: PointerEvent) =>
+    target instanceof HTMLElement &&
+    (target.scrollWidth > target.clientWidth || target.scrollHeight > target.clientHeight) &&
+    (offsetX >= target.clientWidth || offsetY >= target.clientHeight);
+
+  // A plain press selects rows, as the source view's body drag selects lines (lineDrag.ts):
+  // released on its own row it is a click on that row, on another a drag across the rows
+  // between. Native selection is held off while it runs, so it paints no text. Shift bows
+  // out so the browser selects text — the copy escape hatch — dropping a selection left
+  // outside the root (a closed composer's) first, or the native drag would extend from it.
+  // Controls keep their own clicks, a scrollbar its scroll, and a reference its click. The
+  // release listens on window, since a drag can end over a slot, and every terminator ends
+  // the gesture.
+  function armRows(event: PointerEvent) {
     gesture?.abort();
-    if (!onTextComment || event.button !== 0) return;
+    dragged = false;
     const selection = document.getSelection();
     if (event.shiftKey) {
       if (selection?.rangeCount && !root?.contains(selection.anchorNode))
         selection.removeAllRanges();
       return;
     }
-    const before = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
-    const anchor = rowAt?.(event.clientY) ?? null;
+    const el = root;
+    const control = event.target instanceof Element && event.target.closest(CONTROLS) !== null;
+    if (!onTextComment || !el || event.button !== 0 || control || onScrollbar(event)) return;
+    const anchor = rowAt?.(event.clientY);
+    if (!anchor) return;
+    const comment = onTextComment;
+    const onRef = refAt(event.target) !== undefined;
+    if (selection?.rangeCount && el.contains(selection.anchorNode)) selection.removeAllRanges();
+    for (const prop of USER_SELECT) el.style.setProperty(prop, "none");
     const current = new AbortController();
     gesture = current;
     const { signal } = current;
     const endGesture = () => current.abort();
-    const dragging = () => root != null && isCommentDrag(root, before, document.getSelection());
-    let reported = false;
+    let dragging = false;
     signal.addEventListener("abort", () => {
-      if (!reported) return;
-      commentDragging = false;
-      onCommentDrag?.(null);
+      for (const prop of USER_SELECT) el.style.removeProperty(prop);
+      if (dragging) onCommentDrag?.(null);
     });
     window.addEventListener(
       "pointermove",
-      () => {
-        if (reported || anchor === null || !dragging()) return;
-        reported = true;
-        commentDragging = true;
+      (move) => {
+        if (dragging || sameRow(rowAt?.(move.clientY), anchor)) return;
+        dragging = true;
         onCommentDrag?.(anchor);
       },
       { signal },
@@ -173,10 +187,11 @@
     window.addEventListener(
       "pointerup",
       (up) => {
-        const commented = dragging();
+        const row = rowAt?.(up.clientY) ?? anchor;
+        dragged = dragging || !sameRow(row, anchor);
         endGesture();
-        const row = anchor && commented ? rowAt?.(up.clientY) : null;
-        if (anchor && row) onTextComment?.(anchor, row);
+        if (dragged) comment(anchor, row);
+        else if (!onRef) comment(anchor, anchor);
       },
       { signal },
     );
@@ -203,17 +218,17 @@
   bind:this={root}
   onerrorcapture={hideFailedImage}
   onclick={onRootClick}
-  onpointerdown={armSelection}
+  onpointerdown={armRows}
   onpointerover={showRefTarget}
   onpointerout={hideRefTarget}
-  data-comment-drag={commentDragging ? "" : undefined}
+  data-rows={onTextComment ? "" : undefined}
+  data-select-text={selectText ? "" : undefined}
   style:--file-ref-icon={FILE_ICON_MASK}
   style:--folder-ref-icon={FOLDER_ICON_MASK}>{@html html}</div>
 
 <style>
   /* Light-DOM: the source view's shadow-adopted highlight rules can't reach the preview,
-     so it carries its own. --mark is caret's content-highlight wash; the keyboard's
-     visual selection is a selection, so it takes --accent-wash. */
+     so it carries its own. --mark is caret's content-highlight wash. */
   :global(::highlight(caret-comment-span)) {
     background-color: var(--mark);
   }
@@ -222,9 +237,6 @@
   }
   :global(::highlight(caret-preview-search-current)) {
     background-color: var(--mark-active);
-  }
-  :global(::highlight(caret-visual-selection)) {
-    background-color: var(--accent-wash);
   }
 
   /* In the preview's own em, so every line wraps at the same word at any zoom, text size,
@@ -240,8 +252,20 @@
     font-size: calc(var(--text-base) * var(--preview-scale));
     overflow-wrap: break-word;
   }
-  .plan-preview[data-comment-drag] :global(::selection) {
-    background-color: transparent;
+  /* A comment slot's room in the text (previewComments.ts's gaps): a row of its own, in a
+     table a table row. */
+  .plan-preview :global([data-preview-gap]) {
+    display: block;
+  }
+  .plan-preview :global(:is(table, thead, tbody, tfoot) > [data-preview-gap]) {
+    display: table-row;
+  }
+  /* A press selects rows, as a source row's does; Shift selects text. */
+  .plan-preview[data-rows] {
+    cursor: pointer;
+  }
+  .plan-preview[data-rows][data-select-text] {
+    cursor: text;
   }
   /* The child rules are :global because {@html} content gets no Svelte scoping. */
   .plan-preview :global(:is(p, blockquote, ul, ol, table, pre, hr)) {

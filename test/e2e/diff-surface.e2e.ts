@@ -571,6 +571,35 @@ test("holding Shift while dragging the code body opens no composer (text-select 
   await expect(page.getByRole("dialog", { name: "Add a comment" })).toHaveCount(0);
 });
 
+test("a Shift click on the code body opens no composer", async ({ daemon, page }) => {
+  await openRangePlan(page, daemon);
+
+  await page.getByText("Body line 1 content here.").click({ modifiers: ["Shift"] });
+
+  await expectNoComposerOpens(page);
+});
+
+test("the code body shows the pointer cursor, and the text cursor while Shift is held", async ({
+  daemon,
+  page,
+}) => {
+  await openRangePlan(page, daemon);
+  const cursor = () =>
+    page.evaluate(() => {
+      const sh = (document.querySelector(".diffview") as HTMLElement).shadowRoot;
+      const line = sh?.querySelector("[data-content] [data-line]");
+      return line ? getComputedStyle(line).cursor : null;
+    });
+
+  const plain = await cursor();
+  await page.keyboard.down("Shift");
+  await expect.poll(cursor).toBe("text");
+  await page.keyboard.up("Shift");
+
+  expect(plain).toBe("pointer");
+  await expect.poll(cursor).toBe("pointer");
+});
+
 test("a plain code-body drag suppresses native text selection", async ({ daemon, page }) => {
   // The flip side of the Shift escape-hatch: a plain drag must not paint native text
   // selection over the span it is range-selecting. Suppression is user-select:none on

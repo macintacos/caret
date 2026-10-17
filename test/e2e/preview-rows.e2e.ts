@@ -54,18 +54,25 @@ async function openRows(daemon: Daemon, page: Page): Promise<{ prose: number; li
   return { prose: start("Rows paragraph"), list: start("- item one") };
 }
 
-/** The vertical middle of each visual row of the block holding source `line`. */
+/** The vertical middle of each visual row of the block holding source `line`, read from its
+ * text alone. */
 function rowsOf(page: Page, line: number): Promise<number[]> {
   return page.evaluate(
     ({ line, preview }) => {
       const block = [
         ...document.querySelectorAll<HTMLElement>(`${preview} > [data-source-start]`),
       ].find((b) => Number(b.dataset.sourceStart) <= line && line <= Number(b.dataset.sourceEnd));
-      const range = document.createRange();
-      range.selectNodeContents(block as Node);
-      const mids = [...range.getClientRects()]
+      const rects: DOMRect[] = [];
+      const walker = document.createTreeWalker(block as Node, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        rects.push(...range.getClientRects());
+      }
+      const mids = rects
         .filter((r) => r.width > 0)
-        .map((r) => Math.round((r.top + r.bottom) / 2));
+        .map((r) => Math.round((r.top + r.bottom) / 2))
+        .sort((a, b) => a - b);
       return [...new Set(mids)].filter((m, i, all) => i === 0 || m - (all[i - 1] as number) > 4);
     },
     { line, preview: PLAN_PREVIEW },
@@ -239,7 +246,7 @@ test("a drag from beside the column paints one band over its rows, a bar down th
   expect(bar.y <= from && to <= bar.y + bar.height).toBe(true);
   const plus = await plusButton(page).boundingBox();
   expect((plus?.y ?? 0) <= to && to < (plus?.y ?? 0) + (plus?.height ?? 0)).toBe(true);
-  await expect(page.locator(PLAN_PREVIEW)).toHaveAttribute("data-comment-drag", "");
+  expect(await page.evaluate(() => String(document.getSelection()))).toBe("");
 
   await page.mouse.up();
   await expect(composerLabel(page)).toHaveText(rowLabel(cited));
@@ -300,6 +307,114 @@ test("a row runs to the plan's right edge: its band spans the plan and a click t
   await page.mouse.click(x, y);
 
   await expect(composerLabel(page)).toHaveText(rowLabel(await linesOnRow(page, y)));
+});
+
+test("a Shift click selects text rather than commenting on its row", async ({ daemon, page }) => {
+  const { prose } = await openRows(daemon, page);
+  const y = await mixedRow(page, prose);
+
+  const x = await textX(page);
+
+  await page.keyboard.down("Shift");
+  await page.mouse.click(x, y);
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 120, y, { steps: 6 });
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+
+  await expect.poll(() => page.evaluate(() => String(document.getSelection()).trim())).not.toBe("");
+  await expect(page.getByRole("dialog", { name: "Add a comment" })).toHaveCount(0);
+});
+
+test("a row shows the pointer cursor, and the text cursor while Shift is held", async ({
+  daemon,
+  page,
+}) => {
+  const { prose } = await openRows(daemon, page);
+  const y = await mixedRow(page, prose);
+  const x = await textX(page);
+  await page.mouse.move(x, y);
+  const cursor = () =>
+    page.evaluate(
+      ({ x, y }) => {
+        const el = document.elementFromPoint(x, y);
+        return el ? getComputedStyle(el).cursor : null;
+      },
+      { x, y },
+    );
+
+  const plain = await cursor();
+  await page.keyboard.down("Shift");
+  await expect.poll(cursor).toBe("text");
+  await page.keyboard.up("Shift");
+
+  expect(plain).toBe("pointer");
+  await expect.poll(cursor).toBe("pointer");
+});
+
+test("a click opens the composer right under the rows it cites, inside its paragraph, and the sent comment stays there", async ({
+  daemon,
+  page,
+}) => {
+  const { prose } = await openRows(daemon, page);
+  const [first, second] = await rowsOf(page, prose);
+  if (first === undefined || second === undefined) throw new Error("the paragraph did not wrap");
+
+  await page.mouse.click(await textX(page), first);
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  await page.mouse.move(1, 1);
+
+  // Right under the band, once the slot is placed.
+  const under = async () => {
+    const [band, at] = await Promise.all([
+      page.locator(PREVIEW_DRAG).boundingBox(),
+      composer.boundingBox(),
+    ]);
+    const gap = band && at ? at.y - (band.y + band.height) : Number.NaN;
+    return gap > -1 && gap < 24;
+  };
+  await expect.poll(under).toBe(true);
+  const box = await composer.boundingBox();
+  if (!box) throw new Error("the composer did not render");
+  // The paragraph runs on under the composer.
+  const rows = await rowsOf(page, prose);
+  expect(rows.filter((y) => y > box.y + box.height).length).toBeGreaterThan(0);
+
+  await composer.getByRole("textbox", { name: "Comment" }).fill("right here");
+  await composer.getByRole("button", { name: "Comment" }).click();
+  const card = page.locator("[data-annotation-card]");
+  await expect(card).toBeVisible();
+  await expect
+    .poll(async () => Math.abs(((await card.boundingBox())?.y ?? 0) - box.y))
+    .toBeLessThan(2);
+});
+
+test("a click on a list item opens the composer between it and the next", async ({
+  daemon,
+  page,
+}) => {
+  const { list } = await openRows(daemon, page);
+  const [one, two] = await rowsOf(page, list);
+  if (one === undefined || two === undefined) throw new Error("the list did not render");
+
+  await page.mouse.click(await textX(page), one);
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+
+  const item = (text: string) =>
+    page.locator(`${PLAN_PREVIEW} li`, { hasText: text }).boundingBox();
+  const between = async () => {
+    const [box, first, second] = await Promise.all([
+      composer.boundingBox(),
+      item("item one"),
+      item("item two"),
+    ]);
+    if (!box || !first || !second) return false;
+    return box.y >= first.y + first.height - 1 && second.y > box.y + box.height - 1;
+  };
+  await expect.poll(between).toBe(true);
 });
 
 test("beside a comment, either side, is the comment's rather than a row's", async ({

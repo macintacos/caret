@@ -62,7 +62,12 @@ describe("groupAnnotationsByLine", () => {
 });
 
 describe("shouldCommentOnLineClick", () => {
-  const ok = { numberColumn: false, linkConsumed: false, selectionCollapsed: true };
+  const ok = {
+    numberColumn: false,
+    linkConsumed: false,
+    selectionCollapsed: true,
+    shiftKey: false,
+  };
   test("opens on a plain content click with no selection", () => {
     expect(shouldCommentOnLineClick(ok)).toBe(true);
   });
@@ -74,6 +79,9 @@ describe("shouldCommentOnLineClick", () => {
   });
   test("stands down while text is selected", () => {
     expect(shouldCommentOnLineClick({ ...ok, selectionCollapsed: false })).toBe(false);
+  });
+  test("stands down on a Shift click, which selects text", () => {
+    expect(shouldCommentOnLineClick({ ...ok, shiftKey: true })).toBe(false);
   });
 });
 

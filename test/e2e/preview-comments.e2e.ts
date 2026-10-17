@@ -34,6 +34,8 @@ import {
   linesOnRow,
   PLAN_PREVIEW,
   PLAN_SURFACE,
+  PREVIEW_DRAG,
+  PREVIEW_DRAG_BAR,
   planSurface,
   revealGutterPlus,
   rowLabel,
@@ -148,10 +150,15 @@ function slotAroundBlock(page: Page, line: number, id: string) {
       const i = blocks.findIndex(
         (b) => Number(b.dataset.sourceStart) <= line && line <= Number(b.dataset.sourceEnd),
       );
+      // Text only: a comment's room in the block is no row of it.
       const textRect = (el: Element) => {
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        const rects = [...range.getClientRects()].filter((r) => r.height > 0);
+        const rects: DOMRect[] = [];
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          rects.push(...[...range.getClientRects()].filter((r) => r.height > 0));
+        }
         if (rects.length === 0) throw new Error("block has no rendered text");
         return rects;
       };
@@ -172,6 +179,40 @@ function slotAroundBlock(page: Page, line: number, id: string) {
     },
     { line, id, preview: PLAN_PREVIEW },
   );
+}
+
+/** The viewport span of the first rendered `text` in the preview, across its rows. */
+function textSpan(page: Page, text: string) {
+  return page.evaluate(
+    ({ text, preview }) => {
+      const walker = document.createTreeWalker(
+        document.querySelector(preview) as Node,
+        NodeFilter.SHOW_TEXT,
+      );
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const i = (node.textContent ?? "").indexOf(text);
+        if (i === -1) continue;
+        const range = document.createRange();
+        range.setStart(node, i);
+        range.setEnd(node, i + text.length);
+        const r = range.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom };
+      }
+      throw new Error(`${JSON.stringify(text)} is not rendered`);
+    },
+    { text, preview: PLAN_PREVIEW },
+  );
+}
+
+/** Whether the slot holding `inside` sits under `above`'s rendered text and clear of
+ * `below`'s, the row after it. */
+async function slotBetween(page: Page, inside: string, above: string, below: string) {
+  const slot = await page
+    .locator(inside)
+    .first()
+    .evaluate((el) => el.closest("[data-preview-slot]")?.getBoundingClientRect().toJSON());
+  const [a, b] = await Promise.all([textSpan(page, above), textSpan(page, below)]);
+  return slot !== undefined && slot.top >= a.bottom - 1 && slot.bottom <= b.top + 1;
 }
 
 /** The comment highlight's ranges, joined and whitespace-collapsed. */
@@ -239,25 +280,20 @@ const headingRows = (page: Page) =>
     return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
   }, PLAN_PREVIEW);
 
-test("each thread renders after its block without overlapping the next", async ({
+test("each thread renders under the row its lines end on, clear of the row after", async ({
   daemon,
   page,
 }) => {
-  const s = await seedPreview(daemon, page);
+  await seedPreview(daemon, page);
   await expect(card(page, "ann-1")).toBeVisible();
   await expect(card(page, "ann-2")).toBeVisible();
 
-  for (const [line, id] of [
-    [s.near + 2, "ann-1"],
-    [s.itemFour, "ann-2"],
-  ] as const) {
-    await expect
-      .poll(async () => {
-        const g = await slotAroundBlock(page, line, id);
-        return g.slotTop >= g.blockBottom - 1 && g.slotBottom <= g.nextTop + 1;
-      })
-      .toBe(true);
-  }
+  await expect
+    .poll(() => slotBetween(page, '[data-annotation-card="ann-1"]', "charlie words.", "item one"))
+    .toBe(true);
+  await expect
+    .poll(() => slotBetween(page, '[data-annotation-card="ann-2"]', "item four", "item five"))
+    .toBe(true);
 });
 
 test("a slot keeps to its block when a theme switch rewraps the heading above it", async ({
@@ -314,48 +350,26 @@ test("a slot keeps to its block when a theme switch rewraps the heading above it
   await expect.poll(slotStaysInPlace).toBe(true);
 });
 
-test("a slot that grows re-places itself under its block, clear of the next", async ({
+test("a slot that grows re-places itself under its row, clear of the row after", async ({
   daemon,
   page,
 }) => {
-  const s = await seedPreview(daemon, page);
+  await seedPreview(daemon, page);
   const marker = page.getByRole("button", { name: "Resume unsent comment" });
   await expect(marker).toBeVisible();
-  const slotBox = () =>
-    page.evaluate(
-      ({ line, preview }) => {
-        const blocks = [
-          ...document.querySelectorAll<HTMLElement>(`${preview} [data-source-start]`),
-        ];
-        const i = blocks.findIndex(
-          (b) => Number(b.dataset.sourceStart) <= line && line <= Number(b.dataset.sourceEnd),
-        );
-        const slot = document
-          .querySelector('[aria-label="Resume unsent comment"], [aria-label="Add a comment"]')
-          ?.closest("[data-preview-slot]")
-          ?.getBoundingClientRect();
-        return {
-          codeBottom: blocks[i]?.querySelector("pre")?.getBoundingClientRect().bottom ?? Infinity,
-          nextTop: blocks[i + 1]?.getBoundingClientRect().top ?? Number.NaN,
-          slotTop: slot?.top ?? Number.NaN,
-          slotBottom: slot?.bottom ?? Number.NaN,
-          height: slot?.height ?? 0,
-        };
-      },
-      { line: s.code, preview: PLAN_PREVIEW },
-    );
-  await expect.poll(async () => (await slotBox()).height).toBeGreaterThan(0);
-  const heightBefore = (await slotBox()).height;
+  const slot = page.locator("[data-preview-slot]", { has: marker });
+  const heightBefore = (await slot.boundingBox())?.height ?? 0;
+  expect(heightBefore).toBeGreaterThan(0);
 
   await marker.click();
-  await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  const grown = page.locator("[data-preview-slot]", { has: composer });
   await expect
-    .poll(async () => {
-      const g = await slotBox();
-      return (
-        g.height > heightBefore && g.slotTop >= g.codeBottom - 1 && g.slotBottom <= g.nextTop + 1
-      );
-    })
+    .poll(async () => ((await grown.boundingBox())?.height ?? 0) > heightBefore)
+    .toBe(true);
+  await expect
+    .poll(() => slotBetween(page, '[aria-label="Add a comment"]', "answer", "other"))
     .toBe(true);
 });
 
@@ -379,33 +393,15 @@ test("hovering or expanding a card highlights exactly its lines' rendered text",
   await expect.poll(() => highlighted(page)).toBe("item four");
 });
 
-test("a draft's marker renders after the code block and resumes into the composer", async ({
+test("a draft's marker renders under its code line and resumes into the composer", async ({
   daemon,
   page,
 }) => {
-  const s = await seedPreview(daemon, page);
+  await seedPreview(daemon, page);
   const marker = page.getByRole("button", { name: "Resume unsent comment" });
   await expect(marker).toBeVisible();
   await expect
-    .poll(() =>
-      page.evaluate(
-        ({ line, preview }) => {
-          const block = [
-            ...document.querySelectorAll<HTMLElement>(`${preview} [data-source-start]`),
-          ].find(
-            (b) => Number(b.dataset.sourceStart) <= line && line <= Number(b.dataset.sourceEnd),
-          );
-          const slot = document
-            .querySelector('[aria-label="Resume unsent comment"]')
-            ?.closest("[data-preview-slot]");
-          return (
-            (slot?.getBoundingClientRect().top ?? 0) >=
-            (block?.querySelector("pre")?.getBoundingClientRect().bottom ?? Infinity) - 1
-          );
-        },
-        { line: s.code, preview: PLAN_PREVIEW },
-      ),
-    )
+    .poll(() => slotBetween(page, '[aria-label="Resume unsent comment"]', "answer", "other"))
     .toBe(true);
 
   await marker.click();
@@ -746,6 +742,50 @@ test.describe("commenting from the preview", () => {
     await expect(composerLabel(page)).toHaveText(`Lines ${row1}–${row2}`);
   });
 
+  test("a comment beside a fenced block keeps its code panel, and one on a wrapping table row opens between the rows", async ({
+    daemon,
+    page,
+  }) => {
+    const wraps = "a long description that wraps over several rows of its cell ".repeat(4).trim();
+    const plan = [
+      "# Code and tables",
+      "1. Edit foo:\n\n   ```ts\n   const x = 1;\n   ```",
+      `| file | note |\n| --- | --- |\n| first.ts | ${wraps} |\n| second.ts | ${wraps} |`,
+      "A closing paragraph.",
+    ].join("\n\n");
+    const id = await daemon.seed({ plan });
+    const lines = ((await daemon.getReview(id)).body?.currentPlan ?? "").split("\n");
+    await page.goto("/");
+    await planSurface(page);
+    await waitPastSafeModeGrace(page);
+    await showPreview(page);
+    const composer = page.getByRole("dialog", { name: "Add a comment" });
+
+    await clickWord(page, { text: "Edit", line: lineStarting(lines, "1. Edit foo:") });
+    await expect(composer).toBeVisible();
+    await expect(page.locator(`${PLAN_PREVIEW} [data-source-code] + pre`)).toHaveCount(1);
+    await closeComposer(page);
+
+    await clickWord(page, { text: "first", line: lineStarting(lines, "| first.ts") });
+    await expect(composer).toBeVisible();
+    const box = async (selector: string) =>
+      (await page.locator(selector).first().boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
+    const between = async () => {
+      const [first, second, at] = await Promise.all([
+        box(`${PLAN_PREVIEW} tbody tr:has-text("first.ts")`),
+        box(`${PLAN_PREVIEW} tbody tr:has-text("second.ts")`),
+        composer.boundingBox(),
+      ]);
+      return at !== null && at.y >= first.y + first.height - 1 && second.y >= at.y + at.height - 1;
+    };
+    await expect.poll(between).toBe(true);
+    const [head, cell] = await Promise.all([
+      box(`${PLAN_PREVIEW} thead th:nth-child(2)`),
+      box(`${PLAN_PREVIEW} tbody tr:has-text("second.ts") td:nth-child(2)`),
+    ]);
+    expect(Math.abs(head.x - cell.x)).toBeLessThan(1);
+  });
+
   test("selections across blocks and across code rows comment on the lines they span", async ({
     daemon,
     page,
@@ -799,16 +839,15 @@ test.describe("commenting from the preview", () => {
 
     await showPreview(page);
     const slotOf = (id: string) =>
-      page.evaluate((id) => {
-        const slot = document
-          .querySelector(`[data-annotation-card="${id}"]`)
-          ?.closest("[data-preview-slot]");
-        return slot ? [...document.querySelectorAll("[data-preview-slot]")].indexOf(slot) : -1;
-      }, id);
-    await expect.poll(() => slotOf("ann-1")).toBeGreaterThanOrEqual(0);
-    const nearSlot = await slotOf("ann-1");
-    await expect.poll(() => slotOf(fromPreview?.id ?? "")).toBe(nearSlot);
-    await expect.poll(() => slotOf(fromSource?.id ?? "")).toBe(nearSlot);
+      page.evaluate(
+        (id) =>
+          document
+            .querySelector(`[data-annotation-card="${id}"]`)
+            ?.closest<HTMLElement>("[data-preview-slot]")?.dataset.previewSlot ?? null,
+        id,
+      );
+    await expect.poll(() => slotOf(fromPreview?.id ?? "")).toBe(String(end));
+    await expect.poll(() => slotOf(fromSource?.id ?? "")).toBe(String(end));
     await card(page, fromSource?.id ?? "").hover();
     await expect.poll(() => highlighted(page)).toBe(joinLines(s.lines, start, end));
 
@@ -832,11 +871,34 @@ test.describe("commenting from the preview", () => {
     // A drag aims at where the cursor band comes to rest, so it lands rather than glides.
     test.beforeEach(({ page }) => page.emulateMedia({ reducedMotion: "reduce" }));
 
-    /** The visual selection highlight's text, or "" when nothing is painted. */
-    const visualSelectionText = (page: Page) =>
-      page.evaluate(() =>
-        [...(CSS.highlights.get("caret-visual-selection") ?? [])].map((r) => r.toString()).join(""),
+    type Span = { top: number; bottom: number };
+
+    /** The viewport span of the first box `selector` matches, or null when none renders. */
+    const spanOf = (page: Page, selector: string): Promise<Span | null> =>
+      page.evaluate((selector) => {
+        const r = document.querySelector(selector)?.getBoundingClientRect();
+        return r ? { top: r.top, bottom: r.bottom } : null;
+      }, selector);
+
+    /** The rows' band: the visual selection's in visual mode, a composer's while it drafts. */
+    const selectedBand = (page: Page) => spanOf(page, PREVIEW_DRAG);
+
+    const plusButton = (page: Page) =>
+      page.locator(PLAN_SURFACE).getByRole("button", { name: "Add a comment" });
+
+    /** Whether `outer` runs from `inner`'s top, or `top`, to its bottom, to the pixel. */
+    const spans = (outer: Span | null, inner: Span, top = inner.top) =>
+      outer !== null && Math.abs(outer.top - top) < 1 && Math.abs(outer.bottom - inner.bottom) < 1;
+
+    /** Whether the selection's band covers exactly the cursor band's rows, from `top`. */
+    async function bandsTheCursor(page: Page, top?: number): Promise<boolean> {
+      const cursor = await bandBox(page);
+      return spans(
+        await selectedBand(page),
+        { top: cursor.y, bottom: cursor.y + cursor.height },
+        top,
       );
+    }
 
     /** `g g j`: the cursor band on NEAR's first visual line. */
     async function cursorToNear(page: Page, s: Seeded) {
@@ -853,7 +915,7 @@ test.describe("commenting from the preview", () => {
       const s = await seedPreview(daemon, page);
       await cursorToNear(page, s);
       await page.keyboard.press("V");
-      await expect.poll(() => visualSelectionText(page)).toMatch(/^Nearby/);
+      await expect.poll(() => bandsTheCursor(page)).toBe(true);
       return s;
     }
 
@@ -892,40 +954,50 @@ test.describe("commenting from the preview", () => {
       await expect(composerLabel(page)).toHaveText(label ?? "");
     });
 
-    test("a mouse comment opened in visual mode hides the visual selection while its composer is open", async ({
+    test("a mouse comment opened in visual mode bands its composer's rows instead of the selection", async ({
       daemon,
       page,
     }) => {
       const s = await visualAtNear(daemon, page);
+      const selected = await selectedBand(page);
+      if (!selected) throw new Error("the selection's band did not render");
 
-      await dragToBandEnd(page, s, await bandBox(page));
-      await expect(composerLabel(page)).toHaveText(/^Lines? /);
-      await expect.poll(() => visualSelectionText(page)).toBe("");
+      await clickWord(page, { text: "four", line: s.itemFour });
+      await expect(composerLabel(page)).toHaveText(rowLabel([s.itemFour]));
+      await page.mouse.move(1, 1);
+
+      await expect(page.locator(PREVIEW_DRAG)).toHaveCount(1);
+      const four = await wordRect(page, { text: "four", line: s.itemFour });
+      const band = await selectedBand(page);
+      expect(band !== null && band.top <= four.top && four.bottom <= band.bottom).toBe(true);
+      expect(band?.top).toBeGreaterThan(selected.bottom);
     });
 
-    test("V and j extend the selection over visual lines, and c comments on what a drag over the same text does", async ({
+    test("V and j band the rows from the anchor's to the cursor's, with the bar beside them and the + on the cursor's row, and c comments on what a drag over them does", async ({
       daemon,
       page,
     }) => {
       const s = await visualAtNear(daemon, page);
       await expect(hint(page)).toBeVisible();
-      const oneLine = await visualSelectionText(page);
-      const firstTop = (await bandBox(page)).y;
+      const first = (await bandBox(page)).y;
 
       await page.keyboard.press("j");
-      await expect.poll(async () => (await bandBox(page)).y).toBeGreaterThan(firstTop);
-      await expect
-        .poll(async () => {
-          const twoLines = await visualSelectionText(page);
-          return twoLines.length > oneLine.length && twoLines.startsWith(oneLine.trimEnd());
-        })
-        .toBe(true);
+      await expect.poll(async () => (await bandBox(page)).y).toBeGreaterThan(first);
+      await expect.poll(() => bandsTheCursor(page, first)).toBe(true);
+      const band = await selectedBand(page);
+      const bar = await spanOf(page, PREVIEW_DRAG_BAR);
+      if (!band || !bar) throw new Error("the selection's band or bar did not render");
+      expect(bar.top >= band.top && bar.bottom <= band.bottom).toBe(true);
+      expect(bar.bottom - bar.top).toBeGreaterThan((band.bottom - band.top) / 2);
+      const cursor = await bandBox(page);
+      const plus = await plusButton(page).boundingBox();
+      const plusMid = (plus?.y ?? 0) + (plus?.height ?? 0) / 2;
+      expect(cursor.y <= plusMid && plusMid < cursor.y + cursor.height).toBe(true);
 
       const box = await bandBox(page);
       await page.keyboard.press("c");
       await expect(composerLabel(page)).toHaveText(/^Lines? /);
       const label = (await composerLabel(page).textContent()) ?? "";
-      await expect.poll(() => visualSelectionText(page)).toBe("");
       await expect(hint(page)).toHaveCount(0);
 
       await closeComposer(page);
@@ -947,14 +1019,32 @@ test.describe("commenting from the preview", () => {
       const s = await visualAtNear(daemon, page);
 
       await page.keyboard.press("Escape");
-      await expect.poll(() => visualSelectionText(page)).toBe("");
+      await expect(page.locator(PREVIEW_DRAG)).toHaveCount(0);
       await expect(hint(page)).toHaveCount(0);
       await expect(previewCursor(page)).toHaveAttribute("data-line", String(s.near));
 
       await page.keyboard.press("V");
-      await expect.poll(() => visualSelectionText(page)).toMatch(/^Nearby/);
+      await expect.poll(() => bandsTheCursor(page)).toBe(true);
       await page.keyboard.press("V");
-      await expect.poll(() => visualSelectionText(page)).toBe("");
+      await expect(page.locator(PREVIEW_DRAG)).toHaveCount(0);
+    });
+
+    test("in visual mode the + comments on the selection, as c does", async ({ daemon, page }) => {
+      const s = await visualAtNear(daemon, page);
+      await page.keyboard.press("j");
+      await page.keyboard.press("c");
+      await expect(composerLabel(page)).toHaveText(/^Lines? /);
+      const label = (await composerLabel(page).textContent()) ?? "";
+      await closeComposer(page);
+
+      await cursorToNear(page, s);
+      await page.keyboard.press("V");
+      await page.keyboard.press("j");
+      await page.mouse.move(1, 1);
+      await plusButton(page).click();
+
+      await expect(composerLabel(page)).toHaveText(label);
+      await expect(page.locator(".visual-hint")).toHaveCount(0);
     });
   });
 });

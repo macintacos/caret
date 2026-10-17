@@ -129,6 +129,9 @@
      * line. Each one's scroll card is marked so the override sheet wraps its rows;
      * omitted or empty leaves every block scrolling horizontally. */
     reflowedBlocks?: ReadonlySet<number>;
+    /** Shift is held: a press selects text rather than lines, so the body shows the
+     * text cursor. */
+    selectText?: boolean;
   }
 
   let {
@@ -153,6 +156,7 @@
     searchMatches,
     currentMatchIndex = -1,
     reflowedBlocks,
+    selectText = false,
   }: Props = $props();
 
   // The container div is component markup, so the instance must not remove
@@ -206,6 +210,7 @@
       numberColumn: props.numberColumn,
       linkConsumed: token?.wasLinkClick(props.event) ?? false,
       selectionCollapsed: selection == null || selection.isCollapsed,
+      shiftKey: props.event.shiftKey,
     });
     if (open) onLineComment?.(props.lineNumber);
   };
@@ -612,4 +617,7 @@
   });
 </script>
 
-<div bind:this={container} class="diffview"></div>
+<div
+  bind:this={container}
+  class="diffview"
+  data-select-text={selectText ? "" : undefined}></div>
