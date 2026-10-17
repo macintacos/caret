@@ -4,14 +4,9 @@
 // blocks a lookup touches, so a cursor step never measures the whole document.
 import { indexAtReadingZone } from "$lib/diffview/scroll.ts";
 import { type Box, contentOrigin, defaultReader, type RectReader } from "$lib/geometry.ts";
-import type { PlanSourceMap } from "$lib/planSourceMap.ts";
+import type { PlanSourceMap, TextPoint } from "$lib/planSourceMap.ts";
 
-/** A cursor position on the preview: a source line, and a character offset into the
- * text that line renders (`PlanSourceMap.rangeOf(line)`). */
-export interface TextPoint {
-  line: number;
-  column: number;
-}
+export type { TextPoint };
 
 /** The client rects of a range's text, one per line fragment. */
 export type RangeRects = (range: Range) => readonly Box[];
@@ -213,35 +208,6 @@ function textBlockFrom(
   return null;
 }
 
-/** `p` as a DOM point, its column clamped to the line's text. */
-function domPoint(root: Element, map: PlanSourceMap, p: TextPoint): [Text, number] | null {
-  const range = map.rangeOf(p.line);
-  if (range === null || !(range.startContainer instanceof Text)) return null;
-  let remaining = Math.min(p.column, Math.max(range.toString().length - 1, 0));
-  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  walker.currentNode = range.startContainer;
-  let node: Text = range.startContainer;
-  let offset = range.startOffset;
-  for (;;) {
-    if (remaining < node.data.length - offset) return [node, offset + remaining];
-    remaining -= node.data.length - offset;
-    const next = walker.nextNode();
-    if (next === null) return [node, node.data.length];
-    node = next as Text;
-    offset = 0;
-  }
-}
-
-/** `domPoint`'s inverse. */
-function textPoint(map: PlanSourceMap, node: Text, offset: number): TextPoint | null {
-  const line = map.lineAt(node, offset);
-  if (line === null) return null;
-  const range = map.rangeOf(line);
-  if (range === null) return { line, column: 0 };
-  range.setEnd(node, offset);
-  return { line, column: range.toString().length };
-}
-
 /** The start of the visual line `count` lines from `from`'s (negative steps up), clamped
  * to the first and last. Blocks with no text are skipped; `from` comes back unchanged
  * when it cannot be placed in the DOM. */
@@ -274,7 +240,7 @@ export function stepVisualLine(
     ({ block, lines } = prev);
     targetIndex += lines.length;
   }
-  return textPoint(map, ...lineStart(lines[targetIndex] as VisualLine, read)) ?? from;
+  return map.textPoint(...lineStart(lines[targetIndex] as VisualLine, read)) ?? from;
 }
 
 /** Column 0 of the first line from `line` on that renders text, else of the last one
@@ -298,7 +264,7 @@ export function lastVisualLine(
 ): TextPoint | null {
   for (let block = root.lastElementChild; block !== null; block = block.previousElementSibling) {
     const last = visualLines(block, read).at(-1);
-    if (last !== undefined) return textPoint(map, ...lineStart(last, read));
+    if (last !== undefined) return map.textPoint(...lineStart(last, read));
   }
   return null;
 }
@@ -326,10 +292,10 @@ export function readingPoint(
       scrollerTop,
     );
     if (belowZone !== null)
-      return textPoint(map, ...lineStart(lines[belowZone] as VisualLine, read));
+      return map.textPoint(...lineStart(lines[belowZone] as VisualLine, read));
     last = lines.at(-1) ?? last;
   }
-  return last === undefined ? null : textPoint(map, ...lineStart(last, read));
+  return last === undefined ? null : map.textPoint(...lineStart(last, read));
 }
 
 /** The box of the visual line holding `p`'s character. */
@@ -353,7 +319,7 @@ function locate(
   p: TextPoint,
   read: RangeRects,
 ): { block: Element; lines: VisualLine[]; index: number; line: VisualLine } | null {
-  const point = domPoint(root, map, p);
+  const point = map.clampedPoint(p);
   const block = point === null ? null : blockOf(root, point[0]);
   if (point === null || block === null) return null;
   const lines = visualLines(block, read);

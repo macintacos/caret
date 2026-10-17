@@ -224,9 +224,10 @@ maps between the two for comments, the cursor and search.
 - **The map.** `createPlanSourceMap(root)` takes the element whose content is exactly the
   rendered HTML and walks it once per version, storing runs of text offset → line. After a
   `data-source-code` marker, each `\n` in the next element's text that more code follows
-  starts the next line's run. No lookup reads layout. `DiffPlanView` builds it in an
-  effect, after the preview's `{@html}` commits: a render-phase build, such as one the
-  search count pulls, would walk the previous version's DOM.
+  starts the next line's run. Besides the runs, it indexes the root's text nodes at build,
+  each with the offset its text ends at. No lookup reads layout. `DiffPlanView` builds it
+  in an effect, after the preview's `{@html}` commits: a render-phase build, such as one
+  the search count pulls, would walk the previous version's DOM.
 - **Lookups.** `lineAt` gives the line of the character at a DOM point, the last
   character's at the end of the text, and null outside the root or for an empty preview.
   `linesOf` gives the lines of a range's first and last non-whitespace characters (its
@@ -236,8 +237,12 @@ maps between the two for comments, the cursor and search.
   code, link definition, fence, table delimiter row, `hr`, out of range. `lineAtOffset` is
   `lineAt` for a caller that counted the root's text itself. `offsetOfLine` gives where a
   line's text starts, the origin a TextPoint column counts from, at the same first run
-  `rangeOf` starts at. Offsets resolve to DOM points through `createTextCursor`, one
-  forward walk over ascending offsets.
+  `rangeOf` starts at. Offsets and DOM points resolve through the text-node index, the
+  runs are binary-searched, and each line maps to its first run. `domPoint`,
+  `clampedPoint` and `textPoint` are the TextPoint ↔ DOM conversions the cursor and search
+  use: `domPoint` resolves a line's origin plus a column that may run past the line's
+  text, `clampedPoint` clamps the column to the line's characters, and `textPoint` is its
+  inverse.
 - **Edges.**
   - A soft break's `\n` belongs to the line it ends.
   - The structural `\n` marked emits between tags belongs to the preceding run (before the
@@ -258,7 +263,12 @@ maps between the two for comments, the cursor and search.
   whether it was built before or after. The preview relies on this: `previewCode.ts` swaps
   a block's `code` children for token spans built through `textContent`, only when their
   text is identical, with the trailing `\n` kept. `previewRefs.ts` relies on the same
-  property when it wraps a reference's text in place.
+  property when it wraps a reference's text in place. The text-node index survives these
+  swaps because a lookup checks that every indexed node it reads, a node the caller passes
+  in included, is still under the root at its indexed length, and re-indexes once when one
+  is not, so the map never hands back a detached node. This rests on a precondition: a
+  mutation may replace, split, merge or wrap text nodes, keeping the root's text in order;
+  it never edits an indexed node's `data` in place or reorders nodes.
 - **Comment highlight.** The preview's comment highlight reads `rangeOf` and paints a CSS
   Custom Highlight, so it inserts nothing into the root. The painted ranges are live,
   though: a later swap of the text nodes they sit in, such as `previewCode.ts`'s

@@ -1,8 +1,9 @@
 // Maps the mounted preview's text back to the plan's source lines, from the empty
 // `[data-source-line]` markers `renderPlanMarkdown` emits. Offsets count all of the root's
-// text and are resolved against the live DOM at lookup time, so replacing a code block's
-// markup with spans of the same text keeps every answer valid, and each lookup costs time
-// proportional to the preview's text: batch lookups rather than calling per character.
+// text and are resolved against the live DOM at lookup time: the text nodes are indexed at
+// build, and a lookup re-indexes when a node it reads was detached or resized. A mutation
+// may replace, split, merge or wrap text nodes, keeping the root's text in order; it never
+// edits an indexed node's `data` in place or reorders nodes.
 import type { SourceSpan } from "$lib/planMarkdown.ts";
 
 export interface PlanSourceMap {
@@ -23,6 +24,24 @@ export interface PlanSourceMap {
   /** Where `line`'s text starts, in characters into the root's text — the origin a
    * TextPoint column counts from; null wherever `rangeOf(line)` is null. */
   offsetOfLine(line: number): number | null;
+  /** `p` as a DOM point. The column may run past the line's own text, as a search match's
+   * does across a soft break. At a boundary between text nodes "after" resolves into the
+   * later one, "before" the earlier. Null where `offsetOfLine(p.line)` is null, and where
+   * `p` is at or past the end of the preview's text for "after", or past it for "before". */
+  domPoint(p: TextPoint, side: "before" | "after"): [Text, number] | null;
+  /** `domPoint(p, "after")` with the column clamped to the line's text, so it names one of
+   * the characters `rangeOf(p.line)` covers. Null where `rangeOf` is. */
+  clampedPoint(p: TextPoint): [Text, number] | null;
+  /** `clampedPoint`'s inverse: `lineAt`'s line, and the characters from that line's start
+   * to the point (never negative). Null where `lineAt` is. */
+  textPoint(node: Node, offset: number): TextPoint | null;
+}
+
+/** A point in the preview's text: a source line, and a column counted from that line's
+ * start (`offsetOfLine`); `domPoint` lets the column run past the line's own text. */
+export interface TextPoint {
+  line: number;
+  column: number;
 }
 
 /** A source line's text starts at `offset` and runs to the next run's. Offsets ascend. */
@@ -78,51 +97,124 @@ function collectRuns(root: Node): { runs: Run[]; length: number } {
   return { runs, length: offset };
 }
 
-/** Resolves ascending offsets into `root`'s text in one forward walk. At a boundary
- * between two text nodes "after" resolves into the later one, "before" the earlier. */
-export function createTextCursor(
-  root: Element,
-): (offset: number, side: "before" | "after") => [Text, number] | null {
+/** A text node under the root, and where its text starts and ends in the root's text. */
+interface IndexedText {
+  node: Text;
+  start: number;
+  end: number;
+}
+
+/** The root's text nodes in document order, and each node's record. */
+interface TextIndex {
+  texts: IndexedText[];
+  byNode: Map<Text, IndexedText>;
+}
+
+function indexText(root: Element): TextIndex {
+  const textIndex: TextIndex = { texts: [], byNode: new Map() };
   const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  let node = walker.nextNode() as Text | null;
-  let seen = 0;
-  return (offset, side) => {
-    for (; node !== null; node = walker.nextNode() as Text | null) {
-      const end = seen + node.data.length;
-      if (side === "after" ? offset < end : offset <= end) return [node, offset - seen];
-      seen = end;
+  let start = 0;
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    const text = node as Text;
+    const record = { node: text, start, end: start + text.data.length };
+    textIndex.texts.push(record);
+    textIndex.byNode.set(text, record);
+    start = record.end;
+  }
+  return textIndex;
+}
+
+/** The first item that passes, where `passes` is false then true; `items.length` when none
+ * does. */
+function firstPassing<T>(items: readonly T[], passes: (item: T) => boolean): number {
+  let lo = 0;
+  let hi = items.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (passes(items[mid] as T))
+      hi = mid; // mid < hi <= items.length
+    else lo = mid + 1;
+  }
+  return lo;
+}
+
+/** The first Text node at or after the boundary point `(node, offset)` under `root`. */
+function textFrom(root: Element, node: Node, offset: number): Text | null {
+  const nextOutside = (from: Node): Node | null => {
+    for (let at: Node | null = from; at !== null && at !== root; at = at.parentNode) {
+      if (at.nextSibling !== null) return at.nextSibling;
     }
     return null;
   };
+  let next = node.childNodes[offset] ?? nextOutside(node);
+  while (next !== null && !(next instanceof Text)) next = next.firstChild ?? nextOutside(next);
+  return next;
 }
+
+/** A lookup's answer when an indexed node it read has been detached or resized. */
+const STALE = Symbol("stale");
 
 /** Builds the map for `root`, whose content is exactly `renderPlanMarkdown(text).html`.
  * Build once per version; it reads no layout. */
 export function createPlanSourceMap(root: Element): PlanSourceMap {
   const { runs, length } = collectRuns(root);
-  const firstRunIndex = (line: number): number => runs.findIndex((run) => run.line === line);
+  /** Each line's rendered text: from its first run's offset to the run after it. */
+  const extents = new Map<number, { start: number; end: number }>();
+  runs.forEach((run, i) => {
+    if (!extents.has(run.line))
+      extents.set(run.line, { start: run.offset, end: runs[i + 1]?.offset ?? length });
+  });
+  let textIndex = indexText(root);
+
+  const isFresh = ({ node, start, end }: IndexedText): boolean =>
+    root.contains(node) && node.data.length === end - start;
+  // Mutations keep the root's text, so one re-index makes every node a lookup reads fresh; a
+  // second STALE cannot happen.
+  const withFreshIndex = <T>(lookup: () => T | typeof STALE): T | null => {
+    const answer = lookup();
+    if (answer !== STALE) return answer;
+    textIndex = indexText(root);
+    const retried = lookup();
+    return retried === STALE ? null : retried;
+  };
+
+  const resolve = (offset: number, side: "before" | "after"): [Text, number] | null =>
+    withFreshIndex(() => {
+      const { texts } = textIndex;
+      const hit =
+        texts[firstPassing(texts, (t) => (side === "after" ? offset < t.end : offset <= t.end))];
+      if (hit === undefined) return null;
+      if (!isFresh(hit)) return STALE;
+      return [hit.node, offset - hit.start];
+    });
+
+  const offsetAt = (node: Node, offset: number): number | null => {
+    if (!root.contains(node)) return null;
+    return withFreshIndex(() => {
+      const text = node instanceof Text ? node : textFrom(root, node, offset);
+      if (text === null) return length;
+      const hit = textIndex.byNode.get(text);
+      if (hit === undefined || !isFresh(hit)) return STALE;
+      return hit.start + (text === node ? offset : 0);
+    });
+  };
 
   const lineAtOffset = (offset: number): number | null => {
     if (length === 0) return null;
     const at = Math.min(offset, length - 1);
-    return (runs.findLast((run) => run.offset <= at) ?? runs[0])?.line ?? null;
+    const firstRunPast = firstPassing(runs, (run) => run.offset > at);
+    return (runs[firstRunPast - 1] ?? runs[0])?.line ?? null;
   };
 
-  const offsetOf = (node: Node, offset: number): number | null => {
-    if (!root.contains(node)) return null;
-    const range = root.ownerDocument.createRange();
-    range.setStart(root, 0);
-    range.setEnd(node, offset);
-    return range.toString().length;
-  };
+  const offsetOfLine = (line: number): number | null => extents.get(line)?.start ?? null;
 
   return {
     lineAt(node, offset) {
-      const at = offsetOf(node, offset);
+      const at = offsetAt(node, offset);
       return at === null ? null : lineAtOffset(at);
     },
     linesOf(range) {
-      const rangeStart = offsetOf(range.startContainer, range.startOffset);
+      const rangeStart = offsetAt(range.startContainer, range.startOffset);
       if (rangeStart === null || !root.contains(range.endContainer)) return null;
       const text = range.toString();
       const [firstChar, lastChar] =
@@ -134,12 +226,10 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
       return start === null || end === null ? null : { start, end };
     },
     rangeOf(line) {
-      const index = firstRunIndex(line);
-      const run = runs[index];
-      if (run === undefined) return null;
-      const pointAt = createTextCursor(root);
-      const start = pointAt(run.offset, "after");
-      const end = pointAt(runs[index + 1]?.offset ?? length, "before");
+      const extent = extents.get(line);
+      if (extent === undefined) return null;
+      const start = resolve(extent.start, "after");
+      const end = resolve(extent.end, "before");
       if (start === null || end === null) return null;
       const range = root.ownerDocument.createRange();
       range.setStart(...start);
@@ -147,8 +237,23 @@ export function createPlanSourceMap(root: Element): PlanSourceMap {
       return range;
     },
     lineAtOffset,
-    offsetOfLine(line) {
-      return runs[firstRunIndex(line)]?.offset ?? null;
+    offsetOfLine,
+    domPoint(p, side) {
+      const origin = offsetOfLine(p.line);
+      return origin === null ? null : resolve(origin + p.column, side);
+    },
+    clampedPoint(p) {
+      const extent = extents.get(p.line);
+      if (extent === undefined) return null;
+      const lastColumn = Math.max(extent.end - extent.start - 1, 0);
+      return resolve(extent.start + Math.min(p.column, lastColumn), "after");
+    },
+    textPoint(node, offset) {
+      const at = offsetAt(node, offset);
+      const line = at === null ? null : lineAtOffset(at);
+      if (at === null || line === null) return null;
+      const origin = offsetOfLine(line);
+      return { line, column: origin === null ? 0 : Math.max(at - origin, 0) };
     },
   };
 }

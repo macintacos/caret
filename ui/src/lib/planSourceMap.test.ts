@@ -377,4 +377,194 @@ describe("highlighted code", () => {
     highlight(root);
     expectCodeLines(root, createPlanSourceMap(root));
   });
+
+  test("a map built before highlighting hands back connected ranges with the same text", () => {
+    const { root, map } = mount(CODE);
+    const before = [4, 5].map((line) => map.rangeOf(line)?.toString());
+    highlight(root);
+    [4, 5].forEach((line, i) => {
+      const range = map.rangeOf(line);
+      if (range === null) throw new Error(`line ${line} has no range`);
+      expect(range.startContainer.isConnected).toBe(true);
+      expect(range.endContainer.isConnected).toBe(true);
+      expect(range.toString()).toBe(before[i] ?? "");
+    });
+  });
+
+  test("domPoint at a text-node boundary: before takes the earlier node, after the later", () => {
+    const { root, map } = mount(CODE);
+    highlight(root);
+    const [x] = find(root, "let x");
+    const [y] = find(root, "let y");
+    const before = map.domPoint({ line: 5, column: 0 }, "before");
+    const after = map.domPoint({ line: 5, column: 0 }, "after");
+    expect(before !== null && before[0] === x && before[1] === x.data.length).toBe(true);
+    expect(after !== null && after[0] === y && after[1] === 0).toBe(true);
+  });
+});
+
+const LOOKUP_PLAN = [
+  "A paragraph that", // 1
+  "wraps here.", // 2
+  "", // 3
+  "- item one", // 4
+  "- item two", // 5
+  "", // 6
+  "| h1 | h2 |", // 7
+  "| -- | -- |", // 8
+  "| c1 | c2 |", // 9
+  "", // 10
+  "```js", // 11
+  "let x = 1;", // 12
+  "let y = 2;", // 13
+  "```", // 14
+].join("\n");
+
+describe("text points", () => {
+  test("textPoint inverts clampedPoint at every column of every rendered line", () => {
+    const { map } = mount(LOOKUP_PLAN);
+    let checked = 0;
+    for (let line = 1; line <= 14; line++) {
+      const length = map.rangeOf(line)?.toString().length ?? 0;
+      for (let column = 0; column < length; column++, checked++) {
+        const point = map.clampedPoint({ line, column });
+        if (point === null) throw new Error(`line ${line} column ${column} has no point`);
+        expect(map.textPoint(...point)).toEqual({ line, column });
+      }
+    }
+    expect(checked > 0).toBe(true);
+  });
+
+  test("clampedPoint clamps a column past the line to its last character", () => {
+    const { map } = mount(LOOKUP_PLAN);
+    const length = map.rangeOf(1)?.toString().length ?? 0;
+    expect(map.clampedPoint({ line: 1, column: 999 })).toEqual(
+      map.clampedPoint({ line: 1, column: length - 1 }),
+    );
+  });
+
+  test("domPoint with a column past a soft-broken line's text lands in the next line", () => {
+    const { map } = mount("one\ntwo\n");
+    const point = map.domPoint({ line: 1, column: 5 }, "after");
+    if (point === null) throw new Error("no point");
+    expect(map.lineAt(...point)).toBe(2);
+  });
+
+  test("at the end of the preview's text only before resolves, to the last text node's end", () => {
+    const { root, map } = mount(LOOKUP_PLAN);
+    const column = map.rangeOf(13)?.toString().length ?? 0;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const texts: Text[] = [];
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode())
+      texts.push(node as Text);
+    const last = texts.at(-1);
+    if (last === undefined) throw new Error("no text node");
+    const point = map.domPoint({ line: 13, column }, "before");
+    expect(point !== null && point[0] === last && point[1] === last.data.length).toBe(true);
+    expect(map.domPoint({ line: 13, column }, "after") === null).toBe(true);
+  });
+
+  test("a line with no text has no DOM point", () => {
+    const { map } = mount(LOOKUP_PLAN);
+    expect(map.clampedPoint({ line: 3, column: 0 }) === null).toBe(true);
+    expect(map.domPoint({ line: 3, column: 0 }, "after") === null).toBe(true);
+  });
+
+  test("an element point past the last block reads as the last line", () => {
+    const { root, map } = mount(LOOKUP_PLAN);
+    expect(map.lineAt(root, root.childNodes.length)).toBe(13);
+  });
+
+  test("a point in the structural text before the first line's text is at column 0", () => {
+    const { root, map } = mount("| h1 | h2 |\n| -- | -- |\n| c1 | c2 |\n");
+    const table = root.querySelector("table");
+    if (!(table?.firstChild instanceof Text)) throw new Error("no text before the head");
+    expect(map.textPoint(table.firstChild, 0)).toEqual({ line: 1, column: 0 });
+  });
+});
+
+describe("lookups", () => {
+  test("no lookup walks the preview from its root", () => {
+    const { root, map } = mount(LOOKUP_PLAN);
+    const points = ["paragraph", "wraps", "item two", "c2", "let y"].map((n) => find(root, n));
+    const row = root.querySelector("tbody tr");
+    if (row === null) throw new Error("no body row");
+    const [two, at] = find(root, "two");
+    const ranges = [
+      rangeBetween(find(root, "wraps"), [two, at + 3]),
+      rangeBetween([row, 0], find(root, "let x")),
+    ];
+    const walks: string[] = [];
+    // A root walk is a TreeWalker (every one here starts at the root) or a Range from (root, 0);
+    // happy-dom's Range.toString uses no TreeWalker, so setStart is what catches the latter.
+    const setStart = Range.prototype.setStart;
+    const createTreeWalker = Document.prototype.createTreeWalker;
+    try {
+      Document.prototype.createTreeWalker = function (
+        this: Document,
+        ...args: Parameters<Document["createTreeWalker"]>
+      ) {
+        walks.push("createTreeWalker");
+        return createTreeWalker.apply(this, args);
+      };
+      Range.prototype.setStart = function (this: Range, node: Node, offset: number) {
+        if (node === root) walks.push("setStart(root)");
+        setStart.call(this, node, offset);
+      };
+      for (const point of points) map.lineAt(...point);
+      map.lineAt(row, 0);
+      for (const range of ranges) map.linesOf(range);
+      for (let line = 1; line <= 14; line++) {
+        map.rangeOf(line);
+        map.offsetOfLine(line);
+        map.lineAtOffset(line * 5);
+        map.domPoint({ line, column: 2 }, "before");
+        const point = map.clampedPoint({ line, column: 2 });
+        if (point !== null) map.textPoint(...point);
+      }
+    } finally {
+      Document.prototype.createTreeWalker = createTreeWalker;
+      Range.prototype.setStart = setStart;
+    }
+    expect(walks).toEqual([]);
+  });
+});
+
+describe("swapped text", () => {
+  function wrapMiddle(root: Element): { first: Text; middle: Text; span: HTMLSpanElement } {
+    const [first] = find(root, "A paragraph that");
+    const middle = first.splitText(2);
+    middle.splitText(9);
+    const span = document.createElement("span");
+    middle.replaceWith(span);
+    span.append(middle);
+    return { first, middle, span };
+  }
+
+  function expectLineOne(map: PlanSourceMap, text: string): void {
+    const range = map.rangeOf(1);
+    if (range === null) throw new Error("line 1 has no range");
+    expect(range.toString()).toBe(text);
+    expect(range.startContainer.isConnected).toBe(true);
+    expect(range.endContainer.isConnected).toBe(true);
+  }
+
+  test("a wrapped reference keeps its line's range and lookups", () => {
+    const { root, map } = mount(LOOKUP_PLAN);
+    const text = map.rangeOf(1)?.toString() ?? "";
+    const { middle } = wrapMiddle(root);
+    expectLineOne(map, text);
+    expect(map.lineAt(middle, 0)).toBe(1);
+  });
+
+  test("merging the split text back keeps the same answers", () => {
+    const { root, map } = mount(LOOKUP_PLAN);
+    const text = map.rangeOf(1)?.toString() ?? "";
+    const { first, middle, span } = wrapMiddle(root);
+    span.replaceWith(...span.childNodes);
+    root.normalize();
+    expect(first.data.startsWith("A paragraph that") && !middle.isConnected).toBe(true);
+    expectLineOne(map, text);
+    expect(lineOf(map, root, "paragraph")).toBe(1);
+  });
 });
