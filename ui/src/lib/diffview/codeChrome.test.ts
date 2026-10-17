@@ -8,8 +8,8 @@ import {
   codeChromeAnchors,
   previewCodeBlockAtPoint,
   previewCodeChromeAnchors,
-  type RectReader,
 } from "$lib/diffview/codeChrome.ts";
+import type { RectReader } from "$lib/geometry.ts";
 import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
 
 // A host with a shadow root of [data-content] > [data-line] rows, matching the
@@ -178,7 +178,7 @@ describe("preview code chrome", () => {
   }
 
   // The first pre spans y [10,30], the second y [50,70], both x [100,300].
-  function previewReader(pres: HTMLElement[], scroller: HTMLElement): RectReader {
+  function previewReader(pres: readonly Element[], scroller: HTMLElement): RectReader {
     return (el) => {
       if (el === scroller) return { top: 5, bottom: 1000, left: 8, right: 400 };
       const i = pres.indexOf(el);

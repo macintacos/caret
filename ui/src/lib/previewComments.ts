@@ -5,8 +5,8 @@
 // rendered HTML the source map and `planPlace` index.
 
 import { shouldCommentOnLineClick } from "$lib/diffview/annotationSlot.ts";
-import { defaultReader, type RectReader } from "$lib/diffview/codeChrome.ts";
 import { highlightsSupported } from "$lib/diffview/searchHighlight.ts";
+import { contentOrigin, defaultReader, type RectReader } from "$lib/geometry.ts";
 import type { SourceSpan } from "$lib/planMarkdown.ts";
 import type { PlanSourceMap } from "$lib/planSourceMap.ts";
 
@@ -174,6 +174,9 @@ export function createSlotReserve(root: Element): {
   return { set, release: () => set(new Map()) };
 }
 
+/** A comment slot's box in a scroller's content coordinates. */
+export type SlotBox = { top: number; left: number; width: number };
+
 /** Each slot's box in `scroller` content coordinates: top at its block's bottom less the
  * reserved height, left and width the block's. `heights` maps a block index
  * (`root.children` position) to its slot's height in CSS px. */
@@ -182,18 +185,31 @@ export function previewSlotBoxes(
   scroller: HTMLElement,
   heights: ReadonlyMap<number, number>,
   read: RectReader = defaultReader,
-): Map<number, { top: number; left: number; width: number }> {
-  const scrollerRect = read(scroller);
-  const boxes = new Map<number, { top: number; left: number; width: number }>();
+): Map<number, SlotBox> {
+  const origin = contentOrigin(scroller, read(scroller));
+  const boxes = new Map<number, SlotBox>();
   for (const [block, height] of heights) {
     const el = root.children[block];
     if (!(el instanceof HTMLElement)) continue;
     const box = read(el);
     boxes.set(block, {
-      top: box.bottom - height - (scrollerRect.top - scroller.scrollTop),
-      left: box.left - (scrollerRect.left - scroller.scrollLeft),
+      top: box.bottom - height - origin.top,
+      left: box.left - origin.left,
       width: box.right - box.left,
     });
   }
   return boxes;
+}
+
+/** Whether `a` and `b` place the same blocks at exactly the same boxes. */
+export function sameSlotBoxes(
+  a: ReadonlyMap<number, SlotBox>,
+  b: ReadonlyMap<number, SlotBox>,
+): boolean {
+  if (a.size !== b.size) return false;
+  for (const [block, box] of b) {
+    const old = a.get(block);
+    if (old?.top !== box.top || old.left !== box.left || old.width !== box.width) return false;
+  }
+  return true;
 }

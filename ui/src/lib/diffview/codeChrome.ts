@@ -8,18 +8,8 @@
 
 import { CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
 import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
+import { type Box, contentOrigin, defaultReader, type RectReader } from "$lib/geometry.ts";
 import { previewCodeBlocks, previewCodeText } from "$lib/previewCode.ts";
-
-/** Reads an element's viewport rect. Injectable for tests. */
-export type RectReader = (el: HTMLElement) => Box;
-
-type Box = { top: number; bottom: number; left: number; right: number };
-
-/** The live reader: `el`'s viewport rect via getBoundingClientRect. */
-export const defaultReader: RectReader = (el) => {
-  const r = el.getBoundingClientRect();
-  return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
-};
 
 /** Where a block's chrome sits, in `scroller` content coordinates, and whether the block
  * is carded — the overflow predicate the wrap button gates on. */
@@ -46,16 +36,12 @@ function contains(box: Box, x: number, y: number): boolean {
   return y >= box.top && y <= box.bottom && x >= box.left && x <= box.right;
 }
 
-/** A box's top-right corner in `scroller` content coordinates. */
+/** `box`'s top-right corner, relative to `origin`. */
 function contentCorner(
   box: Box,
-  scroller: HTMLElement,
-  scrollerRect: Box,
+  origin: { top: number; left: number },
 ): { top: number; left: number } {
-  return {
-    top: box.top - (scrollerRect.top - scroller.scrollTop),
-    left: box.right - (scrollerRect.left - scroller.scrollLeft),
-  };
+  return { top: box.top - origin.top, left: box.right - origin.left };
 }
 
 /**
@@ -115,9 +101,7 @@ export function codeBlockAtPoint(
  * The top-right corner of every rendered block, in the scroll container's content
  * coordinates, with whether each is carded. Chrome placed absolutely at one of these points
  * inside `scroller` sits at the block's top-right and scrolls with the rows; the chrome's
- * own translate insets it from the corner. The conversion mirrors bracket.ts: a box's
- * content offset is its viewport edge minus the scroller's viewport edge, plus how far the
- * content is scrolled.
+ * own translate insets it from the corner.
  */
 export function codeChromeAnchors(
   host: HTMLElement,
@@ -127,14 +111,14 @@ export function codeChromeAnchors(
 ): CodeChromeAnchor[] {
   const root = host.shadowRoot;
   if (root == null) return [];
-  const scrollerRect = read(scroller);
+  const origin = contentOrigin(scroller, read(scroller));
   const anchors: CodeChromeAnchor[] = [];
   for (const range of ranges) {
     const box = blockBox(root, range, read);
     if (box == null) continue;
     anchors.push({
       start: range.start,
-      ...contentCorner(box, scroller, scrollerRect),
+      ...contentCorner(box, origin),
       carded: box.carded,
     });
   }
@@ -162,10 +146,10 @@ export function previewCodeChromeAnchors(
   reflowed: ReadonlySet<number>,
   read: RectReader = defaultReader,
 ): ChromeBox[] {
-  const scrollerRect = read(scroller);
+  const origin = contentOrigin(scroller, read(scroller));
   return previewCodeBlocks(root).map(({ start, pre, code }) => ({
     start,
-    ...contentCorner(read(pre), scroller, scrollerRect),
+    ...contentCorner(read(pre), origin),
     carded: pre.scrollWidth > pre.clientWidth || reflowed.has(start),
     text: previewCodeText(code),
   }));

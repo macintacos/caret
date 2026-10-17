@@ -1,7 +1,8 @@
 import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { bracketBox, type RectReader } from "$lib/diffview/bracket.ts";
+import { bracketBox } from "$lib/diffview/bracket.ts";
+import type { Box, RectReader } from "$lib/geometry.ts";
 
 // bracketBox computes a comment-span rail's box from the shadow `[data-line]`
 // rows the source view paints, in the scroll container's content frame. happy-dom
@@ -34,16 +35,16 @@ function build(
   const host = document.createElement("div");
   const root = host.attachShadow({ mode: "open" });
   scroller.append(host);
-  const tops = new Map<HTMLElement, { top: number; bottom: number }>();
-  tops.set(scroller, { top: scrollerTop, bottom: scrollerTop + 1000 });
+  const rects = new Map<Element, Box>();
+  rects.set(scroller, { top: scrollerTop, bottom: scrollerTop + 1000, left: 0, right: 0 });
   lines.forEach((n, i) => {
     const row = document.createElement("div");
     row.setAttribute("data-line", String(n));
     root.append(row);
     const top = rowTop + i * 20;
-    tops.set(row, { top, bottom: top + 20 });
+    rects.set(row, { top, bottom: top + 20, left: 0, right: 0 });
   });
-  const read: RectReader = (el) => tops.get(el) ?? { top: 0, bottom: 0 };
+  const read: RectReader = (el) => rects.get(el) ?? { top: 0, bottom: 0, left: 0, right: 0 };
   return { host, scroller, read };
 }
 

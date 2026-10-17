@@ -3,13 +3,12 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import type { ThemedToken } from "shiki/core";
 
+import type { Box, RectReader } from "$lib/geometry.ts";
 import { renderPlanMarkdown } from "$lib/planMarkdown.ts";
 import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
 import { highlightPreviewCode } from "$lib/previewCode.ts";
 import {
-  type Box,
   cursorBand,
-  type ElementRect,
   lastVisualLine,
   pointForLine,
   type RangeRects,
@@ -42,7 +41,7 @@ interface Grid {
   /** The root child index of every range handed to `read`, in order. */
   blocksRead: number[];
   /** Each block's rect; only its bottom edge is laid out. */
-  rect: ElementRect;
+  rect: RectReader;
 }
 
 /** Lays each block's text out as a monospace grid `width` characters wide, one `ROW`
@@ -110,7 +109,7 @@ function grid(root: Element, width: number): Grid {
     }
     return [...rows.values()];
   };
-  const rect: ElementRect = (el) => ({ top: 0, bottom: bottoms.get(el) ?? 0, left: 0, right: 0 });
+  const rect: RectReader = (el) => ({ top: 0, bottom: bottoms.get(el) ?? 0, left: 0, right: 0 });
   return { read, blocksRead, rect };
 }
 
@@ -342,7 +341,7 @@ describe("cursorBand", () => {
     const { root, map } = mount(`${LONG}\n`);
     const scroller = document.createElement("div");
     scroller.scrollTop = 40;
-    const rect: ElementRect = (el) =>
+    const rect: RectReader = (el) =>
       el === scroller
         ? { top: 100, bottom: 1100, left: 5, right: 505 }
         : { top: 50, bottom: 1050, left: 25, right: 325 };
@@ -407,7 +406,7 @@ describe("readingPoint", () => {
   test("passes over a block whose padding, not its text, reaches the reading zone", () => {
     const { root, map } = mount(`${LONG}\n\n${LONG}\n`);
     const g = grid(root, 20);
-    const padded: ElementRect = (el) =>
+    const padded: RectReader = (el) =>
       el === root.firstElementChild ? { ...g.rect(el), bottom: 300 } : g.rect(el);
     expect(readingPoint(root, map, 25, g.read, padded)).toEqual({ line: 3, column: 0 });
   });

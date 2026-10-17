@@ -1,5 +1,5 @@
-import type { RectReader } from "$lib/diffview/codeChrome.ts";
 import { CELL_ATTR } from "$lib/diffview/rowTokens.ts";
+import type { RectReader } from "$lib/geometry.ts";
 
 /** A `[data-line]` row holding one `<span>` per token, concatenating to the
  * row's text — the stand-in DOM the inline-decoration suites drive shiki's

@@ -2,7 +2,6 @@ import "@ui/support/setup.ts";
 import { beforeEach, describe, expect, test } from "bun:test";
 
 import { scrolledOffsetReader } from "@ui/support/diffview-dom.ts";
-import type { RectReader } from "$lib/diffview/codeChrome.ts";
 import type { FileRefSpan, FileRefSpanMap } from "$lib/diffview/fileRefs.ts";
 import {
   dismissRefHint,
@@ -11,6 +10,7 @@ import {
   refHintToken,
   syncRefHints,
 } from "$lib/diffview/refHint.ts";
+import type { RectReader } from "$lib/geometry.ts";
 
 // Both halves of the one-time reference hint (EXC-1061): the per-kind dismissal
 // flags, against the happy-dom localStorage support/setup.ts wires, and the anchor
