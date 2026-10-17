@@ -451,20 +451,40 @@
     border: 0;
     background: var(--ink-soft);
   }
-  /* display: block lets a wide table scroll without a wrapper element. */
+  /* display: block lets a wide table scroll without a wrapper element. The source view's
+     table card: the code panel's fill, no frame, and one faint rule between columns and
+     between rows, the header's included. */
   .plan-preview :global(table) {
+    --table-rule: color-mix(in lab, var(--paper-sunk), var(--ink) 12%);
     display: block;
     width: max-content;
     max-width: 100%;
     overflow: auto;
     border-collapse: collapse;
+    border-radius: var(--radius);
+    background-color: var(--code-panel);
+    font-variant-numeric: tabular-nums;
   }
+  /* A row reads along its cells' first lines, as a source row does. */
   .plan-preview :global(:is(th, td)) {
     padding: 0.375em 0.8em;
-    border: 1px solid var(--rule-strong);
+    vertical-align: baseline;
   }
+  .plan-preview :global(:is(th, td) + :is(th, td)) {
+    border-inline-start: 1px solid var(--table-rule);
+  }
+  .plan-preview :global(td) {
+    border-block-start: 1px solid var(--table-rule);
+  }
+  /* The source view's header cap: uppercase in --ink-soft. A label never wraps, so a
+     column is at least as wide as its header. */
   .plan-preview :global(th) {
+    font-size: calc(var(--text-xs) * var(--preview-scale));
     font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--ink-soft);
   }
   /* Chromium's UA sheet centres a header cell; start it like a body cell. */
   .plan-preview :global(th:not([align])) {

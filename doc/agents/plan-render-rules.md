@@ -207,7 +207,10 @@ exist today.
   Links, reference chips and inline code wear the source view's chips, and a link whose
   label holds code, a reference or an image gives way to it, so a label mixing code and
   prose shows the code chip alone; `coreStyles.test.ts` pins each copy to the
-  `coreStyles.ts` rule it mirrors.
+  `coreStyles.ts` rule it mirrors. A table wears the source view's table card: the code
+  panel's fill, no frame, `--table-rule` between columns and rows (pinned the same way),
+  an uppercase `--ink-soft` header that never wraps, and cells aligned on their first
+  line.
 - **Code blocks.** A code block renders `<pre><code>` with its escaped text and no class.
   A fence's info string resolves through `fenceGrammar` to a bundled grammar, carried as
   `RenderedPlan.codeLanguages` keyed by the code marker's line, and never as markup; an
