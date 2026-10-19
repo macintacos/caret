@@ -355,6 +355,7 @@
   /* Padding, radius and tint pinned to coreStyles.ts's code chip by coreStyles.test.ts. */
   .plan-preview :global(:not(pre) > code) {
     font-family: var(--font-mono);
+    font-size: 0.9em;
     padding: var(--chip-pad-block) var(--chip-pad-inline);
     border-radius: var(--radius);
     background-color: var(--chip-code);
@@ -558,7 +559,7 @@
     border-radius: var(--radius);
     background-color: var(--code-panel);
     font-family: var(--font-mono);
-    font-size: calc(var(--text-sm) * var(--preview-scale));
+    font-size: 0.9em;
     line-height: var(--leading-relaxed);
   }
   .plan-preview :global([data-source-code] + pre > code) {

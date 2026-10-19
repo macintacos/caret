@@ -106,6 +106,9 @@ const EXEMPT: Record<string, string[]> = {
   // (a keycap one-off, not a type-scale step), so it carries a raw em rather than
   // a --text-* token.
   "StatusStrip.svelte": ["0.9em"],
+  // The preview's monospace runs a touch under the sans prose it sits in, whose x-height
+  // it otherwise outsizes. Relative, so inline code in a heading scales with the heading.
+  "PlanPreview.svelte": ["0.9em"],
 };
 
 describe("chrome components reference the scale, not raw font-size literals", () => {
