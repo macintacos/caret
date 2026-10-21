@@ -74,56 +74,56 @@ export type SoundEvent =
  */
 export const SOUND_MAP: Partial<Record<SoundEvent, SoundName>> = {
   // The daemon's news, which the reviewer may be away from the tab for.
-  planArrived: "arrival",
+  planArrived: "navigate",
   // A revision landing in a tab that did not request it. The tab that DID send a
   // Request Changes dropped the review locally on resolve, so the revision returns
   // to it as an arrival — which is what it is, from that seat.
-  planRevised: "page",
-  planExpired: "whisper",
+  planRevised: "navigate",
+  planExpired: "select",
   daemonDropped: "error",
   daemonReconnected: "ready",
   // The three verdicts and the comment that feeds them. Each rides its own toast
   // rather than sounding beside it, so a decision is heard once.
   approved: "success",
   changesRequested: "loading",
-  rejected: "droplet",
-  annotationPosted: "pulse",
+  rejected: "close",
+  annotationPosted: "tap",
   // Whatever else reaches the toast queue, by variant.
-  toastSuccess: "chime",
+  toastSuccess: "success",
   toastError: "error",
-  toastNotice: "tick",
+  toastNotice: "select",
   // Chrome.
-  filePreviewOpen: "bloom",
-  filePreviewClose: "whisper",
-  modalOpen: "scan",
+  filePreviewOpen: "open",
+  filePreviewClose: "select",
+  modalOpen: "select",
   themeSwitch: "toggle",
-  copyCode: "tick",
+  copyCode: "select",
   // Commenting: starting one, and the two ways of abandoning one. A composer
-  // holding text is discarded and takes the verdict-weight droplet; an empty one
+  // holding text is discarded and takes the verdict-weight close; an empty one
   // is merely dropped.
-  commentOpen: "press",
-  commentDropped: "release",
-  commentDiscarded: "droplet",
+  commentOpen: "tap",
+  commentDropped: "tap",
+  commentDiscarded: "close",
   // The plan's two navigation surfaces opening.
-  contentsOpen: "scan",
-  breadcrumbOpen: "page",
+  contentsOpen: "select",
+  breadcrumbOpen: "navigate",
   // Reading the plan differently: against another version, against another plan,
   // or with the comments panel in or out.
   compareToggled: "toggle",
-  planSwitched: "page",
+  planSwitched: "navigate",
   commentsToggled: "toggle",
   // The search HUD, and visual line-select.
-  searchOpened: "scan",
+  searchOpened: "select",
   searchCommitted: "ready",
-  searchClosed: "whisper",
-  searchStepped: "tick",
-  visualEntered: "press",
-  visualExited: "release",
+  searchClosed: "select",
+  searchStepped: "select",
+  visualEntered: "tap",
+  visualExited: "tap",
 };
 
 /** The sound cuelume synthesizes to unlock its AudioContext, kept out of
  * SOUND_MAP so pruning a moment can never disarm the unlock. */
-const UNLOCK_SOUND: SoundName = "tick";
+const UNLOCK_SOUND: SoundName = "select";
 
 /** Loud enough that cuelume renders it — a computed volume of exactly zero is a
  * no-op there, which is the whole reason this is not simply `0` — and far too
