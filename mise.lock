@@ -172,7 +172,7 @@ version = "1.13.0"
 backend = "npm:bats"
 
 [[tools."npm:jscpd"]]
-version = "5.1.1"
+version = "5.4.2"
 backend = "npm:jscpd"
 
 [[tools.pkl]]
