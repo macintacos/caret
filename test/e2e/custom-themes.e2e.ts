@@ -84,7 +84,7 @@ async function expectDarkOption(page: Page, name: string): Promise<void> {
   await page.keyboard.press("Escape");
 }
 
-const darkTrigger = (page: Page) => page.getByRole("button", { name: "Dark theme" });
+const darkTrigger = (page: Page) => page.getByRole("combobox", { name: "Dark theme" });
 
 async function pickNightly(page: Page, daemon: Daemon): Promise<void> {
   await writeThemes(daemon);
@@ -113,7 +113,7 @@ test("each custom theme is offered in its scheme's picker, and a broken file is 
   await page.keyboard.press("Escape");
   await expect(page.getByRole("option", { name: "Dracula" })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Light theme" }).click();
+  await page.getByRole("combobox", { name: "Light theme" }).click();
   await expect(page.getByRole("option", { name: "daylight", exact: true })).toBeVisible();
   await expect(page.getByRole("option", { name: "nightly", exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");

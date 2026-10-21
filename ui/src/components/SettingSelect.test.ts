@@ -145,7 +145,7 @@ describe("SettingSelect panel", () => {
     await open(flush);
 
     expect(option("split")?.getAttribute("aria-selected")).toBe("true");
-    expect(option("unified")?.getAttribute("aria-selected")).toBeNull();
+    expect(option("unified")?.getAttribute("aria-selected")).toBe("false");
     await close(flush);
   });
 
