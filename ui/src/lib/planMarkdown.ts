@@ -126,10 +126,11 @@ function leadingNewlines(raw: string): number {
   return newlines(raw.slice(0, raw.length - raw.trimStart().length));
 }
 
-// Inline text has `raw === text` in marked, so each piece is its own raw.
+// Splits the raw, not the entity-decoded text, so `&#10;` stays one piece; marked's text
+// renderer escapes without re-encoding, so a raw piece renders as its decoded text would.
 function splitAfterNewlines(token: Tokens.Text): Tokens.Text[] {
   // A trailing "\n" keeps its empty piece, so the next line's marker still follows it.
-  const pieces = token.text
+  const pieces = token.raw
     .split("\n")
     .map((piece, i, all) => (i < all.length - 1 ? `${piece}\n` : piece));
   return pieces.map((piece) => ({ ...token, raw: piece, text: piece }));
