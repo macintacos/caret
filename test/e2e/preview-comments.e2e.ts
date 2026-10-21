@@ -869,7 +869,7 @@ test.describe("commenting from the preview", () => {
 
   test.describe("from the keyboard", () => {
     // A drag aims at where the cursor band comes to rest, so it lands rather than glides.
-    test.beforeEach(({ page }) => page.emulateMedia({ reducedMotion: "reduce" }));
+    test.use({ reducedMotion: "reduce" });
 
     type Span = { top: number; bottom: number };
 
