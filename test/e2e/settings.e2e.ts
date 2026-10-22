@@ -115,7 +115,7 @@ async function reopenSoundSlider(page: Page): Promise<Locator> {
 
 /** Pick the Dracula palette for the dark slot and wait for the confirming toast. */
 async function pickDraculaDark(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Dark theme" }).click();
+  await page.getByRole("combobox", { name: "Dark theme" }).click();
   await page.getByRole("option", { name: "Dracula" }).click();
   await expect(page.getByText("Dark theme updated")).toBeVisible();
 }
@@ -198,11 +198,11 @@ test("opens the Appearance pane with theme, hints, and the folded-in Diff view s
   await expect(page.getByRole("radio", { name: "Light", exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: "Dark", exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: "System", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Light theme" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Dark theme" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Light theme" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Dark theme" })).toBeVisible();
   await expect(page.getByRole("switch", { name: "Shortcut hints" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Layout" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Change markers" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Layout" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Change markers" })).toBeVisible();
 });
 
 // Appearance mode (EXC-773). A fresh origin follows the OS, which the project config
@@ -278,7 +278,7 @@ test("picking a slot's palette applies it immediately when that slot is live", a
   // once — no Save step — and confirms with its own toast. The pick is a DIFFERENT
   // palette than the one already selected: the control is a listbox, so re-picking the
   // current value commits nothing, exactly as a native <select> does (EXC-1111).
-  await page.getByRole("button", { name: "Dark theme" }).click();
+  await page.getByRole("combobox", { name: "Dark theme" }).click();
   await page.getByRole("option", { name: "GitHub Dark" }).click();
   await expect(page.getByText("Dark theme updated")).toBeVisible();
 
@@ -352,7 +352,7 @@ test("hovering a theme option previews its palette beside the menu, without appl
   await openSettingsFromDark(page, daemon);
   // Open the LIGHT slot's menu while dark is showing — the palette being previewed is
   // deliberately not the live one, so "preview without applying" is unambiguous.
-  await page.getByRole("button", { name: "Light theme" }).click();
+  await page.getByRole("combobox", { name: "Light theme" }).click();
 
   // An abstract preview card appears beside the open panel — before any selection. A
   // listbox always has an active option, so the slot's own palette (caret light, accent
@@ -383,7 +383,7 @@ test("hovering a theme option previews its palette beside the menu, without appl
   // Exactly one at a time — closing this panel and opening the other slot's swaps the
   // single card to that slot's palette rather than stacking a second.
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Dark theme" }).click();
+  await page.getByRole("combobox", { name: "Dark theme" }).click();
   await expect(preview).toHaveCount(1);
   await expect(preview).toHaveAttribute(
     "style",
@@ -399,7 +399,7 @@ test("keyboard-highlighting a theme option previews it too (EXC-753)", async ({ 
   // the menu never roves and no preview appears. Fast machines lose that race; slow ones
   // don't, which is the whole flake.
   await waitPastSafeModeGrace(page);
-  await page.getByRole("button", { name: "Light theme" }).click();
+  await page.getByRole("combobox", { name: "Light theme" }).click();
 
   // A listbox always has an active option, so the selected palette's card is already up
   // when the panel opens. Read it first — otherwise "a card is visible" after the keypress
@@ -435,7 +435,7 @@ test("reopening the theme menu after a switch keeps the preview beside the menu,
 
   // Reopen and highlight the first option — the fast reopen that raced the menu's async
   // positioning in the bug report.
-  await page.getByRole("button", { name: "Dark theme" }).click();
+  await page.getByRole("combobox", { name: "Dark theme" }).click();
   await page.locator(".setting-menu [role='option']").first().hover();
 
   const preview = page.locator("[data-slot='theme-preview']");
@@ -527,7 +527,7 @@ test("changing the diff Layout in Settings reflows an open compare diff live", a
   await openSettings(page);
   await page
     .getByRole("dialog", { name: "Settings" })
-    .getByRole("button", { name: "Layout" })
+    .getByRole("combobox", { name: "Layout" })
     .click();
   await page.getByRole("option", { name: "Unified" }).click();
   await expect(pre).toHaveAttribute("data-diff-type", "single");
@@ -552,7 +552,7 @@ test("the base font size sets the preview's text live, its headings scale with i
   expect(before.base).toBeCloseTo(15, 2);
 
   const dialog = await openSettings(page);
-  await dialog.getByRole("button", { name: "Base font size" }).click();
+  await dialog.getByRole("combobox", { name: "Base font size" }).click();
   await page.getByRole("option", { name: "18 px" }).click();
   await expect.poll(async () => (await sizes()).base).toBeCloseTo(18, 2);
   const after = await sizes();
