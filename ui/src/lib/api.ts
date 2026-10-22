@@ -5,6 +5,7 @@ import type {
   Annotation,
   ClientReview,
   ConfigPatch,
+  ConfigValues,
   CustomThemes,
   DaemonDiagnostics,
   DirListing,
@@ -80,6 +81,16 @@ export async function getUpdate(): Promise<UpdateReport> {
     } else {
       uiLog.warn("request", "update report read failed", { reason: String(err) });
     }
+    throw err;
+  }
+}
+
+/** The live value of every config.toml key the UI can write. */
+export async function getConfig(): Promise<ConfigValues> {
+  try {
+    return await json(await fetch("/api/config"));
+  } catch (err) {
+    uiLog.warn("request", "config read failed", { reason: String(err) });
     throw err;
   }
 }

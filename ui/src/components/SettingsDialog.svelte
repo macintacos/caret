@@ -283,20 +283,18 @@
             <p class="pane-blurb">{selected.blurb}</p>
           </header>
 
-          {#if selected.id === "Notifications"}
-            <!-- The live, read-only panes render their own surface instead of staged
-                 fields. Two id branches beat a category→component map here: the panes take
-                 different props (Advanced needs the copy callback), which a map can't
-                 thread. -->
-            <NotificationsPane />
-          {:else if selected.id === "Advanced"}
+          {#if selected.id === "Advanced"}
+            <!-- Advanced's read-only pane renders its own surface instead of staged
+                 fields. -->
             <AdvancedPane {onCopyDiagnostic} />
           {:else}
             {#if selected.id === UPDATES_CATEGORY}
-              <!-- Updates is the one category whose pane sits ABOVE its fields rather
-                   than replacing them (EXC-1207): the verdict is read-only, but the
-                   `updates.check` opt-out beneath it is an ordinary registry field. -->
+              <!-- Updates and Notifications put their live pane ABOVE their fields rather
+                   than replacing them: the pane is read-only, but the `updates.check` and
+                   `review.band` toggles beneath are ordinary registry fields. -->
               <UpdatesPane report={updateReport} {onWhatsNew} />
+            {:else if selected.id === "Notifications"}
+              <NotificationsPane />
             {/if}
             {#each paneSections as section, si (si)}
               {#if section.label === THEME_SECTION}

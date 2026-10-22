@@ -212,8 +212,9 @@ bind and switch a token on; the rules below cover both shapes.
 - **Adapters reach the daemon only by spawning the caret CLI**, never over HTTP, so none
   bypasses the token. A new adapter that wants the daemon goes through `caret review` or
   another CLI command, which carries the token for it.
-- **`POST /api/config` refuses `daemon.*`.** It writes `updates.check` and nothing else,
-  so a logged-in device cannot turn auth off or rebind the daemon. A test pins it.
+- **`POST /api/config` refuses `daemon.*`.** It writes `updates.check` and `review.band`
+  and nothing else, so a logged-in device cannot turn auth off or rebind the daemon. A
+  test pins it.
 - **`POST /api/themes` writes only `<id>.json` directly in `themesDir`.** The name comes
   from the schema's slug, never from client input, and the writer removes only `*.json`
   files in that folder declaring the same id. The path stays inside the folder only

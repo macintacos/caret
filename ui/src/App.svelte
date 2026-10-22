@@ -8,7 +8,14 @@
   // presence beacon. The behaviors themselves live in $lib/* and @/state/*; this file only
   // holds them together and lays out the TopBar + DiffPlanView.
   import { untrack } from "svelte";
-  import { getHealth, getThemes, getUpdate, getUpdateChanges, markSeen } from "$lib/api.ts";
+  import {
+    getConfig,
+    getHealth,
+    getThemes,
+    getUpdate,
+    getUpdateChanges,
+    markSeen,
+  } from "$lib/api.ts";
   import { approveVariants, pickApproveMode } from "$lib/approve.ts";
   import { readApproveMode } from "$lib/approveModePref.ts";
   import type { LineCitation } from "$lib/feedback.ts";
@@ -60,6 +67,7 @@
     UPDATES_CHECK_KEY,
   } from "$lib/settingsRegistry.ts";
   import { isUpdatePending, updateSignature, updateToast } from "$lib/updates.ts";
+  import { seedReviewBand } from "$lib/reviewBandPref.ts";
   import { readToastedUpdate, seedUpdatesCheck, writeToastedUpdate } from "$lib/updatesPref.ts";
   import { type ComposerScratch, createSourceCommenting } from "$lib/diffview/commenting.ts";
   import type { DiffSide } from "$lib/diffview/types.ts";
@@ -431,6 +439,9 @@
         if (report) seedUpdatesCheck(report.checkEnabled);
         updateReport = report;
       });
+    void getConfig()
+      .then((c) => seedReviewBand(c.review.band))
+      .catch(() => {});
   });
 
   // ----- Custom themes -----

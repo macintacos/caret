@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { type LogCapture, logCapture } from "@ui/support/helpers.ts";
 import { THEME_MODES } from "$lib/appearance.ts";
 import { knownPrefKeys } from "$lib/definePref.ts";
+import { seedReviewBand } from "$lib/reviewBandPref.ts";
 import {
   daemonField,
   filterSettings,
@@ -218,6 +219,21 @@ describe("Notifications (search-only live pane, EXC-847)", () => {
     expect(entry ? isStagedField(entry) : true).toBe(false);
     expect(entry?.label).toBeTruthy();
     expect(entry?.description).toBeTruthy();
+  });
+
+  describe("the plan-waiting band toggle", () => {
+    const band = () => staged.find((f) => f.key === "reviewBand");
+    afterEach(() => seedReviewBand(true));
+
+    test("is a staged Notifications toggle", () => {
+      expect(band()?.category).toBe("Notifications");
+      expect(band()?.control.kind).toBe("toggle");
+    });
+
+    test("reads the value seeded from the daemon", () => {
+      seedReviewBand(false);
+      expect(band()?.read()).toBe(false);
+    });
   });
 });
 

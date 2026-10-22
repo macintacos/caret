@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { createConfigWriter, withUpdatesCheck } from "@/config/config-write.ts";
+import { createConfigWriter, withBoolean } from "@/config/config-write.ts";
 
 // EXC-1354. The Settings → Updates toggle edits one line of the user's config.toml,
 // so the edit is a text rewrite rather than a parse-and-stringify: smol-toml's
@@ -26,62 +26,93 @@ afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
-describe("withUpdatesCheck", () => {
+describe("withBoolean", () => {
   test("writes the table into empty text with no leading blank line", () => {
-    expect(withUpdatesCheck("", false)).toBe("[updates]\ncheck = false\n");
+    expect(withBoolean("", "updates", "check", false)).toBe("[updates]\ncheck = false\n");
   });
 
   test("appends the table to a file that has none, keeping the original bytes as a prefix", () => {
     const original = '# my config\n[logging]\nlevel = "debug"\n';
-    const out = withUpdatesCheck(original, false);
+    const out = withBoolean(original, "updates", "check", false);
     expect(out?.startsWith(original)).toBe(true);
     expect(out).toContain("[updates]\ncheck = false\n");
   });
 
   test("swaps the value in place and keeps the trailing comment", () => {
-    const out = withUpdatesCheck("[updates]\ncheck = true  # why\n", false);
+    const out = withBoolean("[updates]\ncheck = true  # why\n", "updates", "check", false);
     expect(out).toBe("[updates]\ncheck = false  # why\n");
   });
 
   test("inserts the key right after a header that lacks it", () => {
-    const out = withUpdatesCheck('[updates]\n[logging]\nlevel = "warn"\n', false);
+    const out = withBoolean('[updates]\n[logging]\nlevel = "warn"\n', "updates", "check", false);
     expect(out).toBe('[updates]\ncheck = false\n[logging]\nlevel = "warn"\n');
   });
 
   test("keeps the CRLF endings when it swaps the value in place", () => {
-    expect(withUpdatesCheck("[updates]\r\ncheck = true\r\n", false)).toBe(
+    expect(withBoolean("[updates]\r\ncheck = true\r\n", "updates", "check", false)).toBe(
       "[updates]\r\ncheck = false\r\n",
     );
   });
 
   test("keeps the CRLF endings when it inserts the key", () => {
-    expect(withUpdatesCheck("[updates]\r\nother = 1\r\n", false)).toBe(
+    expect(withBoolean("[updates]\r\nother = 1\r\n", "updates", "check", false)).toBe(
       "[updates]\r\ncheck = false\r\nother = 1\r\n",
     );
   });
 
   test("returns the text unchanged when the value is already set", () => {
     const original = "[updates]\ncheck = false\n";
-    expect(withUpdatesCheck(original, false)).toBe(original);
+    expect(withBoolean(original, "updates", "check", false)).toBe(original);
   });
 
   test("refuses a dotted key rather than leaving two spellings behind", () => {
-    expect(withUpdatesCheck("updates.check = true\n", false)).toBeNull();
+    expect(withBoolean("updates.check = true\n", "updates", "check", false)).toBeNull();
   });
 
   test("refuses an inline table", () => {
-    expect(withUpdatesCheck("updates = { check = true }\n", false)).toBeNull();
+    expect(withBoolean("updates = { check = true }\n", "updates", "check", false)).toBeNull();
   });
 
   test("refuses text that does not parse as TOML", () => {
-    expect(withUpdatesCheck("[updates\ncheck = ", false)).toBeNull();
+    expect(withBoolean("[updates\ncheck = ", "updates", "check", false)).toBeNull();
   });
 
   test("refuses when a look-alike line sits inside a multi-line string", () => {
     // Rewriting the line inside the string would corrupt someone's value while the
     // real setting stayed put.
     const original = '[opencode]\nplans_dir = """\n[updates]\ncheck = true\n"""\n';
-    expect(withUpdatesCheck(original, false)).toBeNull();
+    expect(withBoolean(original, "updates", "check", false)).toBeNull();
+  });
+
+  test("appends a [review] table to a file that has none", () => {
+    expect(withBoolean("[updates]\ncheck = true\n", "review", "band", false)).toBe(
+      "[updates]\ncheck = true\n\n[review]\nband = false\n",
+    );
+  });
+
+  test("inserts band under a [review] table that lacks it", () => {
+    expect(withBoolean("[review]\n[updates]\n", "review", "band", false)).toBe(
+      "[review]\nband = false\n[updates]\n",
+    );
+  });
+
+  test("flips band in place", () => {
+    expect(withBoolean("[review]\nband = true\n", "review", "band", false)).toBe(
+      "[review]\nband = false\n",
+    );
+  });
+
+  test("leaves a [review] timeout_s neighbour intact", () => {
+    expect(withBoolean("[review]\ntimeout_s = 30\nband = true\n", "review", "band", false)).toBe(
+      "[review]\ntimeout_s = 30\nband = false\n",
+    );
+  });
+});
+
+describe("the config writer's review band", () => {
+  test("writes [review] band", async () => {
+    expect(await createConfigWriter(file).setReviewBand(false)).toEqual({ ok: true });
+    expect(await readFile(file, "utf-8")).toBe("[review]\nband = false\n");
   });
 });
 

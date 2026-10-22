@@ -148,6 +148,11 @@ const server = createServer({
       buildStatus,
       settings.current().updates.check,
     ),
+  // Wired for the same reason as updateReport: App reads GET /api/config on every load.
+  configValues: () => {
+    const { updates, review } = settings.current();
+    return { updates: { check: updates.check }, review: { band: review.band } };
+  },
   // Unwired unless a spec staged changes, so GET /api/update/changes 404s by default.
   ...(stagedChanges ? { updateChanges: async () => stagedChanges } : {}),
   diagnostics: fakeDiagnostics,

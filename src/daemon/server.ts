@@ -42,6 +42,7 @@ import { type CaretLogger, noopLogger, shortId } from "@/lib/log.ts";
 import {
   type ApproveVariant,
   type CmuxPane,
+  type ConfigValues,
   currentVersion,
   type DaemonDiagnostics,
   type Decision,
@@ -208,6 +209,8 @@ export interface CreateServerOptions {
    * one (EXC-1207): the UI reads this route on every load, so an unwired route there
    * would 404 into every spec's page load. */
   updateReport?: () => UpdateReport | Promise<UpdateReport>;
+  /** A thunk answering GET /api/config with the live config values. Omitted → 404. */
+  configValues?: () => ConfigValues;
   /** A thunk answering GET /api/update/changes (EXC-1452): what the caret the user is
    * behind would bring, fetched from GitHub on request. Null → 502. Omitted → 404. */
   updateChanges?: () => Promise<UpdateChanges | null>;
@@ -283,6 +286,7 @@ interface ResolvedOptions {
   readSkillDescription: ((cwd: string, skill: SkillRef) => Promise<string | null>) | undefined;
   diagnostics: (() => DaemonDiagnostics) | undefined;
   updateReport: (() => UpdateReport | Promise<UpdateReport>) | undefined;
+  configValues: (() => ConfigValues) | undefined;
   updateChanges: (() => Promise<UpdateChanges | null>) | undefined;
   restartHint: string | undefined;
   onUpdatesEnabled: (() => void) | undefined;
@@ -322,6 +326,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     readSkillDescription: opts.readSkillDescription,
     diagnostics: opts.diagnostics,
     updateReport: opts.updateReport,
+    configValues: opts.configValues,
     updateChanges: opts.updateChanges,
     restartHint: opts.restartHint,
     onUpdatesEnabled: opts.onUpdatesEnabled,
@@ -504,6 +509,13 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   function handleDiagnostics(): Response {
     if (!cfg.diagnostics) return notFound();
     return Response.json(cfg.diagnostics());
+  }
+
+  // GET /api/config — the live value of every key POST /api/config writes, so the
+  // settings toggles seed from the file rather than a default. Unwired → 404.
+  function handleGetConfig(): Response {
+    if (!cfg.configValues) return notFound();
+    return Response.json(cfg.configValues());
   }
 
   // GET /api/update — whether the caret this daemon is, is behind (EXC-1205): the
@@ -757,8 +769,19 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       log.warn("settings", "config patch rejected", { reason: error });
       return Response.json({ error }, { status: 400 });
     }
-    const { updates } = parsed.data;
+    const { updates, review } = parsed.data;
+    if (review !== undefined) {
+      const wrote = await configWriter.setReviewBand(review.band);
+      if (!wrote.ok) {
+        log.warn("settings", "config.toml edit refused", { reason: wrote.reason });
+        return Response.json({ error: "config.toml cannot be edited safely" }, { status: 409 });
+      }
+    }
     if (updates === undefined) {
+      if (review !== undefined) {
+        log.debug("settings", "config saved");
+        return Response.json({ ok: true });
+      }
       // An empty patch is deliberately a success (ConfigPatchSchema): it asked for
       // nothing, so nothing was written. Anything else reaching here is a ConfigPatch key
       // nobody wired, and this route must not answer 200 to a body it did not honour.
@@ -1166,6 +1189,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     const readsUi = method === "GET" || method === "HEAD";
     if (method === "GET" && path === "/api/health") return handleHealth();
     if (method === "GET" && path === "/api/diagnostics") return handleDiagnostics();
+    if (method === "GET" && path === "/api/config") return handleGetConfig();
     if (method === "GET" && path === "/api/update") return handleUpdate();
     if (method === "GET" && path === "/api/update/changes") return handleUpdateChanges();
     if (method === "GET" && path === "/api/themes") return handleThemes();
