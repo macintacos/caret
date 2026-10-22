@@ -360,6 +360,7 @@ Press a key in that terminal, with no Enter:
 | ------------- | ------------------------------------------------------------------------ |
 | `n`           | Seed a brand-new plan under a fresh session — a plan **arrives**         |
 | `r`           | Request changes on the newest pending plan — that plan is **revised**    |
+| `o`           | Open the `open` URL in your default browser                              |
 | `↑` `↓`       | Scroll the log a line                                                    |
 | `PgUp` `PgDn` | Scroll the log a page                                                    |
 | `G`           | Jump back to following the live tail                                     |

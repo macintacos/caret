@@ -21,6 +21,7 @@ import { closeSync, mkdirSync, mkdtempSync, openSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { browserOpenCmd } from "@/commands/review.ts";
 import { devConfigFile } from "@/config/paths.ts";
 import { devPort, devStateDir, loadSettings, type Settings } from "@/config/settings.ts";
 import { isPidAlive } from "@/daemon/lifecycle.ts";
@@ -142,7 +143,7 @@ export type SpawnFn = (
   opts: {
     cwd?: string;
     env?: Record<string, string>;
-    stdout?: "inherit" | "pipe" | number;
+    stdout?: "inherit" | "pipe" | "ignore" | number;
     stderr?: "inherit" | "pipe" | "ignore" | number;
     stdin?: ReadableStream<Uint8Array> | number | "inherit" | null;
   },
@@ -399,12 +400,22 @@ export async function runDev(opts: RunDevOptions, deps: DevDeps = realDevDeps): 
         shortcuts: [
           { key: "n", label: "new plan" },
           { key: "r", label: "revise last plan" },
+          { key: "o", label: "open in browser" },
           { key: "↑ ↓", label: "scroll" },
           { key: "PgUp/Dn", label: "scroll a page" },
           { key: "G", label: "follow live" },
           { key: "q", label: "quit" },
         ],
         onInject: (key) => onDriverKey?.(key),
+        // A no-op until Vite's banner names the url.
+        onOpen: () => {
+          if (uiUrl) {
+            deps.spawn(browserOpenCmd(process.platform, uiUrl), {
+              stdout: "ignore",
+              stderr: "ignore",
+            });
+          }
+        },
         onQuit: () => {
           cleanup();
           deps.exit(0);

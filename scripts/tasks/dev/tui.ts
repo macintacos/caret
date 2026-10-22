@@ -176,6 +176,7 @@ export function renderFrame(state: FrameState, cols: number, rows: number): stri
 export type KeyAction =
   | { kind: "quit" }
   | { kind: "inject"; key: string }
+  | { kind: "open" }
   | { kind: "scroll"; by: number }
   | { kind: "page"; by: number }
   | { kind: "follow" };
@@ -191,6 +192,8 @@ export function keyAction(key: string): KeyAction | null {
     case "n":
     case "r":
       return { kind: "inject", key };
+    case "o":
+      return { kind: "open" };
     case "\x1b[A":
       return { kind: "scroll", by: 1 };
     case "\x1b[B":
@@ -255,6 +258,8 @@ export interface TuiOptions {
   shortcuts: readonly Shortcut[];
   /** A shortcut key was pressed (`n`, `r`). */
   onInject: (key: string) => void;
+  /** `o`: open the dev UI in the browser. */
+  onOpen: () => void;
   /** Ctrl-C or `q`. The caller tears the dev stack down. */
   onQuit: () => void;
 }
@@ -327,6 +332,10 @@ export function createTui(opts: TuiOptions, deps: TuiDeps): Tui {
       }
       if (action.kind === "inject") {
         opts.onInject(action.key);
+        continue;
+      }
+      if (action.kind === "open") {
+        opts.onOpen();
         continue;
       }
       const { rows } = size();
