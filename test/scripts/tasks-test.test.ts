@@ -474,7 +474,6 @@ describe("collectUnitJsonRun", () => {
 });
 
 describe("test mod", () => {
-  // The kit writes no report file, so its captured output is the native input.
   test("counts come from the kit's summary lines", () => {
     const report = buildTestReport({
       target: "mod",

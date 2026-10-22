@@ -86,7 +86,7 @@ function buildProgram(): Command {
     .description("print or open the link Claude Code's plan-waiting band shows (mod hook)")
     .requiredOption("--session <id>", "the Claude Code session id")
     .option("--open", "open the link in a browser instead of printing it")
-    .action((opts: { session: string; open?: boolean }) => runBandLinkSubcommand(opts));
+    .action((opts) => runBandLinkSubcommand(opts));
 
   program
     .command("steer")

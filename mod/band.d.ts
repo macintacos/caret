@@ -1,5 +1,5 @@
 declare module "claude-code" {
   interface PluginState {
-    caret: { band: { session: string; url: string } | null };
+    caret: { band: { session: string; url: string; owner: string } | null };
   }
 }

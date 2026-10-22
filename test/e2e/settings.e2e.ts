@@ -595,8 +595,7 @@ test("the Notifications pane reflects the permission and its test affordance fir
   await page.addInitScript(initGrantedNotification);
   const dialog = await openSettingsPane(page, daemon);
 
-  // The Notifications category swaps the field pane for the live pane — the first
-  // non-staged one.
+  // The Notifications category shows its live pane above the band toggle.
   await expectNotificationsPane(dialog, page);
 
   // Granted → the diagnosis affordance; clicking it constructs exactly one toast

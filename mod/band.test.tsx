@@ -15,7 +15,7 @@ const BAND = {
   },
 } as const;
 
-const URL = "http://caret.localhost:42718/?review=r1";
+const LINK = "http://caret.localhost:42718/?review=r1";
 
 const band = async ($: Engine) => {
   const ui = await $.ui.mount(BAND);
@@ -48,21 +48,21 @@ test("the band links review_plan's pending review and its button opens it", asyn
   const runs: (readonly string[])[] = [];
   on("process.run", (_, e) => {
     runs.push(e.argv);
-    return { value: { exitCode: 0, stdout: `${URL}\n`, stderr: "" } };
+    return { value: { exitCode: 0, stdout: `${LINK}\n`, stderr: "" } };
   });
 
   const review = $.tool.call({ tool: "mcp__plugin_caret_caret__review_plan", plan: "" });
   await tick();
   expect(await band($)).toContain("🥕 CARET PLAN WAITING");
-  expect(await link($)).toBe(URL);
-  expect(runs[0]?.slice(2)).toEqual(["band-link", "--session", "session-a"]);
+  expect(await link($)).toBe(LINK);
+  expect(runs[0]?.slice(2)).toEqual(["band-link", "--session", "mcp-session-a"]);
   expect(runs[0]?.[0]).toBe("bash");
   expect(runs[0]?.[1]?.endsWith("/bin/caret")).toBe(true);
 
   const ui = await $.ui.mount(BAND);
   await ui.press({ key: "open in browser" });
   await ui.unmount();
-  expect(runs[1]?.slice(2)).toEqual(["band-link", "--session", "session-a", "--open"]);
+  expect(runs[1]?.slice(2)).toEqual(["band-link", "--session", "mcp-session-a", "--open"]);
 
   approve();
   await review;
@@ -81,7 +81,7 @@ test("the band shows while caret holds the ExitPlanMode permission request", asy
   const runs: (readonly string[])[] = [];
   on("process.run", (_, e) => {
     runs.push(e.argv);
-    return { value: { exitCode: 0, stdout: URL, stderr: "" } };
+    return { value: { exitCode: 0, stdout: LINK, stderr: "" } };
   });
 
   const request = $.classic.PermissionRequest({
@@ -138,7 +138,7 @@ test("a link that arrives after the review ended draws no band", async ($, on) =
   });
   on("process.run", async () => {
     await answered;
-    return { value: { exitCode: 0, stdout: URL, stderr: "" } };
+    return { value: { exitCode: 0, stdout: LINK, stderr: "" } };
   });
 
   const review = $.tool.call({ tool: "mcp__plugin_caret_caret__review_plan", plan: "" });
@@ -154,12 +154,39 @@ test("a review that fails clears the band", async ($, on) => {
   engineUi(on);
   let fail = () => {};
   on("tool.call", () => new Promise((_, reject) => (fail = () => reject(new Error("timeout")))));
-  on("process.run", () => ({ value: { exitCode: 0, stdout: URL, stderr: "" } }));
+  on("process.run", () => ({ value: { exitCode: 0, stdout: LINK, stderr: "" } }));
 
   const review = $.tool.call({ tool: "mcp__plugin_caret_caret__review_plan", plan: "" });
   await tick();
   expect(await band($)).toContain("🥕 CARET PLAN WAITING");
   fail();
   await expect(review).rejects.toThrow();
+  expect(await band($)).toBe("engine");
+});
+
+test("a call refused while another review waits leaves that review's band up", async ($, on) => {
+  engineUi(on);
+  const approvals: Array<() => void> = [];
+  on("tool.call", () => new Promise((resolve) => approvals.push(() => resolve({ result: {} }))));
+  let calls = 0;
+  let answerInner = () => {};
+  const innerAnswered = new Promise<void>((resolve) => (answerInner = resolve));
+  on("process.run", async () => {
+    if (calls++ > 0) await innerAnswered;
+    return { value: { exitCode: 0, stdout: LINK, stderr: "" } };
+  });
+
+  const outer = $.tool.call({ tool: "mcp__plugin_caret_caret__review_plan", plan: "" });
+  const inner = $.tool.call({ tool: "mcp__plugin_caret_caret__review_plan", plan: "" });
+  while (approvals.length < 2) await tick();
+  await tick();
+  approvals[1]?.();
+  await inner;
+  answerInner();
+  await tick();
+  expect(await band($)).toContain("🥕 CARET PLAN WAITING");
+
+  approvals[0]?.();
+  await outer;
   expect(await band($)).toBe("engine");
 });

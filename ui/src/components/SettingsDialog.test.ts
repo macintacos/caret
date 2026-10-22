@@ -462,7 +462,7 @@ describe("SettingsDialog Updates category (EXC-1207)", () => {
   });
 
   test("the Updates pane renders above the category's own toggle, not instead of it", async () => {
-    // Unlike Notifications and Advanced, this pane does not replace the staged rows: the
+    // Unlike Advanced, this pane does not replace the staged rows: the
     // opt-out is an ordinary registry field and the shell still renders it.
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);

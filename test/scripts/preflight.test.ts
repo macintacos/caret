@@ -28,7 +28,7 @@ import {
   MARKDOWN_READ_BY_TESTS,
   miseTaskCommand,
   resolveSelection,
-  runPreflight as runPreflightOnHost,
+  runPreflight,
   type SpawnOutcome,
   type SpawnTask,
   selectTasks,
@@ -49,8 +49,8 @@ const ALL_TASKS = [
 const UNREAD_MARKDOWN = "doc/RUNNING.md";
 
 /** The gate as if `claude` were on PATH, so the suite does not depend on the host's. */
-const runPreflight: typeof runPreflightOnHost = (deps) =>
-  runPreflightOnHost({ which: (bin) => `/usr/bin/${bin}`, ...deps });
+const runGate: typeof runPreflight = (deps) =>
+  runPreflight({ which: (bin) => `/usr/bin/${bin}`, ...deps });
 
 /** Fake spawner that resolves immediately from a per-task plan (default: pass). */
 function fakeSpawner(plan?: Record<string, SpawnOutcome>) {
@@ -99,7 +99,7 @@ async function releaseRemainingAndFinish(
 
 test("all tasks pass: exit 0, every task reported passed, build ui spawned once", async () => {
   const { calls, spawnTask } = fakeSpawner();
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
 
   expect(r.exitCode).toBe(0);
   expect([...r.results.keys()].sort()).toEqual(ALL_TASKS);
@@ -110,7 +110,7 @@ test("all tasks pass: exit 0, every task reported passed, build ui spawned once"
 
 test("the immediate tasks start at once; dependents wait for build ui", async () => {
   const s = gatedSpawner();
-  const run = runPreflight({ spawnTask: s.spawnTask, renderer: "silent" });
+  const run = runGate({ spawnTask: s.spawnTask, renderer: "silent" });
 
   await waitForCond(() => s.calls.length === 5);
   await Bun.sleep(20); // would catch eagerly-spawned dependents
@@ -131,7 +131,7 @@ test("the immediate tasks start at once; dependents wait for build ui", async ()
 // compile is still running and probe a stale (or absent) bin/caret-native.
 test("smoke waits for build bin, not merely build ui", async () => {
   const s = gatedSpawner();
-  const run = runPreflight({ spawnTask: s.spawnTask, renderer: "silent" });
+  const run = runGate({ spawnTask: s.spawnTask, renderer: "silent" });
 
   await waitForCond(() => s.calls.length === 5);
   s.release("build ui");
@@ -152,7 +152,7 @@ test("smoke waits for build bin, not merely build ui", async () => {
 // regression deadlocks rather than fails, so this test times out to prove it.
 test("concurrency 1: the whole gate still completes, in array order", async () => {
   const { calls, spawnTask } = fakeSpawner();
-  const r = await runPreflight({ spawnTask, renderer: "silent", concurrency: 1 });
+  const r = await runGate({ spawnTask, renderer: "silent", concurrency: 1 });
 
   expect(r.exitCode).toBe(0);
   expect(calls.map((c) => c.name)).toEqual([
@@ -169,7 +169,7 @@ test("concurrency 1: the whole gate still completes, in array order", async () =
 
 test("without claude on PATH, test mod is skipped with the reason and the gate stays green", async () => {
   const { calls, spawnTask } = fakeSpawner();
-  const r = await runPreflight({ spawnTask, renderer: "silent", which: () => null });
+  const r = await runGate({ spawnTask, renderer: "silent", which: () => null });
   const report = buildResultReport(r.results);
 
   expect(calls.map((c) => c.name)).not.toContain("test mod");
@@ -180,10 +180,25 @@ test("without claude on PATH, test mod is skipped with the reason and the gate s
   expect(report.ok).toBe(true);
 });
 
+test("an aborted task's partial output stays out of the default result report", async () => {
+  const spawnTask: SpawnTask = (name, _env, _onLine, signal) =>
+    new Promise<SpawnOutcome>((resolve) => {
+      if (name === "lint") return resolve({ exitCode: 1, output: "lint boom" });
+      const abort = () => resolve({ exitCode: 143, output: "half-done", aborted: true });
+      if (signal.aborted) abort();
+      else signal.addEventListener("abort", abort, { once: true });
+    });
+  const r = await runGate({ spawnTask, renderer: "silent" });
+  const unit = buildResultReport(r.results).tasks.find((t) => t.name === "test unit");
+
+  expect(unit?.status).toBe("skipped");
+  expect(unit?.output).toBeUndefined();
+});
+
 // Cosmetic only: tasks still START in the order the test above pins.
 test("the summary lists tasks alphabetically", async () => {
   const { spawnTask } = fakeSpawner();
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
 
   const listed = r.summary
     .split("\n")
@@ -194,7 +209,7 @@ test("the summary lists tasks alphabetically", async () => {
 
 test("dependents get their gate's skip env; immediate tasks get none", async () => {
   const { calls, spawnTask } = fakeSpawner();
-  await runPreflight({ spawnTask, renderer: "silent" });
+  await runGate({ spawnTask, renderer: "silent" });
 
   const envByName = new Map(calls.map((c) => [c.name, c.env]));
   expect(envByName.get("test e2e")?.CARET_SKIP_BUILD_UI).toBe("1");
@@ -215,7 +230,7 @@ test("lint failure doesn't stop the others, exits 1, surfaces output and the for
   const { calls, spawnTask } = fakeSpawner({
     lint: { exitCode: 1, output: "biome: src/x.ts needs formatting" },
   });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
 
   expect(r.exitCode).toBe(1);
   expect(calls.map((c) => c.name).sort()).toEqual(ALL_TASKS);
@@ -272,7 +287,7 @@ test("build ui failure skips its dependents and reports them as skipped", async 
   const { calls, spawnTask } = fakeSpawner({
     "build ui": { exitCode: 1, output: "vite exploded" },
   });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
 
   expect(r.exitCode).toBe(1);
   const names = calls.map((c) => c.name);
@@ -292,7 +307,7 @@ test("build bin failure skips smoke and never spawns it", async () => {
   const { calls, spawnTask } = fakeSpawner({
     "build bin": { exitCode: 1, output: "compile exploded" },
   });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
 
   expect(r.exitCode).toBe(1);
   expect(calls.map((c) => c.name)).not.toContain("smoke");
@@ -367,7 +382,7 @@ test("a failed task aborts in-flight siblings that honor the signal (recorded sk
       if (signal.aborted) abort();
       else signal.addEventListener("abort", abort, { once: true });
     });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
 
   expect(r.exitCode).toBe(1);
   expect(r.results.get("lint")?.status).toBe("failed");
@@ -389,7 +404,7 @@ test("a failed task aborts in-flight siblings that honor the signal (recorded sk
  * restating it — a selection the orchestrator ignored would still fail here. */
 async function spawnedFor(paths: readonly string[] | null): Promise<string[]> {
   const { calls, spawnTask } = fakeSpawner();
-  await runPreflight({ spawnTask, renderer: "silent", selection: selectTasks(paths) });
+  await runGate({ spawnTask, renderer: "silent", selection: selectTasks(paths) });
   return calls.map((c) => c.name).sort();
 }
 
@@ -505,7 +520,7 @@ test("--full runs the full gate and never reads the diff", async () => {
     return ["README.md"];
   });
   const { calls, spawnTask } = fakeSpawner();
-  await runPreflight({ spawnTask, renderer: "silent", selection });
+  await runGate({ spawnTask, renderer: "silent", selection });
 
   expect(calls.map((c) => c.name).sort()).toEqual(ALL_TASKS);
   expect(selection.narrowed).toBe(false);
@@ -526,7 +541,7 @@ test("without the override, resolveSelection narrows from the diff it reads", as
 // this assertion instead of parking the whole suite.
 test("a selection missing a gate task drops the dependent rather than hanging", async () => {
   const { calls, spawnTask } = fakeSpawner();
-  const run = runPreflight({
+  const run = runGate({
     spawnTask,
     renderer: "silent",
     selection: { tasks: ["lint", "build bin", "smoke"], narrowed: true, reason: "split pair" },
@@ -605,7 +620,7 @@ test("buildStartReport surfaces a narrowed selection and why", () => {
 
 test("buildResultReport level 0: passing tasks carry status only", async () => {
   const { spawnTask } = fakeSpawner();
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results);
 
   expect(report.event).toBe("result");
@@ -634,7 +649,7 @@ test("buildResultReport: a task that ran reports the time it took", async () => 
     if (name === "test unit") await Bun.sleep(25);
     return { exitCode: 0, output: "" };
   };
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results);
 
   // 20 rather than 25: Bun.sleep guarantees its lower bound on its own clock, while the
@@ -644,7 +659,7 @@ test("buildResultReport: a task that ran reports the time it took", async () => 
 
 test("buildResultReport: a task skipped before it spawned reports no duration", async () => {
   const { spawnTask } = fakeSpawner({ "build ui": { exitCode: 1, output: "boom" } });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results);
 
   const e2e = report.tasks.find((t) => t.name === "test e2e");
@@ -656,7 +671,7 @@ test("buildResultReport level 0: a small failed output is shown in full (with li
   const { spawnTask } = fakeSpawner({
     lint: { exitCode: 1, output: "boom: bad format" },
   });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results);
 
   expect(report.ok).toBe(false);
@@ -671,7 +686,7 @@ test("buildResultReport level 0: a small failed output is shown in full (with li
 test("buildResultReport level 0: a large failed output is truncated to a tail", async () => {
   const big = Array.from({ length: 30 }, (_, i) => `line ${i + 1}`).join("\n");
   const { spawnTask } = fakeSpawner({ "test unit": { exitCode: 1, output: big } });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results);
 
   const test = report.tasks.find((t) => t.name === "test unit");
@@ -690,7 +705,7 @@ test("buildResultReport -v: failures become full output, passing tasks gain a sn
     lint: { exitCode: 1, output: big },
     "test unit": { exitCode: 0, output: "test detail" },
   });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results, { verbosity: 1 });
 
   const lint = report.tasks.find((t) => t.name === "lint");
@@ -708,7 +723,7 @@ test("buildResultReport -vv: passing tasks carry their output too", async () => 
   const { spawnTask } = fakeSpawner({
     "test unit": { exitCode: 0, output: "ran 42 tests" },
   });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results, { verbosity: 2 });
 
   const test = report.tasks.find((t) => t.name === "test unit");
@@ -720,7 +735,7 @@ test("buildResultReport --grep: reduces output to matching lines with counts", a
   const { spawnTask } = fakeSpawner({
     "test unit": { exitCode: 1, output: "line a\nerror x\nline b\nerror y" },
   });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results, { grep: /error/ });
 
   const test = report.tasks.find((t) => t.name === "test unit");
@@ -733,7 +748,7 @@ test("buildResultReport --grep with no matches: matchedLines 0, no output text",
   const { spawnTask } = fakeSpawner({
     "test unit": { exitCode: 1, output: "line a\nline b" },
   });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results, { grep: /nope/ });
 
   const test = report.tasks.find((t) => t.name === "test unit");
@@ -747,7 +762,7 @@ test("buildResultReport --task: scope alone surfaces the named task's output", a
     lint: { exitCode: 1, output: "lint boom" },
     "test unit": { exitCode: 1, output: "test boom" },
   });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
   // No verbosity: --task alone shows the named task in full.
   const report = buildResultReport(r.results, { tasks: ["test unit"] });
 
@@ -763,7 +778,7 @@ test("buildResultReport --task: out-of-scope tasks stay quiet even at -vv", asyn
     lint: { exitCode: 0, output: "lint chatter" },
     "test unit": { exitCode: 0, output: "test chatter" },
   });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results, { tasks: ["test unit"], verbosity: 2 });
 
   const test = report.tasks.find((t) => t.name === "test unit");
@@ -776,7 +791,7 @@ test("buildResultReport --grep: surfaces matching lines from a passing task too"
   const { spawnTask } = fakeSpawner({
     "test unit": { exitCode: 0, output: "ok line\nwarn: deprecated api\nok line 2" },
   });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results, { grep: /warn/ });
 
   const test = report.tasks.find((t) => t.name === "test unit");
@@ -790,7 +805,7 @@ test("buildResultReport: --grep composes within --task scope", async () => {
     lint: { exitCode: 1, output: "lint error one\nlint clean" },
     "test unit": { exitCode: 1, output: "test error two\ntest clean" },
   });
-  const r = await runPreflight({ spawnTask, renderer: "silent" });
+  const r = await runGate({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results, { grep: /error/, tasks: ["test unit"] });
 
   const test = report.tasks.find((t) => t.name === "test unit");

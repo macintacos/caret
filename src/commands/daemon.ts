@@ -22,6 +22,7 @@ import {
 } from "@/config/paths.ts";
 import { migratePrefsFile } from "@/config/prefs.ts";
 import {
+  configValuesOf,
   daemonLogLevel,
   devLogReviewText,
   getPort,
@@ -307,10 +308,7 @@ export async function runDaemon(opts: {
       // it over the held verdict, so an opt-out takes effect without a restart (EXC-1210).
       updateReport: servedReport,
       // Read off the same hot-reloading service, so a GET after a POST sees the write.
-      configValues: () => {
-        const { updates, review } = svc.current();
-        return { updates: { check: updates.check }, review: { band: review.band } };
-      },
+      configValues: () => configValuesOf(svc.current()),
       // Turning the check back on re-runs it, so a reviewer who opted out long ago gets
       // a real verdict on the spot rather than a daemon lifetime later.
       onUpdatesEnabled: refreshUpdate,

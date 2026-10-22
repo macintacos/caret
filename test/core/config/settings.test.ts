@@ -13,6 +13,7 @@ import {
   MIN_LOG_MAX_SIZE,
 } from "@/config/constants.ts";
 import {
+  configValuesOf,
   createSettings,
   DEFAULT_PORT,
   DEFAULTS,
@@ -810,4 +811,13 @@ test("current() keeps a good parse when the file turns invalid", async () => {
   await Bun.write(file, '[daemon]\nauth = "off"\n');
   utimesSync(file, new Date(2_000_000_000), new Date(2_000_000_000));
   expect(svc.current()).toEqual({ ...DEFAULTS, logging: { ...DEFAULTS.logging, level: "warn" } });
+});
+
+test("configValuesOf projects exactly the keys POST /api/config writes", () => {
+  const s: Settings = {
+    ...DEFAULTS,
+    updates: { check: false },
+    review: { ...DEFAULTS.review, band: false },
+  };
+  expect(configValuesOf(s)).toEqual({ updates: { check: false }, review: { band: false } });
 });

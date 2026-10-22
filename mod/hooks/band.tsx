@@ -3,12 +3,13 @@
 import type { Hook, Register } from "claude-code";
 import { atom, read, update } from "claude-code";
 
-type Shown = { session: string; url: string };
+type Shown = { session: string; url: string; owner: string };
 type HookDollar = Parameters<Hook<"tool.call">>[0];
 
 const band = atom({ plugin: "caret", key: "band" } as const, null as Shown | null);
 
-// $.process.run takes no shell, and Windows cannot exec bin/caret's shebang.
+// $.process.run takes no shell, and Windows cannot exec bin/caret's shebang. The timeout
+// must outlast band-link's review poll (src/commands/band-link.ts) plus its boot.
 const caret = ($: HookDollar, ...args: string[]) =>
   $.process.run(["bash", `${$.plugin.root}/bin/caret`, ...args], { timeoutMs: 15_000 });
 
@@ -21,31 +22,36 @@ const bandWhile = async <T,>(
   signal: AbortSignal,
   review: () => Promise<T>,
 ): Promise<T> => {
+  // Waits overlap (a backgrounded review_plan, then another call): each clears only its own band.
+  const owner = crypto.randomUUID();
   let settled = false;
   const clear = async () => {
     settled = true;
-    await update($, band, () => null);
+    await update($, band, (cur) => (cur?.owner === owner ? null : cur));
   };
   // An interrupt aborts the signal; nothing promises it settles `review`.
-  signal.addEventListener("abort", () => void clear(), { once: true });
+  const onAbort = () => void clear();
+  signal.addEventListener("abort", onAbort, { once: true });
   // Not awaited: the review never waits on the band.
   void caret($, "band-link", "--session", session).then(
     async ({ stdout }) => {
       const url = stdout.trim();
-      if (url && !settled) await update($, band, () => ({ session, url }));
+      if (url && !settled) await update($, band, () => ({ session, url, owner }));
     },
     () => {},
   );
   try {
     return await review();
   } finally {
+    signal.removeEventListener("abort", onAbort);
     await clear();
   }
 };
 
 export const register: Register = (on) => {
   on("tool.call", { tool: "mcp__plugin_caret_caret__review_plan" }, async ($, e, next) =>
-    bandWhile($, await $.session.id(), next.signal, () => next(e)),
+    // The `mcp-` prefix is src/commands/mcp.ts's session id; keep the two in sync.
+    bandWhile($, `mcp-${await $.session.id()}`, next.signal, () => next(e)),
   ).catch(passThrough);
   // caret's own PermissionRequest hook sits beneath this one and holds the plan until a decision.
   on("classic.PermissionRequest", { tool_name: "ExitPlanMode" }, ($, e, next) =>
@@ -66,7 +72,9 @@ export const register: Register = (on) => {
         <Button
           hotkey="1"
           plain
-          onPress={() => caret($, "band-link", "--session", shown.session, "--open")}
+          onPress={() =>
+            void caret($, "band-link", "--session", shown.session, "--open").catch(() => {})
+          }
         >
           open in browser
         </Button>

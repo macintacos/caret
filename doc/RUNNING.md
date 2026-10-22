@@ -319,12 +319,13 @@ check — and reports the answer on your next load.
 ## The plan-waiting band
 
 While a plan waits for your review, Claude Code draws a 🥕 band above its prompt, so the
-session no longer looks idle. It shows in the terminal and the Desktop app, not in VS
-Code, and it clears once the review ends — approved, denied, interrupted or timed out.
+session no longer looks idle. It needs Claude Code 2.1.287 or later, shows in the terminal
+and the Desktop app, not in VS Code, and it clears once the review ends — approved,
+denied, interrupted or timed out.
 
 The band links this session's pending review. Click the link, or press `1` in an empty
 prompt, to open it in your browser. Either way caret builds the address, so it follows
-your port, `mise run dev` and login token.
+your port and login token.
 
 Set `[review] band = false` in `config.toml`, or flip the switch under Settings →
 Notifications, to turn it off from the next review. Claude Code's `disableAllHooks` and

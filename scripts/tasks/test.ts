@@ -1,6 +1,6 @@
-// `test` task group (EXC-739): the bun unit suite, the Playwright e2e suite, and
-// the hermetic bats suites, consolidated into one command whose `unit`/`e2e`/`bats`
-// positional targets map to `mise run test <target>`. Bare `mise run test` (and
+// `test` task group (EXC-739): the bun unit suite, the Playwright e2e suite, the
+// hermetic bats suites, and the Claude Code mod's kit tests, consolidated into one
+// command whose `unit`/`e2e`/`bats`/`mod` positional targets map to `mise run test <target>`. Bare `mise run test` (and
 // `mise run test unit`) run the unit suite, preserving today's `mise run test ==
 // unit` behaviour.
 
@@ -85,9 +85,9 @@ export function e2eModeArgs(mode: TestOutputMode): string[] {
 
 // --- the --json result document ----------------------------------------------
 // One document per run, on stdout, and nothing else. The envelope is shared
-// across all three targets; a runner's native report is nested UNNORMALISED
+// across all four targets; a runner's native report is nested UNNORMALISED
 // beneath it — JUnit XML text for unit and bats, Playwright's parsed JSON for
-// e2e — so this file never has to model what a "test result" is in more than
+// e2e, none for mod (report null) — so this file never has to model what a "test result" is in more than
 // two dialects.
 //
 // What rides along depends on the verdict, the same discipline
@@ -148,20 +148,35 @@ export function buildTestReport(input: TestReportInput): TestReport {
   return { ...envelope, ...counts, report: parsed?.report ?? null, output: input.output };
 }
 
-/** Counts plus the report to nest, or null when the text isn't a report at all. */
+/** Counts plus the report to nest, or null when the text isn't a report or summary at all. */
 function parseNative(
   target: TestTarget,
   native: string,
 ): Pick<TestReport, "passed" | "failed" | "report"> | null {
-  if (target === "mod") return parseKitSummary(native);
-  return target === "e2e" ? parsePlaywrightReport(native) : parseJUnit(native);
+  switch (target) {
+    case "mod":
+      return parseKitSummary(native);
+    case "e2e":
+      return parsePlaywrightReport(native);
+    case "unit":
+    case "bats":
+      return parseJUnit(native);
+    default: {
+      const unreachable: never = target;
+      return unreachable;
+    }
+  }
 }
 
-/** The kit writes no report file, only bun's ` N pass` / ` N fail` summary lines. */
-function parseKitSummary(output: string): Pick<TestReport, "passed" | "failed" | "report"> {
-  const count = (word: string): number =>
-    Number(new RegExp(`^\\s*(\\d+) ${word}$`, "m").exec(stripAnsi(output))?.[1] ?? 0);
-  return { passed: count("pass"), failed: count("fail"), report: null };
+/** Counts from the kit's ` N pass` / ` N fail` summary lines. */
+function parseKitSummary(output: string): Pick<TestReport, "passed" | "failed" | "report"> | null {
+  const text = stripAnsi(output);
+  const count = (word: string): string | undefined =>
+    new RegExp(`^\\s*(\\d+) ${word}$`, "m").exec(text)?.[1];
+  const passed = count("pass");
+  const failed = count("fail");
+  if (passed === undefined && failed === undefined) return null;
+  return { passed: Number(passed ?? 0), failed: Number(failed ?? 0), report: null };
 }
 
 /** The JUnit dialect both bun and bats write. The two put their counts in different

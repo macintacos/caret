@@ -34,7 +34,7 @@
 import { fakeDiagnostics } from "@test/support/diagnostics.ts";
 import { NEVER_IDLE_MS } from "@/config/constants.ts";
 import { configFile, reviewsDir } from "@/config/paths.ts";
-import { createSettings } from "@/config/settings.ts";
+import { configValuesOf, createSettings } from "@/config/settings.ts";
 import { createServer } from "@/daemon/server.ts";
 import { updateReportFor } from "@/daemon/update-check.ts";
 import { buildHash } from "@/lib/build-id.ts";
@@ -149,10 +149,7 @@ const server = createServer({
       settings.current().updates.check,
     ),
   // Wired for the same reason as updateReport: App reads GET /api/config on every load.
-  configValues: () => {
-    const { updates, review } = settings.current();
-    return { updates: { check: updates.check }, review: { band: review.band } };
-  },
+  configValues: () => configValuesOf(settings.current()),
   // Unwired unless a spec staged changes, so GET /api/update/changes 404s by default.
   ...(stagedChanges ? { updateChanges: async () => stagedChanges } : {}),
   diagnostics: fakeDiagnostics,

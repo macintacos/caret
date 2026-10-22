@@ -205,7 +205,7 @@ describe("Sound volume (EXC-1101)", () => {
   });
 });
 
-describe("Notifications (search-only live pane, EXC-847)", () => {
+describe("Notifications (live pane + band toggle)", () => {
   test("Notifications is a sidebar category with a blurb", () => {
     const cat = SETTINGS_CATEGORIES.find((c) => c.id === "Notifications");
     expect(cat).toBeDefined();
@@ -213,7 +213,7 @@ describe("Notifications (search-only live pane, EXC-847)", () => {
   });
 
   test("contributes a search-only entry (findable by /-search, never staged)", () => {
-    const entry = SETTINGS_REGISTRY.find((e) => e.category === "Notifications");
+    const entry = SETTINGS_REGISTRY.find((e) => e.key === "notifications");
     expect(entry).toBeDefined();
     // Live, browser-owned state — searchable but never an editable field.
     expect(entry ? isStagedField(entry) : true).toBe(false);

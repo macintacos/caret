@@ -74,6 +74,8 @@ export interface TaskResult {
   status: TaskStatus;
   output: string;
   durationMs: number;
+  /** Why a task was skipped without running; reported in place of its output. */
+  reason?: string;
 }
 
 export interface PreflightOutcome {
@@ -159,7 +161,7 @@ const SKIP_UI = { CARET_SKIP_BUILD_UI: "1" } as const;
 // `build ui` gates the dependents below.
 const IMMEDIATE = ["lint", "test unit", "build ui", "test bats", "test mod"] as const;
 /** An immediate task that needs a binary on PATH, skipped rather than failed without it. */
-const NEEDS_ON_PATH: Partial<Record<string, string>> = { "test mod": "claude" };
+const NEEDS_ON_PATH: Partial<Record<(typeof IMMEDIATE)[number], string>> = { "test mod": "claude" };
 // ORDER IS LOAD-BEARING: listr2 fills its concurrency slots in array order, so a
 // task can only start once every task before it has started. `smoke` therefore
 // stays LAST — a gate capped below the task count (CARET_PREFLIGHT_JOBS=1) would
@@ -472,12 +474,17 @@ export async function runPreflight(deps: {
     return status;
   };
 
-  const immediate = (name: string): ListrTask => ({
+  const immediate = (name: (typeof IMMEDIATE)[number]): ListrTask => ({
     title: name,
     task: async (_ctx, task) => {
       const bin = NEEDS_ON_PATH[name];
       if (bin && !which(bin)) {
-        results.set(name, { status: "skipped", output: `${bin} not on PATH`, durationMs: 0 });
+        results.set(name, {
+          status: "skipped",
+          output: "",
+          durationMs: 0,
+          reason: `${bin} not on PATH`,
+        });
         return task.skip(`${name} (skipped: ${bin} not on PATH)`);
       }
       const status = await runTask(name, undefined, (line) => {
@@ -578,7 +585,7 @@ function outputDetail(
   if (scoped) return "full";
   if (status === "failed") return verbosity >= 1 ? "full" : "tail";
   if (status === "passed") return verbosity >= 2 ? "full" : verbosity >= 1 ? "tail" : "none";
-  return "tail"; // skipped — its output, when any, is the reason
+  return "none";
 }
 
 /** Planned task set, why it is that set, and the filters in effect — emitted to
@@ -625,6 +632,7 @@ export function buildResultReport(
       status: result.status,
       durationMs: result.durationMs,
     };
+    if (result.reason) entry.output = result.reason;
     const lines = splitLines(result.output);
     const inScope = !scope || scope.has(name);
     if (inScope && lines.length > 0) {

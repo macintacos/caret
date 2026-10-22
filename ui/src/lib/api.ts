@@ -85,7 +85,10 @@ export async function getUpdate(): Promise<UpdateReport> {
   }
 }
 
-/** The live value of every config.toml key the UI can write. */
+/** The live value of every config.toml key the UI can write.
+ *
+ * Throws on failure, unlike this file's degrading readers: there is no stand-in value
+ * to return, so the caller keeps whatever its toggles already hold. */
 export async function getConfig(): Promise<ConfigValues> {
   try {
     return await json(await fetch("/api/config"));
@@ -146,7 +149,7 @@ function configSaveMessage(err: unknown): string {
     return "The caret daemon isn't reachable, so the change wasn't saved.";
   }
   if (err.status === 409) {
-    return "caret couldn't edit config.toml safely — set the [updates] check line there by hand.";
+    return "caret couldn't edit config.toml safely — set that line there by hand.";
   }
   return `The daemon couldn't save the change (HTTP ${err.status}).`;
 }

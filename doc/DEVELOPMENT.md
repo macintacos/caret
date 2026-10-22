@@ -564,6 +564,8 @@ loads as `../mod/hooks/band.tsx`. It is a self-contained mini-plugin, with its o
 
 `mise run test mod` runs those kit tests and needs `claude` 2.1.287 or later on PATH. Run
 directly it fails without one; `mise run preflight` records the task skipped instead.
+Preflight checks only that `claude` exists, not its version, so an older one fails the
+gate rather than skipping.
 
 ### A quick trial without installing
 

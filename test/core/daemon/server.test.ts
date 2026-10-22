@@ -13,7 +13,7 @@ import { type RecordedEmit, recordingLog } from "@test/support/recording-log.ts"
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { themeFileText } from "@test/support/theme.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
-import { loadSettings } from "@/config/settings.ts";
+import { configValuesOf, loadSettings } from "@/config/settings.ts";
 import {
   isClientLive,
   isCrossOrigin,
@@ -2473,10 +2473,7 @@ describe("GET /api/config", () => {
   test("a POSTed value reads back from config.toml", async () => {
     const configPath = join(dir, "config.toml");
     await boot({
-      configValues: () => {
-        const s = loadSettings(configPath);
-        return { updates: s.updates, review: { band: s.review.band } };
-      },
+      configValues: () => configValuesOf(loadSettings(configPath)),
     });
     await fetch(`${base}/api/config`, {
       method: "POST",

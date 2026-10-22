@@ -283,15 +283,14 @@
             <p class="pane-blurb">{selected.blurb}</p>
           </header>
 
+          <!-- Advanced's live pane replaces staged fields; Updates' and Notifications' sit
+               ABOVE theirs, which stay ordinary registry fields. Id branches beat a
+               category→component map here: the panes take different props, which a map
+               can't thread. -->
           {#if selected.id === "Advanced"}
-            <!-- Advanced's read-only pane renders its own surface instead of staged
-                 fields. -->
             <AdvancedPane {onCopyDiagnostic} />
           {:else}
             {#if selected.id === UPDATES_CATEGORY}
-              <!-- Updates and Notifications put their live pane ABOVE their fields rather
-                   than replacing them: the pane is read-only, but the `updates.check` and
-                   `review.band` toggles beneath are ordinary registry fields. -->
               <UpdatesPane report={updateReport} {onWhatsNew} />
             {:else if selected.id === "Notifications"}
               <NotificationsPane />

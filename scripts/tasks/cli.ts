@@ -244,7 +244,7 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   // contract (EXC-738/739), so these must precede the forwarded args — hence the
   // "(before forwarded args)" each description carries. unit and e2e share one
   // declaration so a reworded description cannot drift between them.
-  // `--json` is split out because all three targets carry it and only two carry the
+  // `--json` is split out because all four targets carry it and only two carry the
   // volume pair — one declaration each, so neither can drift.
   const withJsonFlag = <Args extends unknown[], Opts extends OptionValues>(
     cmd: Command<Args, Opts>,

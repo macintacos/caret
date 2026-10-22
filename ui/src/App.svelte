@@ -439,6 +439,12 @@
         if (report) seedUpdatesCheck(report.checkEnabled);
         updateReport = report;
       });
+  });
+
+  // ----- Config values -----
+  // Read once on mount to seed the band toggle with what is on disk. A failed read is
+  // quiet: the toggle keeps its default.
+  $effect(() => {
     void getConfig()
       .then((c) => seedReviewBand(c.review.band))
       .catch(() => {});

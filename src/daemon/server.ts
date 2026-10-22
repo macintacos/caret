@@ -6,7 +6,7 @@
 import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { createConfigWriter } from "@/config/config-write.ts";
+import { type ConfigRefusal, createConfigWriter } from "@/config/config-write.ts";
 import { deriveIdleTimeoutSec } from "@/config/constants.ts";
 import { configFile, ensureStateDir, themesDir } from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
@@ -209,7 +209,9 @@ export interface CreateServerOptions {
    * one (EXC-1207): the UI reads this route on every load, so an unwired route there
    * would 404 into every spec's page load. */
   updateReport?: () => UpdateReport | Promise<UpdateReport>;
-  /** A thunk answering GET /api/config with the live config values. Omitted → 404. */
+  /** A thunk answering GET /api/config with the live config values. Omitted → 404.
+   * runDaemon wires it, and the e2e fixture daemon must too: App reads this route on
+   * every load. */
   configValues?: () => ConfigValues;
   /** A thunk answering GET /api/update/changes (EXC-1452): what the caret the user is
    * behind would bring, fetched from GitHub on request. Null → 502. Omitted → 404. */
@@ -769,42 +771,34 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       log.warn("settings", "config patch rejected", { reason: error });
       return Response.json({ error }, { status: 400 });
     }
-    const { updates, review } = parsed.data;
+    const { updates, review, ...unwired } = parsed.data;
+    // A ConfigPatch key nobody wired: this route must not answer 200 to a body it did
+    // not honour. An empty patch is deliberately a success (ConfigPatchSchema).
+    if (Object.keys(unwired).length > 0) {
+      return Response.json({ error: "unhandled config patch" }, { status: 400 });
+    }
     if (review !== undefined) {
       const wrote = await configWriter.setReviewBand(review.band);
-      if (!wrote.ok) {
-        log.warn("settings", "config.toml edit refused", { reason: wrote.reason });
-        return Response.json({ error: "config.toml cannot be edited safely" }, { status: 409 });
-      }
+      if (!wrote.ok) return refused(wrote.reason);
     }
-    if (updates === undefined) {
-      if (review !== undefined) {
-        log.debug("settings", "config saved");
-        return Response.json({ ok: true });
-      }
-      // An empty patch is deliberately a success (ConfigPatchSchema): it asked for
-      // nothing, so nothing was written. Anything else reaching here is a ConfigPatch key
-      // nobody wired, and this route must not answer 200 to a body it did not honour.
-      if (Object.keys(parsed.data).length > 0) {
-        return Response.json({ error: "unhandled config patch" }, { status: 400 });
-      }
-      return Response.json({ ok: true });
+    if (updates !== undefined) {
+      const wrote = await configWriter.setUpdatesCheck(updates.check);
+      if (!wrote.ok) return refused(wrote.reason);
     }
-    const { check } = updates;
-    const wrote = await configWriter.setUpdatesCheck(check);
-    if (!wrote.ok) {
-      // Carrying the reason for the same reason the 400 above does: the toast tells the
-      // user to hand-edit but not what in their file blocked the write, so the daemon log
-      // is the only place it survives. The reasons are a closed set of tokens.
-      log.warn("settings", "config.toml edit refused", { reason: wrote.reason });
-      return Response.json({ error: "config.toml cannot be edited safely" }, { status: 409 });
-    }
-    log.debug("settings", "config saved");
+    if (review !== undefined || updates !== undefined) log.debug("settings", "config saved");
     // Turning the check back on is a user action, so it is allowed to spend a call
     // (EXC-1210). The throttle still governs: a re-run inside the 24h window returns
     // null and the already-held verdict is what gets served.
-    if (check === true) cfg.onUpdatesEnabled?.();
+    if (updates?.check === true) cfg.onUpdatesEnabled?.();
     return Response.json({ ok: true });
+  }
+
+  function refused(reason: ConfigRefusal): Response {
+    // Carrying the reason for the same reason the 400 above does: the toast tells the
+    // user to hand-edit but not what in their file blocked the write, so the daemon log
+    // is the only place it survives. The reasons are a closed set of tokens.
+    log.warn("settings", "config.toml edit refused", { reason });
+    return Response.json({ error: "config.toml cannot be edited safely" }, { status: 409 });
   }
 
   // GET /api/reviews/:id — one review as its client-facing shape.

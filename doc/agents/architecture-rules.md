@@ -206,8 +206,11 @@ bind and switch a token on; the rules below cover both shapes.
   kept.
 - **The token is printed only to a terminal the user ran:** by `caret serve` after
   `runDaemon` returns, and by `caret login-link`, which reads the token file without
-  asking the daemon or minting one. Never by `caret daemon`, whose stdout and stderr land
-  in `daemon-stderr.log`, which the `caret doctor` bundle ships unredacted; an integration
+  asking the daemon or minting one. One deliberate exception: `caret band-link` prints the
+  band's login link, so the token reaches Claude Code's capture of its stdout, the mod's
+  `$.state` atom and the band's OSC 8 hyperlink target in the terminal — never a log or
+  the band's visible text. Never by `caret daemon`, whose stdout and stderr land in
+  `daemon-stderr.log`, which the `caret doctor` bundle ships unredacted; an integration
   test pins that.
 - **Adapters reach the daemon only by spawning the caret CLI**, never over HTTP, so none
   bypasses the token. A new adapter that wants the daemon goes through `caret review` or

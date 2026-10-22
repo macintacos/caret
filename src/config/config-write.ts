@@ -1,6 +1,5 @@
-// The two lines caret writes into the user's config.toml: `[updates] check`, flipped by
-// the Settings → Updates toggle (EXC-1354), and `[review] band`, flipped by the
-// Settings → Notifications toggle.
+// The lines caret writes into the user's config.toml, one boolean per Settings toggle:
+// `[updates] check` (EXC-1354), `[review] band` (EXC-2071).
 //
 // The edit is a text rewrite rather than a parse-and-stringify, because smol-toml's
 // stringify would hand the user back a file stripped of their comments, ordering, and
@@ -49,15 +48,14 @@ function parseOrNull(text: string): unknown | null {
   }
 }
 
+/** The keys caret may write. A closed set of plain identifiers, which is what lets them
+ * go into withBoolean's regexes unescaped. */
+export type BooleanKey = { table: "updates"; key: "check" } | { table: "review"; key: "band" };
+
 /** Rewrite the `[table] key` boolean line, returning the new text — or null when that
- * cannot be done without risking the rest of the file. `table` and `key` are fixed
- * literals, so they go into the regexes unescaped. */
-export function withBoolean(
-  text: string,
-  table: string,
-  key: string,
-  value: boolean,
-): string | null {
+ * cannot be done without risking the rest of the file. */
+export function withBoolean(text: string, at: BooleanKey, value: boolean): string | null {
+  const { table, key } = at;
   const before = parseOrNull(text);
   if (before === null) return null; // never touch a file caret cannot read
 
@@ -107,13 +105,13 @@ export interface ConfigWriter {
   setReviewBand(band: boolean): Promise<WriteResult>;
 }
 
-type WriteResult = { ok: true } | { ok: false; reason: ConfigRefusal };
+export type WriteResult = { ok: true } | { ok: false; reason: ConfigRefusal };
 
 /** Build the writer the config write path uses. Writes queue per file, so two flips
  * cannot both read the pre-write text and lose one another's edit. */
 export function createConfigWriter(file = configFile()): ConfigWriter {
   const writes = createKeyedQueue();
-  async function setBoolean(table: string, key: string, value: boolean): Promise<WriteResult> {
+  async function setBoolean(at: BooleanKey, value: boolean): Promise<WriteResult> {
     let refusal: ConfigRefusal | null = null;
     await writes.run(file, async () => {
       // ENOENT alone reads as empty — that is a first write creating the file. Any
@@ -126,7 +124,7 @@ export function createConfigWriter(file = configFile()): ConfigWriter {
         refusal = "unreadable";
         return;
       }
-      const next = withBoolean(current, table, key, value);
+      const next = withBoolean(current, at, value);
       if (next === null) {
         refusal = "unverifiable";
         return;
@@ -150,7 +148,7 @@ export function createConfigWriter(file = configFile()): ConfigWriter {
     return refusal === null ? { ok: true } : { ok: false, reason: refusal };
   }
   return {
-    setUpdatesCheck: (check) => setBoolean("updates", "check", check),
-    setReviewBand: (band) => setBoolean("review", "band", band),
+    setUpdatesCheck: (check) => setBoolean({ table: "updates", key: "check" }, check),
+    setReviewBand: (band) => setBoolean({ table: "review", key: "band" }, band),
   };
 }

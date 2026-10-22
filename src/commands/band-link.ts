@@ -10,10 +10,10 @@
 import { bootHookLogging } from "@/commands/boot.ts";
 import { browserLoginToken, openBrowser } from "@/commands/review.ts";
 import { loadSettings } from "@/config/settings.ts";
-import { daemonBaseUrl, localHostname, loginLink } from "@/daemon/address.ts";
+import { daemonBaseUrl, localHostname } from "@/daemon/address.ts";
 import { sessionReview } from "@/daemon/client.ts";
-import { logDebug } from "@/lib/log.ts";
-import { reviewUrl } from "@/review/orchestrate.ts";
+import { logDebug, setLogContext } from "@/lib/log.ts";
+import { browserReviewLink } from "@/review/orchestrate.ts";
 
 export interface BandLinkDeps {
   /** The session's pending review id; rejects when no daemon answers. */
@@ -21,7 +21,8 @@ export interface BandLinkDeps {
   sleep: (ms: number) => Promise<void>;
 }
 
-/** Poll for the session's review: the band starts with the hook, a beat before the review is posted. */
+/** Poll for the session's review, 5 s by default: the band starts with the hook, a beat
+ * before the review is posted. The mod's process timeout must outlast this budget. */
 export async function awaitPendingReview(
   deps: BandLinkDeps,
   attempts = 25,
@@ -35,17 +36,6 @@ export async function awaitPendingReview(
   return undefined;
 }
 
-/** The band's link: the review when found, else caret's UI, logged in when `token` is set. */
-export function bandLink(
-  baseUrl: string,
-  hostname: string,
-  id: string | undefined,
-  token: string | null,
-): string {
-  const url = reviewUrl(baseUrl, hostname, id);
-  return token === null ? url : loginLink(url, token);
-}
-
 export async function runBandLinkSubcommand(opts: {
   session: string;
   open?: boolean;
@@ -53,18 +43,29 @@ export async function runBandLinkSubcommand(opts: {
   try {
     const s = loadSettings();
     bootHookLogging(s);
-    if (s.review.band) {
+    setLogContext({ sessionId: opts.session });
+    // --open answers a press on a band already drawn, so the setting and the poll gate only printing.
+    if (opts.open || s.review.band) {
       const baseUrl = daemonBaseUrl(s);
-      const id = await awaitPendingReview({
-        pendingReviewId: async () => (await sessionReview(baseUrl, opts.session))?.id,
-        sleep: Bun.sleep,
-      });
-      const url = bandLink(baseUrl, localHostname(s.daemon.host), id, browserLoginToken(s.daemon));
+      const id = await awaitPendingReview(
+        {
+          pendingReviewId: async () => (await sessionReview(baseUrl, opts.session))?.id,
+          sleep: Bun.sleep,
+        },
+        opts.open ? 1 : undefined,
+      );
+      logDebug("band", "band link resolved", { found: id !== undefined });
+      const url = browserReviewLink(
+        baseUrl,
+        localHostname(s.daemon.host),
+        id,
+        browserLoginToken(s.daemon),
+      );
       if (opts.open) openBrowser(url);
       else process.stdout.write(`${url}\n`);
     }
   } catch (err) {
-    logDebug("band-link", "band link skipped", { err: String(err) });
+    logDebug("band", "band link skipped", { err: String(err) });
   }
   process.exit(0);
 }

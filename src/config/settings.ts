@@ -41,7 +41,7 @@ import { configFile } from "@/config/paths.ts";
 // paths.ts (already imported below) itself imports build-id.
 import { isCompiledBinary } from "@/lib/build-id.ts";
 import { logError } from "@/lib/log.ts";
-import type { EnvOverride } from "@/lib/types.ts";
+import type { ConfigValues, EnvOverride } from "@/lib/types.ts";
 import { DENY_KEYS } from "@/redact/core.ts";
 
 export { DEFAULT_PORT };
@@ -151,6 +151,11 @@ const SettingsSchema = z.object({
 });
 
 export type Settings = z.infer<typeof SettingsSchema>;
+
+/** The keys GET /api/config serves, read off a Settings. */
+export function configValuesOf(s: Settings): ConfigValues {
+  return { updates: { check: s.updates.check }, review: { band: s.review.band } };
+}
 
 /** Settings are shared across callers (DEFAULTS, the service's lastGood
  * cache) — freeze so no consumer can mutate another's view. */
