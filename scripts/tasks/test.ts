@@ -1,8 +1,8 @@
 // `test` task group (EXC-739): the bun unit suite, the Playwright e2e suite, the
 // hermetic bats suites, and the Claude Code mod's kit tests, consolidated into one
-// command whose `unit`/`e2e`/`bats`/`mod` positional targets map to `mise run test <target>`. Bare `mise run test` (and
-// `mise run test unit`) run the unit suite, preserving today's `mise run test ==
-// unit` behaviour.
+// command whose `unit`/`e2e`/`bats`/`mod` positional targets map to
+// `mise run test <target>`. Bare `mise run test` (and `mise run test unit`) run
+// the unit suite, preserving today's `mise run test == unit` behaviour.
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -87,8 +87,8 @@ export function e2eModeArgs(mode: TestOutputMode): string[] {
 // One document per run, on stdout, and nothing else. The envelope is shared
 // across all four targets; a runner's native report is nested UNNORMALISED
 // beneath it — JUnit XML text for unit and bats, Playwright's parsed JSON for
-// e2e, none for mod (report null) — so this file never has to model what a "test result" is in more than
-// two dialects.
+// e2e, none for mod (report null) — so this file never has to model what a "test
+// result" is in more than two dialects.
 //
 // What rides along depends on the verdict, the same discipline
 // scripts/preflight.ts applies to its own --json result: a GREEN run is the
