@@ -281,7 +281,7 @@ test.describe("preview cursor motion", () => {
 
 test.describe("preview keyboard cursor", () => {
   // Each step reads where the band comes to rest, so it lands rather than glides.
-  test.beforeEach(({ page }) => page.emulateMedia({ reducedMotion: "reduce" }));
+  test.use({ reducedMotion: "reduce" });
 
   test("j/k step one visual line, and the unit follows the width", async ({ page, daemon }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
