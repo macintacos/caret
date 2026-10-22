@@ -132,6 +132,7 @@ const SettingsSchema = z.object({
   review: z
     .object({
       timeout_s: TimeoutS.default(3600), // EXC-430: seconds — reviewTimeoutMs converts to ms, once
+      band: z.boolean().default(true), // EXC-2071: Claude Code's plan-waiting band (mod/hooks/band.tsx)
     })
     .prefault({}),
   opencode: z

@@ -912,6 +912,23 @@ test("POST /api/reviews reports hasLiveClient=true right after a reviews poll (E
   expect(r.hasLiveClient).toBe(true);
 });
 
+test("GET /api/reviews?session= returns only that session's reviews", async () => {
+  await boot();
+  const mine = await postReviewRaw({ sessionId: "s-mine" });
+  await postReviewRaw({ sessionId: "s-other" });
+  const list = (await (await fetch(`${base}/api/reviews?session=s-mine`)).json()) as Array<{
+    id: string;
+  }>;
+  expect(list.map((r) => r.id)).toEqual([mine.id]);
+});
+
+test("a session-scoped reviews read leaves hasLiveClient false", async () => {
+  await boot();
+  await fetch(`${base}/api/reviews?session=s-any`);
+  const r = await postReviewRaw();
+  expect(r.hasLiveClient).toBe(false);
+});
+
 // EXC-562: the EXC-559 liveness window keyed on the 2s reviews poll is defeated
 // by browser background-tab timer throttling — a hidden tab's poll is slowed to
 // ~1/min, so a backgrounded-but-open tab read as not-live and the hook opened a

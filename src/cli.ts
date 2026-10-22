@@ -15,6 +15,7 @@
 import type { Command } from "@commander-js/extra-typings";
 
 import { fatalDeny } from "@/adapters/index.ts";
+import { runBandLinkSubcommand } from "@/commands/band-link.ts";
 import { runConvertTheme } from "@/commands/convert-theme.ts";
 import { runDaemon } from "@/commands/daemon.ts";
 import { runDoctorSubcommand } from "@/commands/doctor.ts";
@@ -79,6 +80,13 @@ function buildProgram(): Command {
       "reconcile a terminal plan approval into the daemon (ExitPlanMode PostToolUse hook)",
     )
     .action(() => runReconcileSubcommand());
+
+  program
+    .command("band-link")
+    .description("print or open the link Claude Code's plan-waiting band shows (mod hook)")
+    .requiredOption("--session <id>", "the Claude Code session id")
+    .option("--open", "open the link in a browser instead of printing it")
+    .action((opts: { session: string; open?: boolean }) => runBandLinkSubcommand(opts));
 
   program
     .command("steer")

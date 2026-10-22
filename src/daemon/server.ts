@@ -713,8 +713,19 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // GET /api/reviews — the pending list as client-facing shapes. Doubles as the
   // live-client heartbeat: a UI polls this every ~2s, so stamping the time here
   // lets handleCreateReview tell the hook whether a tab is already listening
-  // (EXC-559).
-  function handleListReviews(): Response {
+  // (EXC-559). `?session=<id>` is the plan-waiting band's lookup, not a UI: it
+  // polls while the review is being posted, so stamping would read as a live tab
+  // and switch off the browser auto-open.
+  function handleListReviews(url: URL): Response {
+    const session = url.searchParams.get("session");
+    if (session !== null) {
+      return Response.json(
+        store
+          .list()
+          .filter((r) => r.sessionId === session)
+          .map(toClientReview),
+      );
+    }
     lastReviewsPollAt = Date.now();
     return Response.json(store.list().map(toClientReview));
   }
@@ -1165,7 +1176,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       return handleCreateReview(req, bindRequestLog);
     if (method === "POST" && path === "/api/logs") return handleLogs(req);
     if (method === "POST" && path === "/api/ui/gone") return handleUiGone();
-    if (method === "GET" && path === "/api/reviews") return handleListReviews();
+    if (method === "GET" && path === "/api/reviews") return handleListReviews(new URL(req.url));
     if (method === "POST" && path === "/api/config") return handleSetConfig(req);
 
     if (route) {

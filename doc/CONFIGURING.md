@@ -92,14 +92,16 @@ and `daemon.auth`, which are config-only; precedence is
 | `daemon.hostnames`    | `[]`          | Extra names the daemon answers to, such as `"caret.home.lan"` or `"192.168.1.5"` (IPv6 bracketed). Matched case-insensitively on any port, over `http` or `https`. The first entry is the name review links and login links use. Takes effect on daemon restart.                                                                                                                    |
 | `daemon.auth`         | _unset_       | `"token"` or `"none"`. Unset, token auth is on exactly when `daemon.host` is exposed. Takes effect on daemon restart.                                                                                                                                                                                                                                                               |
 | `review.timeout_s`    | `3600`        | Review window in seconds before the hook fail-safe-denies (default 1 hour). The schema rejects values at or above the 3900s hook budget in `hooks/hooks.json`.                                                                                                                                                                                                                      |
+| `review.band`         | `true`        | Shows a band above Claude Code's prompt while a plan waits for review. `false` turns the band off.                                                                                                                                                                                                                                                                                  |
 
 > [!NOTE]
 > Unlike the `[logging]` keys, which hot-reload live, these tunables are captured at
 > startup: `port`, `idle_ms`, `heartbeat_ms`, `host`, `hostnames`, and `auth` take effect
-> on the next daemon start, and `timeout_s` on the next review. For the caret service's
-> daemon, the next start means `caret install --refresh`, which restarts it on the newest
-> caret installed, or a
-> [service restart](RUNNING.md#the-caret-service).
+> on the next daemon start, and `timeout_s` and `band` on the next review. For the caret
+> service's daemon, the next start means `caret install --refresh`, which restarts it on
+> the newest caret installed, or a [service restart](RUNNING.md#the-caret-service). `band`
+> needs no restart of the daemon or Claude Code: `caret band-link` reads `config.toml` on
+> every run, and the daemon serves the live value to the settings UI.
 
 ```toml
 [logging]
@@ -115,6 +117,7 @@ heartbeat_ms = 8000
 
 [review]
 timeout_s = 3600
+band = true
 ```
 
 ### The `[opencode]` table

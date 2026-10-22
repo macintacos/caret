@@ -149,12 +149,12 @@ export async function expireAbandoned(
   }
 }
 
-/** The review's URL on `baseUrl`'s port under the named `hostname` humans reach it by;
- * internal fetches keep using baseUrl. */
-function reviewUrl(baseUrl: string, hostname: string, id: string): string {
+/** The review's URL (caret's UI root without an `id`) on `baseUrl`'s port under the named
+ * `hostname` humans reach it by; internal fetches keep using baseUrl. */
+export function reviewUrl(baseUrl: string, hostname: string, id?: string): string {
   const u = new URL(baseUrl);
   u.hostname = hostname;
-  return `${u.origin}/?review=${id}`;
+  return id === undefined ? `${u.origin}/` : `${u.origin}/?review=${id}`;
 }
 
 /** Run a review end-to-end, returning the core `Decision`. Never throws — any

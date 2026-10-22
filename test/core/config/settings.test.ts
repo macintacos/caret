@@ -69,7 +69,7 @@ test("an absent file yields all defaults with no error", () => {
       keep: DEFAULT_LOG_KEEP,
     },
     daemon: { port: 42718, idle_ms: 60_000, heartbeat_ms: 8_000, host: "127.0.0.1", hostnames: [] },
-    review: { timeout_s: 3600 },
+    review: { timeout_s: 3600, band: true },
     opencode: {},
     updates: { check: true },
     dev: { notify: { enabled: false, interval_ms: 15_000, max_pending: 3 } },
@@ -79,6 +79,11 @@ test("an absent file yields all defaults with no error", () => {
 test("[updates] check is a recognized key", async () => {
   await Bun.write(file, "[updates]\ncheck = false\n");
   expect(loadSettings(file).updates.check).toBe(false);
+});
+
+test("[review] band is a recognized key", async () => {
+  await Bun.write(file, "[review]\nband = false\n");
+  expect(loadSettings(file).review.band).toBe(false);
 });
 
 test("[opencode] plans_dir is a recognized key", async () => {

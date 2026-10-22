@@ -145,6 +145,20 @@ export async function listReviews(baseUrl: string): Promise<ClientReview[]> {
   return (await res.json()) as ClientReview[];
 }
 
+/** The session's pending review (GET /api/reviews?session=), short-fused like
+ * listReviews; rejects when no daemon answers. */
+export async function sessionReview(
+  baseUrl: string,
+  sessionId: string,
+): Promise<ClientReview | undefined> {
+  const res = await daemonFetch(`${baseUrl}/api/reviews?session=${encodeURIComponent(sessionId)}`, {
+    signal: AbortSignal.timeout(1000),
+  });
+  if (!res.ok) throw new Error(`GET /api/reviews failed: ${res.status}`);
+  // Matched here too: an older daemon ignores ?session= and returns every review.
+  return ((await res.json()) as ClientReview[]).find((r) => r.sessionId === sessionId);
+}
+
 /** Resolve a review (POST /:id/resolve) — the reconcile hook uses it to mirror a
  * terminal approval into the daemon. Short-fused; a 404 (already resolved or
  * superseded) throws like any non-ok status and the best-effort caller swallows it. */
