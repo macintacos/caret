@@ -16,7 +16,7 @@ HK_MISE = 1
 # Keep hk in lockstep with hk.pkl's amends/import version; the two are compared exactly,
 # so even a patch bump landing here needs the hk.pkl edit. test/structure/hk-pin.test.ts
 # fails if they diverge.
-hk  = "2.0"
+hk  = "2.7"
 pkl = "0"
 bun = "1.4"
 # Bump biome.jsonc's `$schema` to match whatever release mise.lock resolves. biome
@@ -31,7 +31,7 @@ rumdl       = "latest" # aqua:rvben/rumdl (Markdown format + lint; mise.lock pin
 yamlfmt     = "0"      # aqua:google/yamlfmt
 taplo       = "0"      # aqua:tamasfe/taplo
 shellcheck  = "0"      # aqua:koalaman/shellcheck
-shfmt       = "3.13"   # aqua:mvdan/sh
+shfmt       = "3.14"   # aqua:mvdan/sh
 "npm:jscpd" = "5"      # copy-paste detector; npm is the only distribution
 "npm:bats"  = "1"      # bash test runner
 
