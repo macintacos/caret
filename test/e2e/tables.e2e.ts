@@ -70,7 +70,7 @@ import {
 //
 // C is wide enough that the table cannot fit the prose reading measure.
 //
-// The last block is the degrade case (see the header): one delimiter cell short.
+// The last block is the degrade case (see the header): a delimiter cell that is not dashes.
 const TABLE_PLAN = `# Table Plan
 
 Prose above the tables, on a row with no table at all.
@@ -95,10 +95,10 @@ Prose between the second and third tables.
 | --- | --- | --- | --- | --- | --- |
 | aaaaaaaaaaaaaaaaaaaa | bbbbbbbbbbbbbbbbbbbb | cccccccccccccccccccc | dddddddddddddddddddd | eeeeeeeeeeeeeeeeeeee | ffffffffffffffffffff |
 
-Prose above the malformed table, one delimiter cell short.
+Prose above the malformed table, one delimiter cell not dashes.
 
 | x | y | z |
-| --- | --- |
+| --- | --- | x |
 | 1 | 2 | 3 |
 
 Trailing prose below every table.
@@ -106,8 +106,7 @@ Trailing prose below every table.
 
 // Rows are addressed by their TEXT rather than by a line number counted off the string
 // above, because the daemon reflows a plan through rumdl on ingest — see `lineOf` in the
-// shared helpers. Everything here survives that reflow verbatim except MALFORMED_RULE,
-// which is seeded `| --- | --- |` and arrives padded to three cells.
+// shared helpers. Everything here survives that reflow verbatim.
 const PROSE_ABOVE = "Prose above the tables, on a row with no table at all.";
 const A_HEAD = "| Component | Owner | Status |";
 const A_RULE = "| :--- | :---: | ---: |";
@@ -134,7 +133,7 @@ const C_HEAD = "| One | Two | Three | Four | Five | Six |";
 const C_ROW =
   "| aaaaaaaaaaaaaaaaaaaa | bbbbbbbbbbbbbbbbbbbb | cccccccccccccccccccc | dddddddddddddddddddd | eeeeeeeeeeeeeeeeeeee | ffffffffffffffffffff |";
 const MALFORMED_HEAD = "| x | y | z |";
-const MALFORMED_RULE = "| --- | --- |  |";
+const MALFORMED_RULE = "| --- | --- | x |";
 const MALFORMED_ROW = "| 1 | 2 | 3 |";
 
 /** The seed plan's inline-markup table verbatim (scripts/tasks/dev/fake-plan.md), which
@@ -956,8 +955,9 @@ test("a malformed table renders as plain source rows", async ({ page, daemon }) 
   // The shape that survives ingest. rumdl REPAIRS a ragged body row — it truncates or
   // pads the row to the header's cell count — so "a body row of the wrong width ends the
   // table" cannot be armed end to end and stays pinned in tables.test.ts. What rumdl
-  // does not repair is a DELIMITER row short of the header: it pads it with an EMPTY
-  // trailing cell, and an empty cell is not a delimiter, so the whole table is voided.
+  // does not repair is a delimiter cell that is not dashes: `x` is not a delimiter, so
+  // the whole table is voided. (A delimiter row one cell SHORT it does repair, into a
+  // valid table.)
   await openPlan(page, daemon, TABLE_PLAN);
   await carded(page);
 
