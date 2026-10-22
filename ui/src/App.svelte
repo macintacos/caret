@@ -446,7 +446,7 @@
   // quiet: the toggle keeps its default.
   $effect(() => {
     void getConfig()
-      .then((c) => seedReviewBand(c.review.band))
+      .then((config) => seedReviewBand(config.review.band))
       .catch(() => {});
   });
 
