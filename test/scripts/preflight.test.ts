@@ -28,7 +28,7 @@ import {
   MARKDOWN_READ_BY_TESTS,
   miseTaskCommand,
   resolveSelection,
-  runPreflight,
+  runPreflight as runPreflightOnHost,
   type SpawnOutcome,
   type SpawnTask,
   selectTasks,
@@ -36,8 +36,21 @@ import {
 import { waitFor } from "@test/support/poll.ts";
 import { DEV_FIXTURES } from "@/tasks/dev/protocol.ts";
 
-const ALL_TASKS = ["build bin", "build ui", "lint", "smoke", "test bats", "test e2e", "test unit"];
+const ALL_TASKS = [
+  "build bin",
+  "build ui",
+  "lint",
+  "smoke",
+  "test bats",
+  "test e2e",
+  "test mod",
+  "test unit",
+];
 const UNREAD_MARKDOWN = "doc/RUNNING.md";
+
+/** The gate as if `claude` were on PATH, so the suite does not depend on the host's. */
+const runPreflight: typeof runPreflightOnHost = (deps) =>
+  runPreflightOnHost({ which: (bin) => `/usr/bin/${bin}`, ...deps });
 
 /** Fake spawner that resolves immediately from a per-task plan (default: pass). */
 function fakeSpawner(plan?: Record<string, SpawnOutcome>) {
@@ -78,7 +91,8 @@ async function releaseRemainingAndFinish(
   s: ReturnType<typeof gatedSpawner>,
   run: Promise<{ exitCode: number }>,
 ): Promise<void> {
-  for (const name of ["lint", "test unit", "test bats", "test e2e", "smoke"]) s.release(name);
+  for (const name of ["lint", "test unit", "test bats", "test mod", "test e2e", "smoke"])
+    s.release(name);
   const r = await run;
   expect(r.exitCode).toBe(0);
 }
@@ -98,12 +112,12 @@ test("the immediate tasks start at once; dependents wait for build ui", async ()
   const s = gatedSpawner();
   const run = runPreflight({ spawnTask: s.spawnTask, renderer: "silent" });
 
-  await waitForCond(() => s.calls.length === 4);
+  await waitForCond(() => s.calls.length === 5);
   await Bun.sleep(20); // would catch eagerly-spawned dependents
-  expect([...s.calls].sort()).toEqual(["build ui", "lint", "test bats", "test unit"]);
+  expect([...s.calls].sort()).toEqual(["build ui", "lint", "test bats", "test mod", "test unit"]);
 
   s.release("build ui");
-  await waitForCond(() => s.calls.length === 6);
+  await waitForCond(() => s.calls.length === 7);
   expect(s.calls).toContain("test e2e");
   expect(s.calls).toContain("build bin");
 
@@ -119,9 +133,9 @@ test("smoke waits for build bin, not merely build ui", async () => {
   const s = gatedSpawner();
   const run = runPreflight({ spawnTask: s.spawnTask, renderer: "silent" });
 
-  await waitForCond(() => s.calls.length === 4);
+  await waitForCond(() => s.calls.length === 5);
   s.release("build ui");
-  await waitForCond(() => s.calls.length === 6);
+  await waitForCond(() => s.calls.length === 7);
   await Bun.sleep(20); // would catch a smoke gated on `build ui`
   expect(s.calls).not.toContain("smoke");
 
@@ -146,10 +160,24 @@ test("concurrency 1: the whole gate still completes, in array order", async () =
     "test unit",
     "build ui",
     "test bats",
+    "test mod",
     "test e2e",
     "build bin",
     "smoke",
   ]);
+});
+
+test("without claude on PATH, test mod is skipped with the reason and the gate stays green", async () => {
+  const { calls, spawnTask } = fakeSpawner();
+  const r = await runPreflight({ spawnTask, renderer: "silent", which: () => null });
+  const report = buildResultReport(r.results);
+
+  expect(calls.map((c) => c.name)).not.toContain("test mod");
+  const mod = report.tasks.find((t) => t.name === "test mod");
+  expect(mod?.status).toBe("skipped");
+  expect(mod?.durationMs).toBe(0);
+  expect(mod?.output).toContain("claude not on PATH");
+  expect(report.ok).toBe(true);
 });
 
 // Cosmetic only: tasks still START in the order the test above pins.
@@ -457,7 +485,7 @@ test("every MARKDOWN_READ_BY_TESTS entry still exists on disk", () => {
   }
 });
 
-test("a single non-Markdown path runs the full seven-task gate", async () => {
+test("a single non-Markdown path runs the full eight-task gate", async () => {
   expect(await spawnedFor([UNREAD_MARKDOWN, "src/daemon.ts"])).toEqual(ALL_TASKS);
   expect(selectTasks([UNREAD_MARKDOWN, "src/daemon.ts"]).narrowed).toBe(false);
 });
@@ -547,6 +575,7 @@ test("buildStartReport echoes the parsed filters and lists planned tasks", () =>
     "test unit",
     "build ui",
     "test bats",
+    "test mod",
     "test e2e",
     "build bin",
     "smoke",
@@ -587,6 +616,7 @@ test("buildResultReport level 0: passing tasks carry status only", async () => {
     "test unit",
     "build ui",
     "test bats",
+    "test mod",
     "test e2e",
     "build bin",
     "smoke",

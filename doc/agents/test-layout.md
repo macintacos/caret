@@ -103,6 +103,10 @@ it.
   suite per shipped script: the plugin entrypoint shim, the service launcher, the
   bootstrap preamble. They sit outside `test/` because their subject does, and because
   bats collects them from the directory it is handed rather than from `test/`'s tree.
+- **Claude Code mod** — `mod/*.test.tsx`, beside the mod they cover, run by
+  `claude plugin test mod` (`mise run test mod`). They import `claude-code/testing`, which
+  only Claude Code's kit resolves, so `bunfig.toml`'s `pathIgnorePatterns` keeps them out
+  of bun's collection.
 - **Linux systemd** — `scripts/linux/verify.sh`, run by hand through
   `mise run verify linux`, which boots a real systemd under Apple `container` and drives
   the install, restart and uninstall sequence `createSystemdManager` performs against the

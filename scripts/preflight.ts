@@ -7,7 +7,7 @@
 // it). `lint`'s `hk check` step is the read-only one — it is the formatting
 // gate, and a lint failure points at `mise run format`.
 //
-// DAG: lint, `test unit`, `build ui` and `test bats` start immediately;
+// DAG: lint, `test unit`, `build ui`, `test bats` and `test mod` start immediately;
 // `test e2e` and `build bin` start once `build ui` passes; `smoke` starts once
 // `build bin` passes (EXC-914). The build-first ordering + skip mechanism live in the tasks
 // CLI (scripts/tasks/build.ts), so each dependent is spawned with the skips that
@@ -21,7 +21,7 @@
 //
 // Which of those tasks run is scoped to the diff (EXC-1042): a change confined
 // to Markdown runs `lint` alone, plus `test unit` when it touches Markdown a test
-// reads from disk. Everything else runs all seven, as does a diff that cannot
+// reads from disk. Everything else runs all eight, as does a diff that cannot
 // be read at all.
 //
 // DI mirrors scripts/tasks/release/command.ts: the spawn collaborator is injected so
@@ -88,7 +88,7 @@ export interface PreflightOutcome {
 export interface PreflightStartReport {
   event: "start";
   schemaVersion: number;
-  /** The tasks this run will spawn — a subset of the seven when `selection.narrowed`. */
+  /** The tasks this run will spawn — a subset of the eight when `selection.narrowed`. */
   tasks: string[];
   /**
    * Why this task set (EXC-1042). A scoped run must never read as a full green
@@ -104,7 +104,7 @@ export interface PreflightTaskReport {
   name: string;
   status: TaskStatus;
   /** How long the task ran: 0 when it was skipped before ever spawning, and excluding
-   * time queued behind an upstream gate — so the seven never sum to the gate's wall clock. */
+   * time queued behind an upstream gate — so the eight never sum to the gate's wall clock. */
   durationMs: number;
   /** Captured output, included per the verbosity / --grep / --task selection. */
   output?: string;
@@ -155,9 +155,11 @@ interface Dependent {
 
 const SKIP_UI = { CARET_SKIP_BUILD_UI: "1" } as const;
 
-// `test bats` is last within IMMEDIATE: it gates nothing, and `build ui` gates the
-// dependents below.
-const IMMEDIATE = ["lint", "test unit", "build ui", "test bats"] as const;
+// `test bats` and `test mod` are last within IMMEDIATE: both gate nothing, and
+// `build ui` gates the dependents below.
+const IMMEDIATE = ["lint", "test unit", "build ui", "test bats", "test mod"] as const;
+/** An immediate task that needs a binary on PATH, skipped rather than failed without it. */
+const NEEDS_ON_PATH: Partial<Record<string, string>> = { "test mod": "claude" };
 // ORDER IS LOAD-BEARING: listr2 fills its concurrency slots in array order, so a
 // task can only start once every task before it has started. `smoke` therefore
 // stays LAST — a gate capped below the task count (CARET_PREFLIGHT_JOBS=1) would
@@ -408,7 +410,10 @@ export async function runPreflight(deps: {
   concurrency?: number;
   /** Which tasks to run (EXC-1042); defaults to the full gate. */
   selection?: TaskSelection;
+  /** Resolves a binary on PATH; defaults to `Bun.which`. */
+  which?: (bin: string) => string | null;
 }): Promise<PreflightOutcome> {
+  const which = deps.which ?? Bun.which;
   const selection = deps.selection ?? FULL_GATE;
   const selected = new Set(selection.tasks);
   const immediateTasks = IMMEDIATE.filter((name) => selected.has(name));
@@ -470,6 +475,11 @@ export async function runPreflight(deps: {
   const immediate = (name: string): ListrTask => ({
     title: name,
     task: async (_ctx, task) => {
+      const bin = NEEDS_ON_PATH[name];
+      if (bin && !which(bin)) {
+        results.set(name, { status: "skipped", output: `${bin} not on PATH`, durationMs: 0 });
+        return task.skip(`${name} (skipped: ${bin} not on PATH)`);
+      }
       const status = await runTask(name, undefined, (line) => {
         task.output = line;
       });
@@ -568,7 +578,7 @@ function outputDetail(
   if (scoped) return "full";
   if (status === "failed") return verbosity >= 1 ? "full" : "tail";
   if (status === "passed") return verbosity >= 2 ? "full" : verbosity >= 1 ? "tail" : "none";
-  return "none"; // skipped — nothing ran
+  return "tail"; // skipped — its output, when any, is the reason
 }
 
 /** Planned task set, why it is that set, and the filters in effect — emitted to

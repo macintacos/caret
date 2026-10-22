@@ -55,11 +55,11 @@ mise run caret      # caret's own CLI from src/cli.ts, e.g. `mise run caret doct
 mise run test       # bun test (unit); `mise run test unit` is the same target
 mise run test e2e   # Playwright browser e2e (isolated daemon; Chromium, plus WebKit for the JSC probe)
                     # both take --quiet / --verbose / --json, before any forwarded args
-mise run test bats  # the hermetic shell suites under scripts/; --json only
+mise run test bats  # the hermetic shell suites under scripts/; `test mod` the mod's kit tests; --json only
 mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-check
 mise run format     # Biome (write)
 mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bundle`
-mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ e2e) + build + smoke, scoped to the diff
+mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ mod ∥ e2e) + build + smoke, scoped to the diff
 mise run verify     # check the service unit against a real supervisor: `verify macos` or `verify linux`
                     # macos drives this Mac's own launchctl; linux boots a real systemd in a container
 ```
@@ -553,6 +553,18 @@ drive: Chromium runs the suite, WebKit runs the single JSC engine probe.
 For when to write an e2e spec versus a `bun test` unit versus throwaway exploration, see
 [`agents/browser-testing.md`](agents/browser-testing.md).
 
+### The Claude Code mod
+
+`mod/` holds the plan-waiting band, a Claude Code mod that caret's root `hooks/hooks.json`
+loads as `../mod/hooks/band.tsx`. It is a self-contained mini-plugin, with its own
+`hooks/hooks.json` and a test-only `.claude-plugin/plugin.json`, because
+`claude plugin test <dir>` refuses a module outside the directory it tests and runs every
+`*.test.ts(x)` under it: pointed at the repo root it would sweep the whole bun suite.
+`bunfig.toml` keeps `mod/` out of bun's collection in turn.
+
+`mise run test mod` runs those kit tests and needs `claude` 2.1.287 or later on PATH. Run
+directly it fails without one; `mise run preflight` records the task skipped instead.
+
 ### A quick trial without installing
 
 To exercise caret's hooks from a checkout without registering anything, load the plugin
@@ -581,7 +593,7 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 | --------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------- |
 | `dev`                                               | `scripts/tasks/dev/`            | The one multi-file task, so it keeps a folder rather than a single module.        |
 | `build` — bare, `ui`, `bin`, `bundle`               | `scripts/tasks/build.ts`        | Bare is the umbrella; `mise run build bin` reaches a target.                      |
-| `test` — bare / `unit`, `e2e`, `bats`               | `scripts/tasks/test.ts`         | Bare and `unit` are the same bun target; `e2e` is Playwright; `bats` is the shell suites under `scripts/`. The first two carry `--quiet`, `--verbose`, and `--json` ahead of their forwarded args; `bats` carries `--json` alone. |
+| `test` — bare / `unit`, `e2e`, `bats`, `mod`        | `scripts/tasks/test.ts`         | Bare and `unit` are the same bun target; `e2e` is Playwright; `bats` is the shell suites under `scripts/`; `mod` is `claude plugin test mod`. The first two carry `--quiet`, `--verbose`, and `--json` ahead of their forwarded args; `bats` and `mod` carry `--json` alone. |
 | `smoke` — bare, `bin`, `bundle`                     | `scripts/tasks/smoke.ts`        | Bare smokes both artifacts.                                                       |
 | `assets`                                            | `scripts/tasks/assets.ts`       | Regenerates the README hero image. Needs ImageMagick on `PATH`.                   |
 | `lint`, `format`, `caret`                           | `scripts/tasks/lint.ts` et al.  | Passthroughs: operands and flags reach the underlying tool. Only `caret` forwards a bare `--help`. |
@@ -661,12 +673,12 @@ diff, plus untracked files — and picks a task set from them:
   file). **Add to that list whenever a test starts reading a Markdown file at run time** —
   the suite checks that each listed path still exists, but nothing can catch an omission,
   and an omission silently stops running a real check.
-- **Anything else** → all seven, exactly as before. That covers a non-Markdown path, an
+- **Anything else** → all eight, exactly as before. That covers a non-Markdown path, an
   empty diff, and a diff that could not be read at all (no `origin/HEAD`, a shallow
   clone). The default is always the full gate; narrowing is an optimisation, never a
   weakening.
 
-`mise run preflight --full` forces all seven regardless. Unlike `-v` / `--grep` /
+`mise run preflight --full` forces all eight regardless. Unlike `-v` / `--grep` /
 `--task`, it is not `--json`-only — the human display narrows too, so it needs the same
 escape hatch.
 

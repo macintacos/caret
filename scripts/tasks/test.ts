@@ -104,7 +104,7 @@ export function e2eModeArgs(mode: TestOutputMode): string[] {
 const REPORT_SCHEMA_VERSION = 1;
 
 /** The suites a run can target, each with its own runner. */
-export type TestTarget = "unit" | "e2e" | "bats";
+export type TestTarget = "unit" | "e2e" | "bats" | "mod";
 
 export interface TestReport {
   schemaVersion: number;
@@ -153,7 +153,15 @@ function parseNative(
   target: TestTarget,
   native: string,
 ): Pick<TestReport, "passed" | "failed" | "report"> | null {
+  if (target === "mod") return parseKitSummary(native);
   return target === "e2e" ? parsePlaywrightReport(native) : parseJUnit(native);
+}
+
+/** The kit writes no report file, only bun's ` N pass` / ` N fail` summary lines. */
+function parseKitSummary(output: string): Pick<TestReport, "passed" | "failed" | "report"> {
+  const count = (word: string): number =>
+    Number(new RegExp(`^\\s*(\\d+) ${word}$`, "m").exec(stripAnsi(output))?.[1] ?? 0);
+  return { passed: count("pass"), failed: count("fail"), report: null };
 }
 
 /** The JUnit dialect both bun and bats write. The two put their counts in different
@@ -415,6 +423,32 @@ export async function runTestBats(
 ): Promise<never> {
   if (flags.json) return runTestBatsJson(args);
   return execAndExit(batsCommand(args));
+}
+
+// --- test mod ---------------------------------------------------------------
+// The Claude Code mod's kit tests under mod/, which only Claude Code's own runner
+// can load (they import `claude-code/testing`).
+
+export function modCommand(): string[] {
+  return ["claude", "plugin", "test", "mod"];
+}
+
+/** The kit writes no report file, so its captured output doubles as the native input. */
+export async function collectModJsonRun(
+  run: typeof runCapture = runCapture,
+): Promise<Omit<TestReportInput, "durationMs">> {
+  let log = "";
+  const exitCode = await run(modCommand(), (chunk) => {
+    log += chunk;
+  });
+  return { target: "mod", exitCode, native: log, output: log };
+}
+
+/** Run directly, a missing `claude` fails loudly; only preflight skips the lane. */
+export async function runTestMod(flags: Pick<TestFlags, "json"> = {}): Promise<never> {
+  if (!flags.json) return execAndExit(modCommand());
+  const startedAt = Date.now();
+  return emitTestReport({ ...(await collectModJsonRun()), startedAt });
 }
 
 // --- test e2e ---------------------------------------------------------------

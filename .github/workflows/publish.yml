@@ -23,6 +23,8 @@ jobs:
             exit 1
           fi
       - run: bun install --frozen-lockfile
+      - run: npm install --global @anthropic-ai/claude-code@2.1.308
+      - run: mise run test mod
       - run: mise run smoke bundle
       - run: npm pack --ignore-scripts
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
