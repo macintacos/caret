@@ -208,8 +208,6 @@ export function createAutosave(
     },
     focusAnnotation(id) {
       store.focusedAnnotation = id;
-      const card = document.querySelector(`[data-annotation-card="${id}"]`);
-      card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     },
     editGeneralComment(value) {
       store.generalCommentDraft = value;

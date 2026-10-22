@@ -489,7 +489,7 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
   // their branch, so that is not hypothetical.
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
-  await page.getByRole("button", { name: "Light theme" }).click();
+  await page.getByRole("combobox", { name: "Light theme" }).click();
   await page.getByRole("option", { name: "Catppuccin Latte" }).click();
   await page.keyboard.press("Escape");
   // The identity anchor: this really is Latte and not whichever palette was live before.

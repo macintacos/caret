@@ -67,6 +67,10 @@ const BUNDLE_SHAPES = [
 // whole pattern, so the branch where the group matches nothing is never tried and
 // a match at index 1 comes back null. A fixed engine returns ["b", undefined].
 test("WebKit still anchors an optional group containing ^", async ({ page }) => {
+  // Fixed upstream in Playwright 1.64's WebKit (ms-playwright/webkit-2370, WebKit 27.2).
+  // Waiting on: the first shipping Safari built on WebKit ≥ that build
+  // (https://bugs.webkit.org/show_bug.cgi?id=216671).
+  test.fail();
   expect(await page.evaluate(() => /(^a)?b/.exec("xb"))).toBeNull();
 });
 
