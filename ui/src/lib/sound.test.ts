@@ -10,12 +10,20 @@ afterEach(() => localStorage.clear());
 
 /** A recording stand-in for cuelume: the injection point that keeps every test
  * below off a real AudioContext, which happy-dom does not implement at all. */
-function recorder(): SoundEngine & { played: Array<{ sound: string; volume?: number }> } {
+function recorder(): SoundEngine & {
+  played: Array<{ sound: string; volume?: number }>;
+  unlocks: number;
+} {
   const played: Array<{ sound: string; volume?: number }> = [];
   return {
     played,
+    unlocks: 0,
     play(sound, options) {
       played.push({ sound, volume: options?.volume });
+    },
+    unlock() {
+      this.unlocks++;
+      return Promise.resolve(true);
     },
   };
 }
@@ -71,17 +79,12 @@ const poisoned: SoundEngine = {
   play() {
     throw new Error("AudioContext is closed");
   },
+  unlock: () => Promise.resolve(false),
 };
 
 describe("an engine that throws", () => {
   test("play swallows it — a wedged AudioContext is not the caller's problem", () => {
     expect(() => createSound({ engine: poisoned }).play("planArrived")).not.toThrow();
-  });
-
-  test("unlock swallows it too, from inside the gesture handler", () => {
-    const target = new EventTarget();
-    createSound({ engine: poisoned, target }).unlock();
-    expect(() => target.dispatchEvent(new Event("pointerdown"))).not.toThrow();
   });
 });
 
@@ -94,17 +97,17 @@ describe("unlock", () => {
     return { target, engine, dispose };
   }
 
-  test("creates the AudioContext on the first gesture, inaudibly", () => {
+  test("unlocks the engine on the first gesture, playing nothing", () => {
     const { target, engine } = unlockedRecorder();
     target.dispatchEvent(new Event("pointerdown"));
-    expect(engine.played).toHaveLength(1);
-    expect(engine.played[0]?.volume).toBeLessThan(0.01);
+    expect(engine.unlocks).toBe(1);
+    expect(engine.played).toHaveLength(0);
   });
 
   test("a keystroke unlocks too", () => {
     const { target, engine } = unlockedRecorder();
     target.dispatchEvent(new Event("keydown"));
-    expect(engine.played).toHaveLength(1);
+    expect(engine.unlocks).toBe(1);
   });
 
   test("fires once, not on every later gesture", () => {
@@ -112,7 +115,7 @@ describe("unlock", () => {
     target.dispatchEvent(new Event("pointerdown"));
     target.dispatchEvent(new Event("keydown"));
     target.dispatchEvent(new Event("pointerdown"));
-    expect(engine.played).toHaveLength(1);
+    expect(engine.unlocks).toBe(1);
   });
 
   test("the disposer detaches both listeners before any gesture lands", () => {
@@ -120,13 +123,13 @@ describe("unlock", () => {
     dispose();
     target.dispatchEvent(new Event("pointerdown"));
     target.dispatchEvent(new Event("keydown"));
-    expect(engine.played).toHaveLength(0);
+    expect(engine.unlocks).toBe(0);
   });
 
   test("unlocks even while sound is switched off, so enabling it later needs no second gesture", () => {
     localStorage.setItem(SOUND_ENABLED_KEY, "off");
     const { target, engine } = unlockedRecorder();
     target.dispatchEvent(new Event("pointerdown"));
-    expect(engine.played).toHaveLength(1);
+    expect(engine.unlocks).toBe(1);
   });
 });

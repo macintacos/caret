@@ -22,7 +22,7 @@
 // setVolume module globals deliberately unused: one source for the preference,
 // which is caret's, beats two that can disagree.
 
-import { play as cuelumePlay, type SoundName } from "cuelume";
+import { play as cuelumePlay, unlock as cuelumeUnlock, type SoundName } from "cuelume";
 
 import { uiLog } from "$lib/log.ts";
 import { readSoundEnabled, readSoundVolume } from "$lib/soundPref.ts";
@@ -121,15 +121,6 @@ export const SOUND_MAP: Partial<Record<SoundEvent, SoundName>> = {
   visualExited: "tap",
 };
 
-/** The sound cuelume synthesizes to unlock its AudioContext, kept out of
- * SOUND_MAP so pruning a moment can never disarm the unlock. */
-const UNLOCK_SOUND: SoundName = "select";
-
-/** Loud enough that cuelume renders it — a computed volume of exactly zero is a
- * no-op there, which is the whole reason this is not simply `0` — and far too
- * quiet to hear. The point is the AudioContext it creates, not the sound. */
-const UNLOCK_VOLUME = 0.0001;
-
 /** The gestures that count as the reviewer's first interaction with the page. */
 const UNLOCK_EVENTS = ["pointerdown", "keydown"] as const;
 
@@ -137,6 +128,7 @@ const UNLOCK_EVENTS = ["pointerdown", "keydown"] as const;
  * would have been played without a real AudioContext. */
 export interface SoundEngine {
   play(sound: SoundName, options?: { volume?: number }): void;
+  unlock(): Promise<boolean>;
 }
 
 /** The effects an instance performs, injectable for isolated unit tests. */
@@ -164,7 +156,7 @@ export interface Sound {
    * from inside the gesture itself is what makes the first real sound audible.
    *
    * Unlocks even while sound is switched off, so switching it back on needs no
-   * second gesture. The cue it plays to do so is inaudible either way.
+   * second gesture.
    */
   unlock(): () => void;
 }
@@ -174,7 +166,7 @@ export interface Sound {
  * unit tests; the app uses the `sound` singleton below.
  */
 export function createSound(deps: SoundDeps = {}): Sound {
-  const engine: SoundEngine = deps.engine ?? { play: cuelumePlay };
+  const engine: SoundEngine = deps.engine ?? { play: cuelumePlay, unlock: cuelumeUnlock };
   const target = deps.target ?? (typeof window === "undefined" ? undefined : window);
 
   // cuelume guards context creation, but builds its node graph unguarded — a wedged
@@ -205,7 +197,7 @@ export function createSound(deps: SoundDeps = {}): Sound {
       // gesture unlocks, and the other type's listener must go with it.
       const onGesture = () => {
         detach();
-        render(UNLOCK_SOUND, UNLOCK_VOLUME);
+        void engine.unlock();
       };
       for (const type of UNLOCK_EVENTS) target.addEventListener(type, onGesture);
       return detach;
