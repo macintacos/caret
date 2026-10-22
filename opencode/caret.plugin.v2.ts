@@ -23,7 +23,7 @@ import {
   runPlanReview,
   type WarmRunner,
 } from "./caret.core.ts";
-import { editPermitted, type Rule } from "./permission.ts";
+import { editChecks, editPermitted, type Rule } from "./permission.ts";
 import { decisionText, nodeSpawnRunner, type SpawnRunner } from "./review-bridge.ts";
 
 /** Appended last, it outranks a config deny-all: v2 disables a tool only when the last
@@ -91,6 +91,15 @@ export type SetupContext = {
   tool: {
     transform: (callback: (tools: { add: (tool: ReviewTool) => void }) => void) => Promise<unknown>;
   };
+  /** Hosts ≥ 2.0.29 only. */
+  permission?: {
+    assert: (input: {
+      sessionID: string;
+      agent?: string;
+      action: string;
+      resources: string[];
+    }) => Promise<void>;
+  };
 };
 
 /** The v2 tool-call context fields caret's `execute` reads. */
@@ -118,6 +127,7 @@ export function createCaretSetup(opts: {
       input: unknown,
       context: ToolContext,
     ): Promise<{ content: string; metadata?: Record<string, string> }> {
+      let declined: unknown;
       try {
         const session = await readSession(context.sessionID).catch(() => undefined);
         const directory = session?.location.directory ?? ctx.location.directory;
@@ -130,15 +140,34 @@ export function createCaretSetup(opts: {
             // Fail-open: an unreadable session is treated as primary, as on v1.
             isSubagent: async () => Boolean(session?.parentID),
             canEdit: async (planFilePath) => {
+              const location = { directory, projectDirectory: ctx.location.project.directory };
+              const permission = ctx.permission;
+              if (typeof permission?.assert === "function") {
+                try {
+                  for (const check of editChecks(planFilePath, location)) {
+                    await permission.assert({
+                      sessionID: context.sessionID,
+                      agent: context.agent,
+                      action: check.action,
+                      resources: [check.resource],
+                    });
+                  }
+                  return true;
+                } catch (error) {
+                  if ((error as { _tag?: unknown } | null)?._tag === "Tool.Error") return false;
+                  // A plain rejection must end the step, so it escapes the fail-safe catch below.
+                  declined = error;
+                  throw error;
+                }
+              }
               // Session rules can deny, so an unreadable session cannot prove allow.
               if (!session) return false;
               try {
                 const agent = await ctx.agent.get({ agentID: context.agent });
-                return editPermitted(
-                  planFilePath,
-                  { directory, projectDirectory: ctx.location.project.directory },
-                  { agent: agent.data.permissions, session: session.permissions ?? [] },
-                );
+                return editPermitted(planFilePath, location, {
+                  agent: agent.data.permissions,
+                  session: session.permissions ?? [],
+                });
               } catch {
                 return false;
               }
@@ -155,6 +184,7 @@ export function createCaretSetup(opts: {
         if (!decision || context.signal.aborted) return { content: text };
         return { content: text, metadata: { [CARET_DECISION_KEY]: decision.behavior } };
       } catch (error) {
+        if (declined !== undefined && error === declined) throw error;
         const message = error instanceof Error ? error.message : String(error);
         return {
           content: decisionText(

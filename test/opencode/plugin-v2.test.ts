@@ -1,6 +1,6 @@
 // Unit coverage for caret's OpenCode v2 `setup` adapter: tool registration, the
 // planning steer, the `context`-hook subagent removal, the prewarm, the plan-agent allow,
-// the evaluate-then-refuse `path` check, the subagent refusal, abort, and the toast
+// the `path` check (host assert or evaluate-then-refuse), the subagent refusal, abort, and the toast
 // progress and metadata keys — driven through a fake v2 plugin context and a stub runner.
 
 import { afterAll, expect, test } from "bun:test";
@@ -41,7 +41,11 @@ type FakeOpts = {
   /** Agent ids, default first. */
   agents?: () => Promise<string[]>;
   update?: (input: { sessionID: string; permissions: Rule[] }) => Promise<void>;
+  /** Hosts ≥ 2.0.29 expose `permission.assert`; omitted, the fake is an older host. */
+  assert?: (input: AssertCall) => Promise<void>;
 };
+
+type AssertCall = { sessionID: string; agent?: string; action: string; resources: string[] };
 
 /** A v2 plugin context that records the registered tool and hooks. */
 function fakeContext(opts: FakeOpts = {}) {
@@ -82,6 +86,7 @@ function fakeContext(opts: FakeOpts = {}) {
         data: (await (opts.agents ?? (async () => ["build", "plan"]))()).map((id) => ({ id })),
       }),
     },
+    ...(opts.assert && { permission: { assert: opts.assert } }),
   };
   return { ctx: ctx as unknown as Plugin.Context, tools, hooks, updates };
 }
@@ -626,4 +631,72 @@ test("an aborted review returns content without decision metadata", async () => 
   const result = await tool.execute({ plan: "# P" }, toolContext({ signal: controller.signal }));
   expect(typeof result.content).toBe("string");
   expect(result.metadata).toBeUndefined();
+});
+
+// --- permission.assert (hosts ≥ 2.0.29) ---
+
+/** The rejection the host's assert raises on a deny: a `Tool.Error`. */
+const toolError = (message: string) => Object.assign(new Error(message), { _tag: "Tool.Error" });
+
+function recordingAssert(reject?: (call: AssertCall) => unknown) {
+  const calls: AssertCall[] = [];
+  return {
+    calls,
+    assert: async (call: AssertCall) => {
+      calls.push(call);
+      const error = reject?.(call);
+      if (error) throw error;
+    },
+  };
+}
+
+test("a host assert decides an in-project path review over the local rules", async () => {
+  const directory = planDir({ "p.md": "# P\n" });
+  const host = recordingAssert();
+  const { stdins } = await pathReview(
+    {
+      directory,
+      agentRules: async () => [{ action: "edit", resource: "*", effect: "deny" }],
+      assert: host.assert,
+    },
+    "p.md",
+  );
+  expect(stdins).toHaveLength(1);
+  expect(host.calls).toEqual([
+    { sessionID: "S", agent: "plan", action: "edit", resources: ["p.md"] },
+  ]);
+});
+
+test("a Tool.Error from the host assert refuses a path review without spawning", async () => {
+  const directory = planDir({ "p.md": "# P\n" });
+  const host = recordingAssert(() => toolError("denied by policy"));
+  const { result, stdins } = await pathReview(
+    { directory, agentRules: async () => ALLOW_ALL, assert: host.assert },
+    "p.md",
+  );
+  expect(String(result.content)).toContain("not permitted to edit");
+  expect(stdins).toEqual([]);
+});
+
+test("a plain rejection from the host assert propagates out of execute", async () => {
+  const directory = planDir({ "p.md": "# P\n" });
+  const declined = Object.assign(new Error("declined"), { _tag: "Permission.DeclinedError" });
+  const host = recordingAssert(() => declined);
+  const { tool } = await setupWith(stubRunner(ALLOW), { directory, assert: host.assert });
+  await expect(tool.execute({ path: "p.md" }, toolContext())).rejects.toBe(declined);
+});
+
+test("an out-of-project file asserts edit and its external_directory", async () => {
+  const project = planDir({ ".keep": "" });
+  const outside = planDir({ "p.md": "# Out\n" });
+  const host = recordingAssert();
+  const { stdins } = await pathReview(
+    { directory: project, assert: host.assert },
+    join(outside, "p.md"),
+  );
+  expect(stdins).toHaveLength(1);
+  expect(host.calls.map(({ action, resources }) => ({ action, resources }))).toEqual([
+    { action: "edit", resources: [join(outside, "p.md")] },
+    { action: "external_directory", resources: [join(outside, "*")] },
+  ]);
 });

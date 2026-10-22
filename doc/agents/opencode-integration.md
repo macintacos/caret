@@ -122,28 +122,36 @@ resolved absolute path as `planFilePath`, which gives the envelope the same shap
 Code's hook sends. The core's plan-file guard, write-back, and notes append then run
 unchanged. The plugin can't import `src/`, so it repeats the core's "`.md`, existing
 regular file" check. It then checks `edit` permission on the file, the pattern being the
-path relative to the session worktree: v1 asks OpenCode (`context.ask`); v2 evaluates
-OpenCode's rules itself, as below. The core's plan-file guard assumes the agent wrote the
-file itself, as Claude Code's does; here the model picks the string, so without that check
-caret's write-back would bypass OpenCode's edit rules and rewrite a file the agent may not
-edit. When the check fails or permission is refused, the plugin returns an error string to
-the agent without spawning `caret review`. That is an error, not a deny: no review
-happened.
+path relative to the session worktree: v1 asks OpenCode (`context.ask`); v2 asks through
+`ctx.permission.assert` where the host has it, else evaluates OpenCode's rules itself, as
+below. The core's plan-file guard assumes the agent wrote the file itself, as Claude
+Code's does; here the model picks the string, so without that check caret's write-back
+would bypass OpenCode's edit rules and rewrite a file the agent may not edit. When the
+check fails or permission is refused, the plugin returns an error string to the agent
+without spawning `caret review`. That is an error, not a deny: no review happened.
 
-**On v2 the check is evaluate-then-refuse**, because no v2 plugin API raises an
-interactive permission ask. `opencode/permission.ts` copies OpenCode v2's `Wildcard.match`
-and `Permission.evaluate` (its `*` crosses `/`, which `Bun.Glob` and `path.matchesGlob` do
-not, and no published package exports the matcher) and mirrors the resource forming of
-v2's `file-access.ts`. `editPermitted` evaluates the agent's rules (`ctx.agent.get`,
-config `permission` already folded in), then the session's `permissions` — last matching
-rule wins, default `ask` — for `edit` on the file, plus `external_directory` when the file
-is outside the project, since that is OpenCode's own check for such a file. It permits
-only when every evaluated effect is `allow`; a failed agent or session read refuses.
-**An `ask` refuses** too, with the not-permitted text, which tells the agent to pass the
-plan inline as `plan`: `ask` means "only with the user's consent", v2 gives a plugin no
-way to obtain it, and proceeding would write without it.
+**On v2 ≥ 2.0.29 caret asks OpenCode.** When `ctx.permission.assert` exists, the plugin
+asserts `edit` on the file, plus `external_directory` when it is outside the project, with
+the resources `opencode/permission.ts` forms. OpenCode's own engine then applies config
+rules, saved "always" grants, and its native prompt. A resolve permits; a `Tool.Error`
+(deny, or rejection with feedback) refuses with the not-permitted text; a plain rejection
+is rethrown out of `execute`, as the SDK requires, so it ends the step instead of reading
+as a deny.
 
-Known limits of evaluate-then-refuse:
+**Older v2 hosts fall back to evaluate-then-refuse**, because they give a plugin no API
+that raises an interactive permission ask. `opencode/permission.ts` copies OpenCode v2's
+`Wildcard.match` and `Permission.evaluate` (its `*` crosses `/`, which `Bun.Glob` and
+`path.matchesGlob` do not, and no published package exports the matcher) and mirrors the
+resource forming of v2's `file-access.ts`. `editPermitted` evaluates the agent's rules
+(`ctx.agent.get`, config `permission` already folded in), then the session's `permissions`
+— last matching rule wins, default `ask` — for `edit` on the file, plus
+`external_directory` when the file is outside the project, since that is OpenCode's own
+check for such a file. It permits only when every evaluated effect is `allow`; a failed
+agent or session read refuses. **An `ask` refuses** too, with the not-permitted text,
+which tells the agent to pass the plan inline as `plan`: `ask` means "only with the user's
+consent", v2 gives a plugin no way to obtain it, and proceeding would write without it.
+
+Known limits of the fallback, all closed where `assert` exists:
 
 - **Stock v2 refuses a non-plan agent's out-of-project `path`.** Stock agent rules are
   `* * allow`, then `external_directory * ask`, so a `build` agent submitting
@@ -155,7 +163,8 @@ Known limits of evaluate-then-refuse:
 - **Config and organization policy denies are invisible too**, so caret may proceed where
   a policy would deny.
 
-All three close when upstream exposes a permission assert (anomalyco/opencode#46530).
+Raising caret's v2 floor to 2.0.29 would let `permission.ts`'s matcher and the fallback
+go; `editChecks` still forms the asserted resources.
 
 Abort reaches the child on both hosts: `runPlanReview` passes the host's signal (v1's
 `context.abort`, v2's `context.signal`) to the bridge, whose `spawn({ signal })` kills
