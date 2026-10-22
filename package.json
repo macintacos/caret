@@ -52,7 +52,7 @@
     "@lezer/highlight": "^1.2.3",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@opencode/plugin": "^2.0.18",
-    "@pierre/diffs": "1.3.6",
+    "@pierre/diffs": "1.5.2",
     "@pierre/trees": "1.0.0-beta.6",
     "@playwright/test": "^1.62.1",
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
