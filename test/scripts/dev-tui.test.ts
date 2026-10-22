@@ -185,6 +185,10 @@ describe("keyAction", () => {
     expect(keyAction("G")).toEqual({ kind: "follow" });
   });
 
+  test("o opens the UI in the browser", () => {
+    expect(keyAction("o")).toEqual({ kind: "open" });
+  });
+
   test("an unknown key does nothing", () => {
     expect(keyAction("z")).toBeNull();
     expect(keyAction("")).toBeNull();
@@ -234,6 +238,7 @@ describe("createTui", () => {
     title: "caret dev",
     shortcuts: [{ key: "n", label: "new plan" }],
     onInject: () => {},
+    onOpen: () => {},
     onQuit: () => {},
     ...over,
   });
@@ -262,6 +267,20 @@ describe("createTui", () => {
     const tui = createTui(opts({ onInject: (k: string) => injected.push(k) }), deps);
     press("n");
     expect(injected).toEqual(["n"]);
+    tui.stop();
+  });
+
+  test("pressing o asks to open the UI, without injecting", () => {
+    let opened = 0;
+    const injected: string[] = [];
+    const { deps, press } = fakeDeps();
+    const tui = createTui(
+      opts({ onOpen: () => opened++, onInject: (k: string) => injected.push(k) }),
+      deps,
+    );
+    press("o");
+    expect(opened).toBe(1);
+    expect(injected).toEqual([]);
     tui.stop();
   });
 
