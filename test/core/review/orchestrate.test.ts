@@ -9,6 +9,7 @@ import { logInfo, setLogLevel } from "@/lib/log.ts";
 import type { Decision, PlanInput } from "@/lib/types.ts";
 import { PLAN_EMPTY_DENY_MESSAGE, PLAN_FORMAT_DENY_MESSAGE } from "@/plan/format.ts";
 import {
+  browserReviewLink,
   expireAbandoned,
   type PostedReview,
   parseHook,
@@ -784,4 +785,22 @@ test("expireAbandoned swallows an expire failure (best-effort, never throws)", a
       { baseUrl: "http://d", id: "rid" },
     ),
   ).resolves.toBeUndefined();
+});
+
+test("browserReviewLink points at the review when one was found", () => {
+  expect(browserReviewLink("http://127.0.0.1:42718", "caret.localhost", "r1", null)).toBe(
+    "http://caret.localhost:42718/?review=r1",
+  );
+});
+
+test("browserReviewLink falls back to caret's UI root without a review", () => {
+  expect(browserReviewLink("http://127.0.0.1:42718", "caret.localhost", undefined, null)).toBe(
+    "http://caret.localhost:42718/",
+  );
+});
+
+test("browserReviewLink logs the browser in when given a token", () => {
+  expect(browserReviewLink("http://127.0.0.1:42718", "caret.localhost", "r1", "t0k")).toBe(
+    "http://caret.localhost:42718/?review=r1&token=t0k",
+  );
 });

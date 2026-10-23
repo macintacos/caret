@@ -38,7 +38,7 @@ import { runLint } from "@/tasks/lint.ts";
 import { buildReleaseCommand } from "@/tasks/release/command.ts";
 import { runSetup } from "@/tasks/setup.ts";
 import { runSmoke, runSmokeBin, runSmokeBundle } from "@/tasks/smoke.ts";
-import { runTest, runTestBats, runTestE2e, type TestFlags } from "@/tasks/test.ts";
+import { runTest, runTestBats, runTestE2e, runTestMod, type TestFlags } from "@/tasks/test.ts";
 
 import { type JsonArgs, runPreflightCli } from "../../scripts/preflight.ts";
 
@@ -57,6 +57,7 @@ export interface TaskActions {
   test: (args: string[], flags: TestFlags) => Promise<unknown>;
   testE2e: (args: string[], flags: TestFlags) => Promise<unknown>;
   testBats: (args: string[], flags: TestFlags) => Promise<unknown>;
+  testMod: (flags: TestFlags) => Promise<unknown>;
   setup: () => Promise<unknown>;
   smoke: () => Promise<unknown>;
   smokeBin: () => Promise<unknown>;
@@ -77,6 +78,7 @@ const realActions: TaskActions = {
   test: runTest,
   testE2e: runTestE2e,
   testBats: runTestBats,
+  testMod: runTestMod,
   setup: runSetup,
   smoke: runSmoke,
   smokeBin: runSmokeBin,
@@ -242,7 +244,7 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   // contract (EXC-738/739), so these must precede the forwarded args — hence the
   // "(before forwarded args)" each description carries. unit and e2e share one
   // declaration so a reworded description cannot drift between them.
-  // `--json` is split out because all three targets carry it and only two carry the
+  // `--json` is split out because all four targets carry it and only two carry the
   // volume pair — one declaration each, so neither can drift.
   const withJsonFlag = <Args extends unknown[], Opts extends OptionValues>(
     cmd: Command<Args, Opts>,
@@ -255,7 +257,9 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       .option("--quiet", "Show failures only (before forwarded args)");
   const test = program
     .command("test")
-    .description("Run tests: bare/`unit` = bun test, `e2e` = Playwright, `bats` = shell");
+    .description(
+      "Run tests: bare/`unit` = bun test, `e2e` = Playwright, `bats` = shell, `mod` = Claude Code kit",
+    );
   withModeFlags(
     test
       .command("unit", { isDefault: true })
@@ -290,6 +294,11 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       .argument("[args...]", "forwarded to bats"),
   ).action(async (args: string[], opts) => {
     await actions.testBats(args, opts);
+  });
+  withJsonFlag(
+    test.command("mod").description("Run the Claude Code mod's kit tests (claude plugin test mod)"),
+  ).action(async (opts) => {
+    await actions.testMod(opts);
   });
 
   program

@@ -6,7 +6,7 @@
 import { renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import { createConfigWriter } from "@/config/config-write.ts";
+import { type ConfigRefusal, createConfigWriter } from "@/config/config-write.ts";
 import { deriveIdleTimeoutSec } from "@/config/constants.ts";
 import { configFile, ensureStateDir, themesDir } from "@/config/paths.ts";
 import { DEFAULTS } from "@/config/settings.ts";
@@ -42,6 +42,7 @@ import { type CaretLogger, noopLogger, shortId } from "@/lib/log.ts";
 import {
   type ApproveVariant,
   type CmuxPane,
+  type ConfigValues,
   currentVersion,
   type DaemonDiagnostics,
   type Decision,
@@ -208,6 +209,10 @@ export interface CreateServerOptions {
    * one (EXC-1207): the UI reads this route on every load, so an unwired route there
    * would 404 into every spec's page load. */
   updateReport?: () => UpdateReport | Promise<UpdateReport>;
+  /** A thunk answering GET /api/config with the live config values. Omitted → 404.
+   * runDaemon wires it, and the e2e fixture daemon must too: App reads this route on
+   * every load. */
+  configValues?: () => ConfigValues;
   /** A thunk answering GET /api/update/changes (EXC-1452): what the caret the user is
    * behind would bring, fetched from GitHub on request. Null → 502. Omitted → 404. */
   updateChanges?: () => Promise<UpdateChanges | null>;
@@ -283,6 +288,7 @@ interface ResolvedOptions {
   readSkillDescription: ((cwd: string, skill: SkillRef) => Promise<string | null>) | undefined;
   diagnostics: (() => DaemonDiagnostics) | undefined;
   updateReport: (() => UpdateReport | Promise<UpdateReport>) | undefined;
+  configValues: (() => ConfigValues) | undefined;
   updateChanges: (() => Promise<UpdateChanges | null>) | undefined;
   restartHint: string | undefined;
   onUpdatesEnabled: (() => void) | undefined;
@@ -322,6 +328,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     readSkillDescription: opts.readSkillDescription,
     diagnostics: opts.diagnostics,
     updateReport: opts.updateReport,
+    configValues: opts.configValues,
     updateChanges: opts.updateChanges,
     restartHint: opts.restartHint,
     onUpdatesEnabled: opts.onUpdatesEnabled,
@@ -504,6 +511,13 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   function handleDiagnostics(): Response {
     if (!cfg.diagnostics) return notFound();
     return Response.json(cfg.diagnostics());
+  }
+
+  // GET /api/config — the live value of every key POST /api/config writes, so the
+  // settings toggles seed from the file rather than a default. Unwired → 404.
+  function handleGetConfig(): Response {
+    if (!cfg.configValues) return notFound();
+    return Response.json(cfg.configValues());
   }
 
   // GET /api/update — whether the caret this daemon is, is behind (EXC-1205): the
@@ -713,8 +727,19 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // GET /api/reviews — the pending list as client-facing shapes. Doubles as the
   // live-client heartbeat: a UI polls this every ~2s, so stamping the time here
   // lets handleCreateReview tell the hook whether a tab is already listening
-  // (EXC-559).
-  function handleListReviews(): Response {
+  // (EXC-559). `?session=<id>` is the plan-waiting band's lookup, not a UI: it
+  // polls while the review is being posted, so stamping would read as a live tab
+  // and switch off the browser auto-open.
+  function handleListReviews(url: URL): Response {
+    const session = url.searchParams.get("session");
+    if (session !== null) {
+      return Response.json(
+        store
+          .list()
+          .filter((r) => r.sessionId === session)
+          .map(toClientReview),
+      );
+    }
     lastReviewsPollAt = Date.now();
     return Response.json(store.list().map(toClientReview));
   }
@@ -746,31 +771,34 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       log.warn("settings", "config patch rejected", { reason: error });
       return Response.json({ error }, { status: 400 });
     }
-    const { updates } = parsed.data;
-    if (updates === undefined) {
-      // An empty patch is deliberately a success (ConfigPatchSchema): it asked for
-      // nothing, so nothing was written. Anything else reaching here is a ConfigPatch key
-      // nobody wired, and this route must not answer 200 to a body it did not honour.
-      if (Object.keys(parsed.data).length > 0) {
-        return Response.json({ error: "unhandled config patch" }, { status: 400 });
-      }
-      return Response.json({ ok: true });
+    const { updates, review, ...unwired } = parsed.data;
+    // A ConfigPatch key nobody wired: this route must not answer 200 to a body it did
+    // not honour. An empty patch is deliberately a success (ConfigPatchSchema).
+    if (Object.keys(unwired).length > 0) {
+      return Response.json({ error: "unhandled config patch" }, { status: 400 });
     }
-    const { check } = updates;
-    const wrote = await configWriter.setUpdatesCheck(check);
-    if (!wrote.ok) {
-      // Carrying the reason for the same reason the 400 above does: the toast tells the
-      // user to hand-edit but not what in their file blocked the write, so the daemon log
-      // is the only place it survives. The reasons are a closed set of tokens.
-      log.warn("settings", "config.toml edit refused", { reason: wrote.reason });
-      return Response.json({ error: "config.toml cannot be edited safely" }, { status: 409 });
+    if (review !== undefined) {
+      const wrote = await configWriter.setReviewBand(review.band);
+      if (!wrote.ok) return refused(wrote.reason);
     }
-    log.debug("settings", "config saved");
+    if (updates !== undefined) {
+      const wrote = await configWriter.setUpdatesCheck(updates.check);
+      if (!wrote.ok) return refused(wrote.reason);
+    }
+    if (review !== undefined || updates !== undefined) log.debug("settings", "config saved");
     // Turning the check back on is a user action, so it is allowed to spend a call
     // (EXC-1210). The throttle still governs: a re-run inside the 24h window returns
     // null and the already-held verdict is what gets served.
-    if (check === true) cfg.onUpdatesEnabled?.();
+    if (updates?.check === true) cfg.onUpdatesEnabled?.();
     return Response.json({ ok: true });
+  }
+
+  function refused(reason: ConfigRefusal): Response {
+    // Carrying the reason for the same reason the 400 above does: the toast tells the
+    // user to hand-edit but not what in their file blocked the write, so the daemon log
+    // is the only place it survives. The reasons are a closed set of tokens.
+    log.warn("settings", "config.toml edit refused", { reason });
+    return Response.json({ error: "config.toml cannot be edited safely" }, { status: 409 });
   }
 
   // GET /api/reviews/:id — one review as its client-facing shape.
@@ -1155,6 +1183,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     const readsUi = method === "GET" || method === "HEAD";
     if (method === "GET" && path === "/api/health") return handleHealth();
     if (method === "GET" && path === "/api/diagnostics") return handleDiagnostics();
+    if (method === "GET" && path === "/api/config") return handleGetConfig();
     if (method === "GET" && path === "/api/update") return handleUpdate();
     if (method === "GET" && path === "/api/update/changes") return handleUpdateChanges();
     if (method === "GET" && path === "/api/themes") return handleThemes();
@@ -1165,7 +1194,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       return handleCreateReview(req, bindRequestLog);
     if (method === "POST" && path === "/api/logs") return handleLogs(req);
     if (method === "POST" && path === "/api/ui/gone") return handleUiGone();
-    if (method === "GET" && path === "/api/reviews") return handleListReviews();
+    if (method === "GET" && path === "/api/reviews") return handleListReviews(new URL(req.url));
     if (method === "POST" && path === "/api/config") return handleSetConfig(req);
 
     if (route) {

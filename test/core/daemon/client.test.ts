@@ -16,6 +16,7 @@ import {
   longPoll,
   postReview,
   resolveReview,
+  sessionReview,
   waitForHealth,
 } from "@/daemon/client.ts";
 
@@ -121,6 +122,34 @@ test("a call without a version sends no version query", async () => {
   const seen: string[] = [];
   await expireReview(serveStatus(404, seen), "r1", undefined);
   expect(seen).toEqual([""]);
+});
+
+test("sessionReview asks for the session and returns its review, skipping other sessions", async () => {
+  const seen: string[] = [];
+  const srv = Bun.serve({
+    port: 0,
+    fetch: (req) => {
+      seen.push(new URL(req.url).search);
+      return Response.json([
+        { id: "r-other", sessionId: "s-other" },
+        { id: "r-mine", sessionId: "s/mine" },
+      ]);
+    },
+  });
+  servers.push(srv);
+  const review = await sessionReview(`http://localhost:${srv.port}`, "s/mine");
+  expect(review?.id).toBe("r-mine");
+  expect(seen).toEqual(["?session=s%2Fmine"]);
+});
+
+test("sessionReview is undefined when no review matches the session", async () => {
+  const srv = Bun.serve({ port: 0, fetch: () => Response.json([{ id: "r", sessionId: "x" }]) });
+  servers.push(srv);
+  expect((await sessionReview(`http://localhost:${srv.port}`, "s")) === undefined).toBe(true);
+});
+
+test("sessionReview rejects on a non-ok status", async () => {
+  await expect(sessionReview(serveStatus(500, []), "s")).rejects.toThrow();
 });
 
 describe("daemon requests carry the state dir's token", () => {

@@ -184,6 +184,11 @@ is the only signal. `UserPromptSubmit` fires on every prompt, so outside plan mo
 command prints nothing, it never reads config or writes logs, and any failure exits 0
 silently.
 
+`hooks.json` also loads a Claude Code mod, `mod/hooks/band.tsx`, which draws the
+plan-waiting band above the prompt while an `ExitPlanMode` request or a `review_plan` call
+waits. It asks `caret band-link` for the link, so caret's own rules pick the host, port
+and login token, and it never holds up the review.
+
 Beside the hooks, the plugin starts a stdio MCP server, `caret mcp`, declared in
 `.claude-plugin/plugin.json`. It serves one tool, `review_plan`, which a skill can call to
 put a plan in front of you without going through plan mode — see
@@ -455,17 +460,20 @@ waiting out the timeout, and no agent is waiting on its result.
 
 On Claude Code, three more behaviors follow from how the server is built:
 
-- **One review at a time.** The server mints its own session id when it starts and uses it
-  for every call for the life of the Claude Code process. A second review under that id
-  would land as the next version of the pending one and end the first call with a deny, so
-  the server refuses a call made while a review is pending: it returns an error at once,
-  telling the agent to wait for the pending decision.
+- **One review at a time.** The server derives its session id when it starts — Claude
+  Code's session id with an `mcp-` prefix, or a fresh uuid when Claude Code gives none —
+  and uses it for every call for the life of the Claude Code process. A second review
+  under that id would land as the next version of the pending one and end the first call
+  with a deny, so the server refuses a call made while a review is pending: it returns an
+  error at once, telling the agent to wait for the pending decision.
 - **Resubmissions thread.** Because every call from that process shares the one id, a
   revised plan sent after a change request lands as the next version of the same review.
-  The id is not Claude Code's session id, so a tool review and a review intercepted from
-  plan mode (`ExitPlanMode`) never replace each other. The one oddity: after `/clear`, a
+  The prefix keeps the id from ever equalling a hook's session id, so a tool review and a
+  review intercepted from plan mode (`ExitPlanMode`) never replace each other; the
+  plan-waiting band uses the id to find the tool review. The one oddity: after `/clear`, a
   submission can still land as a new version of a review from before the clear that was
-  waiting on changes.
+  waiting on changes, and the band cannot find the tool review, so it links caret's UI
+  instead.
 - **Approve is always plain.** A tool result cannot change Claude Code's permission mode,
   so choosing accept-edits or auto when approving a tool-submitted plan approves it
   without switching modes.
@@ -487,7 +495,8 @@ src/lib/            cross-cutting foundation — wire-contract types, logging, a
 src/commands/       per-subcommand entrypoints (one file per subcommand), plus the wiring they share
 src/adapters/       the coding-agent adapter axis — the AgentAdapter interface and registry, plus one directory per tool (claude · opencode · codex)
 ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs · src/lib/themes/ the built-in theme files · src/code-themes/ the vendored Nightfox shiki themes, the theme comparison's reference rather than a shipped theme
-hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode + UserPromptSubmit) — Claude-adapter packaging
+hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode + UserPromptSubmit, plus the `modules` entry that loads the mod) — Claude-adapter packaging
+mod/                the Claude Code mod — the plan-waiting band's hooks module, its state typings, and its kit tests (`claude plugin test mod`) — Claude-adapter packaging
 commands/           /caret:demo · /caret:doctor · /caret:plan — Claude-adapter packaging (agent-specific behavioral prose)
 opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging; caret.core.ts is the host-neutral core the v1, v2 and TUI modules share; review-bridge.ts, its bridge to caret review, is shared with caret mcp and caret steer
 templates/          demo.md — the /caret:demo plan both adapters' commands fill and present

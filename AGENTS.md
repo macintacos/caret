@@ -59,15 +59,15 @@ documents on stdout, one per line: a `start` document (the planned tasks, why th
 plus the filters in effect) and a `result` document carrying each task's status and
 `durationMs` and an overall `ok` boolean. The exit code is unchanged (`0` pass, `1` fail).
 
-**The gate scopes itself to your diff, so `ok` does not always mean all seven tasks ran.**
+**The gate scopes itself to your diff, so `ok` does not always mean all eight tasks ran.**
 A change where every path is Markdown runs `lint` alone — plus `test unit` when it touches
 one of the Markdown files a test reads from disk (`MARKDOWN_READ_BY_TESTS` in
 `scripts/preflight.ts`: `scripts/tasks/dev/fake-plan.md`, `doc/ARCHITECTURE.md`,
 `THIRD_PARTY_LICENSES.md`, `doc/DEVELOPMENT.md`, and `doc/CONFIGURING.md`). Anything else
-runs the full seven, as does an empty or unreadable diff. Read the `start` document's
+runs the full eight, as does an empty or unreadable diff. Read the `start` document's
 `selection` object before you report a run as green: `{"narrowed": true, "reason": "…"}`
 means you proved less than the whole gate, and `schemaVersion` is `2` precisely because
-`ok` now means "every task that ran passed". `--full` forces all seven — it is the one
+`ok` now means "every task that ran passed". `--full` forces all eight — it is the one
 preflight flag that works without `--json` too. Note that `lint` always scans the whole
 tree even when the gate narrows, so cross-file link fragments stay checked.
 
@@ -99,14 +99,16 @@ README.
 hermetic shell suites under `scripts/`) are the entry points, and all three forward their
 arguments, so `mise run test <path>` scopes the run to one file. On `bats` a named suite
 replaces the default `scripts/` rather than joining it; `--filter <regex>` narrows within
-whatever is selected.
+whatever is selected. `mise run test mod` runs the Claude Code mod's kit tests under
+`mod/` (`claude plugin test mod`) and forwards nothing; preflight skips it when `claude`
+is not on PATH.
 
 **`mise run test --json` is the call you want when you only need the verdict.** It emits
 one JSON document on stdout and nothing else — every child, the UI build included, runs
 captured — and the exit code is unchanged (`0` pass, non-zero fail):
 
 ```text
-{"schemaVersion": 1, "target": "unit"|"e2e"|"bats", "ok", "passed", "failed", "durationMs", "report"}
+{"schemaVersion": 1, "target": "unit"|"e2e"|"bats"|"mod", "ok", "passed", "failed", "durationMs", "report"}
 ```
 
 `ok` is the runner's own exit code, never re-derived from the counts.

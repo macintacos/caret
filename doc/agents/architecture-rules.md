@@ -110,12 +110,12 @@ another.
 
 **What does NOT move to the adapter directory:** the Claude plugin packaging —
 `hooks/hooks.json`, `.claude-plugin/*` (including `plugin.json`'s `mcpServers` entry for
-`caret mcp`), `commands/*.md` — sits where Claude Code's plugin system requires it on
-disk. It is adapter-owned *surface* (Claude-contractual file locations), documented as
-such, but not parameterized for hypothetical future tools. The Codex adapter likewise
-ships no packaging today; Codex hook installation (`~/.codex/hooks.json` /
-`config.toml [hooks]` behind `[features] codex_hooks`) is a documented future ship step,
-not built here.
+`caret mcp`), `commands/*.md`, and the plan-waiting band's hooks module under `mod/` —
+sits where Claude Code's plugin system requires it on disk. It is adapter-owned *surface*
+(Claude-contractual file locations), documented as such, but not parameterized for
+hypothetical future tools. The Codex adapter likewise ships no packaging today; Codex hook
+installation (`~/.codex/hooks.json` / `config.toml [hooks]` behind
+`[features] codex_hooks`) is a documented future ship step, not built here.
 
 ## Browser-safe shared modules
 
@@ -206,14 +206,18 @@ bind and switch a token on; the rules below cover both shapes.
   kept.
 - **The token is printed only to a terminal the user ran:** by `caret serve` after
   `runDaemon` returns, and by `caret login-link`, which reads the token file without
-  asking the daemon or minting one. Never by `caret daemon`, whose stdout and stderr land
-  in `daemon-stderr.log`, which the `caret doctor` bundle ships unredacted; an integration
+  asking the daemon or minting one. One deliberate exception: `caret band-link` prints the
+  band's login link, so the token reaches Claude Code's capture of its stdout, the mod's
+  `$.state` atom and the band's OSC 8 hyperlink target in the terminal — never a log or
+  the band's visible text. Never by `caret daemon`, whose stdout and stderr land in
+  `daemon-stderr.log`, which the `caret doctor` bundle ships unredacted; an integration
   test pins that.
 - **Adapters reach the daemon only by spawning the caret CLI**, never over HTTP, so none
   bypasses the token. A new adapter that wants the daemon goes through `caret review` or
   another CLI command, which carries the token for it.
-- **`POST /api/config` refuses `daemon.*`.** It writes `updates.check` and nothing else,
-  so a logged-in device cannot turn auth off or rebind the daemon. A test pins it.
+- **`POST /api/config` refuses `daemon.*`.** It writes `updates.check` and `review.band`
+  and nothing else, so a logged-in device cannot turn auth off or rebind the daemon. A
+  test pins it.
 - **`POST /api/themes` writes only `<id>.json` directly in `themesDir`.** The name comes
   from the schema's slug, never from client input, and the writer removes only `*.json`
   files in that folder declaring the same id. The path stays inside the folder only

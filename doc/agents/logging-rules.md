@@ -87,20 +87,21 @@ Concretely:
 - `step` is a **short fixed lowercase token** naming the operation (`review`, `resolve`,
   `decision`, `idle`, `listen`, `settings`, `signal`, `store`, `draft`, `env`, `ui`,
   `poll`, `render`, `prewarm`, `retire`, `drain`, `spawn`, `request`, `fatal`, `update`,
-  `service`, `upkeep`, `mcp`, `reconcile`, `themes`). Reuse an existing token before
-  minting a new one — and when you do mint one, add it here in the same change, so this
-  stays a registry rather than a snapshot. Two emitters pass an identifier as `step`, so
-  both keep its camelCase: `runReview`'s plan rejections and its failure record log the
+  `service`, `upkeep`, `mcp`, `reconcile`, `themes`, `band`). Reuse an existing token
+  before minting a new one — and when you do mint one, add it here in the same change, so
+  this stays a registry rather than a snapshot. Two emitters pass an identifier as `step`,
+  so both keep its camelCase: `runReview`'s plan rejections and its failure record log the
   `ReviewStep` they were on (a key of `REVIEW_FAILURE_CODES` in
   `src/review/orchestrate.ts`), and the daemon's crash handler (`src/commands/daemon.ts`)
   logs the process event it caught (`uncaughtException`, `unhandledRejection`).
 - Review-scoped records carry structured `reviewId` / `sessionId` fields so one review
   stitches across the two log streams (EXC-444). A logger whose scope is one review binds
   them once: a daemon `:id` handler logs through the request's `log.child({ reviewId })`,
-  and the hook's review flow and reconcile, each serving one review per process, set them
-  with `setLogContext`. Code behind a shared, not-review-scoped object (the store,
-  decision settlement, the router's threading records, the MCP server) names the id in
-  `extra` on the record that concerns it, as does a record that learns an id mid-handler.
+  and the hook's review flow, reconcile and band-link, each serving one review per
+  process, set them with `setLogContext`. Code behind a shared, not-review-scoped object
+  (the store, decision settlement, the router's threading records, the MCP server) names
+  the id in `extra` on the record that concerns it, as does a record that learns an id
+  mid-handler.
 - Every record carries a `source` field naming the emitting process — `"hook"`,
   `"daemon"`, or `"ui"` (EXC-445). The logger attaches its own token unless `extra.source`
   is already set; the explicit value winning is how bridged browser events stay `"ui"`

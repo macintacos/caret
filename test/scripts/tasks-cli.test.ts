@@ -24,6 +24,7 @@ import { smokePlan } from "@/tasks/smoke.ts";
 import {
   batsCommand,
   e2eCommand,
+  modCommand,
   resolveTestMode,
   type TestFlags,
   testCommand,
@@ -281,6 +282,16 @@ describe("tasks CLI: test output-mode flags", () => {
       flags: {},
     });
   });
+
+  test("test mod: --json parses", async () => {
+    let captured: TestFlags | undefined;
+    const testMod = async (flags: TestFlags) => {
+      captured = flags;
+    };
+    expect(await runParsed(["test", "mod"], ["--json"], { testMod }, () => captured)).toEqual({
+      json: true,
+    });
+  });
 });
 
 describe("tasks CLI: task command lines", () => {
@@ -460,6 +471,10 @@ describe("tasks CLI: build pipeline command lines", () => {
       "--grep",
       "smoke",
     ]);
+  });
+
+  test("test mod runs Claude Code's kit against mod/", () => {
+    expect(modCommand()).toEqual(["claude", "plugin", "test", "mod"]);
   });
 
   // Asserts the `mise x --` prefix batsCommand documents.

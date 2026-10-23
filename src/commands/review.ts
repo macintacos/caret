@@ -59,7 +59,7 @@ export function notesAppendTarget(
   return { path: planFilePath, notes: decision.feedback };
 }
 
-function openBrowser(url: string): void {
+export function openBrowser(url: string): void {
   try {
     Bun.spawn(browserOpenCmd(process.platform, url), {
       stdio: ["ignore", "ignore", "ignore"],
@@ -67,6 +67,12 @@ function openBrowser(url: string): void {
   } catch {
     // Best-effort: the stderr URL is the fallback.
   }
+}
+
+/** The token an auto-opened browser link carries, or null when it carries none. */
+export function browserLoginToken(daemon: Settings["daemon"]): string | null {
+  // Windows' `cmd /c start` splits the URL at `&`, so the tab opens on the login page.
+  return authEnabled(daemon) && process.platform !== "win32" ? readToken(daemonTokenFile()) : null;
 }
 
 /** A denied review costs the user more than a few seconds' wait, so the fallback spawn
@@ -88,11 +94,7 @@ export function prodReviewDeps(settings: Settings): ReviewDeps {
     },
     localHostname: localHostname(settings.daemon.host),
     publicHostname: publicHostname(settings.daemon),
-    // Windows' `cmd /c start` splits the URL at `&`, so the tab opens on the login page.
-    loginToken: () =>
-      authEnabled(settings.daemon) && process.platform !== "win32"
-        ? readToken(daemonTokenFile())
-        : null,
+    loginToken: () => browserLoginToken(settings.daemon),
     readPane: readCmuxPane,
     timeoutMs: reviewTimeoutMs(settings),
     expire: expireReview,

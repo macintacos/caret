@@ -90,7 +90,9 @@ export function createCaretMcpServer(review: ReviewPlanHandler): McpServer {
 
 export async function runMcpSubcommand(): Promise<void> {
   bootHookLogging(loadSettings());
-  const sessionId = `mcp-${randomUUID()}`;
+  // Claude Code's session id lets the band find this server's review; the `mcp-` prefix keeps tool
+  // and ExitPlanMode reviews from ever threading together. Keep in sync with mod/hooks/band.tsx.
+  const sessionId = `mcp-${process.env.CLAUDE_CODE_SESSION_ID || randomUUID()}`;
   const server = createCaretMcpServer(
     createReviewPlanHandler({
       sessionId,

@@ -33,7 +33,7 @@ mise run preflight  # the pre-push gate: lint + unit/shell/e2e tests + build + a
 ```
 
 `mise run preflight` is the gate to pass before pushing. It scopes itself to your diff, so
-a Markdown-only change runs fewer than the full seven tasks — `--full` forces all of them.
+a Markdown-only change runs fewer than the full eight tasks — `--full` forces all of them.
 The full task catalog (`build`, `test`, `smoke`, `lint`, `format`) is documented in
 [`doc/DEVELOPMENT.md`](doc/DEVELOPMENT.md#development).
 

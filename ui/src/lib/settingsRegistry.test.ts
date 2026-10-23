@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { type LogCapture, logCapture } from "@ui/support/helpers.ts";
 import { THEME_MODES } from "$lib/appearance.ts";
 import { knownPrefKeys } from "$lib/definePref.ts";
+import { seedReviewBand } from "$lib/reviewBandPref.ts";
 import {
   daemonField,
   filterSettings,
@@ -204,7 +205,7 @@ describe("Sound volume (EXC-1101)", () => {
   });
 });
 
-describe("Notifications (search-only live pane, EXC-847)", () => {
+describe("Notifications (live pane + band toggle)", () => {
   test("Notifications is a sidebar category with a blurb", () => {
     const cat = SETTINGS_CATEGORIES.find((c) => c.id === "Notifications");
     expect(cat).toBeDefined();
@@ -212,12 +213,27 @@ describe("Notifications (search-only live pane, EXC-847)", () => {
   });
 
   test("contributes a search-only entry (findable by /-search, never staged)", () => {
-    const entry = SETTINGS_REGISTRY.find((e) => e.category === "Notifications");
+    const entry = SETTINGS_REGISTRY.find((e) => e.key === "notifications");
     expect(entry).toBeDefined();
     // Live, browser-owned state — searchable but never an editable field.
     expect(entry ? isStagedField(entry) : true).toBe(false);
     expect(entry?.label).toBeTruthy();
     expect(entry?.description).toBeTruthy();
+  });
+
+  describe("the plan-waiting band toggle", () => {
+    const band = () => staged.find((f) => f.key === "reviewBand");
+    afterEach(() => seedReviewBand(true));
+
+    test("is a staged Notifications toggle", () => {
+      expect(band()?.category).toBe("Notifications");
+      expect(band()?.control.kind).toBe("toggle");
+    });
+
+    test("reads the value seeded from the daemon", () => {
+      seedReviewBand(false);
+      expect(band()?.read()).toBe(false);
+    });
   });
 });
 
