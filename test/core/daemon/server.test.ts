@@ -13,6 +13,7 @@ import { type RecordedEmit, recordingLog } from "@test/support/recording-log.ts"
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { themeFileText } from "@test/support/theme.ts";
 import { VANITY_HOST } from "@/config/constants.ts";
+import { configValuesOf, loadSettings } from "@/config/settings.ts";
 import {
   isClientLive,
   isCrossOrigin,
@@ -910,6 +911,23 @@ test("POST /api/reviews reports hasLiveClient=true right after a reviews poll (E
   await fetch(`${base}/api/reviews`); // a live UI client polling the pending list
   const r = await postReviewRaw();
   expect(r.hasLiveClient).toBe(true);
+});
+
+test("GET /api/reviews?session= returns only that session's reviews", async () => {
+  await boot();
+  const mine = await postReviewRaw({ sessionId: "s-mine" });
+  await postReviewRaw({ sessionId: "s-other" });
+  const list = (await (await fetch(`${base}/api/reviews?session=s-mine`)).json()) as Array<{
+    id: string;
+  }>;
+  expect(list.map((r) => r.id)).toEqual([mine.id]);
+});
+
+test("a session-scoped reviews read leaves hasLiveClient false", async () => {
+  await boot();
+  await fetch(`${base}/api/reviews?session=s-any`);
+  const r = await postReviewRaw();
+  expect(r.hasLiveClient).toBe(false);
 });
 
 // EXC-562: the EXC-559 liveness window keyed on the 2s reviews poll is defeated
@@ -2422,6 +2440,48 @@ describe("POST /api/config", () => {
     expect(foreignHost.status).toBe(403);
     // Neither reached the handler.
     expect(existsSync(configPath())).toBe(false);
+  });
+
+  test("a review patch lands in config.toml", async () => {
+    await boot();
+    expect((await setConfig({ review: { band: false } })).status).toBe(200);
+    expect(configOnDisk()).toBe("[review]\nband = false\n");
+  });
+
+  test("a malformed review patch answers 400", async () => {
+    await boot();
+    for (const body of [{ review: { band: "no" } }, { review: { band: false, timeout_s: 1 } }]) {
+      expect((await setConfig(body)).status).toBe(400);
+    }
+    expect(existsSync(configPath())).toBe(false);
+  });
+});
+
+describe("GET /api/config", () => {
+  const values = { updates: { check: true }, review: { band: false } };
+
+  test("answers the injected values", async () => {
+    await boot({ configValues: () => values });
+    expect(await (await fetch(`${base}/api/config`)).json()).toEqual(values);
+  });
+
+  test("404s when unwired", async () => {
+    await boot();
+    expect((await fetch(`${base}/api/config`)).status).toBe(404);
+  });
+
+  test("a POSTed value reads back from config.toml", async () => {
+    const configPath = join(dir, "config.toml");
+    await boot({
+      configValues: () => configValuesOf(loadSettings(configPath)),
+    });
+    await fetch(`${base}/api/config`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ review: { band: false } }),
+    });
+    const got = await (await fetch(`${base}/api/config`)).json();
+    expect(got.review).toEqual({ band: false });
   });
 });
 

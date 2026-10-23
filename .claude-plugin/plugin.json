@@ -15,6 +15,7 @@
     "approval",
     "annotation"
   ],
+  "types": "./mod/band.d.ts",
   "mcpServers": {
     "caret": {
       "command": "${CLAUDE_PLUGIN_ROOT}/bin/caret",

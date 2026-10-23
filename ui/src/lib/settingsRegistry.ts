@@ -26,6 +26,7 @@ import {
   readPreviewFontSize,
   writePreviewFontSize,
 } from "$lib/previewFontSizePref.ts";
+import { seededReviewBand } from "$lib/reviewBandPref.ts";
 import { readShortcutHints, writeShortcutHints } from "$lib/shortcutHintsPref.ts";
 import {
   readSoundEnabled,
@@ -380,7 +381,16 @@ export const SETTINGS_REGISTRY: readonly SettingEntry[] = [
     label: "Desktop notifications",
     description: "Get alerted when a new plan is ready for review; check the permission state.",
   },
-  // The update check (EXC-1207) — the registry's one daemon-owned field, since the check
+  daemonField<boolean>({
+    key: "reviewBand",
+    category: "Notifications",
+    label: "Plan-waiting band",
+    description: "Show a band above Claude Code's prompt while a plan waits for review.",
+    control: { kind: "toggle" },
+    read: seededReviewBand,
+    patch: (band) => ({ review: { band } }),
+  }),
+  // The update check (EXC-1207) — a daemon-owned field, since the check
   // runs in the daemon and outlives any browser that flipped it.
   daemonField<boolean>({
     key: UPDATES_CHECK_KEY,
@@ -447,7 +457,7 @@ export interface SettingCategory {
 export const SETTINGS_CATEGORIES: readonly SettingCategory[] = [
   { id: "Appearance", blurb: "How the interface looks, including the diff view." },
   { id: "Sound", blurb: "Short cues when a plan arrives and a decision lands." },
-  { id: "Notifications", blurb: "Desktop alerts when a new plan is ready for review." },
+  { id: "Notifications", blurb: "Alerts when a new plan is ready for review." },
   { id: UPDATES_CATEGORY, blurb: "Whether a newer caret is out, and how to install it." },
   { id: "Advanced", blurb: "Read-only details about this install. Click a block to copy it." },
 ];

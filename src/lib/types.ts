@@ -392,10 +392,14 @@ export interface ResolveBody {
 }
 
 /** Body of POST /api/config — the settings the UI may write into the user's
- * config.toml (EXC-1206). Deliberately narrow: the schema rejects anything not named
- * below rather than stripping it. */
-export interface ConfigPatch {
-  updates?: { check: boolean };
+ * config.toml (EXC-1206). Deliberately narrow: the schema rejects anything outside
+ * ConfigValues rather than stripping it. */
+export type ConfigPatch = Partial<ConfigValues>;
+
+/** Body of GET /api/config — the live value of every key POST /api/config writes. */
+export interface ConfigValues {
+  updates: { check: boolean };
+  review: { band: boolean };
 }
 
 /** Body of PUT /api/reviews/:id/draft (the reviewer's working-copy autosave).

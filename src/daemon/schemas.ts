@@ -94,7 +94,10 @@ export const VersionQuerySchema = z.coerce.number().int().positive().optional().
 // levels, so an unknown key UNDER `updates` is refused too; an empty patch is
 // deliberately a success.
 export const ConfigPatchSchema: z.ZodType<ConfigPatch> = z
-  .object({ updates: z.object({ check: z.boolean() }).strict().optional() })
+  .object({
+    updates: z.object({ check: z.boolean() }).strict().optional(),
+    review: z.object({ band: z.boolean() }).strict().optional(),
+  })
   .strict();
 
 // PUT /api/reviews/:id/draft. Each field is independently optional; the handler

@@ -316,6 +316,21 @@ only at startup, so turning it off stops the toast and both marks immediately. T
 back on asks again on the spot — subject to the same once-a-day throttle as any other
 check — and reports the answer on your next load.
 
+## The plan-waiting band
+
+While a plan waits for your review, Claude Code draws a 🥕 band above its prompt, so the
+session no longer looks idle. It needs Claude Code 2.1.287 or later, shows in the terminal
+and the Desktop app, not in VS Code, and it clears once the review ends — approved,
+denied, interrupted or timed out.
+
+The band links this session's pending review. Click the link, or press `1` in an empty
+prompt, to open it in your browser. Either way caret builds the address, so it follows
+your port and login token.
+
+Set `[review] band = false` in `config.toml`, or flip the switch under Settings →
+Notifications, to turn it off from the next review. Claude Code's `disableAllHooks` and
+`--safe-mode` turn it off too.
+
 ## The caret service
 
 Answer **Keep it running** when `caret install` asks (`mise run build --install` included)

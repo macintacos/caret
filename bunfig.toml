@@ -32,3 +32,5 @@ preload = [
   "./test/support/rumdl-preload.ts",
   "./ui/support/svelte-preload.ts",
 ]
+# mod/ holds `claude plugin test`'s kit tests, which import claude-code/testing.
+pathIgnorePatterns = ["mod/**"]

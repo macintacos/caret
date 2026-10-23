@@ -28,6 +28,8 @@
     "commands/",
     "opencode/",
     "templates/",
+    "mod/hooks/band.tsx",
+    "mod/band.d.ts",
     ".claude-plugin/plugin.json"
   ],
   "scripts": {

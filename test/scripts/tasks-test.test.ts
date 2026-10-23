@@ -6,6 +6,7 @@ import {
   buildTestReport,
   collectBatsJsonRun,
   collectE2eJsonRun,
+  collectModJsonRun,
   collectUnitJsonRun,
   e2eModeArgs,
   ensureUiForE2e,
@@ -469,6 +470,35 @@ describe("collectUnitJsonRun", () => {
     expect(collected.exitCode).toBe(1);
     expect(collected.native).toBeNull();
     expect(collected.output).toContain("[bun] ran");
+  });
+});
+
+describe("test mod", () => {
+  test("counts come from the kit's summary lines", () => {
+    const report = buildTestReport({
+      target: "mod",
+      exitCode: 1,
+      durationMs: 300,
+      native: "(fail) x\n\n 5 pass\n 1 fail\nRan 6 tests across 1 file.",
+      output: "log",
+    });
+    expect(report.target).toBe("mod");
+    expect(report.passed).toBe(5);
+    expect(report.failed).toBe(1);
+    expect(report.report).toBeNull();
+    expect(report.output).toBe("log");
+  });
+
+  test("runs claude plugin test mod alone and hands its output on as the native input", async () => {
+    const { calls, run } = capturingCapture(
+      () => 0,
+      () => " 6 pass\n 0 fail\n",
+    );
+    const collected = await collectModJsonRun(run);
+    expect(calls.map((c) => c.cmd)).toEqual([["claude", "plugin", "test", "mod"]]);
+    expect(collected.target).toBe("mod");
+    expect(collected.native).toBe(collected.output);
+    expect(buildTestReport({ ...collected, durationMs: 0 }).passed).toBe(6);
   });
 });
 

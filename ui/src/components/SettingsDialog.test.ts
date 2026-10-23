@@ -161,14 +161,20 @@ describe("SettingsDialog Notifications pane (EXC-847)", () => {
     expect(has("[data-category='Notifications']")).toBe(true);
   });
 
-  test("selecting Notifications swaps in the live pane", async () => {
+  test("selecting Notifications shows the live pane above the band toggle", async () => {
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
     // Appearance is selected first, so the field pane shows, not the live pane.
     expect(has("[data-notifications-pane]")).toBe(false);
     (document.body.querySelector("[data-category='Notifications']") as HTMLButtonElement).click();
     flush();
-    expect(has("[data-notifications-pane]")).toBe(true);
+    const pane = document.body.querySelector("[data-notifications-pane]");
+    const toggle = document.body.querySelector("[data-field='reviewBand']");
+    expect(pane !== null).toBe(true);
+    expect(toggle !== null).toBe(true);
+    expect(!!(pane!.compareDocumentPosition(toggle!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(
+      true,
+    );
   });
 });
 
@@ -456,7 +462,7 @@ describe("SettingsDialog Updates category (EXC-1207)", () => {
   });
 
   test("the Updates pane renders above the category's own toggle, not instead of it", async () => {
-    // Unlike Notifications and Advanced, this pane does not replace the staged rows: the
+    // Unlike Advanced, this pane does not replace the staged rows: the
     // opt-out is an ordinary registry field and the shell still renders it.
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);

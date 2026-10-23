@@ -149,12 +149,23 @@ export async function expireAbandoned(
   }
 }
 
-/** The review's URL on `baseUrl`'s port under the named `hostname` humans reach it by;
- * internal fetches keep using baseUrl. */
-function reviewUrl(baseUrl: string, hostname: string, id: string): string {
+/** The review's URL (caret's UI root without an `id`) on `baseUrl`'s port under the named
+ * `hostname` humans reach it by; internal fetches keep using baseUrl. */
+function reviewUrl(baseUrl: string, hostname: string, id?: string): string {
   const u = new URL(baseUrl);
   u.hostname = hostname;
-  return `${u.origin}/?review=${id}`;
+  return id === undefined ? `${u.origin}/` : `${u.origin}/?review=${id}`;
+}
+
+/** The link caret opens in this machine's browser: `reviewUrl`, logged in when `token` is set. */
+export function browserReviewLink(
+  baseUrl: string,
+  hostname: string,
+  id: string | undefined,
+  token: string | null,
+): string {
+  const url = reviewUrl(baseUrl, hostname, id);
+  return token === null ? url : loginLink(url, token);
 }
 
 /** Run a review end-to-end, returning the core `Decision`. Never throws — any
@@ -230,9 +241,7 @@ export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Prom
     // pre-empting the away-gated desktop notification. An older daemon reports no
     // such field, which fails safe to opening.
     if (!hasLiveClient) {
-      const localUrl = reviewUrl(baseUrl, deps.localHostname, id);
-      const token = deps.loginToken();
-      deps.openBrowser(token === null ? localUrl : loginLink(localUrl, token));
+      deps.openBrowser(browserReviewLink(baseUrl, deps.localHostname, id, deps.loginToken()));
     }
     // Unconditional: the announcement is the fallback for a browser that never
     // opened, and the handle a live tab's reader still wants.

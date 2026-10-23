@@ -92,14 +92,17 @@ and `daemon.auth`, which are config-only; precedence is
 | `daemon.hostnames`    | `[]`          | Extra names the daemon answers to, such as `"caret.home.lan"` or `"192.168.1.5"` (IPv6 bracketed). Matched case-insensitively on any port, over `http` or `https`. The first entry is the name review links and login links use. Takes effect on daemon restart.                                                                                                                    |
 | `daemon.auth`         | _unset_       | `"token"` or `"none"`. Unset, token auth is on exactly when `daemon.host` is exposed. Takes effect on daemon restart.                                                                                                                                                                                                                                                               |
 | `review.timeout_s`    | `3600`        | Review window in seconds before the hook fail-safe-denies (default 1 hour). The schema rejects values at or above the 3900s hook budget in `hooks/hooks.json`.                                                                                                                                                                                                                      |
+| `review.band`         | `true`        | Claude Code only: shows a band above the prompt while a plan waits for review. `false` turns the band off. See [The plan-waiting band](RUNNING.md#the-plan-waiting-band).                                                                                                                                                                                                           |
 
 > [!NOTE]
 > Unlike the `[logging]` keys, which hot-reload live, these tunables are captured at
 > startup: `port`, `idle_ms`, `heartbeat_ms`, `host`, `hostnames`, and `auth` take effect
 > on the next daemon start, and `timeout_s` on the next review. For the caret service's
 > daemon, the next start means `caret install --refresh`, which restarts it on the newest
-> caret installed, or a
-> [service restart](RUNNING.md#the-caret-service).
+> caret installed, or a [service restart](RUNNING.md#the-caret-service).
+>
+> `band` is read on every `caret band-link` run, so it applies from the next review with
+> no restart.
 
 ```toml
 [logging]
@@ -115,6 +118,7 @@ heartbeat_ms = 8000
 
 [review]
 timeout_s = 3600
+band = true
 ```
 
 ### The `[opencode]` table
@@ -142,10 +146,11 @@ plans_dir = "~/.local/share/opencode/plans"
 check = false
 ```
 
-This is the one key caret writes itself. **Settings → Updates** edits that single line and
-leaves the rest of your file — comments, ordering, formatting — alone. When it cannot do
-that safely, which it can't if you spelled the key as a dotted `updates.check = true` or
-as an inline table, it changes nothing and says so, so you can set it by hand.
+These are the keys caret writes itself: **Settings → Updates** edits `updates.check` and
+the review-band toggle edits `[review] band`, each a single line, leaving the rest of your
+file — comments, ordering, formatting — alone. When it cannot do that safely, which it
+can't if you spelled the key as a dotted `updates.check = true` or as an inline table, it
+changes nothing and says so, so you can set it by hand.
 
 That same refusal blocks the one-time move of an opt-out out of the retired `prefs.json`
 (`~/.local/state/caret/prefs.json`, or under `$XDG_STATE_HOME/caret`): caret keeps that
