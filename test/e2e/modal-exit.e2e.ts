@@ -5,21 +5,22 @@
 // move as one gesture on the shared tokens, that leaving is quicker than arriving, and
 // that reduced motion stills both without stranding either.
 //
-// And it carries the hand-off a decided modal starts, on both of its routes (EXC-894,
-// EXC-1400): a resolve landing on the next plan is uncovered by the curtain, one that
-// drains the queue by a whole-window crossfade.
+// And it carries the plan hand-off (EXC-894, EXC-1400): every plan swap — a decided guard
+// landing on the next plan or draining the queue, a plan arriving into the waiting room — is
+// one whole-window crossfade.
 //
 // This layer is e2e and cannot be anything else: happy-dom has no getAnimations,
 // which is exactly what bits-ui's PresenceManager waits on — the hold this ticket
 // introduces does not exist there at all, so a unit could only assert the gate's
 // bookkeeping (modalPresence.test.ts already does). Whether a real exit runs, what it
 // spends, and whether the surface actually leaves afterwards, is browser behavior. The
-// drain route needs one more thing a unit cannot give: ::view-transition-* pseudo-elements
+// hand-off needs one more thing a unit cannot give: ::view-transition-* pseudo-elements
 // exist only while a real browser runs a real transition. planHandoff.test.ts covers the
 // decision to start one; what it plays is only observable here.
 
-import { alerts, openSettings } from "@test/e2e/support/chrome.ts";
+import { alerts, openSettings, previewToggle } from "@test/e2e/support/chrome.ts";
 import {
+  openApproveGuard,
   openRejectGuard,
   openWithPendingAnnotation,
   seedTwoPlansAndOpen,
@@ -358,19 +359,31 @@ test("a modal neither moves nor sticks under reduced motion", async ({ daemon, p
   await expect(page.locator(settingsDialog)).toHaveCount(0);
 });
 
-test("a decided guard's exit leads the arrival that uncovers the next state", async ({
+/** Wait for the hand-off's arriving half, then return everything the recorder saw. Both
+ * halves start in the transition's one animation phase and dispatch in tree order, old before
+ * new — so the arriving half is the later of the two to record, and waiting on it is waiting
+ * for both. */
+async function handoffPlayed(page: import("@playwright/test").Page) {
+  await page.waitForFunction(() =>
+    (window as unknown as HandoffWindow).__handoff.some(
+      (a) => a.who === "::view-transition-new(root)",
+    ),
+  );
+  return page.evaluate(() => (window as unknown as HandoffWindow).__handoff);
+}
+
+test("a decided guard landing on the next plan hands over in one crossfade", async ({
   daemon,
   page,
 }) => {
-  // The hand-off as a SEQUENCE (EXC-894): the guard leaving and the next state arriving are
-  // two animations on two different elements, and what this ticket is about is their
-  // relationship. Which one STARTS first is the half no screenshot and no stylesheet read
-  // can carry — it only exists while the app runs — so it is sampled at animationstart. The
-  // duration comparison beside it is a computed-style read, and is here only because the
-  // two claims are the same claim: the exit leads, and it is over first.
+  // The hand-off as a SEQUENCE (EXC-894): the guard leaving and the next plan arriving are
+  // two animations, and what matters is their relationship. Which one STARTS first only
+  // exists while the app runs, so it is sampled at animationstart.
   //
-  // Two plans, so the reject lands on the NEXT one — the route the curtain covers. Draining
-  // the queue instead is the crossfade's, and is the test below.
+  // A crossfade rather than a curtain: the next plan's render is synchronous and long, and a
+  // curtain keyed in the same flush starts its clock beside it — by the first painted frame
+  // both it and the guard's exit were nearly spent, so the guard froze and then the plan
+  // popped. The transition holds a still of the old window through the render instead.
   await seedTwoPlansAndOpen(daemon, page);
   await waitPastSafeModeGrace(page);
 
@@ -383,24 +396,64 @@ test("a decided guard's exit leads the arrival that uncovers the next state", as
   await recordHandoff(page);
   await guard.getByRole("button", { name: "Reject", exact: true }).click();
 
-  // The curtain is the last of the hand-off's parts to start — it waits on a real HTTP
-  // round trip — so waiting for it is waiting for the whole gesture.
-  await page.waitForFunction(() =>
-    (window as unknown as HandoffWindow).__handoff.some((a) => a.who === "arrival"),
-  );
-  const played = await page.evaluate(() => (window as unknown as HandoffWindow).__handoff);
+  const played = await handoffPlayed(page);
   const exit = played.find((a) => a.who === "alert-dialog-content" && a.name === "exit");
-  const arrival = played.find((a) => a.who === "arrival");
+  const departing = played.find((a) => a.who === "::view-transition-old(root)");
+  const arriving = played.find((a) => a.who === "::view-transition-new(root)");
   expect(exit).toBeDefined();
-  expect(arrival).toBeDefined();
+  expect(departing?.name).toBe("plan-handoff-out");
+  expect(arriving?.name).toBe("plan-handoff-in");
+  // One cover per hand-off.
+  expect(played.filter((a) => a.who === "arrival")).toEqual([]);
+  await expect(page.getByRole("banner")).toContainText("Plan Beta");
 
-  // The exit LEADS. The guard's flag clears in the same tick the resolve fires, so its
-  // departure is already running while the arrival is still waiting on the daemon.
-  expect(exit?.at ?? 0).toBeLessThanOrEqual(arrival?.at ?? 0);
-  // …and it is the SHORTER of the two, so it has cleared before the arrival settles. That
-  // pair of facts is the whole of "deliberately timed against each other" — a relationship
-  // drawn from the --dur-exit/--dur-enter tiers rather than a number this hand-off minted.
-  expect(exit?.seconds ?? 0).toBeLessThan(arrival?.seconds ?? 0);
+  // The exit LEADS, and it is the shorter half, so it has cleared before the arrival settles.
+  expect(exit?.at ?? 0).toBeLessThanOrEqual(departing?.at ?? 0);
+  expect(exit?.seconds ?? 0).toBeLessThan(arriving?.seconds ?? 0);
+});
+
+test("a plan arriving into the waiting room crossfades in", async ({ daemon, page }) => {
+  // The first half of the user's loop, and the route that cut hardest: the waiting room
+  // vanished in one frame, the content row sat blank while the plan rendered, then the plan
+  // popped. Seeded after the page is up, so it arrives through the poll as a real one does.
+  //
+  // What the crossfade fades in is captured once its update has run, so the plan has to be
+  // rendered by then — this page is fresh, so the highlighter and the fence grammars are
+  // cold, which once left the arriving half blank until they loaded. Counted at `ready`, the
+  // moment that capture is done, since the pseudo-elements' animationstart can dispatch long
+  // after it. Installed before the app boots, since the app binds the API when it starts.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __rowsAtCapture: number | null };
+    w.__rowsAtCapture = null;
+    const doc = document as Document & {
+      startViewTransition: (cb: () => void) => { ready: Promise<void> };
+    };
+    const start = doc.startViewTransition.bind(doc);
+    doc.startViewTransition = (cb) => {
+      const transition = start(cb);
+      void transition.ready.then(() => {
+        const host = [...document.querySelectorAll(".diff-plan *")].find((el) => el.shadowRoot);
+        w.__rowsAtCapture = host?.shadowRoot?.querySelectorAll("[data-line]").length ?? 0;
+      });
+      return transition;
+    };
+  });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+
+  await recordHandoff(page);
+  await daemon.seed();
+
+  const played = await handoffPlayed(page);
+  expect(played.find((a) => a.who === "::view-transition-old(root)")?.name).toBe(
+    "plan-handoff-out",
+  );
+  expect(played.filter((a) => a.who === "arrival")).toEqual([]);
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  const rows = await page.evaluate(
+    () => (window as unknown as { __rowsAtCapture: number | null }).__rowsAtCapture,
+  );
+  expect(rows).toBeGreaterThan(0);
 });
 
 test("draining the queue hands the whole window over in one crossfade", async ({
@@ -421,28 +474,75 @@ test("draining the queue hands the whole window over in one crossfade", async ({
   await recordHandoff(page);
   await guard.getByRole("button", { name: "Reject", exact: true }).click();
 
-  // Both halves start in the transition's one animation phase and dispatch in tree order,
-  // old before new — so the arriving half is the later of the two to record, and waiting
-  // on it is waiting for both.
-  await page.waitForFunction(() =>
-    (window as unknown as HandoffWindow).__handoff.some(
-      (a) => a.who === "::view-transition-new(root)",
-    ),
-  );
-  const played = await page.evaluate(() => (window as unknown as HandoffWindow).__handoff);
+  const played = await handoffPlayed(page);
   const exit = played.find((a) => a.who === "alert-dialog-content" && a.name === "exit");
   const departing = played.find((a) => a.who === "::view-transition-old(root)");
   const arriving = played.find((a) => a.who === "::view-transition-new(root)");
   expect(exit).toBeDefined();
   expect(departing?.name).toBe("plan-handoff-out");
   expect(arriving?.name).toBe("plan-handoff-in");
-  // One cover per hand-off: the curtain is withheld on this route. The wait above bounds the
-  // absence — the curtain mounts in the same flush the transition's update runs in, so it
+  // One cover per hand-off: the curtain is withheld wherever the crossfade runs. The wait
+  // above bounds the absence — the curtain mounts in the same flush the transition's update runs in, so it
   // would already have started by the time the arriving half does.
   expect(played.filter((a) => a.who === "arrival")).toEqual([]);
 
   expect(exit?.at ?? 0).toBeLessThanOrEqual(departing?.at ?? 0);
   expect(exit?.seconds ?? 0).toBeLessThan(arriving?.seconds ?? 0);
+});
+
+test("a decision hands over from the preview, whose table headers animate on scroll", async ({
+  daemon,
+  page,
+}) => {
+  // The hand-off lets running animations end before it takes its still. The preview pins
+  // each table header with a scroll-driven animation, which reports itself running and never
+  // ends on the clock — waited on, the decision never advanced and the actions stayed locked.
+  await daemon.seed({
+    plan: "# Tabled plan\n\n| Step | Owner |\n| --- | --- |\n| One | Alpha |\n| Two | Beta |\n",
+  });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+  await previewToggle(page).click();
+  await expect(page.locator(".diff-plan th").first()).toBeVisible();
+  await waitPastSafeModeGrace(page);
+
+  const guard = await openApproveGuard(page);
+  await guard.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+});
+
+test("the waiting room never shares the window with the plan it replaced", async ({
+  daemon,
+  page,
+}) => {
+  // A view transition snapshots whatever the DOM holds once its update has run, so a plan
+  // view still mounted beside the empty state is what the crossfade fades in: the shell grid
+  // pushes the old surface into a row below the status bar, and both snap back when it goes.
+  // What held it was a descendant's outro — the breadcrumbs' crumb exit — so the bar is
+  // waited for first; with no crumbs mounted nothing can hold the view, and this would pass
+  // without proving anything.
+  await seedAndOpen(page, daemon);
+  await expect(page.locator(".plan-breadcrumbs")).toBeVisible();
+  await waitPastSafeModeGrace(page);
+  const guard = await openApproveGuard(page);
+
+  // Checked on every change to the shell's children rather than sampled, since the overlap
+  // lasted one exit tier.
+  await page.evaluate(() => {
+    const w = window as unknown as { __overlap: boolean };
+    w.__overlap = false;
+    new MutationObserver(() => {
+      const empty = document.querySelector(".shell > .empty");
+      w.__overlap ||= empty !== null && document.querySelector(".shell > .diff-surface") !== null;
+    }).observe(document.querySelector(".shell") as Element, { childList: true });
+  });
+  await guard.getByRole("button", { name: "Approve", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+  await expect(page.locator(".diff-surface")).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as { __overlap: boolean }).__overlap)).toBe(
+    false,
+  );
 });
 
 test("diverting from a guard to the dialog acknowledges nothing and uncovers nothing", async ({

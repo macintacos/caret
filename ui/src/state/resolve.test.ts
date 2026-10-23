@@ -38,6 +38,8 @@ function build(
     annotations?: Annotation[];
     planText?: string;
     citation?: LineCitation;
+    /** Stands in for the hand-off, which can resolve well after it is called. */
+    afterResolve?: (id: string) => Promise<void>;
   } = {},
 ) {
   const activeId = "activeId" in opts ? (opts.activeId ?? null) : "r1";
@@ -57,7 +59,10 @@ function build(
       flushOrder.push("flush");
       if (opts.versionAfterFlush !== undefined) version = opts.versionAfterFlush;
     },
-    afterResolve: (id) => advanced.push(id),
+    afterResolve: (id) => {
+      advanced.push(id);
+      return opts.afterResolve?.(id);
+    },
     onOffline: () => {
       offline = true;
     },
@@ -354,5 +359,35 @@ describe("remembering the approve mode", () => {
     const resolve = build(makeStore());
     await resolve.approve("auto");
     expect(saved).toEqual([]);
+  });
+});
+
+describe("the advance", () => {
+  // The hand-off can swap the next plan in well after the daemon answered. Until it does,
+  // the decided plan is still on screen, and an action taken on it — another `a` — would
+  // open a guard the swap then lands the NEXT plan under.
+  async function heldAdvance(decide: (r: ReturnType<typeof build>) => Promise<void>) {
+    let advance: (() => void) | undefined;
+    const store = makeStore();
+    const done = decide(
+      build(store, { afterResolve: () => new Promise<void>((r) => (advance = r)) }),
+    );
+    for (let i = 0; i < 100 && advance === undefined; i++) await Promise.resolve();
+    expect(advance).toBeDefined();
+    expect(store.busy).toBe(true);
+    advance?.();
+    await done;
+    expect(store.busy).toBe(false);
+  }
+
+  test("stays busy until the approve advance has run", () =>
+    heldAdvance((r) => r.approve("default")));
+
+  test("stays busy until the request-changes advance has run", () =>
+    heldAdvance((r) => r.requestChanges("")));
+
+  test("stays busy until a review resolved elsewhere has advanced", () => {
+    submitResult = () => Promise.reject(new HttpError(404));
+    return heldAdvance((r) => r.approve("default"));
   });
 });

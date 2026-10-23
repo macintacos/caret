@@ -436,12 +436,17 @@ shadcn surfaces (dialogs, dropdown menus, tooltips, popovers) instead animate th
 enter/exit through `tw-animate-css` — the `animate-in`/`fade`/`zoom`/`slide` utilities the
 copied components ship with. Ambient/infinite animations (the safe-mode pulse, the
 EmptyState float, the theme wipe) are exempt from both and keep their own bespoke
-durations. The hand-off back to the waiting room (`lib/planHandoff.ts`, EXC-1400) is the
-second view transition and is NOT exempt: it crossfades the whole window on the
-`--dur-exit`/`--dur-enter` surface pair, so a decided plan leaving and the waiting room
-arriving spend the same asymmetric pair a dialog does. Its two arms are scoped under a
-class that module tags, because the theme wipe claims the bare `::view-transition-*(root)`
-pseudo-elements unconditionally.
+durations. The plan hand-off (`lib/planHandoff.ts`, EXC-1400) is the second view
+transition and is NOT exempt: every plan swap — a plan arriving, the next one after a
+decision, a switch, the queue draining — crossfades the whole window on the
+`--dur-exit`/`--dur-enter` surface pair, the same asymmetric pair a dialog spends. It is a
+transition rather than an animation beside the swap because the swap's render is
+synchronous and long: an animation started in the same frame spends its duration before
+the first frame paints, while the transition holds a still until the new window has
+rendered. That still freezes everything, so the hand-off first lets one-shot motion
+already in flight finish — a decided guard's exit, its confirmation sliding in. Its two
+arms are scoped under a class that module tags, because the theme wipe claims the bare
+`::view-transition-*(root)` pseudo-elements unconditionally.
 
 **A property no stylesheet can drive takes a third route, and it is the narrowest one.**
 Where the thing being animated is a JS property rather than a style — `scrollTop`, or a
@@ -486,6 +491,10 @@ mirrored nor awaited but **read back off the element** with
 `getComputedStyle(node).animationDuration` — a third answer to the paragraph above:
 nothing to drift, and the guard collapses the wait along with the motion, so reduced
 motion drops the level on the spot rather than holding an invisible one for `--dur-exit`.
+Its directive is `|global`, and a global outro is collected by EVERY ancestor teardown,
+with Svelte holding that ancestor's whole DOM until it ends — it once kept the plan view
+mounted beside the waiting room that replaced it. So `crumbOut` returns no duration for a
+level still on the trail, which is a bar torn down from above rather than a level leaving.
 Reach for this when a departure needs animating at all; a plain CSS `animation:` still
 covers every arrival, since an arriving element is already in the DOM and needs no
 directive.

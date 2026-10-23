@@ -116,6 +116,10 @@ export const SEAM_STRIP = /-[\d.]+px 0px 0px 0px/;
 export async function planSurface(page: Page): Promise<Locator> {
   const plan = page.locator(PLAN_SURFACE);
   await expect(plan).toBeVisible();
+  // A plan arrives through the hand-off's crossfade, and a view transition routes pointer
+  // input to its own overlay until it ends: a click or hover landed before then reaches
+  // nothing.
+  await expect(page.locator("html.plan-handoff")).toHaveCount(0);
   return plan;
 }
 

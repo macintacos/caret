@@ -145,6 +145,8 @@ export interface ReviewSelection {
   selectReview: (id: string | null) => void;
   /** Merge a fresh poll snapshot, keeping the active review stable. */
   mergeReviews: (incoming: ClientReview[]) => void;
+  /** Whether merging `incoming` would change the active review. */
+  movesActive: (incoming: readonly ClientReview[]) => boolean;
   /** Drop a resolved review and auto-advance to the next pending one. */
   afterResolve: (id: string) => void;
 }
@@ -229,6 +231,14 @@ export function createReviewSelection(
   /** Drop unread entries for plans no longer present. Called from both removal
    * paths — `mergeReviews` for expiry, `afterResolve` for resolve — so a mark can
    * never outlive the row that would clear it. */
+  /** The review a merge of `incoming` makes active: the current one while it is still
+   * present, else the deep link, else the first. */
+  const pickActive = (incoming: readonly ClientReview[]): string | null => {
+    if (store.activeId && incoming.some((r) => r.id === store.activeId)) return store.activeId;
+    const wanted = deepLinkId();
+    return (wanted && incoming.find((r) => r.id === wanted)?.id) ?? incoming[0]?.id ?? null;
+  };
+
   const pruneUnread = (present: readonly ClientReview[]) => {
     if (store.unread.length === 0) return;
     const ids = new Set(present.map((r) => r.id));
@@ -275,14 +285,10 @@ export function createReviewSelection(
       observeMerge(incoming);
       store.reviews = incoming;
       pruneUnread(incoming);
-      // Pick active: keep current if still present, else deep link, else first.
-      if (!store.activeId || !incoming.some((r) => r.id === store.activeId)) {
-        const wanted = deepLinkId();
-        const next =
-          (wanted && incoming.find((r) => r.id === wanted)?.id) ?? incoming[0]?.id ?? null;
-        if (next !== store.activeId) select(next);
-      }
+      const next = pickActive(incoming);
+      if (next !== store.activeId) select(next);
     },
+    movesActive: (incoming) => pickActive(incoming) !== store.activeId,
     afterResolve(id) {
       const remaining = store.reviews.filter((r) => r.id !== id);
       store.reviews = remaining;
