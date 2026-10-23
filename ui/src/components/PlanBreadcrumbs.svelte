@@ -78,6 +78,15 @@
 
   const trail = $derived(headingTrail(headings, activeLine));
 
+  // The trail's length as of the last update, which runs before the {#each} below
+  // reconciles — so crumbOut sees a shortened trail as shortened. A plain copy, never a
+  // read of `trail` in the outro: a teardown from above runs none of this component's
+  // effects, and recomputing the derived then would read props the parent already cleared.
+  let trailDepth = 0;
+  $effect.pre(() => {
+    trailDepth = trail.length;
+  });
+
   // The headings on the reviewer's own trail, by source line: what marks "you
   // are here" in a menu at any depth, and what stays unmarked once the walk
   // turns off into a branch the reviewer is not in.
@@ -644,10 +653,13 @@
   // `|global` at the call sites is not decoration either. The <li> is rendered through
   // the vendored component's `child` snippet, so it sits inside that component's `{#if}`
   // — a block Svelte does not treat as transparent — and a local transition would never
-  // be collected when the crumb's own block is destroyed. The price is that a teardown of
-  // the WHOLE bar plays the exit too: entering compare mode holds the control row for
-  // --dur-exit while the crumbs fade, and the version picker stretches once they are gone.
-  function crumbOut(node: HTMLElement): { duration: number } {
+  // be collected when the crumb's own block is destroyed. The price is that every ancestor
+  // teardown collects it too, and Svelte holds that ancestor's whole DOM until the outro
+  // ends: the plan view stayed mounted beside the waiting room that replaced it. So a level
+  // still on the trail — the bar torn down from above, not the trail shortening — leaves at
+  // once.
+  function crumbOut(node: HTMLElement, depth: number): { duration: number } {
+    if (depth < trailDepth) return { duration: 0 };
     node.classList.add("crumb-leaving");
     const ms = Number.parseFloat(getComputedStyle(node).animationDuration) * 1000;
 
@@ -817,7 +829,7 @@
         {#if depth > 0}
           <Breadcrumb.Separator class={hidden}>
             {#snippet child({ props })}
-              <li {...props} out:crumbOut|global><Icon name="chevron-right" size={14} /></li>
+              <li {...props} out:crumbOut|global={depth}><Icon name="chevron-right" size={14} /></li>
             {/snippet}
           </Breadcrumb.Separator>
         {/if}
@@ -834,7 +846,7 @@
         {/snippet}
         <Breadcrumb.Item class="crumb-item {current ? 'current' : ''} {hidden}">
           {#snippet child({ props })}
-            <li {...props} out:crumbOut|global>{@render menu(crumb.siblings, crumbTrigger)}</li>
+            <li {...props} out:crumbOut|global={depth}>{@render menu(crumb.siblings, crumbTrigger)}</li>
           {/snippet}
         </Breadcrumb.Item>
       {/each}

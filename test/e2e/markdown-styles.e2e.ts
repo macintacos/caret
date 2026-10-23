@@ -21,7 +21,12 @@ import {
   rgb,
   STYLES,
 } from "@test/e2e/support/markdown-styles.ts";
-import { openPlan, openPlanForKeys, probeColor } from "@test/e2e/support/source-view.ts";
+import {
+  openPlan,
+  openPlanForKeys,
+  planSurface,
+  probeColor,
+} from "@test/e2e/support/source-view.ts";
 import { caretThemeVariant, selectThemeFile } from "@test/e2e/support/themes.ts";
 
 /** The computed paint of each element in PLAN, read off its content token. */
@@ -103,6 +108,7 @@ test("a reload paints a theme's markdown styles while its palette is cached", as
   await expect.poll(() => paint(page)).toEqual(STYLED_PAINT);
 
   await page.reload();
+  await planSurface(page);
   await expect.poll(() => paint(page)).toEqual(STYLED_PAINT);
 });
 

@@ -328,7 +328,7 @@
   const showDiff = $derived(canCompare && compareStore.comparing);
 
   let planView = $state<PlanView>(readPlanView());
-  // Gates the flip fade, so a first paint doesn't fade under App's arrival curtain too.
+  // Gates the flip fade, so a first paint doesn't fade under App's plan hand-off too.
   let viewFlipped = $state(false);
   const surface = $derived<PlanSurface>(showDiff ? "compare" : planView);
   const runs = (behavior: SurfaceBehavior): boolean => runsOn(behavior, surface);

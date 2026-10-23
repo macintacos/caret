@@ -309,6 +309,19 @@ describe("createReviewSelection", () => {
     expect(store.activeId).toBe(null);
   });
 
+  test("movesActive is true exactly when a merge would change the active review", () => {
+    // Asked BEFORE the merge, so a whole-window hand-off can snapshot the outgoing plan.
+    expect(selectionOf().sel.movesActive([review("x")])).toBe(true);
+    expect(selectionOf().sel.movesActive([])).toBe(false);
+    const { store, sel } = selectionOf({ reviews: [review("a", 1)], activeId: "a" });
+    expect(sel.movesActive([review("a", 2), review("b")])).toBe(false);
+    expect(sel.movesActive([review("b")])).toBe(true);
+    expect(sel.movesActive([])).toBe(true);
+    // A question, not a merge.
+    expect(store.activeId).toBe("a");
+    expect(store.reviews.map((r) => r.version)).toEqual([1]);
+  });
+
   test("afterResolve drops the review and auto-advances to the next", () => {
     const { store, sel } = selectionOf({ reviews: [review("a"), review("b")], activeId: "a" });
     sel.afterResolve("a");

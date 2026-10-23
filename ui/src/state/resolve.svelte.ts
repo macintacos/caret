@@ -41,8 +41,9 @@ export interface ResolveDeps {
   citation: () => LineCitation;
   /** Flush any pending draft before submitting (snapshot-before-await). */
   flushPending: () => Promise<void>;
-  /** Drop the resolved review and auto-advance. */
-  afterResolve: (id: string) => void;
+  /** Drop the resolved review and auto-advance. The flow stays busy until it settles: the
+   * decided plan is on screen until then, and must not take a second decision. */
+  afterResolve: (id: string) => void | Promise<void>;
   /** Mark the daemon offline on a genuine network failure. */
   onOffline: () => void;
   /** Report a decision the daemon refused because a newer version of the review
@@ -80,10 +81,10 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
 
   // 404 = resolved or removed elsewhere → advance. 409 = a newer version of this
   // still-pending review arrived → stay, so the next poll raises the revision.
-  function onSubmitError(id: string, err: unknown): void {
+  async function onSubmitError(id: string, err: unknown): Promise<void> {
     if (!(err instanceof HttpError)) deps.onOffline();
     else if (err.status === 409) deps.onSuperseded();
-    else deps.afterResolve(id);
+    else await deps.afterResolve(id);
   }
 
   // The general-comment mirror is cleared because the daemon dropped the stored
@@ -99,9 +100,9 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
     try {
       await submit(id, { behavior: "deny", feedback: feedback(), version });
       deps.clearGeneralComment();
-      deps.afterResolve(id);
+      await deps.afterResolve(id);
     } catch (err) {
-      onSubmitError(id, err);
+      await onSubmitError(id, err);
     } finally {
       store.busy = false;
     }
@@ -131,9 +132,9 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
         });
         store.approveMode = mode; // remember locally so the next plan defaults to it
         saveMode(mode);
-        deps.afterResolve(id);
+        await deps.afterResolve(id);
       } catch (err) {
-        onSubmitError(id, err);
+        await onSubmitError(id, err);
       } finally {
         store.busy = false;
       }

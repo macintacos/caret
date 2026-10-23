@@ -15,6 +15,7 @@
 import { preloadHighlighter } from "@pierre/diffs";
 
 import { bundledLanguages } from "$lib/diffview/shiki-bundle.ts";
+import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
 import { THEME_IDS } from "$lib/theme.ts";
 
 // The grammars the shiki bundle can resolve (canonical shiki names). markdown is
@@ -103,8 +104,8 @@ const inflight = new Map<string, Promise<boolean>>();
 function startLoad(lang: string): Promise<boolean> {
   // Warmed against every caret theme, so the grammar is ready in whichever palette
   // is live and a later theme switch re-tokenizes without another load. Naming the
-  // ids requires them to be registered first, which theme.ts's registerCaretDiffThemes
-  // does at the view components' module scope, before any instance loads a grammar.
+  // ids requires them registered, and a plan can be warmed before any view mounts.
+  registerCaretDiffThemes();
   const p = preloadHighlighter({ themes: [...THEME_IDS], langs: [lang] })
     .then(() => {
       loaded.add(lang);
@@ -131,6 +132,13 @@ export async function preloadFenceLanguages(langs: string[]): Promise<boolean> {
   if (pending.length === 0) return false;
   const results = await Promise.all(pending);
   return results.some(Boolean);
+}
+
+/** Attach every grammar a render of the plan `text` tokenizes with — markdown's own and
+ * its fences' — so the first render is final: no deferred paint while the highlighter
+ * boots, and no whole-plan re-highlight when a fence grammar lands after it. */
+export function preloadPlanLanguages(text: string): Promise<boolean> {
+  return preloadFenceLanguages(["markdown", ...scanFenceLanguages(text)]);
 }
 
 /**

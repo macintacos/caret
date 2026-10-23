@@ -18,7 +18,7 @@ export interface ViewTransitionDeps {
 }
 
 /** True when this document has the View Transitions API. App withholds the `.arrival`
- * curtain on the empty state only when this is true, so an engine without the API keeps it. */
+ * curtain when this is true, so only an engine without the API keeps it. */
 export function supportsViewTransition(): boolean {
   return (
     typeof document !== "undefined" &&

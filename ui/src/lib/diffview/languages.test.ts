@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { fenceGrammar, scanFenceLanguages } from "$lib/diffview/languages.ts";
+import { fenceGrammar, preloadPlanLanguages, scanFenceLanguages } from "$lib/diffview/languages.ts";
 
 // scanFenceLanguages is the gate between an agent's free-form fence tags and the
 // shiki grammar bundle: only canonical, bundled grammar names should reach the
@@ -63,5 +63,14 @@ describe("fenceGrammar", () => {
     for (const info of ["text", "nosuchlang", "", "__proto__", "constructor", '"><script>']) {
       expect(fenceGrammar(info)).toBeNull();
     }
+  });
+});
+
+describe("preloadPlanLanguages", () => {
+  // App warms an arriving plan's grammars before any view has mounted, and every load names
+  // caret's themes — so the load has to register them itself. Nothing in this file mounts a
+  // view, which is the state the warm-up runs in.
+  test("attaches a plan's grammars before any view has mounted", async () => {
+    expect(await preloadPlanLanguages("# Plan\n\n```ts\nconst x = 1;\n```\n")).toBe(true);
   });
 });

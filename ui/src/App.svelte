@@ -21,7 +21,7 @@
   import type { LineCitation } from "$lib/feedback.ts";
   import { uiLog } from "$lib/log.ts";
   import { createPlanNotifier } from "$lib/notify.ts";
-  import { withPlanHandoff } from "$lib/planHandoff.ts";
+  import { createPlanHandoff } from "$lib/planHandoff.ts";
   import { installUiGoneBeacon } from "$lib/presence.ts";
   import { registerCustomThemes } from "$lib/registerTheme.ts";
   import { createSafeModeGuard } from "$lib/safeMode.ts";
@@ -70,6 +70,7 @@
   import { seedReviewBand } from "$lib/reviewBandPref.ts";
   import { readToastedUpdate, seedUpdatesCheck, writeToastedUpdate } from "$lib/updatesPref.ts";
   import { type ComposerScratch, createSourceCommenting } from "$lib/diffview/commenting.ts";
+  import { preloadPlanLanguages } from "$lib/diffview/languages.ts";
   import type { DiffSide } from "$lib/diffview/types.ts";
   import type {
     ApproveVariant,
@@ -260,13 +261,19 @@
 
   // ----- State modules -----
   const selection = createReviewSelection(selStore, { onSound: sound.play });
+  // Every plan swap goes through this one hand-off, which keeps their transitions in order.
+  const handoff = createPlanHandoff();
   // The reviewer picking another plan, which selectReview alone is not: that is also
   // the funnel for a deep link, a re-select and an auto-advance. The notifier's click
   // sits out too — the plan it jumps to already sounded its own arrival. Only on a
   // real move, since the switcher lists the active plan as a pickable row.
   function switchPlan(id: string): void {
     if (id !== selection.activeId) sound.play("planSwitched");
-    selection.selectReview(id);
+    showPlan(id);
+  }
+  function showPlan(id: string): void {
+    if (id === selection.activeId) selection.selectReview(id);
+    else void handoff(() => selection.selectReview(id));
   }
   const autosave = createAutosave(work, () => selection.activeId, {
     onOffline: () => selection.setConnected(false),
@@ -301,13 +308,7 @@
     planText: () => active?.currentPlan ?? "",
     citation: () => citation,
     flushPending: () => autosave.flushPending(),
-    // A resolve that empties the queue swaps the whole window, so it crossfades; one that
-    // lands on the next plan leaves the view mounted and is the curtain's route. What is
-    // left decides that, not the count — a poll landing mid-resolve can drop this id.
-    afterResolve: (resolvedId) => {
-      if (selection.reviews.some((r) => r.id !== resolvedId)) selection.afterResolve(resolvedId);
-      else withPlanHandoff(() => selection.afterResolve(resolvedId));
-    },
+    afterResolve: (resolvedId) => handoff(() => selection.afterResolve(resolvedId)),
     onOffline: () => {
       selection.setConnected(false);
       // Fires only on a genuine network failure, since a daemon non-2xx either advances
@@ -334,7 +335,7 @@
   });
   // EXC-427 desktop-plan notifier. Component-scoped so both consumers — the poll
   // (observe) and the EXC-815 dismiss-on-open effect below — share one instance.
-  const notifier = createPlanNotifier({ onSelect: selection.selectReview });
+  const notifier = createPlanNotifier({ onSelect: showPlan });
   // EXC-961 read detection: a plan submitted from a cmux pane leaves that pane
   // unread, and reading it here is enough to clear the mark — no decision
   // required. Component-scoped like the notifier: the track effect below feeds
@@ -541,10 +542,13 @@
         // diffs against its own seen-set, so the new-review signal stays
         // independent of what merge selects.
         notifier.observe(incoming);
-        // A merge that empties the queue reaches the same empty state a resolve does — the
-        // last pending plan expiring — so it hands over the same way.
-        if (incoming.length === 0 && selection.reviews.length > 0)
-          withPlanHandoff(() => selection.mergeReviews(incoming));
+        // Each plan's grammars are warmed as it lands, so a later decision or switch renders
+        // it whole inside the hand-off; a poll that swaps one in waits for them itself. Asked
+        // before merging, since the hand-off has to snapshot the outgoing plan, and only on a
+        // move: a revision in place is the compare view's news, not a new plan.
+        const prepared = Promise.all(incoming.map((r) => preloadPlanLanguages(r.currentPlan)));
+        if (selection.movesActive(incoming))
+          void prepared.then(() => handoff(() => selection.mergeReviews(incoming)));
         else selection.mergeReviews(incoming);
       },
       2000,
@@ -829,13 +833,11 @@
        Keyed on the review's identity rather than the derived object: the 2s poll bumps
        the version without changing the id, and a revision in place is not an arrival.
 
-       Withheld on the empty state when the crossfade (EXC-1400) carries the hand-off, since
-       two covers over one hand-off read as a stutter. Both routes there — a resolve and a
-       poll expiry — run inside the transition, and first paint has no hand-off to cover, so
-       a boot with nothing pending deliberately raises none. Gated on the capability, not the
-       destination alone, so an engine without view transitions keeps the curtain instead of
-       a bare cut. -->
-  {#if active !== null || !canCrossfade}
+       Only for an engine without view transitions, where it beats a bare cut. Everywhere
+       else every plan swap runs inside the crossfade (lib/planHandoff.ts): the swap's
+       render is synchronous and long, and a curtain starting in the same frame spends its
+       duration before anything paints — a blank row, then a pop. -->
+  {#if !canCrossfade}
     {#key active?.id ?? "none"}
       <div class="arrival" aria-hidden="true"></div>
     {/key}
