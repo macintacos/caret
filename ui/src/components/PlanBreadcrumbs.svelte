@@ -781,8 +781,8 @@
            focus never offers it as a row. -->
       {#if showShortcutHints}
         <DropdownMenu.Separator />
-        <p class="crumb-menu-hint">
-          Filter headings <Kbd class="kbd-sm" aria-hidden="true">/</Kbd>
+        <p class="crumb-menu-hint" aria-hidden="true">
+          Filter headings <Kbd class="kbd-sm">/</Kbd>
         </p>
       {/if}
     </DropdownMenu.Content>

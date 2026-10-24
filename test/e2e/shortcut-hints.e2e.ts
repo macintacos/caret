@@ -5,7 +5,9 @@
 // live apply, persistence across a reload, and the ? keystroke are real-browser
 // behavior (browser-testing.md), so this lives here, not in a unit. The --fresh
 // reset is unit-covered (ui/src/lib/prefs.test.ts: SHORTCUT_HINTS_KEY is a
-// KNOWN_PREF_KEY that clearKnownPrefs removes), like the theme pref.
+// KNOWN_PREF_KEY that clearKnownPrefs removes), like the theme pref. A touch device
+// hides the key caps whatever the setting says; that is a media query, so it is
+// emulated here too.
 
 import { commentTally } from "@test/e2e/support/chrome.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
@@ -91,4 +93,18 @@ test("with hints off, V-mode still selects lines but the hint chip stays hidden"
     page.locator(".diffview [data-content] [data-line][data-selected-line]"),
   ).toHaveCount(2);
   await expect(page.locator(".visual-hint")).toHaveCount(0);
+});
+
+test.describe("on a touch device", () => {
+  test.use({ hasTouch: true, isMobile: true });
+
+  test("the key caps stay hidden with hints on", async ({ daemon, page }) => {
+    await daemon.seed();
+    await page.goto("/");
+    await planSurface(page);
+
+    await expect(page.locator(topbarHints).first()).toBeAttached();
+    await expect(page.locator(`${topbarHints}:visible`)).toHaveCount(0);
+    await expect(commentTally(page).locator("[data-slot='kbd']:visible")).toHaveCount(0);
+  });
 });

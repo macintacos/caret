@@ -268,7 +268,7 @@
           </Sidebar.Group>
         </Sidebar.Content>
         <Sidebar.Footer>
-          <p class="nav-hint"><Kbd aria-hidden="true">esc</Kbd> <span>close</span></p>
+          <p class="nav-hint" aria-hidden="true"><Kbd>esc</Kbd> <span>close</span></p>
         </Sidebar.Footer>
       </Sidebar.Root>
 

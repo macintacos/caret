@@ -155,6 +155,14 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
 [data-theme="light"] [data-slot="kbd"] {
   background: color-mix(in srgb, currentColor 8%, transparent);
 }
+/* A touch device has no keys to press. A key hint is decorative (its control carries
+   aria-keyshortcuts), so aria-hidden is what marks one, alone or with the caption it
+   sits in. !important so no scoped display rule out-specifies it. */
+@media (hover: none) and (pointer: coarse) {
+  [aria-hidden="true"]:is([data-slot="kbd"], :has(> [data-slot="kbd"])) {
+    display: none !important;
+  }
+}
 
 /* A settings pane's section label — the uppercase caption above a read-only
    block (Advanced's diagnostics, Updates' status), in the same vocabulary as
