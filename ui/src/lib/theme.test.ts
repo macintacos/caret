@@ -277,11 +277,11 @@ describe("THEMES", () => {
       "--paper-sunk": "#faf6ec",
       "--ink": "#191310",
       "--ink-soft": "#544b43",
-      "--ink-faint": "#847a70",
+      "--ink-faint": "#786f65",
       "--rule": "#2a20181a",
       "--rule-strong": "#2a201829",
       "--accent": "#c2490d",
-      "--accent-bright": "#e06a24",
+      "--accent-bright": "#9f3c0b",
       "--accent-wash": "#e07a2e1f",
       "--accent-ink": "#fff6ec",
       "--mark": "#e8882e24",
@@ -331,6 +331,28 @@ describe("caret's theme file colors", () => {
           expect(ratio, `${id} ${role} on sunk`).toBeGreaterThanOrEqual(4.5);
         }
       }
+    }
+  });
+
+  // The registry-wide ink-ramp test holds --ink-faint to 3:1 so a vendor palette's own
+  // metadata grey ships as drawn. caret's two palettes hold every text colour to 4.5:1,
+  // and the bright accent too: it colours link hovers and code, and the primary action's
+  // label sits on it on hover.
+  test("clears the text floor for faint ink and both accents, on every surface", () => {
+    for (const [id] of CARET_RECORDS) {
+      const tokens = THEMES[id].tokens;
+      for (const surface of ["--paper", "--paper-raised", "--paper-sunk"] as const) {
+        for (const fg of ["--ink-faint", "--accent", "--accent-bright"] as const) {
+          expect(
+            contrast(tokens[fg], tokens[surface]),
+            `${id} ${fg} on ${surface}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+      expect(
+        contrast(tokens["--accent-ink"], tokens["--accent-bright"]),
+        `${id} --accent-ink on --accent-bright`,
+      ).toBeGreaterThanOrEqual(4.5);
     }
   });
 });

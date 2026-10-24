@@ -29,7 +29,8 @@ export interface PaletteInput {
   inkFaint: string;
   /** The scarce mark caret spends on the current selection. */
   accent: string;
-  /** The accent's lighter sibling — hovers, and shiki's entity/constant role. */
+  /** The accent's hover step, a shade further from `paper` — hovers, and shiki's
+   * entity/constant role. */
   accentBright: string;
   /** Text painted on top of `accent`. */
   accentInk: string;

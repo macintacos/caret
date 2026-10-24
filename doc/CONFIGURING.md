@@ -338,7 +338,7 @@ These 13 colors are required:
 | `inkSoft`      | Secondary text.                                                                     |
 | `inkFaint`     | Metadata.                                                                           |
 | `accent`       | The current selection.                                                              |
-| `accentBright` | The accent's lighter sibling: hovers, links, inline code.                           |
+| `accentBright` | The accent's hover step, a shade further from `paper`: hovers, links, inline code.  |
 | `accentInk`    | Text drawn on top of `accent`.                                                      |
 | `neutral`      | A mid-tone neutral, used for the mark on an orphaned comment.                       |
 | `ok`           | Success and additions.                                                              |
