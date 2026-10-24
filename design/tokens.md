@@ -21,7 +21,7 @@ it. User theme files follow
 | Text | `--ink` |
 | Secondary text | `--ink-soft`, then `--ink-faint` |
 | Separator | `--rule`, `--rule-strong` |
-| Accent | `--accent`; `--accent-bright` for hover fills, `--accent-ink` for text on the accent, `--accent-wash` for tints |
+| Accent | `--accent`; `--accent-bright` for hovers, `--accent-ink` for text on the accent, `--accent-wash` for tints |
 | Destructive | `--danger` |
 | Status | `--ok`, `--danger`, and `--attention` for novelty (new, unread) |
 | Highlight bands | `--mark`, `--mark-active`, `--mark-orphan` |
@@ -41,9 +41,8 @@ All in `ui/src/styles/tokens.css`:
   font files ship; each stack falls back to the platform.
 - **Size:** the `--text-2xs` … `--text-xl` ramp, and the role-keyed `--leading-*` tokens.
   The reading base is the 15px on `<body>` in `ui/src/styles/base.css`.
-- **Motion:** `--dur-*` and `--ease-*`. `ui/src/lib/motion.test.ts` pins their shape. The
-  code still carries the older ladder; see the open items in
-  [`decisions.md`](decisions.md).
+- **Motion:** `--dur-state` and `--ease-out` for every state transition, `--dur-travel`
+  for the plan's scroll. `ui/src/lib/motion.test.ts` pins the set.
 - **Radius:** `--radius` for controls, `--radius-lg` for panels, `99px` for badges.
 - **Elevation:** `--shadow-card` for panels comes from the palette; `--shadow-chip` for
   small floating chrome is hand-written here.

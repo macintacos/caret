@@ -34,9 +34,9 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 ### Motion
 
 - Every state transition takes 160 ms on the strong ease-out
-  `cubic-bezier(0.22, 1, 0.36, 1)`: hover and focus tints, surfaces entering and leaving,
-  and controls sliding between positions. The curve covers most of the distance at once,
-  then brakes hard.
+  `cubic-bezier(0.22, 1, 0.36, 1)` (`--dur-state`, `--ease-out`): hover and focus tints,
+  surfaces entering and leaving, and controls sliding between positions. The curve covers
+  most of the distance at once, then brakes hard.
 - Ambient loops (the empty screen's floating `^`, the reference-hint ping, the safe-mode
   pulse) and the plan's scroll travel are not state transitions and keep their own timing.
 - Motion is CSS only. A Svelte JS transition throws under happy-dom and ignores reduced
@@ -55,7 +55,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   don't collide with typing: `j`/`k`, `G`, `/` to search, `?` for help.
 - Each control shows the key that activates it on the control itself (`KbdCap.svelte`,
   `SubmitCap.svelte`). The hints are on by default and the `caret.shortcutHints`
-  preference hides them (`ui/src/lib/shortcutHintsPref.ts`). They are for desktop only.
+  preference hides them (`ui/src/lib/shortcutHintsPref.ts`). They are for desktop only: a
+  touch device hides them in `ui/src/styles/atoms.css`.
 - An open modal silences the review keymap.
 
 ### Sound
