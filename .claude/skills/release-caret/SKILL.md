@@ -345,25 +345,26 @@ git switch trunk && git pull --ff-only
 A Linear automation mints an issue for the release PR — the one PR caret opens with no
 `EXC-` ref in its title or branch — within a minute of `prepare`. It is born
 **In Progress**, labelled `chore`, and carries the release PR (attachment title
-`v<version>`) as its only attachment. Neither its creator nor its title identifies it: the
-Linear MCP lists the operator as its creator, and the title wording drifts
+`v<version>`) as its only attachment. Neither its creator nor its title identifies it:
+Linear lists the operator as its creator, and the title wording drifts
 (`Bump caret plugin version to 1.2.0`, `… to 1.1.0 in all manifests`,
 `… to 1.0.0 for the release`). Which automation is not determinable from the API, and
 Linear's docs describe no such feature; what IS established is that it never closes
 itself. Across v0.11.0, v0.11.1 and v0.12.0 every one sat In Progress until a human
 noticed — 21h, 1d19h, 2d11h. Closing it is this skill's job.
 
-Find it by version and confirm it is the right one — its attachment URL must be the
-release PR `prepare` reported — then transition it:
+Find it by the release PR, not by its version or title: Linear's `attachmentsForURL` query
+returns exactly the issues that `prepare`'s `prUrl` is attached to. Then transition it,
+using the `linear` CLI from the `linear-cli:linear-cli` skill:
 
-- `list_issues` with `query: "<version>"`, `label: "chore"` and `createdAt: "-P1D"`.
-  `list_issues` returns no attachments, so for each candidate call `get_issue` with
-  `fields: ["attachments"]` and keep the one whose attachment URL is `prUrl`.
-- `save_issue` with that id and `state: "Done"`.
+```sh
+linear api 'query($u:String!){ attachmentsForURL(url:$u){ nodes { issue { identifier state { name } } } } }' --variable u=<prUrl>
+linear issue update <identifier> --state Done
+```
 
-The version gate already authorized this; do not prompt. If no such issue exists, say so
-and stop — do not close anything whose attachment is not the release PR. Skip this step
-entirely on a dry run, which opens no PR for Linear to see.
+The version gate already authorized this; do not prompt. If the query returns no issue, or
+more than one, say so and stop — do not close anything the release PR is not attached to.
+Skip this step entirely on a dry run, which opens no PR for Linear to see.
 
 ---
 
