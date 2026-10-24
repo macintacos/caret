@@ -538,15 +538,29 @@ const HEADER_KEYS = new Set(["schema", "version", "generatedAt", "checks"]);
  * fonts are free to give it emoji presentation, which would double its width. */
 const STATUS_GLYPH = { pass: "✓", fail: "✗", unknown: "?" } as const;
 
-/** SGR color per status, worn by the glyph alone so the rest of the line stays plain
- * text. Only a caller that knows its stdout is a terminal asks for it. */
-const STATUS_COLOR = { pass: "\x1b[32m", fail: "\x1b[31m", unknown: "\x1b[33m" } as const;
-const COLOR_RESET = "\x1b[0m";
+/** The SGR codes the text format wears when asked for color: red for a failure and its
+ * block, green for a pass, yellow for an undecided check, dim for everything secondary,
+ * and bold for the one line that carries the news. */
+const SGR = { red: "31", green: "32", yellow: "33", dim: "2", bold: "1", boldRed: "1;31" } as const;
+const STATUS_SGR = { pass: SGR.green, fail: SGR.red, unknown: SGR.yellow } as const;
+
+/** Wraps text in one SGR code, or returns it untouched when color is off. */
+type Paint = (code: string, text: string) => string;
+
+const painter =
+  (color: boolean): Paint =>
+  (code, text) =>
+    color && text ? `\x1b[${code}m${text}\x1b[0m` : text;
+
+/** The failure block's width in columns, corners included. */
+const BLOCK_WIDTH = 70;
+
+type FailedCheck = Extract<Check, { status: "fail" }>;
 
 /** Everything doctor writes to stdout, in either format. The one scrub covers the whole
  * document — the checks' own strings included — and runs before anything is rendered, so
- * no output path can carry an unredacted value. `color` reaches only the text format's
- * status glyphs; JSON is a data document and never wears it. */
+ * no output path can carry an unredacted value. `color` reaches only the text format;
+ * JSON is a data document and never wears it. */
 export function renderStdout(doc: DoctorDocument, format: "json" | "text", color = false): string {
   // scrubValue returns a shape-preserving copy — same keys, scrubbed strings — so the
   // cast back is safe.
@@ -554,36 +568,64 @@ export function renderStdout(doc: DoctorDocument, format: "json" | "text", color
   return format === "json" ? JSON.stringify(redacted, null, 2) : renderDocument(redacted, color);
 }
 
-/** Render the (already-scrubbed) document as plain text: a header line, the checks
- * block, then one titled block per state section with aligned `key: value` lines. ANSI
- * appears only on the check glyphs, and only when asked for. Never throws — a degraded
- * { error } section renders one error line, and missing keys are simply absent. */
+/** Render the (already-scrubbed) document as text: a header line, the failing checks in
+ * one block, the rest of the checks, one titled block per state section, then what to
+ * run next. ANSI appears only when asked for. Never throws — a degraded { error } section
+ * renders one error line, and missing keys are simply absent. */
 export function renderDocument(doc: DoctorDocument, color = false): string {
-  const lines: string[] = [];
-  lines.push(`caret doctor (${doc.schema}) version ${doc.version} at ${doc.generatedAt}`);
-  lines.push("", "checks:", ...renderChecks(doc.checks, color));
-  const sections = Object.entries(doc).filter(([key]) => !HEADER_KEYS.has(key));
-  for (const [title, value] of sections) {
-    lines.push("");
-    lines.push(`${title}:`);
-    lines.push(...renderSection(title, value));
+  const paint = painter(color);
+  const failing = doc.checks.filter((c): c is FailedCheck => c.status === "fail");
+  const rest = doc.checks.filter((c) => c.status !== "fail");
+  const lines = [
+    `caret doctor ${doc.version} ${paint(SGR.dim, `· ${doc.schema} · ${doc.generatedAt}`)}`,
+  ];
+  if (failing.length > 0) lines.push("", ...renderFailures(failing, paint));
+  if (rest.length > 0) lines.push("", ...renderChecks(rest, paint));
+  for (const [title, value] of Object.entries(doc).filter(([key]) => !HEADER_KEYS.has(key))) {
+    lines.push("", title, ...renderSection(value, paint));
   }
+  lines.push("", nextStep(failing.length, paint));
   return lines.join("\n");
 }
 
-/** One line per check, with the remedy or reason indented beneath the ones that leave
- * the reader something to do. A check that claims nothing carries no detail, and renders
- * without the separator rather than trailing one. */
-function renderChecks(checks: Check[], color: boolean): string[] {
-  const out: string[] = [];
-  for (const c of checks) {
-    const glyph = STATUS_GLYPH[c.status];
-    const marker = color ? `${STATUS_COLOR[c.status]}${glyph}${COLOR_RESET}` : glyph;
-    out.push(`  ${marker} ${c.id}${c.detail ? ` — ${c.detail}` : ""}`);
-    if (c.status === "fail") out.push(`    remedy: ${c.remedy}`);
-    if (c.status === "unknown") out.push(`    reason: ${c.reason}`);
-  }
-  return out;
+/** The failing checks in one rounded block titled with their count: each one's name, its
+ * detail, and the remedy that closes it. */
+function renderFailures(failing: FailedCheck[], paint: Paint): string[] {
+  const title = `${failing.length} ${failing.length === 1 ? "check" : "checks"} failing`;
+  const bar = paint(SGR.red, "│");
+  const body = failing.flatMap((c, i) => [
+    ...(i > 0 ? [bar] : []),
+    `${bar} ${paint(SGR.red, STATUS_GLYPH.fail)} ${c.id}`,
+    ...(c.detail ? [`${bar}   ${c.detail}`] : []),
+    `${bar}   → ${c.remedy}`,
+  ]);
+  const rule = "─".repeat(Math.max(1, BLOCK_WIDTH - title.length - 4));
+  return [
+    `${paint(SGR.red, "╭─")} ${paint(SGR.boldRed, title)} ${paint(SGR.red, rule)}`,
+    ...body,
+    paint(SGR.red, `╰${"─".repeat(BLOCK_WIDTH - 1)}`),
+  ];
+}
+
+/** The passing and undecided checks, one per line with their names aligned: the detail
+ * dimmed beside each, and an undecided one's reason after it. A check that claims nothing
+ * — every degraded section's — renders without a separator or trailing space. */
+function renderChecks(checks: Check[], paint: Paint): string[] {
+  const width = Math.max(...checks.map((c) => c.id.length));
+  return checks.map((c) => {
+    const glyph = paint(STATUS_SGR[c.status], STATUS_GLYPH[c.status]);
+    const said = [paint(SGR.dim, c.detail), c.status === "unknown" ? c.reason : ""]
+      .filter(Boolean)
+      .join(" — ");
+    return said ? `${glyph} ${c.id.padEnd(width)}  ${said}` : `${glyph} ${c.id}`;
+  });
+}
+
+/** The closing line: what to run next. */
+function nextStep(failures: number, paint: Paint): string {
+  return failures > 0
+    ? `next: apply the ${failures === 1 ? "fix" : "fixes"} above, then run caret doctor again`
+    : `next: ${paint(SGR.bold, "nothing to fix")} — if caret still misbehaves, share this report`;
 }
 
 /** A section that degraded to { error } rather than the value it was supposed to collect
@@ -598,24 +640,18 @@ export function isSectionError(v: unknown): v is SectionError {
   );
 }
 
-/** Render one section's body. A degraded section is a single error line; an
- * object is aligned key:value lines; arrays/nested objects render one item per
- * line. */
-function renderSection(title: string, value: unknown): string[] {
-  if (isSectionError(value)) return [`  ${title} error: ${value.error}`];
+/** One section's body: its keys dimmed and aligned beside their values, an array's items
+ * one per line beneath its key, and a degraded section a single error line. */
+function renderSection(value: unknown, paint: Paint): string[] {
+  if (isSectionError(value)) return [`  ${paint(SGR.dim, "error")}  ${value.error}`];
   if (value === null || typeof value !== "object") return [`  ${String(value)}`];
   const entries = Object.entries(value as Record<string, unknown>);
   const width = entries.reduce((w, [k]) => Math.max(w, k.length), 0);
-  const out: string[] = [];
-  for (const [k, v] of entries) {
-    if (Array.isArray(v)) {
-      out.push(`  ${k.padEnd(width)} :`);
-      for (const item of v) out.push(`    ${formatValue(item)}`);
-    } else {
-      out.push(`  ${k.padEnd(width)} : ${formatValue(v)}`);
-    }
-  }
-  return out;
+  return entries.flatMap(([k, v]) =>
+    Array.isArray(v)
+      ? [`  ${paint(SGR.dim, k)}`, ...v.map((item) => `    ${formatValue(item)}`)]
+      : [`  ${paint(SGR.dim, k.padEnd(width))}  ${formatValue(v)}`],
+  );
 }
 
 /** Format a leaf value for a render line. Objects (a nested LogStats) become a

@@ -589,26 +589,25 @@ test("caret doctor prints a human-readable report and exits 0", async () => {
       env: doctorEnv(stateHome),
     });
     expect(exitCode).toBe(0);
-    expect(out.startsWith("caret doctor (caret-doctor/1)")).toBe(true);
+    expect(out).toMatch(/^caret doctor \S+ · caret-doctor\/1 · /);
     // Every section title renders, and the daemon (nothing on the port) reads
     // as unreachable.
     for (const title of [
-      "checks:",
-      "system:",
-      "install:",
-      "settings:",
-      "daemon:",
-      "lockAndPort:",
-      "processes:",
-      "reviews:",
-      "installState:",
-      "logs:",
+      "system",
+      "install",
+      "settings",
+      "daemon",
+      "lockAndPort",
+      "processes",
+      "reviews",
+      "installState",
+      "logs",
     ]) {
-      expect(out).toContain(title);
+      expect(out).toMatch(new RegExp(`^${title}$`, "m"));
     }
-    expect(out).toMatch(/^ {2}reachable +: false$/m);
+    expect(out).toMatch(/^ {2}reachable +false$/m);
     // An empty state home is a healthy one: an idle-exited daemon, no lock, no logs.
-    expect(out).toMatch(/^ {2}✓ daemon-reachable /m);
+    expect(out).toMatch(/^✓ daemon-reachable /m);
   } finally {
     await rm(stateHome, { recursive: true, force: true });
   }
@@ -638,9 +637,7 @@ test("caret doctor --bundle announces the archive before it prints the report", 
     });
     expect(exitCode).toBe(0);
     expect(out).toContain("caret doctor: wrote ");
-    expect(out.indexOf("caret doctor: wrote ")).toBeLessThan(
-      out.indexOf("caret doctor (caret-doctor/1)"),
-    );
+    expect(out.indexOf("caret doctor: wrote ")).toBeLessThan(out.indexOf("caret-doctor/1"));
   } finally {
     await rm(stateHome, { recursive: true, force: true });
   }
@@ -657,9 +654,9 @@ test("caret doctor exits 1 and names a remedy when a check fails", async () => {
       env: doctorEnv(stateHome),
     });
     expect(exitCode).toBe(1);
-    expect(out).toMatch(/^ {2}✗ log-errors /m);
+    expect(out).toMatch(/^│ ✗ log-errors$/m);
     expect(out).toContain(justNow);
-    expect(out).toMatch(/^ {4}remedy: /m);
+    expect(out).toMatch(/^│ {3}→ /m);
   } finally {
     await rm(stateHome, { recursive: true, force: true });
   }
@@ -676,7 +673,7 @@ test("caret doctor exits 0 when the only error records have aged out", async () 
       env: doctorEnv(stateHome),
     });
     expect(exitCode).toBe(0);
-    expect(out).toMatch(/^ {2}✓ log-errors /m);
+    expect(out).toMatch(/^✓ log-errors /m);
     // The record is still surfaced — it just no longer stands as a verdict.
     expect(out).toContain(longAgo);
   } finally {

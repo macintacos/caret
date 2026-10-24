@@ -3,13 +3,13 @@ description: Diagnose this caret install — run caret doctor, relay each failin
 ---
 
 caret's `doctor` subcommand renders a verdict over a one-shot, read-only snapshot of the
-local install: a `checks:` block naming what is wrong and how to fix it, then the state it
-read that from — running caret processes, daemon identity, lock/port state, effective
-settings, review counts, the OpenCode adapter's install-state probe (plugin version,
-enabled state), log sizes and error counts, recent failures grouped by review with their
-codes, and system basics. The report is **always redacted** (home paths become `~`,
-foreign usernames censored) and never contains plan, prompt, or feedback bodies — it
-exists to be shared.
+local install: the failing checks first, each with the command that fixes it, then the
+passing ones, then the state it read them from — running caret processes, daemon identity,
+lock/port state, effective settings, review counts, the OpenCode adapter's install-state
+probe (plugin version, enabled state), log sizes and error counts, recent failures grouped
+by review with their codes, and system basics. The report is **always redacted** (home
+paths become `~`, foreign usernames censored) and never contains plan, prompt, or feedback
+bodies — it exists to be shared.
 
 ## 1. Run it
 
@@ -47,9 +47,9 @@ one. What each id means:
 | `opencode-caret-version` | OpenCode would load a caret behind the published one | the check's remedy verbatim |
 
 An `unknown` check is not a failure: it names its own `reason` — no network, an unreadable
-config, or a report section that never collected, which also shows as `<name> error: …`
-and leaves the check with no detail. Present it as-is. A daemon that is simply not running
-is not one of these — it reports `reachable false` and *passes*.
+config, or a report section that never collected, which also shows as an `error` line and
+leaves the check with no detail. Present it as-is. A daemon that is simply not running is
+not one of these — it reports `reachable false` and *passes*.
 
 ## 3. Present the report
 

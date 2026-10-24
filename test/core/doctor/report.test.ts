@@ -571,21 +571,20 @@ test("groupFailures keeps the newest 50 records and counts the rest as omitted",
 
 test("renderDocument renders the header and every section title for a happy report", async () => {
   const text = renderDocument(await document());
-  expect(typeof text).toBe("string");
-  expect(text).toContain("caret-doctor/1");
+  expect(text).toMatch(/^caret doctor \S+ · caret-doctor\/1 · /);
   for (const title of [
-    "system:",
-    "install:",
-    "settings:",
-    "daemon:",
-    "lockAndPort:",
-    "processes:",
-    "reviews:",
-    "installState:",
-    "logs:",
-    "failures:",
+    "system",
+    "install",
+    "settings",
+    "daemon",
+    "lockAndPort",
+    "processes",
+    "reviews",
+    "installState",
+    "logs",
+    "failures",
   ]) {
-    expect(text).toContain(title);
+    expect(text).toMatch(new RegExp(`^${title}$`, "m"));
   }
   // renderSection walks whatever keys a section carries, so a third log needs
   // no rendering change to show up.
@@ -594,7 +593,7 @@ test("renderDocument renders the header and every section title for a happy repo
 
 test("renderDocument renders a degraded section as an error line and never throws", async () => {
   const text = renderDocument(await document({ system: boom }));
-  expect(text).toContain("system error: probe boom");
+  expect(text).toMatch(/^system\n {2}error {2}probe boom$/m);
 });
 
 test("renderDocument tolerates an all-degraded report without throwing", () => {
@@ -617,21 +616,33 @@ test("renderDocument tolerates an all-degraded report without throwing", () => {
   expect(() => renderDocument(allError)).not.toThrow();
 });
 
-test("the checks block renders before the first state section", async () => {
+test("the checks render before the first state section, names aligned", async () => {
   const text = renderDocument(
     await document({}, [
       { id: "daemon-lock", title: "Daemon lock", status: "pass", detail: "on port 42718" },
+      { id: "log-errors", title: "Logs", status: "pass", detail: "none in the last 24h" },
     ]),
   );
-  expect(text.indexOf("checks:")).toBeGreaterThan(-1);
-  expect(text.indexOf("checks:")).toBeLessThan(text.indexOf("system:"));
-  expect(text).toContain("✓ daemon-lock");
+  expect(text).toMatch(/^✓ daemon-lock {2}on port 42718$/m);
+  expect(text).toMatch(/^✓ log-errors {3}none in the last 24h$/m);
+  expect(text.indexOf("✓ daemon-lock")).toBeLessThan(text.indexOf("\nsystem\n"));
 });
 
-test("a failing check renders its remedy and an unknown one its reason", async () => {
+test("failures come first, in a block that counts them and gives each fix", async () => {
   const text = renderDocument(
     await document({}, [
+      { id: "daemon-lock", title: "Daemon lock", status: "pass", detail: "live" },
       { id: "log-errors", title: "Logs", status: "fail", detail: "2 errors", remedy: "read x.log" },
+    ]),
+  );
+  expect(text).toMatch(/^╭─ 1 check failing ─+$/m);
+  expect(text).toMatch(/^│ ✗ log-errors\n│ {3}2 errors\n│ {3}→ read x.log\n╰─+$/m);
+  expect(text.indexOf("✗ log-errors")).toBeLessThan(text.indexOf("✓ daemon-lock"));
+});
+
+test("an unknown check renders its reason, with no separator when it claims nothing", async () => {
+  const text = renderDocument(
+    await document({}, [
       {
         id: "opencode-caret-version",
         title: "OpenCode",
@@ -641,13 +652,23 @@ test("a failing check renders its remedy and an unknown one its reason", async (
       },
     ]),
   );
-  expect(text).toContain("✗ log-errors");
-  expect(text).toContain("remedy: read x.log");
-  expect(text).toContain("? opencode-caret-version");
-  expect(text).toContain("reason: offline");
-  // A check that claims nothing — every degraded section's — carries no detail, so it
-  // must not render a separator with nothing after it.
-  expect(text).not.toContain("opencode-caret-version —");
+  expect(text).toMatch(/^\? opencode-caret-version {2}offline$/m);
+});
+
+test("the last line names what to run next", async () => {
+  const lastLine = async (checks: Check[]) =>
+    renderDocument(await document({}, checks))
+      .split("\n")
+      .at(-1) ?? "";
+  const failing = await lastLine([
+    { id: "log-errors", title: "Logs", status: "fail", detail: "2 errors", remedy: "read x.log" },
+  ]);
+  expect(failing).toStartWith("next: ");
+  expect(failing).toContain("caret doctor");
+  const passing = await lastLine([
+    { id: "daemon-lock", title: "Daemon lock", status: "pass", detail: "live" },
+  ]);
+  expect(passing).toStartWith("next: nothing to fix");
 });
 
 test("the status markers stay uncolored unless the caller asks for color", async () => {
@@ -662,8 +683,7 @@ test("the status markers stay uncolored unless the caller asks for color", async
   expect(colored).toContain("\x1b[32m✓\x1b[0m daemon-lock");
   expect(colored).toContain("\x1b[31m✗\x1b[0m log-errors");
   expect(colored).toContain("\x1b[33m?\x1b[0m opencode-caret-version");
-  // Only the marker is colored: the rest of the line pastes clean.
-  expect(colored).toContain("daemon-lock — live");
+  expect(colored).toContain("\x1b[2mlive\x1b[0m");
 });
 
 test("the json format carries no color, whatever the caller asked for", async () => {
