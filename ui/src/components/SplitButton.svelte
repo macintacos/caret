@@ -107,7 +107,7 @@
      (Icon has no class prop); reduced-motion is caught by the global app.css guard. */
   .split :global(.split-toggle .icon) {
     transform: rotate(-90deg);
-    transition: transform var(--dur-micro) var(--ease-out);
+    transition: transform var(--dur-state) var(--ease-out);
   }
   .split :global(.split-toggle[aria-expanded="true"] .icon) {
     transform: rotate(0deg);

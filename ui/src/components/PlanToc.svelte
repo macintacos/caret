@@ -492,33 +492,6 @@
     gap: 0;
   }
 
-  /* The panel's own arrival and departure (EXC-1107), RETIMED rather than replaced.
-     The vendored Popover.Content already carries tw-animate-css's `animate-in` /
-     `animate-out` keyed on `data-[state=…]`, and that machinery is load-bearing well
-     past the look: bits-ui's portal presence waits on the `animationend` those
-     keyframes fire, so a shorthand of caret's own here would replace them and strand
-     the panel in the DOM on close. What is retimed instead is the pair of custom
-     properties the utility itself reads — the compiled `animate-in` resolves its
-     duration from `--tw-duration` and its curve from `--tw-ease` — so the keyframes,
-     the `--tw-enter-*` plumbing and the animationend all survive untouched. Both
-     properties are registered `inherits: false`, which keeps this override on the panel
-     and off the several hundred rows inside it. Unlayered, so it beats the
-     `duration-100` utility the vendored component ships.
-     The two arms are the motion vocabulary's own enter/exit pairing (tokens.css §
-     Motion) rather than one number used twice.
-     Reduced motion is not handled here, deliberately: the single global rule in
-     app.css already reaches this panel through its `[data-slot]` anchor, and it
-     collapses the duration rather than removing the keyframes — which is exactly what
-     keeps the animationend above firing under the preference. */
-  :global(.plan-toc-panel) {
-    --tw-duration: var(--dur-enter);
-    --tw-ease: var(--ease-out);
-  }
-  :global(.plan-toc-panel[data-state="closed"]) {
-    --tw-duration: var(--dur-exit);
-    --tw-ease: var(--ease-in);
-  }
-
   /* The list re-forming when the query crosses between empty and non-empty — the one
      boundary at which this surface really does swap one view for another. bits-ui's
      `Command.List` wraps its OWN element in `{#key search === ""}`, so the list — the
@@ -542,7 +515,7 @@
     }
   }
   :global(.plan-toc-panel [data-toc-view="outline"] [data-slot="command-viewport"]) {
-    animation: toc-list-in var(--dur-micro) var(--ease-out);
+    animation: toc-list-in var(--dur-state) var(--ease-out);
   }
 
   /* A match arriving, and its breadcrumb header arriving with it. ONE declaration for
@@ -579,7 +552,7 @@
   }
   :global(.plan-toc-panel [data-toc-view="matches"] [data-slot="command-item"]),
   :global(.plan-toc-panel [data-toc-view="matches"] [data-command-group-heading]) {
-    animation: toc-row-in var(--dur-micro) var(--ease-out);
+    animation: toc-row-in var(--dur-state) var(--ease-out);
   }
 
   /* The list carries its own leading space so the first row is not flush against

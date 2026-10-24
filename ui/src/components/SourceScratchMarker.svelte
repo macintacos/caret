@@ -46,10 +46,10 @@
     border: 1px dashed var(--rule);
     border-left: 3px dashed var(--ink-faint);
     border-radius: var(--radius);
-    transition: border-color var(--dur-micro) var(--ease-out);
+    transition: border-color var(--dur-state) var(--ease-out);
     /* Opacity-only, never size: the row's measured height must not move (the
        preventScroll guard depends on it). */
-    animation: reveal var(--dur-micro) var(--ease-out);
+    animation: reveal var(--dur-state) var(--ease-out);
   }
   :global([data-slot="button"].scratch:hover) {
     background: transparent;

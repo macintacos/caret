@@ -267,7 +267,7 @@ carries one shape of each to copy:
 - **Driven in-page** — the answer when the window is shorter than a single driver round
   trip, so neither of the above can be reached inside it: move the gesture *and* the read
   into one `page.evaluate` and assert the recorded boolean out of process.
-  `file-drawer.e2e.ts`'s closing wipe is a 140ms `setTimeout` in `DiffPlanView`, and the
+  `file-drawer.e2e.ts`'s closing wipe is a 160ms `setTimeout` in `DiffPlanView`, and the
   round trip is what overran it. The trade is that `element.click()` skips Playwright's
   actionability checks and `locator.evaluate` waits only for attachment, so prove the
   target visible before taking the handle, and bound any in-page spin by
@@ -277,7 +277,7 @@ carries one shape of each to copy:
 **`getAnimations()` is the trap worth naming.** It returns only animations still
 *in effect*, so one with no `fill-mode` leaves the list the moment it finishes: a sample
 is valid only inside that animation's own duration, and the duration is WALL CLOCK.
-`toc-row-in` is 120ms, which a contended host can spend on a single driver round trip —
+`toc-row-in` is 160ms, which a contended host can spend on a single driver round trip —
 the read lands after the ramps have gone and the count comes back 0 (EXC-1193). Live
 animations are still exactly what `getAnimations()` is for; the split is by claim, not by
 API. "Does it drain" is liveness and is polled through it; "did it fire" is history and is

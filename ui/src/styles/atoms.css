@@ -357,7 +357,7 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
      the two, twice per arrow key (loading bars, then the answer). Height only:
      the placement is re-decided per frame against a list that may itself have
      moved, and animating left/top would drag the panel after it. */
-  transition: height 140ms var(--ease-out);
+  transition: height var(--dur-state) var(--ease-out);
 }
 
 /* What is being previewed: a path, or a `/name`. Mono at the hint strip's own

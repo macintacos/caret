@@ -720,10 +720,10 @@
   // pane slides shut with the excerpt still in it instead of blinking out. The
   // drawer stays mounted for that beat and `drawerClosing` puts it in its closing
   // state; the timer then drops it. Must match FileDrawer's fd-close-* duration
-  // (--dur-exit = 140ms, pinned by motion.test.ts) — a timer rather than animationend
+  // (--dur-state = 160ms, pinned by motion.test.ts) — a timer rather than animationend
   // because happy-dom fires no animation events, so the unit env would strand the
   // drawer forever.
-  const CLOSE_ANIM_MS = 140;
+  const CLOSE_ANIM_MS = 160;
   let drawerClosing = $state(false);
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -2940,12 +2940,12 @@
     white-space: nowrap;
     /* Brightens on hover to read as clickable. */
     cursor: pointer;
-    transition: color var(--dur-micro) var(--ease-out);
+    transition: color var(--dur-state) var(--ease-out);
     /* Returning to plan review (leaving compare mode) re-mounts the path, so it
        reveals with the same quick slide-in the compare controls use when entering
        (VersionComparePicker's compare-reveal, EXC-808), and the switch reads
        symmetric in both directions. The global #app reduced-motion guard zeroes it. */
-    animation: cwd-reveal var(--dur-enter) var(--ease-out);
+    animation: cwd-reveal var(--dur-state) var(--ease-out);
   }
   .cwd:hover {
     color: var(--ink-soft);
@@ -3015,7 +3015,7 @@
     font-size: var(--text-sm);
     white-space: nowrap;
     user-select: none;
-    animation: search-hint-in var(--dur-micro) var(--ease-out);
+    animation: search-hint-in var(--dur-state) var(--ease-out);
   }
   @keyframes search-hint-in {
     from {
@@ -3047,10 +3047,10 @@
      an animation restarts only when its name changes, so each direction names its own.
      Opacity only: a transform would move the rects the overlays measure mid-flip. */
   .diff-plan[data-view-flip='source'] {
-    animation: plan-view-in-source var(--dur-enter) var(--ease-out);
+    animation: plan-view-in-source var(--dur-state) var(--ease-out);
   }
   .diff-plan[data-view-flip='preview'] {
-    animation: plan-view-in-preview var(--dur-enter) var(--ease-out);
+    animation: plan-view-in-preview var(--dur-state) var(--ease-out);
   }
   @keyframes plan-view-in-source {
     from {
@@ -3122,7 +3122,7 @@
      follow scroll; the global reduced-motion rule collapses it to a jump. */
   :is(.preview-cursor, .preview-hover, .preview-drag, .preview-drag-bar, .preview-plus)[data-glide] {
     transition-property: top, left, width, height;
-    transition-duration: var(--dur-micro);
+    transition-duration: var(--dur-state);
     transition-timing-function: var(--ease-out);
   }
   /* Centred in the preview's left padding, one preview line square. */
@@ -3196,7 +3196,7 @@
     border-radius: var(--radius);
     box-shadow: var(--shadow-chip);
     pointer-events: none;
-    animation: readout-in var(--dur-micro) var(--ease-out);
+    animation: readout-in var(--dur-state) var(--ease-out);
   }
 
   /* The one-time drag hint and the visual-select affordance hint share one chip:
@@ -3220,7 +3220,7 @@
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-chip);
-    animation: readout-in var(--dur-micro) var(--ease-out);
+    animation: readout-in var(--dur-state) var(--ease-out);
   }
 
   @keyframes readout-in {

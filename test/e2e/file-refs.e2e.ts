@@ -879,7 +879,7 @@ test("clicking the close circle dismisses the open preview", async ({ daemon, pa
   // route out of a lane a reader opened with the mouse. Here rather than in the
   // component unit — which already pins that the button calls `onClose` — because
   // what this covers is the rest of the route: FilePreview's callback reaching
-  // DiffPlanView's dismissal, and the lane surviving its --dur-exit closing wipe
+  // DiffPlanView's dismissal, and the lane surviving its --dur-state closing wipe
   // before it unmounts. Neither exists on a component mounted alone.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
@@ -1663,21 +1663,17 @@ test("switching references lets the outgoing file leave before the next arrives"
     await expect(page.locator(".fp-code.fp-leaving")).toHaveCount(1);
     await expect(page.locator(".fp-path")).toHaveText("src/cache.ts");
     await expect(page.locator('[data-preview-state="loading"]')).toHaveCount(0);
-    // On the exit curve, at the exit duration — both off the tokens, and the duration
-    // read back from the token itself so a retune moves one number in tokens.css.
+    // At the state duration, read back from the token itself so a retune moves one
+    // number in tokens.css.
     await expect(page.locator(".fp-code")).toHaveCSS(
       "animation-duration",
-      `${await motionToken(page, "--dur-exit")}s`,
-    );
-    await expect(page.locator(".fp-code")).toHaveCSS(
-      "animation-timing-function",
-      "cubic-bezier(0.4, 0, 1, 1)",
+      `${await motionToken(page, "--dur-state")}s`,
     );
 
     release();
 
     // The second file replaces it in a NEW region — a reused one would neither
-    // restart the enter animation nor start unscrolled — on the enter curve.
+    // restart the enter animation nor start unscrolled — on the state curve.
     await expect(page.locator(".fp-path")).toHaveText("src/other.ts");
     await expect(page.locator(".fp-code")).toHaveCount(1);
     await expect(page.locator(".fp-code.fp-leaving")).toHaveCount(0);

@@ -62,13 +62,13 @@ type ChoreographyWindow = {
  * portalled modal surfaces (appended to body), so a sampled clock would report the arrival
  * as first whenever the resolve lands inside one frame. `timeStamp` makes a same-frame pair
  * compare EQUAL, which is what the ordering assertion below is actually claiming. */
-type HandoffAnimation = { who: string; name: string; at: number; seconds: number };
+type HandoffAnimation = { who: string; name: string; at: number };
 type HandoffWindow = { __handoff: HandoffAnimation[] };
 
 /** Record every animation that starts anywhere in the document, tagged by the surface it
  * ran on. Capture-phase on the document, so it sees the portalled modal surfaces (outside
  * #app) and the in-shell curtain alike, and installed BEFORE the intent — a hand-off whose
- * halves are 140ms and 220ms leaves no room to attach afterwards. */
+ * halves are 160ms each leaves no room to attach afterwards. */
 async function recordHandoff(page: import("@playwright/test").Page) {
   await page.evaluate(() => {
     (window as unknown as HandoffWindow).__handoff = [];
@@ -86,9 +86,6 @@ async function recordHandoff(page: import("@playwright/test").Page) {
             (el.classList.contains("arrival") ? "arrival" : played.pseudoElement),
           name: played.animationName,
           at: e.timeStamp,
-          seconds: Number.parseFloat(
-            getComputedStyle(el, played.pseudoElement || null).animationDuration,
-          ),
         });
       },
       true,
@@ -147,7 +144,7 @@ test("closing a modal plays its exit before the surface leaves the DOM", async (
   await openSettings(page);
   await waitForEnterToSettle(page, [settingsDialog]);
 
-  // Register before the close intent: the exit is over in --dur-exit (140ms), so a
+  // Register before the close intent: the exit is over in --dur-state (160ms), so a
   // listener attached after Escape would race the very event it is waiting on. Only a
   // self-targeted event counts — animationend BUBBLES, and a descendant inside
   // Settings (the theme pane's IN USE marker) animates on its own schedule, so an
@@ -213,22 +210,19 @@ test("a confirm guard unmounts too — the alertdialog branch of the shell", asy
   await expect(page.locator("[data-slot='alert-dialog-content']")).toHaveCount(0);
 });
 
-test("the backdrop moves with the panel, and both leave quicker than they arrived", async ({
+test("the backdrop moves with the panel, both ways, on the state duration", async ({
   daemon,
   page,
 }) => {
   // The choreography (EXC-892) asserted on the real thing rather than read back out of the
-  // stylesheet that declares it. Three claims, none of which survives a unit — happy-dom
+  // stylesheet that declares it. Two claims, neither of which survives a unit — happy-dom
   // runs no animations at all:
-  //   1. Both arms really ride the tokens, not tw-animate-css's .15s fallback.
+  //   1. Arrival and departure really ride the token, not tw-animate-css's .15s fallback.
   //   2. Overlay and content are ONE gesture — same keyframe, same duration — so the
   //      backdrop deepens with the panel instead of on a clock of its own.
-  //   3. Leaving is quicker than arriving, which is what the --dur-enter/--dur-exit pair
-  //      EXC-890 tiered exists to buy.
   //
-  // Claim 1 is why the token values are read off :root and compared rather than the
-  // durations merely being ordered: --dur-exit (140ms) is BELOW the .15s fallback, so an
-  // open arm that silently stopped applying would still satisfy claims 2 and 3 on its own.
+  // Claim 1 is why the token value is read off :root and compared: an arm that silently
+  // stopped applying would still satisfy claim 2 on its own.
   //
   // Driven on the alertdialog GUARD; the Dialog branch is covered by the exit test above
   // plus the shared arms motion.test.ts pins. The guard is the branch where a backdrop on
@@ -252,21 +246,16 @@ test("the backdrop moves with the panel, and both leave quicker than they arrive
       }),
     [guardContent, guardOverlay],
   );
-  // The tokens themselves, off :root — no mirrored constant, so a retune moves both sides
-  // of the comparison together and only a surface falling OFF the vocabulary reds. Read
-  // unit-agnostically: tokens.css authors these in ms, and the build's minifier is free to
-  // emit either `220ms` or `.22s` for the same value.
-  const tokens = await page.evaluate(() => {
-    const seconds = (v: string): number =>
-      v.trim().endsWith("ms") ? Number.parseFloat(v) / 1000 : Number.parseFloat(v);
-    const root = getComputedStyle(document.documentElement);
-    return {
-      enter: seconds(root.getPropertyValue("--dur-enter")),
-      exit: seconds(root.getPropertyValue("--dur-exit")),
-    };
+  // The token itself, off :root — no mirrored constant, so a retune moves both sides of
+  // the comparison together and only a surface falling OFF the vocabulary reds. Read
+  // unit-agnostically: tokens.css authors it in ms, and the build's minifier is free to
+  // emit either `160ms` or `.16s` for the same value.
+  const state = await page.evaluate(() => {
+    const v = getComputedStyle(document.documentElement).getPropertyValue("--dur-state").trim();
+    return v.endsWith("ms") ? Number.parseFloat(v) / 1000 : Number.parseFloat(v);
   });
   expect(entering.map((a) => a.name)).toEqual(["enter", "enter"]);
-  expect(entering[0]?.seconds).toBe(tokens.enter);
+  expect(entering[0]?.seconds).toBe(state);
   expect(entering[0]?.seconds).toBe(entering[1]?.seconds);
 
   // Both enters must be over before the exit listeners go on, or the enter's own
@@ -300,9 +289,8 @@ test("the backdrop moves with the panel, and both leave quicker than they arrive
 
   const leaving = await page.evaluate(() => (window as unknown as ChoreographyWindow).__exits);
   expect(leaving.map((a) => a.name)).toEqual(["exit", "exit"]);
-  expect(leaving[0]?.seconds).toBeCloseTo(tokens.exit, 3);
+  expect(leaving[0]?.seconds).toBeCloseTo(state, 3);
   expect(leaving[0]?.seconds).toBe(leaving[1]?.seconds);
-  expect(leaving[0]?.seconds).toBeLessThan(entering[0]?.seconds ?? 0);
   await expect(page.locator(guardContent)).toHaveCount(0);
 });
 
@@ -312,8 +300,8 @@ test("a modal neither moves nor sticks under reduced motion", async ({ daemon, p
   // forever, and the count assertion times out rather than passing. The visible one: the
   // global guard in base.css reaches these surfaces only through its [data-slot] anchor —
   // they are portalled to document.body, outside #app — so a modal that opts into caret's
-  // timing must not out-specify the guard and fade in anyway. Sampled in BOTH directions,
-  // since the two arms are separate rules.
+  // timing must not out-specify the guard and fade in anyway. Sampled in both
+  // directions.
   await page.emulateMedia({ reducedMotion: "reduce" });
   await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
@@ -407,9 +395,8 @@ test("a decided guard landing on the next plan hands over in one crossfade", asy
   expect(played.filter((a) => a.who === "arrival")).toEqual([]);
   await expect(page.getByRole("banner")).toContainText("Plan Beta");
 
-  // The exit LEADS, and it is the shorter half, so it has cleared before the arrival settles.
+  // The exit LEADS: the hand-off lets it finish before it takes its still.
   expect(exit?.at ?? 0).toBeLessThanOrEqual(departing?.at ?? 0);
-  expect(exit?.seconds ?? 0).toBeLessThan(arriving?.seconds ?? 0);
 });
 
 test("a plan arriving into the waiting room crossfades in", async ({ daemon, page }) => {
@@ -487,7 +474,6 @@ test("draining the queue hands the whole window over in one crossfade", async ({
   expect(played.filter((a) => a.who === "arrival")).toEqual([]);
 
   expect(exit?.at ?? 0).toBeLessThanOrEqual(departing?.at ?? 0);
-  expect(exit?.seconds ?? 0).toBeLessThan(arriving?.seconds ?? 0);
 });
 
 test("a decision hands over from the preview, whose table headers animate on scroll", async ({
@@ -527,7 +513,7 @@ test("the waiting room never shares the window with the plan it replaced", async
   const guard = await openApproveGuard(page);
 
   // Checked on every change to the shell's children rather than sampled, since the overlap
-  // lasted one exit tier.
+  // lasted one --dur-state.
   await page.evaluate(() => {
     const w = window as unknown as { __overlap: boolean };
     w.__overlap = false;

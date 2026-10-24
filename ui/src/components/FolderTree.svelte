@@ -662,7 +662,7 @@
     border: 1px solid var(--rule);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    animation: ft-in var(--dur-enter) var(--ease-out);
+    animation: ft-in var(--dur-state) var(--ease-out);
   }
   .ft-elided,
   .ft-stale {
@@ -683,7 +683,7 @@
   .ft-refresh {
     background: none;
     color: var(--ink-faint);
-    transition: color var(--dur-micro) var(--ease-out);
+    transition: color var(--dur-state) var(--ease-out);
   }
   .ft-refresh:hover,
   .ft-refresh:focus-visible {
@@ -752,7 +752,7 @@
   }
   .ft-message {
     font-family: var(--font-mono);
-    animation: ft-in var(--dur-micro) var(--ease-out);
+    animation: ft-in var(--dur-state) var(--ease-out);
   }
   /* The card rises the same 4px onto the surface FilePreview's region does, so
      opening either reference surface reads as one gesture. Reduced motion is not

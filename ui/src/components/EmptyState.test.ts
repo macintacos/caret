@@ -109,15 +109,12 @@ describe("EmptyState", () => {
   });
 
   // The line docks above the status bar off the shared --status-bar-h token (the
-  // same one CommentNavigator docks from), and cross-fades on both arms of the
-  // surface duration pair. Pinned against the CSS source so a retune that drops
-  // an arm — leaving the swap to snap in one direction — reds the unit suite.
-  test("the fact line docks off --status-bar-h and cross-fades on both arms", async () => {
+  // same one CommentNavigator docks from), and cross-fades on the state duration.
+  test("the fact line docks off --status-bar-h and cross-fades on --dur-state", async () => {
     const css = await componentCss("EmptyState.svelte");
     const rule = ruleBody(css, ".carrot-fact");
     expect(rule).toContain("var(--status-bar-h)");
-    expect(rule).toContain("var(--dur-enter)");
-    expect(ruleBody(css, ".carrot-fact.leaving")).toContain("var(--dur-exit)");
+    expect(rule).toContain("var(--dur-state)");
   });
 
   // WCAG 2.2.2: auto-updating content running indefinitely needs a way to hold it.

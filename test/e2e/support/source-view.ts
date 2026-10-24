@@ -564,18 +564,19 @@ export async function revealGutterPlus(page: Page, line: number): Promise<Locato
  * The query is filled rather than typed, and Enter from the field selects the first
  * result, so callers pass a heading whose text is unique within the plan.
  *
- * A third wait closes the gesture: Enter commits, but the menu it opened is still
- * playing its exit, and bits-ui's portal presence unmounts on that animation's end.
- * A caller that drives the bar again inside that window strands the surface — so the
- * helper returns only once the menu is GONE, making "jumped" mean the whole gesture
+ * A third wait closes the gesture: Enter commits, but the menu and the filter panel it
+ * opened may still be playing their exits, and bits-ui's portal presence unmounts each
+ * on that animation's end. A caller that drives the bar again inside that window strands
+ * the surface, or opens a menu that never takes focus — so the helper returns only once
+ * both are GONE, making "jumped" mean the whole gesture
  * finished rather than that the keystroke was delivered. Waiting here rather than in
  * each caller matters because the window is invisible from the call site, and it
  * closed on its own for as long as the jump's scroll outlasted it (EXC-1092 shortened
  * that scroll to 180ms, which is how the race surfaced).
  *
  * One thing this does NOT wait out: a jump that shortens the trail leaves the departing
- * crumb in the bar for --dur-exit while it animates away (EXC-1123), and that crumb keeps
- * its aria-current, so `currentCrumb` resolves to two nodes for those 140ms and a second
+ * crumb in the bar for --dur-state while it animates away (EXC-1123), and that crumb keeps
+ * its aria-current, so `currentCrumb` resolves to two nodes for those 160ms and a second
  * jump inside the window would trip strict mode. Every caller today is incidentally safe
  * because each shortening is followed by an exact `toHaveText([…])` that cannot pass until
  * the ghost is gone. A new spec that jumps twice in a row should settle the trail between
@@ -588,6 +589,7 @@ export async function jumpToHeading(page: Page, heading: string): Promise<void> 
   await page.locator("input[aria-label='Filter headings']").fill(heading);
   await page.keyboard.press("Enter");
   await expect(page.locator("[data-slot='dropdown-menu-content']")).toHaveCount(0);
+  await expect(page.locator(".plan-crumb-filter")).toHaveCount(0);
 }
 
 /** Open the gutter composer on `line` (3 by default) and return its editor,

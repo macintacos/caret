@@ -223,7 +223,7 @@
     color: inherit;
     opacity: 0.6;
     transform: rotate(-90deg);
-    transition: transform var(--dur-micro) var(--ease-out);
+    transition: transform var(--dur-state) var(--ease-out);
   }
   :global(.setting-trigger[aria-expanded="true"] span:has(> [data-icon="chevron-down"])) {
     transform: rotate(0deg);

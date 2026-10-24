@@ -182,8 +182,8 @@
     letter-spacing: 0.02em;
     color: var(--ink-soft);
     transition:
-      color var(--dur-micro) var(--ease-out),
-      background-color var(--dur-micro) var(--ease-out);
+      color var(--dur-state) var(--ease-out),
+      background-color var(--dur-state) var(--ease-out);
   }
   .diag-copy:hover {
     color: var(--ink);
@@ -210,8 +210,8 @@
     text-align: left;
     cursor: pointer;
     transition:
-      border-color var(--dur-micro) var(--ease-out),
-      background-color var(--dur-micro) var(--ease-out);
+      border-color var(--dur-state) var(--ease-out),
+      background-color var(--dur-state) var(--ease-out);
   }
   .diag-block:not(.is-unavailable):hover {
     border-color: var(--rule-strong);

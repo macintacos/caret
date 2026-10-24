@@ -578,7 +578,7 @@ describe("sound events (EXC-1126)", () => {
     expect(h.sounds).toEqual(["searchClosed"]);
   });
 
-  // The pill stays mounted for one --dur-exit playing its collapse, so Esc is still
+  // The pill stays mounted for one --dur-state playing its collapse, so Esc is still
   // live during it — and Esc is a two-stage idiom elsewhere in the plan view, so a
   // reviewer pressing it twice is dismissing once.
   test("a second Esc inside the collapse window does not re-sound the dismissal", () => {

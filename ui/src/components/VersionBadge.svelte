@@ -98,8 +98,8 @@
     border-radius: var(--radius);
     padding: 0.15rem 0.35rem;
     transition:
-      color var(--dur-micro) var(--ease-out),
-      background-color var(--dur-micro) var(--ease-out);
+      color var(--dur-state) var(--ease-out),
+      background-color var(--dur-state) var(--ease-out);
   }
   .version-badge:hover {
     color: var(--ink);

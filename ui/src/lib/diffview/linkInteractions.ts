@@ -107,7 +107,7 @@ function tooltipMount(tokenElement: HTMLElement): ParentNode {
  * as the code, or on the body for a light-DOM token (the preview's). Its colours are
  * caret's raised-paper tokens, which inherit into the shadow root.
  *
- * The reveal is motionless — wiring the motion tokens (--dur-micro / --ease-out)
+ * The reveal is motionless — wiring the motion tokens (--dur-state / --ease-out)
  * is a deliberate follow-up. The bubble does not reposition on scroll (no scroll
  * listener is added); dismissal relies on hideTooltip from the caller's pointer
  * leave (onTokenLeave here, PlanPreview's pointerout). */

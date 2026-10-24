@@ -237,7 +237,7 @@ describe("PlanBreadcrumbs menus", () => {
     expect(keys.filter((k) => k === "ArrowDown")).toEqual(["ArrowDown"]);
   });
 
-  // EXC-1128: a level inside its ~140ms outro is off the trail, so a walk anchored on one
+  // EXC-1128: a level inside its ~160ms outro is off the trail, so a walk anchored on one
   // does not step — least of all onto the level leaving beside it. The trail's {#each} is
   // keyed on depth, so a shortening trail destroys a SUFFIX of the blocks: the levels going
   // are always the trailing ones, which is the arrangement staged here. The class goes on by

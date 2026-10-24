@@ -302,7 +302,7 @@
   // answer to "is there something to close before stepping out a crumb". Portalled
   // since EXC-957, so every level is a body-level sibling in mount order and the last
   // open one is the deepest. `data-state` is what excludes a panel still running its
-  // exit animation: the node lingers for --dur-exit while it animates out, and a held
+  // exit animation: the node lingers for --dur-state while it animates out, and a held
   // key ticks every KEY_REPEAT_INTERVAL_MS, so a presence-only test would read a
   // closed submenu as open and stall a hold for two or three ticks.
   //
@@ -325,7 +325,7 @@
   // Says nothing about submenus: a caller stepping the trail asks deepestOpenSubmenu()
   // first, so a panel standing open is closed before the trail moves (EXC-1127).
   //
-  // The cells are the levels the row is SHOWING: not elided, and not inside a --dur-exit
+  // The cells are the levels the row is SHOWING: not elided, and not inside a --dur-state
   // outro. Only the second half is a claim measure() shares — a level on its way out is
   // not a level — while the elided ones it deliberately keeps, since their widths are what
   // decide the collapse. Without the guard the walk would step onto a leaving level and
@@ -581,11 +581,11 @@
     if (list === null || bar === null) return;
     list.classList.add("measuring");
     const gap = Number.parseFloat(getComputedStyle(list).columnGap) || 0;
-    // A level on its way out is still in the list for --dur-exit, so it is skipped here:
+    // A level on its way out is still in the list for --dur-state, so it is skipped here:
     // visibleDepths reads this array BY INDEX as the depth, and a ghost would leave it one
     // longer than the trail it is meant to describe. What the skip does NOT fix is `avail`
     // below — the bar is flex: 1 in the control row, so on an over-full row its width
-    // still follows the ghost's content for those 140ms and a level can be kept that will
+    // still follows the ghost's content for those 160ms and a level can be kept that will
     // not fit. That settles on the resize pass the ghost's own removal triggers, one flash
     // later. The separator probe needs no skip: querySelector takes the FIRST one, which is
     // always the marker's, and the marker leaves through no transition.
@@ -642,7 +642,7 @@
   // Svelte drives a transition's own keyframes through the Web Animations API, which the
   // reduced-motion clamp in styles/base.css cannot reach, where a real CSS animation is
   // governed by it like every other one in the chrome. Reading the duration back off the
-  // computed style rather than mirroring --dur-exit follows from the same choice: there
+  // computed style rather than mirroring --dur-state follows from the same choice: there
   // is no number to drift (svelte-rules.md § Motion principles), and under the preference
   // the clamp collapses the wait along with the motion.
   //
@@ -663,7 +663,7 @@
     node.classList.add("crumb-leaving");
     const ms = Number.parseFloat(getComputedStyle(node).animationDuration) * 1000;
 
-    // An exit does not always finish. A level that comes back before --dur-exit is up — which
+    // An exit does not always finish. A level that comes back before --dur-state is up — which
     // a trail re-rooting under a scroll does constantly — makes Svelte ABORT the outro and
     // keep the node, and the class above is this component's rather than Svelte's, so nothing
     // in that path takes it off again. Left on, `crumb-out`'s `forwards` pins the revived node
@@ -1082,7 +1082,7 @@
   }
   :global(.plan-breadcrumbs .crumb-item),
   :global(.plan-breadcrumbs [data-slot="breadcrumb-separator"]) {
-    animation: crumb-in var(--dur-enter) var(--ease-out);
+    animation: crumb-in var(--dur-state) var(--ease-out);
   }
 
   /* And the way back out (EXC-1123), so a trail that shortens reads as the trail
@@ -1106,7 +1106,7 @@
     }
   }
   :global(.plan-breadcrumbs .crumb-leaving) {
-    animation: crumb-out var(--dur-exit) var(--ease-in) forwards;
+    animation: crumb-out var(--dur-state) var(--ease-out) forwards;
   }
 
   /* Walking to a sibling at the same depth keeps the crumb mounted and swaps only
@@ -1124,7 +1124,7 @@
     }
   }
   :global(.plan-breadcrumbs .crumb-text) {
-    animation: crumb-text-in var(--dur-micro) var(--ease-out);
+    animation: crumb-text-in var(--dur-state) var(--ease-out);
   }
 
   /* Each crumb is a menu trigger. It deliberately does NOT wear .float-chip: three
@@ -1145,8 +1145,8 @@
     background: transparent;
     cursor: pointer;
     transition:
-      background var(--dur-micro) var(--ease-out),
-      color var(--dur-micro) var(--ease-out);
+      background var(--dur-state) var(--ease-out),
+      color var(--dur-state) var(--ease-out);
   }
   :global(.plan-breadcrumbs .crumb) {
     display: block;

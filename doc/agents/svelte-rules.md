@@ -424,22 +424,19 @@ rules. A new navigable surface adopts them rather than inventing its own.
 
 caret runs two motion tracks, one system by intent. The chrome's own motion is restraint
 over flourish: functional one-shot transitions draw their duration/easing from the
-`--dur-*`/`--ease-*` tokens in `app.css` (one enter easing, one exit easing — a caret
-design call, not ported). Those durations are **tiered by what moves**, not held under one
-ceiling — `--dur-micro` (a tint or a pop, the same time in both directions), the
-`--dur-enter`/`--dur-exit` pair for a surface, and `--dur-travel` for a scroll crossing
-distance. The ladder is monotonic and `motion.test.ts` pins it as an ordering rather than
-as values, so a surface leaving quicker than it arrives is the vocabulary's contract and
-tuning any tier by eye stays free. Pick the tier from the thing that moves: a hover tint
-on `--dur-enter` reads as lag, a dialog on `--dur-micro` reads as a pop. The portalled
-shadcn surfaces (dialogs, dropdown menus, tooltips, popovers) instead animate their
-enter/exit through `tw-animate-css` — the `animate-in`/`fade`/`zoom`/`slide` utilities the
-copied components ship with. Ambient/infinite animations (the safe-mode pulse, the
-EmptyState float, the theme wipe) are exempt from both and keep their own bespoke
-durations. The plan hand-off (`lib/planHandoff.ts`, EXC-1400) is the second view
-transition and is NOT exempt: every plan swap — a plan arriving, the next one after a
-decision, a switch, the queue draining — crossfades the whole window on the
-`--dur-exit`/`--dur-enter` surface pair, the same asymmetric pair a dialog spends. It is a
+`--dur-*`/`--ease-*` tokens in `app.css`. Every state transition — a tint, a pop, a
+surface arriving or leaving, a control sliding between positions — takes `--dur-state` on
+`--ease-out`, the same in both directions
+([`design/patterns.md`](../../design/patterns.md) § Motion holds the decision).
+`--dur-travel` is the one other duration, for a scroll crossing distance, and
+`motion.test.ts` pins the vocabulary as closed at those two. The portalled shadcn surfaces
+(dialogs, dropdown menus, tooltips, popovers) instead animate their enter/exit through
+`tw-animate-css` — the `animate-in`/`fade`/`zoom`/`slide` utilities the copied components
+ship with. Ambient/infinite animations (the safe-mode pulse, the EmptyState float, the
+theme wipe) are exempt from both and keep their own bespoke durations. The plan hand-off
+(`lib/planHandoff.ts`, EXC-1400) is the second view transition and is NOT exempt: every
+plan swap — a plan arriving, the next one after a decision, a switch, the queue draining —
+crossfades the whole window on the state tokens, the same timing a dialog spends. It is a
 transition rather than an animation beside the swap because the swap's render is
 synchronous and long: an animation started in the same frame spends its duration before
 the first frame paints, while the transition holds a still until the new window has
@@ -453,8 +450,8 @@ Where the thing being animated is a JS property rather than a style — `scrollT
 timer standing in for the `animationend` happy-dom never fires — the duration is MIRRORED
 as a plain constant instead of read from the sheet, and every mirror is pinned by
 `motion.test.ts` so the two cannot drift. There are five: `SCROLL_ANIM_MS` and
-`FOLLOW_ANIM_MS` (`diffview/scroll.ts`) carry `--dur-travel` and `--dur-micro` for the
-plan's two scrolls, and three exit windows carry `--dur-exit` — `CLOSE_ANIM_MS` in
+`FOLLOW_ANIM_MS` (`diffview/scroll.ts`) carry `--dur-travel` and `--dur-state` for the
+plan's two scrolls, and three exit windows carry `--dur-state` — `CLOSE_ANIM_MS` in
 `state/planKeyboard.svelte.ts` (PlanSearch's collapse), `CLOSE_ANIM_MS` in
 `components/DiffPlanView.svelte` (FileDrawer's close wipe), and the `exitMs` default in
 `state/alerts.ts` (AlertHost's `alert-out`). The three exit ones are pinned by scanning
@@ -470,7 +467,7 @@ enough.
 **Before minting a sixth, check whether you have a DOM handle — if you do, await the
 animation instead of mirroring its duration.** A mirror is a number kept equal to a token
 by a test; awaiting `getAnimations()` is the same wait with nothing to drift, and it
-retimes itself for free when a tier moves. The repo ships both shapes of that already.
+retimes itself for free when a token moves. The repo ships both shapes of that already.
 `awaitDeparture` (`components/FilePreview.svelte`) awaits the region's own animations
 before swapping in a new excerpt, so a fetch faster than the departure still lets the
 departure play and a fetch slower than it waits for nothing. `createModalPresence`
@@ -490,7 +487,7 @@ Svelte to hold the node in the DOM while that animation plays. That duration is 
 mirrored nor awaited but **read back off the element** with
 `getComputedStyle(node).animationDuration` — a third answer to the paragraph above:
 nothing to drift, and the guard collapses the wait along with the motion, so reduced
-motion drops the level on the spot rather than holding an invisible one for `--dur-exit`.
+motion drops the level on the spot rather than holding an invisible one for `--dur-state`.
 Its directive is `|global`, and a global outro is collected by EVERY ancestor teardown,
 with Svelte holding that ancestor's whole DOM until it ends — it once kept the plan view
 mounted beside the waiting room that replaced it. So `crumbOut` returns no duration for a
@@ -501,13 +498,13 @@ directive.
 
 Two things about that route are decisions rather than details, and both were EXC-1092's.
 
-**`--dur-travel` (240ms) is the one token off the enter/exit axis, because it times travel
-rather than a surface.** Distance sets it, not surface size: a scroll crossing hundreds of
-pixels is a different perceptual job from a panel arriving in place, the eye needs longer
-to follow a thing that moves than to accept a thing that appears, and a scroll has no exit
-to be asymmetric against. At 180ms the same scroll read as an instant cut. Nothing that
-fades, slides, pops or rises may borrow it — `motion.test.ts` asserts the vocabulary is
-CLOSED at the four tiers, so a fifth duration has to argue for itself here first.
+**`--dur-travel` (240ms) is the one duration besides `--dur-state`, because it times
+travel rather than a change of state.** Distance sets it: a scroll crossing hundreds of
+pixels is a different perceptual job from a panel arriving in place, and the eye needs
+longer to follow a thing that moves than to accept a thing that appears. At 180ms the same
+scroll read as an instant cut. Nothing that fades, slides, pops or rises may borrow it —
+`motion.test.ts` asserts the vocabulary is CLOSED at the two, so a third duration has to
+argue for itself here first.
 
 **The easing is `quadOut` from `svelte/easing`, not `--ease-out`, and the exponent is the
 whole design.** Every decelerating curve slows down on paper; what decides whether a
@@ -521,61 +518,53 @@ name is the implementation and the visible glide is the contract. Judge a JS eas
 what its last frames do over the real distance, not by where it sits at the midpoint.
 
 **Both of the plan's scrolls ride that one curve and driver**, differing only in duration:
-the jump to a place (`--dur-travel`) and the keyboard cursor's follow (`--dur-micro`,
-since a held `j`/`k` retargets it every few frames and a jump-length glide would leave the
-view trailing the cursor). Sharing the driver is also what stops them fighting — a follow
-landing inside a jump retargets that flight rather than being mistaken for a reader
-grabbing the scrollbar.
+the jump to a place (`--dur-travel`) and the keyboard cursor's follow (`--dur-state`, so
+the view lands with the cursor band's glide, and since a held `j`/`k` retargets it every
+few frames a jump-length glide would leave the view trailing the cursor). Sharing the
+driver is also what stops them fighting — a follow landing inside a jump retargets that
+flight rather than being mistaken for a reader grabbing the scrollbar.
 
 **The two tracks may meet, and there is exactly one way to do it.** A portalled surface
 that wants caret's timing sets `--tw-duration` and `--tw-ease` — the two custom properties
 `tw-animate-css`'s compiled `animate-in`/`animate-out` reads — from the
 `--dur-*`/`--ease-*` tokens, and declares no `animation` of its own on that element. The
-ToC panel (`PlanToc.svelte`, EXC-1107) is the worked example, including the asymmetric
-pairing the vocabulary tiers for: `--dur-enter`/`--ease-out` arriving,
-`--dur-exit`/`--ease-in` leaving. Writing a competing `animation` shorthand instead is a
-correctness bug and not only a style one — bits-ui's portal presence waits on the
-`animationend` the vendored `enter`/`exit` keyframes fire, so replacing them strands the
-surface in the DOM on dismissal. For the same reason nothing in this vocabulary may
-resolve to `animation: none` on a portalled surface; the global guard below collapses the
-duration instead, which is what keeps that event firing under the preference.
+default for the menus, popovers and tooltips in `styles/base.css` is the worked example.
+Writing a competing `animation` shorthand instead is a correctness bug and not only a
+style one — bits-ui's portal presence waits on the `animationend` the vendored
+`enter`/`exit` keyframes fire, so replacing them strands the surface in the DOM on
+dismissal. For the same reason nothing in this vocabulary may resolve to `animation: none`
+on a portalled surface; the global guard below collapses the duration instead, which is
+what keeps that event firing under the preference.
 
 **Where the opt-in is written follows how many surfaces share it.** One component owning
-one surface writes its two arms in its own `<style>`, as the ToC panel does. A
-choreography several surfaces must wear *identically* is written once in
-`styles/shadcn-bridge.css`, keyed on the `data-slot` every copied component stamps — that
-is § Modal choreography (EXC-892), which times the Dialog and AlertDialog content and
-overlay off one pair of arms because four vendored files each timing themselves is exactly
-how they ended up at `duration-100`, `duration-200` and tw-animate's implicit `.15s`.
-Overlay and content take the *same* arm there: the panel settling in as the room dims is
-one gesture, and giving the backdrop its own clock reads as two. Being in the bridge earns
-a second thing the component `<style>` cannot — those rules are unlayered while the
-utilities they supersede compile into `@layer utilities`, so a `shadcn add --overwrite`
-that restores the stock timing is overridden rather than a silent regression.
+one surface writes the pair in its own `<style>`. A choreography several surfaces must
+wear *identically* is written once in `styles/shadcn-bridge.css`, keyed on the `data-slot`
+every copied component stamps — that is § Modal choreography (EXC-892), which times the
+Dialog and AlertDialog content and overlay off one rule because four vendored files each
+timing themselves is exactly how they ended up at `duration-100`, `duration-200` and
+tw-animate's implicit `.15s`. Overlay and content take the *same* rule there: the panel
+settling in as the room dims is one gesture, and giving the backdrop its own clock reads
+as two. Being in the bridge earns a second thing the component `<style>` cannot — those
+rules are unlayered while the utilities they supersede compile into `@layer utilities`, so
+a `shadcn add --overwrite` that restores the stock timing is overridden rather than a
+silent regression.
 
-**The menus, popovers and tooltips take that timing by default**, from three unlayered
-rules in `styles/base.css`. The click-opened surfaces —
-`[data-slot="dropdown-menu-content"]`, `…-sub-content` and `popover-content` — are
-surfaces the reader asked for, so they take the enter tokens by default and the exit
-tokens on `[data-state="closed"]`. **The tooltip is the carve-out**: it is the one
-hover-TRIGGERED surface in the set, and four of its six consumers (`NotifyBell`,
-`StatusStrip`, `VersionBadge`, `VersionComparePicker`) open it with `delayDuration={0}`,
-so it takes `--dur-micro` in one rule with no closed-state arm — symmetric, for the reason
-`tokens.css` already gives for micro being the same time in both directions, which also
-makes it the one departure in the vocabulary that leaves on `--ease-out` rather than
-`--ease-in`. The slots are named one by one rather than swept as
-`[data-slot][data-state]`, and the modal surfaces (`dialog`, `alert-dialog`, `sheet`) sit
-deliberately outside all three: those take the whole viewport behind a backdrop and their
-arrival is choreographed with it, so a sweep would quietly overrule that. `motion.test.ts`
-asserts the inclusions and the separation both — specifically that no single rule ever
-names a surface from both sets.
+**The menus, popovers and tooltips take that timing by default**, from one unlayered rule
+in `styles/base.css` naming `[data-slot="dropdown-menu-content"]`, `…-sub-content`,
+`popover-content`, `select-content` and `tooltip-content`. It carries no state qualifier,
+so each surface leaves on the time it arrived in. The slots are named one by one rather
+than swept as `[data-slot][data-state]`, and the modal surfaces (`dialog`, `alert-dialog`,
+`sheet`) sit deliberately outside it: those take the whole viewport behind a backdrop and
+their arrival is choreographed with it, so a sweep would quietly overrule that.
+`motion.test.ts` asserts the inclusions and the separation both — specifically that no
+single rule ever names a surface from both sets.
 
 **The vendored components' own hover/focus tempo is bridged separately**, and it is not
 `animate-in`'s. A bare `transition-colors` / `transition-all` in the shadcn tree resolves
 through Tailwind's `--default-transition-duration` and
 `--default-transition-timing-function`, which ship as 150ms on
-`cubic-bezier(.4, 0, .2, 1)` — a second hover tempo beside caret's own 120ms `--ease-out`
-chips. Both keys point at the micro tier from the `@theme inline` block in
+`cubic-bezier(.4, 0, .2, 1)` — a second hover tempo beside caret's own 160ms `--ease-out`
+chips. Both keys point at the state tokens from the `@theme inline` block in
 `styles/shadcn-bridge.css`, which is the whole fix: no selector, no per-component
 override, and a vendored class that names its own duration (the sheet's `duration-200`)
 still wins over a default.
@@ -583,16 +572,10 @@ still wins over a default.
 Two things about where those rules live. They are in `base.css` rather than in the
 vendored components' class strings because `shadcn-svelte add` reverts those wholesale on
 a re-sync (`shadcn-rules.md` § Edits a re-sync will silently undo) and never reaches a
-caret-owned stylesheet. And **both arms sit at specificity zero** — the closed state wraps
-its own `[data-state="closed"]` in a second `:where()`, which is not decoration: left bare
-it would score (0,1,0) and a component's rule would have to tie-break against it on source
-order. At zero they are a true default, so a surface with timing of its own simply wins.
-`PlanToc.svelte` is that surface: the ToC panel is a `popover-content` and keeps the pin
-EXC-1107 designed for it. A default and a pin agreeing on today's values is the expected
-state, not a duplicate to collapse — the pin is what keeps the panel's timing the panel's
-if the default ever moves. Being unlayered is what still makes these beat the
-`duration-100` `popover-content` carries in `@layer utilities`; layer order decides that,
-not specificity.
+caret-owned stylesheet. And **the rule sits at specificity zero**, inside `:where()`, so
+it is a true default and a surface with timing of its own simply wins. Being unlayered is
+what still makes these beat the `duration-100` `popover-content` carries in
+`@layer utilities`; layer order decides that, not specificity.
 
 `prefers-reduced-motion: reduce` is the single global kill-switch over all of it: one rule
 in `app.css` collapses every animation and transition to one static frame, so no component

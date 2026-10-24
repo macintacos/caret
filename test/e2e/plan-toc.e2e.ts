@@ -287,7 +287,6 @@ const animationOf = (locator: Locator) =>
     return {
       name: style.animationName,
       duration: style.animationDuration,
-      easing: style.animationTimingFunction,
     };
   });
 
@@ -952,7 +951,7 @@ test("filtering drops the guides, headers and all", async ({ daemon, page }) => 
  *
  * Filtered to the panel's own events. `animationstart`/`animationend` bubble, so a row or
  * a header animating inside would otherwise land in the same log. */
-type MotionLog = { type: string; name: string; elapsed: number; easing: string }[];
+type MotionLog = { type: string; name: string; elapsed: number }[];
 
 async function recordDismissal(page: Page, dismiss: () => Promise<void>): Promise<MotionLog> {
   await panel(page).evaluate((el) => {
@@ -965,11 +964,6 @@ async function recordDismissal(page: Page, dismiss: () => Promise<void>): Promis
         type: event.type,
         name: animation.animationName,
         elapsed: animation.elapsedTime,
-        // Sampled as the exit BEGINS, which is the only moment the closed cascade is
-        // live on a real dismissal. Reading it any other way means writing `data-state`
-        // by hand — poking an attribute the primitive owns, and starting then cancelling
-        // an exit to observe one.
-        easing: getComputedStyle(el).animationTimingFunction,
       });
     };
     el.addEventListener("animationstart", log);
@@ -980,33 +974,24 @@ async function recordDismissal(page: Page, dismiss: () => Promise<void>): Promis
   return page.evaluate(() => (window as Window & { __tocMotion?: MotionLog }).__tocMotion ?? []);
 }
 
-test("the panel arrives on the enter token and leaves on the exit one", async ({
-  daemon,
-  page,
-}) => {
+test("the panel arrives and leaves on the state duration", async ({ daemon, page }) => {
   // The vendored Popover.Content already animates through tw-animate-css, and that
   // machinery is not decoration: bits-ui's portal presence waits on the `animationend` its
   // `enter`/`exit` keyframes fire. So the refinement retimes those keyframes rather than
   // declaring a competing one, and what this spec pins is exactly that — the animation is
-  // still tw-animate-css's, and only its timing is now caret's, asymmetric in the direction
-  // the vocabulary pairs its two easings for.
+  // still tw-animate-css's, and only its timing is now caret's.
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
   await readingAt(page, "Delta");
 
-  const enterSeconds = await motionToken(page, "--dur-enter");
-  const exitSeconds = await motionToken(page, "--dur-exit");
-  // The pairing is the claim; two tokens that had drifted to the same number would make
-  // every assertion below true while saying nothing.
-  expect(enterSeconds).not.toBe(exitSeconds);
+  const stateSeconds = await motionToken(page, "--dur-state");
 
   await openToc(page);
   const entering = await animationOf(panel(page));
   // Still the vendored keyframes — a caret-named animation here would mean the exit
   // bits-ui waits on had been replaced.
   expect(entering.name).toBe("enter");
-  expect(Number.parseFloat(entering.duration)).toBeCloseTo(enterSeconds, 3);
-  const enterEasing = entering.easing;
+  expect(Number.parseFloat(entering.duration)).toBeCloseTo(stateSeconds, 3);
 
   const log = await recordDismissal(page, () => page.keyboard.press("Escape"));
   const started = log.find((e) => e.type === "animationstart");
@@ -1014,13 +999,9 @@ test("the panel arrives on the enter token and leaves on the exit one", async ({
   expect(started?.name).toBe("exit");
   expect(ended?.name).toBe("exit");
   // `elapsedTime` at animationend is the animation's own active duration, so this is the
-  // exit really having run for the exit token's worth of time — not a frame we happened
-  // to catch, and not a computed value that would read the same on a cancelled animation.
-  expect(ended?.elapsed).toBeCloseTo(exitSeconds, 3);
-  // And the curve turns around with it: leaving accelerates out where arriving decelerated
-  // in. Sampled off the real exit as it began, so both easings are the same kind of value
-  // read on the animation that actually ran.
-  expect(started?.easing).not.toBe(enterEasing);
+  // exit really having run for the token's worth of time — not a frame we happened to
+  // catch, and not a computed value that would read the same on a cancelled animation.
+  expect(ended?.elapsed).toBeCloseTo(stateSeconds, 3);
 });
 
 test("every way out of the popup is animated, not cut", async ({ daemon, page }) => {
@@ -1092,7 +1073,7 @@ test("the outline carries its motion on the list, never on its rows", async ({ d
   const viewport = panel(page).locator("[data-slot='command-viewport']");
   const list = await animationOf(viewport);
   expect(list.name).toMatch(/toc-list-in$/);
-  expect(Number.parseFloat(list.duration)).toBeCloseTo(await motionToken(page, "--dur-micro"), 3);
+  expect(Number.parseFloat(list.duration)).toBeCloseTo(await motionToken(page, "--dur-state"), 3);
 
   const animated = await options(page).evaluateAll(
     (els) => els.filter((el) => getComputedStyle(el).animationName !== "none").length,
@@ -1122,7 +1103,7 @@ test("the outline carries its motion on the list, never on its rows", async ({ d
  *
  * Armed rather than sampled, because `toc-row-in` carries no fill-mode: a finished
  * animation is no longer in effect, so `getAnimations()` drops it the moment its
- * `--dur-micro` is up. That leaves a one-shot read valid only inside a 120ms WALL-CLOCK
+ * `--dur-state` is up. That leaves a one-shot read valid only inside a 160ms WALL-CLOCK
  * window, and the gate's contention routinely lands it outside — the ramps have gone by
  * the time the read arrives and the count comes back 0 (EXC-1193, reproduced 4/4 at a 6x
  * CPU throttle). An `animationstart` listener records the fact instead of having to catch

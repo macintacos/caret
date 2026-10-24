@@ -5,12 +5,11 @@ import { join } from "node:path";
 import { readAppCss, rootBlock, themeBlock } from "$lib/appCss.ts";
 import { FOLLOW_ANIM_MS, SCROLL_ANIM_MS } from "$lib/diffview/scroll.ts";
 
-// caret's motion vocabulary lives in app.css: a small set of functional
-// duration/easing tokens for one-shot chrome reveals, plus a single global
-// prefers-reduced-motion rule that neutralizes movement for the light-DOM app root.
-// This suite pins the substrate — the tier ladder (micro < exit < enter < travel, so
-// a surface leaves quicker than it arrives), the JS constants that mirror it, and the
-// global guard — so a drift fails the unit suite rather than only showing as motion
+// caret's motion vocabulary lives in app.css: one duration and one curve for every state
+// transition, a travel duration for the plan's scroll, plus a single global
+// prefers-reduced-motion rule that neutralizes movement for the light-DOM app root. This
+// suite pins the substrate — the closed vocabulary, the JS constants that mirror it, and
+// the global guard — so a drift fails the unit suite rather than only showing as motion
 // under reduced-motion.
 
 const uiDir = join(import.meta.dir, "..");
@@ -109,7 +108,7 @@ describe("motion tokens in app.css", () => {
   // Keyed on a token the motion vocabulary owns, so the lookup is
   // self-locating. A marker that matches nothing yields "" and every assertion
   // below fails, so this cannot mask a missing block.
-  const root = rootBlock(appCss, "--dur-micro:");
+  const root = rootBlock(appCss, "--dur-state:");
 
   // Both reads below anchor to the start of a line, so they see DECLARATIONS and not the
   // doc comment above them — which names every token it explains, and may legitimately
@@ -118,35 +117,20 @@ describe("motion tokens in app.css", () => {
   const dur = (name: string): number =>
     toMs(root.match(new RegExp(`^\\s*--dur-${name}:\\s*([^;]+);`, "m"))?.[1] ?? "");
 
-  test("declares the three surface tiers plus the travel exception", () => {
-    // The vocabulary is tiered by WHAT MOVES, not capped at one ceiling: a micro
-    // tier for tints and pops, an enter/exit pair for surfaces, and travel for a
-    // scroll crossing distance. All four are real times.
-    for (const name of ["micro", "enter", "exit", "travel"]) {
+  test("declares the state duration plus the travel exception", () => {
+    for (const name of ["state", "travel"]) {
       expect(dur(name)).toBeGreaterThan(0);
     }
   });
 
-  test("the ladder is monotonic, and a surface leaves quicker than it arrives", () => {
-    // The retune's whole claim (EXC-890). `exit < enter` is the native asymmetry —
-    // you watch a thing arrive, you only need a thing leaving to be gone — and the
-    // micro tier sits below both because a hover tint spending an entrance's time
-    // reads as lag on the pointer. Ordering rather than absolute values, so tuning
-    // by eye stays free while an inverted pair reds here.
-    expect(dur("micro")).toBeLessThan(dur("exit"));
-    expect(dur("exit")).toBeLessThan(dur("enter"));
-    expect(dur("enter")).toBeLessThan(dur("travel"));
-  });
-
-  test("the vocabulary is closed — every --dur-* is one of the four tiers", () => {
-    // A fifth duration cannot be slipped in without arguing for itself in
-    // tokens.css first. Travel is the standing exception inside the set because it
-    // is the one token OFF the enter/exit axis — distance, not surface size.
-    // [\w-] rather than [a-z]: a fifth token spelled the way most tokens in this
-    // sheet are (--dur-fade-out, --dur-enter2) would slip past a letters-only class
-    // and leave this green with the vocabulary silently at six.
+  test("the vocabulary is closed — one duration for state, one for travel", () => {
+    // A third duration cannot be slipped in without arguing for itself in tokens.css
+    // first. Travel is the standing exception because it times distance, not a change of
+    // state. [\w-] rather than [a-z]: a token spelled the way most tokens in this sheet
+    // are (--dur-fade-out, --dur-state2) would slip past a letters-only class and leave
+    // this green with the vocabulary silently at three.
     const names = [...root.matchAll(/^\s*--dur-([\w-]+):/gm)].map(([, name]) => name);
-    expect(names.sort()).toEqual(["enter", "exit", "micro", "travel"]);
+    expect(names.sort()).toEqual(["state", "travel"]);
   });
 
   test("the plan's two JS scroll durations mirror their tokens", () => {
@@ -155,15 +139,15 @@ describe("motion tokens in app.css", () => {
     // coupled across files, which svelte-rules.md § CSS-token discipline says to
     // name once and TEST — the same pin layout.test.ts holds REFERENCE_WIDTH_PX to.
     expect(SCROLL_ANIM_MS).toBe(dur("travel")); // the jump to a place
-    expect(FOLLOW_ANIM_MS).toBe(dur("micro")); // the cursor follow
+    expect(FOLLOW_ANIM_MS).toBe(dur("state")); // the cursor follow, with the band's glide
   });
 
-  test("the three exit-window timers mirror --dur-exit", () => {
+  test("the three exit-window timers mirror --dur-state", () => {
     // happy-dom fires no animationend, so each surface that must outlive its own
     // closing keyframe holds the duration as a timer instead. Same coupling as the
-    // scroll mirrors above and the same reason to pin it: a retune that misses one
+    // scroll mirror above and the same reason to pin it: a retune that misses one
     // strands or flashes the surface rather than failing anything.
-    const exit = dur("exit");
+    const exit = dur("state");
     expect(planKeyboard).toContain(`const CLOSE_ANIM_MS = ${exit};`); // PlanSearch's collapse
     expect(chromeSources["components/DiffPlanView.svelte"]).toContain(
       `const CLOSE_ANIM_MS = ${exit};`, // FileDrawer's close wipe
@@ -171,11 +155,10 @@ describe("motion tokens in app.css", () => {
     expect(alertsState).toContain(`deps.exitMs ?? ${exit};`); // AlertHost's alert-out
   });
 
-  test("declares an enter and an exit easing as cubic-beziers", () => {
-    const out = root.match(/--ease-out:\s*([^;]+);/)?.[1] ?? "";
-    const eIn = root.match(/--ease-in:\s*([^;]+);/)?.[1] ?? "";
-    expect(out).toContain("cubic-bezier");
-    expect(eIn).toContain("cubic-bezier");
+  test("declares one easing, a cubic-bezier", () => {
+    const names = [...root.matchAll(/^\s*--ease-([\w-]+):/gm)].map(([, name]) => name);
+    expect(names).toEqual(["out"]);
+    expect(root.match(/--ease-out:\s*([^;]+);/)?.[1]).toContain("cubic-bezier");
   });
 
   test("documents the ambient/infinite carve-out", () => {
@@ -249,21 +232,8 @@ describe("the formerly-unguarded composer reveal references the tokens", () => {
 
 describe("the breadcrumb trail is animated in both directions", () => {
   // EXC-1123. The bar re-roots continuously as the reviewer scrolls, so an arrival and a
-  // departure are the same event seen from two sides — and the pairing is the claim. The
-  // chrome sweep below only asks that a declaration reference SOME duration token; this
-  // asks that the two arms take the two halves of the pair, which is the whole reason the
-  // vocabulary ships --dur-enter/--ease-out and --dur-exit/--ease-in rather than one of
-  // each.
+  // departure are the same event seen from two sides.
   const bar = chromeSources["components/PlanBreadcrumbs.svelte"] ?? "";
-
-  test("the enter and the exit take opposite halves of the token pair", () => {
-    const enter = bar.match(/animation:\s*crumb-in\s+([^;]+);/)?.[1] ?? "";
-    const exit = bar.match(/animation:\s*crumb-out\s+([^;]+);/)?.[1] ?? "";
-    expect(enter).toContain("var(--dur-enter)");
-    expect(enter).toContain("var(--ease-out)");
-    expect(exit).toContain("var(--dur-exit)");
-    expect(exit).toContain("var(--ease-in)");
-  });
 
   test("the exit mirrors the enter's shape rather than collapsing the crumb's box", () => {
     // Read as the two arms, each asserted as an EXACT property set. Direction is half the
@@ -282,81 +252,6 @@ describe("the breadcrumb trail is animated in both directions", () => {
       );
     expect(arm("from")).toEqual({ opacity: "1", transform: "none" });
     expect(arm("to")).toEqual({ opacity: "0", transform: "translateX(-0.25rem)" });
-  });
-});
-
-describe("the ToC panel refines the vendored popover animation rather than replacing it", () => {
-  // EXC-1107. The panel is one of the portalled shadcn surfaces, so its enter/exit is
-  // tw-animate-css's rather than caret's — and bits-ui's portal presence waits on the
-  // `animationend` those keyframes fire, which makes replacing them a correctness bug
-  // and not only a style one. The refinement therefore writes the two custom properties
-  // the compiled `animate-in` utility reads for its duration and its curve, leaving the
-  // keyframes alone. Those are longhand custom-property writes, invisible to the
-  // shorthand scan below (its pattern needs `animation:`, which `--tw-duration:` is
-  // not), so the whole refinement would otherwise ship uncovered.
-  const toc = chromeSources["components/PlanToc.svelte"] ?? "";
-  // The panel's motion block, found by the property it is the only one to carry — the
-  // selector itself is spelled three times in that stylesheet, one concern each.
-  const openBlock =
-    toc.match(/:global\(\.plan-toc-panel\)\s*\{([^}]*--tw-duration[^}]*)\}/)?.[1] ?? "";
-  const closedBlock =
-    toc.match(/:global\(\.plan-toc-panel\[data-state="closed"\]\)\s*\{([^}]*)\}/)?.[1] ?? "";
-
-  test("retimes tw-animate-css's own properties, from the shared tokens", () => {
-    // A marker matching nothing yields "" and reds every assertion here, so a moved or
-    // deleted block cannot pass this suite by leaving it with nothing to check.
-    expect(openBlock).not.toBe("");
-    expect(closedBlock).not.toBe("");
-    for (const block of [openBlock, closedBlock]) {
-      for (const prop of ["--tw-duration", "--tw-ease"]) {
-        const value = read(block, prop);
-        expect(value).toMatch(/^var\(--(dur|ease)-[a-z]+\)$/);
-      }
-      // "Refined, not duplicated": a shorthand of caret's own on this element would
-      // replace the `enter`/`exit` keyframes and strand the portal on close.
-      expect(block).not.toContain("animation");
-    }
-  });
-
-  test("pairs a distinct enter and exit rather than spending one timing twice", () => {
-    // The vocabulary ships --ease-out and --ease-in as a pair precisely so a scripted
-    // exit reads as the inverse of its entrance, and the vendored default it supersedes
-    // used one plain `ease` at one duration in both directions. Collapsing the two arms
-    // back to one is the regression this catches.
-    expect(read(openBlock, "--tw-ease")).not.toBe(read(closedBlock, "--tw-ease"));
-    expect(read(openBlock, "--tw-duration")).not.toBe(read(closedBlock, "--tw-duration"));
-  });
-});
-
-describe("the confirm bubble refines the vendored popover animation, symmetrically", () => {
-  // EXC-1110. Same mechanism as the ToC panel above — longhand `--tw-duration` /
-  // `--tw-ease` writes, invisible to the shorthand scan below — so it needs its own pin
-  // for the same reason. What differs is the TIER, and that is the whole point of
-  // asserting it: the bubble takes micro in BOTH directions, where the panel takes the
-  // surface tier's enter/exit pair.
-  //
-  // A closed-state arm here would be a regression, not an omission. tokens.css § Motion
-  // gives --dur-micro as deliberately the same time in both directions, so pairing it
-  // with --dur-exit (140ms) would make the bubble LEAVE SLOWER than it arrives (120ms) —
-  // inverting the ladder the suite pins at the top of this file. styles/base.css's
-  // tooltip is the same call for the same reason; both of base.css's default arms sit at
-  // specificity zero, so this one rule governs open and closed alike.
-  const confirm = chromeSources["components/ConfirmPopover.svelte"] ?? "";
-  const openBlock = confirm.match(/:global\(\.confirm-popover\)\s*\{([\s\S]*?)\n {2}\}/)?.[1] ?? "";
-
-  test("retimes tw-animate-css's own properties, from the shared tokens", () => {
-    // A marker matching nothing yields "" and reds every assertion here, so a moved or
-    // deleted block cannot pass this suite by leaving it with nothing to check.
-    expect(openBlock).not.toBe("");
-    expect(read(openBlock, "--tw-duration")).toBe("var(--dur-micro)");
-    expect(read(openBlock, "--tw-ease")).toBe("var(--ease-out)");
-    // "Refined, not duplicated": a shorthand of caret's own on this element would
-    // replace the `enter`/`exit` keyframes and strand the portal on close.
-    expect(openBlock).not.toContain("animation");
-  });
-
-  test("declares no closed-state arm, so the bubble leaves on the time it arrived in", () => {
-    expect(confirm).not.toContain('.confirm-popover[data-state="closed"]');
   });
 });
 
@@ -387,10 +282,9 @@ describe("the modal surfaces share one choreography, written in the shadcn bridg
   const namesEverySlot = (selector: string): boolean =>
     modalSlots.every((slot) => selector.includes(`[data-slot="${slot}"]`));
 
-  // The two timing arms: the open one carries no state qualifier, the exit one is the same
-  // four slots narrowed to [data-state="closed"].
-  const openArm = ruleWhere((s) => namesEverySlot(s) && !s.includes('[data-state="closed"]'));
-  const closedArm = ruleWhere((s) => namesEverySlot(s) && s.includes('[data-state="closed"]'));
+  // The timing arm: one rule over the four slots, with no state qualifier, so it governs
+  // the arrival and the departure alike.
+  const arm = ruleWhere((s) => namesEverySlot(s));
   // The scrim: both OVERLAYS and neither content, which is what makes "one treatment,
   // declared once" an assertion rather than two values that happen to agree today.
   const scrim = ruleWhere(
@@ -400,10 +294,9 @@ describe("the modal surfaces share one choreography, written in the shadcn bridg
       !s.includes('[data-slot="dialog-content"]'),
   );
   // A predicate matching nothing yields "", which would leave every `read` below comparing
-  // "" to "". Proven present once, here, for all three.
+  // "" to "". Proven present once, here, for both.
   const present = (): void => {
-    expect(openArm).not.toBe("");
-    expect(closedArm).not.toBe("");
+    expect(arm).not.toBe("");
     expect(scrim).not.toBe("");
   };
   const withoutComments = (src: string): string => src.replace(/^\s*\/\/.*$/gm, "");
@@ -438,20 +331,15 @@ describe("the modal surfaces share one choreography, written in the shadcn bridg
       expect(src).toContain("data-[state=open]:animate-in");
       expect(src).toContain("data-[state=closed]:animate-out");
     }
-    for (const arm of [openArm, closedArm]) {
-      expect(arm).not.toContain("animation");
-    }
+    expect(arm).not.toContain("animation");
   });
 
-  test("all four surfaces arrive on the enter tier and leave on the exit tier", () => {
+  test("all four surfaces arrive and leave on the state tokens", () => {
     present();
-    // The asymmetry EXC-890 tiered for, spent on the surfaces it was named for. Overlay
-    // and content take the SAME arm on purpose: the panel settling in as the room dims is
-    // one gesture, and a backdrop on its own clock reads as two.
-    expect(read(openArm, "--tw-duration")).toBe("var(--dur-enter)");
-    expect(read(openArm, "--tw-ease")).toBe("var(--ease-out)");
-    expect(read(closedArm, "--tw-duration")).toBe("var(--dur-exit)");
-    expect(read(closedArm, "--tw-ease")).toBe("var(--ease-in)");
+    // Overlay and content take the SAME arm on purpose: the panel settling in as the room
+    // dims is one gesture, and a backdrop on its own clock reads as two.
+    expect(read(arm, "--tw-duration")).toBe("var(--dur-state)");
+    expect(read(arm, "--tw-ease")).toBe("var(--ease-out)");
   });
 
   test("both overlays wear one scrim, and its blur radius is a constant", () => {
@@ -478,9 +366,6 @@ describe("the portalled menus, popovers and tooltips run on caret's tempo", () =
   // those two properties. app.css writes them for the surfaces that are NOT modals; the
   // modal ones choreograph their own arrival, and their absence is asserted here rather
   // than left to be noticed.
-  // Click-opened: a menu or a panel the reader asked for is a SURFACE, so it takes the
-  // enter/exit pair. The tooltip is the deliberate exception below — it is hover-
-  // triggered, and four of its six consumers open with no delay at all.
   // select-content's live consumer is SettingSelect, and so every `select` control in the
   // settings registry; its vendored class string ships `duration-100`.
   const SURFACES = [
@@ -488,6 +373,7 @@ describe("the portalled menus, popovers and tooltips run on caret's tempo", () =
     "dropdown-menu-sub-content",
     "popover-content",
     "select-content",
+    "tooltip-content",
   ];
   const MODAL = [
     "dialog-content",
@@ -504,53 +390,20 @@ describe("the portalled menus, popovers and tooltips run on caret's tempo", () =
   const portalRules = [...appCss.matchAll(/([^{}]*)\{([^{}]*--tw-duration:[^{}]*)\}/g)].map(
     ([, before = "", body = ""]) => ({ selector: (before.split("*/").pop() ?? "").trim(), body }),
   );
-  // Narrowed to the rules naming a surface from THIS set before anything is keyed on a
-  // tier. The modal choreography writes the same two properties and the same enter/exit
-  // tokens, so a tier alone does not identify a rule — it would hand this suite whichever
-  // of the two the sheet happens to @import first.
+  // Narrowed to the rules naming a surface from THIS set. The modal choreography writes
+  // the same two properties and the same tokens, so the tokens alone do not identify a
+  // rule.
   const mine = portalRules.filter((r) =>
-    [...SURFACES, "tooltip-content"].some((s) => r.selector.includes(`[data-slot="${s}"]`)),
+    SURFACES.some((s) => r.selector.includes(`[data-slot="${s}"]`)),
   );
-  const armFor = (tier: string) => mine.find((r) => r.body.includes(`var(--dur-${tier})`));
-  const enterArm = armFor("enter");
-  const exitArm = armFor("exit");
-  const tooltipArm = armFor("micro");
-  const read = (arm: typeof enterArm, prop: string): string =>
-    arm?.body.match(new RegExp(`${prop}:\\s*([^;]+);`))?.[1]?.trim() ?? "";
+  const read = (prop: string): string =>
+    mine[0]?.body.match(new RegExp(`${prop}:\\s*([^;]+);`))?.[1]?.trim() ?? "";
 
-  test("retimes the click-opened surfaces from the shared tokens, in both directions", () => {
-    for (const arm of [enterArm, exitArm]) {
-      for (const slot of SURFACES) expect(arm?.selector).toContain(`[data-slot="${slot}"]`);
-      expect(read(arm, "--tw-ease")).toMatch(/^var\(--ease-[a-z]+\)$/);
-    }
-    expect(exitArm?.selector).toContain('[data-state="closed"]');
-    expect(enterArm?.selector).not.toContain("data-state");
-  });
-
-  test("pairs a distinct enter and exit rather than spending one timing twice", () => {
-    // The same claim the ToC panel's suite above makes, for the same reason: the
-    // vendored default this supersedes spent one duration and one curve in both
-    // directions, and collapsing the arms back together is the regression to catch.
-    expect(read(enterArm, "--tw-duration")).not.toBe(read(exitArm, "--tw-duration"));
-    expect(read(enterArm, "--tw-ease")).not.toBe(read(exitArm, "--tw-ease"));
-  });
-
-  test("the tooltip takes the micro tier instead, symmetrically", () => {
-    // The one hover-TRIGGERED surface in the set: NotifyBell, StatusStrip, VersionBadge
-    // and VersionComparePicker all open it with delayDuration={0}, and an entrance's
-    // worth of time before an instant tooltip resolves is the lag on the pointer
-    // --dur-micro exists to avoid. Micro is symmetric by definition ("the SAME time in
-    // both directions", tokens.css), so the tooltip takes one rule and no closed-state
-    // arm — which also means it LEAVES on --ease-out, the one departure in the
-    // vocabulary that does not take --ease-in. That follows from the same symmetry: a
-    // hover tint does not invert its curve on the way out either.
-    expect(tooltipArm?.selector).toContain('[data-slot="tooltip-content"]');
-    expect(tooltipArm?.selector).not.toContain("data-state");
-    expect(read(tooltipArm, "--tw-duration")).toBe("var(--dur-micro)");
-    expect(read(tooltipArm, "--tw-ease")).toBe("var(--ease-out)");
-    for (const arm of [enterArm, exitArm]) {
-      expect(arm?.selector).not.toContain('[data-slot="tooltip-content"]');
-    }
+  test("retimes every portalled surface from the state tokens, open and closed alike", () => {
+    for (const slot of SURFACES) expect(mine[0]?.selector).toContain(`[data-slot="${slot}"]`);
+    expect(mine[0]?.selector).not.toContain("data-state");
+    expect(read("--tw-duration")).toBe("var(--dur-state)");
+    expect(read("--tw-ease")).toBe("var(--ease-out)");
   });
 
   test("never mixes these surfaces with the modal ones", () => {
@@ -558,21 +411,21 @@ describe("the portalled menus, popovers and tooltips run on caret's tempo", () =
     // pointer — they take the whole surface, with a backdrop, and their timing is
     // theirs. They may well have rules of their own in this sheet; what must not happen
     // is one rule retiming both, because that is how a menu's tempo silently becomes a
-    // modal's. So the check runs over every rule naming a surface from THIS set — three
-    // of them, which is asserted too, since the likeliest way a modal gets swept in is a
-    // FOURTH rule that a per-arm check would never look at.
-    expect(mine).toHaveLength(3);
+    // modal's. So the check runs over every rule naming a surface from THIS set — one of
+    // them, which is asserted too, since the likeliest way a modal gets swept in is a
+    // second rule that a single-arm check would never look at.
+    expect(mine).toHaveLength(1);
     for (const rule of mine) {
       for (const slot of MODAL) expect(rule.selector).not.toContain(`[data-slot="${slot}"]`);
     }
   });
 });
 
-describe("the vendored components' hover/focus tempo is caret's micro tier", () => {
+describe("the vendored components' hover/focus tempo is caret's state tempo", () => {
   // The OTHER half of the two-track meeting, and the one that shows up on every
   // button rather than only on a portal. A bare `transition-colors` / `transition-all`
   // in the shadcn tree resolves through Tailwind's own theme defaults — 150ms on
-  // cubic-bezier(.4, 0, .2, 1) — beside caret chrome that tints in --dur-micro on
+  // cubic-bezier(.4, 0, .2, 1) — beside caret chrome that tints in --dur-state on
   // --ease-out. Two hover tempos in one chrome is what the audit exists to catch, and
   // the theme keys are the whole fix: no selector, no per-component override, and a
   // vendored class that names its own duration (sheet's duration-200) still wins.
@@ -582,27 +435,23 @@ describe("the vendored components' hover/focus tempo is caret's micro tier", () 
 
   test("both Tailwind transition defaults resolve to caret's tokens", () => {
     expect(theme).not.toBe("");
-    expect(key("duration")).toBe("var(--dur-micro)");
+    expect(key("duration")).toBe("var(--dur-state)");
     expect(key("timing-function")).toBe("var(--ease-out)");
   });
 });
 
 describe("the arrival that uncovers the next state", () => {
   // The other half of the hand-off a decided modal starts (EXC-894). The guard departs on
-  // the exit tier the block above pins; App.svelte's `.arrival` curtain lifts off whatever
+  // the arm the block above pins; App.svelte's `.arrival` curtain lifts off whatever
   // the resolve put in its place. Read out of App.svelte's own <style> block — the same
   // source the chrome sweep below scans, which already covers the curtain's token
   // discipline. What that sweep cannot see are the two facts that make the arrival correct.
   const arrival =
     /\.arrival\s*\{([^}]*)\}/.exec(styleBlock(chromeSources["App.svelte"] ?? ""))?.[1] ?? "";
 
-  test("the curtain lifts on the enter tier, against the modal's exit tier", () => {
+  test("the curtain lifts on the state tokens", () => {
     expect(arrival).not.toBe("");
-    // An arrival, not a micro-reveal and not a travel. It is deliberately the LONGER half
-    // of the pair the departing modal spends, which is what makes the exit lead: the guard
-    // is gone at --dur-exit while the state behind it is still resolving at --dur-enter, so
-    // the two read as one gesture rather than as two events that happened to coincide.
-    expect(arrival).toContain("var(--dur-enter)");
+    expect(arrival).toContain("var(--dur-state)");
     expect(arrival).toContain("var(--ease-out)");
   });
 
@@ -625,14 +474,12 @@ describe("the crossfade that hands the window back to the waiting room", () => {
       appCss,
     )?.[1] ?? "";
 
-  test("the window departs on the exit tier and arrives on the enter tier", () => {
+  test("the window departs and arrives on the state tokens", () => {
     expect(handoffClass).not.toBe("");
-    // The curtain's asymmetry again, spoken by the whole window: the departure leads and is
-    // over first, so the guard receding and the waiting room arriving read as one gesture.
-    expect(handoffArm("old")).toContain("var(--dur-exit)");
-    expect(handoffArm("old")).toContain("var(--ease-in)");
-    expect(handoffArm("new")).toContain("var(--dur-enter)");
-    expect(handoffArm("new")).toContain("var(--ease-out)");
+    for (const which of ["old", "new"] as const) {
+      expect(handoffArm(which)).toContain("var(--dur-state)");
+      expect(handoffArm(which)).toContain("var(--ease-out)");
+    }
   });
 
   test("the departure declares its end state with `forwards`", () => {
@@ -664,7 +511,7 @@ describe("chrome motion declarations draw from the tokens, not bare literals", (
   // are deliberately EXEMPT from the one-shot tokens, so their literals are expected
   // to remain. Matched by keyframe name. The first two are infinite; ref-hint-ping
   // is finite (three pings) and is ambient by SCALE rather than by repetition — a
-  // teaching pulse that read at --dur-enter would be a flicker, not a wave.
+  // teaching pulse that read at --dur-state would be a flicker, not a wave.
   const ambient = /\b(float|safe-mode-pulse|ref-hint-ping)\b/;
 
   // Pull every `transition:`/`animation:` declaration body (the text up to the

@@ -234,7 +234,7 @@
     font: inherit;
     cursor: pointer;
     color: var(--ink);
-    transition: background-color var(--dur-micro) var(--ease-out);
+    transition: background-color var(--dur-state) var(--ease-out);
   }
   .help-row.is-runnable:hover {
     background: var(--chip-hover);

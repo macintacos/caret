@@ -173,7 +173,7 @@ in exactly one place — the shadcn semantic `:root` block plus the `@theme inli
   caret chrome file, add that path to `@source`.
 - **The bridge is not only color.** That same `@theme inline` map carries Tailwind's
   `--default-transition-duration` and `--default-transition-timing-function`, pointed at
-  caret's `--dur-micro` / `--ease-out`, so a bare `transition-colors` in the vendored tree
+  caret's `--dur-state` / `--ease-out`, so a bare `transition-colors` in the vendored tree
   tints on the chrome's tempo rather than on Tailwind's 150ms default. Anything editing
   that block should know it governs motion as well as palette.
 
@@ -236,7 +236,7 @@ consistent with it rather than inventing a per-component treatment.
   can't drift. A new modal reuses it instead of hand-rolling a Dialog. The shadcn
   `dialog-*` and `alert-dialog-*` `content`/`footer` are kept visually aligned as its
   base, and their **backdrop and their timing are shared outright** — one scrim, one blur,
-  one enter/exit pair across all four Dialog and AlertDialog surfaces, declared in
+  one timing across all four Dialog and AlertDialog surfaces, declared in
   `styles/shadcn-bridge.css` § Modal choreography (EXC-892) rather than per vendored file,
   because a dismissible pane and a decision guard dimming the app differently is two
   backdrop languages in one app. A modal built on either primitive inherits all of it and

@@ -132,10 +132,10 @@ export interface PlanKeyboard {
   clearForContentSwitch(): void;
 }
 
-// Must match PlanSearch's search-collapse duration (--dur-exit = 140ms), pinned by
+// Must match PlanSearch's search-collapse duration (--dur-state = 160ms), pinned by
 // motion.test.ts. happy-dom fires no animationend, so a timer — not that event —
 // drives the teardown.
-const CLOSE_ANIM_MS = 140;
+const CLOSE_ANIM_MS = 160;
 
 export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardDeps): PlanKeyboard {
   const setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
@@ -190,12 +190,12 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
 
   // Dismiss the pill. Blur now so focus returns to the plan and the cursor/highlights stay
   // where they landed. With hints on there's a "/ to search" chip to collapse back into,
-  // so keep the pill mounted for one --dur-exit playing its collapse animation, then reset;
+  // so keep the pill mounted for one --dur-state playing its collapse animation, then reset;
   // with hints off there's no chip, so reset immediately.
   function closeSearch(): void {
     // Sounds at the dismissal rather than at the deferred teardown, so the Esc chain and
     // the pill's ✕ inherit it by routing through. Silent while already collapsing: the
-    // pill stays open for one --dur-exit, so a second press inside that window is the
+    // pill stays open for one --dur-state, so a second press inside that window is the
     // same dismissal rather than another one.
     if (!store.searchClosing) deps.sound?.("searchClosed");
     deps.blur();

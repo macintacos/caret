@@ -86,10 +86,10 @@
     gap: 0.6rem;
     pointer-events: auto;
     box-shadow: var(--shadow-card);
-    animation: alert-in var(--dur-enter) var(--ease-out);
+    animation: alert-in var(--dur-state) var(--ease-out);
   }
   :global(.alert-item.leaving) {
-    animation: alert-out var(--dur-exit) var(--ease-in) forwards;
+    animation: alert-out var(--dur-state) var(--ease-out) forwards;
   }
   .alert-body {
     flex: 1;
@@ -129,7 +129,7 @@
     text-decoration-color: currentColor;
     text-underline-offset: 0.2em;
     opacity: 0.75;
-    transition: opacity var(--dur-micro) var(--ease-out);
+    transition: opacity var(--dur-state) var(--ease-out);
   }
   .alert-action:hover {
     opacity: 1;
@@ -150,7 +150,7 @@
     border-radius: var(--radius);
     color: inherit;
     opacity: 0.6;
-    transition: opacity var(--dur-micro) var(--ease-out);
+    transition: opacity var(--dur-state) var(--ease-out);
   }
   .alert-dismiss:hover {
     opacity: 1;

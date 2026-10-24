@@ -245,7 +245,7 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     overflow: hidden;
-    animation: nav-open var(--dur-enter) var(--ease-out);
+    animation: nav-open var(--dur-state) var(--ease-out);
   }
   /* At ≤ --w-tight it unpins and widens to a full-bleed bottom sheet (EXC-812),
      which may sit over the plan surface (intended). The px literal mirrors

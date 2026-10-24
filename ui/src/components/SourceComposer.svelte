@@ -195,7 +195,7 @@
     /* Opacity only: this opens inside the library-reserved annotation row, so a
        transform that grew or shifted the box would change the row's measured
        height mid-reveal and fight the preventScroll guard. */
-    animation: reveal var(--dur-micro) var(--ease-out);
+    animation: reveal var(--dur-state) var(--ease-out);
   }
   .label {
     margin: 0 0 0.4rem;

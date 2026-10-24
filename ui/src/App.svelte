@@ -694,7 +694,7 @@
   // createResolve's onOffline above.
   //
   // The flag check is what makes each idempotent: the surface stays mounted through its
-  // 140ms exit, so a second press inside that window would push a second confirmation
+  // --dur-state exit, so a second press inside that window would push a second confirmation
   // for one decision.
   function approveAnyway(notes: string) {
     const mode = pendingApproveMode;
@@ -820,8 +820,8 @@
   {/if}
 
   <!-- The arrival (EXC-894): the second half of the hand-off a decided modal starts.
-       The guard recedes on --dur-exit while this lifts on --dur-enter, so the two read
-       as one gesture rather than two events that coincided.
+       The guard recedes while this lifts, both on --dur-state, so the two read as one
+       gesture rather than two events that coincided.
 
        A curtain rather than an animation on the content, because the two destinations
        arrive by different mechanisms: draining the queue MOUNTS EmptyState, where a CSS
@@ -1072,7 +1072,7 @@
     inset: 0;
     pointer-events: none;
     background: var(--paper);
-    animation: arrival var(--dur-enter) var(--ease-out) forwards;
+    animation: arrival var(--dur-state) var(--ease-out) forwards;
   }
   @keyframes arrival {
     from {
@@ -1102,7 +1102,7 @@
     border-left: 3px solid var(--accent);
     border-radius: 0;
     font-size: var(--text-base);
-    animation: daemon-banner-in var(--dur-enter) var(--ease-out);
+    animation: daemon-banner-in var(--dur-state) var(--ease-out);
   }
   .db-text {
     margin: 0;
@@ -1122,7 +1122,7 @@
     cursor: pointer;
     border-radius: var(--radius);
     padding: 0.3rem 0.7rem;
-    transition: background var(--dur-micro) var(--ease-out);
+    transition: background var(--dur-state) var(--ease-out);
   }
   .db-reload {
     background: var(--accent);
@@ -1172,7 +1172,7 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     font-size: var(--text-base);
-    animation: safe-mode-in var(--dur-enter) var(--ease-out);
+    animation: safe-mode-in var(--dur-state) var(--ease-out);
   }
   .sm-dot {
     flex: none;

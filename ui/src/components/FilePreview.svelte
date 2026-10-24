@@ -713,7 +713,7 @@
      device pixel and smudges rather than reading as an x. */
   .fp-close :global(.icon) {
     opacity: 0;
-    transition: opacity var(--dur-micro) var(--ease-out);
+    transition: opacity var(--dur-state) var(--ease-out);
   }
   .fp-close :global(svg) {
     stroke-width: 3;
@@ -774,7 +774,7 @@
        after it. The travel is half AlertHost's 8px because this surface is the
        whole lane rather than a card, and the same distance on it reads as a
        lurch. */
-    animation: fp-in var(--dur-enter) var(--ease-out);
+    animation: fp-in var(--dur-state) var(--ease-out);
   }
   /* The outgoing file, still on screen while the next one loads. It leaves the
      way the next arrives from, so a switch reads as one movement rather than two
@@ -783,7 +783,7 @@
      also stops taking gestures on the way out: a scroll landing here would ask
      for a chunk of the file the reader has just left. */
   .fp-code.fp-leaving {
-    animation: fp-out var(--dur-exit) var(--ease-in) forwards;
+    animation: fp-out var(--dur-state) var(--ease-out) forwards;
     pointer-events: none;
   }
   /* Inset the app-wide focus ring (base.css) rather than restyling it: the drawer
@@ -850,11 +850,8 @@
     padding: 0 0.8rem;
     white-space: pre;
   }
-  /* One line of text rather than a screenful, so it takes the micro tier
-     rather than the surface one — long enough not to pop, short enough that a
-     reader waiting to be told the file is too large is not watching it arrive. */
   .fp-message {
-    animation: fp-in var(--dur-micro) var(--ease-out);
+    animation: fp-in var(--dur-state) var(--ease-out);
   }
   /* Both halves travel the same 4px in the same direction: contents rise into
      place, and the file being replaced keeps rising as it goes. Reduced motion is

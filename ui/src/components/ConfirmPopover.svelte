@@ -97,14 +97,7 @@
 
      It sits over the same --paper-raised surface as the composer/card, so --pop-bg
      takes the chip fill to read as its own floating layer rather than melting into
-     what it covers.
-
-     The --tw-* pair below retimes the vendored animation rather than replacing it
-     (svelte-rules.md § Motion principles carries the worked example). The tier here
-     is micro, taken SYMMETRICALLY — one rule, no closed-state arm — because a popover
-     this small pops rather than rises, and --dur-exit would make it leave SLOWER than
-     it arrives. Both of base.css's default arms sit at specificity zero, so this
-     single rule governs open and closed alike. */
+     what it covers. */
   :global(.confirm-popover) {
     --pop-bg: var(--chip);
     /* Pin the sans stack explicitly: the bubble is portalled to the body — outside
@@ -120,8 +113,6 @@
     border: 1px solid var(--rule-strong);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
-    --tw-duration: var(--dur-micro);
-    --tw-ease: var(--ease-out);
   }
   :global(.confirm-popover .question) {
     margin: 0 0 0.5rem;

@@ -175,12 +175,12 @@
     border-radius: 50%;
     background: var(--attention);
   }
-  /* A one-shot shudder on the arrival of a plan, twice over --dur-micro: enough to
+  /* A one-shot shudder on the arrival of a plan, twice over --dur-state: enough to
      catch the eye in a header the reviewer is not looking at, short enough not to read
      as an ambient loop. No local prefers-reduced-motion query — the trigger renders
      inside #app, which app.css's single global guard covers. */
   .unread-dot {
-    animation: switcher-jiggle var(--dur-micro) var(--ease-out) 2;
+    animation: switcher-jiggle var(--dur-state) var(--ease-out) 2;
   }
   @keyframes switcher-jiggle {
     0%,

@@ -45,7 +45,7 @@ export interface AlertDeps {
   schedule?: (fn: () => void, ms: number) => () => void;
   /** How long an alert dwells before auto-dismissing ("a couple of seconds"). */
   dwellMs?: number;
-  /** Exit-animation window before the item is removed (matches --dur-exit = 140ms,
+  /** Exit-animation window before the item is removed (matches --dur-state = 160ms,
    * pinned by motion.test.ts). */
   exitMs?: number;
   /** Play a cue for a pushed alert. Injectable so tests observe the cue without
@@ -88,7 +88,7 @@ const defaultSchedule = (fn: () => void, ms: number) => {
 export function createAlerts(store: AlertStore, deps: AlertDeps = {}): Alerts {
   const schedule = deps.schedule ?? defaultSchedule;
   const dwellMs = deps.dwellMs ?? 4000;
-  const exitMs = deps.exitMs ?? 140;
+  const exitMs = deps.exitMs ?? 160;
 
   let nextId = 1;
   // Live dwell-timer cancels, keyed by alert id, so a manual dismiss cancels the

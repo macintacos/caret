@@ -72,41 +72,17 @@ body {
    strings for a second reason: `shadcn-svelte add` reverts those wholesale on a
    re-sync (shadcn-rules.md § Edits a re-sync will silently undo) and never reaches
    this file. Unlayered, so it wins over the `duration-100` popover-content carries in
-   @layer utilities — layer order decides that, not specificity, which is what lets
-   BOTH arms sit at specificity ZERO. The closed state is wrapped in its own :where()
-   for exactly that reason: left bare it would score (0,1,0) and a component rule
-   would have to tie-break on source order. At zero, a surface with timing of its own
-   simply wins — which is how PlanToc.svelte, itself a popover-content, keeps the pin
-   EXC-1107 designed for it, and why a pin agreeing with this default is not a
-   duplicate to collapse. */
+   @layer utilities — layer order decides that, not specificity, which is what lets the
+   rule sit at specificity ZERO, so a surface with timing of its own simply wins. No
+   state qualifier: a surface leaves on the time it arrived in. */
 :where(
   [data-slot="dropdown-menu-content"],
   [data-slot="dropdown-menu-sub-content"],
   [data-slot="popover-content"],
-  [data-slot="select-content"]
+  [data-slot="select-content"],
+  [data-slot="tooltip-content"]
 ) {
-  --tw-duration: var(--dur-enter);
-  --tw-ease: var(--ease-out);
-}
-:where(
-  [data-slot="dropdown-menu-content"],
-  [data-slot="dropdown-menu-sub-content"],
-  [data-slot="popover-content"],
-  [data-slot="select-content"]
-):where([data-state="closed"]) {
-  --tw-duration: var(--dur-exit);
-  --tw-ease: var(--ease-in);
-}
-
-/* The tooltip is the one HOVER-triggered surface in that set, and four of its six
-   consumers (NotifyBell, StatusStrip, VersionBadge, VersionComparePicker) open it with
-   delayDuration={0} — an entrance's worth of time before an instant tooltip resolves is
-   exactly the lag on the pointer the micro tier exists to avoid. So it takes micro, and
-   takes it symmetrically: one rule, no closed-state arm, which means the tooltip also
-   LEAVES on --ease-out, the only departure in the vocabulary that does not take
-   --ease-in. */
-:where([data-slot="tooltip-content"]) {
-  --tw-duration: var(--dur-micro);
+  --tw-duration: var(--dur-state);
   --tw-ease: var(--ease-out);
 }
 
@@ -141,16 +117,14 @@ body {
    SPOKEN FOR: a directional wipe means "everything was restyled", which is the theme
    switch's sentence and not this one.
 
-   The departing window leaves on the exit tier and the arriving one enters on the longer
-   enter tier, so a decided guard receding and what replaces it arriving stay one gesture.
-   `forwards` states the departure's end state — it finishes first, while the transition
-   runs on — rather than fixing a visible snap-back: the arriving half is ~0.99 opaque by
-   then. */
+   Both halves run on the state tokens, so a decided guard receding and what replaces it
+   arriving read as one crossfade. `forwards` states the departure's end state rather
+   than leaving it to the transition's own teardown. */
 :root.plan-handoff::view-transition-old(root) {
-  animation: plan-handoff-out var(--dur-exit) var(--ease-in) forwards;
+  animation: plan-handoff-out var(--dur-state) var(--ease-out) forwards;
 }
 :root.plan-handoff::view-transition-new(root) {
-  animation: plan-handoff-in var(--dur-enter) var(--ease-out);
+  animation: plan-handoff-in var(--dur-state) var(--ease-out);
 }
 @keyframes plan-handoff-out {
   from {

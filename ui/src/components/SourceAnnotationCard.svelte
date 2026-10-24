@@ -187,8 +187,8 @@
     /* Opacity only: the card mounts inside the library-reserved annotation row, so
        a transform that grew or shifted its box would change the row's measured
        height and fight the preventScroll guard. */
-    animation: reveal var(--dur-micro) var(--ease-out);
-    transition: background-color var(--dur-micro) var(--ease-out);
+    animation: reveal var(--dur-state) var(--ease-out);
+    transition: background-color var(--dur-state) var(--ease-out);
   }
   .card[data-state="approved"] {
     --state-accent: var(--ok);
@@ -249,7 +249,7 @@
   :global([data-slot="button"].chip .icon) {
     flex: none;
     color: var(--ink-faint);
-    transition: transform var(--dur-micro) var(--ease-out);
+    transition: transform var(--dur-state) var(--ease-out);
   }
   :global([data-slot="button"].chip[aria-expanded="false"] .icon) {
     transform: rotate(-90deg);
@@ -301,11 +301,9 @@
   }
   /* A wobble previewing the destructive action. The keyframes are declared -global-
      so the name still resolves from inside the :global() hover selector — Svelte only
-     rewrites animation names for component-scoped rules. --dur-enter rather than
-     --dur-micro because four rotation steps across 120ms are ~30ms each, which reads
-     as jitter rather than a wobble. */
+     rewrites animation names for component-scoped rules. */
   :global(button.danger:hover .icon) {
-    animation: trash-shake var(--dur-enter) var(--ease-out);
+    animation: trash-shake var(--dur-state) var(--ease-out);
   }
   @keyframes -global-trash-shake {
     0%,
@@ -324,19 +322,14 @@
   }
   /* A grid-template-rows: 0fr -> 1fr height animation. The row's measured height
      legitimately changes on expand/collapse and the library re-measures, but nothing
-     transforms, so a code line below never gets a transform-driven jump.
-
-     The two arms carry their own timing rather than one `transition` on the base
-     rule: opening is a surface arriving, closing the same surface leaving. Which
-     rule is in force when the class flips is what selects the arm. */
+     transforms, so a code line below never gets a transform-driven jump. */
   .body-wrap {
     display: grid;
     grid-template-rows: 0fr;
-    transition: grid-template-rows var(--dur-exit) var(--ease-in);
+    transition: grid-template-rows var(--dur-state) var(--ease-out);
   }
   .card.expanded .body-wrap {
     grid-template-rows: 1fr;
-    transition: grid-template-rows var(--dur-enter) var(--ease-out);
   }
   .body {
     overflow: hidden;

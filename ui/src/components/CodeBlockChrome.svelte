@@ -162,7 +162,7 @@
     /* Rests dimmed so it stays quiet while the code is read, and comes up as the reviewer
        reaches the block. Keyboard focus lights it the same way a pointer does. */
     opacity: 0.4;
-    transition: opacity var(--dur-micro) var(--ease-out);
+    transition: opacity var(--dur-state) var(--ease-out);
   }
 
   .code-chrome[data-lit],
@@ -221,7 +221,7 @@
   /* The checkmark pops in on a short scale; the copy glyph returns as a plain swap. */
   .glyph.done {
     color: var(--ok);
-    animation: code-copy-pop var(--dur-micro) var(--ease-out);
+    animation: code-copy-pop var(--dur-state) var(--ease-out);
   }
 
   @keyframes code-copy-pop {

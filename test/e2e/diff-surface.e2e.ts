@@ -1907,11 +1907,11 @@ test("the composer reveal and the card swap share one opacity-only token transit
   await expect(composer).toBeVisible();
   const composerMotion = await composer.evaluate(motionOf);
   expect(composerMotion.name).toMatch(/reveal$/);
-  // The micro tier, read off the token rather than retyped as seconds. Compared as a
+  // The state duration, read off the token rather than retyped as seconds. Compared as a
   // number, not a formatted string: `toBe` on the string form would also be asserting
   // that Number's toString and Chrome's animation-duration serialization agree.
   expect(Number.parseFloat(composerMotion.duration)).toBeCloseTo(
-    await motionToken(page, "--dur-micro"),
+    await motionToken(page, "--dur-state"),
     3,
   );
   // Opacity only — no scale bounce, no translate.

@@ -158,7 +158,7 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-chip);
     transform-origin: top right;
-    animation: search-expand var(--dur-enter) var(--ease-out);
+    animation: search-expand var(--dur-state) var(--ease-out);
   }
   @keyframes search-expand {
     from {
@@ -170,12 +170,12 @@
       transform: scale(1);
     }
   }
-  /* Closing reverses the expand on the exit arm (--dur-exit) for a snappy dismiss, while
-     planKeyboard keeps the pill mounted for that long. `forwards` holds the shrunk/faded
+  /* Closing reverses the expand over --dur-state, while planKeyboard keeps the pill
+     mounted for that long. `forwards` holds the shrunk/faded
      end frame until the unmount so it can't flash back to full size; higher specificity
      than the base rule, so this animation wins while closing. */
   .plan-search.closing {
-    animation: search-collapse var(--dur-exit) var(--ease-in) forwards;
+    animation: search-collapse var(--dur-state) var(--ease-out) forwards;
   }
   @keyframes search-collapse {
     from {

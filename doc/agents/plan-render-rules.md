@@ -466,7 +466,7 @@ selection's wash, from its press row through the pointer's and across the margin
 slots between them, drawn before the chrome and slots so they sit on it. The "+" rides on
 the pointer's row, and a faded accent bar (`data-caret-preview-drag-bar`), the source
 gutter's selection ticks drawn as one, runs the band's length down the "+" lane. The
-bands, the cursor's too, glide between rows on `--dur-micro`, the cursor follow scroll's
+bands, the cursor's too, glide between rows on `--dur-state`, the cursor follow scroll's
 duration, and land in place on an entry, a scroll, a press or release, a layout bump, or a
 jump of more than two rows. `withinLines` counts those rows as visual lines, not pixels,
 so a heading's margins never turn its neighbour into a jump. Once the composer opens, the

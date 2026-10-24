@@ -1263,7 +1263,7 @@ test("compare mode drops the bar, which tracks no heading there", async ({ daemo
  * Arming a recorder first and running the gesture into it is what makes "a departure is
  * animated too" falsifiable: strip the exit and the array comes back empty rather than
  * merely different. */
-type BarMotion = { name: string; slot: string; duration: number; easing: string }[];
+type BarMotion = { name: string; slot: string; duration: number }[];
 
 async function armBarMotion(page: Page): Promise<void> {
   await page.locator(BAR).evaluate((bar) => {
@@ -1276,10 +1276,9 @@ async function armBarMotion(page: Page): Promise<void> {
       log.push({
         name: (event as AnimationEvent).animationName,
         slot: target.dataset.slot ?? "",
-        // Both read as the animation BEGINS, the one moment the leaving cascade is live on
-        // a crumb that is about to stop existing.
+        // Read as the animation BEGINS, the one moment the leaving cascade is live on a
+        // crumb that is about to stop existing.
         duration: Number.parseFloat(style.animationDuration),
-        easing: style.animationTimingFunction,
       });
     };
     const arm = (el: Element) => {
@@ -1340,9 +1339,8 @@ test("a level leaving the trail plays the exit, and its separator leaves with it
   await daemon.seed({ plan: NESTED_PLAN });
   await page.goto("/");
 
-  // Armed before the DEEPENING as well, so both halves of the pairing are sampled off the
-  // same engine on the same elements. That is what lets the easing assertion below be a
-  // comparison rather than two readings that happen to differ.
+  // Armed before the DEEPENING as well, so both halves are sampled off the same engine on
+  // the same elements.
   await armBarMotion(page);
   await jumpTo(page, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
@@ -1359,19 +1357,12 @@ test("a level leaving the trail plays the exit, and its separator leaves with it
     "breadcrumb-separator",
   ]);
 
-  // On the exit tier, not the enter one. The pairing is the claim, so the two tokens are
-  // read as well — drifted to the same number they would make this assertion vacuous.
-  const exitSeconds = await motionToken(page, "--dur-exit");
-  const enterSeconds = await motionToken(page, "--dur-enter");
-  expect(exitSeconds).not.toBe(enterSeconds);
+  // Both ways on the state duration, read off the animations that really ran.
+  const stateSeconds = await motionToken(page, "--dur-state");
   expect(arriving.length).toBeGreaterThan(0);
-  for (const event of leaving) expect(event.duration).toBeCloseTo(exitSeconds, 3);
-  for (const event of arriving) expect(event.duration).toBeCloseTo(enterSeconds, 3);
-
-  // And the curve turns around with it: leaving accelerates out where arriving decelerated
-  // in. Read off the animations that really ran, so --ease-in is pinned by the engine
-  // rather than only by a regex over the stylesheet.
-  expect(leaving[0]?.easing).not.toBe(arriving[0]?.easing);
+  for (const event of [...leaving, ...arriving]) {
+    expect(event.duration).toBeCloseTo(stateSeconds, 3);
+  }
 });
 
 test("walking to a sibling swaps the label without firing the exit", async ({ daemon, page }) => {
@@ -1437,7 +1428,7 @@ test("reduced motion collapses the exit rather than removing it", async ({ daemo
   // The vocabulary underneath is untouched — what changed is what the cascade computed on
   // the crumb. motionToken probes outside #app and carries no data-slot, so neither arm of
   // the guard reaches it.
-  expect(await motionToken(page, "--dur-exit")).toBeGreaterThan(0.1);
+  expect(await motionToken(page, "--dur-state")).toBeGreaterThan(0.1);
 });
 
 test("a level that comes back mid-exit leaves no hole where its chevron was", async ({
@@ -1445,7 +1436,7 @@ test("a level that comes back mid-exit leaves no hole where its chevron was", as
   page,
 }) => {
   // The trail re-roots continuously as the reader scrolls, so a level can start leaving and
-  // be back before --dur-exit is up. Svelte aborts the outro there and keeps the node — but
+  // be back before --dur-state is up. Svelte aborts the outro there and keeps the node — but
   // `crumb-leaving` is added by crumbOut() rather than by Svelte, so nothing in the abort
   // path knows to take it off again. Left on, `crumb-out ... forwards` pins the last frame
   // at opacity 0 for good, while the element keeps `position: static` and its box: the row
@@ -1459,12 +1450,12 @@ test("a level that comes back mid-exit leaves no hole where its chevron was", as
 
   // The exit is widened for this spec, and that is the difference between a test and a coin
   // toss. What is under test is what an ABORTED outro leaves behind, not how quickly one can
-  // be caught: at the real 140ms the abort has to win a race against whatever else the machine
+  // be caught: at the real 160ms the abort has to win a race against whatever else the machine
   // is doing, which under a full gate it does not reliably. Stretching the token makes the
   // abort a certainty and changes nothing about the mechanism — crumbOut() reads its wait back
   // out of the cascade, so the longer exit is honoured end to end.
-  await page.addStyleTag({ content: ":root { --dur-exit: 2s; }" });
-  expect(await motionToken(page, "--dur-exit")).toBeGreaterThan(1);
+  await page.addStyleTag({ content: ":root { --dur-state: 2s; }" });
+  expect(await motionToken(page, "--dur-state")).toBeGreaterThan(1);
 
   await jumpTo(page, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);

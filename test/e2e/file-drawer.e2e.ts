@@ -192,7 +192,7 @@ test("the lane wipes in from the edge it docks to", async ({ daemon, page }) => 
       await expect.poll(() => fileRefCount(page)).toBe(1);
 
       // The keyframes are read HERE, inside the listener, not from a later
-      // getAnimations() call: the wipe runs for --dur-enter (220ms) and then
+      // getAnimations() call: the wipe runs for --dur-state (160ms) and then
       // leaves the element's animation list empty forever, so any read that
       // costs a round-trip is racing a window it loses on a loaded host.
       // animationstart is the one instant the animation is guaranteed live.
@@ -767,7 +767,7 @@ test("a row clicked during the lane's closing wipe still pushes the card clear",
 
     // Dismiss, and click a row without waiting out the wipe. Both clicks and the check
     // between them run in ONE page task, because the window they have to land in is
-    // 140ms of wall clock — DiffPlanView holds the lane with a `CLOSE_ANIM_MS` timer —
+    // 160ms of wall clock — DiffPlanView holds the lane with a `CLOSE_ANIM_MS` timer —
     // and a driver round trip is not something this test can afford to spend inside it.
     // Driven from here the whole handoff costs a millisecond or two at any host load;
     // driven across the process boundary it overruns the window on a loaded one, and the

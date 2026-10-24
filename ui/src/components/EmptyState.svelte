@@ -33,13 +33,13 @@
   const sourceHost = $derived(new URL(fact.source).hostname);
 
   // Let the outgoing line finish leaving before the next one is swapped in, by
-  // awaiting the element's own animations rather than mirroring --dur-exit as a
+  // awaiting the element's own animations rather than mirroring --dur-state as a
   // constant — FilePreview.svelte's awaitDeparture is the same shape. Under
   // happy-dom, which runs no animations, getAnimations is absent and the swap is
   // immediate. allSettled rather than all: if `connected` flips false mid-rotation
   // the element leaves the DOM and its cancelled transition REJECTS `finished`.
   //
-  // Not reentrancy-guarded, because --dur-exit is three orders of magnitude under
+  // Not reentrancy-guarded, because --dur-state is three orders of magnitude under
   // ROTATE_MS; a rotateMs below the exit duration would overlap two calls and burn
   // two facts for one visible swap.
   async function rotate(): Promise<void> {
@@ -188,11 +188,10 @@
     line-height: var(--leading-snug);
     color: var(--ink-faint);
     pointer-events: none;
-    transition: opacity var(--dur-enter) var(--ease-out);
+    transition: opacity var(--dur-state) var(--ease-out);
   }
   .carrot-fact.leaving {
     opacity: 0;
-    transition: opacity var(--dur-exit) var(--ease-in);
   }
   /* The link stays in the faint ink — the accent is for selection and brand — so
      the underline is its whole affordance. text-decoration-line is set explicitly

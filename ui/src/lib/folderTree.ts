@@ -72,7 +72,7 @@ export const CARD_MARGIN = 12;
  * edge the card must stay clear of, in viewport coordinates.
  *
  * Arithmetic rather than the lane's own rect because the rect lies while the
- * lane is opening. FileDrawer wipes in from `width: 0` over `--dur-enter`, so a
+ * lane is opening. FileDrawer wipes in from `width: 0` over `--dur-state`, so a
  * lane measured in that window reports a sliver and narrows nothing — which is
  * exactly the instant a file opened FROM the card (EXC-1137) is measured at. Its
  * DOCKED edge is the flex surface's own and does not move through the wipe (the
