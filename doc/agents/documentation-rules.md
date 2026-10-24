@@ -29,6 +29,7 @@ digraph caret_docs_router {
     "Edit CLAUDE.md" [shape=box];
     "Edit a doc/agents/*.md rule file" [shape=box];
     "Edit doc/README.md" [shape=box];
+    "Edit design/*.md" [shape=box];
 
     "Changing documentation" -> "Which doc does the change affect?";
     "Which doc does the change affect?" -> "Edit README.md" [label="user-facing front door: what caret is, install, basic usage, pointers onward"];
@@ -40,6 +41,7 @@ digraph caret_docs_router {
     "Which doc does the change affect?" -> "Edit CLAUDE.md" [label="the code-change routing index, plus the CodeGraph / verifying-changes prose"];
     "Which doc does the change affect?" -> "Edit a doc/agents/*.md rule file" [label="a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, plan rendering, testing, icons, settings, dependencies, OpenCode, rumdl)"];
     "Which doc does the change affect?" -> "Edit doc/README.md" [label="the router for the doc/ directory: which page answers a given reader's question"];
+    "Which doc does the change affect?" -> "Edit design/*.md" [label="design direction: how caret looks, moves, sounds, or prints, its deliberate exceptions, and the decision log"];
 }
 ```
 
@@ -77,6 +79,10 @@ digraph caret_docs_router {
   wants to do to the page that answers it, across the four reference pages, `doc/agents/`,
   and the two repo-root docs (`README.md` and `CONTRIBUTING.md`). How to edit it:
   [`references/doc-readme.md`](references/doc-readme.md).
+- **`design/`** (repo root) — caret's design direction: the brief, where each token lives,
+  the patterns, the deliberate exceptions, and the decision log, routed from
+  `design/README.md`. Read by contributors and coding agents alike. How to edit it:
+  [`references/design.md`](references/design.md).
 
 ## Audience, stated at the top of every new doc
 

@@ -34,6 +34,7 @@ Find the row that matches what you came here to do, then follow the link.
 | Refresh the README's screenshot | [`DEVELOPMENT.md` § Regenerating the README assets](DEVELOPMENT.md#regenerating-the-readme-assets) |
 | Work out which of caret's three rumdl roles you're touching, or bump its version | [`agents/rumdl-rules.md`](agents/rumdl-rules.md) |
 | Follow the conventions for the area of code you're changing | [`agents/`](agents/), routed by [`AGENTS.md`](../AGENTS.md) |
+| Match caret's design direction: how it looks, moves, sounds, and prints | [`design/`](../design/README.md) |
 
 ## `agents/`
 

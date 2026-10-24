@@ -31,6 +31,7 @@ digraph caret_rules_router {
     "Load doc/agents/opencode-integration.md" [shape=box];
     "Load doc/agents/rumdl-rules.md" [shape=box];
     "Load doc/agents/documentation-rules.md" [shape=box];
+    "Load design/README.md" [shape=box];
 
     "Working on caret" -> "What does the change touch?";
     "What does the change touch?" -> "Load doc/agents/architecture-rules.md" [label="core/adapter boundary, daemon routing and lifecycle (the service supervisor, bin/caret-launcher), @core shared modules"];
@@ -47,6 +48,7 @@ digraph caret_rules_router {
     "What does the change touch?" -> "Load doc/agents/opencode-integration.md" [label="OpenCode adapter, plugin, or install (caret install)"];
     "What does the change touch?" -> "Load doc/agents/rumdl-rules.md" [label="rumdl: bumping its version, touching any of its three configs or invocations (repo hygiene, plan formatting, release notes), or scripts/tasks/dev/fake-plan.md"];
     "What does the change touch?" -> "Load doc/agents/documentation-rules.md" [label="documentation: which doc to update — README, the doc/ reference pages (CONFIGURING, RUNNING, ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the doc/ router, or the doc map itself"];
+    "What does the change touch?" -> "Load design/README.md" [label="how caret looks, moves, sounds, or prints: colour, type, radius, motion, sound, empty/loading/error states, CLI and task output layout"];
 }
 ```
 
