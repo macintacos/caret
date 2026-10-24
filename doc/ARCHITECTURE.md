@@ -365,9 +365,9 @@ At a terminal the whole run renders as one
 [`@clack/prompts`](https://github.com/bombshell-dev/clack) session: the chooser, then a
 spinner per operation (registering the marketplace, installing the plugin, editing
 OpenCode's plugin array, deploying the command files, fetching rumdl) that settles into a
-line saying what it did, and a closing summary. Off a terminal — piped, `CI=true`, or
-`NO_COLOR` set — the same run reports as plain `caret: …` lines with no escape codes, so
-CI transcripts and captured logs stay readable.
+line saying what it did, and a closing summary. Off a terminal — piped, `CI=true`,
+`TERM=dumb`, `NO_COLOR` set, or `--no-color` passed — the same run reports as plain
+`caret: …` lines with no escape codes, so CI transcripts and captured logs stay readable.
 
 ### Calling the review tool from your own skill
 

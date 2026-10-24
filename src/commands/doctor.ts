@@ -54,6 +54,7 @@ import {
 } from "@/doctor/report.ts";
 import { writeZip } from "@/doctor/zip.ts";
 import { isCompiledBinary, VERSION } from "@/lib/build-id.ts";
+import { wantsColor } from "@/lib/color.ts";
 import { errorMessage } from "@/lib/types.ts";
 import { publishedCaretVersion } from "@/lib/upstream.ts";
 
@@ -151,6 +152,7 @@ export async function runDoctorSubcommand(opts: {
   json: boolean;
   bundle: boolean;
   yes: boolean;
+  noColor: boolean;
 }): Promise<void> {
   // 1 means the install has something wrong with it, 2 that no report was produced at
   // all — doctor could not collect one, or --bundle had no terminal to ask consent at
@@ -179,10 +181,12 @@ export async function runDoctorSubcommand(opts: {
       readAdapterChecks(),
     ]);
     const doc: DoctorDocument = { ...report, checks: runChecks(report, adapterChecks) };
-    // The same gate createInstallUI draws its chrome behind: a pipe, NO_COLOR, or CI all
-    // want the glyphs bare. Deciding it here keeps the renderer a pure function.
-    const color =
-      process.stdout.isTTY === true && !process.env.NO_COLOR && process.env.CI !== "true";
+    // Deciding it here keeps the renderer a pure function.
+    const color = wantsColor({
+      isTTY: process.stdout.isTTY,
+      env: process.env,
+      noColorFlag: opts.noColor,
+    });
     process.stdout.write(`${renderStdout(doc, opts.json ? "json" : "text", color)}\n`);
     process.exit(doc.checks.some((c) => c.status === "fail") ? 1 : 0);
   } catch (e) {

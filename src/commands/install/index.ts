@@ -99,10 +99,11 @@ export async function runInstallSubcommand(
     dryRun: boolean;
     fromLocal?: boolean;
     refresh?: boolean;
+    noColor?: boolean;
   },
   deps: InstallDeps = {},
 ): Promise<InstallOutcome> {
-  const ui = deps.ui ?? (await createInstallUI());
+  const ui = deps.ui ?? (await createInstallUI({ noColorFlag: opts.noColor ?? false }));
   const verb = opts.uninstall ? "uninstall" : "install";
   ui.intro(`${verb}${opts.fromLocal ? " (local build)" : ""}${opts.dryRun ? " (dry run)" : ""}`);
 

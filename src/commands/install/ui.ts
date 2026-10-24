@@ -12,6 +12,8 @@
 // plain `caret: …` lines everywhere else. The chooser stays clack either way: NO_COLOR
 // asks for no color, not for a question to go unasked.
 
+import { wantsColor } from "@/lib/color.ts";
+
 /** Report sub-status while a step is still running (e.g. the command being spawned). */
 export type StepDetail = (message: string) => void;
 
@@ -19,9 +21,9 @@ export type StepDetail = (message: string) => void;
  * reads keys from stdin and draws to stdout, so a piped stdout would render its UI into
  * the pipe and look like a hang. Every surface that gates on *asking* — the target
  * chooser, the service question, the OpenCode upgrade confirm — resolves through this one
- * predicate; `createInstallUI`'s own render check is separate and stricter (it also
- * honours NO_COLOR and CI), because drawing clack's chrome and asking a question are
- * different questions. */
+ * predicate; `createInstallUI`'s own render check is separate and stricter (it is
+ * `wantsColor`), because drawing clack's chrome and asking a question are different
+ * questions. */
 export function isTerminal(): boolean {
   return process.stdin.isTTY === true && process.stdout.isTTY === true;
 }
@@ -128,9 +130,10 @@ function plainUI(write: (s: string) => void): InstallUI {
 
 /** Options exist for the tests: production reads the real terminal. */
 export interface InstallUIOptions {
-  /** Draw clack's full session? Defaults to "stdout is a terminal, and the environment
-   * hasn't asked for plain output". */
+  /** Draw clack's full session? Defaults to `wantsColor` on stdout. */
   interactive?: boolean;
+  /** Set by `--no-color`. */
+  noColorFlag?: boolean;
   /** Where the plain reporter writes. */
   write?: (s: string) => void;
 }
@@ -142,7 +145,11 @@ export async function createInstallUI(opts: InstallUIOptions = {}): Promise<Inst
   const write = opts.write ?? ((s: string) => void process.stdout.write(s));
   const interactive =
     opts.interactive ??
-    (process.stdout.isTTY === true && !process.env.NO_COLOR && process.env.CI !== "true");
+    wantsColor({
+      isTTY: process.stdout.isTTY,
+      env: process.env,
+      noColorFlag: opts.noColorFlag ?? false,
+    });
   if (!interactive) return plainUI(write);
 
   const clack = await import("@clack/prompts");

@@ -113,11 +113,13 @@ function buildProgram(): Command {
     .option("--json", "emit the machine-readable JSON document")
     .option("--bundle", "also write a zip of the raw logs and review records, to share")
     .option("--yes", "write the bundle without asking — it holds unredacted content")
+    .option("--no-color", "print without color")
     .action((opts) =>
       runDoctorSubcommand({
         json: opts.json ?? false,
         bundle: opts.bundle ?? false,
         yes: opts.yes ?? false,
+        noColor: !opts.color,
       }),
     );
 
@@ -139,6 +141,7 @@ function buildProgram(): Command {
       "--from-local",
       "dev loop: install the built caret checkout this binary runs from, then hand it the daemon",
     )
+    .option("--no-color", "print without color")
     .action(async (opts) => {
       const outcome = await runInstallSubcommand(
         {
@@ -146,6 +149,7 @@ function buildProgram(): Command {
           dryRun: opts.dryRun ?? false,
           refresh: opts.refresh ?? false,
           fromLocal: opts.fromLocal ?? false,
+          noColor: !opts.color,
         },
         {
           service: prodService,
