@@ -23,6 +23,7 @@ afterEach(() => {
 function expectAdapterShape(a: AgentAdapter): void {
   expect(typeof a.id).toBe("string");
   expect(Array.isArray(a.approveVariants)).toBe(true);
+  expect(typeof a.approveCarriesNotes).toBe("boolean");
   expect(typeof a.parseHookInput).toBe("function");
   expect(typeof a.emitDecision).toBe("function");
   expect(typeof a.fatalDenyLine).toBe("function");
@@ -37,6 +38,18 @@ function expectAdapterShape(a: AgentAdapter): void {
 test("each adapter's id matches its registry key", () => {
   for (const id of agentIds()) {
     expect(selectAdapter(id).id).toBe(id);
+  }
+});
+
+test("approveCarriesNotes says whether an allow's feedback reaches the emitted decision", () => {
+  const probe = "caret-notes-probe";
+  for (const id of agentIds()) {
+    const a = selectAdapter(id);
+    const out = a.emitDecision(
+      { behavior: "allow", acceptMode: a.approveVariants[0]?.id, feedback: probe, decidedAt: 0 },
+      { sessionId: "s", cwd: "/w", plan: "p" },
+    );
+    expect(out.includes(probe)).toBe(a.approveCarriesNotes);
   }
 });
 

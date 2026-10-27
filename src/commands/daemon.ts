@@ -278,6 +278,7 @@ export async function runDaemon(opts: {
       stateDir: stateDir(),
       instanceId: randomUUID().slice(0, 8),
       approveVariants: adapter.approveVariants,
+      approveCarriesNotes: adapter.approveCarriesNotes,
       // The active adapter's id, published on /api/health so the UI can adapt to
       // the environment (EXC-791).
       source: adapter.id,

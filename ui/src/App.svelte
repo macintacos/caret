@@ -49,8 +49,11 @@
   import {
     type CommentIndexEntry,
     commentIndex,
+    commentItems,
     coveredLineCount,
+    lineOrder,
     pendingItems,
+    scratchItems,
     versionCommentIndex,
   } from "$lib/feedback.ts";
   import {
@@ -117,6 +120,9 @@
   // Undefined until it lands, or for a daemon predating the field; approveVariants()
   // then falls back to the built-in set.
   let declaredVariants = $state<ApproveVariant[] | undefined>(undefined);
+  // A daemon predating the field omits it, so this stays true: the approve dialog warns
+  // only when the adapter says its approval drops notes.
+  let approveCarriesNotes = $state(true);
   // True when the daemon runs from source (EXC-556), for the "local build" badge. A
   // daemon predating the field omits it, so this stays false.
   let isDev = $state(false);
@@ -305,6 +311,7 @@
     activeId: () => selection.activeId,
     activeVersion: () => active?.version,
     annotations: () => work.annotations,
+    generalComment: () => work.generalCommentDraft,
     planText: () => active?.currentPlan ?? "",
     citation: () => citation,
     flushPending: () => autosave.flushPending(),
@@ -364,12 +371,16 @@
   // Whether to mark the update surfaces (EXC-1207). The daemon's verdict alone: an
   // opted-out reviewer is served `disabled`, which is not pending.
   let updatePending = $derived(!!updateReport && isUpdatePending(updateReport.status));
-  // Everything a plain Approve would silently leave behind, as a preview list the
-  // approve/reject guard renders. Deriving pendingCount from the same list keeps
+  // Everything queued, as the Reject guard's preview list. Deriving pendingCount from the same list keeps
   // every surface agreeing on what's pending — an uncommitted scratch (EXC-745) and a
   // lone general-comment draft (EXC-742) are protected exactly like a committed one.
   let guardItems = $derived(pendingItems(work.annotations, work.generalCommentDraft, scratches));
   let pendingCount = $derived(guardItems.length);
+  // What Approve sends, and the scratches it leaves behind as unsaved drafts.
+  let approveComments = $derived(
+    commentItems(lineOrder(work.annotations), work.generalCommentDraft),
+  );
+  let approveScratches = $derived(scratchItems(scratches));
   // Distinct source lines the pending line-anchored comments cover (union of
   // ranges), for the status strip's at-a-glance "N comments · M lines" readout.
   let coveredLines = $derived(coveredLineCount(work.annotations));
@@ -512,6 +523,7 @@
       .then((h) => {
         selection.setConnected(true);
         declaredVariants = h.approveVariants;
+        approveCarriesNotes = h.approveCarriesNotes ?? true;
         isDev = h.isDev ?? false;
         version = h.version;
         commit = h.commit;
@@ -683,8 +695,8 @@
   function onApprove(mode: ApproveVariantId) {
     // Approve always routes through a confirmation (EXC-791): even with nothing
     // queued, a stray click must not ship the plan. Park the chosen mode; the
-    // guard (UnsentCommentsDialog) additionally previews any pending comments a
-    // plain approve would drop.
+    // guard (UnsentCommentsDialog) additionally previews the comments the
+    // approval sends and any unsent scratches it leaves behind.
     pendingApproveMode = mode;
   }
   // The three verdict hand-offs (EXC-894). Each acknowledges BEFORE clearing its
@@ -696,7 +708,7 @@
   // The flag check is what makes each idempotent: the surface stays mounted through its
   // --dur-state exit, so a second press inside that window would push a second confirmation
   // for one decision.
-  function approveAnyway(notes: string) {
+  function confirmApprove(notes: string) {
     const mode = pendingApproveMode;
     if (!mode) return;
     alerts.push({ variant: "success", message: "Plan approved", sound: "approved" });
@@ -879,21 +891,23 @@
 <!-- Each modal is hosted by ModalPresence rather than an {#if} (EXC-891): the
      surface stays mounted while `open` is false so bits-ui can play its exit, then
      unmounts. One consequence on the three `active`-gated sites below: `active` can
-     go null DURING the exit (approveAnyway resolves the review while the guard is
+     go null DURING the exit (confirmApprove resolves the review while the guard is
      still fading), so a site that dereferences it reads it optionally. -->
 <ModalPresence open={pendingApproveMode !== null && active !== null}>
   {#snippet modal({ open, onClosed })}
     <UnsentCommentsDialog
       {open}
       {onClosed}
-      items={guardItems}
+      comments={approveComments}
+      items={approveScratches}
+      delivered={approveCarriesNotes}
       action="Approve"
       consequence="Approving accepts the plan and starts the agent's work."
       icon="check"
       kind="dialog"
       showNotes
       {reviewContext}
-      onConfirm={approveAnyway}
+      onConfirm={confirmApprove}
       onRequestChanges={divertToRequestChanges}
       onCancel={() => (pendingApproveMode = null)}
     />

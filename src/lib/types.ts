@@ -137,7 +137,10 @@ export interface PlanVersion {
 /** The decision recorded when a review resolves. */
 export interface Decision {
   behavior: Behavior;
-  /** Formatted feedback (annotations + general comment) on a deny. */
+  /** On a deny, the formatted request-changes feedback. On an allow, the body of the
+   * reviewer-notes section (`reviewerNotesBody`: instruction line, notes, cited
+   * comments), which each delivery path wraps with `reviewerNotesSection`. Absent
+   * when there is nothing to send. */
   feedback?: string;
   /** The chosen approve variant's opaque id; only meaningful when
    * behavior === "allow". The adapter interprets the token; the core stores and
@@ -384,6 +387,7 @@ export interface SkillDescriptionResponse {
 /** Body of POST /api/reviews/:id/resolve. */
 export interface ResolveBody {
   behavior: Behavior;
+  /** See Decision.feedback. */
   feedback?: string;
   /** The chosen approve variant's opaque id (see Decision.acceptMode). */
   acceptMode?: ApproveVariantId;
@@ -447,6 +451,10 @@ export interface HealthIdentity {
    * capability instead of hard-coding tool mode names. Optional: a daemon that
    * predates this field omits it, and the UI falls back to its built-in set. */
   approveVariants?: ApproveVariant[];
+  /** Whether the active adapter's approval carries the reviewer's notes and comments
+   * to the agent. Optional: a daemon that predates this field omits it, and the UI
+   * then reads it as true. */
+  approveCarriesNotes?: boolean;
   /** What to do after upgrading, in the words of the harness that spawned this daemon.
    * Absent on a resident daemon, whose adapter is only a default. */
   restartHint?: string;

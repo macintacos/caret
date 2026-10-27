@@ -181,6 +181,9 @@ export interface CreateServerOptions {
    * (default) means the field is absent from the health body and the UI uses its
    * built-in fallback set. */
   approveVariants?: readonly ApproveVariant[];
+  /** Whether the active adapter's approval carries notes to the agent, published
+   * in /api/health. Omitted (default) means the field is absent from the health body. */
+  approveCarriesNotes?: boolean;
   /** The active adapter's id (e.g. "claude" | "opencode"), published in
    * /api/health as `source` so the UI can adapt to the environment — e.g. an
    * OpenCode session (EXC-791). Omitted (default) drops the field from the body. */
@@ -283,6 +286,7 @@ interface ResolvedOptions {
   stateDir: string | undefined;
   instanceId: string | undefined;
   approveVariants: readonly ApproveVariant[] | undefined;
+  approveCarriesNotes: boolean | undefined;
   source: string | undefined;
   listSkills: ((cwd: string) => Promise<SkillRef[]>) | undefined;
   readSkillDescription: ((cwd: string, skill: SkillRef) => Promise<string | null>) | undefined;
@@ -323,6 +327,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     stateDir: opts.stateDir,
     instanceId: opts.instanceId,
     approveVariants: opts.approveVariants,
+    approveCarriesNotes: opts.approveCarriesNotes,
     source: opts.source,
     listSkills: opts.listSkills,
     readSkillDescription: opts.readSkillDescription,
@@ -412,7 +417,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const cfg = resolveOptions(opts);
   const { store, idle, heartbeat, resident, assets, onShutdown, routePlan, configPath, log } = cfg;
   const { buildId, assetDigest, commit, stateDir, instanceId } = cfg;
-  const { approveVariants, source, lockPath } = cfg;
+  const { approveVariants, approveCarriesNotes, source, lockPath } = cfg;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount, unreadDecisionCount } =
     createDecisions(log);
 
@@ -496,6 +501,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // entirely so the wire stays byte-identical there (EXC-781).
       ...(process.env.CARET_FRESH === "1" ? { fresh: true } : {}),
       ...(approveVariants ? { approveVariants: [...approveVariants] } : {}),
+      ...(approveCarriesNotes === undefined ? {} : { approveCarriesNotes }),
       // The active adapter's id (EXC-791): the "source" the UI adapts to (e.g.
       // OpenCode's single-variant approve). Absent when the daemon declares none.
       ...(source ? { source } : {}),

@@ -14,7 +14,8 @@ const twoItems = [
 
 const approveProps = {
   open: true,
-  items: twoItems,
+  comments: twoItems,
+  items: [],
   action: "Approve",
   consequence: "Approving accepts the plan and starts the agent's work.",
   icon: "check" as const,
@@ -49,6 +50,18 @@ const description = () => q("[data-slot='alert-dialog-description']");
 const confirm = () =>
   [...document.body.querySelectorAll("[data-slot='alert-dialog-footer'] button")].at(-1) ?? null;
 
+const button = (label: string) =>
+  [...document.body.querySelectorAll("button")].find((b) => b.textContent?.includes(label));
+
+// A named group: a <section> whose aria-labelledby caption starts with `name`.
+const region = (name: string) =>
+  [...document.body.querySelectorAll("section[aria-labelledby]")].find((s) =>
+    document
+      .getElementById(s.getAttribute("aria-labelledby") ?? "")
+      ?.textContent?.trim()
+      .startsWith(name),
+  ) ?? null;
+
 async function mount(props: ComponentProps<typeof UnsentCommentsDialog>) {
   const { flush } = render(UnsentCommentsDialog, props);
   await flushUntil(flush, mounted);
@@ -56,18 +69,18 @@ async function mount(props: ComponentProps<typeof UnsentCommentsDialog>) {
 
 describe("UnsentCommentsDialog render", () => {
   test("names the pending count, pluralized", async () => {
-    await mount(approveProps);
+    await mount(rejectProps);
     expect(description()?.textContent).toContain("2 pending comments");
   });
 
   test("singularizes the count for one pending comment", async () => {
-    await mount({ ...approveProps, items: [{ label: "Line 3", text: "tighten" }] });
+    await mount({ ...rejectProps, items: [{ label: "Line 3", text: "tighten" }] });
     expect(description()?.textContent).toContain("1 pending comment");
     expect(description()?.textContent).not.toContain("1 pending comments");
   });
 
   test("previews each pending comment's label and text", async () => {
-    await mount(approveProps);
+    await mount(rejectProps);
     const rows = document.body.querySelectorAll(".comments .comment");
     expect(rows.length).toBe(2);
     const preview = q(".comments")?.textContent ?? "";
@@ -77,14 +90,57 @@ describe("UnsentCommentsDialog render", () => {
     expect(preview).toContain("explain the cold cost");
   });
 
-  test("the Approve variant reads with the approve vocabulary and accessible name", async () => {
+  test("the Approve variant sends its comments and reads with the approve vocabulary", async () => {
     await mount(approveProps);
     // The dialog's accessible name is its Title (bits-ui wires aria-labelledby to it).
     expect(q("[data-slot='alert-dialog-title']")?.textContent).toContain("Approve this plan?");
-    expect(confirm()?.textContent).toContain("Approve anyway");
+    expect(confirm()?.textContent).toContain("Approve with comments");
+    expect(confirm()?.textContent).not.toContain("anyway");
+    expect(button("Request changes") !== undefined).toBe(true);
+    const sent = region("Sent with your approval")?.textContent ?? "";
+    expect(sent).toContain("reconsider the rollout");
+    expect(sent).toContain("explain the cold cost");
     expect(description()?.textContent).toContain(
       "Approving accepts the plan and starts the agent's work.",
     );
+    expect(description()?.textContent).toContain("Request changes");
+  });
+
+  test("an Approve with only scratches confirms plainly and lists them as not sent", async () => {
+    await mount({ ...approveProps, comments: [], items: [{ label: "Line 3", text: "draft" }] });
+    expect(confirm()?.textContent).toContain("Approve");
+    expect(confirm()?.textContent).not.toContain("with comments");
+    expect(confirm()?.textContent).not.toContain("anyway");
+    const group = region("Unsent comments");
+    expect(group?.textContent).toContain("draft");
+    expect(group?.querySelectorAll("button").length).toBe(0);
+  });
+
+  test("an Approve with comments and scratches shows both groups", async () => {
+    await mount({
+      ...approveProps,
+      comments: twoItems,
+      items: [{ label: "Line 3", text: "draft" }],
+    });
+    expect(confirm()?.textContent).toContain("Approve with comments");
+    expect(region("Sent with your approval") !== null).toBe(true);
+    expect(region("Unsent comments") !== null).toBe(true);
+  });
+
+  test("an Approve with nothing queued is a plain confirm with the notes field", async () => {
+    await mount({ ...approveProps, comments: [], items: [], showNotes: true });
+    expect(q(".comments") !== null).toBe(false);
+    expect(button("Request changes") === undefined).toBe(true);
+    expect(q(".cm-content") !== null).toBe(true);
+  });
+
+  test("an undelivered Approve warns instead of promising delivery", async () => {
+    await mount({ ...approveProps, items: [{ label: "Line 3", text: "draft" }], delivered: false });
+    expect(description()?.textContent).toContain("won't reach it");
+    expect(description()?.textContent).not.toContain("without another planning round");
+    expect(region("Sent with your approval") !== null).toBe(false);
+    expect(region("Your comments")?.textContent).toContain("reconsider the rollout");
+    expect(confirm()?.textContent).toContain("Approve with comments");
   });
 
   test("the Reject variant swaps in the reject vocabulary and accessible name", async () => {

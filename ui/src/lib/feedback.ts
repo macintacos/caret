@@ -101,7 +101,7 @@ export function pendingInlineCount(annotations: Annotation[]): number {
   return pendingInline(annotations).length;
 }
 
-/** One line in the approve/reject guard's preview of unsent feedback: a short
+/** One line in a verdict guard's preview of queued feedback: a short
  * anchor label and the comment/draft text. */
 export interface PendingItem {
   /** Short anchor: "General", "Line N", "Lines N–M", or a legacy quote. */
@@ -110,18 +110,17 @@ export interface PendingItem {
   text: string;
 }
 
-/** Everything a plain Approve would silently leave behind, as a flat preview
- * list: the general-comment draft first, then the non-blank committed inline
- * comments, then the retained-but-unsent composer scratches. The guard renders
- * this so the reviewer sees what is at stake, and App.svelte's pendingCount is
- * this list's length — so the count and the preview can never disagree about
- * what's pending. Scratch text arrives already trimmed (the controller keeps a
- * scratch only when its trimmed text is non-empty). */
-export function pendingItems(
-  annotations: Annotation[],
-  generalComment: string,
-  scratches: ComposerScratch[],
-): PendingItem[] {
+/** The annotations in plan line order: line-anchored ones by start line, then the
+ * legacy (unanchored) ones. The sort is stable, so ties keep their stored order. */
+export function lineOrder(annotations: Annotation[]): Annotation[] {
+  const startLineOf = (a: Annotation) =>
+    isLineAnnotation(a) ? a.startLine : Number.MAX_SAFE_INTEGER;
+  return [...annotations].sort((x, y) => startLineOf(x) - startLineOf(y));
+}
+
+/** The queued comments — the general-comment draft, then the non-blank inline
+ * comments: what Approve or Request changes sends. */
+export function commentItems(annotations: Annotation[], generalComment: string): PendingItem[] {
   const items: PendingItem[] = [];
   const general = generalComment.trim();
   if (general) items.push({ label: "General", text: general });
@@ -131,10 +130,26 @@ export function pendingItems(
       : abbreviate(a.quote) || "Comment";
     items.push({ label, text: a.comment.trim() });
   }
-  for (const s of scratches) {
-    items.push({ label: rangeLabel(s.startLine, s.endLine), text: s.text });
-  }
   return items;
+}
+
+/** The retained composer scratches, which no verdict sends. Their text arrives
+ * already trimmed (the controller keeps a scratch only when its trimmed text is
+ * non-empty). */
+export function scratchItems(scratches: ComposerScratch[]): PendingItem[] {
+  return scratches.map((s) => ({ label: rangeLabel(s.startLine, s.endLine), text: s.text }));
+}
+
+/** Everything queued at a verdict, as a flat preview list: commentItems, then
+ * scratchItems. The Reject guard renders this so the reviewer sees what is at stake, and
+ * App.svelte's pendingCount is this list's length — so the count and the preview
+ * can never disagree about what's pending. */
+export function pendingItems(
+  annotations: Annotation[],
+  generalComment: string,
+  scratches: ComposerScratch[],
+): PendingItem[] {
+  return [...commentItems(annotations, generalComment), ...scratchItems(scratches)];
 }
 
 /** A comment as a navigable index entry for the comment navigator: the id to

@@ -19,15 +19,16 @@ slots in without touching core internals; blur it and agent vocabulary leaks eve
   id to its adapter and resolves the active one (by explicit id, then `CARET_AGENT`, then
   the default). `src/adapters/claude/` is the reference implementation and the default;
   `src/adapters/codex/` is a second (default-off, provisional) adapter that proves the
-  seam. An adapter owns eight surfaces: `parseHookInput` (raw hook stdin → core
+  seam. An adapter owns nine surfaces: `parseHookInput` (raw hook stdin → core
   `PlanInput`), `emitDecision` (core `Decision` → the tool's stdout wire shape),
   `fatalDenyLine` (a dependency-free last-resort deny line for the CLI's fatal handler),
-  `approveVariants` (the post-approval options it offers), `readInstallState` (the doctor
-  install probe), `listSkills` (the skill names the reviewer's `/` completion offers —
-  names only, never a skill's contents), `readSkillDescription` (one named skill's own
-  description, read on demand for the preview panel that completion opens — that
-  description, never the rest of the skill's file), and `restartHint` (optional: the
-  post-upgrade line What's new shows).
+  `approveVariants` (the post-approval options it offers), `approveCarriesNotes` (whether
+  its approval can carry notes to the agent), `readInstallState` (the doctor install
+  probe), `listSkills` (the skill names the reviewer's `/` completion offers — names only,
+  never a skill's contents), `readSkillDescription` (one named skill's own description,
+  read on demand for the preview panel that completion opens — that description, never the
+  rest of the skill's file), and `restartHint` (optional: the post-upgrade line What's new
+  shows).
 
 ## The dependency law (grep-enforceable)
 
@@ -52,13 +53,15 @@ an adapter.
   **over the wire**, not by import. The pattern: the daemon publishes the active adapter's
   `approveVariants` in `GET /api/health`, and the UI renders its approve split-button from
   that wire field (`ui/src/lib/approve.ts`), falling back to a built-in set when the field
-  is absent. `listSkills` rides the same pattern one route over — the daemon serves the
-  active adapter's skill names on `GET /api/reviews/:id/skills` and the feedback editors'
-  `/` completion reads them from there (`ui/src/lib/skillCompletion.ts`), so an adapter
-  that enumerates nothing simply leaves the list empty and no completion fires.
-  `restartHint` rides `GET /api/health` too, but only from a spawned daemon: a resident
-  one (the service, `caret serve`) withholds it, since its adapter is a default rather
-  than the harness the user actually runs.
+  is absent. `approveCarriesNotes` rides `GET /api/health` beside it, so the approve
+  dialog can warn when notes won't reach the agent. `listSkills` rides the same pattern
+  one route over — the daemon serves the active adapter's skill names on
+  `GET /api/reviews/:id/skills` and the feedback editors' `/` completion reads them from
+  there (`ui/src/lib/skillCompletion.ts`), so an adapter that enumerates nothing simply
+  leaves the list empty and no completion fires. `restartHint` rides `GET /api/health`
+  too, but only from a spawned daemon: a resident one (the service, `caret serve`)
+  withholds it, since its adapter is a default rather than the harness the user actually
+  runs.
 
 ## Where agent vocabulary lives
 
@@ -76,12 +79,12 @@ in as a parameter. Vocabulary shared by all of them belongs there; vocabulary on
 owns still belongs only in its own directory.
 
 **Adding a new agent tool:** create `src/adapters/<tool>/`, implement `AgentAdapter`
-(declare its own approve variants with their ids/labels, parse its hook shape, render its
-decision wire format and its `fatalDenyLine`, probe its install, enumerate its skills, and
-optionally give its post-upgrade `restartHint`), add one `REGISTRY` entry in
-`src/adapters/index.ts` keyed by the tool id, and add its `test/adapters/<tool>/` suite.
-You touch `src/adapters/` and the registry — never core internals, store records, the
-daemon's routing, or `test/core/`.
+(declare its own approve variants with their ids/labels and whether its allow delivers
+feedback (`approveCarriesNotes`), parse its hook shape, render its decision wire format
+and its `fatalDenyLine`, probe its install, enumerate its skills, and optionally give its
+post-upgrade `restartHint`), add one `REGISTRY` entry in `src/adapters/index.ts` keyed by
+the tool id, and add its `test/adapters/<tool>/` suite. You touch `src/adapters/` and the
+registry — never core internals, store records, the daemon's routing, or `test/core/`.
 
 `src/adapters/codex/` is the worked second example: the OpenAI Codex CLI's
 PermissionRequest hook is ~1:1 with Claude's (one JSON object on stdin, a
@@ -121,9 +124,10 @@ installation (`~/.codex/hooks.json` / `config.toml [hooks]` behind
 
 Some modules are imported by **both** runtimes — the compiled bun binary and the browser
 UI bundle (the UI reaches them through the `@core/*` alias: `src/lib/types.ts`,
-`config/constants.ts`, `redact/core.ts`, `ui/log-bridge.ts`, `lib/semver.ts`). Every such
-module is **pure TS with zero node imports** — the node-free property is per-module, so a
-browser-safe file can sit in a domain directory beside node-only siblings.
+`config/constants.ts`, `redact/core.ts`, `ui/log-bridge.ts`, `lib/semver.ts`,
+`plan/reviewer-notes.ts`). Every such module is **pure TS with zero node imports** — the
+node-free property is per-module, so a browser-safe file can sit in a domain directory
+beside node-only siblings.
 
 The reason is the browser bundle: a `node:*` import in a `@core`-shared module either
 breaks the Vite build (node builtins have no browser equivalent) or drags the daemon's

@@ -37,6 +37,10 @@ export interface AgentAdapter {
   /** The approve variants this adapter offers, in display order. */
   readonly approveVariants: readonly ApproveVariant[];
 
+  /** True when `emitDecision` delivers an allow's `feedback` to the agent. Published
+   * on /api/health so the approve dialog can warn when it doesn't. */
+  readonly approveCarriesNotes: boolean;
+
   /** The post-upgrade line the UI shows beside the upgrade command. Optional; an
    * adapter without one omits it. */
   readonly restartHint?: string;
