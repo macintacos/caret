@@ -7,8 +7,8 @@
   import Modal from "@/components/Modal.svelte";
   import UpgradeCommand from "@/components/UpgradeCommand.svelte";
   import { Spinner } from "$lib/components/ui/spinner/index.js";
-  import { renderMarkdown } from "$lib/markdown.ts";
   import { topmostDialogContent } from "$lib/modalStack.ts";
+  import { releaseHtml } from "$lib/releaseNotes.ts";
   import { commitLink, compareUrl, isUpdatePending, upgradeGuidance } from "$lib/updates.ts";
 
   interface Props {
@@ -41,20 +41,6 @@
   const guidance = $derived(
     isUpdatePending(report.status) ? upgradeGuidance(report.status, restartHint) : null,
   );
-
-  // The sanitizer's output, tightened for a surface that renders GitHub-authored text:
-  // an <img>, <video> or <audio> would make the browser call out to its host, and an
-  // in-tab link would navigate the review away.
-  function releaseHtml(body: string): string {
-    const template = document.createElement("template");
-    template.innerHTML = renderMarkdown(body);
-    for (const media of template.content.querySelectorAll("img, video, audio")) media.remove();
-    for (const a of template.content.querySelectorAll("a")) {
-      a.setAttribute("target", "_blank");
-      a.setAttribute("rel", "noreferrer");
-    }
-    return template.innerHTML;
-  }
 
   // Land focus on the dialog, not the footer's command field or links — the same
   // synthetic-event reach ShortcutsHelp uses.
@@ -196,6 +182,12 @@
   .release-body :global(pre code) {
     padding: 0;
     background: none;
+  }
+  .release-body :global(img) {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
   }
   .release-body :global(blockquote) {
     padding-left: 0.7em;
