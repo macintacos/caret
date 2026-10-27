@@ -1,12 +1,14 @@
 // The update surface (EXC-1207): a once-per-version toast on load, the settings-gear
 // dot, the Settings dialog's Updates pane, and What's new, opened from the toast and from
-// the pane (EXC-1452).
+// the pane (EXC-1452) — and opened on its own at the first load after an upgrade.
 //
 // What needs a real browser here is the toast card actually rendering and its button
 // actually opening a PORTALLED dialog, that dialog stacking over Settings, and
 // `localStorage` suppressing the second toast across a real reload — none of which a
-// mounted component models, and the last of which no unit can even stage. The
-// verdict→copy mapping is pure and lives in `ui/src/lib/updates.test.ts`; the pane's own
+// mounted component models, and the last of which no unit can even stage. The same holds
+// for the post-upgrade What's new staying shut across a reload once dismissed. The
+// verdict→copy mapping is pure and lives in `ui/src/lib/updates.test.ts`, and whether a
+// load announces an upgrade in `ui/src/lib/upgradeNotes.test.ts`; the pane's own
 // render, the rail badge, the gear's aria-label, and the What's new body are component
 // units (`UpdatesPane.test.ts`, `SettingsDialog.test.ts`, `TopBar.test.ts`,
 // `WhatsNewDialog.test.ts`).
@@ -14,11 +16,12 @@
 // Nothing here stubs a caret route; the one `page.route` serves the release note's
 // GitHub-hosted screenshot, so no run touches the network. The daemon owns the whole
 // answer (EXC-1210): its BUILD verdict is staged through the fixture's `updateStatus`
-// option (with `updateInstall` and `updateChanges` beside it), and the reviewer's
-// `updates.check` is folded over it per request — so the opt-out specs below exercise
-// the real fold rather than a `page.route` that would only test itself. The fixture
-// daemon's default verdict is the quiet from-source one, which is why the specs outside
-// the describe block see no toast they did not ask for.
+// option (with `updateInstall`, `updateChanges`, the running `updateVersion` and the
+// GitHub `updateReleases` beside it), and the reviewer's `updates.check` is folded over
+// it per request — so the opt-out specs below exercise the real fold rather than a
+// `page.route` that would only test itself. The fixture daemon's default verdict is the
+// quiet from-source one, which is why the specs outside the describe blocks see no toast
+// they did not ask for.
 
 import type { Page } from "@playwright/test";
 
@@ -198,6 +201,64 @@ test.describe("with a pending update", () => {
     // not-yet-arrived.
     await expect(markedGear(page)).toBeVisible();
     await expect(toast(page)).toHaveCount(0);
+  });
+});
+
+test.describe("after an upgrade", () => {
+  const RUNNING = "1.5.0";
+  const notes = (version: string) => `Staged notes for ${version}.`;
+  test.use({
+    updateInstall: "bundle",
+    updateStatus: { kind: "current" },
+    updateVersion: RUNNING,
+    // In Playwright's [value, options] form: a bare array of objects reads as that tuple,
+    // and its first release would be taken for the whole value.
+    updateReleases: [
+      ["1.6.0", "1.5.0", "1.4.0", "1.3.0"].map((version) => ({
+        tag_name: `v${version}`,
+        body: notes(version),
+        draft: false,
+        prerelease: false,
+      })),
+      { scope: "test" },
+    ],
+  });
+
+  test("What's new opens at load with the releases since the last version seen, until dismissed", async ({
+    daemon,
+    page,
+  }) => {
+    // The last load this browser saw ran 1.3.0. Planted only while unset, so the record
+    // the dismissal writes survives the reloads below.
+    await page.addInitScript(() => {
+      if (localStorage.getItem("caret.lastSeenVersion") === null) {
+        localStorage.setItem("caret.lastSeenVersion", "1.3.0");
+      }
+    });
+    await daemon.seed();
+    await page.goto("/");
+
+    // A string name matches as a substring: the title names the version now running.
+    const dialog = page.getByRole("dialog", { name: RUNNING });
+    await expect(dialog).toBeVisible();
+    // (1.3.0, 1.5.0], newest first: neither the version seen nor one past the running.
+    await expect(dialog.locator(".release-body")).toHaveText([notes("1.5.0"), notes("1.4.0")]);
+
+    // Opening is not seeing it: a reload mid-read opens it again.
+    await page.reload();
+    await expect(dialog).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+
+    await page.reload();
+    await planSurface(page);
+    // The Updates pane rendering proves this load's report landed, and the notes would have
+    // opened over Settings before it did.
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.locator("[data-category='Updates']").click();
+    await expect(page.locator("[data-updates-pane] .update-headline")).toBeVisible();
+    await expect(dialog).toHaveCount(0);
   });
 });
 

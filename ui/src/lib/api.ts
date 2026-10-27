@@ -15,6 +15,7 @@ import type {
   FileSearchResponse,
   HealthIdentity,
   PersistedScratch,
+  ReleaseNote,
   ResolveBody,
   SkillDescriptionResponse,
   SkillRef,
@@ -117,6 +118,17 @@ export async function getUpdateChanges(): Promise<UpdateChanges> {
     return await json(await fetch("/api/update/changes"));
   } catch (err) {
     uiLog.warn("request", "update changes read failed", { reason: String(err) });
+    throw err;
+  }
+}
+
+/** The release notes from `since` up to the running caret, read on a load that finds an
+ * upgrade What's new has not yet shown. Throws `HttpError` on any non-2xx. */
+export async function getReleaseNotes(since: string): Promise<ReleaseNote[]> {
+  try {
+    return await json(await fetch(`/api/update/notes?since=${encodeURIComponent(since)}`));
+  } catch (err) {
+    uiLog.warn("request", "release notes read failed", { reason: String(err) });
     throw err;
   }
 }

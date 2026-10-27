@@ -36,10 +36,12 @@ import { NEVER_IDLE_MS } from "@/config/constants.ts";
 import { configFile, reviewsDir } from "@/config/paths.ts";
 import { configValuesOf, createSettings } from "@/config/settings.ts";
 import { createServer } from "@/daemon/server.ts";
+import { createReleaseNotes } from "@/daemon/update-changes.ts";
 import { updateReportFor } from "@/daemon/update-check.ts";
 import { buildHash } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
 import type { BuildKind, UpdateChanges, UpdateStatus } from "@/lib/types.ts";
+import type { GitHubRelease } from "@/lib/upstream.ts";
 import { createStore } from "@/review/store.ts";
 import { loadUiAssets } from "@/ui/assets.ts";
 
@@ -95,11 +97,23 @@ const buildStatus: UpdateStatus = ((): UpdateStatus => {
   }
 })();
 
-// The install kind and the changes payload the fixture staged beside the verdict.
+// The install kind, running version, changes payload and GitHub releases the fixture
+// staged beside the verdict.
 const buildInstall = (process.env.CARET_E2E_UPDATE_INSTALL || "dev") as BuildKind;
+const buildVersion = process.env.CARET_E2E_UPDATE_VERSION || "0.0.0-e2e";
 const stagedChanges = JSON.parse(
   process.env.CARET_E2E_UPDATE_CHANGES || "null",
 ) as UpdateChanges | null;
+const stagedReleases = JSON.parse(process.env.CARET_E2E_UPDATE_RELEASES || "null") as
+  | GitHubRelease[]
+  | null;
+
+const updateReport = () =>
+  updateReportFor(
+    { install: buildInstall, version: buildVersion, commit: "e2ecommit0000000" },
+    buildStatus,
+    settings.current().updates.check,
+  );
 
 const server = createServer({
   store,
@@ -142,16 +156,23 @@ const server = createServer({
   // The install kind is staged beside the verdict because the What's new footer reads
   // `report.install` for its compare link; a spec staging a behind verdict should stage
   // the install that could have produced it.
-  updateReport: () =>
-    updateReportFor(
-      { install: buildInstall, version: "0.0.0-e2e", commit: "e2ecommit0000000" },
-      buildStatus,
-      settings.current().updates.check,
-    ),
+  updateReport,
   // Wired for the same reason as updateReport: App reads GET /api/config on every load.
   configValues: () => configValuesOf(settings.current()),
   // Unwired unless a spec staged changes, so GET /api/update/changes 404s by default.
   ...(stagedChanges ? { updateChanges: async () => stagedChanges } : {}),
+  // Unwired unless a spec staged releases; wired, it runs the real (since, running]
+  // selection over them and the same served-verdict gate production uses.
+  ...(stagedReleases
+    ? {
+        releaseNotes: createReleaseNotes({
+          version: buildVersion,
+          status: () => updateReport().status,
+          releases: async () => stagedReleases,
+          log,
+        }),
+      }
+    : {}),
   diagnostics: fakeDiagnostics,
   log,
 });

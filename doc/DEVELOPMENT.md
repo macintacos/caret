@@ -293,7 +293,9 @@ that it found nothing to pose as. Only a from-source daemon reads `CARET_DEV_UPD
 an installed caret can't be made to pose.
 
 The toast shows once per update, per browser. Add `--fresh` to see it again, or open
-What's new from **Settings → Updates**.
+What's new from **Settings → Updates**. What's new opens by itself only for a version
+newer than the one the browser recorded under `caret.lastSeenVersion`, so to see that, set
+the key in the dev origin's `localStorage` to an older version and reload.
 
 #### What the agent receives
 

@@ -1,11 +1,11 @@
 // The browser's side of the update surface (EXC-1207) — both halves of "what does this
 // browser know about updates before the next fetch", which is why they share a module.
 //
-// The toasted marker is an arbitrary signature string, so neither definePref (an enum)
-// nor defineFlagPref (a boolean) fits; it takes the bespoke read/write plus
-// registerPrefKey that definePref.ts already documents for exactly this case (the file
-// drawer's clamped sizes, the sound volume), so it still joins the `--fresh` reset and
-// prefKeys.test.ts's scan.
+// The toasted marker and the last-seen version are arbitrary strings, so neither
+// definePref (an enum) nor defineFlagPref (a boolean) fits; each takes the bespoke
+// read/write plus registerPrefKey that definePref.ts already documents for exactly this
+// case (the file drawer's clamped sizes, the sound volume), so it still joins the
+// `--fresh` reset and prefKeys.test.ts's scan.
 //
 // `updates.check` owns no browser key at all — it is a config.toml key the daemon
 // holds. What lives here is the synchronous holder the registry's daemon-backed field
@@ -36,6 +36,32 @@ export function readToastedUpdate(): string | null {
 export function writeToastedUpdate(signature: string): void {
   try {
     localStorage.setItem(UPDATE_TOASTED_KEY, signature);
+  } catch {
+    // Storage unavailable (private mode, quota, disabled) — drop silently.
+  }
+}
+
+/** localStorage key holding the caret version this browser last showed What's new for. */
+export const LAST_SEEN_VERSION_KEY = "caret.lastSeenVersion";
+
+registerPrefKey(LAST_SEEN_VERSION_KEY);
+
+/** The version recorded by writeLastSeenVersion, or null when none is. Never throws: an
+ * unreadable store degrades to null, which records the running version rather than
+ * announcing it. */
+export function readLastSeenVersion(): string | null {
+  try {
+    return localStorage.getItem(LAST_SEEN_VERSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Record the version this browser has seen What's new for. A storage failure is
+ * swallowed — at worst the same notes open again on the next load. */
+export function writeLastSeenVersion(version: string): void {
+  try {
+    localStorage.setItem(LAST_SEEN_VERSION_KEY, version);
   } catch {
     // Storage unavailable (private mode, quota, disabled) — drop silently.
   }

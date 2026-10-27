@@ -292,6 +292,12 @@ and the trunk commits since your build on a locally-built one. Its footer links 
 comparison on GitHub and repeats the upgrade command. It fetches from GitHub only when you
 open it.
 
+After you upgrade, the first page load opens the dialog by itself, with the notes for
+every release since the version this browser last saw. Closing it marks the new version
+seen; until then a reload opens it again. A browser meeting caret for the first time
+records the version quietly instead, and with update checks off it never asks GitHub, so
+it stays shut.
+
 While an update is waiting, a small mark sits on the settings button in the top bar and on
 the **Updates** row in the settings rail, so the notice is findable again after you
 dismiss it.

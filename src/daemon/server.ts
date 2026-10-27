@@ -51,6 +51,7 @@ import {
   type FileRefsResponse,
   type HealthIdentity,
   type PlanInput,
+  type ReleaseNote,
   type ResolveBody,
   type Review,
   type RouteResult,
@@ -219,6 +220,9 @@ export interface CreateServerOptions {
   /** A thunk answering GET /api/update/changes (EXC-1452): what the caret the user is
    * behind would bring, fetched from GitHub on request. Null → 502. Omitted → 404. */
   updateChanges?: () => Promise<UpdateChanges | null>;
+  /** A reader answering GET /api/update/notes?since=: the release notes from `since` up to
+   * the running version, fetched from GitHub on request. Null → 502. Omitted → 404. */
+  releaseNotes?: (since: string) => Promise<ReleaseNote[] | null>;
   /** The active harness's post-upgrade instruction, published in /api/health.
    * Omitted drops the field from the body. */
   restartHint?: string;
@@ -294,6 +298,7 @@ interface ResolvedOptions {
   updateReport: (() => UpdateReport | Promise<UpdateReport>) | undefined;
   configValues: (() => ConfigValues) | undefined;
   updateChanges: (() => Promise<UpdateChanges | null>) | undefined;
+  releaseNotes: ((since: string) => Promise<ReleaseNote[] | null>) | undefined;
   restartHint: string | undefined;
   onUpdatesEnabled: (() => void) | undefined;
   onDecisionAwaited: ((id: string) => void) | undefined;
@@ -335,6 +340,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     updateReport: opts.updateReport,
     configValues: opts.configValues,
     updateChanges: opts.updateChanges,
+    releaseNotes: opts.releaseNotes,
     restartHint: opts.restartHint,
     onUpdatesEnabled: opts.onUpdatesEnabled,
     onDecisionAwaited: opts.onDecisionAwaited,
@@ -544,6 +550,14 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (!cfg.updateChanges) return notFound();
     const changes = await cfg.updateChanges();
     return changes ? Response.json(changes) : new Response("upstream unavailable", { status: 502 });
+  }
+
+  // GET /api/update/notes?since= — the release notes an upgrade from `since` brought.
+  // Like /api/update/changes this may reach GitHub; a missing `since` selects nothing.
+  async function handleReleaseNotes(req: Request): Promise<Response> {
+    if (!cfg.releaseNotes) return notFound();
+    const notes = await cfg.releaseNotes(new URL(req.url).searchParams.get("since") ?? "");
+    return notes ? Response.json(notes) : new Response("upstream unavailable", { status: 502 });
   }
 
   // GET /api/themes — the user's custom themes plus a per-file error for each file
@@ -1192,6 +1206,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "GET" && path === "/api/config") return handleGetConfig();
     if (method === "GET" && path === "/api/update") return handleUpdate();
     if (method === "GET" && path === "/api/update/changes") return handleUpdateChanges();
+    if (method === "GET" && path === "/api/update/notes") return handleReleaseNotes(req);
     if (method === "GET" && path === "/api/themes") return handleThemes();
     if (method === "POST" && path === "/api/themes") return handleUploadTheme(req);
     if (method === "POST" && path === "/api/retire") return handleRetire();

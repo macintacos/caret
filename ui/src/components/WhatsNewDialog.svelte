@@ -3,6 +3,8 @@
   // manual build is missing. The host mounts this per open (ModalPresence), so each open
   // runs `load` once. The footer is built from the report the UI already holds, never
   // from `load`, so the compare link and the upgrade guidance survive a failed fetch.
+  // Opened after an upgrade instead, it names the version now running and drops that
+  // footer: there is nothing left to upgrade to.
   import type { UpdateChanges, UpdateReport } from "@core/lib/types";
   import Modal from "@/components/Modal.svelte";
   import UpgradeCommand from "@/components/UpgradeCommand.svelte";
@@ -23,8 +25,10 @@
     restartHint?: string;
     /** Fetches the changes; App passes getUpdateChanges. */
     load: () => Promise<UpdateChanges>;
+    /** The version just upgraded to, when the notes are what that upgrade brought. */
+    upgradedTo?: string;
   }
-  let { open, onClosed, onClose, report, restartHint, load }: Props = $props();
+  let { open, onClosed, onClose, report, restartHint, load, upgradedTo }: Props = $props();
 
   let state = $state<
     { kind: "loading" } | { kind: "error" } | { kind: "ready"; changes: UpdateChanges }
@@ -54,11 +58,12 @@
   kind="dialog"
   {open}
   {onClosed}
-  eyebrow="Updates"
-  title="What's new"
+  eyebrow={upgradedTo ? "What's new" : "Updates"}
+  title={upgradedTo ? `Updated to caret ${upgradedTo}` : "What's new"}
   onDismiss={onClose}
   onOpenAutoFocus={focusDialog}
   contentClass="whats-new-content"
+  footer={upgradedTo ? undefined : upgradeFooter}
 >
   <div class="changes">
     {#if state.kind === "loading"}
@@ -100,21 +105,21 @@
       </ul>
     {/if}
   </div>
-
-  {#snippet footer()}
-    <div class="upgrade">
-      {#if compareHref}
-        <a class="upgrade-compare" href={compareHref} target="_blank" rel="noreferrer">Compare on GitHub</a>
-      {/if}
-      {#if guidance}
-        <UpgradeCommand command={guidance.command} />
-        {#each guidance.lines as line}
-          <p class="upgrade-line">{line}</p>
-        {/each}
-      {/if}
-    </div>
-  {/snippet}
 </Modal>
+
+{#snippet upgradeFooter()}
+  <div class="upgrade">
+    {#if compareHref}
+      <a class="upgrade-compare" href={compareHref} target="_blank" rel="noreferrer">Compare on GitHub</a>
+    {/if}
+    {#if guidance}
+      <UpgradeCommand command={guidance.command} />
+      {#each guidance.lines as line}
+        <p class="upgrade-line">{line}</p>
+      {/each}
+    {/if}
+  </div>
+{/snippet}
 
 <style>
   /* Rides the portalled content (no scope hash → :global); a changelog wants a reading

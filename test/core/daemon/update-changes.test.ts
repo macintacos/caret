@@ -5,8 +5,10 @@ import { expect, test } from "bun:test";
 
 import {
   COMMIT_CAP,
+  createReleaseNotes,
   createUpdateChanges,
   prNumber,
+  type ReleaseNotesDeps,
   selectReleases,
   type UpdateChangesDeps,
 } from "@/daemon/update-changes.ts";
@@ -220,4 +222,58 @@ test("a re-settled check with equal JSON refetches", async () => {
   status = { ...BEHIND_RELEASE };
   await d.get();
   expect(d.fetches()).toBe(2);
+});
+
+/** A release-notes reader running 1.2.0, counting its releases reads. */
+function notes(over: Partial<ReleaseNotesDeps> = {}) {
+  let reads = 0;
+  const get = createReleaseNotes({
+    version: "1.2.0",
+    status: () => ({ kind: "current" }),
+    releases: async () => {
+      reads++;
+      return [release("v1.3.0"), release("v1.2.0"), release("v1.1.0"), release("v1.0.0")];
+    },
+    log: noopLogger,
+    ...over,
+  });
+  return { get, reads: () => reads };
+}
+
+test("the notes since a version are the releases in (since, running], newest first", async () => {
+  expect(await notes().get("1.0.0")).toEqual([
+    { version: "1.2.0", body: "notes v1.2.0" },
+    { version: "1.1.0", body: "notes v1.1.0" },
+  ]);
+});
+
+test("the notes are read on any verdict but the check being off", async () => {
+  const statuses: UpdateStatus[] = [
+    { kind: "current" },
+    BEHIND_RELEASE,
+    { kind: "unknown", reason: "x" },
+  ];
+  for (const status of statuses) {
+    const d = notes({ status: () => status });
+    expect(await d.get("1.1.0")).toEqual([{ version: "1.2.0", body: "notes v1.2.0" }]);
+    expect(d.reads()).toBe(1);
+  }
+});
+
+test("a dev build or the opt-out has no notes and makes zero fetches", async () => {
+  for (const reason of ["dev", "disabled"] as const) {
+    const d = notes({ status: () => ({ kind: "unavailable", reason }) });
+    expect(await d.get("1.0.0")).toEqual([]);
+    expect(d.reads()).toBe(0);
+  }
+});
+
+test("an unreadable or rejected releases read answers null", async () => {
+  expect(await notes({ releases: async () => null }).get("1.0.0")).toBeNull();
+  const rejected = notes({
+    releases: async () => {
+      throw new Error("boom");
+    },
+  });
+  expect(await rejected.get("1.0.0")).toBeNull();
 });

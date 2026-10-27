@@ -46,7 +46,7 @@ import {
 } from "@/daemon/lifecycle.ts";
 import { type CaretServer, createServer } from "@/daemon/server.ts";
 import { loadOrMintToken } from "@/daemon/token.ts";
-import { createUpdateChanges } from "@/daemon/update-changes.ts";
+import { createReleaseNotes, createUpdateChanges } from "@/daemon/update-changes.ts";
 import {
   fileUpdateCache,
   readCachedStatus,
@@ -322,6 +322,14 @@ export async function runDaemon(opts: {
         status: () => servedReport().status,
         releases: listReleases,
         compare: compareToTrunk,
+        log,
+      }),
+      // The notes an upgrade brought, for the What's new the UI opens after one. Judged on
+      // the same served verdict, so the opt-out makes zero GitHub calls here too.
+      releaseNotes: createReleaseNotes({
+        version,
+        status: () => servedReport().status,
+        releases: listReleases,
         log,
       }),
       // Only a harness-spawned daemon knows which harness the user runs; a resident
