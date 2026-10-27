@@ -4,10 +4,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { withThrowingStorage } from "@ui/support/storage.ts";
 import { knownPrefKeys } from "$lib/definePref.ts";
 import {
+  LAST_SEEN_VERSION_KEY,
+  readLastSeenVersion,
   readToastedUpdate,
   seededUpdatesCheck,
   seedUpdatesCheck,
   UPDATE_TOASTED_KEY,
+  writeLastSeenVersion,
   writeToastedUpdate,
 } from "$lib/updatesPref.ts";
 
@@ -47,6 +50,29 @@ describe("the toasted-update marker", () => {
     withThrowingStorage(() => {
       expect(readToastedUpdate()).toBeNull();
       expect(() => writeToastedUpdate("release:1.5.0")).not.toThrow();
+    });
+  });
+});
+
+describe("the last-seen version", () => {
+  test("round-trips a version", () => {
+    writeLastSeenVersion("1.5.0");
+    expect(readLastSeenVersion()).toBe("1.5.0");
+  });
+
+  test("reads null with nothing stored", () => {
+    expect(readLastSeenVersion()).toBeNull();
+  });
+
+  test("joins the --fresh reset set", () => {
+    expect(knownPrefKeys()).toContain(LAST_SEEN_VERSION_KEY);
+  });
+
+  test("never throws when storage itself does", () => {
+    // An unreadable record reads as none, which records silently rather than announcing.
+    withThrowingStorage(() => {
+      expect(readLastSeenVersion()).toBeNull();
+      expect(() => writeLastSeenVersion("1.5.0")).not.toThrow();
     });
   });
 });

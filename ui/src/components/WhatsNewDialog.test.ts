@@ -125,6 +125,24 @@ describe("WhatsNewDialog", () => {
     expect(bodyText()).toContain("Then restart OpenCode.");
   });
 
+  test("after an upgrade, the title names the version now running and no upgrade is offered", async () => {
+    // BUNDLE is behind 1.5.0, so the footer would otherwise offer the command.
+    const { flush } = render(WhatsNewDialog, {
+      open: true,
+      onClose: () => {},
+      report: BUNDLE,
+      load: async (): Promise<UpdateChanges> => ({
+        kind: "releases",
+        releases: [{ version: "1.4.0", body: "four" }],
+      }),
+      upgradedTo: BUNDLE.version,
+    });
+    await flushUntil(flush, () => bodyText().includes("four"));
+    const title = content()?.querySelector("[data-slot='dialog-title']")?.textContent ?? "";
+    expect(title).toContain(BUNDLE.version);
+    expect(content()?.querySelector("[data-slot='dialog-footer']") === null).toBe(true);
+  });
+
   test("the dialog content holds focus on open", async () => {
     await open(
       BUNDLE,

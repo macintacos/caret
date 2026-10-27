@@ -6,6 +6,7 @@ import type {
   CustomThemes,
   DirListing,
   FileExcerpt,
+  ReleaseNote,
   ResolveBody,
   SkillRef,
   UpdateChanges,
@@ -25,6 +26,7 @@ import {
   getDirListing,
   getFileExcerpt,
   getHealth,
+  getReleaseNotes,
   getReview,
   getSkillDescription,
   getSkills,
@@ -839,6 +841,35 @@ describe("getUpdateChanges", () => {
     respond = () => Promise.resolve(new Response("upstream unavailable", { status: 502 }));
 
     await expect(getUpdateChanges()).rejects.toThrow(HttpError);
+    flush();
+
+    expectLoggedAt("warn", "request");
+  });
+});
+
+// Read on a load that finds an upgrade this browser has not yet shown What's new for; it
+// rethrows so that load can stay silent and retry on the next.
+describe("getReleaseNotes", () => {
+  const notes: ReleaseNote[] = [{ version: "1.5.0", body: "x" }];
+
+  test("asks for the notes since the version given and emits no record", async () => {
+    let asked = "";
+    respond = (url) => {
+      asked = url;
+      return Promise.resolve(jsonResponse(notes));
+    };
+
+    expect(await getReleaseNotes("1.3.0")).toEqual(notes);
+    flush();
+
+    expect(asked).toBe("/api/update/notes?since=1.3.0");
+    expectNoRecords();
+  });
+
+  test("a non-2xx throws HttpError and warns at step request", async () => {
+    respond = () => Promise.resolve(new Response("upstream unavailable", { status: 502 }));
+
+    await expect(getReleaseNotes("1.3.0")).rejects.toThrow(HttpError);
     flush();
 
     expectLoggedAt("warn", "request");

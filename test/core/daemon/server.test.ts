@@ -26,6 +26,7 @@ import { VERSION } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
 import type {
   CustomThemes,
+  ReleaseNote,
   ThemeUpload,
   ThemeUploadRefusal,
   UpdateChanges,
@@ -466,6 +467,31 @@ test("GET /api/update/changes is 502 when there is nothing to describe", async (
 test("GET /api/update/changes is 404 when unwired", async () => {
   await boot();
   expect((await fetch(`${base}/api/update/changes`)).status).toBe(404);
+});
+
+test("GET /api/update/notes serves the notes since the version asked about", async () => {
+  const notes: ReleaseNote[] = [{ version: "1.5.0", body: "x" }];
+  let asked: string | undefined;
+  await boot({
+    releaseNotes: async (since) => {
+      asked = since;
+      return notes;
+    },
+  });
+  const res = await fetch(`${base}/api/update/notes?since=1.3.0`);
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual(notes);
+  expect(asked).toBe("1.3.0");
+});
+
+test("GET /api/update/notes is 502 when the notes cannot be read", async () => {
+  await boot({ releaseNotes: async () => null });
+  expect((await fetch(`${base}/api/update/notes?since=1.3.0`)).status).toBe(502);
+});
+
+test("GET /api/update/notes is 404 when unwired", async () => {
+  await boot();
+  expect((await fetch(`${base}/api/update/notes?since=1.3.0`)).status).toBe(404);
 });
 
 test("GET /api/health publishes a wired restartHint", async () => {
@@ -1551,6 +1577,7 @@ describe("read-confidentiality posture", () => {
       ],
       ["GET /api/update", () => fetch(`${base}/api/update`)],
       ["GET /api/update/changes", () => fetch(`${base}/api/update/changes`)],
+      ["GET /api/update/notes", () => fetch(`${base}/api/update/notes?since=1.0.0`)],
       ["GET / (index)", () => fetch(`${base}/`)],
       ["GET /assets/* (asset)", () => fetch(`${base}/assets/index-AB12.js`)],
       [
@@ -1882,7 +1909,10 @@ describe("routing fallthrough", () => {
   });
 
   test("a wrong method on a known path falls through to 404 (no 405)", async () => {
-    await boot({ updateChanges: async () => ({ kind: "commits", commits: [], more: 0 }) });
+    await boot({
+      updateChanges: async () => ({ kind: "commits", commits: [], more: 0 }),
+      releaseNotes: async () => [],
+    });
     const { id } = await newReview();
     // Each pair is a real route under a method it does not serve, sent SAME-ORIGIN
     // (no Origin header) so the CSRF guard passes and the request reaches the
@@ -1896,6 +1926,7 @@ describe("routing fallthrough", () => {
       ["POST", "/api/diagnostics"], // /api/diagnostics is GET-only
       ["POST", "/api/update"], // /api/update is GET-only
       ["POST", "/api/update/changes"],
+      ["POST", "/api/update/notes"],
       ["PUT", "/api/themes"],
       ["DELETE", "/api/config"],
       ["PUT", `/api/reviews/${id}/resolve`], // /resolve is POST-only

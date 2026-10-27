@@ -11,6 +11,7 @@
   import {
     getConfig,
     getHealth,
+    getReleaseNotes,
     getThemes,
     getUpdate,
     getUpdateChanges,
@@ -71,7 +72,14 @@
   } from "$lib/settingsRegistry.ts";
   import { isUpdatePending, updateSignature, updateToast } from "$lib/updates.ts";
   import { seedReviewBand } from "$lib/reviewBandPref.ts";
-  import { readToastedUpdate, seedUpdatesCheck, writeToastedUpdate } from "$lib/updatesPref.ts";
+  import { loadUpgradeNotes } from "$lib/upgradeNotes.ts";
+  import {
+    readLastSeenVersion,
+    readToastedUpdate,
+    seedUpdatesCheck,
+    writeLastSeenVersion,
+    writeToastedUpdate,
+  } from "$lib/updatesPref.ts";
   import { type ComposerScratch, createSourceCommenting } from "$lib/diffview/commenting.ts";
   import { preloadPlanLanguages } from "$lib/diffview/languages.ts";
   import type { DiffSide } from "$lib/diffview/types.ts";
@@ -80,6 +88,7 @@
     ApproveVariantId,
     Annotation,
     PersistedScratch,
+    ReleaseNote,
     ThemeFileError,
     UpdateReport,
   } from "@core/lib/types";
@@ -181,9 +190,18 @@
     sound.play("modalOpen");
     showWhatsNew = true;
   }
+  // What's new after an upgrade: the report it was judged from and the notes it brought,
+  // opened once at load. Silent, because a page load should not chime. Dismissal records
+  // the version, so a reload before then opens it again.
+  let upgrade = $state<{ report: UpdateReport; releases: ReleaseNote[] } | null>(null);
+  let showUpgrade = $state(false);
+  function dismissUpgrade(): void {
+    if (upgrade) writeLastSeenVersion(upgrade.report.version);
+    showUpgrade = false;
+  }
   // The topmost modal decides which shortcuts fire and which the help lists (EXC-849).
   function activeScope(): ShortcutScope | null {
-    if (showWhatsNew) return "modal";
+    if (showWhatsNew || showUpgrade) return "modal";
     return showSettings ? "settings" : null;
   }
   function openHelp(): void {
@@ -441,7 +459,8 @@
   // ----- Update verdict -----
   // Read the daemon's verdict once on mount. No network check is triggered by the UI:
   // the daemon decided this against its own cache and the route only reports it. A
-  // failed read is quiet — the report stays null and every surface says nothing.
+  // failed read is quiet — the report stays null and every surface says nothing. The
+  // report also decides What's new after an upgrade, whose notes read may reach GitHub.
   $effect(() => {
     void getUpdate()
       .catch(() => null)
@@ -450,6 +469,16 @@
         // control opens showing what is actually on disk rather than the default.
         if (report) seedUpdatesCheck(report.checkEnabled);
         updateReport = report;
+        if (!report) return;
+        void loadUpgradeNotes(report, {
+          lastSeen: readLastSeenVersion(),
+          record: writeLastSeenVersion,
+          notesSince: getReleaseNotes,
+        }).then((releases) => {
+          if (!releases) return;
+          upgrade = { report, releases };
+          showUpgrade = true;
+        });
       });
   });
 
@@ -1009,6 +1038,24 @@
         report={updateReport}
         {restartHint}
         load={getUpdateChanges}
+      />
+    {/if}
+  {/snippet}
+</ModalPresence>
+
+<!-- Never over onboarding: a first run records its version silently, so the two only meet
+     when the onboarded flag alone was lost, and onboarding goes first. -->
+<ModalPresence open={showUpgrade && !showOnboarding}>
+  {#snippet modal({ open, onClosed })}
+    {#if upgrade}
+      {@const { report, releases } = upgrade}
+      <WhatsNewDialog
+        {open}
+        {onClosed}
+        onClose={dismissUpgrade}
+        {report}
+        load={() => Promise.resolve({ kind: "releases", releases })}
+        upgradedTo={report.version}
       />
     {/if}
   {/snippet}

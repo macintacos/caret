@@ -31,6 +31,7 @@ import type {
   UpdateChanges,
   UpdateStatus,
 } from "@/lib/types.ts";
+import type { GitHubRelease } from "@/lib/upstream.ts";
 import { RUMDL_VERSION } from "@/plan/rumdl.ts";
 
 import { FIXTURE_PLAN } from "./fixture-plan.ts";
@@ -117,6 +118,11 @@ export interface E2EOptions {
   updateInstall: BuildKind;
   /** What GET /api/update/changes serves. Null (the default) leaves the route unwired, so it 404s. */
   updateChanges: UpdateChanges | null;
+  /** The version the daemon reports running; the default `0.0.0-e2e` parses to 0.0.0. */
+  updateVersion: string;
+  /** The GitHub releases GET /api/update/notes selects from, through the daemon's real
+   * selection. Null (the default) leaves the route unwired, so it 404s. */
+  updateReleases: GitHubRelease[] | null;
   /** Boot the daemon with token auth on; harness requests then carry its token. Off by default. */
   auth: boolean;
 }
@@ -255,8 +261,21 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
   updateStatus: [{ kind: "unavailable", reason: "dev" }, { option: true }],
   updateInstall: ["dev", { option: true }],
   updateChanges: [null, { option: true }],
+  updateVersion: ["0.0.0-e2e", { option: true }],
+  updateReleases: [null, { option: true }],
   auth: [false, { option: true }],
-  daemon: async ({ bootTimeoutMs, updateStatus, updateInstall, updateChanges, auth }, use) => {
+  daemon: async (
+    {
+      bootTimeoutMs,
+      updateStatus,
+      updateInstall,
+      updateChanges,
+      updateVersion,
+      updateReleases,
+      auth,
+    },
+    use,
+  ) => {
     // Before mkdtemp so an unresolvable rumdl can't leak a state dir.
     const rumdl = pinnedRumdl();
     // Ephemeral, isolated state: the daemon's reviews and logs all live under
@@ -281,6 +300,8 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
         CARET_E2E_UPDATE_STATUS: JSON.stringify(updateStatus),
         CARET_E2E_UPDATE_INSTALL: updateInstall,
         CARET_E2E_UPDATE_CHANGES: JSON.stringify(updateChanges),
+        CARET_E2E_UPDATE_VERSION: updateVersion,
+        CARET_E2E_UPDATE_RELEASES: JSON.stringify(updateReleases),
         ...(auth ? { CARET_E2E_TOKEN_FILE: tokenFile } : {}),
       },
       stdio: ["pipe", "pipe", "pipe"],

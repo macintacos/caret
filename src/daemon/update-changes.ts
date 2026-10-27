@@ -2,6 +2,8 @@
 // bundle, the trunk commits since the build for a binary. Pure selection over GitHub's
 // bodies, plus a runner that fetches only when asked — the What's new modal opening —
 // and holds the last good answer for as long as the served verdict is the same object.
+// The same selection, run from the last version a browser saw up to the running one,
+// answers what an upgrade already taken brought.
 
 import type { CaretLogger } from "@/lib/log.ts";
 import { isNewer } from "@/lib/semver.ts";
@@ -111,6 +113,23 @@ async function changesFor(
   const comparison = await deps.compare(deps.commit);
   if (!comparison) return failed(deps.log);
   return selectCommits([...comparison.commits].reverse(), comparison.total_commits, COMMIT_CAP);
+}
+
+/** What createReleaseNotes reads. */
+export type ReleaseNotesDeps = Pick<UpdateChangesDeps, "version" | "status" | "releases" | "log">;
+
+/** A reader answering GET /api/update/notes: the release notes in (since, running], for
+ * the What's new the UI opens after an upgrade. Null when GitHub cannot be read. Uncached,
+ * because the UI asks only on a load that finds an upgrade it has not yet shown. */
+export function createReleaseNotes(
+  deps: ReleaseNotesDeps,
+): (since: string) => Promise<ReleaseNote[] | null> {
+  return async (since) => {
+    // A dev build and the opt-out both serve `unavailable`, and neither may call GitHub.
+    if (deps.status().kind === "unavailable") return [];
+    const releases = await deps.releases().catch(() => null);
+    return releases ? selectReleases(releases, since, deps.version) : failed(deps.log);
+  };
 }
 
 function failed(log: CaretLogger): null {
