@@ -304,24 +304,34 @@ When `approval` is non-null, print:
 - `approval.runUrl`
 
 Note that it can be run here as `! npm stage approve <stageId> --otp=<code>`, or in any
-terminal. Then **wait for the operator to say "continue"**. This pause always stops the
-run, under plan mode too. An approve the operator ran here that printed
-`approved and published successfully` counts as "continue".
+terminal, and that `! npm stage approve <stageId> --otp=` is on the clipboard, ready to
+paste and finish with the code. Then **wait for the operator to say "continue"**. This
+pause always stops the run, under plan mode too. An approve the operator ran here that
+printed `approved and published successfully` counts as "continue".
 
 npm runs an automated review on a staged version before it accepts an approval, and an
 approve sent too early fails with `E409 … automated review hasn't finished`, wasting the
 operator's one-time code. `npm stage view <stageId> --json` reports
 `"status": "validating"` while that review runs (several minutes for v1.2.0) and
-`"staged"` once it can be approved. So check it before you print the approve command.
-While it reads `validating`, say so, then poll in a background Bash command
-(`run_in_background`) that exits on any other status:
+`"staged"` once it can be approved. So check it before you print the approve command, and
+copy that command only once it reads `staged`, since an early paste invites the E409. When
+the first check already reads `staged`, copy it (no trailing newline, so the cursor lands
+after `--otp=`; skipped where `pbcopy` is missing):
 
 ```sh
-bash -c 'while true; do s=$(npm stage view <stageId> --json 2>/dev/null | jq -r ".status // empty"); if [ -n "$s" ] && [ "$s" != validating ]; then echo "status: $s"; exit 0; fi; sleep 60; done'
+command -v pbcopy >/dev/null && printf '! npm stage approve %s --otp=' <stageId> | pbcopy
 ```
 
-On `staged`, tell the operator it is ready, with a push notification when that tool is
-available, since they have likely stepped away. On any other status, surface it and stop.
+While it reads `validating`, say so, then poll in a background Bash command
+(`run_in_background`) that exits on any other status and copies the command on `staged`:
+
+```sh
+bash -c 'while true; do s=$(npm stage view <stageId> --json 2>/dev/null | jq -r ".status // empty"); if [ -n "$s" ] && [ "$s" != validating ]; then echo "status: $s"; if [ "$s" = staged ] && command -v pbcopy >/dev/null; then printf "! npm stage approve %s --otp=" <stageId> | pbcopy; fi; exit 0; fi; sleep 60; done'
+```
+
+On `staged`, tell the operator it is ready and the command is on the clipboard, with a
+push notification saying the same when that tool is available, since they have likely
+stepped away. On any other status, surface it and stop.
 
 ### 4. Publish the Release
 
