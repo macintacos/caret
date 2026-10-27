@@ -4,13 +4,16 @@ import type { Annotation, PlanVersion } from "@core/lib/types";
 import type { ComposerScratch } from "$lib/diffview/commenting.ts";
 import {
   commentIndex,
+  commentItems,
   coveredLineCount,
   filterComments,
   formatFeedback,
   highlightMatches,
+  lineOrder,
   pendingInlineCount,
   pendingItems,
   pendingLineCount,
+  scratchItems,
   sourceLines,
   versionCommentIndex,
 } from "$lib/feedback.ts";
@@ -805,5 +808,35 @@ describe("highlightMatches", () => {
       { text: "the ", match: false },
       { text: "sidecar", match: true },
     ]);
+  });
+});
+
+describe("lineOrder", () => {
+  test("sorts line annotations by start line", () => {
+    const anns = [lineAnn(7, 7, "b"), lineAnn(2, 3, "a")];
+    expect(lineOrder(anns).map((a) => a.comment)).toEqual(["a", "b"]);
+  });
+
+  test("puts legacy annotations after line-anchored ones", () => {
+    const anns = [ann({ comment: "legacy" }), lineAnn(9, 9, "line")];
+    expect(lineOrder(anns).map((a) => a.comment)).toEqual(["line", "legacy"]);
+  });
+
+  test("keeps the stored order on a tie", () => {
+    const anns = [lineAnn(4, 5, "first"), lineAnn(4, 4, "second")];
+    expect(lineOrder(anns).map((a) => a.comment)).toEqual(["first", "second"]);
+  });
+});
+
+describe("commentItems and scratchItems", () => {
+  test("commentItems is the general draft and inline comments", () => {
+    expect(commentItems([lineAnn(3, 3, "x")], "g")).toEqual([
+      { label: "General", text: "g" },
+      { label: "Line 3", text: "x" },
+    ]);
+  });
+
+  test("scratchItems is the scratches", () => {
+    expect(scratchItems([scratch(7, 8, "s")])).toEqual([{ label: "Lines 7–8", text: "s" }]);
   });
 });

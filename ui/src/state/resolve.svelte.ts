@@ -9,9 +9,10 @@
 
 import { PLAN_REJECTED_MESSAGE } from "@core/config/constants";
 import type { Annotation, ApproveVariantId } from "@core/lib/types";
+import { reviewerNotesBody } from "@core/plan/reviewer-notes";
 import { HttpError, resolveReview } from "$lib/api.ts";
 import { writeApproveMode } from "$lib/approveModePref.ts";
-import { formatFeedback, type LineCitation } from "$lib/feedback.ts";
+import { formatFeedback, type LineCitation, lineOrder } from "$lib/feedback.ts";
 
 export { HttpError };
 
@@ -32,8 +33,11 @@ export interface ResolveDeps {
   /** The version of the active review on screen, so a decision never lands on a
    * newer version the reviewer has not seen. */
   activeVersion: () => number | undefined;
-  /** The working-copy annotations to format into deny feedback. */
+  /** The working-copy annotations to format into the feedback a deny or an
+   * approval carries. */
   annotations: () => Annotation[];
+  /** The general-comment draft an approval carries with its inline comments. */
+  generalComment: () => string;
   /** The active review's current plan text, used to quote a line-anchored
    * annotation's source lines into the deny feedback. */
   planText: () => string;
@@ -65,9 +69,10 @@ export interface Resolve {
   readonly approveMode: ApproveVariantId | null;
   readonly busy: boolean;
 
-  /** Approve the plan. Optional `notes` ride the allow as feedback (EXC-791): the
-   * reviewer's free-text note, delivered to the agent to fold into its work. A
-   * blank note is omitted. */
+  /** Approve the plan. The allow's feedback carries the optional `notes` and the
+   * queued comments (the general draft and the inline comments in line order), for
+   * the agent to fold into its work (EXC-791). Feedback with nothing in it is
+   * omitted. */
   approve: (mode: ApproveVariantId, notes?: string) => Promise<void>;
   requestChanges: (generalComment: string) => Promise<void>;
   /** Deny the plan with a concise "rejected — wait for the user" message and no
@@ -122,7 +127,15 @@ export function createResolve(store: ResolveStore, deps: ResolveDeps): Resolve {
       if (!id) return;
       store.busy = true;
       await deps.flushPending();
-      const feedback = notes?.trim();
+      const feedback = reviewerNotesBody(
+        notes ?? "",
+        formatFeedback(
+          lineOrder(deps.annotations()),
+          deps.generalComment(),
+          deps.planText(),
+          deps.citation(),
+        ),
+      );
       try {
         await submit(id, {
           behavior: "allow",

@@ -38,6 +38,7 @@ function build(
     annotations?: Annotation[];
     planText?: string;
     citation?: LineCitation;
+    generalComment?: string;
     /** Stands in for the hand-off, which can resolve well after it is called. */
     afterResolve?: (id: string) => Promise<void>;
   } = {},
@@ -55,6 +56,7 @@ function build(
     annotations: () => opts.annotations ?? [],
     planText: () => opts.planText ?? "",
     citation: () => opts.citation ?? "line-and-quote",
+    generalComment: () => opts.generalComment ?? "",
     flushPending: async () => {
       flushOrder.push("flush");
       if (opts.versionAfterFlush !== undefined) version = opts.versionAfterFlush;
@@ -210,6 +212,52 @@ describe("approve", () => {
         body: { behavior: "allow", acceptMode: "default", feedback: "use the retry helper" },
       },
     ]);
+  });
+
+  const PLAN7 = ["one", "two", "three", "four", "five", "six", "seven"].join("\n");
+  const at = (line: number, comment: string): Annotation => ({
+    id: `a${line}`,
+    startLine: line,
+    endLine: line,
+    comment,
+  });
+  const allowFeedback = () => {
+    const body = submits[0]?.body;
+    return body?.behavior === "allow" ? (body.feedback ?? "") : "";
+  };
+
+  test("carries the queued comments in the allow's feedback, after the notes", async () => {
+    const resolve = build(makeStore(), {
+      annotations: [at(7, "later"), at(2, "earlier")],
+      generalComment: "overall",
+      planText: PLAN7,
+    });
+    await resolve.approve("default", "my note");
+    const paras = allowFeedback().split("\n\n");
+    expect(paras.slice(1, 4)).toEqual(["my note", "overall", "Inline comments:"]);
+    const headers = paras
+      .slice(4)
+      .join("\n")
+      .split("\n")
+      .filter((l) => /^\d+\. /.test(l));
+    expect(headers).toEqual(["1. Line 2:", "2. Line 7:"]);
+  });
+
+  test("cites approval comments by line alone under a line citation", async () => {
+    const resolve = build(makeStore(), {
+      annotations: [at(2, "fix")],
+      planText: PLAN7,
+      citation: "line",
+    });
+    await resolve.approve("default");
+    expect(allowFeedback()).toContain("1. Line 2:");
+    expect(allowFeedback()).not.toContain(">");
+  });
+
+  test("a blank-comment annotation adds nothing to the allow", async () => {
+    const resolve = build(makeStore(), { annotations: [at(2, "   ")], planText: PLAN7 });
+    await resolve.approve("default");
+    expect(submits).toEqual([{ id: "r1", body: { behavior: "allow", acceptMode: "default" } }]);
   });
 
   test("omits a blank note from the allow body", async () => {

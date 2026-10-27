@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 
-import { appendReviewerNotes, reviewerNotesSection } from "@/plan/reviewer-notes.ts";
+import {
+  appendReviewerNotes,
+  reviewerNotesBody,
+  reviewerNotesSection,
+} from "@/plan/reviewer-notes.ts";
 
 // Reviewer notes on an approval are appended to the plan the agent works from,
 // as a clearly-labeled trailing section, so the agent folds them into its work
@@ -38,4 +42,27 @@ test("appendReviewerNotes returns the plan unchanged for a blank note", () => {
   const plan = "# Plan\n\nDo the thing.\n";
   expect(appendReviewerNotes(plan, "")).toBe(plan);
   expect(appendReviewerNotes(plan, "   ")).toBe(plan);
+});
+
+const paragraphs = (body: string) => body.split("\n\n");
+
+test("reviewerNotesBody passes notes alone through trimmed, leaving their section unchanged", () => {
+  expect(reviewerNotesBody("  n  ", "")).toBe("n");
+  expect(reviewerNotesSection(reviewerNotesBody("n", ""))).toBe(reviewerNotesSection("n"));
+});
+
+test("reviewerNotesBody opens comments with an instruction paragraph", () => {
+  const body = paragraphs(reviewerNotesBody("", "1. Line 2: fix"));
+  expect(body).toHaveLength(2);
+  expect(body[1]).toBe("1. Line 2: fix");
+});
+
+test("reviewerNotesBody orders the instruction, the notes, then the comments", () => {
+  const [instruction] = paragraphs(reviewerNotesBody("", "c"));
+  expect(paragraphs(reviewerNotesBody("n", "c"))).toEqual([instruction ?? "", "n", "c"]);
+});
+
+test("reviewerNotesBody is empty when both parts are blank", () => {
+  expect(reviewerNotesBody("  ", " ")).toBe("");
+  expect(reviewerNotesSection(reviewerNotesBody("", ""))).toBe("");
 });

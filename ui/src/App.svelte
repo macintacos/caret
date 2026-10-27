@@ -305,6 +305,7 @@
     activeId: () => selection.activeId,
     activeVersion: () => active?.version,
     annotations: () => work.annotations,
+    generalComment: () => work.generalCommentDraft,
     planText: () => active?.currentPlan ?? "",
     citation: () => citation,
     flushPending: () => autosave.flushPending(),
