@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PendingItem } from "$lib/feedback.ts";
   import type { IconName } from "$lib/icons.ts";
+  import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { isSubmitChord } from "$lib/keys.ts";
@@ -21,11 +22,12 @@
      * (Reject always confirms, EXC-685). */
     items: PendingItem[];
     /** The queued comments this verdict sends to the agent. Given only by Approve;
-     * Reject, which sends none, omits it. */
+     * Reject, which sends none, omits it. Omitting it (not `[]`) puts the dialog in
+     * drop mode, where `items` are confirmed "anyway". */
     comments?: PendingItem[];
-    /** One line saying the verdict's message won't reach the agent, shown in the
-     * description. */
-    warning?: string;
+    /** Whether the verdict's message (comments and notes) reaches the agent. When
+     * false the dialog warns instead of promising delivery. */
+    delivered?: boolean;
     /** The verdict's label, e.g. "Approve" or "Reject". Drives the title,
      * eyebrow, and the confirm button. */
     action: string;
@@ -56,7 +58,7 @@
     onClosed,
     items,
     comments,
-    warning,
+    delivered = true,
     action,
     consequence,
     icon,
@@ -81,6 +83,7 @@
   let confirmLabel = $derived(
     sent.length > 0 ? `${action} with comments` : dropsItems ? `${action} anyway` : action,
   );
+  const uid = $props.id();
 
   // Without a notes field the primary path is Enter-confirmable (EXC-761): focus the
   // confirm action on open so a bare Enter activates it, rather than letting bits-ui
@@ -99,7 +102,7 @@
   }
 </script>
 
-{#snippet list(rows: PendingItem[], label: string)}
+{#snippet list(rows: PendingItem[], label?: string)}
   <ul class="comments" aria-label={label}>
     {#each rows as item, i (i)}
       <li class="comment">
@@ -129,8 +132,8 @@
 >
   {#snippet description()}
     {consequence}
-    {#if warning}
-      {warning}
+    {#if !delivered}
+      This agent's approval can't carry a message, so your comments and notes won't reach it.
     {:else if sent.length > 0}
       Your comments go with it, and the agent applies them without another planning round.
       For structural changes, use Request changes.
@@ -139,33 +142,35 @@
     {/if}
   {/snippet}
 
-  {#if sent.length > 0 && count > 0 && !dropsItems}
-    <!-- Beside the not-sent group, the sent one needs its own head to read as a pair. -->
-    <div class="group">
-      <p class="group-head">Sent with your approval</p>
-      {@render list(sent, "Comments sent with your approval")}
-    </div>
-  {:else if sent.length > 0}
-    {@render list(sent, "Comments sent with your approval")}
+  {#if sent.length > 0}
+    <section class="group" aria-labelledby="{uid}-sent">
+      <span class="form-label" id="{uid}-sent">
+        {delivered ? "Sent with your approval" : "Your comments"}
+      </span>
+      {@render list(sent)}
+    </section>
   {/if}
   {#if dropsItems}
     <!-- A preview of exactly what a plain confirm would leave behind, so the
          reviewer sees their unsent work before deciding. -->
     {@render list(items, "Your unsent comments")}
   {:else if count > 0}
-    <div class="group">
-      <p class="group-head">
-        <span class="not-sent">Not sent</span>
-        Unsaved drafts. To send one, cancel and save it first.
+    <!-- Request changes' scratch treatment, so the two dialogs read as one form. -->
+    <section class="group unsent" aria-labelledby="{uid}-unsent">
+      <span class="form-label" id="{uid}-unsent">
+        Unsent comments
+        <Badge variant="outline" class="tally">{count}</Badge>
+      </span>
+      <p class="unsent-note">
+        Comments you started but never sent. To send one, cancel and save it first.
       </p>
-      {@render list(items, "Unsaved drafts, not sent")}
-    </div>
+      {@render list(items)}
+    </section>
   {/if}
 
   {#if showNotes}
-    <!-- Optional note handed to the agent on approval (EXC-791): distinct from the
-         unsent inline comments above (which a plain approve drops) — this text IS
-         sent, folded into the plan the agent works from, with no re-planning. -->
+    <!-- Optional note handed to the agent on approval (EXC-791), sent with any
+         comments above and folded into the plan with no re-planning. -->
     <div class="field">
       <span class="form-label">Notes for the agent <span class="optional">(optional)</span></span>
       <MarkdownEditor
@@ -219,7 +224,7 @@
     max-width: min(var(--confirm-dialog-width), calc(100% - 2rem));
   }
 
-  /* Preview of the unsent feedback: a quiet sunk container — no accent, which is
+  /* Preview of the queued feedback: a quiet sunk container — no accent, which is
      reserved for actions. Height-capped and scrollable so a long queue never grows
      the dialog past the viewport. */
   .comments {
@@ -270,20 +275,20 @@
   .group + .group {
     margin-top: 0.75rem;
   }
-  .group-head {
+  .unsent .form-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .unsent-note {
     margin: 0 0 0.4rem;
-    font-size: var(--text-xs);
+    font-size: var(--text-sm);
     color: var(--ink-faint);
   }
-  /* Pill marker, neutral: amber is reserved for the primary action. */
-  .not-sent {
-    margin-right: 0.35rem;
-    padding: 0.05rem 0.45rem;
-    border: 1px solid var(--rule);
-    border-radius: 99px;
-    font-size: var(--text-2xs);
-    font-weight: 600;
-    color: var(--ink-soft);
+  /* Dashed neutral rail, the source view's Resume-marker idiom: an unsent comment
+     never reads as one that will be sent. */
+  .unsent .comments {
+    border-style: dashed;
   }
 
   /* Optional reviewer-notes field (EXC-791), reusing the request-changes form

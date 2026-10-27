@@ -256,15 +256,16 @@ test("GET /api/health omits approveVariants when the adapter declares none", asy
   expect("approveVariants" in body).toBe(false);
 });
 
-for (const approveCarriesNotes of [true, false]) {
-  test(`GET /api/health publishes approveCarriesNotes: ${approveCarriesNotes} as passed`, async () => {
+test.each([true, false])(
+  "GET /api/health publishes approveCarriesNotes: %p as passed",
+  async (approveCarriesNotes) => {
     await boot({ approveCarriesNotes });
     const body = (await (await fetch(`${base}/api/health`)).json()) as {
       approveCarriesNotes?: boolean;
     };
     expect(body.approveCarriesNotes).toBe(approveCarriesNotes);
-  });
-}
+  },
+);
 
 test("GET /api/health omits approveCarriesNotes when not passed", async () => {
   await boot();

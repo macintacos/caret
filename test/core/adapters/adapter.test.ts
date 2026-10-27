@@ -41,6 +41,18 @@ test("each adapter's id matches its registry key", () => {
   }
 });
 
+test("approveCarriesNotes says whether an allow's feedback reaches the emitted decision", () => {
+  const probe = "caret-notes-probe";
+  for (const id of agentIds()) {
+    const a = selectAdapter(id);
+    const out = a.emitDecision(
+      { behavior: "allow", acceptMode: a.approveVariants[0]?.id, feedback: probe, decidedAt: 0 },
+      { sessionId: "s", cwd: "/w", plan: "p" },
+    );
+    expect(out.includes(probe)).toBe(a.approveCarriesNotes);
+  }
+});
+
 test("the default agent is registered and selectable", () => {
   expect(agentIds()).toContain(DEFAULT_AGENT);
 });

@@ -2,7 +2,8 @@
 // (EXC-791). An approval carries an optional note and any line-cited comments; caret
 // appends them as a clearly labeled section at the end of the plan so the agent picks
 // them up as it proceeds, without another planning round. Browser-safe (no node
-// imports) so the same wording can be reused wherever a plan is rendered.
+// imports): the review UI composes an approval's body with reviewerNotesBody and sends
+// it as the allow's feedback; each delivery path wraps it with reviewerNotesSection.
 
 /** The heading that marks the appended notes as reviewer-provided, so the agent
  * never mistakes them for part of the original plan. */
@@ -15,8 +16,9 @@ const COMMENTS_INSTRUCTION =
 
 /**
  * The notes section's body: the instruction line when `comments` is non-blank, then
- * the typed notes, then the comments. A blank part leaves no gap, so notes alone pass
- * through trimmed and their section is unchanged.
+ * the typed notes, then the comments (formatFeedback's output). A blank part leaves no
+ * gap, so notes alone pass through trimmed:
+ * `reviewerNotesSection(reviewerNotesBody(n, ""))` is `reviewerNotesSection(n)`.
  */
 export function reviewerNotesBody(notes: string, comments: string): string {
   const cited = comments.trim();

@@ -2,8 +2,8 @@
 // (EXC-791) — even with nothing queued — observable in the UI (the review leaves
 // the pending set) and via the API (the list no longer carries it). The confirm
 // is a dismissible dialog: it opens with the notes field focused, so Cmd/Ctrl+Enter
-// confirms; Escape, the Cancel button, and a click outside all dismiss. With pending inline comments it additionally previews what
-// a plain approve would silently drop.
+// confirms; Escape, the Cancel button, and a click outside all dismiss. With comments or unsent scratches queued it lists
+// what the approval sends and what it leaves behind.
 //
 // Everything here needs a real browser or the live daemon. The verdict is only
 // observable over HTTP — GET /api/reviews/:id for the stored decision, and the
@@ -11,11 +11,11 @@
 // mounted component can be handed as props. The dismissal semantics are real
 // gestures (Enter, Escape, a backdrop click at 5,5), and the footer check is a
 // measured scrollWidth. The pure halves are units: the guard's own shaping — the
-// pluralized count, the preview rows, the approve vocabulary, the notes field —
+// preview rows, the approve vocabulary, the notes field —
 // in ui/src/components/UnsentCommentsDialog.test.ts, and the request body it
 // submits, reviewer notes included, in ui/src/state/resolve.test.ts.
 
-import { alerts } from "@test/e2e/support/chrome.ts";
+import { alerts, unsentRows } from "@test/e2e/support/chrome.ts";
 import {
   assertGuardDismissed,
   assertResolved,
@@ -165,9 +165,7 @@ test("an uncommitted composer scratch guards approve (EXC-745)", async ({ daemon
   // inline work, listed as not sent. Nothing else is queued, so the verdict is a
   // plain Approve.
   const guard = await openApproveGuard(page);
-  await expect(guard.getByRole("list", { name: "Unsaved drafts, not sent" })).toContainText(
-    "half a thought to finish later",
-  );
+  await expect(unsentRows(guard)).toContainText(["half a thought to finish later"]);
   await expect(guard.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
 
   // The review is still pending: nothing was sent, the scratch was not dropped.
@@ -213,9 +211,14 @@ test("'Approve with comments' resolves as an allow carrying the cited comment", 
       return decision.behavior;
     })
     .toBe("allow");
-  expect(decision?.feedback).toContain("explain the cold cost");
-  expect(decision?.feedback).toContain("Inline comments:");
-  expect(decision?.feedback).toMatch(/Lines? \d+/);
+  const feedback = decision?.feedback ?? "";
+  expect(feedback).toContain("1. Lines 7-8:");
+  expect(feedback).toContain("explain the cold cost");
+  // The feedback opens with its instruction paragraph, ahead of the comments.
+  const [instruction = "", ...rest] = feedback.split("\n\n");
+  expect(instruction).not.toContain("Inline comments:");
+  expect(instruction).not.toContain("explain the cold cost");
+  expect(rest.join("\n\n")).toContain("Inline comments:");
 });
 
 test("the chord confirms the approve guard, resolving it as an allow", async ({ daemon, page }) => {

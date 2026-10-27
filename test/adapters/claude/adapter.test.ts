@@ -108,7 +108,3 @@ test("readInstallState returns an agent-neutral InstallProbe shape", () => {
     else process.env.CLAUDE_CONFIG_DIR = savedClaude;
   }
 });
-
-test("declares whether its approval carries the reviewer's notes to the agent", () => {
-  expect(claudeAdapter.approveCarriesNotes).toBe(true);
-});

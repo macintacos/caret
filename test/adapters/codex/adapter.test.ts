@@ -110,7 +110,3 @@ test("listSkills contributes nothing, so no completion fires on a codex review",
   // the whole contract: the editor's `/` source returns null and no popup paints.
   expect(await codexAdapter.listSkills("/w/caret")).toEqual([]);
 });
-
-test("declares whether its approval carries the reviewer's notes to the agent", () => {
-  expect(codexAdapter.approveCarriesNotes).toBe(false);
-});

@@ -120,6 +120,8 @@
   // Undefined until it lands, or for a daemon predating the field; approveVariants()
   // then falls back to the built-in set.
   let declaredVariants = $state<ApproveVariant[] | undefined>(undefined);
+  // A daemon predating the field omits it, so this stays true: the approve dialog warns
+  // only when the adapter says its approval drops notes.
   let approveCarriesNotes = $state(true);
   // True when the daemon runs from source (EXC-556), for the "local build" badge. A
   // daemon predating the field omits it, so this stays false.
@@ -369,8 +371,7 @@
   // Whether to mark the update surfaces (EXC-1207). The daemon's verdict alone: an
   // opted-out reviewer is served `disabled`, which is not pending.
   let updatePending = $derived(!!updateReport && isUpdatePending(updateReport.status));
-  // Everything a plain Approve would silently leave behind, as a preview list the
-  // approve/reject guard renders. Deriving pendingCount from the same list keeps
+  // Everything queued, as the Reject guard's preview list. Deriving pendingCount from the same list keeps
   // every surface agreeing on what's pending — an uncommitted scratch (EXC-745) and a
   // lone general-comment draft (EXC-742) are protected exactly like a committed one.
   let guardItems = $derived(pendingItems(work.annotations, work.generalCommentDraft, scratches));
@@ -694,8 +695,8 @@
   function onApprove(mode: ApproveVariantId) {
     // Approve always routes through a confirmation (EXC-791): even with nothing
     // queued, a stray click must not ship the plan. Park the chosen mode; the
-    // guard (UnsentCommentsDialog) additionally previews any pending comments a
-    // plain approve would drop.
+    // guard (UnsentCommentsDialog) additionally previews the comments the
+    // approval sends and any unsent scratches it leaves behind.
     pendingApproveMode = mode;
   }
   // The three verdict hand-offs (EXC-894). Each acknowledges BEFORE clearing its
@@ -899,9 +900,7 @@
       {onClosed}
       comments={approveComments}
       items={approveScratches}
-      warning={approveCarriesNotes
-        ? undefined
-        : "This agent's approval can't carry a message, so your comments and notes won't reach it."}
+      delivered={approveCarriesNotes}
       action="Approve"
       consequence="Approving accepts the plan and starts the agent's work."
       icon="check"

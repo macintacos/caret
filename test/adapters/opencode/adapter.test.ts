@@ -84,7 +84,3 @@ test("fatalDenyLine is a dependency-free deny wire line", () => {
     feedback: "daemon unreachable",
   });
 });
-
-test("declares whether its approval carries the reviewer's notes to the agent", () => {
-  expect(opencodeAdapter.approveCarriesNotes).toBe(true);
-});

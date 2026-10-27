@@ -101,7 +101,7 @@ export function pendingInlineCount(annotations: Annotation[]): number {
   return pendingInline(annotations).length;
 }
 
-/** One line in the approve/reject guard's preview of unsent feedback: a short
+/** One line in a verdict guard's preview of queued feedback: a short
  * anchor label and the comment/draft text. */
 export interface PendingItem {
   /** Short anchor: "General", "Line N", "Lines N–M", or a legacy quote. */
@@ -117,8 +117,8 @@ export function lineOrder(annotations: Annotation[]): Annotation[] {
   return [...annotations].sort((x, y) => at(x) - at(y));
 }
 
-/** The queued feedback an approval carries: the general-comment draft, then the
- * non-blank inline comments. */
+/** The queued comments — the general-comment draft, then the non-blank inline
+ * comments: what Approve or Request changes sends. */
 export function commentItems(annotations: Annotation[], generalComment: string): PendingItem[] {
   const items: PendingItem[] = [];
   const general = generalComment.trim();
@@ -140,7 +140,7 @@ export function scratchItems(scratches: ComposerScratch[]): PendingItem[] {
 }
 
 /** Everything queued at a verdict, as a flat preview list: commentItems, then
- * scratchItems. The guard renders this so the reviewer sees what is at stake, and
+ * scratchItems. The Reject guard renders this so the reviewer sees what is at stake, and
  * App.svelte's pendingCount is this list's length — so the count and the preview
  * can never disagree about what's pending. */
 export function pendingItems(

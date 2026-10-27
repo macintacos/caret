@@ -79,9 +79,9 @@ in as a parameter. Vocabulary shared by all of them belongs there; vocabulary on
 owns still belongs only in its own directory.
 
 **Adding a new agent tool:** create `src/adapters/<tool>/`, implement `AgentAdapter`
-(declare its own approve variants with their ids/labels and whether its approval carries
-notes (`approveCarriesNotes`), parse its hook shape, render its decision wire format and
-its `fatalDenyLine`, probe its install, enumerate its skills, and optionally give its
+(declare its own approve variants with their ids/labels and whether its allow delivers
+feedback (`approveCarriesNotes`), parse its hook shape, render its decision wire format
+and its `fatalDenyLine`, probe its install, enumerate its skills, and optionally give its
 post-upgrade `restartHint`), add one `REGISTRY` entry in `src/adapters/index.ts` keyed by
 the tool id, and add its `test/adapters/<tool>/` suite. You touch `src/adapters/` and the
 registry — never core internals, store records, the daemon's routing, or `test/core/`.
@@ -124,9 +124,10 @@ installation (`~/.codex/hooks.json` / `config.toml [hooks]` behind
 
 Some modules are imported by **both** runtimes — the compiled bun binary and the browser
 UI bundle (the UI reaches them through the `@core/*` alias: `src/lib/types.ts`,
-`config/constants.ts`, `redact/core.ts`, `ui/log-bridge.ts`, `lib/semver.ts`). Every such
-module is **pure TS with zero node imports** — the node-free property is per-module, so a
-browser-safe file can sit in a domain directory beside node-only siblings.
+`config/constants.ts`, `redact/core.ts`, `ui/log-bridge.ts`, `lib/semver.ts`,
+`plan/reviewer-notes.ts`). Every such module is **pure TS with zero node imports** — the
+node-free property is per-module, so a browser-safe file can sit in a domain directory
+beside node-only siblings.
 
 The reason is the browser bundle: a `node:*` import in a `@core`-shared module either
 breaks the Vite build (node builtins have no browser equivalent) or drags the daemon's

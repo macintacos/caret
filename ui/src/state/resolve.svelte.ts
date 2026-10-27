@@ -39,7 +39,7 @@ export interface ResolveDeps {
   /** The general-comment draft an approval carries with its inline comments. */
   generalComment: () => string;
   /** The active review's current plan text, used to quote a line-anchored
-   * annotation's source lines into the deny feedback. */
+   * annotation's source lines into the feedback a deny or an approval carries. */
   planText: () => string;
   /** How that feedback cites a line-anchored annotation on the active version. */
   citation: () => LineCitation;
