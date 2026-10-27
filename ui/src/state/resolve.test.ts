@@ -215,7 +215,7 @@ describe("approve", () => {
   });
 
   const PLAN7 = ["one", "two", "three", "four", "five", "six", "seven"].join("\n");
-  const at = (line: number, comment: string): Annotation => ({
+  const lineAnn = (line: number, comment: string): Annotation => ({
     id: `a${line}`,
     startLine: line,
     endLine: line,
@@ -228,7 +228,7 @@ describe("approve", () => {
 
   test("carries the queued comments in the allow's feedback, after the notes", async () => {
     const resolve = build(makeStore(), {
-      annotations: [at(7, "later"), at(2, "earlier")],
+      annotations: [lineAnn(7, "later"), lineAnn(2, "earlier")],
       generalComment: "overall",
       planText: PLAN7,
     });
@@ -245,7 +245,7 @@ describe("approve", () => {
 
   test("cites approval comments by line alone under a line citation", async () => {
     const resolve = build(makeStore(), {
-      annotations: [at(2, "fix")],
+      annotations: [lineAnn(2, "fix")],
       planText: PLAN7,
       citation: "line",
     });
@@ -255,7 +255,7 @@ describe("approve", () => {
   });
 
   test("a blank-comment annotation adds nothing to the allow", async () => {
-    const resolve = build(makeStore(), { annotations: [at(2, "   ")], planText: PLAN7 });
+    const resolve = build(makeStore(), { annotations: [lineAnn(2, "   ")], planText: PLAN7 });
     await resolve.approve("default");
     expect(submits).toEqual([{ id: "r1", body: { behavior: "allow", acceptMode: "default" } }]);
   });

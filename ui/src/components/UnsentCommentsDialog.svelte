@@ -74,14 +74,14 @@
   // onConfirm on confirm. Only rendered — and only meaningful — when showNotes.
   let notes = $state("");
 
-  let count = $derived(items.length);
-  let sent = $derived(comments ?? []);
-  let queued = $derived(sent.length + count > 0);
+  let itemCount = $derived(items.length);
+  let sentComments = $derived(comments ?? []);
+  let hasQueued = $derived(sentComments.length + itemCount > 0);
   // Only a verdict that sends no comments (Reject) drops feedback another verdict would
   // send, so only it confirms "anyway"; Approve's leftover items are unsaved drafts.
-  let dropsItems = $derived(comments === undefined && count > 0);
+  let dropsItems = $derived(comments === undefined && itemCount > 0);
   let confirmLabel = $derived(
-    sent.length > 0 ? `${action} with comments` : dropsItems ? `${action} anyway` : action,
+    sentComments.length > 0 ? `${action} with comments` : dropsItems ? `${action} anyway` : action,
   );
   const uid = $props.id();
 
@@ -134,32 +134,32 @@
     {consequence}
     {#if !delivered}
       This agent's approval can't carry a message, so your comments and notes won't reach it.
-    {:else if sent.length > 0}
+    {:else if sentComments.length > 0}
       Your comments go with it, and the agent applies them without another planning round.
       For structural changes, use Request changes.
     {:else if dropsItems}
-      You have {count} pending comment{count === 1 ? "" : "s"} that won't be sent.
+      You have {itemCount} pending comment{itemCount === 1 ? "" : "s"} that won't be sent.
     {/if}
   {/snippet}
 
-  {#if sent.length > 0}
+  {#if sentComments.length > 0}
     <section class="group" aria-labelledby="{uid}-sent">
       <span class="form-label" id="{uid}-sent">
         {delivered ? "Sent with your approval" : "Your comments"}
       </span>
-      {@render list(sent)}
+      {@render list(sentComments)}
     </section>
   {/if}
   {#if dropsItems}
     <!-- A preview of exactly what a plain confirm would leave behind, so the
          reviewer sees their unsent work before deciding. -->
     {@render list(items, "Your unsent comments")}
-  {:else if count > 0}
+  {:else if itemCount > 0}
     <!-- Request changes' scratch treatment, so the two dialogs read as one form. -->
     <section class="group unsent" aria-labelledby="{uid}-unsent">
       <span class="form-label" id="{uid}-unsent">
         Unsent comments
-        <Badge variant="outline" class="tally">{count}</Badge>
+        <Badge variant="outline" class="tally">{itemCount}</Badge>
       </span>
       <p class="unsent-note">
         Comments you started but never sent. To send one, cancel and save it first.
@@ -188,7 +188,7 @@
 
   {#snippet footer()}
     <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
-    {#if queued}
+    {#if hasQueued}
       <Button variant="secondary" class="float-chip" onclick={onRequestChanges}>
         <Icon name="corner-up-left" size={14} />
         Request changes

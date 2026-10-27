@@ -113,8 +113,9 @@ export interface PendingItem {
 /** The annotations in plan line order: line-anchored ones by start line, then the
  * legacy (unanchored) ones. The sort is stable, so ties keep their stored order. */
 export function lineOrder(annotations: Annotation[]): Annotation[] {
-  const at = (a: Annotation) => (isLineAnnotation(a) ? a.startLine : Number.MAX_SAFE_INTEGER);
-  return [...annotations].sort((x, y) => at(x) - at(y));
+  const startLineOf = (a: Annotation) =>
+    isLineAnnotation(a) ? a.startLine : Number.MAX_SAFE_INTEGER;
+  return [...annotations].sort((x, y) => startLineOf(x) - startLineOf(y));
 }
 
 /** The queued comments — the general-comment draft, then the non-blank inline
