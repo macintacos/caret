@@ -105,9 +105,8 @@ test("a pending inline comment guards approve and routes to request-changes inta
 }) => {
   const id = await openWithPendingAnnotation(daemon, page, "explain the cold cost");
 
-  // Approve opens a confirmation naming the count — it does NOT resolve.
+  // Approve opens a confirmation listing the comment it sends — it does NOT resolve.
   const guard = await openApproveGuard(page);
-  await expect(guard).toContainText("1 pending comment");
   await expect(guard.locator(".comments")).toContainText("Lines 7–8");
   await expect(guard.locator(".comments")).toContainText("explain the cold cost");
 
@@ -134,7 +133,7 @@ test("the approve guard fits its three-button footer without a horizontal scroll
   page,
 }) => {
   // With a pending comment the guard's footer carries three buttons (Cancel ·
-  // Request changes · Approve anyway). At the shadcn Dialog default (max-w-sm,
+  // Request changes · Approve with comments). At the shadcn Dialog default (max-w-sm,
   // 384px) they overflowed, and the shell's overflow-y-auto forces overflow-x to
   // compute to auto — so the surplus width became a horizontal scrollbar and the
   // modal read as clipped/cutout. The guard is widened (guard-content) so the row
@@ -146,7 +145,7 @@ test("the approve guard fits its three-button footer without a horizontal scroll
   // All three footer buttons are present — the overflow only occurs with the full row.
   await expect(guard.getByRole("button", { name: "Cancel" })).toBeVisible();
   await expect(guard.getByRole("button", { name: "Request changes" })).toBeVisible();
-  await expect(guard.getByRole("button", { name: "Approve anyway" })).toBeVisible();
+  await expect(guard.getByRole("button", { name: "Approve with comments" })).toBeVisible();
 
   // No horizontal overflow: scrollWidth never exceeds the visible box (1px slack for
   // sub-pixel rounding). Before the fix this was ~12px over.
@@ -163,9 +162,13 @@ test("an uncommitted composer scratch guards approve (EXC-745)", async ({ daemon
   await expect(page.getByRole("button", { name: "Resume unsent comment" })).toBeVisible();
 
   // Approve must open the guard, not resolve: an uncommitted scratch is unsent
-  // inline work that a plain approve would silently drop.
+  // inline work, listed as not sent. Nothing else is queued, so the verdict is a
+  // plain Approve.
   const guard = await openApproveGuard(page);
-  await expect(guard).toContainText("1 pending comment");
+  await expect(guard.getByRole("list", { name: "Unsaved drafts, not sent" })).toContainText(
+    "half a thought to finish later",
+  );
+  await expect(guard.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
 
   // The review is still pending: nothing was sent, the scratch was not dropped.
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
@@ -182,10 +185,9 @@ test("a lone general-comment draft guards approve (EXC-742)", async ({ daemon, p
   await page.goto("/");
   await planSurface(page);
 
-  // Approve must open the guard, not resolve: the unsent general comment is
-  // feedback a plain approve would leave behind.
+  // Approve must open the guard, not resolve: the general comment is feedback the
+  // approval sends, so the reviewer sees it first.
   const guard = await openApproveGuard(page);
-  await expect(guard).toContainText("1 pending comment");
   await expect(guard.locator(".comments")).toContainText("General");
   await expect(guard.locator(".comments")).toContainText("reconsider the migration order");
 
@@ -193,13 +195,27 @@ test("a lone general-comment draft guards approve (EXC-742)", async ({ daemon, p
   await expect.poll(async () => (await daemon.listReviews()).map((r) => r.id)).toContain(id);
 });
 
-test("'Approve anyway' on the guard resolves as an allow", async ({ daemon, page }) => {
+test("'Approve with comments' resolves as an allow carrying the cited comment", async ({
+  daemon,
+  page,
+}) => {
   const id = await openWithPendingAnnotation(daemon, page, "explain the cold cost");
 
   const guard = await openApproveGuard(page);
 
-  await guard.getByRole("button", { name: "Approve anyway" }).click();
-  await assertResolved(daemon, page, id);
+  await guard.getByRole("button", { name: "Approve with comments" }).click();
+  await expect(page.getByRole("heading", { name: "No plans awaiting review" })).toBeVisible();
+  let decision: { behavior: string; feedback?: string } | undefined;
+  await expect
+    .poll(async () => {
+      const res = await fetch(`${daemon.url}/api/reviews/${encodeURIComponent(id)}/decision`);
+      decision = (await res.json()) as { behavior: string; feedback?: string };
+      return decision.behavior;
+    })
+    .toBe("allow");
+  expect(decision?.feedback).toContain("explain the cold cost");
+  expect(decision?.feedback).toContain("Inline comments:");
+  expect(decision?.feedback).toMatch(/Lines? \d+/);
 });
 
 test("the chord confirms the approve guard, resolving it as an allow", async ({ daemon, page }) => {

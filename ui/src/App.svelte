@@ -49,8 +49,11 @@
   import {
     type CommentIndexEntry,
     commentIndex,
+    commentItems,
     coveredLineCount,
+    lineOrder,
     pendingItems,
+    scratchItems,
     versionCommentIndex,
   } from "$lib/feedback.ts";
   import {
@@ -117,6 +120,7 @@
   // Undefined until it lands, or for a daemon predating the field; approveVariants()
   // then falls back to the built-in set.
   let declaredVariants = $state<ApproveVariant[] | undefined>(undefined);
+  let approveCarriesNotes = $state(true);
   // True when the daemon runs from source (EXC-556), for the "local build" badge. A
   // daemon predating the field omits it, so this stays false.
   let isDev = $state(false);
@@ -371,6 +375,11 @@
   // lone general-comment draft (EXC-742) are protected exactly like a committed one.
   let guardItems = $derived(pendingItems(work.annotations, work.generalCommentDraft, scratches));
   let pendingCount = $derived(guardItems.length);
+  // What Approve sends, and the scratches it leaves behind as unsaved drafts.
+  let approveComments = $derived(
+    commentItems(lineOrder(work.annotations), work.generalCommentDraft),
+  );
+  let approveScratches = $derived(scratchItems(scratches));
   // Distinct source lines the pending line-anchored comments cover (union of
   // ranges), for the status strip's at-a-glance "N comments · M lines" readout.
   let coveredLines = $derived(coveredLineCount(work.annotations));
@@ -513,6 +522,7 @@
       .then((h) => {
         selection.setConnected(true);
         declaredVariants = h.approveVariants;
+        approveCarriesNotes = h.approveCarriesNotes ?? true;
         isDev = h.isDev ?? false;
         version = h.version;
         commit = h.commit;
@@ -697,7 +707,7 @@
   // The flag check is what makes each idempotent: the surface stays mounted through its
   // --dur-state exit, so a second press inside that window would push a second confirmation
   // for one decision.
-  function approveAnyway(notes: string) {
+  function confirmApprove(notes: string) {
     const mode = pendingApproveMode;
     if (!mode) return;
     alerts.push({ variant: "success", message: "Plan approved", sound: "approved" });
@@ -880,21 +890,25 @@
 <!-- Each modal is hosted by ModalPresence rather than an {#if} (EXC-891): the
      surface stays mounted while `open` is false so bits-ui can play its exit, then
      unmounts. One consequence on the three `active`-gated sites below: `active` can
-     go null DURING the exit (approveAnyway resolves the review while the guard is
+     go null DURING the exit (confirmApprove resolves the review while the guard is
      still fading), so a site that dereferences it reads it optionally. -->
 <ModalPresence open={pendingApproveMode !== null && active !== null}>
   {#snippet modal({ open, onClosed })}
     <UnsentCommentsDialog
       {open}
       {onClosed}
-      items={guardItems}
+      comments={approveComments}
+      items={approveScratches}
+      warning={approveCarriesNotes
+        ? undefined
+        : "This agent's approval can't carry a message, so your comments and notes won't reach it."}
       action="Approve"
       consequence="Approving accepts the plan and starts the agent's work."
       icon="check"
       kind="dialog"
       showNotes
       {reviewContext}
-      onConfirm={approveAnyway}
+      onConfirm={confirmApprove}
       onRequestChanges={divertToRequestChanges}
       onCancel={() => (pendingApproveMode = null)}
     />

@@ -49,6 +49,9 @@ const description = () => q("[data-slot='alert-dialog-description']");
 const confirm = () =>
   [...document.body.querySelectorAll("[data-slot='alert-dialog-footer'] button")].at(-1) ?? null;
 
+const button = (label: string) =>
+  [...document.body.querySelectorAll("button")].find((b) => b.textContent?.includes(label));
+
 async function mount(props: ComponentProps<typeof UnsentCommentsDialog>) {
   const { flush } = render(UnsentCommentsDialog, props);
   await flushUntil(flush, mounted);
@@ -77,14 +80,55 @@ describe("UnsentCommentsDialog render", () => {
     expect(preview).toContain("explain the cold cost");
   });
 
-  test("the Approve variant reads with the approve vocabulary and accessible name", async () => {
-    await mount(approveProps);
+  test("the Approve variant sends its comments and reads with the approve vocabulary", async () => {
+    await mount({ ...approveProps, comments: twoItems, items: [] });
     // The dialog's accessible name is its Title (bits-ui wires aria-labelledby to it).
     expect(q("[data-slot='alert-dialog-title']")?.textContent).toContain("Approve this plan?");
-    expect(confirm()?.textContent).toContain("Approve anyway");
+    expect(confirm()?.textContent).toContain("Approve with comments");
+    expect(confirm()?.textContent).not.toContain("anyway");
+    expect(button("Request changes")).toBeDefined();
+    const sent = q("[aria-label='Comments sent with your approval']")?.textContent ?? "";
+    expect(sent).toContain("reconsider the rollout");
+    expect(sent).toContain("explain the cold cost");
     expect(description()?.textContent).toContain(
       "Approving accepts the plan and starts the agent's work.",
     );
+    expect(description()?.textContent).toContain("Request changes");
+  });
+
+  test("an Approve with only scratches confirms plainly and lists them as not sent", async () => {
+    await mount({ ...approveProps, comments: [], items: [{ label: "Line 3", text: "draft" }] });
+    expect(confirm()?.textContent).toContain("Approve");
+    expect(confirm()?.textContent).not.toContain("with comments");
+    expect(confirm()?.textContent).not.toContain("anyway");
+    const group = q("[aria-label='Unsaved drafts, not sent']");
+    expect(group?.textContent).toContain("draft");
+    expect(group?.querySelectorAll("button").length).toBe(0);
+  });
+
+  test("an Approve with comments and scratches shows both groups", async () => {
+    await mount({
+      ...approveProps,
+      comments: twoItems,
+      items: [{ label: "Line 3", text: "draft" }],
+    });
+    expect(confirm()?.textContent).toContain("Approve with comments");
+    expect(q("[aria-label='Comments sent with your approval']") !== null).toBe(true);
+    expect(q("[aria-label='Unsaved drafts, not sent']") !== null).toBe(true);
+  });
+
+  test("an Approve with nothing queued is a plain confirm with the notes field", async () => {
+    await mount({ ...approveProps, comments: [], items: [], showNotes: true });
+    expect(q(".comments") !== null).toBe(false);
+    expect(button("Request changes")).toBeUndefined();
+    expect(q(".cm-content") !== null).toBe(true);
+  });
+
+  test("a warning replaces the delivery sentence in the description", async () => {
+    await mount({ ...approveProps, comments: twoItems, items: [], warning: "x-warning" });
+    expect(description()?.textContent).toContain("x-warning");
+    expect(description()?.textContent).not.toContain("without another planning round");
+    expect(confirm()?.textContent).toContain("Approve with comments");
   });
 
   test("the Reject variant swaps in the reject vocabulary and accessible name", async () => {

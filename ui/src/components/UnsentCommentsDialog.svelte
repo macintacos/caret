@@ -15,12 +15,17 @@
     open: boolean;
     /** The surface finished its exit and may be unmounted. */
     onClosed?: () => void;
-    /** The unsent feedback a plain confirm would leave behind — the general-comment
-     * draft, committed inline comments, and unsent scratches — each a short anchor
-     * label plus its text. When empty the dialog is a plain "are you sure?" confirm
-     * (Reject always confirms, EXC-685); when non-empty it previews the items and
-     * guards them from being silently dropped. */
+    /** The feedback this verdict leaves behind, each a short anchor label plus its
+     * text: for Reject, everything queued; for Approve, only the unsent scratches.
+     * When it and `comments` are empty the dialog is a plain "are you sure?" confirm
+     * (Reject always confirms, EXC-685). */
     items: PendingItem[];
+    /** The queued comments this verdict sends to the agent. Given only by Approve;
+     * Reject, which sends none, omits it. */
+    comments?: PendingItem[];
+    /** One line saying the verdict's message won't reach the agent, shown in the
+     * description. */
+    warning?: string;
     /** The verdict's label, e.g. "Approve" or "Reject". Drives the title,
      * eyebrow, and the confirm button. */
     action: string;
@@ -50,6 +55,8 @@
     open,
     onClosed,
     items,
+    comments,
+    warning,
     action,
     consequence,
     icon,
@@ -65,10 +72,15 @@
   // onConfirm on confirm. Only rendered — and only meaningful — when showNotes.
   let notes = $state("");
 
-  // With queued comments the dialog previews them and guards against dropping them;
-  // with none it is a bare confirmation.
   let count = $derived(items.length);
-  let hasComments = $derived(count > 0);
+  let sent = $derived(comments ?? []);
+  let queued = $derived(sent.length + count > 0);
+  // Only a verdict that sends no comments (Reject) drops feedback another verdict would
+  // send, so only it confirms "anyway"; Approve's leftover items are unsaved drafts.
+  let dropsItems = $derived(comments === undefined && count > 0);
+  let confirmLabel = $derived(
+    sent.length > 0 ? `${action} with comments` : dropsItems ? `${action} anyway` : action,
+  );
 
   // Without a notes field the primary path is Enter-confirmable (EXC-761): focus the
   // confirm action on open so a bare Enter activates it, rather than letting bits-ui
@@ -86,6 +98,17 @@
     onConfirm(notes);
   }
 </script>
+
+{#snippet list(rows: PendingItem[], label: string)}
+  <ul class="comments" aria-label={label}>
+    {#each rows as item, i (i)}
+      <li class="comment">
+        <span class="anchor metric">{item.label}</span>
+        <span class="text">{item.text}</span>
+      </li>
+    {/each}
+  </ul>
+{/snippet}
 
 <!-- The host mounts this per open (ModalPresence) and keeps it through the exit. -->
 <Modal
@@ -106,22 +129,37 @@
 >
   {#snippet description()}
     {consequence}
-    {#if hasComments}
+    {#if warning}
+      {warning}
+    {:else if sent.length > 0}
+      Your comments go with it, and the agent applies them without another planning round.
+      For structural changes, use Request changes.
+    {:else if dropsItems}
       You have {count} pending comment{count === 1 ? "" : "s"} that won't be sent.
     {/if}
   {/snippet}
 
-  {#if hasComments}
+  {#if sent.length > 0 && count > 0 && !dropsItems}
+    <!-- Beside the not-sent group, the sent one needs its own head to read as a pair. -->
+    <div class="group">
+      <p class="group-head">Sent with your approval</p>
+      {@render list(sent, "Comments sent with your approval")}
+    </div>
+  {:else if sent.length > 0}
+    {@render list(sent, "Comments sent with your approval")}
+  {/if}
+  {#if dropsItems}
     <!-- A preview of exactly what a plain confirm would leave behind, so the
          reviewer sees their unsent work before deciding. -->
-    <ul class="comments" aria-label="Your unsent comments">
-      {#each items as item, i (i)}
-        <li class="comment">
-          <span class="anchor metric">{item.label}</span>
-          <span class="text">{item.text}</span>
-        </li>
-      {/each}
-    </ul>
+    {@render list(items, "Your unsent comments")}
+  {:else if count > 0}
+    <div class="group">
+      <p class="group-head">
+        <span class="not-sent">Not sent</span>
+        Unsaved drafts. To send one, cancel and save it first.
+      </p>
+      {@render list(items, "Unsaved drafts, not sent")}
+    </div>
   {/if}
 
   {#if showNotes}
@@ -145,7 +183,7 @@
 
   {#snippet footer()}
     <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
-    {#if hasComments}
+    {#if queued}
       <Button variant="secondary" class="float-chip" onclick={onRequestChanges}>
         <Icon name="corner-up-left" size={14} />
         Request changes
@@ -158,7 +196,7 @@
       aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}
     >
       {#if icon}<Icon name={icon} size={14} />{/if}
-      {hasComments ? `${action} anyway` : action}
+      {confirmLabel}
       <SubmitCap />
     </Button>
   {/snippet}
@@ -227,6 +265,25 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     white-space: pre-wrap;
+  }
+
+  .group + .group {
+    margin-top: 0.75rem;
+  }
+  .group-head {
+    margin: 0 0 0.4rem;
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+  }
+  /* Pill marker, neutral: amber is reserved for the primary action. */
+  .not-sent {
+    margin-right: 0.35rem;
+    padding: 0.05rem 0.45rem;
+    border: 1px solid var(--rule);
+    border-radius: 99px;
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    color: var(--ink-soft);
   }
 
   /* Optional reviewer-notes field (EXC-791), reusing the request-changes form
