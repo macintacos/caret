@@ -33,6 +33,7 @@ interface HookStdin {
 export const opencodeAdapter: AgentAdapter = {
   id: "opencode",
   approveVariants: APPROVE_VARIANTS,
+  approveCarriesNotes: true,
   restartHint: "Then restart OpenCode.",
 
   parseHookInput(stdin: string): PlanInput {

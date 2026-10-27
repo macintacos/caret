@@ -256,6 +256,22 @@ test("GET /api/health omits approveVariants when the adapter declares none", asy
   expect("approveVariants" in body).toBe(false);
 });
 
+for (const approveCarriesNotes of [true, false]) {
+  test(`GET /api/health publishes approveCarriesNotes: ${approveCarriesNotes} as passed`, async () => {
+    await boot({ approveCarriesNotes });
+    const body = (await (await fetch(`${base}/api/health`)).json()) as {
+      approveCarriesNotes?: boolean;
+    };
+    expect(body.approveCarriesNotes).toBe(approveCarriesNotes);
+  });
+}
+
+test("GET /api/health omits approveCarriesNotes when not passed", async () => {
+  await boot();
+  const body = (await (await fetch(`${base}/api/health`)).json()) as Record<string, unknown>;
+  expect("approveCarriesNotes" in body).toBe(false);
+});
+
 // ---- daemon diagnostics endpoint (EXC-842) ----
 
 test("GET /api/diagnostics returns the injected diagnostics body", async () => {

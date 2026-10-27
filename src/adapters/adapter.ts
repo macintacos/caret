@@ -37,6 +37,10 @@ export interface AgentAdapter {
   /** The approve variants this adapter offers, in display order. */
   readonly approveVariants: readonly ApproveVariant[];
 
+  /** Whether an approval can carry the reviewer's notes and comments to the agent,
+   * published on /api/health so the approve dialog can warn when they won't arrive. */
+  readonly approveCarriesNotes: boolean;
+
   /** The post-upgrade line the UI shows beside the upgrade command. Optional; an
    * adapter without one omits it. */
   readonly restartHint?: string;

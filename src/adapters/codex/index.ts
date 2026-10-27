@@ -37,6 +37,8 @@ interface HookStdin {
 export const codexAdapter: AgentAdapter = {
   id: "codex",
   approveVariants: APPROVE_VARIANTS,
+  // Codex's allow has no agent-facing message channel (see feedback.ts).
+  approveCarriesNotes: false,
 
   parseHookInput(stdin: string): PlanInput {
     const hook = parseHookStdin<HookStdin>(stdin);

@@ -23,6 +23,7 @@ afterEach(() => {
 function expectAdapterShape(a: AgentAdapter): void {
   expect(typeof a.id).toBe("string");
   expect(Array.isArray(a.approveVariants)).toBe(true);
+  expect(typeof a.approveCarriesNotes).toBe("boolean");
   expect(typeof a.parseHookInput).toBe("function");
   expect(typeof a.emitDecision).toBe("function");
   expect(typeof a.fatalDenyLine).toBe("function");

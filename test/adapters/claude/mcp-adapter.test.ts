@@ -58,6 +58,10 @@ test("offers Claude's approve variants", () => {
   expect(selectAdapter(CLAUDE_MCP_AGENT).approveVariants).toBe(APPROVE_VARIANTS);
 });
 
+test("approval carries notes like Claude's", () => {
+  expect(selectAdapter(CLAUDE_MCP_AGENT).approveCarriesNotes).toBe(true);
+});
+
 test("lists skills, reads skill descriptions and probes the install as Claude does", () => {
   const mcp = selectAdapter(CLAUDE_MCP_AGENT);
   expect(mcp.listSkills).toBe(claudeAdapter.listSkills);

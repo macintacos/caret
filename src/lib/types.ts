@@ -447,6 +447,10 @@ export interface HealthIdentity {
    * capability instead of hard-coding tool mode names. Optional: a daemon that
    * predates this field omits it, and the UI falls back to its built-in set. */
   approveVariants?: ApproveVariant[];
+  /** Whether the active adapter's approval carries the reviewer's notes and comments
+   * to the agent. Optional: a daemon that predates this field omits it, and the UI
+   * then reads it as true. */
+  approveCarriesNotes?: boolean;
   /** What to do after upgrading, in the words of the harness that spawned this daemon.
    * Absent on a resident daemon, whose adapter is only a default. */
   restartHint?: string;
