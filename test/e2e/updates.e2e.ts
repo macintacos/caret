@@ -11,22 +11,26 @@
 // units (`UpdatesPane.test.ts`, `SettingsDialog.test.ts`, `TopBar.test.ts`,
 // `WhatsNewDialog.test.ts`).
 //
-// Nothing here stubs a route. The daemon owns the whole answer (EXC-1210): its BUILD
-// verdict is staged through the fixture's `updateStatus` option (with `updateInstall` and
-// `updateChanges` beside it), and the reviewer's `updates.check` is folded over it per
-// request — so the opt-out specs below exercise the real fold rather than a `page.route`
-// that would only test itself. The fixture daemon's default verdict is the quiet
-// from-source one, which is why the specs outside the describe block see no toast they
-// did not ask for.
+// Nothing here stubs a caret route; the one `page.route` serves the release note's
+// GitHub-hosted screenshot, so no run touches the network. The daemon owns the whole
+// answer (EXC-1210): its BUILD verdict is staged through the fixture's `updateStatus`
+// option (with `updateInstall` and `updateChanges` beside it), and the reviewer's
+// `updates.check` is folded over it per request — so the opt-out specs below exercise
+// the real fold rather than a `page.route` that would only test itself. The fixture
+// daemon's default verdict is the quiet from-source one, which is why the specs outside
+// the describe block see no toast they did not ask for.
 
 import type { Page } from "@playwright/test";
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { BIG_PNG } from "@test/e2e/support/images.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const AVAILABLE = "9.9.9";
 const COMMAND = "bunx --no-cache @macintacos/caret@latest install --refresh";
 const RELEASE_NOTE = "Staged release note for the e2e run.";
+const SCREENSHOT = "https://github.com/macintacos/caret/releases/download/v9.9.9/shot.png";
+const SCREENSHOT_ALT = "The staged screenshot";
 
 const toast = (page: Page) => page.locator(".alert-item", { hasText: "Update available" });
 const markedGear = (page: Page) =>
@@ -36,7 +40,18 @@ test.describe("with a pending update", () => {
   test.use({
     updateStatus: { kind: "behind-release", available: AVAILABLE, command: COMMAND },
     updateInstall: "bundle",
-    updateChanges: { kind: "releases", releases: [{ version: AVAILABLE, body: RELEASE_NOTE }] },
+    updateChanges: {
+      kind: "releases",
+      releases: [
+        { version: AVAILABLE, body: `${RELEASE_NOTE}\n\n![${SCREENSHOT_ALT}](${SCREENSHOT})` },
+      ],
+    },
+  });
+
+  test.beforeEach(async ({ page }) => {
+    await page.route(SCREENSHOT, (route) =>
+      route.fulfill({ status: 200, contentType: "image/png", body: BIG_PNG }),
+    );
   });
 
   test("a pending update toasts on load and dots the settings gear", async ({ daemon, page }) => {
@@ -63,6 +78,14 @@ test.describe("with a pending update", () => {
     const dialog = page.getByRole("dialog", { name: "What's new" });
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText(RELEASE_NOTE);
+    // The screenshot decodes and fits the dialog's measure: BIG_PNG is 900px wide.
+    const shot = dialog.getByRole("img", { name: SCREENSHOT_ALT });
+    await expect(shot).toBeVisible();
+    await expect.poll(() => shot.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(900);
+    const fits = await shot.evaluate(
+      (img) => img.getBoundingClientRect().width <= (img.parentElement?.clientWidth ?? 0),
+    );
+    expect(fits).toBe(true);
     // The fixture runs 0.0.0-e2e, which parses to 0.0.0.
     await expect(dialog.getByRole("link", { name: "Compare on GitHub" })).toHaveAttribute(
       "href",
