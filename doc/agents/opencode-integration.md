@@ -761,12 +761,33 @@ and the subagent deny:
 **v2 follow-ups.** Whether a real model obeys the steer over v2's own "do not create or
 update plan files unless the user explicitly asks" reminder — a mock model cannot show it
 (anomalyco/opencode#49879). Web and desktop, which attach no TUI and so show no toasts.
-The default-agent resolution: a user whose default agent is `plan` gets the warm and the
-allow, awaiting its live check (EXC-1535). That the allow follows a plan session switched
-to another agent was not observed directly.
+That the allow follows a plan session switched to another agent was not observed directly.
+The toasts were not re-checked live after 2.0.18; their loader shape and the three
+`session.tool.*` events are unchanged in source through 2.2.0.
 
-**v1 follow-up.** v1 loading through the lazy `server`, which imports `caret.plugin.ts` on
-its first call, awaits its live check (EXC-1535); the v1.18.29 runs above predate it.
+**Confirmed live for the v2 re-enable** (scripted OpenAI-compatible mock model, isolated
+`HOME` + `XDG_*`; v2 loaded the packed npm tarball as `file:<tgz>` under `plugins`, v1 the
+unpacked package directory with production deps installed, since v1 can't install a
+`file:` tarball):
+
+- **v1-only entrypoint.** v2 2.0.27 and 2.2.0 rejected it, and the published 1.5.0, with
+  `PluginModule.LoadError`: "Plugin must export a default definition with an id and an
+  effect or setup function". v2 has no loader path for a v1-shaped default.
+- **Dual default.** v2 2.0.18, 2.0.27 and 2.2.0 loaded caret with no load error.
+  `caret_review_plan` was in the plan agent's tools, the steer reached its system prompt,
+  and a review reached the daemon and returned the decision. 2.0.27 also loaded it from
+  the legacy `plugin` key.
+- **Default agent** (2.0.27). With `default_agent: plan` and a config deny-all, a session
+  started with no agent was offered only `caret_review_plan`, and its review completed.
+  With `default_agent: build` under the same deny-all it was offered no tool and caret
+  never started. With `default_agent: plan` and no tool call, the prewarm started the
+  daemon.
+- **`path`** (2.0.27 and 2.2.0). A plan in `~/.opencode/plan/` was allowed and reviewed. A
+  path outside it was refused with the not-permitted text and opened no review. 2.0.27
+  predates `permission.assert`, so it took the evaluator; 2.2.0 has `assert`.
+- **v1 lazy `server`.** 1.3.4 and 1.19.5 loaded the package through it: the log showed the
+  plugin loading from `opencode/index.ts`, `caret_review_plan` was offered, and a review
+  completed.
 
 **Confirmed live for EXC-1520** (isolated `HOME` + `XDG_*`; v2.0.18 from Homebrew,
 v1.18.15 and v1.18.29 from npm):
