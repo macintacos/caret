@@ -1,5 +1,6 @@
-// OpenCode v2 permission evaluation, for checking a plan file write-back that v2 gives a
-// plugin no way to ask about. Copied from anomalyco/opencode at v2.0.18:
+// OpenCode v2 permission evaluation, for checking a plan file write-back on a v2 before
+// 2.0.29, which gives a plugin no way to ask about it (2.0.29+ asks through
+// `permission.assert`). Copied from anomalyco/opencode at v2.0.18:
 // packages/core/src/util/wildcard.ts (match), packages/core/src/permission.ts (evaluate),
 // the resource forming in packages/core/src/file-access.ts (resolve), and
 // packages/util/src/fs-util.ts (contains, from FSUtil.contains).

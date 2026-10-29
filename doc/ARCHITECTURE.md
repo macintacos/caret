@@ -313,14 +313,13 @@ changes without writing. See
 [`agents/opencode-integration.md`](agents/opencode-integration.md) for the design.
 
 caret supports OpenCode v1 1.3.4 or later (an older v1 fails to load the plugin) and v2
-2.0.18 or later. `caret doctor`'s `opencode-host` check flags a v1 below that floor, and
-caret sitting in the array the running host does not load or in a config file it does not
-load (`config.json` on v2). On v2 the same package loads through a dual default export.
-The review tool, planning steer, prewarm, abort, and the review-link and update toasts
-work; the toasts come from a TUI half under the package's `./tui` export, so they need an
-attached terminal UI (web and desktop show none). Prewarm runs per prompt. From 2.0.29 a
-`path` outside what the agent may edit is asked about through OpenCode; an older v2
-refuses it rather than asks (see
+2.0.18 or later. `caret doctor`'s `opencode-host` check flags a v1 below 1.3.4, and caret
+sitting in the array the running host does not load or in a config file it does not load
+(`config.json` on v2). On v2 the same package loads through a dual default export. The
+review tool, planning steer, prewarm, abort, and the review-link and update toasts work;
+the toasts come from a TUI half under the package's `./tui` export, so they need an
+attached terminal UI (web and desktop show none). Prewarm runs per prompt, and how caret
+checks a `path`'s edit permission depends on the v2 version (see
 [Calling the review tool from your own skill](#calling-the-review-tool-from-your-own-skill)).
 
 `caret install --refresh` takes an update: it compares the caret OpenCode would load

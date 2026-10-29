@@ -1,6 +1,6 @@
 // The package entrypoint that makes `@macintacos/caret` loadable as an OpenCode
-// plugin via a bare `plugin: ["@macintacos/caret"]` array entry. OpenCode's loader
-// iterates a plugin module's exports (Object.values) and rejects the whole module
+// plugin via a bare `plugin`/`plugins` array entry. v1's loader iterates a plugin
+// module's exports (Object.values; v2 reads only `default`) and rejects the whole module
 // on the FIRST export that isn't a plugin, so the entrypoint must expose EXACTLY
 // one value: the object both OpenCode v1 (`server`) and v2 (`setup`) load. These
 // tests pin that invariant, that a v2 load never evaluates v1's SDK, and the
