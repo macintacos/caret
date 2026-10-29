@@ -759,14 +759,15 @@ and the subagent deny:
   `experimental.primary_tools` holding the tool and the plan agent's
   `caret_review_plan: allow`.
 
-**v2 follow-ups.** Whether a real model obeys the steer over v2's own "do not create or
-update plan files unless the user explicitly asks" reminder — a mock model cannot show it
-(anomalyco/opencode#49879). Web and desktop, which attach no TUI and so show no toasts.
-That the allow follows a plan session switched to another agent was not observed directly.
-The toasts were not re-checked live after 2.0.18; their loader shape and the three
-`session.tool.*` events are unchanged in source through 2.2.0. OpenCode's interactive
-prompt through `permission.assert` for an `ask` rule (for example a non-plan agent's
-out-of-project `path` on ≥ 2.0.29) is not live-checked.
+**v2 follow-ups.** One real model, checked by hand on v2, followed the steer over v2's own
+"do not create or update plan files unless the user explicitly asks" reminder: it wrote
+its plan and called `caret_review_plan` (anomalyco/opencode#49879). Other models are
+unchecked. Web and desktop, which attach no TUI and so show no toasts. That the allow
+follows a plan session switched to another agent was not observed directly. The toasts
+were not re-checked live after 2.0.18; their loader shape and the three `session.tool.*`
+events are unchanged in source through 2.2.0. OpenCode's interactive prompt through
+`permission.assert` for an `ask` rule (for example a non-plan agent's out-of-project
+`path` on ≥ 2.0.29) is not live-checked.
 
 **v1 follow-up.** v1 loading the dual default through OpenCode's npm installer (the
 published package) is inferred, not observed: the re-enable runs used a directory entry,
