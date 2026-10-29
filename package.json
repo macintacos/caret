@@ -6,7 +6,8 @@
   "description": "A Claude Code plugin that replaces the terminal plan-approval prompt with a local web UI for inline review, annotation, and approval.",
   "main": "./opencode/index.ts",
   "exports": {
-    ".": "./opencode/index.ts"
+    ".": "./opencode/index.ts",
+    "./tui": "./opencode/caret.tui.ts"
   },
   "bin": {
     "caret": "./bin/caret"
