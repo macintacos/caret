@@ -619,20 +619,15 @@ So the package's entrypoint is a tiny dedicated module, `opencode/index.ts`, who
 namespace is exactly `{ default }`, and `package.json` `exports` `.` points at it.
 `test/opencode/entrypoint.test.ts` asserts it.
 
-**v2 is withheld from the published package for now.** `index.ts` re-exports only
-`caret.plugin.ts`'s default and `package.json` has no `./tui` export, so a v2 host loads
-none of caret; `entrypoint.test.ts` pins both. The dual default below is the shape
-re-enabling v2 restores, and `test/opencode/sdk-conformance.ts` still pins
-`caret.plugin.v2.ts` against it.
-
 **One default serves both runtimes: `{ id: "caret", setup, server }`.** OpenCode v2
 decodes `default` as `{ id, setup }` and ignores the extra `server`; v1 runs `server` and
 ignores `setup` (the v2 plugin, `caret.plugin.v2.ts`'s default). `id` is a fixed
-whitespace-free string both loaders accept. `server` imports `caret.plugin.ts` on its
-first call and delegates to its default, so a v2 load never evaluates
-`@opencode-ai/plugin` (or its zod); v1's loader only checks that `server` is a function
-before awaiting it. The v1 floor is **1.3.4**, the first v1 loader that reads an object
-default's `server`; an older v1 sees a non-function export and fails to load the plugin.
+whitespace-free string both loaders accept. v2 does not skip a v1-shaped default; it fails
+the load with `PluginModule.LoadError`. `server` imports `caret.plugin.ts` on its first
+call and delegates to its default, so a v2 load never evaluates `@opencode-ai/plugin` (or
+its zod); v1's loader only checks that `server` is a function before awaiting it. The v1
+floor is **1.3.4**, the first v1 loader that reads an object default's `server`; an older
+v1 sees a non-function export and fails to load the plugin.
 
 `@opencode/plugin` (v2's plugin API) is a `devDependency`, never imported from
 `opencode/`: its runtime entry would pull Effect and OpenCode's client into the module
@@ -764,15 +759,44 @@ and the subagent deny:
   `experimental.primary_tools` holding the tool and the plan agent's
   `caret_review_plan: allow`.
 
-**v2 follow-ups.** Whether a real model obeys the steer over v2's own "do not create or
-update plan files unless the user explicitly asks" reminder — a mock model cannot show it
-(anomalyco/opencode#49879). Web and desktop, which attach no TUI and so show no toasts.
-The default-agent resolution: a user whose default agent is `plan` gets the warm and the
-allow, awaiting its live check (EXC-1535). That the allow follows a plan session switched
-to another agent was not observed directly.
+**v2 follow-ups.** One real model, checked by hand on v2, followed the steer over v2's own
+"do not create or update plan files unless the user explicitly asks" reminder: it wrote
+its plan and called `caret_review_plan` (anomalyco/opencode#49879). Other models are
+unchecked. Web and desktop, which attach no TUI and so show no toasts. That the allow
+follows a plan session switched to another agent was not observed directly. The toasts
+were not re-checked live after 2.0.18; their loader shape and the three `session.tool.*`
+events are unchanged in source through 2.2.0. OpenCode's interactive prompt through
+`permission.assert` for an `ask` rule (for example a non-plan agent's out-of-project
+`path` on ≥ 2.0.29) is not live-checked.
 
-**v1 follow-up.** v1 loading through the lazy `server`, which imports `caret.plugin.ts` on
-its first call, awaits its live check (EXC-1535); the v1.18.29 runs above predate it.
+**v1 follow-up.** v1 loading the dual default through OpenCode's npm installer (the
+published package) is inferred, not observed: the re-enable runs used a directory entry,
+so a published prerelease would prove it.
+
+**Confirmed live for EXC-1600** (scripted OpenAI-compatible mock model, isolated `HOME` +
+`XDG_*`; v2 loaded the packed npm tarball as `file:<tgz>` under `plugins`, v1 the unpacked
+package directory with production deps installed, since 1.3.4 and 1.19.5 fail to install a
+`file:<tgz>` entry):
+
+- **v1-only entrypoint.** v2 2.0.27 and 2.2.0 rejected it, and caret 1.5.0 from npm, with
+  `PluginModule.LoadError`: "Plugin must export a default definition with an id and an
+  effect or setup function". v2 has no loader path for a v1-shaped default.
+- **Dual default.** v2 2.0.18, 2.0.27 and 2.2.0 loaded caret with no load error.
+  `caret_review_plan` was in the plan agent's tools, the steer reached its system prompt,
+  and a review reached the daemon and returned the decision. 2.0.27 also loaded it from
+  the legacy `plugin` key.
+- **Default agent** (2.0.27). With `default_agent: plan` and a config deny-all, a session
+  started with no agent was offered only `caret_review_plan`, and its review completed.
+  With `default_agent: build` under the same deny-all it was offered no tool and caret
+  never started. With `default_agent: plan` and no tool call, the prewarm started the
+  daemon.
+- **`path`** (2.0.27 and 2.2.0). A plan in `~/.opencode/plan/` was allowed and reviewed. A
+  path outside it was refused with the not-permitted text and opened no review. 2.0.27
+  predates `permission.assert`, so it took the evaluator; 2.2.0 has `assert` (mechanism
+  read from source; neither run hit an `ask` rule).
+- **v1 lazy `server`.** 1.3.4 and 1.19.5 loaded the package through it: the log showed the
+  plugin loading from `opencode/index.ts`, `caret_review_plan` was offered, and a review
+  completed.
 
 **Confirmed live for EXC-1520** (isolated `HOME` + `XDG_*`; v2.0.18 from Homebrew,
 v1.18.15 and v1.18.29 from npm):
