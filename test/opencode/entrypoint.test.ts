@@ -40,8 +40,8 @@ test("the OpenCode package entrypoint exports one plugin serving both v1 (server
   expect(plugin.tui).toBeUndefined();
 });
 
-const ENTRY = Bun.resolveSync("@oc/index.ts", import.meta.dir);
-const V1 = Bun.resolveSync("@oc/caret.plugin.ts", import.meta.dir);
+const ENTRY_PATH = Bun.resolveSync("@oc/index.ts", import.meta.dir);
+const V1_PLUGIN_PATH = Bun.resolveSync("@oc/caret.plugin.ts", import.meta.dir);
 
 /** Runs `script` in a fresh bun, whose module registry this file's imports haven't touched. */
 function inFreshBun(script: string): string {
@@ -59,10 +59,10 @@ function inFreshBun(script: string): string {
 test("a v2 load — index.ts plus setup() — never evaluates @opencode-ai/plugin", () => {
   const out = inFreshBun(`
     const loadedV1SdkModules = () => Object.keys(require.cache).filter((k) => k.includes("/@opencode-ai/plugin/"));
-    const { default: plugin } = await import(${JSON.stringify(ENTRY)});
+    const { default: plugin } = await import(${JSON.stringify(ENTRY_PATH)});
     await plugin.setup({ tool: { transform: async () => {} }, session: { hook: async () => {} } });
     const afterSetup = loadedV1SdkModules();
-    await import(${JSON.stringify(V1)});
+    await import(${JSON.stringify(V1_PLUGIN_PATH)});
     console.log(JSON.stringify({ afterSetup, seenOnceImported: loadedV1SdkModules().length > 0 }));
   `);
   // seenOnceImported proves the probe sees the SDK at all, so an empty afterSetup is real.
@@ -74,7 +74,7 @@ test("server() rejects when the v1 module fails to load, never swallowing it", (
     Bun.plugin({ name: "fail-v1", setup(build) {
       build.onLoad({ filter: /caret\.plugin\.ts$/ }, () => { throw new Error("v1 load failed"); });
     } });
-    const { default: plugin } = await import(${JSON.stringify(ENTRY)});
+    const { default: plugin } = await import(${JSON.stringify(ENTRY_PATH)});
     console.log(await plugin.server({}).then(() => "resolved", (e) => e.message));
   `);
   expect(out.trim()).toBe("v1 load failed");
@@ -82,7 +82,7 @@ test("server() rejects when the v1 module fails to load, never swallowing it", (
 
 test("server() resolves the v1 plugin's hooks", () => {
   const out = inFreshBun(`
-    const { default: plugin } = await import(${JSON.stringify(ENTRY)});
+    const { default: plugin } = await import(${JSON.stringify(ENTRY_PATH)});
     console.log(JSON.stringify(Object.keys((await plugin.server({})).tool ?? {})));
   `);
   expect(JSON.parse(out)).toEqual(["caret_review_plan"]);
