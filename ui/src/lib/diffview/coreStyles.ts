@@ -81,8 +81,10 @@ const CARET_OVERRIDES = `
      together, so they share one named value rather than coupled literals. */
   :host { --caret-seam: 20px; }
   [data-content] { padding-inline-start: var(--caret-seam); }
-  /* Three more of the same kind, one level down (EXC-865). Their depth is --panel-recess
-     (styles/tokens.css); see the note below.
+  /* Three more of the same kind, one level down (EXC-865). Their depth is the shared
+     --panel-recess (styles/tokens.css, inherited into this shadow root): two cards a hair
+     apart side by side read as a mistake. Only its 1px bottom lip leaves the card's box,
+     so nothing spills into the --caret-card-inset gutter lane.
 
      --caret-card-inset is how far the content column's own indented surfaces sit in
      from it — the fenced-code row and the code card both spend it — and
@@ -101,12 +103,6 @@ const CARET_OVERRIDES = `
     --caret-read-max: 720px;
     --caret-gutter-divider: 2px;
   }
-  /* The depth those same indented surfaces sit at: the table card and both of the fenced
-     block's paint paths are panels recessed into the page, the preview's code block's
-     depth (--panel-recess in styles/tokens.css, which inherits into this shadow root).
-     All of it is inside the card's own box but a 1px lip under its bottom edge, so nothing
-     spills into the --caret-card-inset gutter lane. One value across the sites, because
-     two cards a hair apart side by side read as a mistake. */
   /* The task-list checkbox's size (EXC-860) — the box the masked Lucide glyph is painted
      into, which every state measures from. Lucide draws its square inset in the viewBox
      (18 of 24 units), so the SQUARE a reader sees is about three quarters of this: the
@@ -1105,7 +1101,6 @@ const CARET_OVERRIDES = `
     margin-inline: var(--caret-card-inset);
     background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
     border-radius: var(--radius);
-    /* The table card's recess, quoted from the shared token. */
     box-shadow: var(--panel-recess);
   }
   /* The library paints every line with its own --diffs-bg, so clear it inside the card for

@@ -921,15 +921,12 @@ test("a comment inside a code card is never wider than the card, and starts at i
   expect(box?.commentX).toBeCloseTo(box?.cardX ?? -1, 0);
 });
 
-// EXC-1145: the two cards a rendered plan puts in front of a reader — the table's
-// (EXC-1136) and the fenced block's — must sit at the same depth, or the page reads as
-// two depth languages rather than as one family. The block has TWO paint paths to the
-// table's one: an overflowing block is a single [data-code-card] box that takes the shadow
-// the way the table card does, while a FITTING block gets no card element at all and every
-// row carries its piece of the recess. Only an engine can say those two produce the same picture,
-// and that the [data-theme] token blocks reach the shadow root — so this plan carries a
-// table, a fitting fence and an overflowing fence together, and the probe runs under both
-// schemes.
+// EXC-1145: the table card (EXC-1136) and the fenced block must sit at one depth. The
+// block has TWO paint paths: an overflowing block is a single [data-code-card] box like the
+// table card, while a FITTING block has no card element and every row carries its piece of
+// the recess. Only an engine can say those produce the same picture, and that the
+// [data-theme] token blocks reach the shadow root — so this plan carries a table, a fitting
+// fence and an overflowing fence, and the probe runs under both schemes.
 //
 // The sheet's own declarations are pinned in coreStyles.test.ts; what is claimed here is
 // that they reach the screen as one depth.

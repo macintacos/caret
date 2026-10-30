@@ -204,9 +204,7 @@
 }
 
 
-/* The panel floats over the dimmed app on the deepest shadow the kit has (--float-high
-   in styles/tokens.css), lit along its top edge, and rises --float-arrive into place as
-   it arrives. The rise rides the custom properties tw-animate-css's `enter`/`exit`
+/* The modal's rise rides the custom properties tw-animate-css's `enter`/`exit`
    keyframes read, so the vendored animation stays the one that plays. */
 [data-slot="dialog-content"],
 [data-slot="alert-dialog-content"] {

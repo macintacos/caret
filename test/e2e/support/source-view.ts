@@ -107,8 +107,7 @@ export function rowLabel(lines: readonly number[]): string {
  * pointed at the strip. Every code row carries the panel recess, so the presence of a
  * box-shadow does not separate a banded row from a resting one — and a length or "not
  * none" comparison would pass on any second layer at all. The recess's right edge is an
- * inset layer at the same kind of offset, which is why an inset layer never matches. Two
- * specs make that claim, so the pattern lives here rather than in either.
+ * inset layer at the same kind of offset, which is why an inset layer never matches.
  */
 export const SEAM_STRIP = /-[\d.]+px 0px 0px 0px(?! inset)/;
 

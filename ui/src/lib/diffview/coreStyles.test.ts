@@ -1180,7 +1180,7 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
     // box-shadow does not cascade additively, so ANY rule that out-ranks the base row rule
     // and declares one erases the depth. The banded-row rule is that trap today; the
     // next such rule — a change tint if the plan surface ever stops being single-version, a
-    // focus ring, a drag affordance — would take the lift out silently. Pinning the whole
+    // focus ring, a drag affordance — would take the depth out silently. Pinning the whole
     // SET rather than three named selectors is what makes a fifth rule opt in or argue here.
     const shadowed = [...overrideDecls.matchAll(/([^{}]+)\{([^}]*)\}/g)]
       .map((rule) => ({ selector: rule[1] ?? "", body: rule[2] ?? "" }))

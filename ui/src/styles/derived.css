@@ -48,10 +48,9 @@
   --code-panel: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
 
   /* The tactile surfaces (their geometry is in styles/tokens.css), in their dark
-     recipe; light re-derives them in the block below. A well's floor, then a text
-     field's shallower one, then a rubber cap's face at rest, hovered and pressed. On
-     dark paper a well steps toward black, since a step toward ink would lift it, and a
-     cap's face lifts toward ink off its well. */
+     recipe; light re-derives them in the block below. On dark paper a well steps
+     toward black, since a step toward ink would lift it, and a cap's face lifts toward
+     ink off its well. */
   --well-floor: color-mix(in lab, var(--paper-raised), black 40%);
   --field-floor: color-mix(in lab, var(--paper-raised), black 30%);
   --neutral-face: color-mix(in lab, var(--paper-raised), var(--ink) 12%);

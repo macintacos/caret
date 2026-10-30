@@ -74,9 +74,8 @@
      chip's own footprint. The dividing line is the surface's own height: anything
      shorter than --shadow-card's blur wears this, panels keep --shadow-card.
 
-     Hand-written rather than emitted per palette: the geometry is fixed and only the
-     alpha moves — the same black reads much heavier over a light ground than over a
-     dark one — so it is declared with the tactile geometry below, per scheme. */
+     Hand-written rather than emitted per palette: only the alpha moves per scheme, so
+     it lives with the tactile geometry below. */
 
   /* The scheme-free half of the tactile geometry; the alphas follow below. */
   --well-pad: 3px;
@@ -91,38 +90,26 @@
   --float-arrive: 4px;
 }
 
-/* The tactile geometry: rubber caps sitting in wells cut into the surface, and floating
-   surfaces lit along their top edge. Written once for every palette: only alphas live
-   here, and the hues come from palette tokens at the use site or in the derived tier
-   (styles/derived.css). The surfaces themselves are built in styles/atoms.css.
+/* The tactile geometry, written once for every palette: only alphas live here. The hues
+   come from palette tokens at the use site or in styles/derived.css; the surfaces are
+   built in styles/atoms.css.
 
-   Keyed on the data-theme paintTheme() stamps on the root and on any scoped paint, not
-   on light-dark(): Lightning CSS, which builds these sheets, rewrites light-dark() into
-   variables that only a stylesheet's own color-scheme declaration sets, so it never
-   sees the color-scheme paintTheme() writes inline and stays on the static first
-   paint's dark arm. :root takes dark, like that first paint. The same black reads far
-   heavier over a light ground than over a dark one, so every alpha splits. Custom properties inherit into the diff
-   view's shadow DOM, so the plan's chips and panels there read these too.
+   Keyed on data-theme, not light-dark(): Lightning CSS rewrites light-dark() into
+   variables only a stylesheet's own color-scheme declaration sets, so it never sees the
+   color-scheme paintTheme() writes inline. :root takes dark, like the static first
+   paint. The same black reads far heavier over a light ground, so every alpha splits.
+   These inherit into the diff view's shadow DOM.
 
-   - Wells: the bezel's inner shade, and the lit lip just below a cut, where the surface
-     turns back toward the light. A text field takes a shallower shade; the use site adds
-     its --rule ring.
-   - Caps: a domed face shaded inside its own box, with nothing cast outside it. The
-     pressed cap turns the dome over (--press-shade, --press-ring). The tinted set
-     retunes the lighting for a coloured face; a bright face on dark paper reads larger
-     than the same box on light paper, so dark takes a firmer side rim and draws the face
-     in by --tinted-inset at rest.
-   - Grain: a barely visible speckle on button faces, blended soft-light so its mean is
-     neutral. Soft-light vanishes on near-white but speckles a dark face, so dark takes a
+   - Wells: a text field takes a shallower shade; the use site adds its --rule ring.
+   - Caps: a bright face on dark paper reads larger than the same box on light paper, so
+     dark takes a firmer side rim and draws the face in by --tinted-inset at rest.
+   - Grain: soft-light vanishes on near-white but speckles a dark face, so dark takes a
      weaker one. The two URIs differ only in the matrix's last alpha; keep them in step.
    - Floats: low for a card on the page, mid for menus, popovers, toasts and the composer,
      high for modals. styles/derived.css adds each one's ring as --float-surface-*.
-   - Sockets: the shade and ring of the status light's socket and the attention count's
-     inner shade.
-   - The plan: a passive chip is stamped into its box and a clickable one stands 1px proud,
-     with crisp, unblurred lines, because a chip fragmented across several elements must
-     show no seam. The raised chip's 1px under-edge is its only outside footprint, inside
-     the line's slack. A fenced code block or table is a panel recessed into the page. */
+   - The plan: chip lines are crisp and unblurred, because a chip fragmented across
+     several elements must show no seam. The raised chip's 1px under-edge stays inside
+     the line's slack. */
 :root,
 [data-theme="dark"] {
   --well-shade:

@@ -255,8 +255,7 @@
     color: var(--accent);
   }
 
-  /* The step / close buttons are neutral caps (.float-chip) sharing one tray; only the
-     square box and disabled state are set here. */
+  /* The step / close buttons are neutral caps (.float-chip) sharing one tray. */
   .search-step,
   .search-close {
     display: inline-flex;

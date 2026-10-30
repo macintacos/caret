@@ -172,8 +172,7 @@
 <style>
   /* Capped so the comment reads as a block under its line, not a full-bleed band. It
      sits on the composer's sheet with no rail on its edge; its state is the stamp in
-     its header, inked in the state's own hue (--st). The two open states ink fully,
-     an accepted one is fainter, being settled, and an expired one takes no ink. */
+     its header, inked in the state's own hue (--st). */
   .card {
     --st: var(--attention);
     --st-settle: 1;
