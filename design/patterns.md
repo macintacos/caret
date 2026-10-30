@@ -19,7 +19,23 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   composite for its height, `--float-surface-low`, `-mid` or `-high` in
   `ui/src/styles/derived.css`, which carries the rim, the ring and the shadow, so a call
   site never picks a ring. `--shadow-chip` stays under small hints and overlays, such as
-  the search box.
+  the drag readout, the editor tooltip and the link hover.
+- **The window is a body, and the plan is a pane set into it.** Every control is cut into
+  the body (`--body`), and chrome never paints a bar face or a rule. The pane is inset
+  `--pane-gap` with `--radius-lg` corners. It is recessed with `--pane-recess`, a contact
+  edge like `--panel-recess`: every outer layer is 1px, with no blur and no spread. Its
+  edges shade the text under them with `--pane-shade`: the top once the plan has scrolled
+  (`data-scrolled` on `.plan-pane`), the bottom while more lies below (`data-more-below`).
+  The file drawer is a second pane beside the plan, and the gap between them is the resize
+  handle. The empty screen is the same pane, and the daemon banner sits on the body. Text
+  cut into the body is `--ink-soft` at its faintest, because `--ink-faint` falls under
+  4.5:1 there in several palettes.
+- **A sheet hangs from a pane's top edge.** It tucks under the pane's lip (`--pane-lip`,
+  z-index 5 over the sheet's 4), so it carries no `--float-rim` and paints no top shade.
+  It is square at the top, and its foot rounds at
+  `calc(var(--radius) + var(--well-pad-tight) + 4px)` so its contents nest. It wears
+  `--paper-raised` with a `--rule` ring on `--float-mid`, and drops in from
+  `translateY(-100%)` over `--dur-state`. The plan search is the only sheet.
 - One emphasis per view. The amber accent is used verbatim, never lightened, and only for
   the wordmark, the primary action, focus, and the cursor. Everything else steps down
   through `--ink-soft` and `--ink-faint`.
@@ -56,8 +72,35 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   and Save in the composer, Send for revision, the guard confirms (Approve with comments,
   Reject anyway) and the confirm bubble's Discard. Enable notifications is not a submit
   and keeps the full size.
-- **Stamps.** Passive labels (`.stamp`, counts, the comment states) take a well's floor
-  and shade with no cap. Text fields (`.field-well`) take a shallower cut.
+- **Stamps.** Passive labels (`.stamp`, counts, the comment states, Settings' "In use")
+  take a well's floor and shade with no cap. Text fields (`.field-well`) take a shallower
+  cut.
+- **Settled values are stamped.** A committed value leaves its field for a `.stamp` set on
+  the field's exact pixels, so committing changes only the material. The committed search
+  query is the example, and because no field keeps focus, bare-key shortcuts still work
+  after a search.
+- **Text fields draw no focus ring.** A focused `.field-well` firms its inset edge from
+  `--rule` to `--rule-strong`, and the text cursor shows the rest. A field that can't wear
+  the class, such as the Contents filter, mirrors the recipe. Controls and list rows are
+  not text fields and keep a visible keyboard indicator.
+- **The key row.** A Contents row rises as a cap from its indent onward: flat at rest,
+  `--neutral-face-hover` when selected, `--neutral-face-latched` while it is the section
+  being read, and `--neutral-face-down` when pressed. It keeps the same layers in every
+  state, so changes transition. Its latched amber tint is an open exception to the accent
+  rule ([`decisions.md`](decisions.md)). It is not a `.cap`, because a `.cap` expects a
+  tray around it. When a second list uses the row, move it into `atoms.css`. Its keyboard
+  indicator is a solid 2px `--accent` outline, shown only while keys drive the selection.
+- **Setting groups.** Each Settings section's rows sit in a recessed group on
+  `--group-floor`, with full-bleed hairlines between rows. The rail stays flat, and the
+  current section is stamped in.
+- **The switch and the meter.** The switch is a latching key: a square-shouldered knob
+  (`--knob-*`), light in both schemes, slides over and stays down, and the channel lifts
+  to `--switch-on`. The slider is a 20-pip level meter, one pip per 5% step, with lit pips
+  in `--ink-soft` over `--meter-off` and no knob; the meter is the target, and focus rings
+  its well. A knob nests 2px inside its well, so the well rounds at `--radius` plus 2px.
+- **The copy and wrap tray.** `CodeChromeTray` is the one copy and wrap tray, and its host
+  places it: `CodeBlockChrome` in the plan, the block corner in Settings. The wrap cap
+  shows only on overflow, and a copy confirms in place, with no toast.
 - **Keycaps.** Key hints stay caret's own `[data-slot="kbd"]` keycap and ride along with
   their control. They get no rubber, well or press of their own.
 - **Saved comments.** A comment card has no rail. Its state is a stamp in its header, a
@@ -65,6 +108,29 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `--stamp-word-toward` and `--stamp-word-mix` tokens in `ui/src/styles/tokens.css`, per
   scheme, and `theme.test.ts` reads them there and holds every word to 4.5:1 on its stamp
   in every palette.
+- **Unsent comments** (`scratch` in code, `SourceScratchMarker.svelte`). The plan marks a
+  comment kept with **Keep for later** by a full-width `button.tray` under its line. Its
+  floor is `--well-floor` mixed with `--attention` at `--unsent-floor`. It holds the
+  `message-square-more` glyph and the word "Unsent" in the comment stamps' word ink, the
+  kept text in `--ink-soft`, and a neutral Resume cap. The row hovers and presses that
+  cap. It does so through the `button.tray:hover > .cap` and
+  `button.tray:is(:active, [data-key-pressed]) > .cap` rules in `atoms.css`.
+  `theme.test.ts` holds the word and the text to 4.5:1 on the tinted floor in every
+  palette, and `tactile-kit.e2e.ts` seeds an unsent comment to cover the marker's cap.
+- **Unsent everywhere.** Every surface marks an unsent comment with the word "unsent", the
+  `message-square-more` glyph in the comment stamps' word ink, and the tinted well. The
+  word is never "draft". Size picks the tint: a row or a list takes `--unsent-floor`, and
+  a pill-sized count, such as the Contents panel's, takes the stamp's `--stamp-floor`. An
+  unsent section's label leads with the glyph in the word ink, and its text stays
+  `--ink-soft`. Sections in one dialog share one plain container, so the rows carry the
+  difference: a committed row is a paper card, and an unsent row is a tinted well.
+- **Ink on a tint.** Text and icons on the unsent tint use `--ink-soft` or stronger, never
+  `--ink-faint`, which falls below 4.5:1 there (2.80 to 4.33:1). Disclosure chevrons
+  follow the same rule.
+- **A row-sized well holding a tray** pads `--well-pad` and rounds at
+  `calc(var(--radius) + 2 * var(--well-pad))`, so the tray inside, which rounds at
+  `--radius` plus one pad, stays concentric. A control beside the tray that fills the
+  well's height, such as a disclosure toggle, takes the tray's radius.
 - **Schemes.** In a stylesheet or a `.svelte` `<style>` block, a value that differs
   between light and dark keys on the `data-theme` attribute `paintTheme()` sets, never on
   `light-dark()`. Lightning CSS, which builds caret's stylesheets, rewrites a

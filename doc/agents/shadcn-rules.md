@@ -216,20 +216,16 @@ consistent with it rather than inventing a per-component treatment.
   fix the component, don't add another border on top.
 - **Menu highlight vs. selection.** A menu/select row's hover/keyboard highlight is
   `bg-accent`, bound (via `--color-accent`) to `--chip-hover` so it matches the topbar's
-  button hover app-wide. The **active/selected** row instead carries an amber wash
-  (`--accent-wash`) — the same "amber marks the selection" language the diff view uses —
-  so the current choice reads distinct from one that's merely hovered. **Which of the two
-  wins depends on the primitive, and a `Select` is the opposite of a `DropdownMenu`.** A
-  menu highlights nothing until the reader moves, so letting the highlight win is safe
-  there — it only ever greys the amber row transiently, under the cursor. A listbox has no
-  such state: bits-ui parks the highlight on the **selected** row as the content mounts
-  (`setInitialHighlightedNode`), so highlight-wins leaves the panel *resting* with no
-  amber in it at all, losing the current choice exactly when it is read. On a `Select`,
-  declare `[data-selected]` after `[data-highlighted]`, and give the row that carries both
-  its own mark for the highlight — an inset `--accent` ring in `SettingSelect.svelte`.
-  That mark is not decoration: bits-ui focuses no row (it drives `aria-activedescendant`
-  from the trigger), so `[data-highlighted]` **is** the listbox's keyboard cursor and has
-  to stay visible on every row, the selected one included.
+  button hover app-wide. A `DropdownMenu`'s selected row keeps the amber wash
+  (`--accent-wash`), as the diff view marks a selection. **The highlight and the selection
+  must never hide each other, and a `Select` is where they meet.** A menu highlights
+  nothing until the reader moves, but a listbox has no such state: bits-ui parks the
+  highlight on the **selected** row as the content mounts (`setInitialHighlightedNode`).
+  So in `SettingSelect.svelte` the highlight is the only fill and the selection is the
+  vendored check icon in `--ink`, which survives under any fill. Settings spends no amber
+  on its select. The highlight is not decoration: bits-ui focuses no row (it drives
+  `aria-activedescendant` from the trigger), so `[data-highlighted]` **is** the listbox's
+  keyboard cursor and has to stay visible on every row, the selected one included.
 - **Modals compose `Modal.svelte`.** `ui/src/components/Modal.svelte` is the shared shell:
   `kind="dialog"` (dismissible, e.g. Settings) or `kind="confirm"` (an `alertdialog`
   guard, e.g. Approve/Reject) selects the bits-ui primitive, but the eyebrow, title,

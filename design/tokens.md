@@ -29,11 +29,14 @@ it. User theme files follow
 | Syntax and markdown colours | the `syntax` and `markdown` blocks of each theme file |
 
 The derived tier, colours a palette implies rather than sets (`--chip`, `--chip-hover`,
-`--paper-veil`, `--ink-wash`, `--attention-wash`, `--code-panel`, and the tactile kit's
-`--well-floor`, `--field-floor`, `--neutral-face` steps, `--danger-face-hover` and the
+`--ink-wash`, `--attention-wash`, `--code-panel`, the window's `--body`, and the tactile
+kit's `--well-floor`, `--field-floor`, `--group-floor`, `--neutral-face` steps,
+`--danger-face-hover`, the switch's `--knob-face`, `--knob-face-hover`,
+`--knob-face-down`, `--knob-edge` and `--switch-on`, the meter's `--meter-off`, and the
 `--float-surface-low`, `-mid` and `-high` composites), is mixed in
-`ui/src/styles/derived.css`. shadcn-svelte's token names map onto these roles in
-`ui/src/styles/shadcn-bridge.css`.
+`ui/src/styles/derived.css`. In light, the top bar, control row and status bar re-cut
+`--well-floor` from `--body`, so their wells stay visible on it. shadcn-svelte's token
+names map onto these roles in `ui/src/styles/shadcn-bridge.css`.
 
 ## Type, motion, radius, depth
 
@@ -52,8 +55,13 @@ All in `ui/src/styles/tokens.css`:
   or danger face, `--grain`), the sockets (`--socket-shade`, `--socket-ring`,
   `--count-shade`), the floats (`--float-rim`, `--float-low`, `--float-mid`,
   `--float-high`) and `--shadow-chip` for small hints, the submit tray's `--cap-submit-h`,
-  the comment stamp's `--stamp-*` strengths, and the plan's `--chip-stamped`,
-  `--chip-raised` and `--panel-recess`. `--shadow-card` still comes from the palette.
+  the comment stamp's `--stamp-*` strengths, `--unsent-floor` (the share of `--attention`
+  in an unsent comment's well, 16% dark and 8% light), the switch knob's `--knob-hi` and
+  `--knob-lo`, the plan pane's `--pane-recess`, `--pane-lip` and `--pane-shade`, and the
+  plan's `--chip-stamped`, `--chip-raised` and `--panel-recess`. `--shadow-card` still
+  comes from the palette.
+- **Layout:** `--pane-gap` (6px), the inset around the plan pane, and `--status-bar-h`
+  (2rem), the status bar's height, are in `ui/src/styles/layout.css`.
 
 ## Terminal
 
