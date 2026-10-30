@@ -291,16 +291,15 @@
 {/snippet}
 
 <style>
-  /* The hairline rule is what stacks it seamlessly with the compare bar
-     (VersionComparePicker) directly below. */
+  /* Cut straight into the window's body, so it has no face or rule of its own, and
+     the plan's control row below reads as the same surface. */
   .topbar {
     display: flex;
     align-items: center;
     gap: 1rem;
-    /* Trimmed by the wells' bezel, so the bar keeps its height. */
-    padding: calc(0.7rem - var(--well-pad)) var(--bar-inset);
-    border-bottom: 1px solid var(--rule);
-    background: var(--paper-raised);
+    /* Trimmed by the wells' bezel. The shorter bottom spaces the trays from the
+       control row's, which has no top padding of its own. */
+    padding: calc(0.7rem - var(--well-pad)) var(--bar-inset) calc(0.4rem - var(--well-pad));
     position: relative;
     z-index: 30;
     /* As a grid item of .shell, the default min-width:auto would expand the track
@@ -488,8 +487,12 @@
     box-shadow: 0 0 0 1.5px var(--cap-face);
     pointer-events: none;
   }
-  /* ≤ --w-tight the header keeps only ⋯ + bell + settings on the right. */
+  /* ≤ --w-tight the header keeps only ⋯ + bell + settings on the right, and the
+     "local build" stamp gives its room to the plan title. */
   @media (max-width: 639px) {
+    .lead :global(.dev-badge) {
+      display: none;
+    }
     .approve-slot {
       display: none;
       opacity: 0;

@@ -156,9 +156,10 @@
   .status-strip :global(.comments-key) {
     font-size: 0.9em;
   }
+  /* Soft, not faint: on the window's body --ink-faint falls under 4.5:1. */
   .num {
     font-weight: 600;
-    color: var(--ink-faint);
+    color: var(--ink-soft);
   }
   /* --attention, the hue the TopBar's pending badge and the compare picker's version
      count already wear, so all three counts read as one family; --ok stays reserved

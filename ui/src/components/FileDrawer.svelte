@@ -137,10 +137,11 @@
 </aside>
 
 <style>
-  /* Chrome, not a floating card: no shadow, no radius — the hairline rule on the
-     drawer's inner edge is the only seam between the plan and the preview. The
-     lane holds its own size (flex: none) and clips, and is the positioning
-     context the handle pins against. */
+  /* A second pane set into the window's body beside the plan, not a floating card:
+     the lane's inner --pane-gap is bare body, the seam between the two panes and the
+     band the resize handle lies in. The lane holds its own size (flex: none) and clips,
+     and is the positioning context the handle pins against. It runs 1px into the
+     surface's padding below, so its pane's lip shows under the clip. */
   aside {
     position: relative;
     flex: none;
@@ -148,8 +149,8 @@
     overflow: hidden;
     width: var(--fd-size);
     min-width: 0;
-    background: var(--paper);
-    border-left: 1px solid var(--rule);
+    padding: 0 0 1px var(--pane-gap);
+    margin-bottom: -1px;
     /* The open wipe: the lane grows from nothing while .diff-plan (flex: 1) gives
        up the space. It animates on MOUNT because the drawer is unmounted when
        closed, so there is no closed class to toggle. Re-docking swaps
@@ -163,8 +164,7 @@
     width: auto;
     height: var(--fd-size);
     min-height: 0;
-    border-left: none;
-    border-top: 1px solid var(--rule);
+    padding: var(--pane-gap) 0 1px;
     animation-name: fd-open-bottom;
   }
   @keyframes fd-open-right {
@@ -215,43 +215,58 @@
     }
   }
 
-  /* Pinned to the lane's full size on the docking axis so the wipe clips the
-     preview rather than squishing it through every frame of the open. The pin
-     is the lane's border-box size, so it overshoots the content box by the
-     hairline's 1px; overflow: hidden above absorbs it, and buying the pixel back
-     would cost a calc() that has to track the border width. */
+  /* The pane itself, pinned to the lane's full size on the docking axis so the wipe
+     clips the preview rather than squishing it through every frame of the open. */
   .fd-content {
+    position: relative;
     display: flex;
-    flex: 0 0 var(--fd-size);
+    flex: 0 0 calc(var(--fd-size) - var(--pane-gap));
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: var(--paper);
+    box-shadow: var(--pane-lip);
+  }
+  /* Docked below, the lip's 1px of padding is on the docking axis too. */
+  .fd-bottom .fd-content {
+    flex-basis: calc(var(--fd-size) - var(--pane-gap) - 1px);
+  }
+  /* The plan pane's recess, over the preview, which paints its own surfaces. */
+  .fd-content::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow: var(--pane-recess);
   }
 
-  /* The lane's one affordance, and at rest it is invisible — the hairline rule
-     IS the visual. A 6px band lies against the rule so the pointer finds the
-     grab before it finds the edge; hover and keyboard focus thicken the seam
-     into --ink-faint, so the affordance appears where the pointer already is.
-     The app-wide :focus-visible ring (base.css) is left alone. */
+  /* The lane's one affordance, and at rest it is invisible — the gap between the
+     panes IS the visual. The handle fills that gap, so the pointer finds the grab
+     between the two panes; hover and keyboard focus draw a 2px seam down its middle
+     in --ink-faint, so the affordance appears where the pointer already is. The
+     app-wide :focus-visible ring (base.css) is left alone. */
   .fd-handle {
     position: absolute;
     z-index: 1;
     inset: 0 auto 0 0;
-    width: 6px;
+    width: var(--pane-gap);
     cursor: col-resize;
     touch-action: none;
-    border-left: 2px solid transparent;
+    border-inline: 2px solid transparent;
+    background-clip: content-box;
   }
   .fd-bottom .fd-handle {
     inset: 0 0 auto 0;
     width: auto;
-    height: 6px;
+    height: var(--pane-gap);
     cursor: row-resize;
-    border-left: none;
-    border-top: 2px solid transparent;
+    border-inline: none;
+    border-block: 2px solid transparent;
   }
   .fd-handle:hover,
   .fd-handle:focus-visible {
-    border-color: var(--ink-faint);
+    background-color: var(--ink-faint);
   }
 </style>

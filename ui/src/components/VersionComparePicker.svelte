@@ -13,6 +13,7 @@
   // primary; here it appears only as the --accent-wash "active-state" marker (the
   // SettingSelect/diff-selection language) on the pressed compare toggle. All colors
   // ride the shadcn↔caret token bridge; no raw colors.
+  import type { Snippet } from "svelte";
   import type { PlanVersion } from "@core/lib/types";
   import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
@@ -49,6 +50,10 @@
      * gated on the app's shortcut-hints setting like the other hints. Defaults
      * false (the hint is opt-in via the parent). */
     showShortcutHints?: boolean;
+    /** Caps that share the Versions toggle's tray, before and after it: the plan's
+     * view keys are one group, so they sit in one well. */
+    leading?: Snippet;
+    trailing?: Snippet;
     onSetComparing: (comparing: boolean) => void;
     onSelectBase: (version: number) => void;
     onSelectTarget: (version: number) => void;
@@ -66,6 +71,8 @@
     diffIndicators,
     layoutLocked = false,
     showShortcutHints = false,
+    leading,
+    trailing,
     onSetComparing,
     onSelectBase,
     onSelectTarget,
@@ -212,8 +219,9 @@
 {/snippet}
 
 <div class="compare-picker">
-  {#if canCompare}
-    <span class="tray">
+  <span class="tray">
+    {@render leading?.()}
+    {#if canCompare}
       <Button
         variant="secondary"
         size="sm"
@@ -244,32 +252,33 @@
           <Kbd class="kbd-sm shortcut-cap" aria-hidden="true">d</Kbd>
         {/if}
       </Button>
-    </span>
-  {:else}
-    <!-- Nothing to compare: shown-but-disabled (EXC-664). A disabled button
-         swallows pointer events, so the "why" tooltip hangs off a span-wrapped
-         trigger rather than the button itself. -->
-    <Tooltip.Provider delayDuration={0}>
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <span {...props} class="compare-toggle-wrap tray">
-              <Button
-                variant="secondary"
-                size="sm"
-                class="compare-toggle float-chip"
-                disabled
-                aria-pressed={false}
-              >
-                {@render compareLabel()}
-              </Button>
-            </span>
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>No other versions to compare yet</Tooltip.Content>
-      </Tooltip.Root>
-    </Tooltip.Provider>
-  {/if}
+    {:else}
+      <!-- Nothing to compare: shown-but-disabled (EXC-664). A disabled button
+           swallows pointer events, so the "why" tooltip hangs off a span-wrapped
+           trigger rather than the button itself. -->
+      <Tooltip.Provider delayDuration={0}>
+        <Tooltip.Root>
+          <Tooltip.Trigger>
+            {#snippet child({ props })}
+              <span {...props} class="compare-toggle-wrap">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  class="compare-toggle float-chip"
+                  disabled
+                  aria-pressed={false}
+                >
+                  {@render compareLabel()}
+                </Button>
+              </span>
+            {/snippet}
+          </Tooltip.Trigger>
+          <Tooltip.Content>No other versions to compare yet</Tooltip.Content>
+        </Tooltip.Root>
+      </Tooltip.Provider>
+    {/if}
+    {@render trailing?.()}
+  </span>
 
   {#if comparing}
     <div class="pair">
@@ -372,8 +381,9 @@
     align-items: center;
     gap: 0.35rem;
   }
+  /* Soft, not faint: on the window's body --ink-faint falls under 4.5:1. */
   .lbl {
-    color: var(--ink-faint);
+    color: var(--ink-soft);
     font-size: var(--text-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;

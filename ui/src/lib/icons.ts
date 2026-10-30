@@ -27,6 +27,7 @@ export const ICON_NAMES = [
   "heading-6",
   "keyboard",
   "loader-circle",
+  "message-square",
   "monitor",
   "moon",
   "panel-left",

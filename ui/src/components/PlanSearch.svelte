@@ -1,12 +1,12 @@
 <script lang="ts">
-  // The vim `/` search HUD (EXC-832): a floating pill on the chip-scale
-  // --shadow-chip, docked (by DiffPlanView) top-right of the plan. It reads as a HUD, not
-  // a modal — the plan stays visible underneath. The pill renders only the surface;
-  // DiffPlanView owns the search state, the highlight, and the cursor/commit
-  // behaviour, reaching them through these callbacks.
-  import { untrack } from "svelte";
+  // The vim `/` search sheet (EXC-832), hung by SearchDock from the plan pane's top edge.
+  // It renders only the surface; DiffPlanView owns the search state, the highlight, and
+  // the cursor/commit behaviour, reaching them through these callbacks.
   import Icon from "@/components/Icon.svelte";
+  import KbdCap from "@/components/KbdCap.svelte";
   import * as InputGroup from "$lib/components/ui/input-group/index.js";
+  import { Kbd } from "$lib/components/ui/kbd/index.js";
+  import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
 
   interface Props {
     /** The live query text, two-way bound so typing drives the parent's incremental
@@ -16,18 +16,17 @@
     matchCount: number;
     /** 0-based index of the current (active) match, or -1 when there is none. */
     currentIndex: number;
-    /** Whether the search is committed — the pill is a passive HUD, not being edited.
-     * Drives two things: the field is read-only (a click can't then desync the counter
-     * from a stale index; re-edit is via `/`, which sets this false), and the pill does
-     * NOT grab focus on mount — an n/N resume reopens as a blurred HUD so bare n/N keep
-     * reaching the global dispatcher, while `/` open/reopen lets the parent focus it. */
+    /** Enter committed the query: it is stamped rather than editable, and the sheet
+     * holds no focusable field, so bare n / N keep reaching the global dispatcher.
+     * `/` reopens editing by setting this false. */
     committed?: boolean;
-    /** Whether the pill is animating closed — plays the collapse-back-to-the-chip
-     * keyframe (the reverse of the open expand). The parent keeps the pill mounted for
-     * the animation's duration, then unmounts it (DiffPlanView owns that timer). */
+    /** Whether the sheet is tucking away; the parent keeps it mounted for the
+     * animation's duration (planKeyboard owns that timer). */
     closing?: boolean;
+    /** Show the keys that apply now in the lip (the Show Hints setting). */
+    hints?: boolean;
     /** Commit the search (Enter): the parent moves the line cursor to the nearest
-     * match and returns focus to the plan, keeping this pill as a HUD. */
+     * match and returns focus to the plan. */
     oncommit: () => void;
     /** Step to the next match (wrapping). */
     onnext: () => void;
@@ -43,6 +42,7 @@
     currentIndex,
     committed = false,
     closing = false,
+    hints = false,
     oncommit,
     onnext,
     onprev,
@@ -51,9 +51,10 @@
 
   const current = $derived(currentIndex >= 0 ? currentIndex + 1 : 0);
   const hasMatches = $derived(matchCount > 0);
+  const noMatches = $derived(query !== "" && !hasMatches);
 
   // Field-mode keys: Enter commits, Escape closes. Handled here, not the global
-  // dispatcher (which suppresses bare keys while a field is focused), so the pill
+  // dispatcher (which suppresses bare keys while a field is focused), so the sheet
   // owns its own field — the same local-handler idiom the breadcrumbs filter uses.
   function onKeydown(e: KeyboardEvent) {
     if (e.key === "Enter") {
@@ -65,181 +66,171 @@
     }
   }
 
-  // Focus and select on mount so typing replaces the prefilled last query, like browser
-  // find. Skipped when the pill opens committed (an n/N resume), which returns as a
-  // blurred HUD. `committed` is read UNTRACKED so this stays a mount-once effect keyed
-  // on `field`.
+  // The field exists only while editing, so whenever it mounts — the first `/` or a
+  // reopen over a stamped query — it takes focus with its text selected, and typing
+  // replaces the prefilled last query, like browser find.
   let field = $state<HTMLInputElement | null>(null);
   $effect(() => {
-    if (untrack(() => committed)) return;
     field?.focus();
     field?.select();
   });
 </script>
 
 <div class="plan-search" class:closing role="search">
-  <InputGroup.Root class="search-group">
-    <!-- Decorative; the field's aria-label already names the search, so the whole
-         addon is hidden rather than just its glyph — an addon is a role="group", and
-         one holding nothing announceable is an empty group to a screen reader. -->
-    <InputGroup.Addon aria-hidden="true">
-      <span class="search-slash mono">/</span>
-    </InputGroup.Addon>
-    <InputGroup.Input
-      bind:ref={field}
-      bind:value={query}
-      class="search-input"
-      type="text"
-      placeholder="Search plan…"
-      aria-label="Search plan"
-      autocomplete="off"
-      spellcheck="false"
-      readonly={committed}
-      onkeydown={onKeydown}
-    />
-    <!-- The addon ships a click-to-focus handler for the "click the icon, start
-         typing" case; a button row wants the opposite. Overriding it with a no-op
-         (restProps spreads last, so a caller's handler wins) keeps a click that lands
-         in the gaps between the chips from focusing the field — which on a committed
-         HUD would silently suppress the bare n / N, since any focused input reads as
-         an editing context to the shared dispatcher. -->
-    <InputGroup.Addon align="inline-end" class="search-actions tray" onclick={() => {}}>
-      <button
-        type="button"
-        class="search-step float-chip"
-        aria-label="Previous match"
-        disabled={!hasMatches}
-        onclick={onprev}
-      >
-        <span class="chev-up"><Icon name="chevron-down" size={14} /></span>
-      </button>
-      <button
-        type="button"
-        class="search-step float-chip"
-        aria-label="Next match"
-        disabled={!hasMatches}
-        onclick={onnext}
-      >
-        <Icon name="chevron-down" size={14} />
-      </button>
-      <button
-        type="button"
-        class="search-close float-chip"
-        aria-label="Close search"
-        onclick={onclose}
-      >
-        <Icon name="x" size={14} />
-      </button>
-    </InputGroup.Addon>
-  </InputGroup.Root>
-  <span
-    class="search-count metric"
-    class:has-matches={hasMatches}
-    aria-live="polite"
-    aria-label="{current} of {matchCount} matches"
-  >
-    {current} / {matchCount}
+  {#if committed}
+    <span class="search-stamp stamp">
+      <span class="search-slash mono" aria-hidden="true">/</span>
+      <span class="search-stamp-query">{query}</span>
+    </span>
+  {:else}
+    <InputGroup.Root class="search-field field-well">
+      <!-- Decorative; the field's aria-label already names the search, so the whole
+           addon is hidden rather than just its glyph — an addon is a role="group", and
+           one holding nothing announceable is an empty group to a screen reader. -->
+      <InputGroup.Addon aria-hidden="true">
+        <span class="search-slash mono">/</span>
+      </InputGroup.Addon>
+      <InputGroup.Input
+        bind:ref={field}
+        bind:value={query}
+        class="search-input"
+        type="text"
+        placeholder="Search plan…"
+        aria-label="Search plan"
+        aria-invalid={noMatches}
+        autocomplete="off"
+        spellcheck="false"
+        onkeydown={onKeydown}
+      />
+    </InputGroup.Root>
+  {/if}
+  <span class="search-actions tray">
+    <button
+      type="button"
+      class="search-step float-chip"
+      aria-label="Previous match"
+      aria-keyshortcuts={ariaKeyshortcutsFor("actions.searchPrev")}
+      disabled={!hasMatches}
+      onclick={onprev}
+    >
+      <span class="chev-up"><Icon name="chevron-down" size={14} /></span>
+    </button>
+    <button
+      type="button"
+      class="search-step float-chip"
+      aria-label="Next match"
+      aria-keyshortcuts={ariaKeyshortcutsFor("actions.searchNext")}
+      disabled={!hasMatches}
+      onclick={onnext}
+    >
+      <Icon name="chevron-down" size={14} />
+    </button>
+    <button type="button" class="search-close float-chip" aria-label="Close search" onclick={onclose}>
+      <Icon name="x" size={14} />
+    </button>
   </span>
+  <div class="search-lip">
+    {#if hints}
+      {#if committed}
+        <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">n</Kbd>next</span>
+        <span class="search-key" aria-hidden="true"
+          ><Kbd class="kbd-sm"><KbdCap key="shift" size={8} /><KbdCap key="N" /></Kbd
+          >previous</span
+        >
+        <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">/</Kbd>edit</span>
+      {:else}
+        {#if hasMatches}
+          <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">↵</Kbd>go to match</span>
+        {/if}
+        <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">Esc</Kbd>close</span>
+      {/if}
+    {/if}
+    <span
+      class="search-count"
+      class:metric={hasMatches}
+      aria-live="polite"
+      aria-label={hasMatches ? `${current} of ${matchCount} matches` : undefined}
+    >
+      {#if hasMatches}{current} / {matchCount}{:else if noMatches}No matches{/if}
+    </span>
+  </div>
 </div>
 
 <style>
-  /* The HUD pill: the sheer --paper-veil surface, so the plan reads faintly through
-     it — a HUD, not a modal — lifted on the chip-scale --shadow-chip (the same one the
-     "/ to search" chip wears, so the two read as one surface growing) and the larger
-     chip radius. On open it expands from the top-right corner — where that chip sat
-     (DiffPlanView's dock) — so `/` reads as the chip growing into the field; the global
-     #app reduced-motion guard zeroes it. */
+  /* A sheet hanging from the plan pane's top edge: square where it tucks under the
+     edge (the pane's lip paints that edge across it), rounded at its foot. Its radii
+     nest: cap, tight bezel, then the sheet's pad. */
   .plan-search {
-    --search-row-h: 1.75rem;
-    display: inline-flex;
-    flex-direction: column;
-    gap: 0.1rem;
-    padding: 0.3rem 0.4rem;
-    background: var(--paper-veil);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-chip);
-    transform-origin: top right;
-    animation: search-expand var(--dur-state) var(--ease-out);
+    --search-cap: 24px;
+    --search-pad: 4px;
+    --search-row: calc(var(--search-cap) + 2 * var(--well-pad-tight));
+    --search-inner-r: calc(var(--radius) + var(--well-pad-tight));
+    --search-r: calc(var(--search-inner-r) + var(--search-pad));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--search-pad);
+    width: 21rem;
+    max-width: 100%;
+    padding: var(--search-pad) var(--search-pad) 0;
+    border-radius: 0 0 var(--search-r) var(--search-r);
+    background: var(--paper-raised);
+    box-shadow:
+      0 0 0 1px var(--rule),
+      var(--float-mid);
+    animation: search-drop var(--dur-state) var(--ease-out);
   }
-  @keyframes search-expand {
-    from {
-      opacity: 0;
-      transform: scale(0.92);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
-  /* Closing reverses the expand over --dur-state, while planKeyboard keeps the pill
-     mounted for that long. `forwards` holds the shrunk/faded
-     end frame until the unmount so it can't flash back to full size; higher specificity
-     than the base rule, so this animation wins while closing. */
+  /* Closing tucks the sheet back under the edge while planKeyboard keeps it mounted;
+     `forwards` holds it there until the unmount. */
   .plan-search.closing {
-    animation: search-collapse var(--dur-state) var(--ease-out) forwards;
+    animation: search-tuck var(--dur-state) var(--ease-out) forwards;
   }
-  @keyframes search-collapse {
+  @keyframes search-drop {
     from {
-      opacity: 1;
-      transform: scale(1);
+      transform: translateY(-100%);
     }
+  }
+  @keyframes search-tuck {
     to {
-      opacity: 0;
-      transform: scale(0.92);
+      transform: translateY(-100%);
     }
   }
 
-  /* The controls row's recessed field surface, so the whole row reads as distinct from
-     the pill — a step off --paper-raised toward --paper-sunk, which recedes in both
-     themes, with a hairline rule. It hugs its content rather than taking the group's
-     stock full width, since the pill is inline and sized by this row. The overrides are
-     reached via :global under the scoped root, since the class is handed to
-     <InputGroup.Root>. */
-  .plan-search :global(.search-group) {
-    height: var(--search-row-h);
+  /* The field and the stamp share one cell and one geometry, so a commit sets the
+     query in place rather than moving it. */
+  .plan-search :global(.search-field),
+  .search-stamp {
+    grid-area: 1 / 1;
+    min-width: 0;
+    height: var(--search-row);
+    border-radius: var(--search-inner-r);
+  }
+  .plan-search :global(.search-field) {
     width: auto;
-    border: 1px solid var(--rule);
-    /* The actions' tray fills the field's end, so the field rounds at the tray's
-       radius plus this border for the two curves to nest. */
-    border-radius: calc(var(--radius) + var(--well-pad-tight) + 1px);
-    background: var(--paper-sunk);
   }
-  /* Dark paper's raised→sunk step is small, so drop the field to the base --paper
-     there for a clearer recess; light's --paper-sunk already reads distinct. */
-  :global(:root[data-theme="dark"]) .plan-search :global(.search-group) {
-    background: var(--paper);
+  .plan-search :global(.search-field [data-slot="input-group-addon"]) {
+    padding-block: 0;
   }
-  /* Focus firms the hairline rather than drawing the group's stock ring: the pill is
-     a HUD floating over the plan, and a ring would halo it against the text. Keyed on
-     the slot the group's own rule keys on, so it cannot drift from it. */
-  .plan-search :global(.search-group:has([data-slot="input-group-control"]:focus-visible)) {
-    box-shadow: none;
-    border-color: var(--rule-strong);
-  }
-
-  /* Fixed width rather than the group's stock flex-1, so the pill keeps one measure
-     whatever is typed into it. */
   .plan-search :global(.search-input) {
     height: 100%;
-    width: 12rem;
-    flex: none;
     font-size: var(--text-sm);
+    caret-color: var(--accent);
   }
 
-  /* The addons keep their inline padding but drop the block padding, which is sized
-     for the stock 2rem group and would push their content past this row. */
-  .plan-search :global([data-slot="input-group-addon"]:not(.tray)) {
-    padding-block: 0;
-    gap: 0.35rem;
+  /* The border and gap match the field's (its border is transparent but still there),
+     so the slash and the query land on the field's exact pixels. */
+  .search-stamp {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid transparent;
+    padding-inline: 0.5rem 0.6rem;
+    font-size: var(--text-sm);
+    color: var(--ink);
+    white-space: nowrap;
   }
-  /* A button row, so it drops the addon's text cursor along with the click-to-focus
-     the markup already overrides. Its tray runs the tight bezel and fills the field's
-     end. */
-  .plan-search :global(.search-actions) {
-    --well-pad: var(--well-pad-tight);
-    --tray-gap: var(--well-pad-tight);
-    margin-inline-end: 0;
-    cursor: default;
+  .search-stamp-query {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .search-slash {
@@ -248,35 +239,29 @@
     user-select: none;
   }
 
-  /* The counter sits BELOW the row, right-aligned to the pill's edge, so a changing
-     total (or a single↔double-digit count) never reflows the row's width. Tabular
-     figures (via .metric) keep the digits from shifting as n/N cycles; the pill's one
-     amber moment while there are matches to stand on, a quiet faint tone when none. */
-  .search-count {
-    text-align: right;
-    font-size: var(--text-xs);
-    color: var(--ink-faint);
-    white-space: nowrap;
-    padding: 0 0.2rem;
+  .search-actions {
+    grid-area: 1 / 2;
+    --well-pad: var(--well-pad-tight);
+    --tray-gap: var(--well-pad-tight);
   }
-  .search-count.has-matches {
-    color: var(--accent);
-  }
-
-  /* The step / close buttons are neutral caps (.float-chip) sharing one tray. */
   .search-step,
   .search-close {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    /* The field's inner height: the row less its border and the tray's bezel. */
-    width: calc(var(--search-row-h) - 2px - 2 * var(--well-pad-tight));
-    height: calc(var(--search-row-h) - 2px - 2 * var(--well-pad-tight));
+    width: var(--search-cap);
+    height: var(--search-cap);
     border: none;
     cursor: pointer;
   }
+  /* A step with nowhere to go can't be pressed, so it isn't raised: it lies flat in
+     its well. */
   .search-step:disabled {
-    opacity: 0.4;
+    --cap-face: var(--well-floor);
+    background-image: none;
+    box-shadow: none;
+    color: var(--ink-faint);
+    opacity: 0.75;
     cursor: default;
   }
   .search-step:focus-visible,
@@ -288,5 +273,31 @@
   .chev-up {
     display: inline-flex;
     transform: rotate(180deg);
+  }
+
+  /* The lip: the keys that apply now, and the counter. The counter sits here, below
+     the row, so a changing count never reflows the row. --ink-soft rather than
+     --ink-faint, which drops under 4.5:1 on --paper-raised in several bundled
+     palettes. */
+  .search-lip {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    height: 1.6rem;
+    padding-inline: 0.35rem 0.4rem;
+    font-size: var(--text-2xs);
+    color: var(--ink-soft);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .search-key {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .search-count {
+    margin-left: auto;
+    font-size: var(--text-xs);
   }
 </style>

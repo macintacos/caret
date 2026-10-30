@@ -26,19 +26,28 @@
   // heading up as the group's `aria-labelledby` target, so the ancestor path reaches a
   // screen reader as the group's name.
   //
+  // Beside the list, the peek shows the selected row's section: where it sits, its line
+  // range, its comments and drafts, whether it changed since the previous version, and
+  // its opening lines. bits-ui's pointer selection stays on, so hover selects and the
+  // peek follows the pointer; the keyboard's ring shows only while keys drive.
+  //
   // Presentational: the only state is the popup's own — open, query, and the
-  // command's selected row — the tree is derived, and the parent owns both the
-  // heading set and the scroll tracking that moves `activeLine`.
+  // command's selected row — the tree and the sections are derived, and the parent owns
+  // the heading set, the plan and its comments, and the scroll tracking that moves
+  // `activeLine`.
+  import type { PlanVersion } from "@core/lib/types";
   import { untrack } from "svelte";
 
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Command from "$lib/components/ui/command/index.js";
+  import type { CommentIndexEntry } from "$lib/feedback.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import * as Popover from "$lib/components/ui/popover/index.js";
   import {
     groupedHeadingMatches,
     type HeadingGroup,
     type HeadingNode,
+    headingTrail,
     headingTree,
   } from "$lib/headingTrail.ts";
   import type { IconName } from "$lib/icons.ts";
@@ -46,6 +55,7 @@
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import { sound } from "$lib/sound.ts";
   import { headingMatcher, type TocHeading } from "$lib/toc.ts";
+  import { describeSection, plural, sectionCounts, tocSections } from "$lib/tocSections.ts";
 
   import Icon from "@/components/Icon.svelte";
 
@@ -56,6 +66,12 @@
      * same value PlanBreadcrumbs receives — this surface tracks no scroll of its
      * own. */
     activeLine: number | null;
+    /** The plan source the headings were extracted from. */
+    plan: string;
+    /** The plan's comments and unsent drafts, anchored to `plan`'s lines. */
+    comments: CommentIndexEntry[];
+    /** The version before the current one, or null on a plan's first version. */
+    previous: Pick<PlanVersion, "version" | "plan"> | null;
     /** Jump the view to a heading's 1-based source line. */
     onJump: (line: number) => void;
     /** Whether the `\` keycap is shown (EXC-1097). When off, the cap hides; the
@@ -66,11 +82,27 @@
     onExposeOpen?: (open: () => void) => void;
   }
 
-  let { headings, activeLine, onJump, showShortcutHints = false, onExposeOpen }: Props = $props();
+  let {
+    headings,
+    activeLine,
+    plan,
+    comments,
+    previous,
+    onJump,
+    showShortcutHints = false,
+    onExposeOpen,
+  }: Props = $props();
 
+  const uid = $props.id();
   let open = $state(false);
   let query = $state("");
   let queryEl = $state<HTMLInputElement | null>(null);
+
+  // Whether keys are driving the selection, which is when its ring shows. Hover moves the
+  // selection too, and a ring chasing the pointer would only repeat the hover face.
+  let keysDriving = $state(false);
+  // The row Enter picked, which plays the key's press while the popup leaves.
+  let pressedLine = $state<number | null>(null);
 
   // Hold-to-repeat for the walk keys (EXC-1122): a held key moves once, pauses,
   // then runs at the app's own cadence rather than the OS's. The lifecycle and the
@@ -87,7 +119,10 @@
   // What was specific to this surface is only WHY Tab had to be claimed: the popover
   // traps focus with a single tabbable inside, so untouched the key moved focus out
   // of the field and straight back to it, doing nothing at all.
-  const onWalkKeydown = (e: KeyboardEvent) => walkCommandList(e, queryEl, repeat);
+  function onWalkKeydown(e: KeyboardEvent): void {
+    keysDriving = true;
+    walkCommandList(e, queryEl, repeat);
+  }
 
   // The command's own selected row, seeded to the heading being read on the open
   // edge (below) so the popup opens looking at where the reviewer already is.
@@ -121,6 +156,22 @@
   // (EXC-1062).
   const tree = $derived(headingTree(headings));
   const groups = $derived(groupedHeadingMatches(headings, query));
+  const sections = $derived(tocSections(headings, plan, comments, previous?.plan ?? null));
+
+  // The rows on screen, in either view, so the peek and the match count read what the
+  // list shows. The peek checks the selection against them because the command keeps its
+  // value when a query unmounts the row it named.
+  const shown = $derived(searching ? groups.flatMap((g) => g.matches) : headings);
+  const peeked = $derived(shown.find((h) => String(h.line) === selected) ?? null);
+  const peekTrail = $derived(
+    peeked === null
+      ? ""
+      : headingTrail(headings, peeked.line)
+          .slice(0, -1)
+          .map((crumb) => crumb.heading.text)
+          .filter((text) => text !== "")
+          .join(" › "),
+  );
 
   // The level the PLAN opens at, which is where its indent guides start (EXC-1106).
   // The indent itself is measured from level 1 — that absolute origin is what keeps a
@@ -152,6 +203,7 @@
         ? "No headings in plan"
         : "No headings match",
   );
+  const noMatch = $derived(searching && groups.length === 0 && headings.length > 0);
 
   // Whether the popup is closing because the reviewer picked a heading, which
   // onCloseAutoFocus below reads to decide where focus lands. The same flag
@@ -167,6 +219,8 @@
   function seed(): void {
     query = "";
     selected = activeLine === null ? "" : String(activeLine);
+    keysDriving = false;
+    pressedLine = null;
     // The popup's cue, sounded from the open itself rather than from either caller
     // (EXC-1126) — the trigger's onOpenChange and openPopup below both land here, so
     // the `\` key and the click cannot drift onto different sounds. The singleton
@@ -239,8 +293,16 @@
     // openPopup above documents for the seeding.
     repeat.stop();
     leaving = true;
+    pressedLine = line;
     open = false;
     onJump(line);
+  }
+
+  // The no-match state's way back. The click took focus to the cap, so it goes back to
+  // the field the reviewer was typing in.
+  function clearFilter(): void {
+    query = "";
+    queryEl?.focus();
   }
 </script>
 
@@ -257,26 +319,50 @@
        construction, and the unfiltered view's query is empty, which the matcher answers
        with the whole label unmarked. -->
   {@const parts = matcher(heading.text) ?? [{ text: heading.text, hit: false }]}
+  {@const section = sections.get(heading.line)}
+  {@const note = section === undefined ? "" : describeSection(section, previous?.version ?? null)}
+  {@const counts = section === undefined ? null : sectionCounts(section)}
+  <!-- The counts and the change go through aria-describedby, so the option's name stays
+       the heading alone. -->
   <Command.Item
     value={String(heading.line)}
     style="--toc-depth: {depth}; --toc-guides: {guides}"
+    data-level={heading.level}
+    data-key-pressed={heading.line === pressedLine ? "" : undefined}
     aria-current={heading.line === activeLine ? "location" : undefined}
+    aria-describedby={note === "" ? undefined : `${uid}-note-${heading.line}`}
     onSelect={() => jump(heading.line)}
   >
-    <!-- What level this heading is (EXC-1105). In the shared snippet so both views get it —
-         and the filtered one, whose rows are all at depth 0, has nothing else to say it.
-         No wrapper element of its own: `data-icon` on Icon.svelte's own <span> is the hook
-         the style rule needs. -->
-    <Icon name={levelIcon(heading.level)} size={14} />
-    <!-- Only a MATCHED run takes an element; unmatched text stays a bare text node, so the
-         unfiltered view's markup is byte-identical to a plain `{heading.text}` — no
-         wrapper span on any of a plan's several hundred rows.
-         The row's TEXT is the heading either way, which keeps the option's accessible
-         name exactly the heading. Splitting the label rather than adding to it is what
-         keeps the mark out of the accessibility tree: a plain span is invisible to it,
-         where a real `mark` element is narrated by WebKit. -->
-    <span class="toc-label" title={heading.text}>
-      {#each parts as part}{#if part.hit}<span class="toc-hit">{part.text}</span>{:else}{part.text}{/if}{/each}
+    <!-- The key: the part of the row that rises as a cap. It starts at the row's indent,
+         so the guides to its left stay on the panel's surface. -->
+    <span class="toc-key">
+      <!-- What level this heading is (EXC-1105). In the shared snippet so both views get it —
+           and the filtered one, whose rows are all at depth 0, has nothing else to say it.
+           No wrapper element of its own: `data-icon` on Icon.svelte's own <span> is the hook
+           the style rule needs. -->
+      <Icon name={levelIcon(heading.level)} size={14} />
+      <!-- Only a MATCHED run takes an element; unmatched text stays a bare text node, so the
+           unfiltered view's markup is byte-identical to a plain `{heading.text}` — no
+           wrapper span on any of a plan's several hundred rows.
+           The row's TEXT is the heading either way, which keeps the option's accessible
+           name exactly the heading. Splitting the label rather than adding to it is what
+           keeps the mark out of the accessibility tree: a plain span is invisible to it,
+           where a real `mark` element is narrated by WebKit. -->
+      <span class="toc-label" title={heading.text}>
+        {#each parts as part}{#if part.hit}<span class="toc-hit">{part.text}</span>{:else}{part.text}{/if}{/each}
+      </span>
+      {#if note !== ""}
+        <span class="toc-meta" aria-hidden="true">
+          {#if section?.change}<span class="toc-dot"></span>{/if}
+          {#if counts?.comments}
+            <span class="toc-count stamp"><Icon name="message-square" size={11} />{counts.comments}</span>
+          {/if}
+          {#if counts?.drafts}
+            <span class="toc-count toc-tint"><Icon name="pencil-line" size={11} />{counts.drafts}</span>
+          {/if}
+        </span>
+        <span id="{uid}-note-{heading.line}" hidden>{note}</span>
+      {/if}
     </span>
   </Command.Item>
 {/snippet}
@@ -329,20 +415,18 @@
            toggle's `d` and the breadcrumbs bar's `b`; aria-hidden so the glyph
            never lands in the button's name, which aria-keyshortcuts carries
            instead — derived from the reservation, so the two cannot disagree. -->
-      <span class="tray">
-        <Button
-          {...props}
-          variant="secondary"
-          size="sm"
-          class="float-chip"
-          aria-keyshortcuts={ariaKeyshortcutsFor("actions.contents")}
-        >
-          Contents
-          {#if showShortcutHints}
-            <Kbd class="kbd-sm" aria-hidden="true">\</Kbd>
-          {/if}
-        </Button>
-      </span>
+      <Button
+        {...props}
+        variant="secondary"
+        size="sm"
+        class="float-chip"
+        aria-keyshortcuts={ariaKeyshortcutsFor("actions.contents")}
+      >
+        Contents
+        {#if showShortcutHints}
+          <Kbd class="kbd-sm" aria-hidden="true">\</Kbd>
+        {/if}
+      </Button>
     {/snippet}
   </Popover.Trigger>
   <Popover.Content
@@ -390,13 +474,19 @@
       loop
       bind:value={selected}
       onkeydown={onWalkKeydown}
+      data-keys={keysDriving ? "" : undefined}
     >
-      <Command.Input
-        bind:ref={queryEl}
-        bind:value={query}
-        placeholder="Filter headings…"
-        aria-label="Filter headings"
-      />
+      <div class="toc-head">
+        <Command.Input
+          bind:ref={queryEl}
+          bind:value={query}
+          placeholder="Filter headings…"
+          aria-label="Filter headings"
+        />
+        <!-- aria-hidden: the field's active descendant and the status line already narrate
+             what the query left. -->
+        <span class="toc-match-count metric" aria-hidden="true">{searching ? shown.length : ""}</span>
+      </div>
       <!-- Which of the two views the list is rendering, published so the motion rules
            in the stylesheet can tell them apart (EXC-1107). Inert in every other
            respect: no role, no name, nothing narrated, nothing selectable.
@@ -414,7 +504,12 @@
            so "matches" over outline rows — the case that would be wrong — is
            unreachable. The disagreement costs only a spurious toc-list-in when a lone
            space is typed or deleted. -->
-      <Command.List aria-label="Plan headings" data-toc-view={searching ? "matches" : "outline"}>
+      <Command.List
+        aria-label="Plan headings"
+        data-toc-view={searching ? "matches" : "outline"}
+        onpointermove={() => (keysDriving = false)}
+        onscroll={(e) => e.currentTarget.toggleAttribute("data-scrolled", e.currentTarget.scrollTop > 0)}
+      >
         {#if searching}
           <!-- Each ancestor path collapses to one Command.Group, whose heading IS
                the breadcrumb (EXC-1103). Reaching for the primitive rather than
@@ -470,8 +565,76 @@
            to be idle in the DOM before the change it announces, and one inserted
            with its content already in it is skipped by some AT outright. Same shape
            and same reason as FilePreview.svelte's `.fp-range`. -->
-      <p class="toc-empty" role="status">{emptyMessage}</p>
+      <div class="toc-empty-row">
+        <p class="toc-empty" role="status">{emptyMessage}</p>
+        <!-- Beside the live region rather than in it: a status announces text, and a
+             control inside one would be read out with it. -->
+        {#if noMatch}
+          <span class="tray">
+            <Button variant="secondary" size="sm" class="float-chip" onclick={clearFilter}>
+              Clear filter
+            </Button>
+          </span>
+        {/if}
+      </div>
     </Command.Root>
+    <!-- Not a live region: it changes on every hover, and the option's description already
+         carries its counts and change to a screen reader. -->
+    <div class="toc-peek">
+      <div class="toc-peek-body">
+        {#if peeked === null}
+          <p class="toc-peek-empty">Nothing selected.</p>
+        {:else}
+          {@const section = sections.get(peeked.line)}
+          {#if peekTrail !== ""}
+            <p class="toc-peek-trail eyebrow">{peekTrail}</p>
+          {/if}
+          <p class="toc-peek-title">{peeked.text}</p>
+          {#if section !== undefined}
+            {@const counts = sectionCounts(section)}
+            <div class="toc-peek-facts">
+              <span class="toc-fact stamp">Lines <span class="metric">{peeked.line}–{section.end}</span></span>
+              {#if counts.comments > 0}
+                <span class="toc-fact stamp">
+                  <Icon name="message-square" size={11} />{plural(counts.comments, "comment")}
+                </span>
+              {/if}
+              {#if counts.drafts > 0}
+                <span class="toc-fact toc-tint">
+                  <Icon name="pencil-line" size={11} />{plural(counts.drafts, "draft")}
+                </span>
+              {/if}
+              {#if section.change !== null && previous !== null}
+                <span class="toc-fact toc-tint">{section.change} since v{previous.version}</span>
+              {/if}
+            </div>
+            {#if section.excerpt !== ""}
+              <p class="toc-peek-excerpt"><span>{section.excerpt}</span></p>
+            {/if}
+            {#if section.comments.length > 0}
+              <ul class="toc-peek-notes">
+                {#each section.comments as entry (entry.id)}
+                  <li class:draft={entry.draft}>
+                    <span class="toc-peek-at metric">L{entry.line}</span>
+                    <span class="toc-peek-say">{entry.text}</span>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+            {#if section.deeper > 0}
+              <p class="toc-peek-deeper">{plural(section.deeper, "more comment")} in subsections.</p>
+            {/if}
+          {/if}
+        {/if}
+      </div>
+      {#if showShortcutHints}
+        <div class="toc-legend" aria-hidden="true">
+          <span><Kbd class="kbd-sm">↑</Kbd><Kbd class="kbd-sm">↓</Kbd> walk</span>
+          <span><Kbd class="kbd-sm">↵</Kbd> jump</span>
+          <span><Kbd class="kbd-sm">esc</Kbd> close</span>
+        </div>
+      {/if}
+    </div>
   </Popover.Content>
 </Popover.Root>
 
@@ -484,14 +647,81 @@
      The trigger needs no rule at all: .float-chip carries the whole affordance,
      and the Button recipe already pins the label to one line. */
 
-  /* The vendored Popover.Content ships w-72 with padding and a gap of its own, and
-     the Command inside already pads itself — so the padding is handed over rather
-     than doubled, and the panel is widened enough to hold a deep heading before it
-     truncates. */
+  /* A split float: the outline on the left, the peek on the right. The vendored
+     Popover.Content ships w-72 as a padded flex column, so the panel takes over its box.
+     The peek is size-contained, so the outline alone sets the panel's height and hovering
+     rows of different length never resizes it; the floor holds a typical section's peek
+     when the outline is short, and goes when there are no rows to peek at. */
   :global(.plan-toc-panel) {
-    width: 20rem;
+    display: grid;
+    grid-template-columns: minmax(0, 23rem) minmax(0, 1fr);
+    width: min(44rem, calc(100vw - 1rem));
     padding: 0;
     gap: 0;
+    overflow: hidden;
+  }
+  :global(.plan-toc-panel:has([data-slot="command-item"])) {
+    min-height: min(21rem, 70vh);
+  }
+  :global(.plan-toc-panel [data-slot="command"]) {
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  /* The filter field, cut into the panel to the `.field-well` recipe, focus included: no
+     ring, only the text cursor and an edge a step firmer. The atom itself can't apply: the
+     vendored input group pins its box-shadow with `shadow-none!`, which only Tailwind's own
+     shadow variables reach. */
+  :global(.plan-toc-panel .toc-head) {
+    position: relative;
+    z-index: 1;
+    background: var(--paper-raised);
+    transition: box-shadow var(--dur-state) var(--ease-out);
+  }
+  :global(.plan-toc-panel [data-slot="command-input-wrapper"]) {
+    padding: 4px;
+  }
+  :global(.plan-toc-panel [data-slot="command-input-wrapper"] [data-slot="input-group"]) {
+    border-color: transparent;
+    background: var(--field-floor);
+    --tw-inset-shadow: var(--field-shade);
+    --tw-inset-ring-shadow: inset 0 0 0 1px var(--rule);
+    --tw-ring-shadow: var(--well-lip);
+  }
+  :global(.plan-toc-panel [data-slot="command-input-wrapper"] [data-slot="input-group"]:focus-within) {
+    --tw-inset-ring-shadow: inset 0 0 0 1px var(--rule-strong);
+  }
+  :global(.plan-toc-panel [data-slot="command-input-wrapper"] [data-slot="input-group-addon"]) {
+    opacity: 1;
+    color: var(--ink-faint);
+  }
+  :global(.plan-toc-panel [data-slot="command-input"]) {
+    padding-inline-end: 2rem;
+    font-size: var(--text-md);
+    caret-color: var(--accent);
+  }
+  :global(.plan-toc-panel [data-slot="command-input"])::placeholder {
+    color: var(--ink-faint);
+    opacity: 1;
+  }
+  :global(.plan-toc-panel .toc-match-count) {
+    position: absolute;
+    inset-block: 4px;
+    inset-inline-end: calc(4px + 0.6rem);
+    display: flex;
+    align-items: center;
+    font-size: var(--text-2xs);
+    color: var(--ink-faint);
+    pointer-events: none;
+  }
+  /* Once rows have scrolled beneath it, the field's band casts a shade over them. The
+     list marks itself rather than going through state, so the list bits-ui rebuilds at
+     each empty/non-empty crossing starts unshaded. */
+  :global(.plan-toc-panel [data-slot="command"]:has([data-slot="command-list"][data-scrolled]) .toc-head) {
+    box-shadow:
+      0 1px 0 var(--rule),
+      var(--float-low);
   }
 
   /* The list re-forming when the query crosses between empty and non-empty — the one
@@ -566,8 +796,8 @@
      The height is the ToC's own, deliberately NOT the vendored `max-h-72` (18rem)
      it overrides: that class is shared with the breadcrumbs bar's filter panel
      (EXC-1098), which anchors to a crumb mid-bar and wants to stay compact. This
-     panel hangs off the control row with the whole plan under it, so it earns twice
-     the run before scrolling.
+     panel hangs off the control row with the whole plan under it, so it earns a longer
+     run before scrolling.
 
      Both terms of the min() have to be resolvable when the stylesheet is parsed, which
      rules out --bits-popover-content-available-height: floating-ui publishes it a frame
@@ -579,20 +809,22 @@
      costs a clamp against the window rather than against the trigger's own room, and is
      never invalid. */
   :global(.plan-toc-panel [data-slot="command-list"]) {
-    padding-block-start: 0.5rem;
-    max-height: min(36rem, 70vh);
+    padding: 0.375rem 4px 4px;
+    max-height: min(25rem, 70vh);
   }
 
   /* One step of nesting, and the panel's own grid. The indent, the guide band's
      origin, its width, and the comb the guides are drawn with are four measurements
      that MUST agree, and three of them are pinned against each other by the e2e's
-     `band.left + band.width === padding` — the gradient's repeat period is not, so a
-     step retuned in one place and not the other would slide every column but the
-     first off the text while the suite stayed green. One declaration, per
+     `band.left + band.width === padding + guide-x` — the gradient's repeat period is
+     not, so a step retuned in one place and not the other would slide every column but
+     the first off its glyph while the suite stayed green. One declaration, per
      svelte-rules.md § CSS-token discipline ("a constant coupled across files gets
-     one named source"). */
+     one named source"). --toc-guide-x is mirrored as GUIDE_X_PX in
+     test/e2e/plan-toc.e2e.ts. */
   :global(.plan-toc-panel) {
-    --toc-step: 0.75rem;
+    --toc-step: 1rem;
+    --toc-guide-x: 0.55rem;
   }
 
   /* The one indent rule, and the two views mean different things by it.
@@ -604,9 +836,25 @@
      offset costs nothing to read, where a shifting indent would.
      Filtered, every row passes zero: the breadcrumb header above it carries the
      hierarchy, so repeating it in the indent would say the same thing twice and
-     cost the row width that the deepest matches need most. */
+     cost the row width that the deepest matches need most.
+     The row itself never paints: its key (below) is the part that rises. */
   :global(.plan-toc-panel [data-slot="command-item"]) {
-    padding-inline-start: calc(0.5rem + var(--toc-depth, 0) * var(--toc-step));
+    padding: 0;
+    padding-inline-start: calc(var(--toc-depth, 0) * var(--toc-step));
+    background: transparent;
+    color: var(--ink);
+    font-size: var(--text-md);
+    line-height: var(--leading-tight);
+  }
+  :global(.plan-toc-panel [data-slot="command-item"]:is([data-level="4"], [data-level="5"], [data-level="6"])) {
+    color: var(--ink-soft);
+  }
+  :global(.plan-toc-panel :is([data-level="1"], [data-level="2"]) .toc-label) {
+    font-weight: 600;
+  }
+  /* The vendored row's check indicator marks a checked item, which a heading never is. */
+  :global(.plan-toc-panel .cn-command-item-indicator) {
+    display: none;
   }
 
   /* The indent guides (EXC-1106): one hairline per level between the plan's own
@@ -614,8 +862,8 @@
      it hangs under agree about depth. A row draws NOTHING in its own column — the
      line for a level is punctuated by the heading that opens it, which is what
      makes the set read as a tree rather than as a ruled ledger. --toc-guides is
-     therefore the count, and where the band STARTS falls out of it: the rightmost
-     tooth always sits one step left of the text.
+     therefore the count, and where the band STARTS falls out of it: each tooth hangs
+     --toc-guide-x into its ancestor's key, under that key's level glyph.
      Zero is the whole of the filtered view's answer (a flush-left row hangs under
      a breadcrumb header, not under a column) and of a plan's shallowest rows,
      which is why the count is passed rather than derived from --toc-depth: only
@@ -631,14 +879,11 @@
      left of a plainly indented row. What guideBase closes is narrower: a column to the
      left of EVERY row, down the whole panel, where the plan has no such level.
 
-     A ::before rather than the row's own background, for two reasons that both fail
-     silently. The row already takes `background:` — the SHORTHAND — when it is the
-     heading being read, and a shorthand resets background-image. And border-radius clips
-     an element's own background layers while leaving an absolutely-positioned child
-     alone: the row is rounded-lg, so the leftmost tooth would be nicked top and bottom
-     and the line would stripe at each row boundary. `inset-block: 0` on an
-     already-relative row is what joins adjacent rows into one line despite their
-     padding-block.
+     A ::before rather than the row's own background: border-radius clips an element's
+     own background layers while leaving an absolutely-positioned child alone, and the
+     row is rounded-lg, so the leftmost tooth would be nicked top and bottom and the line
+     would stripe at each row boundary. `inset-block: 0` on an already-relative row is
+     what joins adjacent rows into one line.
      content:"" and pointer-events:none: nothing in the accessibility tree, and nothing
      between the reviewer and the row they are clicking.
      --rule is what caret already paints an indent guide with — FolderTree.svelte hands
@@ -649,7 +894,7 @@
     position: absolute;
     inset-block: 0;
     inset-inline-start: calc(
-      0.5rem + (var(--toc-depth, 0) - var(--toc-guides, 0)) * var(--toc-step)
+      var(--toc-guide-x) + (var(--toc-depth, 0) - var(--toc-guides, 0)) * var(--toc-step)
     );
     width: calc(var(--toc-guides, 0) * var(--toc-step));
     background-image: repeating-linear-gradient(
@@ -660,11 +905,132 @@
     pointer-events: none;
   }
 
+  /* The key: a row's cap, flat on the panel at rest. It rises under the pointer, which
+     moves the selection; the keyboard's selection adds a solid --accent ring, since the
+     bridge's 30% --ring falls under 3:1 against the float and here the ring is the one
+     signal telling the keyboard's row from the pointer's. The heading being read is
+     latched down, as the compare toggle is when it is on. Every state draws the same five
+     shadow layers, so a change of state transitions. The layers are the kit's cap rest
+     and press (styles/atoms.css); a row is no `.cap`, which would claim a tray. */
+  :global(.plan-toc-panel) {
+    --toc-key-flat:
+      inset 0 0 0 0 transparent,
+      inset 0 1px 0 transparent,
+      inset 0 0 0 1px transparent,
+      inset 0 4px 5px -3px transparent,
+      inset 0 -3px 6px 0 transparent;
+    --toc-key-up:
+      inset 0 0 0 0 transparent,
+      inset 0 1px 0 var(--rim-top),
+      inset 0 0 0 1px var(--rim-side),
+      inset 0 4px 5px -3px var(--dome-hi),
+      inset 0 -3px 6px 0 var(--dome-lo);
+    --toc-key-down:
+      inset 0 0 0 1px var(--well-floor),
+      inset 0 1px 0 transparent,
+      inset 0 0 0 2px var(--rim-side),
+      inset 0 4px 5px -1px var(--press-shade),
+      inset 0 0 4px 1px var(--press-ring);
+  }
+  :global(.plan-toc-panel .toc-key) {
+    --key-face: transparent;
+    --key-grain: none;
+    --key-shadow: var(--toc-key-flat);
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 1.875rem;
+    padding: 0 0.45rem 0 0.375rem;
+    border-radius: var(--radius);
+    background-color: var(--key-face);
+    background-image: var(--key-grain);
+    background-size: 128px;
+    background-blend-mode: soft-light;
+    box-shadow: var(--key-shadow);
+    outline: 2px solid transparent;
+    outline-offset: 1px;
+    transition:
+      background-color var(--dur-state) var(--ease-out),
+      color var(--dur-state) var(--ease-out),
+      box-shadow var(--dur-state) var(--ease-out),
+      outline-color var(--dur-state) var(--ease-out);
+  }
+  :global(.plan-toc-panel [data-slot="command-item"][data-selected] .toc-key) {
+    --key-face: var(--neutral-face-hover);
+    --key-grain: var(--grain);
+    --key-shadow: var(--toc-key-up);
+    color: var(--ink);
+  }
+  :global(.plan-toc-panel [data-keys] [data-slot="command-item"][data-selected] .toc-key) {
+    outline-color: var(--accent);
+  }
+  :global(.plan-toc-panel [data-slot="command-item"][aria-current="location"] .toc-key) {
+    --key-face: var(--neutral-face-latched);
+    --key-grain: var(--grain);
+    --key-shadow: var(--toc-key-down);
+    color: var(--ink);
+  }
+  :global(.plan-toc-panel [data-slot="command-item"][aria-current="location"][data-selected] .toc-key) {
+    --key-face: color-mix(in lab, var(--neutral-face-latched), var(--neutral-face-hover));
+  }
+  :global(.plan-toc-panel [data-slot="command-item"]:is(:active, [data-key-pressed]) .toc-key) {
+    --key-face: var(--neutral-face-down);
+    --key-grain: var(--grain);
+    --key-shadow: var(--toc-key-down);
+  }
+
+  /* What a row says beyond its heading: an --attention dot when the section changed
+     since the previous version, and stamps counting its comments and its drafts. */
+  :global(.plan-toc-panel .toc-meta) {
+    flex: none;
+    margin-inline-start: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  :global(.plan-toc-panel .toc-dot) {
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 99px;
+    background: var(--attention);
+  }
+  :global(.plan-toc-panel :is(.toc-count, .toc-fact)) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    height: 1.15rem;
+    border-radius: 99px;
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  :global(.plan-toc-panel .toc-count) {
+    padding: 0 0.42rem 0 0.32rem;
+  }
+  /* A draft or a change is novelty, tinted at the comment stamp's strengths, so a draft
+     count reads as the Draft stamp on a comment card does. */
+  :global(.plan-toc-panel .toc-tint) {
+    background: color-mix(in lab, var(--well-floor), var(--attention) var(--stamp-floor));
+    box-shadow: var(--well-shade), var(--well-lip);
+    color: color-mix(in lab, var(--attention), var(--stamp-word-toward) var(--stamp-word-mix));
+  }
+  /* The vendored row inks every svg of a selected row; a stamp's glyph keeps its word's. */
+  :global(.plan-toc-panel :is(.toc-meta, .toc-peek-facts) svg) {
+    color: inherit;
+  }
+
   /* The vendored group ships `p-1`, which would inset its rows a step further than
      the unfiltered view's and open a gap the list already pads. The header and the
-     rows carry their own padding, so the group is a pure grouping box. */
+     rows carry their own padding, so the group is a pure grouping box — and an unclipped
+     one, since a flush-left key's ring reaches past the group's edges. */
   :global(.plan-toc-panel [data-slot="command-group"]) {
     padding: 0;
+    overflow: visible;
   }
 
   /* The breadcrumb header. `.eyebrow` (styles/atoms.css) is caret's uppercase-label
@@ -731,10 +1097,8 @@
      is no edge case: the popup seeds its selection to the heading being read on every open,
      and the filtered view always lands on the first match.
      --ink-soft rather than the fainter rung the eyebrow takes, because the ground that
-     decides it is not the panel but the SELECTED row's own bg-accent wash. Measured on
-     the painted pixels in caret-light: --ink-faint reaches only 2.90:1 there — under the
-     3:1 a non-text graphic wants — where --ink-soft gives 5.88:1 against a label at
-     12.69:1. */
+     decides it is not the panel but a raised or latched key's face, where --ink-faint
+     falls under the 3:1 a non-text graphic wants. */
   :global(.plan-toc-panel [data-slot="command-item"] [data-icon^="heading-"] svg) {
     color: var(--ink-soft);
   }
@@ -764,22 +1128,10 @@
      separates from its row by ΔE*ab 8.8–20.3 across both schemes and all three row
      states. */
   :global(.plan-toc-panel .toc-hit) {
+    border-radius: 2px;
     background: var(--mark);
-  }
-
-  /* The heading the reviewer is already on, marked with the amber wash the menu
-     language reserves for the active choice (shadcn-rules.md § Menu highlight vs.
-     selection) — the same mark PlanBreadcrumbs spends on the same job. */
-  :global(.plan-toc-panel [aria-current="location"]) {
-    background: var(--accent-wash);
+    box-shadow: var(--chip-stamped);
     color: var(--ink);
-  }
-  /* The keyboard landing on the row the reviewer is already on: the wash warms
-     toward the neutral --chip-hover every other highlighted row takes, so the
-     amber keeps saying "you are here" while the fill still says "the keyboard is
-     on it". */
-  :global(.plan-toc-panel [aria-current="location"][data-selected]) {
-    background: color-mix(in lab, var(--accent-wash), var(--chip-hover) 40%);
   }
 
   /* An empty list says why, at the quietest ink — the same weight the breadcrumbs'
@@ -787,13 +1139,180 @@
      idle before it speaks, so the padding is what it wears only when it has
      something to say: with no text and no padding it generates no line box and the
      panel closes up exactly as it did when the element was conditional. */
+  :global(.plan-toc-panel .toc-empty-row) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding-inline: 4px;
+  }
   :global(.plan-toc-panel .toc-empty) {
     margin: 0;
     padding: 0;
+    min-width: 0;
+    color: var(--ink-soft);
+    font-size: var(--text-sm);
+    overflow-wrap: anywhere;
+  }
+  :global(.plan-toc-panel .toc-empty:not(:empty)) {
+    padding: 0.55rem 0.25rem 0.55rem 0.5rem;
+  }
+  :global(.plan-toc-panel .toc-empty-row .tray) {
+    margin-block: 0.25rem;
+  }
+
+  /* The peek: everything caret knows about the selected row's section, on a ground a
+     step toward the sunk paper so it reads as a pane of the float rather than a second
+     list. The opening lines sit in a recessed panel, as a fenced block does in the
+     plan. */
+  :global(.plan-toc-panel .toc-peek) {
+    contain: size;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border-inline-start: 1px solid var(--rule);
+    background: color-mix(in lab, var(--paper-raised), var(--paper-sunk) 55%);
+    font-size: var(--text-md);
+  }
+  /* The body scrolls when a section has more to say than the outline is tall, and the key
+     legend stays put below it. */
+  :global(.plan-toc-panel .toc-peek-body) {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.85rem 0.95rem 0.7rem;
+  }
+  /* Children keep their height and the body scrolls, rather than a clipped child (the
+     trail) shrinking away to nothing. */
+  :global(.plan-toc-panel .toc-peek-body > *) {
+    flex: none;
+  }
+  :global(.plan-toc-panel .toc-peek p) {
+    margin: 0;
+  }
+  /* Elided from the start, like the breadcrumb headers above, for the same reasons. */
+  :global(.plan-toc-panel .toc-peek-trail) {
+    margin-block-end: -0.35rem;
+    font-style: italic;
+    direction: rtl;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  :global(.plan-toc-panel .toc-peek-trail)::after {
+    content: "\200E" / "";
+  }
+  :global(.plan-toc-panel .toc-peek-title) {
+    font-size: var(--text-lg);
+    font-weight: 600;
+    line-height: var(--leading-tight);
+    text-wrap: balance;
+    overflow-wrap: anywhere;
+  }
+  :global(.plan-toc-panel .toc-peek-facts) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+  :global(.plan-toc-panel .toc-fact) {
+    padding: 0 0.45rem;
+    font-family: var(--font-sans);
+    letter-spacing: 0.02em;
+  }
+  :global(.plan-toc-panel .toc-peek-excerpt) {
+    padding: 0.5rem 0.65rem;
+    border-radius: var(--radius);
+    background: var(--code-panel);
+    box-shadow: var(--panel-recess);
+    color: var(--ink-soft);
+    font-size: var(--text-sm);
+    line-height: var(--leading-snug);
+  }
+  :global(.plan-toc-panel .toc-peek-excerpt span) {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  :global(.plan-toc-panel .toc-peek-notes) {
+    display: grid;
+    gap: 0.35rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  :global(.plan-toc-panel .toc-peek-notes li) {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    min-width: 0;
+    font-size: var(--text-sm);
+    line-height: var(--leading-snug);
+  }
+  :global(.plan-toc-panel .toc-peek-at) {
+    flex: none;
+    font-size: var(--text-2xs);
+    color: var(--ink-faint);
+  }
+  :global(.plan-toc-panel .toc-peek-say) {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  :global(.plan-toc-panel .toc-peek-notes .draft .toc-peek-say) {
+    color: var(--ink-soft);
+    font-style: italic;
+  }
+  :global(.plan-toc-panel :is(.toc-peek-deeper, .toc-peek-empty)) {
+    color: var(--ink-faint);
+    font-size: var(--text-sm);
+  }
+  /* The key legend, run edge to edge along the peek's foot. */
+  :global(.plan-toc-panel .toc-legend) {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.9rem;
+    padding: 0.45rem 0.65rem;
+    border-top: 1px solid var(--rule);
     color: var(--ink-faint);
     font-size: var(--text-xs);
   }
-  :global(.plan-toc-panel .toc-empty:not(:empty)) {
-    padding: 0.5rem;
+  :global(.plan-toc-panel .toc-legend span) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  @media (hover: none) and (pointer: coarse) {
+    :global(.plan-toc-panel .toc-legend) {
+      display: none;
+    }
+  }
+
+  /* Under 40rem of panel the peek stacks below the outline, and the two share the
+     window's height rather than each claiming most of it. 41rem is the 40rem panel plus
+     the 1rem the width rule above keeps clear of the window. */
+  @media (max-width: 41rem) {
+    :global(.plan-toc-panel) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    :global(.plan-toc-panel:has([data-slot="command-item"])) {
+      min-height: 0;
+    }
+    :global(.plan-toc-panel [data-slot="command-list"]) {
+      max-height: 40vh;
+    }
+    :global(.plan-toc-panel .toc-peek) {
+      contain: none;
+      max-height: 40vh;
+      border-inline-start: 0;
+      border-top: 1px solid var(--rule);
+    }
   }
 </style>

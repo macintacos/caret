@@ -35,6 +35,7 @@ under the ISC license.
 | `heading-6` | [ui/src/icons/heading-6.svg](ui/src/icons/heading-6.svg) | [heading-6.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/heading-6.svg) |
 | `keyboard` | [ui/src/icons/keyboard.svg](ui/src/icons/keyboard.svg) | [keyboard.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/keyboard.svg) |
 | `loader-circle` | [ui/src/icons/loader-circle.svg](ui/src/icons/loader-circle.svg) | [loader-circle.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/loader-circle.svg) |
+| `message-square` | [ui/src/icons/message-square.svg](ui/src/icons/message-square.svg) | [message-square.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/message-square.svg) |
 | `monitor` | [ui/src/icons/monitor.svg](ui/src/icons/monitor.svg) | [monitor.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/monitor.svg) |
 | `moon` | [ui/src/icons/moon.svg](ui/src/icons/moon.svg) | [moon.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/moon.svg) |
 | `panel-left` | [ui/src/icons/panel-left.svg](ui/src/icons/panel-left.svg) | [panel-left.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/panel-left.svg) |

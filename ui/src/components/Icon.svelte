@@ -30,6 +30,7 @@
   import heading6 from "@/icons/heading-6.svg?raw";
   import keyboard from "@/icons/keyboard.svg?raw";
   import loaderCircle from "@/icons/loader-circle.svg?raw";
+  import messageSquare from "@/icons/message-square.svg?raw";
   import monitor from "@/icons/monitor.svg?raw";
   import moon from "@/icons/moon.svg?raw";
   import panelLeft from "@/icons/panel-left.svg?raw";
@@ -73,6 +74,7 @@
     "heading-6": heading6,
     keyboard,
     "loader-circle": loaderCircle,
+    "message-square": messageSquare,
     monitor,
     moon,
     "panel-left": panelLeft,

@@ -928,6 +928,9 @@ test("the preview fills its lane and pages inside itself", async ({ daemon, page
       if (panel === null || lane === null || code === null) return null;
       const p = panel.getBoundingClientRect();
       const l = lane.getBoundingClientRect();
+      // The lane's padding is the bare gap between the panes, not part of the pane.
+      const pad = getComputedStyle(lane);
+      const px = (value: string) => Number.parseFloat(value);
       return {
         overflowX: getComputedStyle(code).overflowX,
         overflowY: getComputedStyle(code).overflowY,
@@ -936,10 +939,10 @@ test("the preview fills its lane and pages inside itself", async ({ daemon, page
         codeScrollWidth: code.scrollWidth,
         codeClientWidth: code.clientWidth,
         // How far the panel's edges sit inside the lane's, on each side.
-        insetLeft: p.left - l.left,
-        insetRight: l.right - p.right,
-        insetTop: p.top - l.top,
-        insetBottom: l.bottom - p.bottom,
+        insetLeft: p.left - l.left - px(pad.paddingLeft),
+        insetRight: l.right - p.right - px(pad.paddingRight),
+        insetTop: p.top - l.top - px(pad.paddingTop),
+        insetBottom: l.bottom - p.bottom - px(pad.paddingBottom),
       };
     });
     expect(geometry).not.toBeNull();
@@ -947,9 +950,9 @@ test("the preview fills its lane and pages inside itself", async ({ daemon, page
     expect(geometry?.overflowY).toBe("auto");
     expect(geometry?.scrollHeight ?? 0).toBeGreaterThan(geometry?.clientHeight ?? 0);
     // The panel fills its lane: every edge sits within a pixel or two of the
-    // lane's — the hairline separator and sub-pixel rounding — rather than being
-    // inset by a margin or a corner radius. So the header stays reachable at the
-    // lane's own edge instead of floating inside it.
+    // lane's content box — sub-pixel rounding — rather than being inset by a
+    // margin. So the header stays reachable at the lane's own edge instead of
+    // floating inside it.
     for (const inset of [
       geometry?.insetLeft,
       geometry?.insetRight,

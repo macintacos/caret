@@ -95,6 +95,7 @@
   } from "@core/lib/types";
 
   import * as Alert from "$lib/components/ui/alert/index.js";
+  import { Button } from "$lib/components/ui/button/index.js";
   import AlertHost from "@/components/AlertHost.svelte";
   import UnsentCommentsDialog from "@/components/UnsentCommentsDialog.svelte";
   import CommentNavigator from "@/components/CommentNavigator.svelte";
@@ -808,21 +809,19 @@
 
   {#if selection.daemonChanged}
     <!-- shadcn Alert as the semantic role="alert" container, molded to a
-         full-width top strip (see .daemon-banner in the style block). -->
+         full-width strip on the window's body (see .daemon-banner in the style block). -->
     <Alert.Root class="daemon-banner">
       <p class="db-text">The caret daemon was replaced — reload to resync.</p>
-      <div class="db-actions">
-        <button type="button" class="db-reload" onclick={() => location.reload()}>
-          Reload
-        </button>
-        <button
-          type="button"
-          class="db-dismiss"
-          aria-label="Dismiss"
+      <div class="db-actions tray">
+        <Button size="sm" onclick={() => location.reload()}>Reload</Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          class="float-chip"
           onclick={() => selection.dismissDaemonChanged()}
         >
           Dismiss
-        </button>
+        </Button>
       </div>
     </Alert.Root>
   {/if}
@@ -1078,55 +1077,70 @@
 </ModalPresence>
 
 <style>
-  /* Pin the shell's direct children to their grid rows (app.css declares
-     `auto auto 1fr auto`): TopBar, the optional banner, content, then the bottom
-     status bar. Explicit placement keeps content on the 1fr row whether or not
-     the banner is present — without it, an absent banner would let content drift
-     off 1fr. `:global` because these children render their own roots. */
+  /* Pin the shell's direct children to their grid rows (layout.css declares
+     `auto auto auto 1fr auto`): TopBar, the optional banner, DiffPlanView's control
+     row, content, then the bottom status bar. Explicit placement keeps content on the
+     1fr row whether or not the banner or the control row is present — auto-placed,
+     the control row lands in the 1fr row under a banner and the plan drops below the
+     status bar. `:global` because these children render their own roots. */
   .shell > :global(.topbar) {
     grid-row: 1;
   }
-  .shell > :global(.diff-plan),
-  .shell > :global(.empty) {
+  .shell > :global(.control-row) {
     grid-row: 3;
   }
-  .shell > :global(.status-bar) {
+  .shell > :global(.diff-surface),
+  .shell > :global(.empty) {
     grid-row: 4;
   }
+  /* With no plan the content row is still a pane set into the body, so the window
+     keeps its shape whether or not a plan is waiting. */
+  .shell > :global(.empty) {
+    /* The gap the control row leaves above a plan's pane, which has none here. */
+    margin: 0.25rem var(--pane-gap) 0;
+    border-radius: var(--radius-lg);
+    background: var(--paper);
+    box-shadow:
+      var(--pane-recess),
+      var(--pane-lip);
+  }
+  .shell > :global(.status-bar) {
+    grid-row: 5;
+  }
+  /* DiffPlanView's read-only list of unanchored comments keeps the implicit row after
+     the status bar that auto-placement always gave it. */
+  .shell > :global(.legacy-list) {
+    grid-row: 6;
+  }
 
-  /* The hand-off's arrival, covering the content row but deliberately OUT OF FLOW. The
-     grid placement gives this absolutely-positioned child its containing block (.shell
-     is positioned for exactly this, layout.css) and `inset: 0` stretches it to that
-     area. In flow it could not work: DiffPlanView renders `.control-row` and
-     `.diff-surface` as two auto-placed siblings, landing in rows 2 and 3, so an in-flow
-     item claiming row 3 would push `.diff-surface` into an implicit fifth row under the
-     status bar. Declared after both content branches, so it paints over them with no
-     z-index of its own.
-
-     What that costs: the curtain covers row 3, so an arriving plan's `.control-row`
-     swaps at once beneath it. Widening to `grid-row: 2 / 4` is not the fix, because row
-     2 is the daemon banner's when one is present — the real fix is a single DiffPlanView
-     root pinned to row 3.
+  /* The hand-off's arrival, covering the content row OUT OF FLOW. The grid placement
+     gives this absolutely-positioned child its containing block (.shell is positioned
+     for exactly this, layout.css) and the inset stretches it to that area. Declared
+     after both content branches, so it paints over them with no z-index of its own.
+     It covers the pane only, so an arriving plan's `.control-row` swaps at once above
+     it.
 
      Both ends of the placement are spelled out because out of flow they have to be: an
      `auto` grid line on an absolutely-positioned child resolves to the grid container's
-     PADDING EDGE rather than "span 1", so a bare `grid-row: 3` would run the curtain
+     PADDING EDGE rather than "span 1", so a bare `grid-row: 4` would run the curtain
      over the status bar too — the bar stays continuous through the curtain's hand-off,
      unlike the drain route's crossfade, which washes the whole viewport, bar included.
 
      Opacity only, never a wipe: the directional sweep is spoken for by the theme switch,
-     where it means "everything was restyled". One paper tone serves both destinations —
-     it matches --paper under the empty state and sits a step above --paper-sunk under a
-     plan, so that reveal begins on a slight lift. `forwards` is load-bearing: without
-     the fill the final opacity is discarded and the curtain snaps back to full paper,
-     blanking the content region for the rest of the session. */
+     where it means "everything was restyled". Both destinations are a paper pane, so the
+     curtain takes the pane's inset, corners and recess rather than painting paper over
+     the body around it. `forwards` is load-bearing: without the fill the final opacity
+     is discarded and the curtain snaps back to full paper, blanking the content region
+     for the rest of the session. */
   .arrival {
     position: absolute;
-    grid-row: 3 / 4;
+    grid-row: 4 / 5;
     grid-column: 1 / 2;
-    inset: 0;
+    inset: 0 var(--pane-gap);
+    border-radius: var(--radius-lg);
     pointer-events: none;
     background: var(--paper);
+    box-shadow: var(--pane-recess);
     animation: arrival var(--dur-state) var(--ease-out) forwards;
   }
   @keyframes arrival {
@@ -1138,23 +1152,21 @@
     }
   }
 
-  /* Alert.Root's card default re-shaped into a full-width strip that consumes grid
-     row 2 and pushes the content down rather than overlaying it, so it can't be
-     mistaken for a transient toast. :global because the class rides the Alert child
-     component; the overrides win because this scoped CSS is unlayered and Tailwind's
-     utilities are layered. */
+  /* Alert.Root's card default re-shaped into a full-width strip on the window's body,
+     between the top bar and the plan's controls. It consumes grid row 2 and pushes the
+     content down rather than overlaying it, so it can't be mistaken for a transient
+     toast. :global because the class rides the Alert child component; the overrides win
+     because this scoped CSS is unlayered and Tailwind's utilities are layered. */
   .shell > :global(.daemon-banner) {
     grid-row: 2;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 0.6rem var(--bar-inset);
-    background: var(--accent-wash);
+    padding: 0 var(--bar-inset) calc(0.5rem - var(--well-pad));
+    background: none;
     color: var(--ink);
     border: 0;
-    border-bottom: 1px solid var(--rule-strong);
-    border-left: 3px solid var(--accent);
     border-radius: 0;
     font-size: var(--text-base);
     animation: daemon-banner-in var(--dur-state) var(--ease-out);
@@ -1165,38 +1177,7 @@
     line-height: var(--leading-tight);
   }
   .db-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
     flex: none;
-  }
-  .db-reload,
-  .db-dismiss {
-    font: inherit;
-    font-size: var(--text-sm);
-    cursor: pointer;
-    border-radius: var(--radius);
-    padding: 0.3rem 0.7rem;
-    transition: background var(--dur-state) var(--ease-out);
-  }
-  .db-reload {
-    background: var(--accent);
-    color: var(--accent-ink);
-    border: 1px solid var(--accent);
-    font-weight: 600;
-  }
-  .db-reload:hover {
-    background: var(--accent-bright);
-    border-color: var(--accent-bright);
-  }
-  .db-dismiss {
-    background: transparent;
-    color: var(--ink-soft);
-    border: 1px solid var(--rule-strong);
-  }
-  .db-dismiss:hover {
-    color: var(--ink);
-    background: var(--paper-raised);
   }
   @keyframes daemon-banner-in {
     from {

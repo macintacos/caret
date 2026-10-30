@@ -165,6 +165,22 @@ describe("DiffPlanView contents popup", () => {
   });
 });
 
+describe("DiffPlanView control row", () => {
+  // The plan's view keys are one group, so they share one well. The Versions toggle has
+  // two markups, enabled and disabled-with-a-reason; both must sit in the shared tray.
+  test.each([
+    ["with nothing to compare", reviewFixture()],
+    ["with versions to compare", multiVersionFixture(3)],
+  ])("Contents, Versions and Preview share one tray %s", (_, review) => {
+    const { target } = render(DiffPlanView, props({ review }));
+    const trays = ["[data-slot='popover-trigger']", ".compare-toggle", ".preview-toggle"].map(
+      (cap) => target.querySelector(`.control-row ${cap}`)?.closest(".tray") ?? null,
+    );
+    expect(trays.every((tray) => tray !== null)).toBe(true);
+    expect(new Set(trays).size).toBe(1);
+  });
+});
+
 /** Mount the view with a composer open on line 2 seeded with `text`, over a
  * controller whose injected sound dep records what the view asks it to play. The
  * controller is opened AFTER the mount, since the view's contentKey effect reseeds

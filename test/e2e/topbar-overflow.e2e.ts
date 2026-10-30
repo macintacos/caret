@@ -122,6 +122,18 @@ test("tight: Approve moves into the overflow menu", async ({ daemon, page }) => 
   await approveViaVariant(daemon, page, "Approve & auto mode", id);
 });
 
+test("tight: the local-build stamp drops, leaving its room to the plan title", async ({
+  daemon,
+  page,
+}) => {
+  await seedAndOpen(page, daemon);
+  const stamp = page.locator(".topbar .dev-badge");
+  await expect(stamp).toBeVisible();
+
+  await page.setViewportSize({ width: 600, height: 800 }); // below --w-tight (640)
+  await expect(stamp).toBeHidden();
+});
+
 test("narrow: bell and settings stay visible while a long title truncates", async ({
   daemon,
   page,
