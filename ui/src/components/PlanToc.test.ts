@@ -938,7 +938,7 @@ function peekPart(name: string): string {
 }
 
 describe("PlanToc section notes", () => {
-  test("describes a row's comments, drafts and change apart from its name", async () => {
+  test("describes a row's comments, unsent ones and change apart from its name", async () => {
     const { target, flush } = await openToc({
       plan: PLAN,
       comments: [note(11, "Which frames?"), note(12, "Say how.", true)],
@@ -946,7 +946,7 @@ describe("PlanToc section notes", () => {
     });
     const details = row("Details");
     const described = document.getElementById(details.getAttribute("aria-describedby") ?? "");
-    expect(described?.textContent?.trim()).toBe("1 comment, 1 draft, edited since v3");
+    expect(described?.textContent?.trim()).toBe("1 comment, 1 unsent, edited since v3");
     // The stamps a sighted reviewer reads carry the same facts, so they stay out of the
     // name the option is announced by.
     expect(details.querySelector(".toc-meta")?.getAttribute("aria-hidden")).toBe("true");
@@ -963,6 +963,7 @@ describe("PlanToc peek", () => {
     expect(peekPart("trail")).toBe("Overview › Approach");
     expect(peekPart("title")).toBe("Details");
     expect(peekPart("facts")).toContain("Lines 9–12");
+    expect(peekPart("facts")).toContain("1 unsent");
     expect(peekPart("excerpt")).toBe("Read the frames first. Then decode them.");
     const notes = [...(peek()?.querySelectorAll(".toc-peek-notes li") ?? [])];
     expect(notes.map((li) => li.textContent?.replace(/\s+/g, " ").trim())).toEqual([

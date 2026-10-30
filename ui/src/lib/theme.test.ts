@@ -151,7 +151,9 @@ function schemeDecls(scheme: Scheme): Record<string, string> {
 /** A saved comment's state stamp (SourceAnnotationCard.svelte), per scheme, read from
  * the sheet: its floor is the well floor (styles/derived.css) tinted --stamp-floor
  * toward the state's hue, and its word is that hue mixed --stamp-word-mix toward
- * --stamp-word-toward (styles/tokens.css). */
+ * --stamp-word-toward (styles/tokens.css). An unsent comment's marker
+ * (SourceScratchMarker.svelte) inks its word the same way on a well tinted --unsent-floor
+ * toward --attention. */
 function stampRecipe(scheme: Scheme) {
   const decls = schemeDecls(scheme);
   const wellMix = /color-mix\(in lab, var\(--paper-raised\), (black|var\(--ink\)) (\d+)%\)/.exec(
@@ -166,6 +168,7 @@ function stampRecipe(scheme: Scheme) {
     floor: pct(decls["--stamp-floor"]),
     inkToward: toward(decls["--stamp-word-toward"] ?? ""),
     ink: pct(decls["--stamp-word-mix"]),
+    unsent: pct(decls["--unsent-floor"]),
   };
 }
 
@@ -719,6 +722,20 @@ describe("every theme", () => {
         expect(contrast(word, stamp), `${id} ${hue}`).toBeGreaterThanOrEqual(4.5);
       }
       expect(contrast(tokens["--ink-soft"]!, well), `${id} expired`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  test("tints an unsent comment's well and keeps its word and text at AA on it", () => {
+    for (const [id, theme] of themeEntries()) {
+      const recipe = stampRecipe(theme.scheme);
+      expect(recipe.unsent, `${theme.scheme} --unsent-floor`).toBeGreaterThan(0);
+      const tokens = theme.tokens as Record<string, string>;
+      const toward = (c: string) => tokens[c] ?? c;
+      const well = banded(tokens["--paper-raised"]!, toward(recipe.wellToward), recipe.well);
+      const floor = banded(well, tokens["--attention"]!, recipe.unsent);
+      const word = banded(tokens["--attention"]!, toward(recipe.inkToward), recipe.ink);
+      expect(contrast(word, floor), `${id} word`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(tokens["--ink-soft"]!, floor), `${id} text`).toBeGreaterThanOrEqual(4.5);
     }
   });
 

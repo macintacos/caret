@@ -3,11 +3,10 @@
   // "scratch"): text typed into the composer and dismissed without submitting.
   // Clicking it resumes the composer with the text restored.
   //
-  // Its badge reads "Resume" — an action, not a state — kept deliberately distinct
-  // from SourceAnnotationCard's "Draft" state label. A scratch was never added to
-  // the working copy, so it must never read as an existing comment.
-  import { Badge } from "$lib/components/ui/badge/index.js";
-  import { Button } from "$lib/components/ui/button/index.js";
+  // It reads "Unsent", the scratch's word everywhere it shows, never "Draft": that is
+  // SourceAnnotationCard's state label for a saved comment, and a scratch was never
+  // added to the working copy, so it must never read as an existing comment.
+  import Icon from "@/components/Icon.svelte";
 
   interface Props {
     /** The retained draft text, previewed on one clamped line. */
@@ -18,43 +17,60 @@
   let { text, onResume }: Props = $props();
 </script>
 
-<Button variant="ghost" class="scratch" onclick={onResume} aria-label="Resume unsent comment">
-  <!-- Neutral ink, off the brand-active amber that SourceAnnotationCard's
-       unresolved "Draft" dot owns. -->
-  <Badge variant="outline" class="quiet-badge">Resume</Badge>
+<button type="button" class="scratch tray" onclick={onResume} aria-label="Resume unsent comment">
+  <span class="unsent"><Icon name="message-square-more" size={14} />Unsent</span>
   <span class="clamp-line preview">{text}</span>
-</Button>
+  <span class="cap resume">Resume</span>
+</button>
 
 <style>
-  /* Sized to match the comment chip so the rows line up, but dashed and
-     transparent against the card's solid paper: "started, not added". The
-     compound [data-slot] selector (0,2,0) outranks the copied Button's
-     utilities. */
-  :global([data-slot="button"].scratch) {
+  /* A saved comment is a card resting on the page; a scratch was never added, so it
+     sits in a well cut into it, tinted with the novelty hue the comment stamps use.
+     Sized to the comment card so the rows line up. The whole row is the button, and
+     the cap presses with it (styles/atoms.css). */
+  .scratch {
     display: flex;
     width: 100%;
-    height: auto;
     max-width: min(46rem, 100%);
-    align-items: baseline;
-    justify-content: flex-start;
-    gap: 0.45rem;
     margin: 0.4rem 0 0.55rem;
-    padding: 0.3rem 0.55rem;
+    border: none;
+    background: color-mix(in lab, var(--well-floor), var(--attention) var(--unsent-floor));
+    font: inherit;
     text-align: left;
-    font-weight: 400;
-    background: transparent;
-    border: 1px dashed var(--rule);
-    border-left: 3px dashed var(--ink-faint);
-    border-radius: var(--radius);
-    transition: border-color var(--dur-state) var(--ease-out);
+    cursor: pointer;
     /* Opacity-only, never size: the row's measured height must not move (the
        preventScroll guard depends on it). */
     animation: reveal var(--dur-state) var(--ease-out);
   }
-  :global([data-slot="button"].scratch:hover) {
-    background: transparent;
-    border-color: var(--rule-strong);
-    border-left-color: var(--ink-soft);
+  .scratch:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  /* Inked like a comment stamp's word, so its hue matches the Draft stamp's while the
+     word and glyph tell the two apart. */
+  .unsent {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding-inline: 0.45rem 0.2rem;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: color-mix(in lab, var(--attention), var(--stamp-word-toward) var(--stamp-word-mix));
+  }
+  .preview {
+    padding-inline: 0.4rem 0.55rem;
+    font-size: var(--text-sm);
+  }
+  .resume {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    height: 1.5rem;
+    padding: 0 0.55rem;
+    font-size: var(--text-xs);
+    font-weight: 600;
   }
   @keyframes reveal {
     from {

@@ -323,7 +323,7 @@ describe("RequestChangesDialog unsent scratches", () => {
     expect(q(".preview")).toBeNull();
   });
 
-  test("surfaces a singular unsent-draft hint so the summary can't contradict the section chip", async () => {
+  test("surfaces a singular unsent-comment hint so the summary can't contradict the section chip", async () => {
     await mount({
       ...baseProps,
       generalComment: "please revise approach",
@@ -331,20 +331,20 @@ describe("RequestChangesDialog unsent scratches", () => {
     });
     // The general comment makes the committed tally read "1 comment will be
     // included"; on its own that contradicts the "Unsent comments [1]" chip, so
-    // the hint spells out that the draft won't go unless Saved (EXC-746).
+    // the hint spells out that the unsent comment won't go unless Saved (EXC-746).
     const hint = q(".drafts-hint");
     expect(hint).not.toBeNull();
-    expect(hint?.textContent).toContain("1 unsent draft");
+    expect(hint?.textContent).toContain("1 unsent comment");
   });
 
-  test("pluralizes the unsent-draft hint", async () => {
+  test("pluralizes the unsent-comment hint", async () => {
     await mount({
       ...baseProps,
       scratches: [scratch(3, 3, "one"), scratch(5, 5, "two")],
     });
     const hint = q(".drafts-hint");
     expect(hint).not.toBeNull();
-    expect(hint?.textContent).toContain("2 unsent drafts");
+    expect(hint?.textContent).toContain("2 unsent comments");
   });
 });
 
@@ -362,7 +362,7 @@ describe("general comment optional vs required (EXC-762)", () => {
   });
 });
 
-describe("inline comments — Discard / Mark as draft (EXC-762)", () => {
+describe("inline comments — Discard / Mark as unsent (EXC-762)", () => {
   test("lists each committed inline comment with its anchor and text", async () => {
     await mount({ ...baseProps, annotations: [lineAnn("a1", 7, 8, "reconsider the cache")] });
     const section = q(".inline-comments");
@@ -371,7 +371,7 @@ describe("inline comments — Discard / Mark as draft (EXC-762)", () => {
     expect(section?.textContent).toContain("reconsider the cache");
   });
 
-  test("Mark as draft fires onDraftAnnotation with the line-anchored comment", async () => {
+  test("Mark as unsent fires onDraftAnnotation with the line-anchored comment", async () => {
     const drafted = capture<Annotation>();
     await mount({
       ...baseProps,
@@ -382,7 +382,7 @@ describe("inline comments — Discard / Mark as draft (EXC-762)", () => {
     expect(drafted.last()?.id).toBe("a1");
   });
 
-  test("a legacy (selection-anchored) comment offers Discard but no Mark as draft", async () => {
+  test("a legacy (selection-anchored) comment offers Discard but no Mark as unsent", async () => {
     await mount({ ...baseProps, annotations: [ann("l1", "old style")] });
     const row = q(".inline-row") as HTMLElement;
     expect(row.querySelector(".mark-draft")).toBeNull();

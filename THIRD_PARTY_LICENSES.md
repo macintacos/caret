@@ -36,6 +36,7 @@ under the ISC license.
 | `keyboard` | [ui/src/icons/keyboard.svg](ui/src/icons/keyboard.svg) | [keyboard.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/keyboard.svg) |
 | `loader-circle` | [ui/src/icons/loader-circle.svg](ui/src/icons/loader-circle.svg) | [loader-circle.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/loader-circle.svg) |
 | `message-square` | [ui/src/icons/message-square.svg](ui/src/icons/message-square.svg) | [message-square.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/message-square.svg) |
+| `message-square-more` | [ui/src/icons/message-square-more.svg](ui/src/icons/message-square-more.svg) | [message-square-more.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/message-square-more.svg) |
 | `monitor` | [ui/src/icons/monitor.svg](ui/src/icons/monitor.svg) | [monitor.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/monitor.svg) |
 | `moon` | [ui/src/icons/moon.svg](ui/src/icons/moon.svg) | [moon.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/moon.svg) |
 | `panel-left` | [ui/src/icons/panel-left.svg](ui/src/icons/panel-left.svg) | [panel-left.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/panel-left.svg) |

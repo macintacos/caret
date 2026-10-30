@@ -158,6 +158,7 @@
     <!-- Request changes' scratch treatment, so the two dialogs read as one form. -->
     <section class="group unsent" aria-labelledby="{uid}-unsent">
       <span class="form-label" id="{uid}-unsent">
+        <Icon name="message-square-more" size={14} />
         Unsent comments
         <Badge variant="outline" class="tally">{itemCount}</Badge>
       </span>
@@ -283,15 +284,23 @@
     align-items: center;
     gap: 0.4rem;
   }
+  .unsent .form-label :global(.icon) {
+    color: color-mix(in lab, var(--attention), var(--stamp-word-toward) var(--stamp-word-mix));
+  }
   .unsent-note {
     margin: 0 0 0.4rem;
     font-size: var(--text-sm);
     color: var(--ink-faint);
   }
-  /* Dashed neutral rail, the source view's Resume-marker idiom: an unsent comment
-     never reads as one that will be sent. */
+  /* The source marker's tinted well: an unsent comment never reads as one that will be
+     sent. --ink-faint misses AA on the tint in some palettes, so the anchor steps up. */
   .unsent .comments {
-    border-style: dashed;
+    border: none;
+    background: color-mix(in lab, var(--well-floor), var(--attention) var(--unsent-floor));
+    box-shadow: var(--well-shade), var(--well-lip);
+  }
+  .unsent .anchor {
+    color: var(--ink-soft);
   }
 
   /* Optional reviewer-notes field (EXC-791), reusing the request-changes form

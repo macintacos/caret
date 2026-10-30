@@ -358,7 +358,7 @@
             <span class="toc-count stamp"><Icon name="message-square" size={11} />{counts.comments}</span>
           {/if}
           {#if counts?.drafts}
-            <span class="toc-count toc-tint"><Icon name="pencil-line" size={11} />{counts.drafts}</span>
+            <span class="toc-count toc-tint"><Icon name="message-square-more" size={11} />{counts.drafts}</span>
           {/if}
         </span>
         <span id="{uid}-note-{heading.line}" hidden>{note}</span>
@@ -601,7 +601,7 @@
               {/if}
               {#if counts.drafts > 0}
                 <span class="toc-fact toc-tint">
-                  <Icon name="pencil-line" size={11} />{plural(counts.drafts, "draft")}
+                  <Icon name="message-square-more" size={11} />{counts.drafts} unsent
                 </span>
               {/if}
               {#if section.change !== null && previous !== null}
@@ -982,7 +982,7 @@
   }
 
   /* What a row says beyond its heading: an --attention dot when the section changed
-     since the previous version, and stamps counting its comments and its drafts. */
+     since the previous version, and stamps counting its comments and its unsent ones. */
   :global(.plan-toc-panel .toc-meta) {
     flex: none;
     margin-inline-start: auto;
@@ -1012,8 +1012,8 @@
   :global(.plan-toc-panel .toc-count) {
     padding: 0 0.42rem 0 0.32rem;
   }
-  /* A draft or a change is novelty, tinted at the comment stamp's strengths, so a draft
-     count reads as the Draft stamp on a comment card does. */
+  /* An unsent count or a change is novelty, tinted at the comment stamp's strengths.
+     The unsent count's glyph is the source marker's, not the Draft stamp's pencil. */
   :global(.plan-toc-panel .toc-tint) {
     background: color-mix(in lab, var(--well-floor), var(--attention) var(--stamp-floor));
     box-shadow: var(--well-shade), var(--well-lip);

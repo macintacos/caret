@@ -62,13 +62,13 @@ export function sectionCounts(section: TocSection): { comments: number; drafts: 
 }
 
 /** What a row says about its section beyond its heading, for `aria-describedby`: "2
- * comments, 1 draft, edited since v3". Empty when there is nothing to say. `since` is the
+ * comments, 1 unsent, edited since v3". Empty when there is nothing to say. `since` is the
  * previous version's number. */
 export function describeSection(section: TocSection, since: number | null): string {
   const { comments, drafts } = sectionCounts(section);
   return [
     comments > 0 ? plural(comments, "comment") : "",
-    drafts > 0 ? plural(drafts, "draft") : "",
+    drafts > 0 ? `${drafts} unsent` : "",
     section.change !== null && since !== null ? `${section.change} since v${since}` : "",
   ]
     .filter((part) => part !== "")

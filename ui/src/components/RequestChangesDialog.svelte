@@ -52,7 +52,7 @@
     // Discard a committed inline comment outright (with confirmation) — the same
     // delete path as the in-source annotation card (EXC-762).
     onDiscardAnnotation: (id: string) => void;
-    // "Mark as draft": demote a committed line comment into the unsent-scratch
+    // "Mark as unsent": demote a committed line comment into the unsent-scratch
     // section. Only line-anchored comments can demote (a scratch is line-ranged).
     onDraftAnnotation: (annotation: LineAnnotation) => void;
     // The review being sent back, forwarded to the general-comment editor so
@@ -80,7 +80,7 @@
   // Live preview of exactly what the agent will receive.
   let preview = $derived(formatFeedback(annotations, generalComment, planText, citation));
   // The committed inline comments actually reaching the agent (non-blank), each
-  // listed below for a per-comment Discard or Mark-as-draft.
+  // listed below for a per-comment Discard or Mark as unsent.
   let inlineComments = $derived(pendingInline(annotations));
   let inlineCount = $derived(inlineComments.length);
   // Distinct source locations the pending comments anchor to; only worth showing
@@ -104,8 +104,8 @@
   // comments [N]" chip below — so say plainly they won't go unless Saved (EXC-746).
   let draftsHint = $derived(
     scratches.length === 1
-      ? "1 unsent draft below won't be sent unless you Save it."
-      : `${scratches.length} unsent drafts below won't be sent unless you Save them.`,
+      ? "1 unsent comment below won't be sent unless you Save it."
+      : `${scratches.length} unsent comments below won't be sent unless you Save them.`,
   );
 
   function submit() {
@@ -168,7 +168,7 @@
       <p class="drafts-hint">{draftsHint}</p>
     {/if}
 
-    <!-- Marking as a draft demotes a comment into "Unsent comments" below, where it
+    <!-- Marking as unsent demotes a comment into "Unsent comments" below, where it
          drops out of the compiled preview and can be Saved back. Only line-anchored
          comments can demote; legacy selection-anchored ones (no line range) offer
          Discard only. -->
@@ -206,7 +206,7 @@
                         class="float-chip mark-draft"
                         onclick={() => onDraftAnnotation(a)}
                       >
-                        Mark as draft
+                        Mark as unsent
                       </Button>
                     {/if}
                     {@render discard(() => onDiscardAnnotation(a.id))}
@@ -246,6 +246,7 @@
     {#if scratches.length > 0}
       <section class="scratches" aria-labelledby="scratches-label">
         <span class="form-label" id="scratches-label">
+          <Icon name="message-square-more" size={14} />
           Unsent comments
           <Badge variant="outline" class="tally">{scratches.length}</Badge>
         </span>
@@ -311,7 +312,7 @@
 </Modal>
 
 <!-- Discarding is the destructive one, so it routes through a confirmation; Mark as
-     draft and Save do not. The bubble anchors itself to the trigger — this dialog's
+     unsent and Save do not. The bubble anchors itself to the trigger — this dialog's
      body scrolls, and bits-ui tracks the button through it. Opening a second row's
      bubble dismisses the first as an outside interaction. -->
 {#snippet discard(onConfirm: () => void)}
@@ -375,9 +376,8 @@
     color: var(--ink-faint);
   }
 
-  /* Committed inline comments: the solid rail reads "committed" against the scratch
-     rows' dashed "started, not sent" below. */
-  .inline-comments {
+  .inline-comments,
+  .scratches {
     padding: 0.7rem 0.8rem;
     border: 1px solid var(--rule);
     border-radius: var(--radius);
@@ -419,20 +419,14 @@
     flex: none;
   }
 
-  /* Unsent-scratch section: the source view's Resume-marker idiom — dashed neutral
-     rails, no accent — so an unsent draft never carries the actionable accent the
-     dialog reserves for real feedback. */
-  .scratches {
-    padding: 0.7rem 0.8rem;
-    border: 1px dashed var(--rule);
-    border-radius: var(--radius);
-    background: var(--paper-sunk);
-  }
   .scratches .form-label {
     display: flex;
     align-items: center;
     gap: 0.4rem;
     margin-bottom: 0;
+  }
+  .scratches .form-label :global(.icon) {
+    color: color-mix(in lab, var(--attention), var(--stamp-word-toward) var(--stamp-word-mix));
   }
   /* The count chip beside a section label: an outline Badge, kept to the tabular
      metric face so a growing count stays fixed-width. */
@@ -447,12 +441,22 @@
     font-size: var(--text-sm);
     color: var(--ink-faint);
   }
+  /* A committed row is a card on the section; an unsent one is the source marker's
+     tinted well, so it never reads as a comment that will be sent. Its padding is the
+     bezel, so the actions' tray nests in its corner. */
   .scratch-row {
-    border-left: 3px dashed var(--ink-faint);
-    border-radius: var(--radius);
-    background: var(--paper);
+    border-radius: calc(var(--radius) + 2 * var(--well-pad));
+    background: color-mix(in lab, var(--well-floor), var(--attention) var(--unsent-floor));
+    box-shadow: var(--well-shade), var(--well-lip);
     margin-top: 0.4rem;
-    padding: 0.15rem 0.25rem;
+    padding: var(--well-pad);
+  }
+  .scratch-row :global(.row-trigger) {
+    border-radius: calc(var(--radius) + var(--well-pad));
+  }
+  /* --ink-faint misses the non-text floor on the tint in some palettes. */
+  .scratch-row :global([data-slot="collapsible-trigger"] svg) {
+    color: var(--ink-soft);
   }
   .scratches :global(.scratch-disclosure) {
     min-width: 0;

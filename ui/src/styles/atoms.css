@@ -72,7 +72,10 @@
     color var(--dur-state) var(--ease-out),
     box-shadow var(--dur-state) var(--ease-out);
 }
-:where(.cap, button.float-chip):not(:disabled):is(:hover, [aria-expanded="true"]) {
+/* A tray that is itself the button (the scratch marker) hovers and presses the cap it
+   holds, wherever in the row the pointer is. */
+:where(.cap, button.float-chip):not(:disabled):is(:hover, [aria-expanded="true"]),
+button.tray:hover > .cap {
   background-color: var(--cap-face-hover);
   color: var(--cap-label-hover);
 }
@@ -80,7 +83,8 @@
    centred. Rest and press share their layers, so the change transitions.
    data-key-pressed is the same press played by the control's shortcut
    (lib/shortcuts/pressEcho.ts); a toggle that is on stays latched down. */
-:where(.cap, button.float-chip):not(:disabled):is(:active, [data-key-pressed], [aria-pressed="true"]) {
+:where(.cap, button.float-chip):not(:disabled):is(:active, [data-key-pressed], [aria-pressed="true"]),
+button.tray:is(:active, [data-key-pressed]) > .cap {
   background-color: var(--cap-face-down);
   color: var(--cap-label-hover);
   box-shadow:

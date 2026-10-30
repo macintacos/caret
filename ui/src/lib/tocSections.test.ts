@@ -135,11 +135,11 @@ describe("describeSection", () => {
     expect(describeSection(section(5), 3)).toBe("");
   });
 
-  test("names the comments, the drafts and the change, in that order", () => {
+  test("names the comments, the unsent ones and the change, in that order", () => {
     const comments = [comment(7, "a"), comment(8, "b"), comment(8, "c", true)];
     const previous = PLAN.replace("Drop malformed ones.", "Keep malformed ones.");
     expect(describeSection(section(5, comments, previous), 3)).toBe(
-      "2 comments, 1 draft, edited since v3",
+      "2 comments, 1 unsent, edited since v3",
     );
   });
 

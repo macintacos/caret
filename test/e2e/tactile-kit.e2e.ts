@@ -4,8 +4,15 @@
 
 import type { Page } from "@playwright/test";
 
-import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { openWithPendingScratch } from "@test/e2e/support/decision.ts";
+import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
 import { seedAndOpen } from "@test/e2e/support/source-view.ts";
+
+/** The review page with one kept scratch, so the gate also reaches its marker's cap. */
+async function openWithScratchMarker(daemon: Daemon, page: Page): Promise<void> {
+  await openWithPendingScratch(daemon, page, "an unsent thought");
+  await expect(page.getByRole("button", { name: "Resume unsent comment" })).toBeVisible();
+}
 
 /** The rendered caps, and an outline of each that sits outside any tray. */
 function capsOutsideTrays(page: Page): Promise<{ total: number; outside: string[] }> {
@@ -48,14 +55,14 @@ function capsOffTrayCurve(page: Page): Promise<string[]> {
 }
 
 test("every rubber cap on the review page sits in a tray", async ({ daemon, page }) => {
-  await seedAndOpen(page, daemon);
+  await openWithScratchMarker(daemon, page);
   const caps = await capsOutsideTrays(page);
   expect(caps.total).toBeGreaterThan(0);
   expect(caps.outside).toEqual([]);
 });
 
 test("every cap's corner nests concentrically in its tray's", async ({ daemon, page }) => {
-  await seedAndOpen(page, daemon);
+  await openWithScratchMarker(daemon, page);
   expect(await capsOffTrayCurve(page)).toEqual([]);
 });
 

@@ -31,6 +31,7 @@
   import keyboard from "@/icons/keyboard.svg?raw";
   import loaderCircle from "@/icons/loader-circle.svg?raw";
   import messageSquare from "@/icons/message-square.svg?raw";
+  import messageSquareMore from "@/icons/message-square-more.svg?raw";
   import monitor from "@/icons/monitor.svg?raw";
   import moon from "@/icons/moon.svg?raw";
   import panelLeft from "@/icons/panel-left.svg?raw";
@@ -75,6 +76,7 @@
     keyboard,
     "loader-circle": loaderCircle,
     "message-square": messageSquare,
+    "message-square-more": messageSquareMore,
     monitor,
     moon,
     "panel-left": panelLeft,

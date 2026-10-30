@@ -970,9 +970,9 @@
       onDiscardScratch={(key) => commenting.discard(key)}
       onDiscardAnnotation={(id) => autosave.deleteAnnotation(id)}
       onDraftAnnotation={(a) => {
-        // "Mark as draft": demote a committed line comment into the unsent-scratch
+        // "Mark as unsent": demote a committed line comment into the unsent-scratch
         // section — drop the annotation and insert a scratch at its range, so it can
-        // be Saved back or Discarded like any other unsent draft (EXC-762).
+        // be Saved back or Discarded like any other unsent comment (EXC-762).
         autosave.deleteAnnotation(a.id);
         commenting.draft({ startLine: a.startLine, endLine: a.endLine, text: a.comment });
       }}
