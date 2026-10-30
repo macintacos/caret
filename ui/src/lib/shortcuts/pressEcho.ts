@@ -42,11 +42,11 @@ export function createPressEcho(deps: PressEchoDeps = {}): (entry: ShortcutEntry
   const root = deps.root ?? document.documentElement;
   const controlsFor = deps.controlsFor ?? defaultControlsFor;
   const schedule = deps.schedule ?? defaultSchedule;
-  const pending = new Map<Element, () => void>();
+  const pendingReleases = new Map<Element, () => void>();
   let cancelEcho: (() => void) | undefined;
 
   function release(el: Element): void {
-    pending.delete(el);
+    pendingReleases.delete(el);
     el.removeAttribute("data-key-pressed");
   }
 
@@ -54,9 +54,9 @@ export function createPressEcho(deps: PressEchoDeps = {}): (entry: ShortcutEntry
     const controls = controlsFor(entry);
     if (controls.length === 0) return;
     for (const el of controls) {
-      pending.get(el)?.();
+      pendingReleases.get(el)?.();
       el.setAttribute("data-key-pressed", "");
-      pending.set(
+      pendingReleases.set(
         el,
         schedule(() => release(el), PRESS_HOLD_MS),
       );

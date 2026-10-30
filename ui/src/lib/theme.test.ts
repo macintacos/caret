@@ -135,7 +135,9 @@ function schemeDecls(scheme: Scheme): Record<string, string> {
     if (body === undefined || !(head.includes(selector) || /\[data-theme\]\s*$/.test(head))) {
       continue;
     }
-    for (const d of body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) decls[d[1]!] = d[2]!.trim();
+    for (const declaration of body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+      decls[declaration[1]!] = declaration[2]!.trim();
+    }
   }
   return decls;
 }
@@ -146,15 +148,15 @@ function schemeDecls(scheme: Scheme): Record<string, string> {
  * --stamp-word-toward (styles/tokens.css). */
 function stampRecipe(scheme: Scheme) {
   const decls = schemeDecls(scheme);
-  const well = /color-mix\(in lab, var\(--paper-raised\), (black|var\(--ink\)) (\d+)%\)/.exec(
+  const wellMix = /color-mix\(in lab, var\(--paper-raised\), (black|var\(--ink\)) (\d+)%\)/.exec(
     decls["--well-floor"] ?? "",
   );
   const toward = (c: string) =>
     c === "black" ? "#000000" : c.replace(/^var\((--[\w-]+)\)$/, "$1");
   const pct = (v: string | undefined) => Number.parseFloat(v ?? "NaN") / 100;
   return {
-    wellToward: toward(well?.[1] ?? ""),
-    well: pct(well?.[2]),
+    wellToward: toward(wellMix?.[1] ?? ""),
+    well: pct(wellMix?.[2]),
     floor: pct(decls["--stamp-floor"]),
     inkToward: toward(decls["--stamp-word-toward"] ?? ""),
     ink: pct(decls["--stamp-word-mix"]),
