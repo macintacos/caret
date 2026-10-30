@@ -131,8 +131,10 @@
     margin-top: 0.35rem;
   }
 
+  /* Field's vertical recipe stretches every child to full width. */
   .whats-new-well {
     align-self: flex-start;
+    width: fit-content;
     margin-top: 0.35rem;
   }
 

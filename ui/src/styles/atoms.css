@@ -164,7 +164,8 @@
 }
 
 /* A text field is cut into the surface, a shallower cut than a control's well. Its
-   edge is the inset --rule ring, so a vendored field's own border steps aside. */
+   edge is the inset --rule ring, so a vendored field's own border steps aside. Focus
+   wears no ring: the text cursor shows it, and the edge firms a step. */
 .field-well {
   border-color: transparent;
   background: var(--field-floor);
@@ -177,45 +178,102 @@
 .field-well:focus-within {
   box-shadow:
     var(--field-shade),
-    inset 0 0 0 1px var(--rule),
-    0 0 0 3px var(--ring);
-}
-
-/* A switch's track is a channel cut into the surface and its knob a domed rubber cap;
-   the knob keeps the vendored fill per scheme, and the track fills amber when on. The
-   knob's dome is the cap's scaled to a 1rem knob, so it can't wear the cap's face. */
-[data-slot="switch"] {
-  border-color: transparent;
-  background: var(--well-floor);
-  box-shadow: var(--well-shade), var(--well-lip);
-}
-[data-slot="switch"][data-state="checked"] {
-  background: var(--accent);
-  box-shadow:
-    inset 0 1px var(--press-blur) var(--tinted-press-shade),
+    inset 0 0 0 1px var(--rule-strong),
     var(--well-lip);
 }
-[data-slot="switch-thumb"],
-[data-slot="slider-thumb"] {
+
+/* A switch is a latching key: a square-shouldered knob in a well whose corners nest
+   around it, 2px out. On, the knob slides over and stays latched down, and the channel
+   lifts a step toward ink. The knob is light in both schemes so its position stands off
+   the well (styles/derived.css). */
+[data-slot="switch"] {
+  width: 2.5rem;
+  height: 1.375rem;
+  padding: 0 2px;
+  border-width: 0;
+  border-radius: calc(var(--radius) + 2px);
+  background: var(--well-floor);
+  box-shadow: var(--well-shade), var(--well-lip);
+  transition: background-color var(--dur-state) var(--ease-out);
+}
+[data-slot="switch"][data-state="checked"] {
+  background: var(--switch-on);
+}
+[data-slot="switch-thumb"] {
+  width: calc(1.375rem - 4px);
+  height: calc(1.375rem - 4px);
+  border-radius: var(--radius);
+  background-color: var(--knob-face);
   background-image: var(--grain);
   background-size: 96px;
   background-blend-mode: soft-light;
   box-shadow:
-    inset 0 1px 0 var(--rim-top),
-    inset 0 0 0 1px var(--rim-side),
-    inset 0 3px 4px -2px var(--dome-hi),
-    inset 0 -2px 4px 0 var(--dome-lo);
+    inset 0 1px 0 var(--knob-hi),
+    inset 0 0 0 1px var(--knob-edge),
+    inset 0 -2px 4px 0 var(--knob-lo);
+  transition:
+    translate var(--dur-state) var(--ease-out),
+    background-color var(--dur-state) var(--ease-out),
+    box-shadow var(--dur-state) var(--ease-out);
 }
-/* A slider is the same channel with an amber fill and the switch's knob. */
-[data-slot="slider-track"][data-orientation="horizontal"] {
-  height: 0.4rem;
+[data-slot="switch-thumb"][data-state="checked"] {
+  translate: calc(2.5rem - 1.375rem) 0;
+}
+[data-slot="switch"]:not(:disabled):hover > [data-slot="switch-thumb"] {
+  background-color: var(--knob-face-hover);
+}
+[data-slot="switch"]:not(:disabled):active > [data-slot="switch-thumb"] {
+  background-color: var(--knob-face-down);
+}
+[data-slot="switch"]:not(:disabled):active > [data-slot="switch-thumb"],
+[data-slot="switch-thumb"][data-state="checked"] {
+  box-shadow:
+    inset 0 0 0 1px var(--knob-edge),
+    inset 0 2px 3px 0 var(--press-shade),
+    inset 0 0 3px 1px var(--press-ring);
+}
+
+/* A slider is a level meter: twenty pips in a well, one per 5% step, lit up to the
+   level. The mask cuts the track and bits-ui's range into pips. The invisible thumb keeps
+   bits-ui's role, keys and pointer handling; at zero width bits-ui insets the range by
+   nothing, so it lands on the pips. Focus rings the well. */
+[data-slot="slider"][data-orientation="horizontal"] {
+  width: auto;
+  padding: var(--well-pad);
+  border-radius: calc(2px + var(--well-pad));
   background: var(--well-floor);
   box-shadow: var(--well-shade), var(--well-lip);
 }
-[data-slot="slider-thumb"] {
-  width: 1rem;
+[data-slot="slider"]:has(> [data-slot="slider-thumb"]:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+[data-slot="slider-track"][data-orientation="horizontal"] {
+  flex: none;
+  width: calc(20 * 7px - 2px);
   height: 1rem;
-  border-color: var(--ink-soft);
+  border-radius: 0;
+  background: var(--meter-off);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 16' preserveAspectRatio='none'%3E%3Crect width='5' height='16' rx='2'/%3E%3C/svg%3E")
+    0 0 / 7px 100% repeat-x;
+}
+[data-slot="slider-range"] {
+  background: var(--ink-soft);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    inset 0 -1px 0 rgb(0 0 0 / 0.18);
+  transition: background-color var(--dur-state) var(--ease-out);
+}
+[data-slot="slider"]:hover [data-slot="slider-range"] {
+  background: color-mix(in lab, var(--ink-soft), var(--ink) 40%);
+}
+[data-slot="slider"]:active [data-slot="slider-range"] {
+  background: var(--ink);
+}
+[data-slot="slider-thumb"] {
+  width: 0;
+  border-width: 0;
+  opacity: 0;
 }
 
 /* A segmented control is one well; the chosen segment is the only cap in it, and wears
@@ -367,20 +425,28 @@
   letter-spacing: 0.04em;
   color: var(--ink-faint);
 }
-/* The sunk-paper box behind a settings pane's copyable/reference text (the
-   Advanced diagnostics blocks, the Updates upgrade command). */
+/* The box behind a settings pane's copyable text (the Advanced diagnostics blocks, the
+   Updates upgrade command): the plan's recessed code panel. The upgrade command is a
+   read-only field, so focus firms its edge rather than ringing it. */
 .settings-copy-box {
   display: block;
+  margin: 0;
   padding: 0.6rem 0.75rem;
-  border: 1px solid var(--rule);
+  border: 0;
   border-radius: var(--radius);
-  background: var(--paper-sunk);
+  background: var(--code-panel);
+  box-shadow: var(--panel-recess);
   overflow-x: auto;
+}
+.settings-copy-box:focus-within {
+  box-shadow:
+    var(--panel-recess),
+    inset 0 0 0 1px var(--rule-strong);
 }
 .settings-copy-text {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
-  line-height: var(--leading-normal);
+  line-height: var(--leading-relaxed);
   color: var(--ink);
   white-space: pre;
 }

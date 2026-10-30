@@ -132,7 +132,13 @@ function schemeDecls(scheme: Scheme): Record<string, string> {
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .split("}")) {
     const [head = "", body] = block.split("{");
-    if (body === undefined || !(head.includes(selector) || /\[data-theme\]\s*$/.test(head))) {
+    // Whole selectors only: a rule scoped below the scheme, such as the light chrome's
+    // re-cut well, re-derives a token for its own subtree and not for the scheme.
+    const selectors = head.split(",").map((s) => s.trim());
+    if (
+      body === undefined ||
+      !(selectors.includes(selector) || selectors.at(-1) === "[data-theme]")
+    ) {
       continue;
     }
     for (const declaration of body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
@@ -161,6 +167,25 @@ function stampRecipe(scheme: Scheme) {
     inkToward: toward(decls["--stamp-word-toward"] ?? ""),
     ink: pct(decls["--stamp-word-mix"]),
   };
+}
+
+/** A colour as the sheet derives it for a theme's scheme: a palette token, or a
+ * derived-tier color-mix(in lab, A, B N%) whose inputs are palette tokens, black or other
+ * derived tokens, resolved through each other. Mixed in sRGB, as banded() documents. */
+function derived(name: string, theme: (typeof THEMES)[BuiltinThemeId]): string {
+  const decls = schemeDecls(theme.scheme);
+  const tokens = theme.tokens as Record<string, string>;
+  const resolve = (ref: string): string => {
+    if (ref === "black") return "#000000";
+    const token = /^var\((--[\w-]+)\)$/.exec(ref)?.[1] ?? ref;
+    if (tokens[token] !== undefined) return tokens[token];
+    const value = decls[token] ?? "";
+    const mix = /^color-mix\(in lab, (.+), (\S+) (\d+)%\)$/.exec(value);
+    if (mix !== null) return banded(resolve(mix[1]!), resolve(mix[2]!), Number(mix[3]) / 100);
+    if (value.startsWith("var(")) return resolve(value);
+    throw new Error(`can't resolve ${token}: ${value || "undeclared"}`);
+  };
+  return resolve(name);
 }
 
 const themeEntries = () =>
@@ -694,6 +719,42 @@ describe("every theme", () => {
         expect(contrast(word, stamp), `${id} ${hue}`).toBeGreaterThanOrEqual(4.5);
       }
       expect(contrast(tokens["--ink-soft"]!, well), `${id} expired`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // Settings recesses each section's rows into a group on --group-floor, so every row's
+  // description sits on it.
+  test("keeps a settings row's description at AA on its group", () => {
+    for (const [id, theme] of themeEntries()) {
+      const group = derived("--group-floor", theme);
+      expect(contrast(theme.tokens["--ink-soft"], group), id).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // A switch's state is where its knob sits, so the knob has to stand off the channel it
+  // rides in, off and on. Dark's knob is a light face. Light's is the raised paper, which
+  // can't stand off a pale well, so its edge does the work and has to clear the face too.
+  test("keeps a switch's knob above the non-text floor in its channel, off and on", () => {
+    for (const [id, theme] of themeEntries()) {
+      const face = derived("--knob-face", theme);
+      const mark = theme.scheme === "dark" ? face : derived("--knob-edge", theme);
+      for (const channel of ["--well-floor", "--switch-on"]) {
+        expect(contrast(mark, derived(channel, theme)), `${id} ${channel}`).toBeGreaterThanOrEqual(
+          3,
+        );
+      }
+      if (theme.scheme === "light") {
+        expect(contrast(mark, face), `${id} edge on face`).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  // The volume meter lights its pips in --ink-soft up to the level, so the lit run is the
+  // value and has to stand off the unlit pips beside it.
+  test("keeps the meter's lit pips above the non-text floor against its unlit ones", () => {
+    for (const [id, theme] of themeEntries()) {
+      const off = derived("--meter-off", theme);
+      expect(contrast(theme.tokens["--ink-soft"], off), id).toBeGreaterThanOrEqual(3);
     }
   });
 

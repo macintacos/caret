@@ -109,7 +109,10 @@
      high for modals. styles/derived.css adds each one's ring as --float-surface-*.
    - The plan: chip lines are crisp and unblurred, because a chip fragmented across
      several elements must show no seam. The raised chip's 1px under-edge stays inside
-     the line's slack. */
+     the line's slack.
+   - The window: a pane set into the body takes --pane-recess, the window-scale sibling
+     of --panel-recess, with the body's lit edge below it as --pane-lip. --pane-shade is
+     the shade an edge casts on text scrolled under it. */
 :root,
 [data-theme="dark"] {
   --well-shade:
@@ -130,6 +133,8 @@
   --socket-shade: rgb(0 0 0 / 0.35);
   --socket-ring: rgb(0 0 0 / 0.4);
   --count-shade: rgb(0 0 0 / 0.3);
+  --knob-hi: rgb(255 255 255 / 0.4);
+  --knob-lo: rgb(0 0 0 / 0.3);
   /* A comment stamp: its floor tints the well this far toward the state's hue, and its
      word mixes the hue this far toward ink (black on light paper, where a blue-grey ink
      greys a pale hue first). theme.test.ts holds every palette at AA on them. */
@@ -170,6 +175,11 @@
     var(--panel-shade),
     inset 0 0 0 1px var(--panel-edge),
     var(--well-lip);
+  --pane-recess:
+    inset 0 2px 3px rgb(0 0 0 / 0.6),
+    inset 0 0 0 1px rgb(0 0 0 / 0.8);
+  --pane-lip: 0 1px 0 rgb(255 255 255 / 0.1);
+  --pane-shade: rgb(0 0 0 / 0.7);
 }
 [data-theme="light"] {
   --well-shade:
@@ -190,6 +200,8 @@
   --socket-shade: rgb(0 0 0 / 0.2);
   --socket-ring: rgb(0 0 0 / 0.06);
   --count-shade: rgb(0 0 0 / 0.06);
+  --knob-hi: rgb(255 255 255 / 0.95);
+  --knob-lo: rgb(0 0 0 / 0.1);
   --stamp-floor: 24%;
   --stamp-word-toward: black;
   --stamp-word-mix: 50%;
@@ -227,4 +239,9 @@
     var(--panel-shade),
     inset 0 0 0 1px var(--panel-edge),
     var(--well-lip);
+  --pane-recess:
+    inset 0 1px 2px rgb(0 0 0 / 0.07),
+    inset 0 0 0 1px rgb(0 0 0 / 0.08);
+  --pane-lip: 0 1px 0 rgb(255 255 255 / 0.8);
+  --pane-shade: rgb(0 0 0 / 0.1);
 }

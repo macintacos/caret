@@ -12,8 +12,9 @@ import { THEMES } from "$lib/theme.ts";
 // (EXC-884) instead of inheriting :root's palette as a baked literal. A regression to
 // a bare :root would show up only as a preview card wearing the app's colors.
 //
-// WELL-FORMEDNESS. Every colour is a color-mix(in lab, …) whose only inputs are
-// palette tokens, the tier's own, and black, which a dark well steps toward.
+// WELL-FORMEDNESS. Every colour is a color-mix(in lab, …), or a palette token taken
+// as is, whose only inputs are palette tokens, the tier's own, and black, which a dark
+// well steps toward.
 // theme.test.ts's registry-wide "covers caret-dark's full token set" already pins
 // that key set for every palette, so a tier built solely from those
 // names derives correctly for every one by construction — rather than by this suite
@@ -42,7 +43,7 @@ function colours(tokens: Record<string, string>): Record<string, string> {
   );
 }
 
-// A light value may also be the palette token itself, unmixed.
+// A value may also be the palette token itself, unmixed.
 const LAB_MIX_OR_TOKEN = /^(color-mix\(in lab,|var\(--[\w-]+\)$)/;
 
 describe("the derived-token tier", () => {
@@ -55,6 +56,7 @@ describe("the derived-token tier", () => {
   test("names the tokens the chrome reads", () => {
     expect(Object.keys(tokens).sort()).toEqual([
       "--attention-wash",
+      "--body",
       "--chip",
       "--chip-hover",
       "--code-panel",
@@ -63,12 +65,18 @@ describe("the derived-token tier", () => {
       "--float-surface-high",
       "--float-surface-low",
       "--float-surface-mid",
+      "--group-floor",
       "--ink-wash",
+      "--knob-edge",
+      "--knob-face",
+      "--knob-face-down",
+      "--knob-face-hover",
+      "--meter-off",
       "--neutral-face",
       "--neutral-face-down",
       "--neutral-face-hover",
       "--neutral-face-latched",
-      "--paper-veil",
+      "--switch-on",
       "--well-floor",
     ]);
   });
@@ -77,10 +85,10 @@ describe("the derived-token tier", () => {
   // pass vacuously against a missing block. The test above is what actually catches
   // that, but assert non-emptiness here too so neither reads as a green tick over
   // nothing.
-  test("derives every colour with color-mix(in lab, …)", () => {
+  test("derives every colour with color-mix(in lab, …) or takes a token as is", () => {
     expect(Object.keys(tokens).length).toBeGreaterThan(0);
     for (const [name, value] of Object.entries(colours(tokens))) {
-      expect(value, name).toMatch(/^color-mix\(in lab,/);
+      expect(value, name).toMatch(LAB_MIX_OR_TOKEN);
     }
   });
 

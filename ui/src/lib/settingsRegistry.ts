@@ -459,5 +459,5 @@ export const SETTINGS_CATEGORIES: readonly SettingCategory[] = [
   { id: "Sound", blurb: "Short cues when a plan arrives and a decision lands." },
   { id: "Notifications", blurb: "Alerts when a new plan is ready for review." },
   { id: UPDATES_CATEGORY, blurb: "Whether a newer caret is out, and how to install it." },
-  { id: "Advanced", blurb: "Read-only details about this install. Click a block to copy it." },
+  { id: "Advanced", blurb: "Read-only details about this install." },
 ];

@@ -26,11 +26,6 @@
   --chip: color-mix(in lab, var(--paper-raised), var(--ink) 9%);
   --chip-hover: color-mix(in lab, var(--paper-raised), var(--ink) 15%);
 
-  /* A sheer raised surface: the panel fill thinned just enough that what scrolls
-     under it stays faintly legible — a HUD rather than a modal. The plan view's
-     search pill and the "/ to search" chip it expands from both ride it. */
-  --paper-veil: color-mix(in lab, var(--paper-raised), transparent 6%);
-
   /* A bare wash of ink over whatever is already behind it — the neutral hover for
      a control that is transparent at rest and must not paint over its container's
      surface. Distinct from --chip-hover, which is opaque and mixes onto a known
@@ -57,6 +52,26 @@
   --neutral-face-hover: color-mix(in lab, var(--paper-raised), var(--ink) 17%);
   --neutral-face-down: color-mix(in lab, var(--paper-raised), var(--ink) 9%);
 
+  /* The material the window is made of: every chrome control is cut into it and the plan
+     pane is set into it. Dark lifts it off the raised paper, which sits too close to the
+     pane's sunk floor for the pane to read as set in. */
+  --body: color-mix(in lab, var(--paper-raised), var(--ink) 7%);
+
+  /* A settings section's rows sit in a group recessed into the modal's sheet. Dark steps
+     it toward black, since a step toward ink would lift it off a sheet this dark. */
+  --group-floor: color-mix(in lab, var(--paper-raised), black 28%);
+
+  /* A switch's knob and the channel it latches into, and the meter's unlit pips. The knob
+     is light in both schemes so its position stands off the well; on light paper the
+     white face can't, so its edge does. theme.test.ts holds each pair to the non-text
+     floor in every palette. */
+  --knob-face: var(--ink-soft);
+  --knob-face-hover: color-mix(in lab, var(--ink-soft), var(--ink) 35%);
+  --knob-face-down: color-mix(in lab, var(--ink-soft), black 10%);
+  --knob-edge: color-mix(in lab, black 30%, transparent);
+  --switch-on: color-mix(in lab, var(--well-floor), var(--ink) 12%);
+  --meter-off: color-mix(in lab, var(--well-floor), var(--ink) 7%);
+
   /* The danger cap's hover face, and the latched face of a toggle that switches a
      mode on (the compare toggle): the pressed face tinted with the accent. */
   --danger-face-hover: color-mix(in lab, var(--danger), var(--ink) 12%);
@@ -80,4 +95,16 @@
   --neutral-face: var(--paper-raised);
   --neutral-face-hover: color-mix(in lab, var(--paper-raised), var(--ink) 4%);
   --neutral-face-down: color-mix(in lab, var(--paper-raised), var(--ink) 6%);
+  --body: color-mix(in lab, var(--paper-sunk), var(--ink) 5%);
+  /* The code panel would leave a row description under AA on the palest palettes. */
+  --group-floor: color-mix(in lab, var(--paper-raised), var(--ink) 4%);
+  --knob-face: var(--paper-raised);
+  --knob-face-hover: color-mix(in lab, var(--paper-raised), var(--ink) 3%);
+  --knob-face-down: color-mix(in lab, var(--paper-raised), var(--ink) 7%);
+  --knob-edge: color-mix(in lab, var(--ink-faint), var(--ink-soft) 50%);
+}
+/* Light chrome is cut into the grey body rather than the raised paper, so its wells
+   re-cut off the body; modals and menus keep the paper's. */
+[data-theme="light"] :is(.topbar, .control-row, .status-bar) {
+  --well-floor: color-mix(in lab, var(--body), var(--ink) 7%);
 }

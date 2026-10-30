@@ -5,12 +5,9 @@
   // Mode control (Light / Dark / System) is the case it exists for.
   //
   // Composed from the shadcn ToggleGroup (single-select, each option role="radio"),
-  // the same primitive the compare bar's layout/marker controls use. It carries NO
-  // amber, unlike those: in the theme section amber marks which palette is actually
-  // showing (the IN USE pill), so spending it on the mode segment too would flatten
-  // the distinction between what you picked and what that resolves to. The active
-  // segment instead wears the neutral cap's face, the app's neutral "this control is
-  // engaged" language.
+  // the same primitive the compare bar's layout/marker controls use. The active segment
+  // wears the neutral cap's face, the app's "this control is engaged" language; amber is
+  // kept for the primary action.
   import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
   import type { SettingOption } from "$lib/settingsRegistry.ts";
   import Icon from "@/components/Icon.svelte";
