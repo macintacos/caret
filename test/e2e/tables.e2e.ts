@@ -1348,6 +1348,46 @@ test("a comment on an interior table row lands between it and the next", async (
   expect(await cellBoxes(page, A_HEAD)).toEqual(before);
 });
 
+test("opening a composer below the tables leaves its line where it was", async ({
+  page,
+  daemon,
+}) => {
+  // The composer's repaint flattens every card for a frame before the pass re-cards it,
+  // and a scroll anchor taken in that frame shifts the plan by the cards' whole height
+  // difference. Enough tail to put the line mid-view with every table above it.
+  const tail = Array.from({ length: 60 }, (_, i) => `- tail item ${i + 1}`).join("\n");
+  await openPlan(page, daemon, `${TABLE_PLAN}\n${tail}\n`);
+  await carded(page);
+
+  const line = await lineOf(page, "- tail item 40");
+  const rowTop = () =>
+    page.evaluate((ln) => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const row = sh?.querySelector(`[data-content] [data-line="${ln}"]`);
+      return Math.round(row?.getBoundingClientRect().top ?? Number.NaN);
+    }, line);
+  await page.evaluate((ln) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    sh?.querySelector(`[data-content] [data-line="${ln}"]`)?.scrollIntoView({ block: "center" });
+  }, line);
+  const plus = await revealGutterPlus(page, line);
+  const before = await rowTop();
+
+  await plus.click();
+  await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
+  // Settled: the composer's row is in, and the re-card has put every table back in its card.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+        if (sh?.querySelector("[data-content] [data-line-annotation]") == null) return -1;
+        return sh.querySelectorAll("[data-content] > [data-table-card]").length;
+      }),
+    )
+    .toBe(TABLES.length);
+  expect(await rowTop()).toBe(before);
+});
+
 test("a drag bands a table's rows in both columns, inside it and into it", async ({
   page,
   daemon,

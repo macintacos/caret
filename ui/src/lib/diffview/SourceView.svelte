@@ -544,12 +544,14 @@
     const quotes = quoteDepth;
     const reflowed = reflowedBlocks;
     let raf = 0;
+    let release = 0;
     // Tag the rows, then wrap each overflowing block in its scroll card (EXC-729). Both re-run
     // after every library repaint via the observer below; syncCodeBlockCards is idempotent (an
     // already-correct block mutates nothing), so its own wrap/unwrap settles in one extra frame
     // rather than looping the observer. Tagging runs first so the rows carry data-code-line etc.
     // before they are moved into a card.
     const tag = () => {
+      raf = 0;
       tagCodeBlockRows(root, ranges);
       // Mark the rows that ARE a horizontal rule (EXC-862). Beside the code-block tagging
       // because it is the same kind of pass — one attribute per row, no nodes — and it
@@ -596,13 +598,23 @@
       // into their cards above, and the library marked them while they were still
       // flat, so this is what re-states the marks a re-card could not carry.
       paintCardSelection(root, selectionMirror);
+      cancelAnimationFrame(release);
+      release = requestAnimationFrame(() => {
+        if (raf === 0) container?.style.removeProperty("overflow-anchor");
+      });
     };
     const schedule = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(tag);
     };
     tag();
-    const observer = new MutationObserver(schedule);
+    // Scroll anchoring stays off from a repaint until the pass above has re-carded it: in
+    // between, every card above the view is flat rows, and an anchor taken then shifts the
+    // plan by the cards' whole height difference.
+    const observer = new MutationObserver(() => {
+      container?.style.setProperty("overflow-anchor", "none");
+      schedule();
+    });
     observer.observe(root, { childList: true, subtree: true });
     // A resize changes the card's drawn width — it is capped, but shrinks below its cap on a
     // narrow viewport — so re-run to re-measure, since a resize fires no DOM mutation the
@@ -611,6 +623,8 @@
     if (container != null) resize.observe(container);
     return () => {
       cancelAnimationFrame(raf);
+      cancelAnimationFrame(release);
+      container?.style.removeProperty("overflow-anchor");
       observer.disconnect();
       resize.disconnect();
     };
