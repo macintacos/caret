@@ -32,7 +32,9 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - **Wells.** A control sits in a `.tray`, a 3px well cut into the surface. A group of
   controls shares one tray, and a lone control gets its own. A tray adds `--well-pad`
   around its controls, so a bar holding trays trims its own padding by the same amount to
-  keep its height.
+  keep its height. Every cap rounds at `--radius`, whatever its Button `size`. A tray
+  rounds at `--radius` plus its pad, so the two corners stay concentric. A well with a
+  different pad, such as `--well-pad-tight`, rounds at `--radius` plus that pad.
 - **Caps.** `.float-chip` is the neutral cap, and every neutral control wears it. The
   amber primary wears `.cap-accent`, which the vendored Button's default variant applies.
   A destructive confirm, such as Reject anyway, wears `.cap-danger`; the top bar's Reject

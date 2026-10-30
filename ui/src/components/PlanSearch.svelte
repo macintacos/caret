@@ -150,6 +150,7 @@
      (DiffPlanView's dock) — so `/` reads as the chip growing into the field; the global
      #app reduced-motion guard zeroes it. */
   .plan-search {
+    --search-row-h: 1.75rem;
     display: inline-flex;
     flex-direction: column;
     gap: 0.1rem;
@@ -195,9 +196,12 @@
      reached via :global under the scoped root, since the class is handed to
      <InputGroup.Root>. */
   .plan-search :global(.search-group) {
-    height: 1.75rem;
+    height: var(--search-row-h);
     width: auto;
     border: 1px solid var(--rule);
+    /* The actions' tray fills the field's end, so the field rounds at the tray's
+       radius plus this border for the two curves to nest. */
+    border-radius: calc(var(--radius) + var(--well-pad-tight) + 1px);
     background: var(--paper-sunk);
   }
   /* Dark paper's raised→sunk step is small, so drop the field to the base --paper
@@ -223,14 +227,18 @@
   }
 
   /* The addons keep their inline padding but drop the block padding, which is sized
-     for the stock 2rem group and would push the 1.5rem chips past this row. */
-  .plan-search :global([data-slot="input-group-addon"]) {
+     for the stock 2rem group and would push their content past this row. */
+  .plan-search :global([data-slot="input-group-addon"]:not(.tray)) {
     padding-block: 0;
     gap: 0.35rem;
   }
   /* A button row, so it drops the addon's text cursor along with the click-to-focus
-     the markup already overrides. */
+     the markup already overrides. Its tray runs the tight bezel and fills the field's
+     end. */
   .plan-search :global(.search-actions) {
+    --well-pad: var(--well-pad-tight);
+    --tray-gap: var(--well-pad-tight);
+    margin-inline-end: 0;
     cursor: default;
   }
 
@@ -261,10 +269,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.5rem;
-    height: 1.5rem;
+    /* The field's inner height: the row less its border and the tray's bezel. */
+    width: calc(var(--search-row-h) - 2px - 2 * var(--well-pad-tight));
+    height: calc(var(--search-row-h) - 2px - 2 * var(--well-pad-tight));
     border: none;
-    border-radius: var(--radius);
     cursor: pointer;
   }
   .search-step:disabled {

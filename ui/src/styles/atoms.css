@@ -34,7 +34,8 @@
    that name, and the amber primary wears .cap-accent, which the vendored Button's
    default variant stamps. Every cap sits in a .tray.
    The shading leaves the face's middle untouched, so the amber stays verbatim.
-   Unlayered, so it wins over the Button variant's Tailwind fill. The resting rule is
+   Unlayered, so it wins over the Button variant's Tailwind fill, and over its small
+   sizes' tighter corners, which wouldn't nest in the tray's curve. The resting rule is
    specificity zero and the state rules are not, so tune a cap through its --cap-*
    variables. The chosen segment of a segmented control is a cap face that can't be
    pushed, so it wears the face alone. */
@@ -64,6 +65,7 @@
 }
 :where(.cap, button.float-chip) {
   border-width: 0;
+  border-radius: var(--radius);
   color: var(--cap-label);
   transition:
     background-color var(--dur-state) var(--ease-out),

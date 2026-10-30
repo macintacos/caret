@@ -20,6 +20,33 @@ function capsOutsideTrays(page: Page): Promise<{ total: number; outside: string[
   });
 }
 
+/** An outline of each rendered cap whose corner isn't its tray's corner less the bezel. A
+ * split half squares its seam side, so the cap's roundest corner is the one compared. */
+function capsOffTrayCurve(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const px = (value: string) => Number.parseFloat(value) || 0;
+    const corner = (style: CSSStyleDeclaration) =>
+      Math.max(
+        px(style.borderTopLeftRadius),
+        px(style.borderTopRightRadius),
+        px(style.borderBottomRightRadius),
+        px(style.borderBottomLeftRadius),
+      );
+    return [...document.querySelectorAll<HTMLElement>("button.float-chip, .cap")]
+      .filter((el) => el.getClientRects().length > 0)
+      .flatMap((el) => {
+        const tray = el.closest<HTMLElement>(".tray");
+        if (tray === null) return [];
+        const trayStyle = getComputedStyle(tray);
+        const expected = corner(trayStyle) - px(trayStyle.paddingTop);
+        const actual = corner(getComputedStyle(el));
+        return actual === expected
+          ? []
+          : [`${actual}px, want ${expected}px: ${el.outerHTML.slice(0, 120)}`];
+      });
+  });
+}
+
 test("every rubber cap on the review page sits in a tray", async ({ daemon, page }) => {
   await seedAndOpen(page, daemon);
   const caps = await capsOutsideTrays(page);
@@ -27,9 +54,15 @@ test("every rubber cap on the review page sits in a tray", async ({ daemon, page
   expect(caps.outside).toEqual([]);
 });
 
+test("every cap's corner nests concentrically in its tray's", async ({ daemon, page }) => {
+  await seedAndOpen(page, daemon);
+  expect(await capsOffTrayCurve(page)).toEqual([]);
+});
+
 test("the plan search's caps sit in a tray", async ({ daemon, page }) => {
   await seedAndOpen(page, daemon);
   await page.keyboard.press("/");
   await expect(page.getByRole("search")).toBeVisible();
   expect((await capsOutsideTrays(page)).outside).toEqual([]);
+  expect(await capsOffTrayCurve(page)).toEqual([]);
 });
