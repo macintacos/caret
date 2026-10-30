@@ -98,10 +98,15 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `--group-floor`, with full-bleed hairlines between rows. The rail stays flat, and the
   current section is stamped in.
 - **The switch and the meter.** The switch is a latching key: a square-shouldered knob
-  (`--knob-*`), light in both schemes, slides over and stays down, and the channel lifts
-  to `--switch-on`. The slider is a 20-pip level meter, one pip per 5% step, with lit pips
-  in `--ink-soft` over `--meter-off` and no knob; the meter is the target, and focus rings
-  its well. A knob nests 2px inside its well, so the well rounds at `--radius` plus 2px.
+  (`--knob-*`), light in both schemes, slides over and stays down. The latched knob keeps
+  hard edges, because a blurred shade smears a knob this small. When the switch is on, the
+  channel takes `--switch-on`, the accent mixed into the well's floor. The tint follows
+  the version compare toggle, whose face latches onto `--neutral-face-latched`. It is an
+  open exception to the accent rule
+  ([`decisions.md`](decisions.md#open-where-the-code-still-differs)). The slider is a
+  20-pip level meter, one pip per 5% step, with lit pips in `--ink-soft` over
+  `--meter-off` and no knob; the meter is the target, and focus rings its well. A knob
+  nests 2px inside its well, so the well rounds at `--radius` plus 2px.
 - **The copy and wrap tray.** `CodeChromeTray` is the one copy and wrap tray, and its host
   places it: `CodeBlockChrome` in the plan, the block corner in Settings. The wrap cap
   shows only on overflow, and a copy confirms in place, with no toast.

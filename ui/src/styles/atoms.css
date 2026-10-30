@@ -229,12 +229,18 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
 [data-slot="switch"]:not(:disabled):active > [data-slot="switch-thumb"] {
   background-color: var(--knob-face-down);
 }
-[data-slot="switch"]:not(:disabled):active > [data-slot="switch-thumb"],
-[data-slot="switch-thumb"][data-state="checked"] {
+[data-slot="switch"]:not(:disabled):active > [data-slot="switch-thumb"] {
   box-shadow:
     inset 0 0 0 1px var(--knob-edge),
     inset 0 2px 3px 0 var(--press-shade),
     inset 0 0 3px 1px var(--press-ring);
+}
+/* Latched, the knob drops its lit top edge for a hard shade line. A held blur smears a
+   knob this small. */
+[data-slot="switch-thumb"][data-state="checked"] {
+  box-shadow:
+    inset 0 0 0 1px var(--knob-edge),
+    inset 0 1px 0 var(--knob-lo);
 }
 
 /* A slider is a level meter: twenty pips in a well, one per 5% step, lit up to the

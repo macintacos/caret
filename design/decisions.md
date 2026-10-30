@@ -23,10 +23,13 @@ Open items first, then the log, newest first.
 - **`--pane-recess` has no contact-edge test:** `coreStyles.test.ts` pins `--panel-recess`
   to 1px outer layers with no blur or spread, and nothing pins `--pane-recess` the same
   way.
-- **The reading row's amber:** the Contents row being read takes `--neutral-face-latched`,
-  an amber tint on a state, after the compare toggle's precedent. The accent rule in
-  [`patterns.md` § Surfaces and emphasis](patterns.md#surfaces-and-emphasis) does not yet
-  sanction it.
+- **Amber on a latched state:** the Contents row being read takes
+  `--neutral-face-latched`, and a switch that is on takes `--switch-on`. Both are amber
+  tints on a state. They follow the version compare toggle, whose face latches onto
+  `--neutral-face-latched` while it compares. They break the accent rule in
+  [`patterns.md` § Surfaces and emphasis](patterns.md#surfaces-and-emphasis) twice: they
+  mix the accent rather than using it verbatim, and they fall outside its list of uses. In
+  Settings, the switch's tint is also a second amber emphasis beside the primary action.
 - **Search-only choices that may go kit-wide:** the flat disabled cap and the amber text
   cursor (`caret-color: var(--accent)`) are local to the search sheet.
 - **The search sheet's 12px foot:** its nested radius is a new radius on screen, beside
@@ -50,13 +53,18 @@ Chosen through side-by-side previews.
   Bezel and screen (the panel framed as a device screen). The rail is flat, with the
   current section stamped in. Each section's rows sit in a recessed group. Below 640px a
   bar with a section picker, a search key and a close key replaces the rail. Settings
-  spends no amber except on the primary action.
+  spends amber only on the primary action and the tint of a switch that is on.
 - **Text fields:** no text field draws a focus ring. A field shows focus by its text
   cursor and its well's edge firming to `--rule-strong`. The user asked for this on the
   Contents filter and the search box, and it now holds kit-wide. Controls keep a visible
   keyboard indicator.
 - **Modals:** a modal that takes focus on open draws no focus ring around itself. The user
   asked for this on Settings opened with the `,` shortcut.
+- **Switch, on:** the channel takes the accent mixed into the well's floor, 30% in dark
+  and 18% in light. The earlier channel, the floor stepped toward ink, read too subdued.
+  Two alternatives lost: a green channel would give `--ok` a second meaning, and an amber
+  knob was louder than the subtle colour the user asked for. The latched knob also dropped
+  its blurred press shade for hard edges, because the blur read as fuzzy in dark.
 - **Unsent comments:** the plan marks a comment kept with **Keep for later** by a
   full-width well under its line, tinted toward `--attention`. A saved comment floats on a
   card, and an unsent one sits in a coloured, recessed well. The well holds:
