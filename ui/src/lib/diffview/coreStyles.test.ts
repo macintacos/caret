@@ -1920,6 +1920,27 @@ describe("tables (EXC-864)", () => {
     expect(cardRule).not.toMatch(/padding(?:-block[-\w]*)?:/);
   });
 
+  test("paints the bezel over the rows either side of it", () => {
+    // The library positions every row and fills it with the paper, so a card left in the
+    // static layer has its ring and drop shadow painted over above and below, and reads
+    // as cut off. A grid item takes a z-index without being positioned.
+    expect(cardRule).toMatch(/z-index:\s*1;/);
+  });
+
+  test("pads the pane's rows clear of its edges and hairlines, in both columns", () => {
+    // A chip fills its line box, and the edges and hairline paint under it, so on an
+    // unpadded row a chip covers them. The gutter cell takes the same padding, or the
+    // number slides against its row's text.
+    const rule =
+      overrideDecls.match(
+        /\[data-table-card\]\s*>\s*\[data-line\]:not\(\[data-table-head\],\s*\[data-table-rule\]\),[^{}]*\{[^}]*\}/,
+      )?.[0] ?? "";
+    expect(rule).toMatch(/padding-block:\s*[^;]+;/);
+    expect(rule).toMatch(
+      /\[data-table-card-gutter\]\s*>\s*:nth-child\(n \+ 3 of \[data-column-number\]\)/,
+    );
+  });
+
   test.each([':root,\n[data-theme="dark"]', '[data-theme="light"]'])(
     "the recess in %s casts nothing past a 1px lip into the gutter lane",
     async (selector) => {

@@ -1271,6 +1271,10 @@ const CARET_OVERRIDES = `
     background-color: var(--body);
     border-radius: var(--radius-lg);
     box-shadow: var(--float-surface-low);
+    /* Over the rows either side, which the library positions and fills with the paper:
+       left in the static layer, the bezel has its ring and drop shadow painted over above
+       and below. A grid item takes a z-index without being positioned. */
+    z-index: 1;
   }
   /* The library paints every line with its own --diffs-bg. Inside the card the rail's two
      rows clear it to show the bezel and the rest take the pane's floor. The banded states
@@ -1358,11 +1362,25 @@ const CARET_OVERRIDES = `
      table's final line takes the rim below it. */
   [data-content] > [data-table-card] > :first-child,
   [data-gutter] [data-table-card-gutter] > :first-child {
-    padding-block-start: 0.3125rem;
+    --row-lead: 0.3125rem;
+    padding-block-start: var(--row-lead);
   }
   [data-content] > [data-table-card] > :last-child,
   [data-gutter] [data-table-card-gutter] > :last-child {
     margin-block-end: 0.25rem;
+  }
+  /* Air between a pane row's text and the edges and hairline painted under it, which a
+     chip filling its line box would otherwise cover. More below, because the glyph box
+     sits low in the line. The gutter half counts number cells only, skipping a comment's
+     buffer, and from the third on: the rail's two rows are a table's first two lines. */
+  [data-content] > [data-table-card] > [data-line]:not([data-table-head], [data-table-rule]),
+  [data-gutter] [data-table-card-gutter] > :nth-child(n + 3 of [data-column-number]) {
+    --row-lead: 0.125rem;
+    padding-block: var(--row-lead) 0.1875rem;
+  }
+  /* The hover "+" hangs from its cell's padding edge, so it steps down with the number. */
+  [data-gutter] [data-table-card-gutter] [data-gutter-utility-slot] {
+    top: var(--row-lead, 0);
   }
   /* The library gives every row a 1ch inline padding. On a subgrid that padding insets
      the row's OWN tracks from the card's, so the cells stop filling the columns they

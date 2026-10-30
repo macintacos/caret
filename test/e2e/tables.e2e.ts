@@ -643,6 +643,91 @@ test("no pipe glyph paints, and the table sits in an inlay", async ({ page, daem
   expect(marks.header.pipes).toEqual(["rgba(0, 0, 0, 0)"]);
 });
 
+test("a chip in the pane clears its edges and hairlines, and the numbers stay on their rows", async ({
+  page,
+  daemon,
+}) => {
+  // A chip fills its line box, and the pane's edges and hairlines paint under it, so on
+  // an unpadded row it covers them and the pane reads as clipped. One table puts a chip
+  // on a row that is both the pane's first and last; the other on its first, an interior
+  // and its last row.
+  await openPlan(
+    page,
+    daemon,
+    `# Chips in the pane
+
+| Case | Link |
+| ---- | ---- |
+| Cell | [a long link in a table cell](https://example.com/reflow/table-cell) |
+
+Prose between the tables.
+
+| Case | Note |
+| ---- | ---- |
+| one | \`code\` here |
+| two | **bold** here |
+| three | [a link](https://example.com/three) |
+`,
+  );
+  await carded(page, 2);
+
+  const rows = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const pane = [
+      ...(sh?.querySelectorAll(
+        "[data-content] > [data-table-card] > [data-line]:not([data-table-head], [data-table-rule])",
+      ) ?? []),
+    ];
+    return pane.map((row) => {
+      const box = row.getBoundingClientRect();
+      const chips = [...row.querySelectorAll("[data-md]")].flatMap((el) => [
+        ...el.getClientRects(),
+      ]);
+      const line = Number(row.getAttribute("data-line"));
+      const number = [...(sh?.querySelectorAll("[data-line-number-content]") ?? [])].find(
+        (n) => (n.parentElement as HTMLElement)?.dataset.lineIndex === String(line - 1),
+      );
+      return {
+        text: row.textContent ?? "",
+        chipTop: Math.min(...chips.map((r) => r.top)) - box.top,
+        chipBottom: box.bottom - Math.max(...chips.map((r) => r.bottom)),
+        cellTop: (row.querySelector("[data-table-cell]") as Element).getBoundingClientRect().top,
+        numberTop: (number as Element).getBoundingClientRect().top,
+      };
+    });
+  });
+
+  expect(rows).toHaveLength(4);
+  for (const row of rows) {
+    // Clear of a 1px edge with air to spare on both ends.
+    expect(row.chipTop, row.text).toBeGreaterThanOrEqual(2);
+    expect(row.chipBottom, row.text).toBeGreaterThanOrEqual(2);
+    expect(Math.abs(row.numberTop - row.cellTop), row.text).toBeLessThanOrEqual(1);
+  }
+
+  // The hover "+" hangs from its cell's padding edge, so a padded row has to step it down
+  // with the number: the header's rail air and a pane row's both.
+  for (const text of ["| Case | Link |", "| Cell | a long link in a table cell |"]) {
+    const line = await lineOf(page, text);
+    await revealGutterPlus(page, line);
+    const off = await page.evaluate((n) => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const cell = sh?.querySelector(
+        `[data-gutter] [data-table-card-gutter] > [data-column-number="${n}"]`,
+      ) as HTMLElement;
+      const mid = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        return r.top + r.height / 2;
+      };
+      return (
+        mid(sh?.querySelector("[data-utility-button]") as Element) -
+        mid(cell.querySelector("[data-line-number-content]") as Element)
+      );
+    }, line);
+    expect(Math.abs(off), text).toBeLessThanOrEqual(1);
+  }
+});
+
 test("the delimiter row is a dot and a hairline, not a numbered line", async ({ page, daemon }) => {
   // The row draws the header separator and was a full text line tall, which put half a
   // line of air above that separator and half below — a gap under the header wider than
@@ -1099,9 +1184,16 @@ test("a cell past the cap wraps inside its own column", async ({ page, daemon })
 
   // And the gutter number grew with it, which is what keeps a line number pointing at
   // its own text — the card's subgrid does that with no height syncing anywhere.
-  const heights = await rowHeights(page, await lineOf(page, B_WRAPPED));
+  const [heights, plainHeights] = await Promise.all([
+    rowHeights(page, await lineOf(page, B_WRAPPED)),
+    rowHeights(page, await lineOf(page, B_ROW2)),
+  ]);
   expect(heights.number).toBe(heights.row);
-  expect(heights.row).toBe(Math.round(note?.height ?? 0));
+  // The row grew by exactly what its cell did, over the air every pane row carries.
+  const air = (row: number, cell = 0) => row - Math.round(cell);
+  expect(
+    Math.abs(air(heights.row, note?.height) - air(plainHeights.row, plain?.height)),
+  ).toBeLessThanOrEqual(1);
   // The first column kept its natural width beside the wrapped one.
   expect(wrapped[0]?.width).toBe(short[0]?.width);
 });
