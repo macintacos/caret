@@ -7,7 +7,10 @@ Open items first, then the log, newest first.
 
 ## Open: where the code still differs
 
-Nothing open.
+- **`light-dark()` in the preview's hover band:** `.preview-hover` in
+  `ui/src/components/DiffPlanView.svelte` still picks its band with `light-dark()`, so it
+  can resolve to the dark value on light paper
+  ([`patterns.md` § The tactile kit](patterns.md#the-tactile-kit), Schemes).
 
 ## 2026-10-29: tactile refresh
 
@@ -23,23 +26,31 @@ Chosen through side-by-side previews.
   scheme over palette tokens, and no palette file changes.
 - **Submit rows:** smaller than the rest of the kit, with 28px caps and `--text-base`
   labels where the other caps are 32px. The preview's submit caps were 30px and still took
-  up too much space, so the rows shipped two pixels smaller. A bright face on dark paper
-  reads larger than the same box on light, so dark draws the amber cap's edge darker and
-  its top highlight softer.
+  up too much space, so the rows shipped two pixels smaller. A submit tray is marked
+  `.tray-submit` where it is used rather than inferred from its cap, so Enable
+  notifications, an amber cap that submits nothing, keeps the full size. Reject anyway
+  wears the danger cap. A bright face on dark paper reads larger than the same box on
+  light, so dark draws the amber cap's edge darker and its top highlight softer.
 - **Key presses:** a shortcut plays the press of the control it names for 110 ms, the same
   press a click plays, and runs at once. Holding the action until the press had shown
   would keep a modal's dimmed backdrop off the press, but then keys typed straight after a
-  shortcut, such as `b` then `/`, would land before the surface it opens.
+  shortcut, such as `b` then `/`, would land before the surface it opens. So a modal holds
+  its entrance instead: while a press echoes, the overlay and the content start 110 ms
+  late, and focus and typed keys land as they did.
+- **Request changes rows:** an inline comment row has no rail and takes a 1px `--rule`
+  ring. An unsent scratch row keeps its dashed rail.
 - **Toggles:** a toggle that is on stays latched down in its well.
 - **Key hints:** caret's own `[data-slot="kbd"]` keycap, unchanged. A keycap rides along
   with its control.
 - **Comment cards:** no accent rail. A saved comment sits on the composer's sheet and
   carries its state as a stamp in its header: a glyph and a word in the state's own hue.
   Draft is `--attention`, Requested `--danger`, Accepted `--ok`, and Expired has no ink.
-  Every word and glyph clears 4.5:1 on its stamp in every bundled palette, which took a
-  deeper ink than the preview's. Chosen over a tinted header band and over sinking settled
-  cards into the page. Draft used to take the amber accent. It now takes `--attention`,
-  and the accent stays for the wordmark, the primary action, focus and the cursor.
+  Every word and glyph clears 4.5:1 on its stamp in every bundled palette. Both schemes
+  keep the preview's 24% tint on the stamp, so dark and light stamps read alike, and the
+  contrast comes from a deeper ink than the preview's. Chosen over a tinted header band
+  and over sinking settled cards into the page. Draft used to take the amber accent. It
+  now takes `--attention`, and the accent stays for the wordmark, the primary action,
+  focus and the cursor.
 
 ## 2026-10-23: code caught up
 

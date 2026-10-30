@@ -927,8 +927,9 @@ test("a comment inside a code card is never wider than the card, and starts at i
 // table's one: an overflowing block is a single [data-code-card] box that takes the shadow
 // the way the table card does, while a FITTING block gets no card element at all and every
 // row carries its piece of the recess. Only an engine can say those two produce the same picture,
-// and only an engine resolves light-dark() at all — so this plan carries a table, a fitting
-// fence and an overflowing fence together, and the probe runs under both schemes.
+// and that the [data-theme] token blocks reach the shadow root — so this plan carries a
+// table, a fitting fence and an overflowing fence together, and the probe runs under both
+// schemes.
 //
 // The sheet's own declarations are pinned in coreStyles.test.ts; what is claimed here is
 // that they reach the screen as one depth.
@@ -982,6 +983,8 @@ async function cardFamily(page: Page) {
       card: read(at("[data-content] > [data-code-card]")),
       fitting: read(fittingRow),
       fittingRadius: read(at("[data-content] > [data-line][data-code-start]"))?.radius ?? null,
+      fittingTop: read(at("[data-content] > [data-line][data-code-start]"))?.shadow ?? "",
+      fittingBottom: read(at("[data-content] > [data-line][data-code-end]"))?.shadow ?? "",
       fittingLine: Number(fittingRow?.getAttribute("data-line") ?? Number.NaN),
       // The row's OWN centre, not the view's: a code row is inset and capped at
       // --caret-read-max, so on a wide viewport the view's horizontal centre lands past the
@@ -994,7 +997,7 @@ async function cardFamily(page: Page) {
   });
 }
 
-test("the table card and both of the code block's paint paths float as one family", async ({
+test("the table card and both of the code block's paint paths sit at one depth", async ({
   daemon,
   page,
 }) => {
@@ -1058,6 +1061,12 @@ test("the table card and both of the code block's paint paths float as one famil
     expect(edge, scheme).not.toBe("");
     expect(fitting.shadow, scheme).toContain(`${edge} 1px 0px 0px 0px inset`);
     expect(card.shadow, scheme).toContain(`${edge} 0px 0px 0px 1px inset`);
+    // Its end rows close the panel: the shade and top edge on the first, the bottom edge
+    // and the outer lip on the last.
+    expect(family.fittingTop, scheme).toContain(`${edge} 0px 1px 0px 0px inset`);
+    expect(family.fittingTop, scheme).toMatch(/0px 2px 3px 0px inset/);
+    expect(family.fittingBottom, scheme).toContain(`${edge} 0px -1px 0px 0px inset`);
+    expect(family.fittingBottom, scheme).toMatch(/0px 1px 0px 0px(,|$)/);
 
     // And the rest of the panel look the recess joins: one fill, one radius.
     expect(table.fill, scheme).not.toBe("rgba(0, 0, 0, 0)");

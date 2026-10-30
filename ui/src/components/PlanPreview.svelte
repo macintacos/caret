@@ -607,7 +607,10 @@
     background-color: var(--ink);
   }
   /* A raised chip sinks into the line when pressed. */
-  .plan-preview :global(:is(a, [data-file-ref], code:has(> [data-file-ref])):active) {
+  .plan-preview :global(:is([data-file-ref], code:has(> [data-file-ref])):active) {
+    box-shadow: var(--chip-pressed);
+  }
+  .plan-preview :global(a:not(:has(code, [data-file-ref], img)):active) {
     box-shadow: var(--chip-pressed);
   }
   /* A backticked reference reads as one pill: the code chip takes the reference tint, the

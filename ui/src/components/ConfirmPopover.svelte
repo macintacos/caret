@@ -65,7 +65,7 @@
     }}
   >
     <p class="question">{question}</p>
-    <div class="actions tray">
+    <div class="actions tray tray-submit">
       <Popover.Close class="cancel float-chip">{cancelLabel}</Popover.Close>
       <!-- Deliberately NOT a Popover.Close, unlike Cancel: it handles Enter/Space
            itself and calls preventDefault, so the native click never fires and an
@@ -112,10 +112,7 @@
     background: var(--pop-bg);
     border: 0;
     border-radius: var(--radius-lg);
-    box-shadow:
-      var(--float-rim),
-      0 0 0 1px var(--rule-strong),
-      var(--float-mid);
+    box-shadow: var(--float-surface-mid);
   }
   :global(.confirm-popover .question) {
     margin: 0 0 0.5rem;
@@ -136,7 +133,6 @@
   :global(.confirm-popover .cancel),
   :global(.confirm-popover .confirm) {
     border-radius: var(--radius);
-    font-weight: 600;
     padding: 0 0.7rem;
   }
   /* The tail that makes it read as popping *out of* the button: a rotated square

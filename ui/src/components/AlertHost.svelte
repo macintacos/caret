@@ -87,10 +87,7 @@
     gap: 0.6rem;
     pointer-events: auto;
     border: 0;
-    box-shadow:
-      var(--float-rim),
-      0 0 0 1px var(--rule),
-      var(--float-mid);
+    box-shadow: var(--float-surface-mid);
     animation: alert-in var(--dur-state) var(--ease-out);
   }
   :global(.alert-item.leaving) {

@@ -300,7 +300,7 @@
   </div>
 
   {#snippet footer()}
-    <span class="tray">
+    <span class="tray tray-submit">
       <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
       <Button onclick={submit} disabled={!preview} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
         Send for revision
@@ -397,7 +397,7 @@
     padding: 0;
   }
   .inline-row {
-    border-left: 3px solid var(--rule-strong);
+    box-shadow: inset 0 0 0 1px var(--rule);
     border-radius: var(--radius);
     background: var(--paper);
     margin-top: 0.4rem;
@@ -530,10 +530,10 @@
   /* On hover each cap's label takes its semantic tint — green for the keep, red for
      the drop — so the consequence reads before the click; resting stays quiet. */
   .scratch-actions :global(.save) {
-    --label-hover: var(--ok);
+    --cap-label-hover: var(--ok);
   }
   :is(.inline-actions, .scratch-actions) :global(.discard) {
-    --label-hover: var(--danger);
+    --cap-label-hover: var(--danger);
   }
   /* Committed-feedback preview: a quiet sunk container behind a disclosure, showing
      exactly what the agent will receive after the draft/discard edits above. */

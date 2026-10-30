@@ -187,7 +187,7 @@
   {/if}
 
   {#snippet footer()}
-    <span class="tray">
+    <span class="tray tray-submit">
       <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
       {#if hasQueued}
         <Button variant="secondary" class="float-chip" onclick={onRequestChanges}>
@@ -197,6 +197,7 @@
       {/if}
       <Button
         bind:ref={confirmEl}
+        class={comments === undefined ? "cap-danger" : undefined}
         onclick={() => onConfirm(notes)}
         onkeydown={onKey}
         aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}

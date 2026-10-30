@@ -30,7 +30,8 @@ it. User theme files follow
 
 The derived tier, colours a palette implies rather than sets (`--chip`, `--chip-hover`,
 `--paper-veil`, `--ink-wash`, `--attention-wash`, `--code-panel`, and the tactile kit's
-`--well-floor`, `--field-floor` and `--cap-face` steps), is mixed in
+`--well-floor`, `--field-floor`, `--neutral-face` steps, `--danger-face-hover` and the
+`--float-surface-low`, `-mid` and `-high` composites), is mixed in
 `ui/src/styles/derived.css`. shadcn-svelte's token names map onto these roles in
 `ui/src/styles/shadcn-bridge.css`.
 
@@ -46,11 +47,13 @@ All in `ui/src/styles/tokens.css`:
   for the plan's scroll. `ui/src/lib/motion.test.ts` pins the set.
 - **Radius:** `--radius` for controls, `--radius-lg` for panels, `99px` for badges.
 - **Depth:** the tactile geometry is hand-written here, its alphas keyed per scheme: the
-  wells (`--well-pad`, `--well-shade`, `--well-lip`), the caps (`--rim-*`, `--dome-*`,
-  `--sunk*`, the `--accent-*` set, `--grain`), the floats (`--float-rim`, `--float-low`,
-  `--float-mid`, `--float-high`) and `--shadow-chip` for small hints, and the plan's
-  `--chip-stamped`, `--chip-raised` and `--panel-recess`. `--shadow-card` still comes from
-  the palette.
+  wells (`--well-pad`, `--well-pad-tight`, `--well-shade`, `--well-lip`), the caps
+  (`--rim-*`, `--dome-*`, the `--press-*` set, the `--tinted-*` set that lights an amber
+  or danger face, `--grain`), the sockets (`--socket-shade`, `--socket-ring`,
+  `--count-shade`), the floats (`--float-rim`, `--float-low`, `--float-mid`,
+  `--float-high`) and `--shadow-chip` for small hints, the submit tray's `--cap-submit-h`,
+  the comment stamp's `--stamp-*` strengths, and the plan's `--chip-stamped`,
+  `--chip-raised` and `--panel-recess`. `--shadow-card` still comes from the palette.
 
 ## Terminal
 

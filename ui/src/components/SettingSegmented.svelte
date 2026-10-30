@@ -9,8 +9,8 @@
   // amber, unlike those: in the theme section amber marks which palette is actually
   // showing (the IN USE pill), so spending it on the mode segment too would flatten
   // the distinction between what you picked and what that resolves to. The active
-  // segment instead wears the topbar's lifted-chip fill, which is the app's neutral
-  // "this control is engaged" language.
+  // segment instead wears the neutral cap's face, the app's neutral "this control is
+  // engaged" language.
   import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
   import type { SettingOption } from "$lib/settingsRegistry.ts";
   import Icon from "@/components/Icon.svelte";
@@ -61,7 +61,7 @@
   /* The track is one well (styles/atoms.css); the chosen segment is the only cap in
      it. */
   .segmented :global([data-slot="toggle-group"]) {
-    gap: 2px;
+    gap: var(--well-pad-tight);
     padding: var(--well-pad);
     border-radius: calc(var(--radius) + var(--well-pad));
   }

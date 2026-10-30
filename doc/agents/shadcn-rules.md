@@ -189,11 +189,12 @@ consistent with it rather than inventing a per-component treatment.
 
 - **Neutral controls wear `.float-chip`.** A button, a dropdown trigger, or any resting
   control that isn't the primary action uses `variant="secondary"` **plus**
-  `class="float-chip"` — a soft solid fill (`--chip`) lifted off the surface with
-  **no hard border**, whose label rides `--ink-soft` and brightens to `--ink` on hover /
-  while its menu is open (`aria-expanded`). The `.float-chip` atom +
-  `--chip`/`--chip-hover` tokens live in `app.css`. Don't give a neutral control an
-  outline border; the chip fill is the affordance.
+  `class="float-chip"` — the neutral rubber cap, a domed face (`--neutral-face`, hover
+  `--neutral-face-hover`, pressed `--neutral-face-down`) sitting in an inset `.tray` well
+  with **no hard border**, whose label rides `--ink-soft` and brightens to `--ink` on
+  hover / while its menu is open (`aria-expanded`). The atom lives in
+  `ui/src/styles/atoms.css`, its face tokens in `styles/derived.css`. Don't give a neutral
+  control an outline border; the cap is the affordance.
 - **Style a Button by element — `button.x`, never `[data-slot="button"].x`.** `Button`
   writes its own `data-slot="button"` *before* it spreads `{...restProps}`, so the moment
   that Button is also a bits-ui trigger the primitive's slot value wins and every

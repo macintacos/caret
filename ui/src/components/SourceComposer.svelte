@@ -151,7 +151,7 @@
       <!-- Edit mode: revise a saved comment. Cancel reverts (the comment survives,
            so no confirm), Save commits — same amber primary + ⌘↵ hint as Comment. -->
       <Button variant="ghost" class="cancel" onclick={onDiscard}>Cancel</Button>
-      <span class="tray">
+      <span class="tray tray-submit">
         <Button class="save" onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
           Save
           <SubmitCap />
@@ -163,7 +163,7 @@
            (EXC-749); an empty box discards at once. The rule lives in the branch
            rather than the click handler because Popover.Trigger opens
            unconditionally — the empty case must never get a trigger. -->
-      <span class="tray">
+      <span class="tray tray-submit">
         {#if canKeep}
           <ConfirmPopover
             question="Discard this comment?"
@@ -196,10 +196,7 @@
     padding: 0.7rem 0.75rem 0.6rem;
     border: 0;
     border-radius: var(--radius-lg);
-    box-shadow:
-      var(--float-rim),
-      0 0 0 1px var(--rule),
-      var(--float-mid);
+    box-shadow: var(--float-surface-mid);
     /* Opacity only: this opens inside the library-reserved annotation row, so a
        transform that grew or shifted the box would change the row's measured
        height mid-reveal and fight the preventScroll guard. */

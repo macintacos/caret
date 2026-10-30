@@ -660,10 +660,7 @@
     background: var(--paper-raised);
     color: var(--ink);
     border-radius: var(--radius-lg);
-    box-shadow:
-      var(--float-rim),
-      0 0 0 1px var(--rule),
-      var(--float-mid);
+    box-shadow: var(--float-surface-mid);
     animation: ft-in var(--dur-state) var(--ease-out);
   }
   .ft-elided,

@@ -81,8 +81,8 @@ const CARET_OVERRIDES = `
      together, so they share one named value rather than coupled literals. */
   :host { --caret-seam: 20px; }
   [data-content] { padding-inline-start: var(--caret-seam); }
-  /* Three more of the same kind, one level down (EXC-865). A fourth, the recess those
-     surfaces sit in, follows in its own block below.
+  /* Three more of the same kind, one level down (EXC-865). Their depth is --panel-recess
+     (styles/tokens.css); see the note below.
 
      --caret-card-inset is how far the content column's own indented surfaces sit in
      from it — the fenced-code row and the code card both spend it — and
@@ -106,12 +106,7 @@ const CARET_OVERRIDES = `
      depth (--panel-recess in styles/tokens.css, which inherits into this shadow root).
      All of it is inside the card's own box but a 1px lip under its bottom edge, so nothing
      spills into the --caret-card-inset gutter lane. One value across the sites, because
-     two cards a hair apart side by side read as a mistake.
-
-     A fitting block has no card element — every row paints its own fill — so it takes the
-     recess in pieces that tile without a seam: the side edges on every row, the shade and
-     top edge on the first, the bottom edge and lip on the last. --caret-row-recess is
-     declared on the row itself, where the first and last rows' pieces resolve. */
+     two cards a hair apart side by side read as a mistake. */
   /* The task-list checkbox's size (EXC-860) — the box the masked Lucide glyph is painted
      into, which every state measures from. Lucide draws its square inset in the viewBox
      (18 of 24 units), so the SQUARE a reader sees is about three quarters of this: the
@@ -256,8 +251,10 @@ const CARET_OVERRIDES = `
     max-width: var(--caret-read-max);
     padding-inline-start: 2ch;
     padding-inline-end: 0.75rem;
-    /* The recess the overflowing block's card carries, in the seam-free pieces described
-       above: a fitting block has no card element to hang one shadow on.
+    /* A fitting block has no card element — every row paints its own fill — so it takes
+       the recess in pieces that tile without a seam: the side edges on every row, the
+       shade and top edge on the first, the bottom edge and lip on the last. Declared on
+       the row, where the first and last rows' pieces resolve.
 
        A selected row's :not() carve-out takes the recess with the fill and the rounding —
        the amber band owns that row. The banded-row rule far below restates this value:
@@ -468,18 +465,35 @@ const CARET_OVERRIDES = `
      policies. */
   [data-content] [data-line]:not([data-selected-line]) [data-md~="bold"] {
     --md-bold: var(--chip-bold);
-    box-shadow: var(--chip-stamped);
   }
   [data-content] [data-line]:not([data-selected-line]) [data-md~="italic"] {
     --md-italic: var(--chip-italic);
-    box-shadow: var(--chip-stamped);
   }
   [data-content] [data-line]:not([data-selected-line]) [data-md~="code"] {
     --md-code: var(--chip-code);
-    box-shadow: var(--chip-stamped);
   }
   [data-content] [data-line] [data-md~="link"] {
     --md-link: var(--chip-link);
+  }
+  /* Depth belongs to the OUTER pill: a token also carrying a nested member keeps the
+     pill's depth on the element and takes the nested one on its ::after, or one pill would
+     change depth at the seam. A citation is excluded: it is raised end to end, below. */
+  [data-content]
+    [data-line]:not([data-selected-line])
+    [data-md~="bold"]:not([data-md-inner~="bold"], [data-md-cite]) {
+    box-shadow: var(--chip-stamped);
+  }
+  [data-content]
+    [data-line]:not([data-selected-line])
+    [data-md~="italic"]:not([data-md-inner~="italic"], [data-md-cite]) {
+    box-shadow: var(--chip-stamped);
+  }
+  [data-content]
+    [data-line]:not([data-selected-line])
+    [data-md~="code"]:not([data-md-inner~="code"], [data-md-cite]) {
+    box-shadow: var(--chip-stamped);
+  }
+  [data-content] [data-line] [data-md~="link"]:not([data-md-inner~="link"]) {
     box-shadow: var(--chip-raised);
   }
   [data-content] [data-line] [data-md] {
@@ -584,22 +598,26 @@ const CARET_OVERRIDES = `
     [data-md~="bold"][data-md-inner~="bold"]:not([data-table-cell] *) {
     --md-bold: initial;
     --nest-bold: var(--chip-bold);
+    --nest-depth: var(--chip-stamped);
   }
   [data-content]
     [data-line]:not([data-selected-line])
     [data-md~="italic"][data-md-inner~="italic"]:not([data-table-cell] *) {
     --md-italic: initial;
     --nest-italic: var(--chip-italic);
+    --nest-depth: var(--chip-stamped);
   }
   [data-content]
     [data-line]:not([data-selected-line])
     [data-md~="code"][data-md-inner~="code"]:not([data-table-cell] *) {
     --md-code: initial;
     --nest-code: var(--chip-code);
+    --nest-depth: var(--chip-stamped);
   }
   [data-content] [data-line] [data-md~="link"][data-md-inner~="link"]:not([data-table-cell] *) {
     --md-link: initial;
     --nest-link: var(--chip-link);
+    --nest-depth: var(--chip-raised);
   }
   [data-content] [data-line] [data-md-inner] {
     position: relative;
@@ -615,6 +633,7 @@ const CARET_OVERRIDES = `
       linear-gradient(var(--nest-italic, transparent), var(--nest-italic, transparent)),
       linear-gradient(var(--nest-code, transparent), var(--nest-code, transparent)),
       linear-gradient(var(--nest-link, transparent), var(--nest-link, transparent));
+    box-shadow: var(--nest-depth, none);
   }
   [data-content] [data-line] [data-md-inner-start] {
     padding-inline-start: var(--chip-pad-inline);
@@ -2112,6 +2131,7 @@ const CARET_OVERRIDES = `
   [data-content] [data-line] [data-md-cite] {
     --chip-code: var(--chip-ref);
     --md-code: var(--chip-ref);
+    box-shadow: var(--chip-raised);
   }
   [data-content] [data-line] [data-file-ref][data-md~="code"] {
     padding-inline: 0;

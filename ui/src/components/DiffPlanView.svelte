@@ -2860,12 +2860,6 @@
     opacity: 0;
     pointer-events: none;
   }
-  /* A view option, not a selection — neutral, like the soft-wrap toggle: the cap stays
-     latched down while the preview shows. */
-  .control-row :global(button.preview-toggle[aria-pressed="true"]:not(:disabled)) {
-    color: var(--ink);
-  }
-
   /* The control bar above the surface. Carries the bar chrome (raised paper,
      hairline rule) for the version-compare picker: the "Versions" toggle sits at
      the left, and (in compare mode) the layout / indicator toggles are pushed to

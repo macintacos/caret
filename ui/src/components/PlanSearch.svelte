@@ -1,6 +1,6 @@
 <script lang="ts">
-  // The vim `/` search HUD (EXC-832): a floating pill in caret's float-chip
-  // language, docked (by DiffPlanView) top-right of the plan. It reads as a HUD, not
+  // The vim `/` search HUD (EXC-832): a floating pill on the chip-scale
+  // --shadow-chip, docked (by DiffPlanView) top-right of the plan. It reads as a HUD, not
   // a modal — the plan stays visible underneath. The pill renders only the surface;
   // DiffPlanView owns the search state, the highlight, and the cursor/commit
   // behaviour, reaching them through these callbacks.
@@ -103,7 +103,7 @@
          in the gaps between the chips from focusing the field — which on a committed
          HUD would silently suppress the bare n / N, since any focused input reads as
          an editing context to the shared dispatcher. -->
-    <InputGroup.Addon align="inline-end" class="search-actions" onclick={() => {}}>
+    <InputGroup.Addon align="inline-end" class="search-actions tray" onclick={() => {}}>
       <button
         type="button"
         class="search-step float-chip"
@@ -255,8 +255,8 @@
     color: var(--accent);
   }
 
-  /* The step / close buttons wear the neutral float-chip (fill + ink-soft→ink hover
-     from the .float-chip atom); only the square box and disabled state are set here. */
+  /* The step / close buttons are neutral caps (.float-chip) sharing one tray; only the
+     square box and disabled state are set here. */
   .search-step,
   .search-close {
     display: inline-flex;

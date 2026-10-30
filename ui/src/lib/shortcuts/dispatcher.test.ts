@@ -1,11 +1,7 @@
 import "@ui/support/setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import {
-  createShortcutDispatcher,
-  PRESS_HOLD_MS,
-  type ShortcutDispatcher,
-} from "$lib/shortcuts/dispatcher.ts";
+import { createShortcutDispatcher, type ShortcutDispatcher } from "$lib/shortcuts/dispatcher.ts";
 import {
   createShortcutRegistry,
   type KeySpec,
@@ -221,48 +217,36 @@ describe("createShortcutDispatcher", () => {
     expect(gg.calls()).toBe(0);
   });
 
-  describe("a shortcut with a control on screen", () => {
-    let control: HTMLButtonElement;
-    let release: (() => void) | null;
-    let releaseAfter: number | null;
+  describe("the onRun hook", () => {
+    let ran: string[];
 
-    function mountWithControl() {
-      control = document.createElement("button");
-      document.body.appendChild(control);
-      release = null;
-      releaseAfter = null;
+    function mountWithHook() {
+      ran = [];
       disp = createShortcutDispatcher({
         target,
         registry,
         isEditingContext: () => editing,
         activeScope: () => scope,
         now: () => 0,
-        controlsFor: () => [control],
-        schedule: (run, ms) => {
-          release = run;
-          releaseAfter = ms;
-        },
+        onRun: (entry) => ran.push(entry.id),
       });
     }
 
-    test("runs at once and plays the control's press for the hold", () => {
+    test("hears each shortcut that runs", () => {
       const a = spyEntry("approve", [{ key: "a" }]);
       registry.register(a.entry);
-      mountWithControl();
+      mountWithHook();
       keydown("a");
       expect(a.calls()).toBe(1);
-      expect(control.hasAttribute("data-key-pressed")).toBe(true);
-      expect(releaseAfter).toBe(PRESS_HOLD_MS);
-      release?.();
-      expect(control.hasAttribute("data-key-pressed")).toBe(false);
+      expect(ran).toEqual(["approve"]);
     });
 
-    test("leaves a disabled shortcut's control unpressed", () => {
+    test("does not hear a disabled shortcut", () => {
       const a = spyEntry("approve", [{ key: "a" }], { enabled: () => false });
       registry.register(a.entry);
-      mountWithControl();
+      mountWithHook();
       keydown("a");
-      expect(control.hasAttribute("data-key-pressed")).toBe(false);
+      expect(ran).toEqual([]);
     });
   });
 

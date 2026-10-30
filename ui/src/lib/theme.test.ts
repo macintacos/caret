@@ -7,6 +7,7 @@ import { BUILTIN_THEME_IDS } from "@core/theme/builtin-ids.ts";
 import { HEADING_LEVELS, ROLE_SCOPES } from "@core/theme/role-scopes.ts";
 import type { MarkdownElement, RoleStyle, SyntaxRole } from "@core/theme/schema.ts";
 import { customThemeFile, readThemeFile, themeFileColors } from "@ui/support/theme-file.ts";
+import { readAppCss } from "$lib/appCss.ts";
 import { shikiThemeName } from "$lib/caret-theme.ts";
 import { QUOTE_SUBDUE } from "$lib/diffview/coreStyles.ts";
 import {
@@ -121,14 +122,44 @@ const TABLE_CARD_FILL = 0.06;
  * checks. */
 const TABLE_GROUNDS = [0.02, TABLE_CARD_FILL, 0.08] as const;
 
-/** A saved comment's state stamp (SourceAnnotationCard.svelte), per scheme: the stamp's
- * floor is the well floor (styles/derived.css) tinted toward the state's hue, and its
- * word is that hue inked toward --ink on dark paper and toward black on light. Quoted
- * from both files, so keep it in step with them. */
-const STAMP = {
-  dark: { wellToward: "#000000", well: 0.4, floor: 0.14, inkToward: "--ink", ink: 0.25 },
-  light: { wellToward: "--ink", well: 0.06, floor: 0.24, inkToward: "#000000", ink: 0.5 },
-} as const;
+/** The declarations a scheme resolves across the flat sheet, in cascade order: the
+ * derived tier's `:root, [data-theme]` block, which carries dark's recipe, and the
+ * blocks keyed on the scheme's own `[data-theme="…"]`. */
+function schemeDecls(scheme: Scheme): Record<string, string> {
+  const selector = `[data-theme="${scheme}"]`;
+  const decls: Record<string, string> = {};
+  for (const block of readAppCss()
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("}")) {
+    const [head = "", body] = block.split("{");
+    if (body === undefined || !(head.includes(selector) || /\[data-theme\]\s*$/.test(head))) {
+      continue;
+    }
+    for (const d of body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) decls[d[1]!] = d[2]!.trim();
+  }
+  return decls;
+}
+
+/** A saved comment's state stamp (SourceAnnotationCard.svelte), per scheme, read from
+ * the sheet: its floor is the well floor (styles/derived.css) tinted --stamp-floor
+ * toward the state's hue, and its word is that hue mixed --stamp-word-mix toward
+ * --stamp-word-toward (styles/tokens.css). */
+function stampRecipe(scheme: Scheme) {
+  const decls = schemeDecls(scheme);
+  const well = /color-mix\(in lab, var\(--paper-raised\), (black|var\(--ink\)) (\d+)%\)/.exec(
+    decls["--well-floor"] ?? "",
+  );
+  const toward = (c: string) =>
+    c === "black" ? "#000000" : c.replace(/^var\((--[\w-]+)\)$/, "$1");
+  const pct = (v: string | undefined) => Number.parseFloat(v ?? "NaN") / 100;
+  return {
+    wellToward: toward(well?.[1] ?? ""),
+    well: pct(well?.[2]),
+    floor: pct(decls["--stamp-floor"]),
+    inkToward: toward(decls["--stamp-word-toward"] ?? ""),
+    ink: pct(decls["--stamp-word-mix"]),
+  };
+}
 
 const themeEntries = () =>
   Object.entries(THEMES) as [BuiltinThemeId, (typeof THEMES)[BuiltinThemeId]][];
@@ -646,7 +677,7 @@ describe("every theme", () => {
 
   test("keeps every comment stamp's word at AA on its stamp", () => {
     for (const [id, theme] of themeEntries()) {
-      const recipe = STAMP[theme.scheme];
+      const recipe = stampRecipe(theme.scheme);
       const tokens = theme.tokens as Record<string, string>;
       const toward = (c: string) => tokens[c] ?? c;
       const well = banded(tokens["--paper-raised"]!, toward(recipe.wellToward), recipe.well);

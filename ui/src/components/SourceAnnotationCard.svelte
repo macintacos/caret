@@ -135,7 +135,7 @@
       >
         <Icon name="chevron-down" size={12} />
         <span class="ref">{label}</span>
-        <span class="state"><Icon name={stateView.icon} size={11} />{stateView.label}</span>
+        <span class="stamp state"><Icon name={stateView.icon} size={11} />{stateView.label}</span>
         {#if !expanded}
           <span class="clamp-line preview">{annotation.comment}</span>
         {/if}
@@ -171,21 +171,17 @@
 
 <style>
   /* Capped so the comment reads as a block under its line, not a full-bleed band. It
-     sits on the composer's sheet with nothing on its edge; its state is the stamp in
+     sits on the composer's sheet with no rail on its edge; its state is the stamp in
      its header, inked in the state's own hue (--st). The two open states ink fully,
      an accepted one is fainter, being settled, and an expired one takes no ink. */
   .card {
     --st: var(--attention);
-    --st-floor: 14%;
     --st-settle: 1;
     max-width: min(46rem, 100%);
     margin: 0.4rem 0 0.55rem;
     border-radius: var(--radius-lg);
     background: var(--paper-raised);
-    box-shadow:
-      var(--float-rim),
-      0 0 0 1px var(--rule),
-      var(--float-low);
+    box-shadow: var(--float-surface-low);
     /* Opacity only: the card mounts inside the library-reserved annotation row, so
        a transform that grew or shifted its box would change the row's measured
        height and fight the preventScroll guard. */
@@ -202,10 +198,7 @@
     --st-settle: 0.5;
   }
   .card.focused {
-    box-shadow:
-      var(--float-rim),
-      0 0 0 1px var(--rule-strong),
-      var(--float-mid);
+    box-shadow: var(--float-surface-mid);
   }
   /* While editing the card is just the composer, which owns its own surface — so
      the card drops its border/paper/box and lets the composer be the sole frame. */
@@ -234,8 +227,8 @@
     padding: 0.15rem 0.3rem 0.15rem 0.35rem;
   }
   /* Grows to fill the head so the whole line is a click target. The compound
-     [data-slot] selector (0,2,0) outranks the copied button's utilities. */
-  :global([data-slot="button"].chip) {
+     button.chip selector outranks the copied button's utilities. */
+  :global(button.chip) {
     display: flex;
     align-items: center;
     justify-content: flex-start;
@@ -250,16 +243,16 @@
     color: inherit;
   }
   /* The whole card is the toggle, so its header row takes no dimple of its own. */
-  :global([data-slot="button"].chip.cap-ghost:is(:active, [data-key-pressed])) {
+  :global(button.chip.cap-ghost:is(:active, [data-key-pressed])) {
     background: none;
     box-shadow: none;
   }
-  :global([data-slot="button"].chip > .icon) {
+  :global(button.chip > .icon) {
     flex: none;
     color: var(--ink-faint);
     transition: transform var(--dur-state) var(--ease-out);
   }
-  :global([data-slot="button"].chip[aria-expanded="false"] > .icon) {
+  :global(button.chip[aria-expanded="false"] > .icon) {
     transform: rotate(-90deg);
   }
   .ref {
@@ -269,11 +262,8 @@
     letter-spacing: 0.02em;
     color: var(--ink-soft);
   }
-  /* The stamp: pressed into the header like the .stamp atom, its floor tinted toward
-     the state's hue (half as far for a settled one) and its glyph and word inked in it,
-     at strengths every bundled palette clears 4.5:1 at. Light paper takes a deeper floor
-     and darkens the hue toward black rather than ink, because a blue-grey ink greys a
-     pale hue before it reaches 4.5:1. */
+  /* The .stamp atom, its floor tinted toward the state's hue (half as far for a settled
+     one) and its glyph and word inked in it, at the --stamp-* strengths. */
   .state {
     flex: none;
     display: inline-flex;
@@ -290,16 +280,9 @@
     background: color-mix(
       in lab,
       var(--well-floor),
-      var(--st) calc(var(--st-floor) * var(--st-settle))
+      var(--st) calc(var(--stamp-floor) * var(--st-settle))
     );
-    box-shadow: var(--well-shade), var(--well-lip);
-    color: color-mix(in lab, var(--st) 75%, var(--ink));
-  }
-  :global([data-theme="light"]) .card {
-    --st-floor: 24%;
-  }
-  :global([data-theme="light"]) .state {
-    color: color-mix(in lab, var(--st) 50%, black);
+    color: color-mix(in lab, var(--st), var(--stamp-word-toward) var(--stamp-word-mix));
   }
   .card[data-state="expired"] .state {
     background: var(--well-floor);

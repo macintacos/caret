@@ -99,13 +99,13 @@
 
   {#if active}
     <!-- The verdicts share one well, like a remote's row of keys. -->
-    <div class="actions tray" class:busy>
-      <!-- Same quiet floating-chip as Request changes (soft fill, ink-soft label),
-           differentiated only by warming to danger on hover. Reject always routes
+    <div class="actions tray tray-submit" class:busy>
+      <!-- Same neutral cap as Request changes, differentiated only by warming to
+           danger on hover (.cap-danger-hover), the one place red belongs in the row. Reject always routes
            through a confirm dialog, so the resting button stays low-key. -->
       <Button
         variant="secondary"
-        class="reject float-chip"
+        class="reject float-chip cap-danger-hover"
         onclick={onReject}
         disabled={busy}
         aria-keyshortcuts={ariaKeyshortcutsFor("actions.reject")}
@@ -311,6 +311,7 @@
   /* Yields first: when the controls need room the plan title truncates rather than
      pushing them off-screen. */
   .lead {
+    --lead-min: 10rem;
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -326,10 +327,10 @@
     flex-shrink: 1;
     /* Enough name left to tell two plans apart. Raising it spills the trigger back
        under the controls, so topbar-overflow.e2e.ts's sweep bounds this number. */
-    min-width: 10rem;
+    min-width: var(--lead-min);
   }
   .lead :global(.switcher-tray) {
-    min-width: calc(10rem + 2 * var(--well-pad));
+    min-width: calc(var(--lead-min) + 2 * var(--well-pad));
   }
   .brand {
     font-family: var(--font-display);
@@ -368,19 +369,6 @@
     margin-left: 0;
   }
 
-  /* Reject warms to danger on hover — the one place red belongs in the row — and its
-     cap takes the coloured face's lighting while it does. */
-  .actions :global(.reject:not(:disabled):hover) {
-    --face-hover: var(--danger);
-    --face-down: var(--danger);
-    --label-hover: var(--paper);
-    --rim-s: var(--accent-rim-side);
-    --rim-t: var(--accent-rim-top);
-    --hi: var(--accent-dome-hi);
-    --lo: var(--accent-dome-lo);
-    --ps: var(--accent-sunk);
-    --pr: var(--accent-sunk-ring);
-  }
   /* The X glyph reads danger-red at rest (the reject affordance); on hover the chip
      fills with danger, so the glyph flips to the paper ink to stay legible on it. */
   .actions :global(.reject .icon) {

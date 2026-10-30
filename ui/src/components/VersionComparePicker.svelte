@@ -344,14 +344,13 @@
   }
 
   /* .float-chip (styles/atoms.css) supplies the cap, its press and its latch; the
-     compare toggle's latched face carries the --accent-wash "active-state" marker — the
-     same amber wash the SettingSelect's active row and the diff selection use — so the
+     compare toggle latches onto an accent-tinted face (--neutral-face-latched), so the
      mode switch is visible at a glance. */
   .compare-picker :global(.compare-toggle) {
     white-space: nowrap;
   }
   .compare-picker :global(.compare-toggle[aria-pressed="true"]:not(:disabled)) {
-    --face-down: color-mix(in lab, var(--cap-face-down), var(--accent) 14%);
+    --cap-face-down: var(--neutral-face-latched);
     color: var(--ink);
   }
   /* Nudge the `d` shortcut cap a hair further right of the label than the
@@ -464,12 +463,13 @@
      come from styles/atoms.css. */
   .compare-picker :global([data-slot="toggle-group"]) {
     position: relative;
-    gap: 2px;
+    gap: var(--well-pad-tight);
     height: var(--ctl-h);
-    padding: 2px;
-    border-radius: calc(var(--radius) + 2px);
+    padding: var(--well-pad-tight);
+    border-radius: calc(var(--radius) + var(--well-pad-tight));
   }
-  /* The sliding active-option pill, behind the option labels. Its transition
+  /* The sliding active-option pill, behind the option labels; it wears the cap's face
+     from styles/atoms.css. Its transition
      redirects mid-slide when a new option is clicked, so rapid switches stay fluid;
      the #app reduced-motion guard zeroes it, so it simply snaps. */
   .compare-picker :global(.seg-pill) {
@@ -479,15 +479,6 @@
     z-index: 0;
     opacity: 0;
     border-radius: var(--radius);
-    background-color: var(--cap-face);
-    background-image: var(--grain);
-    background-size: 128px;
-    background-blend-mode: soft-light;
-    box-shadow:
-      inset 0 1px 0 var(--rim-top),
-      inset 0 0 0 1px var(--rim-side),
-      inset 0 4px 5px -3px var(--dome-hi),
-      inset 0 -3px 6px 0 var(--dome-lo);
     pointer-events: none;
     transition:
       transform var(--dur-state) var(--ease-out),

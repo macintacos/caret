@@ -115,6 +115,23 @@ test("r plays its control's press as it opens the dialog", async ({ daemon, page
   await expect(control).not.toHaveAttribute("data-key-pressed");
 });
 
+test("r holds the dialog's entrance until its control's press has shown", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  await page.keyboard.press("r");
+  // Read inside the echo, which lasts one hold plus the entrance.
+  const delay = await page
+    .locator('[data-slot="dialog-content"]')
+    .evaluate((el) => getComputedStyle(el).animationDelay);
+  expect(delay).toBe("0.11s");
+  await expect(page.locator("html")).not.toHaveAttribute("data-key-echo");
+});
+
 test("shift+R opens the reject guard and Escape dismisses it", async ({ daemon, page }) => {
   await daemon.seed({ plan: PLAN });
   await page.goto("/");

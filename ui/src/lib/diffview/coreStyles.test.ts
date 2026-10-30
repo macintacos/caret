@@ -1497,8 +1497,16 @@ describe("the preview's copies of the link, code and reference chips (EXC-2021)"
       "background-color": tint[`--md-${member}`],
       padding: `${fill["padding-block"]} ${startCap["padding-inline-start"]}`,
       "border-radius": startCap["border-start-start-radius"],
-      "box-shadow": tint["box-shadow"],
+      "box-shadow": depth(member),
     };
+  }
+
+  /** The depth a data-md member's element wears when it is the OUTER pill. */
+  function depth(member: string): string | undefined {
+    const rule = rulesFor(String.raw`\[data-md~="${member}"\]:not\([^{]*\)`).find(
+      (r) => r.includes("box-shadow:") && !r.includes(`--md-${member}:`),
+    );
+    return rule ? declarations(rule)["box-shadow"] : undefined;
   }
 
   /** Both sides non-empty first: two missed selectors compare {} to {} and pass. */
@@ -1534,6 +1542,38 @@ describe("the preview's copies of the link, code and reference chips (EXC-2021)"
         "box-shadow": code["box-shadow"] ?? "",
       },
       sourceChip("code"),
+    );
+  });
+
+  test.each(["bold", "italic", "code", "link"])(
+    "a %s pill's depth is set only where it is the outer member, so a nested run keeps the pill's",
+    (member) => {
+      const rules = rulesFor(String.raw`\[data-md~="${member}"\][^{]*`).filter((r) =>
+        /box-shadow:\s*var\(--chip-/.test(r),
+      );
+      expect(rules.length).toBeGreaterThan(0);
+      for (const rule of rules) expect(rule).toContain(`:not([data-md-inner~="${member}"]`);
+    },
+  );
+
+  test("a nested member's depth rides its ::after, where its radius is", () => {
+    const after = sourceRule("[data-line] [data-md-inner]:not([data-table-cell] *)::after");
+    expect(after["box-shadow"]).toBe("var(--nest-depth, none)");
+  });
+
+  test("a backticked reference is raised end to end, as the preview's, even on a selected row", () => {
+    const cite = sourceRule("[data-line] [data-md-cite]");
+    expect(cite["box-shadow"]).toBe(previewRule("code:has(> [data-file-ref])")["box-shadow"]);
+    const stampedCode = rulesFor(String.raw`\[data-md~="code"\][^{]*`).find((r) =>
+      r.includes("var(--chip-stamped)"),
+    );
+    expect(stampedCode).toContain("[data-md-cite]");
+  });
+
+  test("only a chip link sinks when pressed", () => {
+    expect(previewSheet).not.toMatch(/:is\(a,/);
+    expect(previewRule("a:not(:has(code, [data-file-ref], img)):active")["box-shadow"]).toBe(
+      "var(--chip-pressed)",
     );
   });
 
@@ -1862,6 +1902,33 @@ describe("tables (EXC-864)", () => {
     // but a 1px lip reaches past the card into the gutter lane.
     expect(cardRule).toMatch(/box-shadow:\s*var\(--panel-recess\)/);
   });
+
+  test.each([':root,\n[data-theme="dark"]', '[data-theme="light"]'])(
+    "the recess in %s casts nothing past a 1px lip into the gutter lane",
+    async (selector) => {
+      // A blurred outer shadow showed as a soot halo in the --caret-card-inset lane on
+      // catppuccin mocha (EXC-1145).
+      const tokens = await Bun.file(join(import.meta.dir, "../../styles/tokens.css")).text();
+      const block = tokens.slice(tokens.indexOf(`${selector} {`)).match(/\{([^}]*)\}/)?.[1] ?? "";
+      const value = (name: string) => block.match(new RegExp(`${name}:([^;]+);`))?.[1] ?? "";
+      const recess = value("--panel-recess").replace(/var\((--[\w-]+)\)/g, (_, n) => value(n));
+      const outer = recess
+        .split(/,(?![^(]*\))/)
+        .map((layer) => layer.trim())
+        .filter((layer) => layer && !layer.startsWith("inset"));
+      expect(outer.length).toBeGreaterThan(0);
+      for (const layer of outer) {
+        const [x = "", y = "", blur = "0", spread = "0"] = layer
+          .replace(/rgb\([^)]*\)/, "")
+          .trim()
+          .split(/\s+/);
+        expect(Math.abs(Number.parseFloat(x))).toBeLessThanOrEqual(1);
+        expect(Math.abs(Number.parseFloat(y))).toBeLessThanOrEqual(1);
+        expect(Number.parseFloat(blur)).toBe(0);
+        expect(Number.parseFloat(spread)).toBe(0);
+      }
+    },
+  );
 
   test("clears the library's row fill inside the card, banded rows excepted", () => {
     // @pierre/diffs paints every row its own opaque --diffs-bg, so without this the rows

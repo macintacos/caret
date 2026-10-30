@@ -36,6 +36,7 @@
     scopedShortcuts,
     shortcuts,
   } from "$lib/shortcuts/index.ts";
+  import { createPressEcho } from "$lib/shortcuts/pressEcho.ts";
   import { sound } from "$lib/sound.ts";
   import { supportsViewTransition } from "$lib/viewTransition.ts";
   import { type AlertStore, createAlerts } from "@/state/alerts.ts";
@@ -687,6 +688,7 @@
         defaultIsEditingContext() || document.activeElement?.closest("#comment-navigator") != null,
       // While a modal owns the view, the review shortcuts are inert (EXC-849).
       activeScope,
+      onRun: createPressEcho(),
     });
     return () => {
       for (const off of unregister) off();
@@ -1230,10 +1232,7 @@
     background: var(--paper-raised);
     color: var(--ink);
     border-radius: var(--radius-lg);
-    box-shadow:
-      var(--float-rim),
-      0 0 0 1px var(--rule-strong),
-      var(--float-mid);
+    box-shadow: var(--float-surface-mid);
     font-size: var(--text-base);
     animation: safe-mode-in var(--dur-state) var(--ease-out);
   }

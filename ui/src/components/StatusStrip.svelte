@@ -202,15 +202,9 @@
     border-radius: 99px;
     background: var(--ok);
     box-shadow:
-      inset 0 -1px 1px rgb(0 0 0 / 0.35),
+      inset 0 -1px 1px var(--socket-shade),
       0 0 0 1.5px var(--well-floor),
-      0 0 0 2px rgb(0 0 0 / 0.4);
-  }
-  :global([data-theme="light"]) .dot {
-    box-shadow:
-      inset 0 -1px 1px rgb(0 0 0 / 0.2),
-      0 0 0 1.5px var(--well-floor),
-      0 0 0 2px rgb(0 0 0 / 0.06);
+      0 0 0 2px var(--socket-ring);
   }
   .conn.offline {
     color: var(--danger);

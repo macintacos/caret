@@ -124,13 +124,14 @@ imports it — stays green under any invocation.
   A color used in two places is a token, declared once.
 - **Shared style atoms stay global CSS classes, not Tailwind `@utility`.** The chrome's
   cross-component vocabulary — `.mono`/`.metric` (mono family, tabular figures),
-  `.eyebrow` (the uppercase label), `.float-chip` (the topbar's soft-solid surface) —
-  lives as plain global classes in `app.css`, alongside the tokens. They are deliberately
-  **not** Tailwind `@utility` entries: `app.css` imports Tailwind with `source(none)` and
-  scans only `lib/components/ui` (the shadcn tree), so a `@utility` referenced from
-  caret's own components — which are never scanned — would never be emitted. A named class
-  also beats inlining a multi-property atom at each call site (the declared-once rule
-  again). Tailwind utilities are the shadcn tree's; caret chrome wears caret-token CSS.
+  `.eyebrow` (the uppercase label), `.float-chip` (the rubber cap every neutral control
+  wears, in its `.tray` well) — lives as plain global classes in `styles/atoms.css`, which
+  `app.css` imports beside the tokens. They are deliberately **not** Tailwind `@utility`
+  entries: `app.css` imports Tailwind with `source(none)` and scans only
+  `lib/components/ui` (the shadcn tree), so a `@utility` referenced from caret's own
+  components — which are never scanned — would never be emitted. A named class also beats
+  inlining a multi-property atom at each call site (the declared-once rule again).
+  Tailwind utilities are the shadcn tree's; caret chrome wears caret-token CSS.
 - **A constant coupled across files gets one named source.** The reference layout width
   the Playwright viewport depends on lives as `REFERENCE_WIDTH_PX` in
   `ui/src/lib/layout.ts` (pure TS, node-free), and `layout.test.ts` asserts the e2e
@@ -156,49 +157,54 @@ imports it — stays green under any invocation.
 
   Everything else is neutral: the ink ramp and the chip surface fills. Two carve-outs are
   deliberate, and both explain why something *is* neutral rather than breaking the rule.
-  The **chip surface** — `--chip` / `--chip-hover` in `styles/derived.css`, the soft-solid
-  fill under `.float-chip` — stays neutral because neutral is what the rule prescribes for
-  a control that is neither selection, novelty, nor semantics; the content chips in the
-  table above are a different vocabulary and tint content rather than chrome. The
-  **keycap** derives from `currentColor` because it has no job of its own and inherits its
-  container's — which is why a key on the amber Approve button reads light and a key on a
-  neutral chip reads grey.
+  The **cap face** — `--neutral-face` and its hover and pressed steps in
+  `styles/derived.css`, the face of `.float-chip` — stays neutral because neutral is what
+  the rule prescribes for a control that is neither selection, novelty, nor semantics; the
+  content chips in the table above are a different vocabulary and tint content rather than
+  chrome. The **keycap** derives from `currentColor` because it has no job of its own and
+  inherits its container's — which is why a key on the amber Approve button reads light
+  and a key on a neutral chip reads grey.
 
-  **One control spends a HUED token outside its job**, and it is the only one: the file
-  preview's close circle (`.fp-close`, EXC-1067) fills with `--danger`, which is declared
-  for semantics (removed / failed) and here paints chrome. What buys the exception is that
-  the hue *is* the affordance — the macOS traffic light is a platform idiom a reader
-  decodes before reading anything, and a neutral disc would read as a generic dot rather
-  than as a close control. It stays bounded by being measured: the disc's glyph is held
-  back until hover, so shape alone carries it and WCAG 1.4.11's 3:1 floor binds, which
+  **Two surfaces spend a HUED token outside its job.** The first is the file preview's
+  close circle (`.fp-close`, EXC-1067) fills with `--danger`, which is declared for
+  semantics (removed / failed) and here paints chrome. What buys the exception is that the
+  hue *is* the affordance — the macOS traffic light is a platform idiom a reader decodes
+  before reading anything, and a neutral disc would read as a generic dot rather than as a
+  close control. It stays bounded by being measured: the disc's glyph is held back until
+  hover, so shape alone carries it and WCAG 1.4.11's 3:1 floor binds, which
   `theme.test.ts` pins against `--paper` for every palette. Note what it sits beside —
   TopBar's Reject wears the same pairing (a `--danger` `x` that fills `--danger` and flips
   to `--paper` on hover), so caret now shows red-plus-`x` for one destructive action and
   one benign one. They are told apart by shape and by place: Reject is a labelled chip in
   the action row, the close circle a bare disc in a pane's corner. A third red `x` would
   not be. Reach for this precedent only where a hue is the affordance; a control that
-  merely wants to look important is neutral. `theme.test.ts` asserts every `ColorToken`
-  has at least one `var()` reader under `ui/src`, so a token can't stay declared for
-  nobody — and every content chip clears that floor, nearly all in
-  `diffview/coreStyles.ts`: `--chip-ref` fills the resting file-reference chip, and
-  `--chip-bold` / `--chip-italic` / `--chip-code` / `--chip-link` the four inline chips,
-  each through its own `--md-*` layer variable. The plan preview reads `--chip-code`,
-  `--chip-link` and `--chip-ref` too, as copies `coreStyles.test.ts` pins to the source
-  view's rules. **`--chip-ref` also has a reader outside the rendered plan, and that
-  reader is not a pinned copy**: the feedback editors tint a recognized reference with it
-  too (`.cm-md-ref` in `lib/markdownEditor.ts`, EXC-1177), so one reference reads the same
-  on the side that composes it and the side that renders it. It is deliberately not the
-  neutral `--chip` there — that token is declared for a chrome control, and a run of the
-  reviewer's own markdown is content — and the alpha tint is what lets the same token sit
-  on the editor's `--paper` and on the code panel's ground without a second value. A
-  recognized codespan gives up its own `.cm-md-code` pill for the same reason
-  `data-md-cite` collapses below: one range, one chip. That suite also holds `--chip-link`
-  and `--chip-ref` at least 60 degrees of hue apart in every palette; check that pin
-  rather than your eye when adding one, and read the comment above it for why that pair
-  and not another. A third pin measures something else for a different pair: `--chip-ref`
-  sits above a shared saturation floor and `--chip-code` below it, since those two render
-  side by side and a near-neutral's hue angle carries no design intent to compare against.
-  Read that test's comment before choosing `chipCodeHue` or `chipRefHue`.
+  merely wants to look important is neutral. The second is a saved comment's **Requested**
+  stamp (`SourceAnnotationCard.svelte`), which inks its word and glyph in `--danger` on a
+  comment that is still open, because the hue carries the comment's state
+  ([`design/patterns.md`](../../design/patterns.md) § Saved comments). It stays bounded as
+  a word inside a stamp, never a fill, and `theme.test.ts` holds its word at 4.5:1 on its
+  stamp for every palette. `theme.test.ts` asserts every `ColorToken` has at least one
+  `var()` reader under `ui/src`, so a token can't stay declared for nobody — and every
+  content chip clears that floor, nearly all in `diffview/coreStyles.ts`: `--chip-ref`
+  fills the resting file-reference chip, and `--chip-bold` / `--chip-italic` /
+  `--chip-code` / `--chip-link` the four inline chips, each through its own `--md-*` layer
+  variable. The plan preview reads `--chip-code`, `--chip-link` and `--chip-ref` too, as
+  copies `coreStyles.test.ts` pins to the source view's rules. **`--chip-ref` also has a
+  reader outside the rendered plan, and that reader is not a pinned copy**: the feedback
+  editors tint a recognized reference with it too (`.cm-md-ref` in
+  `lib/markdownEditor.ts`, EXC-1177), so one reference reads the same on the side that
+  composes it and the side that renders it. It is deliberately not the neutral `--chip`
+  there — that token is declared for a chrome control, and a run of the reviewer's own
+  markdown is content — and the alpha tint is what lets the same token sit on the editor's
+  `--paper` and on the code panel's ground without a second value. A recognized codespan
+  gives up its own `.cm-md-code` pill for the same reason `data-md-cite` collapses below:
+  one range, one chip. That suite also holds `--chip-link` and `--chip-ref` at least 60
+  degrees of hue apart in every palette; check that pin rather than your eye when adding
+  one, and read the comment above it for why that pair and not another. A third pin
+  measures something else for a different pair: `--chip-ref` sits above a shared
+  saturation floor and `--chip-code` below it, since those two render side by side and a
+  near-neutral's hue angle carries no design intent to compare against. Read that test's
+  comment before choosing `chipCodeHue` or `chipRefHue`.
   **`--chip-link` marks link SYNTAX, not clickability.** Five shapes wear it and are not
   followable — an internal anchor, an unresolvable path, a fragment target, a bare-word
   target, and an image — and that is the contract rather than a gap (EXC-871 settled it).

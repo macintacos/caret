@@ -7,19 +7,15 @@
 // App.svelte's $effect exactly like createSafeModeGuard.
 
 import { matchKeydown, type SequenceState } from "$lib/shortcuts/match.ts";
-import {
-  ariaKeyshortcuts,
-  type KeySpec,
-  type ShortcutEntry,
-  type ShortcutRegistry,
-  type ShortcutScope,
+import type {
+  KeySpec,
+  ShortcutEntry,
+  ShortcutRegistry,
+  ShortcutScope,
 } from "$lib/shortcuts/registry.ts";
 import { isEntryActive } from "$lib/shortcuts/scope.ts";
 
 const DEFAULT_SEQUENCE_TIMEOUT_MS = 1000;
-
-/** How long a keyed control shows pressed, about a click's mousedown-to-mouseup. */
-export const PRESS_HOLD_MS = 110;
 
 export interface ShortcutDispatcherOptions {
   /** Event source — `window` in the app. */
@@ -38,12 +34,8 @@ export interface ShortcutDispatcherOptions {
   now?: () => number;
   /** Max gap between the two keys of a sequence (gg, ]]). */
   sequenceTimeoutMs?: number;
-  /** The on-screen controls a shortcut stands for. When it runs, each shows pressed
-   * (`data-key-pressed`) for PRESS_HOLD_MS, the same press a click plays. Defaults to
-   * the visible elements whose aria-keyshortcuts names it. */
-  controlsFor?: (entry: ShortcutEntry) => Element[];
-  /** Schedules the press's release; injectable for tests. Defaults to setTimeout. */
-  schedule?: (release: () => void, ms: number) => void;
+  /** Hears each shortcut as it runs — the app's press echo (pressEcho.ts). */
+  onRun?: (entry: ShortcutEntry) => void;
 }
 
 export interface ShortcutDispatcher {
@@ -62,15 +54,6 @@ export function defaultIsEditingContext(): boolean {
   return el.closest(".cm-editor") !== null;
 }
 
-/** Default control lookup: the rendered elements carrying the shortcut's own
- * aria-keyshortcuts value. A control hidden by CSS has no client rects. */
-export function defaultControlsFor(entry: ShortcutEntry): Element[] {
-  const value = CSS.escape(ariaKeyshortcuts(entry.keys));
-  return [...document.querySelectorAll(`[aria-keyshortcuts="${value}"]`)].filter(
-    (el) => el.getClientRects().length > 0,
-  );
-}
-
 /** A spec is "bare" — subject to editing-context suppression — when none of its
  * chords require a command modifier. Shift is not a command modifier: it is
  * already encoded in the chord's key (`V`, `?`, `G`). */
@@ -86,8 +69,6 @@ export function createShortcutDispatcher(opts: ShortcutDispatcherOptions): Short
   const activeScope = opts.activeScope ?? (() => null);
   const now = opts.now ?? (() => performance.now());
   const timeoutMs = opts.sequenceTimeoutMs ?? DEFAULT_SEQUENCE_TIMEOUT_MS;
-  const controlsFor = opts.controlsFor ?? defaultControlsFor;
-  const schedule = opts.schedule ?? ((run, ms) => void setTimeout(run, ms));
 
   let seq: SequenceState | null = null;
 
@@ -124,21 +105,10 @@ export function createShortcutDispatcher(opts: ShortcutDispatcherOptions): Short
     if (entry && entry.enabled?.() !== false) {
       e.preventDefault();
       if (!held) {
-        press(entry);
+        opts.onRun?.(entry);
         entry.run?.();
       }
     }
-  }
-
-  // The shortcut runs at once rather than after the press: keys typed straight after it
-  // (`b` then `/`) must land in whatever it opens.
-  function press(entry: ShortcutEntry): void {
-    const controls = controlsFor(entry);
-    if (controls.length === 0) return;
-    for (const el of controls) el.setAttribute("data-key-pressed", "");
-    schedule(() => {
-      for (const el of controls) el.removeAttribute("data-key-pressed");
-    }, PRESS_HOLD_MS);
   }
 
   // Bubble phase: Safe Mode's capture-phase guard (safeMode.ts) runs first and

@@ -25,8 +25,9 @@
 			"disabled:pointer-events-none disabled:opacity-50",
 		],
 		variants: {
-			// caret's markers: `cap cap-accent` and `cap-ghost` are what the tactile kit
-			// in styles/atoms.css keys on. Neutral controls opt in with `.float-chip`.
+			// caret's markers: `cap cap-accent`, `cap-ghost` and the icon size's `cap-square`
+			// are what the tactile kit in styles/atoms.css keys on. Neutral controls opt in
+			// with `.float-chip`.
 			variant: {
 				default: "cap cap-accent bg-primary text-primary-foreground [a]:hover:bg-primary/80",
 				outline: "border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground",
@@ -40,7 +41,7 @@
 				xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
 				sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
 				lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-				icon: "size-8",
+				icon: "cap-square size-8",
 				"icon-xs": "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
 				"icon-sm": "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
 				"icon-lg": "size-9",

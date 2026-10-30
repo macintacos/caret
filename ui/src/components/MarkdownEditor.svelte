@@ -96,8 +96,6 @@
 <div class="md-editor field-well" bind:this={host}></div>
 
 <style>
-  /* Cut into the surface like every text field: the .field-well atom's floor,
-     shade and focus ring. */
   .md-editor {
     width: 100%;
     box-sizing: border-box;

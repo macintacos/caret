@@ -200,14 +200,13 @@
     pointer-events: none;
   }
 
-  /* Trigger: the vendored Select.Trigger wearing the topbar's floating chip (soft fill,
-     no hard border, ink-soft label brightening on hover / while open — the .float-chip
-     atom supplies the fill + ink treatment). Global rather than scoped because Svelte
+  /* Trigger: the vendored Select.Trigger wearing the rubber cap in its .tray (no hard
+     border; .float-chip supplies the cap face + ink treatment). Global rather than scoped because Svelte
      does not scope-hash a `class` passed to a COMPONENT, which is also why the panel
      rules below are global. The vendored trigger already carries this control's gap,
      radius, padding and text size; the only thing it has that caret's language forbids
      is the outline border (doc/agents/shadcn-rules.md § The caret surface language —
-     the chip fill is the affordance). */
+     the cap is the affordance). */
   :global(.setting-trigger) {
     border: none;
   }

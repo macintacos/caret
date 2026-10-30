@@ -156,8 +156,8 @@
   .code-chrome {
     position: absolute;
     transform: translate(calc(-100% - 0.4rem), 0.4rem);
-    --well-pad: 2px;
-    --tray-gap: 2px;
+    --well-pad: var(--well-pad-tight);
+    --tray-gap: var(--well-pad-tight);
     display: flex;
     z-index: 4;
     /* Rests dimmed so it stays quiet while the code is read, and comes up as the reviewer

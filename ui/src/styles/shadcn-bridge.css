@@ -110,8 +110,7 @@
   /* shadcn's neutral hover/active wash — NOT caret amber (that's --color-primary).
      A neutral grey mixed off the RAISED paper (the --popover surface menus render
      on) toward ink, matching --chip-hover's formula (paper-raised + 15% ink) so a
-     menu/select highlight reads at the same strength as the topbar's .float-chip
-     buttons. Kept a self-contained color-mix rather than a var(--chip-hover)
+     menu/select highlight reads at --chip-hover's strength. Kept a self-contained color-mix rather than a var(--chip-hover)
      reference so the bridge block stays self-describing (a pinned contract in
      shadcn-bridge.test.ts); the operands flip per scheme, so it reads right in both
      without a second block. */
@@ -191,6 +190,19 @@
   --tw-ease: var(--ease-out);
 }
 
+/* A modal opened by a key waits out the key's press: mounted and focused at once,
+   invisible until the cap's sink has been seen. The delay is PRESS_HOLD_MS in
+   pressEcho.ts; keep the two in sync. */
+[data-key-echo] :is(
+    [data-slot="dialog-overlay"],
+    [data-slot="dialog-content"],
+    [data-slot="alert-dialog-overlay"],
+    [data-slot="alert-dialog-content"]
+  ) {
+  animation-delay: 110ms;
+  animation-fill-mode: backwards;
+}
+
 
 /* The panel floats over the dimmed app on the deepest shadow the kit has (--float-high
    in styles/tokens.css), lit along its top edge, and rises --float-arrive into place as
@@ -200,10 +212,7 @@
 [data-slot="alert-dialog-content"] {
   --tw-enter-translate-y: var(--float-arrive);
   --tw-exit-translate-y: var(--float-arrive);
-  box-shadow:
-    var(--float-rim),
-    0 0 0 1px var(--rule-strong),
-    var(--float-high);
+  box-shadow: var(--float-surface-high);
 }
 
 /* Menus, popovers and select lists float a step lower. */
@@ -211,8 +220,5 @@
 [data-slot="dropdown-menu-sub-content"],
 [data-slot="popover-content"],
 [data-slot="select-content"] {
-  box-shadow:
-    var(--float-rim),
-    0 0 0 1px var(--rule),
-    var(--float-mid);
+  box-shadow: var(--float-surface-mid);
 }

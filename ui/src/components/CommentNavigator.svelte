@@ -242,10 +242,7 @@
     max-height: min(60vh, 24rem);
     background: var(--paper-raised);
     border-radius: var(--radius-lg);
-    box-shadow:
-      var(--float-rim),
-      0 0 0 1px var(--rule-strong),
-      var(--float-mid);
+    box-shadow: var(--float-surface-mid);
     overflow: hidden;
     animation: nav-open var(--dur-state) var(--ease-out);
   }

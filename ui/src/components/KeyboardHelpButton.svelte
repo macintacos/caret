@@ -30,7 +30,7 @@
   /* A small cap in a shallow well of its own, sized to fill the status bar's height
      exactly. */
   .kbd-help-well {
-    --well-pad: 2px;
+    --well-pad: var(--well-pad-tight);
   }
   .kbd-help {
     display: inline-flex;
