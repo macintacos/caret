@@ -200,6 +200,11 @@ a:focus-visible,
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
+/* A modal takes focus itself on open, so its keys work at once. It is where focus rests,
+   not a control. */
+:is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]):focus-visible {
+  outline: none;
+}
 
 /* Pointer (hand) cursor on interactive controls. Tailwind v4's Preflight no longer
    sets it on <button> and the shadcn Button recipe adds none, so without this every

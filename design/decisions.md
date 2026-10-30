@@ -55,6 +55,8 @@ Chosen through side-by-side previews.
   cursor and its well's edge firming to `--rule-strong`. The user asked for this on the
   Contents filter and the search box, and it now holds kit-wide. Controls keep a visible
   keyboard indicator.
+- **Modals:** a modal that takes focus on open draws no focus ring around itself. The user
+  asked for this on Settings opened with the `,` shortcut.
 - **Unsent comments:** the plan marks a comment kept with **Keep for later** by a
   full-width well under its line, tinted toward `--attention`. A saved comment floats on a
   card, and an unsent one sits in a coloured, recessed well. The well holds:

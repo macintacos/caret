@@ -83,6 +83,10 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `--rule` to `--rule-strong`, and the text cursor shows the rest. A field that can't wear
   the class, such as the Contents filter, mirrors the recipe. Controls and list rows are
   not text fields and keep a visible keyboard indicator.
+- **Modals draw no focus ring around themselves.** A modal takes focus on its own panel
+  when it opens, so its keys work at once. `base.css` drops the ring from
+  `[data-slot="dialog-content"]` and `[data-slot="alert-dialog-content"]`, so every modal
+  built on the vendored Dialog or AlertDialog follows it. The controls inside keep theirs.
 - **The key row.** A Contents row rises as a cap from its indent onward: flat at rest,
   `--neutral-face-hover` when selected, `--neutral-face-latched` while it is the section
   being read, and `--neutral-face-down` when pressed. It keeps the same layers in every
