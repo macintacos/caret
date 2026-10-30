@@ -112,7 +112,7 @@
           variant="outline"
           size="icon"
           type="button"
-          class="code-chrome-button {chromeButton.className}"
+          class="code-chrome-button float-chip {chromeButton.className}"
           aria-label={chromeButton.ariaLabel}
           aria-pressed={chromeButton.pressed}
           onpointerdown={(event) => event.stopPropagation()}
@@ -128,7 +128,7 @@
 
 <!-- One Provider over both Roots: the delay is shared, and a plan mounts one tooltip
      context per block rather than two. -->
-<div class="code-chrome" style="top: {top}px; left: {left}px;" data-lit={hovered ? "" : undefined}>
+<div class="code-chrome tray" style="top: {top}px; left: {left}px;" data-lit={hovered ? "" : undefined}>
   <Tooltip.Provider delayDuration={300}>
     {#if carded}
       {@render control({
@@ -156,8 +156,9 @@
   .code-chrome {
     position: absolute;
     transform: translate(calc(-100% - 0.4rem), 0.4rem);
+    --well-pad: 2px;
+    --tray-gap: 2px;
     display: flex;
-    gap: 0.25rem;
     z-index: 4;
     /* Rests dimmed so it stays quiet while the code is read, and comes up as the reviewer
        reaches the block. Keyboard focus lights it the same way a pointer does. */
@@ -172,45 +173,21 @@
   }
 
   /* `.code-chrome-button` is handed to <Button>, so it carries no Svelte scope hash and is
-     styled via :global. These unlayered rules beat the Button recipe's layered Tailwind
-     utilities, so the resting chip is caret's paper-raised affordance rather than the
-     shadcn outline variant. The unlayered box-shadow also suppresses the Button's focus
-     ring, so focus is shown by the explicit outline below. */
+     styled via :global; the .float-chip cap supplies its face, press and latch (the wrap
+     toggle stays down while the block is wrapped). The cap's box-shadow suppresses the
+     Button's focus ring, so focus is shown by the explicit outline below. */
   :global(.code-chrome-button) {
     display: grid;
     place-items: center;
-    width: 1.7rem;
-    height: 1.7rem;
+    width: 1.6rem;
+    height: 1.6rem;
     padding: 0;
-    color: var(--ink-soft);
-    background: var(--paper-raised);
-    border: 1px solid var(--rule);
     border-radius: var(--radius);
-    box-shadow: var(--shadow-chip);
-    cursor: pointer;
-  }
-
-  :global(.code-chrome-button:hover) {
-    color: var(--ink);
-    background: var(--paper);
   }
 
   :global(.code-chrome-button:focus-visible) {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
-  }
-
-  /* The wrap toggle stays down while the block is wrapped. Neutral rather than amber:
-     amber is the selection and the primary action, and a view option is neither. */
-  :global(.code-wrap[aria-pressed="true"]) {
-    color: var(--ink);
-    background: var(--chip-hover);
-  }
-
-  /* Ties the pressed rule above on specificity, so source order is what gives a pressed
-     toggle hover feedback at all. */
-  :global(.code-wrap[aria-pressed="true"]:hover) {
-    background: var(--paper);
   }
 
   .glyph {

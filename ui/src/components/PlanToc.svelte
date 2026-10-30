@@ -329,18 +329,20 @@
            toggle's `d` and the breadcrumbs bar's `b`; aria-hidden so the glyph
            never lands in the button's name, which aria-keyshortcuts carries
            instead — derived from the reservation, so the two cannot disagree. -->
-      <Button
-        {...props}
-        variant="secondary"
-        size="sm"
-        class="float-chip"
-        aria-keyshortcuts={ariaKeyshortcutsFor("actions.contents")}
-      >
-        Contents
-        {#if showShortcutHints}
-          <Kbd class="kbd-sm" aria-hidden="true">\</Kbd>
-        {/if}
-      </Button>
+      <span class="tray">
+        <Button
+          {...props}
+          variant="secondary"
+          size="sm"
+          class="float-chip"
+          aria-keyshortcuts={ariaKeyshortcutsFor("actions.contents")}
+        >
+          Contents
+          {#if showShortcutHints}
+            <Kbd class="kbd-sm" aria-hidden="true">\</Kbd>
+          {/if}
+        </Button>
+      </span>
     {/snippet}
   </Popover.Trigger>
   <Popover.Content

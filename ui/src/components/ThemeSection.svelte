@@ -149,12 +149,14 @@
 
   <div class="theme-upload" data-theme-upload>
     <div class="upload-row">
-      <Button
-        variant="secondary"
-        class="float-chip"
-        disabled={uploading}
-        onclick={() => picker?.click()}>Upload theme file…</Button
-      >
+      <span class="tray">
+        <Button
+          variant="secondary"
+          class="float-chip"
+          disabled={uploading}
+          onclick={() => picker?.click()}>Upload theme file…</Button
+        >
+      </span>
       <p class="upload-hint">Adds a .json theme file, or replaces the theme with the same id.</p>
     </div>
     <input

@@ -1176,9 +1176,9 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
     expect(cardBody).toMatch(/border-radius:\s*var\(--radius\)/);
   });
 
-  test("every box-shadow on a carded code or table surface carries the lift (EXC-1145)", () => {
+  test("every box-shadow on a carded code or table surface carries the recess", () => {
     // box-shadow does not cascade additively, so ANY rule that out-ranks the base row rule
-    // and declares one erases the elevation. The banded-row rule is that trap today; the
+    // and declares one erases the depth. The banded-row rule is that trap today; the
     // next such rule — a change tint if the plan surface ever stops being single-version, a
     // focus ring, a drag affordance — would take the lift out silently. Pinning the whole
     // SET rather than three named selectors is what makes a fifth rule opt in or argue here.
@@ -1192,13 +1192,15 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
     // The two cards, the fitting row, and the row's banded state.
     expect(shadowed).toHaveLength(4);
     for (const { selector, body } of shadowed) {
-      expect(body, selector.trim().replace(/\s+/g, " ")).toContain("var(--caret-card-lift)");
+      expect(body, selector.trim().replace(/\s+/g, " ")).toMatch(
+        /var\(--(?:panel-recess|caret-row-recess)\)/,
+      );
     }
   });
 
-  test("floats at the table card's height, not one of its own (EXC-1145)", () => {
+  test("sits at the table card's depth, not one of its own", () => {
     // The two cards on a rendered plan are the table's and this one. Asserted as equality
-    // against the table card's own declaration rather than as a literal: two elevations a
+    // against the table card's own declaration rather than as a literal: two depths a
     // hair apart read as a mistake, which is the whole reason both spend one token.
     const tableCard =
       overrideDecls.match(/\[data-content\]\s*>\s*\[data-table-card\]\s*\{[^}]*\}/)?.[0] ?? "";
@@ -1207,19 +1209,19 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
     expect(lift(cardBody)).toBe(lift(tableCard));
   });
 
-  test("keeps the lift on a hovered or cursored fitting row (EXC-1145)", () => {
+  test("keeps the recess on a hovered or cursored fitting row", () => {
     // The band rule sets box-shadow to paint the gutter→content seam strip, and it outranks
-    // the base row rule. box-shadow does not cascade additively, so without the lift restated
-    // here a hovered code row silently drops it. Seam strip first: on a banded row the
-    // block's left edge should read as band, not as shadow.
+    // the base row rule. box-shadow does not cascade additively, so without the recess
+    // restated here a hovered code row silently drops it. Seam strip first: on a banded row
+    // the block's edge should read as band, not as shadow.
     const bandedRowBody =
       overrideDecls.match(
         /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:is\(\[data-hovered\], \[data-caret-cursor\]\):not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
       )?.[0] ?? "";
     const shadow = bandedRowBody.match(/box-shadow:\s*([^;]+);/)?.[1] ?? "";
     expect(shadow).toContain("calc(");
-    expect(shadow).toContain("var(--caret-card-lift)");
-    expect(shadow.indexOf("calc(")).toBeLessThan(shadow.indexOf("var(--caret-card-lift)"));
+    expect(shadow).toContain("var(--caret-row-recess)");
+    expect(shadow.indexOf("calc(")).toBeLessThan(shadow.indexOf("var(--caret-row-recess)"));
   });
 
   test("clips a not-yet-wrapped row so it can't break out before the card wraps it", () => {
@@ -1490,10 +1492,12 @@ describe("the preview's copies of the link, code and reference chips (EXC-2021)"
     const startCap = sourceRule("[data-line] [data-md-start]");
     const endCap = sourceRule("[data-line] [data-md-end]");
     expect(endCap["padding-inline-end"]).toBe(startCap["padding-inline-start"]);
+    const tint = declarations(tintRule(member));
     return {
-      "background-color": declarations(tintRule(member))[`--md-${member}`],
+      "background-color": tint[`--md-${member}`],
       padding: `${fill["padding-block"]} ${startCap["padding-inline-start"]}`,
       "border-radius": startCap["border-start-start-radius"],
+      "box-shadow": tint["box-shadow"],
     };
   }
 
@@ -1508,7 +1512,11 @@ describe("the preview's copies of the link, code and reference chips (EXC-2021)"
   }
 
   test("a link wears the source view's ink, weight, slant and underline", () => {
-    const { "--md-link": _tint, ...ink } = sourceRule('[data-line] [data-md~="link"]');
+    const {
+      "--md-link": _tint,
+      "box-shadow": _raise,
+      ...ink
+    } = sourceRule('[data-line] [data-md~="link"]');
     expectPinned(previewRule("a"), ink);
   });
 
@@ -1516,13 +1524,14 @@ describe("the preview's copies of the link, code and reference chips (EXC-2021)"
     expectPinned(previewRule("a:not(:has(code, [data-file-ref], img))"), sourceChip("link"));
   });
 
-  test("inline code pads and tints like the source view's code chip", () => {
+  test("inline code pads, tints and stamps like the source view's code chip", () => {
     const code = previewRule(":not(pre) > code");
     expectPinned(
       {
         "background-color": code["background-color"] ?? "",
         padding: code.padding ?? "",
         "border-radius": code["border-radius"] ?? "",
+        "box-shadow": code["box-shadow"] ?? "",
       },
       sourceChip("code"),
     );
@@ -1842,26 +1851,16 @@ describe("tables (EXC-864)", () => {
     // EXC-1136 traded the outline for a panel. The fill is the code card's own, quoted
     // rather than re-tuned: a table and a fenced block are the two cards on this page,
     // and two panel colours a shade apart read as a mistake rather than as two kinds of
-    // block. The elevation is what says "floating".
+    // block. The recess is what says "panel".
     const codeCard =
       overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-card\]\s*\{[^}]*\}/)?.[0] ?? "";
     const codeFill = codeCard.match(/background-color:\s*([^;]+);/)?.[1];
     expect(codeFill).toBeTruthy();
     expect(cardRule).toContain(`background-color: ${codeFill};`);
     expect(cardRule).toMatch(/border-radius:\s*var\(--radius\)/);
-    // A contact shadow rather than --shadow-card: the shared token's far layer is a 30px
-    // blur, wider than the card's own --caret-card-inset, so it spills into the gutter
-    // lane and reads as a halo on any palette whose sunk surface is light enough to
-    // darken. Pinned as "blur no wider than the inset" rather than as a literal, since
-    // what must hold is the relationship. The value lives on --caret-card-lift at :host,
-    // shared with the code card's two paint paths (EXC-1145), so the card is pinned to the
-    // token and the relationship is pinned where the number lives.
-    expect(cardRule).toMatch(/box-shadow:\s*var\(--caret-card-lift\)/);
-    const lift = overrideDecls.match(/--caret-card-lift:\s*([^;]+);/)?.[1] ?? "";
-    const blur = Number.parseFloat(lift.match(/^\S+\s+\S+\s+([\d.]+)px/)?.[1] ?? "");
-    expect(blur).toBeGreaterThan(0);
-    expect(blur).toBeLessThan(12);
-    expect(lift).not.toContain("--shadow-card");
+    // The preview's code block's recess (--panel-recess, styles/tokens.css), so nothing
+    // but a 1px lip reaches past the card into the gutter lane.
+    expect(cardRule).toMatch(/box-shadow:\s*var\(--panel-recess\)/);
   });
 
   test("clears the library's row fill inside the card, banded rows excepted", () => {

@@ -121,6 +121,15 @@ const TABLE_CARD_FILL = 0.06;
  * checks. */
 const TABLE_GROUNDS = [0.02, TABLE_CARD_FILL, 0.08] as const;
 
+/** A saved comment's state stamp (SourceAnnotationCard.svelte), per scheme: the stamp's
+ * floor is the well floor (styles/derived.css) tinted toward the state's hue, and its
+ * word is that hue inked toward --ink on dark paper and toward black on light. Quoted
+ * from both files, so keep it in step with them. */
+const STAMP = {
+  dark: { wellToward: "#000000", well: 0.4, floor: 0.14, inkToward: "--ink", ink: 0.25 },
+  light: { wellToward: "--ink", well: 0.06, floor: 0.24, inkToward: "#000000", ink: 0.5 },
+} as const;
+
 const themeEntries = () =>
   Object.entries(THEMES) as [BuiltinThemeId, (typeof THEMES)[BuiltinThemeId]][];
 
@@ -632,6 +641,26 @@ describe("every theme", () => {
         contrast(theme.tokens["--ink-soft"], ground),
         `${id} table header --ink-soft on --paper-sunk banded ${TABLE_CARD_FILL * 100}%`,
       ).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  test("keeps every comment stamp's word at AA on its stamp", () => {
+    for (const [id, theme] of themeEntries()) {
+      const recipe = STAMP[theme.scheme];
+      const tokens = theme.tokens as Record<string, string>;
+      const toward = (c: string) => tokens[c] ?? c;
+      const well = banded(tokens["--paper-raised"]!, toward(recipe.wellToward), recipe.well);
+      // Accepted is settled, so its floor tints half as far.
+      for (const [hue, settle] of [
+        ["--attention", 1],
+        ["--danger", 1],
+        ["--ok", 0.5],
+      ] as const) {
+        const stamp = banded(well, tokens[hue]!, recipe.floor * settle);
+        const word = banded(tokens[hue]!, toward(recipe.inkToward), recipe.ink);
+        expect(contrast(word, stamp), `${id} ${hue}`).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(contrast(tokens["--ink-soft"]!, well), `${id} expired`).toBeGreaterThanOrEqual(4.5);
     }
   });
 

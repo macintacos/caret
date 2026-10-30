@@ -1,7 +1,11 @@
 import "@ui/support/setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { createShortcutDispatcher, type ShortcutDispatcher } from "$lib/shortcuts/dispatcher.ts";
+import {
+  createShortcutDispatcher,
+  PRESS_HOLD_MS,
+  type ShortcutDispatcher,
+} from "$lib/shortcuts/dispatcher.ts";
 import {
   createShortcutRegistry,
   type KeySpec,
@@ -215,6 +219,51 @@ describe("createShortcutDispatcher", () => {
     scope = "settings"; // a modal took the view
     keydown("g"); // the second key must not complete the now-out-of-scope sequence
     expect(gg.calls()).toBe(0);
+  });
+
+  describe("a shortcut with a control on screen", () => {
+    let control: HTMLButtonElement;
+    let release: (() => void) | null;
+    let releaseAfter: number | null;
+
+    function mountWithControl() {
+      control = document.createElement("button");
+      document.body.appendChild(control);
+      release = null;
+      releaseAfter = null;
+      disp = createShortcutDispatcher({
+        target,
+        registry,
+        isEditingContext: () => editing,
+        activeScope: () => scope,
+        now: () => 0,
+        controlsFor: () => [control],
+        schedule: (run, ms) => {
+          release = run;
+          releaseAfter = ms;
+        },
+      });
+    }
+
+    test("runs at once and plays the control's press for the hold", () => {
+      const a = spyEntry("approve", [{ key: "a" }]);
+      registry.register(a.entry);
+      mountWithControl();
+      keydown("a");
+      expect(a.calls()).toBe(1);
+      expect(control.hasAttribute("data-key-pressed")).toBe(true);
+      expect(releaseAfter).toBe(PRESS_HOLD_MS);
+      release?.();
+      expect(control.hasAttribute("data-key-pressed")).toBe(false);
+    });
+
+    test("leaves a disabled shortcut's control unpressed", () => {
+      const a = spyEntry("approve", [{ key: "a" }], { enabled: () => false });
+      registry.register(a.entry);
+      mountWithControl();
+      keydown("a");
+      expect(control.hasAttribute("data-key-pressed")).toBe(false);
+    });
   });
 
   test("destroy() removes the listener", () => {

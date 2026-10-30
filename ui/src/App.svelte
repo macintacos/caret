@@ -1229,9 +1229,11 @@
     padding: 0.7rem 0.95rem;
     background: var(--paper-raised);
     color: var(--ink);
-    border: 1px solid var(--rule-strong);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
+    box-shadow:
+      var(--float-rim),
+      0 0 0 1px var(--rule-strong),
+      var(--float-mid);
     font-size: var(--text-base);
     animation: safe-mode-in var(--dur-state) var(--ease-out);
   }

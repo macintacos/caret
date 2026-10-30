@@ -228,7 +228,7 @@
              the cap: it is a role="group", and one holding nothing announceable reads as
              an empty group. -->
         <Sidebar.Header>
-          <InputGroup.Root>
+          <InputGroup.Root class="field-well">
             <InputGroup.Input
               type="text"
               placeholder="Search settings…"

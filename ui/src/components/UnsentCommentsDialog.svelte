@@ -187,23 +187,25 @@
   {/if}
 
   {#snippet footer()}
-    <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
-    {#if hasQueued}
-      <Button variant="secondary" class="float-chip" onclick={onRequestChanges}>
-        <Icon name="corner-up-left" size={14} />
-        Request changes
+    <span class="tray">
+      <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
+      {#if hasQueued}
+        <Button variant="secondary" class="float-chip" onclick={onRequestChanges}>
+          <Icon name="corner-up-left" size={14} />
+          Request changes
+        </Button>
+      {/if}
+      <Button
+        bind:ref={confirmEl}
+        onclick={() => onConfirm(notes)}
+        onkeydown={onKey}
+        aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}
+      >
+        {#if icon}<Icon name={icon} size={14} />{/if}
+        {confirmLabel}
+        <SubmitCap />
       </Button>
-    {/if}
-    <Button
-      bind:ref={confirmEl}
-      onclick={() => onConfirm(notes)}
-      onkeydown={onKey}
-      aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}
-    >
-      {#if icon}<Icon name={icon} size={14} />{/if}
-      {confirmLabel}
-      <SubmitCap />
-    </Button>
+    </span>
   {/snippet}
 </Modal>
 

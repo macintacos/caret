@@ -133,9 +133,11 @@
 </script>
 
 <Select.Root type="single" {value} onValueChange={(v) => onSelect(v)} bind:open={menuOpen}>
-  <Select.Trigger {id} class="setting-trigger float-chip">
-    <span class="trigger-label">{triggerLabel}</span>
-  </Select.Trigger>
+  <span class="tray">
+    <Select.Trigger {id} class="setting-trigger float-chip">
+      <span class="trigger-label">{triggerLabel}</span>
+    </Select.Trigger>
+  </span>
 
   <Select.Content bind:ref={menuEl} align="end" class="setting-menu">
     {#each options as option (option.value)}

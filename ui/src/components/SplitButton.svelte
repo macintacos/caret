@@ -74,17 +74,24 @@
 <style>
   /* One fused control that splits on hover. The inner corners are squared and their
      inner (transparent) borders removed so the two fills touch with no gap and no
-     divider line; hovering either half tints only that half (--split-hover-bg), so
-     the seam surfaces as a soft colour edge and is invisible otherwise. The :global
+     divider line; hovering either half tints only that half (--split-hover-bg, as the
+     cap's hover face), so the seam surfaces as a soft colour edge and is invisible
+     otherwise. The :global
      reaches the composed shadcn Buttons but is bounded by `.split`, so nothing
      leaks. */
   .split {
     display: inline-flex;
   }
+  /* Each half is a whole rubber cap, rim included, so the seam would show both halves'
+     rims as a divider. Each half overlaps the other by its rim and clips it off on the
+     inner edge, leaving only the faces to meet; the outer edges keep room for the focus
+     outline. */
   .split :global(.split-primary) {
     border-top-right-radius: 0;
     border-bottom-right-radius: 0;
     border-right-width: 0;
+    margin-right: -1px;
+    clip-path: inset(-4px 1px -4px -4px);
     /* Pull the seam in toward the label so the chevron sits close, not stranded. */
     padding-right: 0.25rem;
   }
@@ -92,14 +99,16 @@
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
     border-left-width: 0;
+    margin-left: -1px;
+    clip-path: inset(-4px -4px -4px 1px);
     /* Slim the toggle to hug the seam; height stays 2rem from size-8. */
     width: auto;
     padding-left: 0.25rem;
     padding-right: 0.5rem;
   }
-  .split :global(.split-primary:not(:disabled):hover),
-  .split :global(.split-toggle:not(:disabled):hover) {
-    background: var(--split-hover-bg);
+  .split :global(.split-primary),
+  .split :global(.split-toggle) {
+    --face-hover: var(--split-hover-bg);
   }
 
   /* Mac disclosure affordance on the options toggle: the chevron points RIGHT at

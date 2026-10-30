@@ -84,20 +84,22 @@
     {#if presentation.canRequest}
       <!-- The pane's single primary action — amber, per the one-primary rule. -->
       <div class="notif-action">
-        <Button data-action="enable" onclick={enable}>Enable notifications</Button>
+        <span class="tray"><Button data-action="enable" onclick={enable}>Enable notifications</Button></span>
       </div>
     {:else if presentation.canTest}
       <!-- Diagnosis affordance: a granted toast the OS suppresses fails silently, so
            an active probe is the only tell. Neutral chip — not the primary. -->
       <div class="notif-action">
-        <Button
-          variant="secondary"
-          class="float-chip"
-          data-action="test"
-          onclick={fireTestNotification}
-        >
-          Send a test notification
-        </Button>
+        <span class="tray">
+          <Button
+            variant="secondary"
+            class="float-chip"
+            data-action="test"
+            onclick={fireTestNotification}
+          >
+            Send a test notification
+          </Button>
+        </span>
       </div>
     {/if}
   {/if}

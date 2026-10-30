@@ -93,17 +93,14 @@
   });
 </script>
 
-<div class="md-editor" bind:this={host}></div>
+<div class="md-editor field-well" bind:this={host}></div>
 
 <style>
+  /* Cut into the surface like every text field: the .field-well atom's floor,
+     shade and focus ring. */
   .md-editor {
     width: 100%;
     box-sizing: border-box;
-    background: var(--paper);
-    border: 1px solid var(--rule);
     border-radius: var(--radius);
-  }
-  .md-editor:focus-within {
-    border-color: var(--accent);
   }
 </style>

@@ -52,7 +52,7 @@
            real toggle button (aria-expanded) rather than an inert readout. -->
       <button
         type="button"
-        class="stat comments-toggle"
+        class="stat comments-toggle cap-ghost"
         aria-expanded={commentsOpen}
         aria-controls="comment-navigator"
         aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleComments")}
@@ -81,7 +81,7 @@
             {#snippet child({ props })}
               <!-- The same chip the TopBar VersionLabel shows. Only the ^ carries
                    amber, holding amber-scarcity. -->
-              <Badge {...props} variant="secondary" class="rev metric">
+              <Badge {...props} variant="secondary" class="rev metric stamp">
                 <span class="caret" aria-hidden="true">^</span>v{version}
               </Badge>
             {/snippet}
@@ -127,10 +127,12 @@
      .stat's baseline: this tally alone carries the taller Shift+C cap, which on a
      baseline row drags the shared baseline down and sinks "N comments" ~1px below
      the strip's other segments. */
+  /* The padding and its cancelling margin give a press's dimple room without moving
+     the tally. */
   .comments-toggle {
     align-items: center;
-    margin: 0;
-    padding: 0;
+    margin: 0 -0.2rem;
+    padding: 0.15rem 0.2rem;
     background: none;
     border: none;
     font: inherit;
@@ -193,11 +195,22 @@
     gap: 0.3rem;
     color: var(--ink-soft);
   }
+  /* The connection light sits in a little socket in the bar. */
   .dot {
     width: 0.4rem;
     height: 0.4rem;
     border-radius: 99px;
     background: var(--ok);
+    box-shadow:
+      inset 0 -1px 1px rgb(0 0 0 / 0.35),
+      0 0 0 1.5px var(--well-floor),
+      0 0 0 2px rgb(0 0 0 / 0.4);
+  }
+  :global([data-theme="light"]) .dot {
+    box-shadow:
+      inset 0 -1px 1px rgb(0 0 0 / 0.2),
+      0 0 0 1.5px var(--well-floor),
+      0 0 0 2px rgb(0 0 0 / 0.06);
   }
   .conn.offline {
     color: var(--danger);

@@ -13,7 +13,7 @@ import { THEMES } from "$lib/theme.ts";
 // a bare :root would show up only as a preview card wearing the app's colors.
 //
 // WELL-FORMEDNESS. Every value is a color-mix(in lab, …) whose only inputs are
-// palette tokens. theme.test.ts's registry-wide "covers caret-dark's full token set"
+// palette tokens (and black, which a dark well steps toward). theme.test.ts's registry-wide "covers caret-dark's full token set"
 // already pins that key set for every palette, so a tier built solely from those
 // names derives correctly for every one by construction — rather than by this suite
 // sampling caret's and hoping.
@@ -44,11 +44,16 @@ describe("the derived-token tier", () => {
   test("names the tokens the chrome reads", () => {
     expect(Object.keys(tokens).sort()).toEqual([
       "--attention-wash",
+      "--cap-face",
+      "--cap-face-down",
+      "--cap-face-hover",
       "--chip",
       "--chip-hover",
       "--code-panel",
+      "--field-floor",
       "--ink-wash",
       "--paper-veil",
+      "--well-floor",
     ]);
   });
 
@@ -63,6 +68,18 @@ describe("the derived-token tier", () => {
     }
   });
 
+  test("re-derives its scheme-split tokens for light paper, in the same mix space", () => {
+    const light = declaredTokens(
+      [...appCss.matchAll(/\[data-theme="light"\]\s*\{([^}]*)\}/g)]
+        .map((m) => m[1] ?? "")
+        .find((body) => body.includes("--well-floor:")) ?? "",
+    );
+    expect(Object.keys(light).length).toBeGreaterThan(0);
+    for (const [name, value] of Object.entries(light)) {
+      expect(Object.keys(tokens), name).toContain(name);
+      expect(value, name).toMatch(/^color-mix\(in lab,/);
+    }
+  });
   test("uses no hardcoded hex or oklch — the palette is the only input", () => {
     expect(decls.trim()).not.toBe("");
     expect(decls).not.toMatch(/#[0-9a-fA-F]{3,8}/);

@@ -61,14 +61,16 @@
         <UpgradeCommand class="update-command" command={copy.command} />
       {/if}
       {#if report && isUpdatePending(report.status)}
-        <Button
-          variant="secondary"
-          size="sm"
-          class="float-chip update-whats-new"
-          data-action="whats-new"
-          onclick={onWhatsNew}>
-          What's new
-        </Button>
+        <span class="tray whats-new-well">
+          <Button
+            variant="secondary"
+            size="sm"
+            class="float-chip update-whats-new"
+            data-action="whats-new"
+            onclick={onWhatsNew}>
+            What's new
+          </Button>
+        </span>
       {/if}
     {:else}
       <p class="update-placeholder">No update information is available from the daemon.</p>
@@ -129,7 +131,7 @@
     margin-top: 0.35rem;
   }
 
-  .updates :global(.update-whats-new) {
+  .whats-new-well {
     align-self: flex-start;
     margin-top: 0.35rem;
   }

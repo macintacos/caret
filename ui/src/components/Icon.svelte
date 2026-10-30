@@ -12,6 +12,7 @@
   import chevronDown from "@/icons/chevron-down.svg?raw";
   import chevronRight from "@/icons/chevron-right.svg?raw";
   import chevronUp from "@/icons/chevron-up.svg?raw";
+  import circleDashed from "@/icons/circle-dashed.svg?raw";
   import circleQuestionMark from "@/icons/circle-question-mark.svg?raw";
   import command from "@/icons/command.svg?raw";
   import copy from "@/icons/copy.svg?raw";
@@ -32,6 +33,7 @@
   import monitor from "@/icons/monitor.svg?raw";
   import moon from "@/icons/moon.svg?raw";
   import panelLeft from "@/icons/panel-left.svg?raw";
+  import pencilLine from "@/icons/pencil-line.svg?raw";
   import refreshCw from "@/icons/refresh-cw.svg?raw";
   import search from "@/icons/search.svg?raw";
   import settings from "@/icons/settings.svg?raw";
@@ -53,6 +55,7 @@
     "chevron-down": chevronDown,
     "chevron-right": chevronRight,
     "chevron-up": chevronUp,
+    "circle-dashed": circleDashed,
     "circle-question-mark": circleQuestionMark,
     command,
     copy,
@@ -73,6 +76,7 @@
     monitor,
     moon,
     "panel-left": panelLeft,
+    "pencil-line": pencilLine,
     "refresh-cw": refreshCw,
     search,
     settings,

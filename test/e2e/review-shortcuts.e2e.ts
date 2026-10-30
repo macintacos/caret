@@ -94,6 +94,27 @@ test("r opens the request-changes dialog", async ({ daemon, page }) => {
   await expect(dialog).toBeVisible();
 });
 
+test("r plays its control's press as it opens the dialog", async ({ daemon, page }) => {
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+  await loadPlan(page);
+
+  // Recorded by an observer rather than polled: the press lasts one hold, shorter than a
+  // loaded host's polling interval.
+  const control = page.getByRole("button", { name: "Request changes" });
+  await control.evaluate((el) => {
+    const record = window as unknown as { pressed?: boolean };
+    new MutationObserver(() => {
+      if (el.hasAttribute("data-key-pressed")) record.pressed = true;
+    }).observe(el, { attributes: true, attributeFilter: ["data-key-pressed"] });
+  });
+  await page.keyboard.press("r");
+  await expect(page.getByRole("dialog", { name: "Send the plan back for revision" })).toBeVisible();
+  const pressed = await page.evaluate(() => (window as unknown as { pressed?: boolean }).pressed);
+  expect(pressed).toBe(true);
+  await expect(control).not.toHaveAttribute("data-key-pressed");
+});
+
 test("shift+R opens the reject guard and Escape dismisses it", async ({ daemon, page }) => {
   await daemon.seed({ plan: PLAN });
   await page.goto("/");

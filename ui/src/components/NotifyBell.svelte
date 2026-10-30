@@ -111,8 +111,8 @@
     color: var(--attention);
   }
   /* Filled status dot pinned to the bell's top-right for the decided states
-     (granted → --ok, denied → --danger). A paper ring lifts it off the bell
-     strokes, matching the undecided overlay. Its fill comes from tone-{dot} on
+     (granted → --ok, denied → --danger). A ring in the cap's face lifts it off
+     the bell strokes, matching the undecided overlay. Its fill comes from tone-{dot} on
      this element (background: currentColor), independent of the neutral bell. */
   .dot {
     position: absolute;
@@ -122,10 +122,10 @@
     height: 7px;
     border-radius: 50%;
     background: currentColor;
-    box-shadow: 0 0 0 1.5px var(--paper);
+    box-shadow: 0 0 0 1.5px var(--cap-face);
   }
-  /* Small glyph pinned to the bell's top-right. A paper-toned ring lifts it off
-     the bell strokes so the two icons stay legible; the overlay is decorative
+  /* Small glyph pinned to the bell's top-right. A ring in the cap's face lifts it
+     off the bell strokes so the two icons stay legible; the overlay is decorative
      (Icon.svelte renders it aria-hidden when no label is given). */
   .overlay {
     position: absolute;
@@ -133,7 +133,7 @@
     right: -4px;
     display: inline-flex;
     border-radius: 50%;
-    background: var(--paper);
-    box-shadow: 0 0 0 1.5px var(--paper);
+    background: var(--cap-face);
+    box-shadow: 0 0 0 1.5px var(--cap-face);
   }
 </style>

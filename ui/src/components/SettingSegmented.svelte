@@ -58,13 +58,12 @@
 </div>
 
 <style>
-  /* The track: a hairline-bounded group, transparent at rest, so the segments
-     read as one control without adding a second surface to the pane. */
+  /* The track is one well (styles/atoms.css); the chosen segment is the only cap in
+     it. */
   .segmented :global([data-slot="toggle-group"]) {
     gap: 2px;
-    padding: 2px;
-    border-radius: var(--radius);
-    box-shadow: inset 0 0 0 1px var(--rule);
+    padding: var(--well-pad);
+    border-radius: calc(var(--radius) + var(--well-pad));
   }
   /* A segment: icon + label, quiet ink-soft at rest. Height matches the
      SettingSelect trigger beside it in the same pane, so the rows keep one rhythm. */
@@ -74,24 +73,21 @@
     gap: 0.35rem;
     height: 1.85rem;
     padding: 0 0.6rem;
-    border-radius: calc(var(--radius) - 1px);
+    border-radius: var(--radius);
     font-size: var(--text-sm);
     color: var(--ink-soft);
-    background: transparent;
     transition:
       background-color var(--dur-state) var(--ease-out),
       color var(--dur-state) var(--ease-out);
   }
-  /* Hover on an unpressed segment takes the topbar's chip tint — the same
-     neutral hover every other control in the modal uses. */
+  /* Hover on an unpressed segment is a bare ink wash over the well floor. */
   .segmented :global([data-slot="toggle-group-item"][data-state="off"]:hover) {
-    background: var(--chip);
+    background: var(--ink-wash);
     color: var(--ink);
   }
-  /* The pressed segment is the lifted chip: a solid neutral fill and full ink,
-     so which mode is on reads at a glance without opening anything. */
+  /* The chosen segment is the cap, in full ink, so which mode is on reads at a
+     glance without opening anything. */
   .segmented :global([data-slot="toggle-group-item"][data-state="on"]) {
-    background: var(--chip-hover);
     color: var(--ink);
     font-weight: 600;
   }

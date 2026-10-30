@@ -2372,19 +2372,21 @@
   <!-- The source / preview switch. Outside any branch on planView, so it keeps
        focus across a flip. -->
   {#if !showDiff}
-    <Button
-      variant="secondary"
-      size="sm"
-      class="preview-toggle float-chip"
-      aria-pressed={planView === "preview"}
-      aria-keyshortcuts={ariaKeyshortcutsFor("actions.togglePreview")}
-      onclick={togglePlanView}
-    >
-      Preview
-      {#if showShortcutHints}
-        <Kbd class="kbd-sm" aria-hidden="true">p</Kbd>
-      {/if}
-    </Button>
+    <span class="tray">
+      <Button
+        variant="secondary"
+        size="sm"
+        class="preview-toggle float-chip"
+        aria-pressed={planView === "preview"}
+        aria-keyshortcuts={ariaKeyshortcutsFor("actions.togglePreview")}
+        onclick={togglePlanView}
+      >
+        Preview
+        {#if showShortcutHints}
+          <Kbd class="kbd-sm" aria-hidden="true">p</Kbd>
+        {/if}
+      </Button>
+    </span>
   {/if}
   <!-- Heading breadcrumbs (EXC-946): where in the plan the reviewer is, and the
        menus to move sideways or deeper — the drill-down surface beside the ToC's
@@ -2858,9 +2860,9 @@
     opacity: 0;
     pointer-events: none;
   }
-  /* A view option, not a selection — neutral, like the soft-wrap toggle. */
+  /* A view option, not a selection — neutral, like the soft-wrap toggle: the cap stays
+     latched down while the preview shows. */
   .control-row :global(button.preview-toggle[aria-pressed="true"]:not(:disabled)) {
-    background: var(--chip-hover);
     color: var(--ink);
   }
 
@@ -2873,7 +2875,8 @@
     display: flex;
     align-items: center;
     gap: 0.85rem;
-    padding: 0.5rem var(--bar-inset);
+    /* Trimmed by the wells' bezel, so the bar keeps its height. */
+    padding: calc(0.5rem - var(--well-pad)) var(--bar-inset);
     border-bottom: 1px solid var(--rule);
     background: var(--paper-raised);
     /* The shared control height every child in the row sizes to. */

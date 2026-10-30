@@ -922,16 +922,16 @@ test("a comment inside a code card is never wider than the card, and starts at i
 });
 
 // EXC-1145: the two cards a rendered plan puts in front of a reader — the table's
-// (EXC-1136) and the fenced block's — must float at the same height, or the page reads as
-// two elevation languages rather than as one family. The block has TWO paint paths to the
+// (EXC-1136) and the fenced block's — must sit at the same depth, or the page reads as
+// two depth languages rather than as one family. The block has TWO paint paths to the
 // table's one: an overflowing block is a single [data-code-card] box that takes the shadow
 // the way the table card does, while a FITTING block gets no card element at all and every
-// row carries the lift itself. Only an engine can say those two produce the same picture,
+// row carries its piece of the recess. Only an engine can say those two produce the same picture,
 // and only an engine resolves light-dark() at all — so this plan carries a table, a fitting
 // fence and an overflowing fence together, and the probe runs under both schemes.
 //
 // The sheet's own declarations are pinned in coreStyles.test.ts; what is claimed here is
-// that they reach the screen as one elevation.
+// that they reach the screen as one depth.
 const CARD_FAMILY_PLAN = `# Card family
 
 | Component | Status |
@@ -957,11 +957,11 @@ Closing prose below both blocks.
 `;
 
 // The three surfaces, read from the live cascade. The two cards are boxes, so they are read
-// whole; a fitting block is rows, so its fill and lift come off an INTERIOR row and its
+// whole; a fitting block is rows, so its fill and recess come off an INTERIOR row and its
 // rounding off the block's own first row. Interior matters: codeBlocks.ts tags every row of
 // a block data-code-line, fences included, and the first is also data-code-start — so the
 // unqualified selector would resolve to the same opening-fence row both reads want to tell
-// apart, and a regression that narrowed the lift to the two end rows (the ones already
+// apart, and a regression that narrowed the recess to the two end rows (the ones already
 // carrying bespoke rounding and padding, so the tempting place to scope it) would pass. The
 // direct-child combinator is what separates the fitting block from the overflowing one: the
 // latter's rows moved inside the card.
@@ -1049,13 +1049,17 @@ test("the table card and both of the code block's paint paths float as one famil
     const card = family.card as NonNullable<typeof family.card>;
     const fitting = family.fitting as NonNullable<typeof family.fitting>;
 
-    // One elevation across all three. Non-"none" first, so this cannot pass by all three
-    // having no shadow at all.
+    // One recess across all three. Non-"none" first, so this cannot pass by all three
+    // having no shadow at all. A fitting block has no card element, so its interior row
+    // carries only the recess's side edges, in the cards' own edge colour.
     expect(table.shadow, scheme).not.toBe("none");
     expect(card.shadow, scheme).toBe(table.shadow);
-    expect(fitting.shadow, scheme).toBe(table.shadow);
+    const edge = fitting.shadow.match(/^rgba?\([^)]*\)/)?.[0] ?? "";
+    expect(edge, scheme).not.toBe("");
+    expect(fitting.shadow, scheme).toContain(`${edge} 1px 0px 0px 0px inset`);
+    expect(card.shadow, scheme).toContain(`${edge} 0px 0px 0px 1px inset`);
 
-    // And the rest of the panel look the elevation joins: one fill, one radius.
+    // And the rest of the panel look the recess joins: one fill, one radius.
     expect(table.fill, scheme).not.toBe("rgba(0, 0, 0, 0)");
     expect(card.fill, scheme).toBe(table.fill);
     expect(fitting.fill, scheme).toBe(table.fill);
@@ -1066,10 +1070,10 @@ test("the table card and both of the code block's paint paths float as one famil
     // no corner — the same shape an interior table row has.
     expect(fitting.radius, scheme).toBe("0px");
 
-    // A hovered fitting row keeps the lift. Its band rule sets box-shadow to paint the
+    // A hovered fitting row keeps the recess. Its band rule sets box-shadow to paint the
     // gutter→content seam strip and outranks the base row rule, and box-shadow does not
-    // cascade additively — so without the lift restated there the row would silently drop
-    // to flat under the pointer. The resting value must still be a substring: same lift,
+    // cascade additively — so without the recess restated there the row would silently drop
+    // to flat under the pointer. The resting value must still be a substring: same recess,
     // with the seam strip in front of it.
     const y = await lineCenterY(page, family.fittingLine);
     await page.mouse.move(family.fittingCentreX, y);
@@ -1081,17 +1085,17 @@ test("the table card and both of the code block's paint paths float as one famil
     expect(hovered.shadow, scheme).toMatch(SEAM_STRIP);
 
     // Un-hover, and prove it took: the next iteration's resting read depends on it, and
-    // without this a stuck hover fails as an elevation mismatch instead of naming itself.
+    // without this a stuck hover fails as a depth mismatch instead of naming itself.
     await page.mouse.move(0, 0);
     await expect(page.locator(".diffview [data-hovered]")).toHaveCount(0);
 
     seen.push(table.shadow);
   }
 
-  // light-dark() actually resolved, in both directions. The lift's alpha splits by scheme
+  // The scheme actually reached the recess, in both directions. Its alpha splits by scheme
   // (the same black reads much heavier over a light ground), so a value that never moved
-  // would mean the function fell back rather than resolving — and the round trip back to
-  // dark proves the first reading was not a one-way stamp.
+  // would mean the scheme never got through — and the round trip back to dark proves the
+  // first reading was not a one-way stamp.
   expect(seen[1]).not.toBe(seen[0]);
   expect(seen[2]).toBe(seen[0]);
 });

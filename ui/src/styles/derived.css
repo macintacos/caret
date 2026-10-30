@@ -47,4 +47,26 @@
      view still mixes the same 6% in coreStyles.ts and diffview.css; change them
      together. */
   --code-panel: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
+
+  /* The tactile surfaces (their geometry is in styles/tokens.css), in their dark
+     recipe; light re-derives them in the block below. A well's floor, then a text
+     field's shallower one, then a rubber cap's face at rest, hovered and pressed. On
+     dark paper a well steps toward black, since a step toward ink would lift it, and a
+     cap's face lifts toward ink off its well. */
+  --well-floor: color-mix(in lab, var(--paper-raised), black 40%);
+  --field-floor: color-mix(in lab, var(--paper-raised), black 30%);
+  --cap-face: color-mix(in lab, var(--paper-raised), var(--ink) 12%);
+  --cap-face-hover: color-mix(in lab, var(--paper-raised), var(--ink) 17%);
+  --cap-face-down: color-mix(in lab, var(--paper-raised), var(--ink) 9%);
+}
+/* Light paper takes a different recipe, not the same one at another strength: a well
+   steps toward ink and a cap stays at the raised paper. Keyed on the scheme paintTheme
+   stamps rather than light-dark(), like the geometry in styles/tokens.css and for the
+   reason given there. */
+[data-theme="light"] {
+  --well-floor: color-mix(in lab, var(--paper-raised), var(--ink) 6%);
+  --field-floor: color-mix(in lab, var(--paper-raised), var(--ink) 3%);
+  --cap-face: color-mix(in lab, var(--paper-raised), var(--ink) 0%);
+  --cap-face-hover: color-mix(in lab, var(--paper-raised), var(--ink) 4%);
+  --cap-face-down: color-mix(in lab, var(--paper-raised), var(--ink) 6%);
 }

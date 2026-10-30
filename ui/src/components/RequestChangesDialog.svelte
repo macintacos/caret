@@ -198,7 +198,7 @@
                     </span>
                     <span class="clamp-line">{a.comment}</span>
                   </Collapsible.Trigger>
-                  <div class="inline-actions">
+                  <div class="inline-actions tray">
                     {#if isLineAnnotation(a)}
                       <Button
                         variant="secondary"
@@ -262,7 +262,7 @@
                     <span class="anchor metric">{rangeLabel(s.startLine, s.endLine)}</span>
                     <span class="clamp-line">{s.text}</span>
                   </Collapsible.Trigger>
-                  <div class="scratch-actions">
+                  <div class="scratch-actions tray">
                     <Button
                       variant="secondary"
                       size="sm"
@@ -300,11 +300,13 @@
   </div>
 
   {#snippet footer()}
-    <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
-    <Button onclick={submit} disabled={!preview} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
-      Send for revision
-      <SubmitCap />
-    </Button>
+    <span class="tray">
+      <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
+      <Button onclick={submit} disabled={!preview} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
+        Send for revision
+        <SubmitCap />
+      </Button>
+    </span>
   {/snippet}
 </Modal>
 
@@ -415,8 +417,6 @@
   .inline-actions,
   .scratch-actions {
     flex: none;
-    display: flex;
-    gap: 0.5rem;
   }
 
   /* Unsent-scratch section: the source view's Resume-marker idiom — dashed neutral
@@ -527,25 +527,13 @@
     color: var(--ink);
   }
 
-  /* On hover each takes its semantic tint — green for the keep, red for the drop —
-     so the consequence reads before the click; resting stays the quiet float-chip. */
-  :global(.save) {
-    transition:
-      color var(--dur-state) var(--ease-out),
-      border-color var(--dur-state) var(--ease-out);
+  /* On hover each cap's label takes its semantic tint — green for the keep, red for
+     the drop — so the consequence reads before the click; resting stays quiet. */
+  .scratch-actions :global(.save) {
+    --label-hover: var(--ok);
   }
-  :global(.save:hover) {
-    color: var(--ok);
-    border-color: var(--ok);
-  }
-  :global(.discard) {
-    transition:
-      color var(--dur-state) var(--ease-out),
-      border-color var(--dur-state) var(--ease-out);
-  }
-  :global(.discard:hover) {
-    color: var(--danger);
-    border-color: var(--danger);
+  :is(.inline-actions, .scratch-actions) :global(.discard) {
+    --label-hover: var(--danger);
   }
   /* Committed-feedback preview: a quiet sunk container behind a disclosure, showing
      exactly what the agent will receive after the draft/discard edits above. */

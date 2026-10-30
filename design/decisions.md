@@ -9,6 +9,38 @@ Open items first, then the log, newest first.
 
 Nothing open.
 
+## 2026-10-29: tactile refresh
+
+Chosen through side-by-side previews.
+
+- **Material:** "Rubber remote", chosen over a hairline-bordered flat step and over deep
+  keys with a visible side below the face. Controls sit in 3px wells. Caps are domed, lit
+  along the top and shaded toward the edges inside their own box, and sink 1px into the
+  well when pressed. Grain shows on button faces. Modals float on a deep layered shadow.
+  Plan chips split by what they do: passive ones are pressed into the line, clickable ones
+  stand 1px above it. Fenced code blocks and tables are recessed panels, in the preview
+  and the source view alike. One geometry serves every palette, with alphas keyed per
+  scheme over palette tokens, and no palette file changes.
+- **Submit rows:** smaller than the rest of the kit, with 28px caps and `--text-base`
+  labels where the other caps are 32px. The preview's submit caps were 30px and still took
+  up too much space, so the rows shipped two pixels smaller. A bright face on dark paper
+  reads larger than the same box on light, so dark draws the amber cap's edge darker and
+  its top highlight softer.
+- **Key presses:** a shortcut plays the press of the control it names for 110 ms, the same
+  press a click plays, and runs at once. Holding the action until the press had shown
+  would keep a modal's dimmed backdrop off the press, but then keys typed straight after a
+  shortcut, such as `b` then `/`, would land before the surface it opens.
+- **Toggles:** a toggle that is on stays latched down in its well.
+- **Key hints:** caret's own `[data-slot="kbd"]` keycap, unchanged. A keycap rides along
+  with its control.
+- **Comment cards:** no accent rail. A saved comment sits on the composer's sheet and
+  carries its state as a stamp in its header: a glyph and a word in the state's own hue.
+  Draft is `--attention`, Requested `--danger`, Accepted `--ok`, and Expired has no ink.
+  Every word and glyph clears 4.5:1 on its stamp in every bundled palette, which took a
+  deeper ink than the preview's. Chosen over a tinted header band and over sinking settled
+  cards into the page. Draft used to take the amber accent. It now takes `--attention`,
+  and the accent stays for the wordmark, the primary action, focus and the cursor.
+
 ## 2026-10-23: code caught up
 
 The open items from the direction entry below, closed the same day. The calls made along

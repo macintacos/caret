@@ -10,17 +10,49 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 
 ### Surfaces and emphasis
 
-- A surface sets itself apart by a shift in background, a `--rule` hairline, and a whisper
-  of depth: `--shadow-chip` under small chrome, `--shadow-card` under panels.
-- Floating chrome uses the neutral float chip (`.float-chip` in
-  `ui/src/styles/atoms.css`). New chrome matches the top bar's float chips rather than
-  inventing a surface.
+- Anything that can be pressed stands as a rubber cap, and anything that can't is stamped
+  into the surface. The kit lives in `ui/src/styles/atoms.css`.
+- Floating surfaces are smooth, never grained, and lit along their top edge: `--float-mid`
+  under menus, popovers, toasts and the composer, `--float-high` under modals, and
+  `--float-low` under a saved comment. Each adds a `--rule` ring at the use site.
+  `--shadow-chip` stays under small hints and overlays, such as the search box.
 - One emphasis per view. The amber accent is used verbatim, never lightened, and only for
   the wordmark, the primary action, focus, and the cursor. Everything else steps down
   through `--ink-soft` and `--ink-faint`.
 - Page structure is left-aligned.
 - Compose from shadcn-svelte first ([`shadcn-rules.md`](../doc/agents/shadcn-rules.md));
   icons are vendored ([`icon-rules.md`](../doc/agents/icon-rules.md)).
+
+### The tactile kit
+
+- **Wells.** A control sits in a `.tray`, a 3px well cut into the surface. A group of
+  controls shares one tray, and a lone control gets its own. A tray adds `--well-pad`
+  around its controls, so a bar holding trays trims its own padding by the same amount to
+  keep its height.
+- **Caps.** Every neutral control wears `.float-chip`, and the amber primary wears
+  `.cap-accent`, which the vendored Button's default variant applies. A destructive
+  confirm wears `.cap-danger`. A component tunes a cap through the custom properties the
+  cap rule in `atoms.css` declares (its face, label, rim, dome and pressed colours), never
+  with a `background` shorthand, which drops the grain.
+- **Press.** A cap sinks into its well in place: its face draws in 1px, and its shading
+  flips, dark at the top where it was lit. Nothing translates. A ghost control
+  (`.cap-ghost`) has no cap, so a press leaves a shallow inset shadow instead. A toggle
+  that is on (`aria-pressed`) stays pressed down.
+- **Submit rows.** A tray holding the amber or danger cap is smaller than the rest of the
+  kit: 28px caps with `--text-base` labels, where the other caps are 32px. Every cap in
+  that tray shrinks with it.
+- **Stamps.** Passive labels (`.stamp`, counts, the comment states) take a well's floor
+  and shade with no cap. Text fields (`.field-well`) take a shallower cut.
+- **Keycaps.** Key hints stay caret's own `[data-slot="kbd"]` keycap and ride along with
+  their control. They get no rubber, well or press of their own.
+- **Saved comments.** A comment card has no rail. Its state is a stamp in its header, a
+  glyph and a word in the state's own hue, at strengths `theme.test.ts` holds to 4.5:1 on
+  every palette.
+- **Schemes.** A value that differs between light and dark keys on the `data-theme`
+  attribute `paintTheme()` sets, never on `light-dark()`. Lightning CSS, which builds
+  caret's stylesheets, rewrites a `light-dark()` into variables that never see the inline
+  `color-scheme` set by `paintTheme()`, so it always resolves to the dark value.
+- Off the table: glass, heavy gradients, and glows.
 
 ### Type and shape
 
@@ -47,6 +79,11 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 ### Plan surface
 
 - Hover and drag highlights in the preview cover full visual lines, never part of a line.
+- Passive chips (bold, italic, code) are pressed into the line with `--chip-stamped`, and
+  clickable ones (links, file references) stand 1px above it with `--chip-raised`. Fenced
+  code blocks and tables are recessed with `--panel-recess`. The preview and the source
+  view share these values, and `coreStyles.test.ts` pins the preview's copies to the
+  source view's.
 - Rendering rules live in [`plan-render-rules.md`](../doc/agents/plan-render-rules.md).
 
 ### Keyboard
@@ -58,6 +95,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   preference hides them (`ui/src/lib/shortcutHintsPref.ts`). They are for desktop only: a
   touch device hides them in `ui/src/styles/atoms.css`.
 - An open modal silences the review keymap.
+- A shortcut runs at once and plays the press of the control that carries its
+  `aria-keyshortcuts` for `PRESS_HOLD_MS` (`ui/src/lib/shortcuts/dispatcher.ts`).
 
 ### Sound
 

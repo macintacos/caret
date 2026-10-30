@@ -359,6 +359,7 @@
     padding: var(--chip-pad-block) var(--chip-pad-inline);
     border-radius: var(--radius);
     background-color: var(--chip-code);
+    box-shadow: var(--chip-stamped);
     color: var(--markdown-code-color, var(--accent-bright));
     font-weight: var(--markdown-code-font-weight);
     font-style: var(--markdown-code-font-style);
@@ -380,6 +381,7 @@
     padding: var(--chip-pad-block) var(--chip-pad-inline);
     border-radius: var(--radius);
     background-color: var(--chip-link);
+    box-shadow: var(--chip-raised);
   }
   .plan-preview :global(:is(ul, ol)) {
     padding-inline-start: 2em;
@@ -484,6 +486,7 @@
     border-spacing: 0;
     border-radius: var(--radius);
     background-color: var(--code-panel);
+    box-shadow: var(--panel-recess);
     font-variant-numeric: tabular-nums;
     view-timeline: --table block;
   }
@@ -558,6 +561,7 @@
     padding-inline: 2ch 4.5rem;
     border-radius: var(--radius);
     background-color: var(--code-panel);
+    box-shadow: var(--panel-recess);
     font-family: var(--font-mono);
     font-size: 0.9em;
     line-height: var(--leading-relaxed);
@@ -579,6 +583,7 @@
     padding: var(--chip-pad-block) var(--chip-pad-inline);
     border-radius: var(--radius);
     background-color: var(--chip-ref);
+    box-shadow: var(--chip-raised);
   }
   .plan-preview :global([data-file-ref]::before) {
     content: "";
@@ -601,10 +606,15 @@
   .plan-preview :global([data-file-ref]:hover::before) {
     background-color: var(--ink);
   }
-  /* A backticked reference reads as one pill: the code chip takes the reference tint and
-     the hover, and the reference inside it gives up its own box. */
+  /* A raised chip sinks into the line when pressed. */
+  .plan-preview :global(:is(a, [data-file-ref], code:has(> [data-file-ref])):active) {
+    box-shadow: var(--chip-pressed);
+  }
+  /* A backticked reference reads as one pill: the code chip takes the reference tint, the
+     raise and the hover, and the reference inside it gives up its own box. */
   .plan-preview :global(code:has(> [data-file-ref])) {
     background-color: var(--chip-ref);
+    box-shadow: var(--chip-raised);
   }
   .plan-preview :global(code:has(> [data-file-ref]:hover)) {
     background-color: var(--accent-wash);
@@ -613,5 +623,6 @@
   .plan-preview :global(code > [data-file-ref]:hover) {
     padding: 0;
     background-color: transparent;
+    box-shadow: none;
   }
 </style>
