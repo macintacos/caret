@@ -976,7 +976,6 @@ async function cardFamily(page: Page) {
       "[data-content] > [data-line][data-code-line]:not([data-code-start]):not([data-code-end])",
     );
     return {
-      table: read(at("[data-content] > [data-table-card]")),
       card: read(at("[data-content] > [data-code-card]")),
       fitting: read(fittingRow),
       fittingRadius: read(at("[data-content] > [data-line][data-code-start]"))?.radius ?? null,
@@ -994,10 +993,7 @@ async function cardFamily(page: Page) {
   });
 }
 
-test("the table card and both of the code block's paint paths sit at one depth", async ({
-  daemon,
-  page,
-}) => {
+test("both of the code block's paint paths sit at one depth", async ({ daemon, page }) => {
   await daemon.seed({ plan: CARD_FAMILY_PLAN });
   await page.goto("/");
   await planSurface(page);
@@ -1042,18 +1038,15 @@ test("the table card and both of the code block's paint paths sit at one depth",
     await expect(codeRows).toHaveCount(fittingRowCount);
 
     const family = await cardFamily(page);
-    expect(family.table, "table card").not.toBeNull();
     expect(family.card, "code card").not.toBeNull();
     expect(family.fitting, "fitting code row").not.toBeNull();
-    const table = family.table as NonNullable<typeof family.table>;
     const card = family.card as NonNullable<typeof family.card>;
     const fitting = family.fitting as NonNullable<typeof family.fitting>;
 
-    // One recess across all three. Non-"none" first, so this cannot pass by all three
-    // having no shadow at all. A fitting block has no card element, so its interior row
-    // carries only the recess's side edges, in the cards' own edge colour.
-    expect(table.shadow, scheme).not.toBe("none");
-    expect(card.shadow, scheme).toBe(table.shadow);
+    // One recess across both. Non-"none" first, so this cannot pass by both having no
+    // shadow at all. A fitting block has no card element, so its interior row carries
+    // only the recess's side edges, in the card's own edge colour.
+    expect(card.shadow, scheme).not.toBe("none");
     const edge = fitting.shadow.match(/^rgba?\([^)]*\)/)?.[0] ?? "";
     expect(edge, scheme).not.toBe("");
     expect(fitting.shadow, scheme).toContain(`${edge} 1px 0px 0px 0px inset`);
@@ -1066,14 +1059,12 @@ test("the table card and both of the code block's paint paths sit at one depth",
     expect(family.fittingBottom, scheme).toMatch(/0px 1px 0px 0px(,|$)/);
 
     // And the rest of the panel look the recess joins: one fill, one radius.
-    expect(table.fill, scheme).not.toBe("rgba(0, 0, 0, 0)");
-    expect(card.fill, scheme).toBe(table.fill);
-    expect(fitting.fill, scheme).toBe(table.fill);
-    expect(Number.parseFloat(table.radius)).toBeGreaterThan(0);
-    expect(card.radius, scheme).toBe(table.radius);
-    expect(family.fittingRadius, scheme).toBe(table.radius);
+    expect(card.fill, scheme).not.toBe("rgba(0, 0, 0, 0)");
+    expect(fitting.fill, scheme).toBe(card.fill);
+    expect(Number.parseFloat(card.radius)).toBeGreaterThan(0);
+    expect(family.fittingRadius, scheme).toBe(card.radius);
     // The rounding hangs off the block's END rows only, so the interior row read above meets
-    // no corner — the same shape an interior table row has.
+    // no corner.
     expect(fitting.radius, scheme).toBe("0px");
 
     // A hovered fitting row keeps the recess. Its band rule sets box-shadow to paint the
@@ -1095,7 +1086,7 @@ test("the table card and both of the code block's paint paths sit at one depth",
     await page.mouse.move(0, 0);
     await expect(page.locator(".diffview [data-hovered]")).toHaveCount(0);
 
-    seen.push(table.shadow);
+    seen.push(card.shadow);
   }
 
   // The scheme actually reached the recess, in both directions. Its alpha splits by scheme

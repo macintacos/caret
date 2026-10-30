@@ -207,15 +207,22 @@ exist today.
   Links, reference chips and inline code wear the source view's chips, and a link whose
   label holds code, a reference or an image gives way to it, so a label mixing code and
   prose shows the code chip alone; `coreStyles.test.ts` pins each copy to the
-  `coreStyles.ts` rule it mirrors. A table wears the source view's table card: the code
-  panel's fill, no frame, `--table-rule` between columns and rows (pinned the same way),
-  an uppercase `--ink-soft` header that never wraps, and cells aligned on their first
-  line. The header row stays at the top of the plan's view while its rows pass under it:
-  `position: sticky` would pin it inside the table, which scrolls sideways, so a
-  scroll-driven animation on the table's view timeline slides it down instead, as far as
-  the view scrolls, and stops it on the last row at the `--pin-travel` `PlanPreview`
-  measures. Pinned, it takes the card's fill and a rule beneath; at rest it stays clear,
-  so a band over its own row shows through.
+  `coreStyles.ts` rule it mirrors. A table wears the source view's inlay, pinned the same
+  way:
+  - a raised bezel of `--body` with the header on its top rail;
+  - the body cells on `--table-floor`, in a pane sunk into the bezel;
+  - `--table-floor-rule` between rows and no rule between columns;
+  - an uppercase `--table-head-ink` header that never wraps;
+  - cells aligned on their first line.
+
+  The pane's edges are crisp per-cell box-shadows. Its soft shade under the rail is a
+  gradient on the first row's cells, because a blurred shadow per cell breaks at every
+  cell boundary. The header row stays at the top of the plan's view while its rows pass
+  under it. `position: sticky` would pin it inside the table, which scrolls sideways, so a
+  scroll-driven animation on the table's view timeline slides it down as far as the view
+  scrolls. It stops on the last row at the `--pin-travel` that `PlanPreview` measures.
+  Pinned, the header takes the bezel's fill. At rest it stays clear, so a band over its
+  own row shows through.
 - **Code blocks.** A code block renders `<pre><code>` with its escaped text and no class.
   A fence's info string resolves through `fenceGrammar` to a bundled grammar, carried as
   `RenderedPlan.codeLanguages` keyed by the code marker's line, and never as markup; an

@@ -176,9 +176,26 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - Hover and drag highlights in the preview cover full visual lines, never part of a line.
 - Passive chips (bold, italic, code) are pressed into the line with `--chip-stamped`, and
   clickable ones (links, file references, citations) stand 1px above it with
-  `--chip-raised`, in both views. Fenced code blocks and tables are recessed with
-  `--panel-recess`. The preview and the source view share these values, and
-  `coreStyles.test.ts` pins the preview's copies to the source view's.
+  `--chip-raised`, in both views. Fenced code blocks are recessed with `--panel-recess`.
+  The preview and the source view share these values, and `coreStyles.test.ts` pins the
+  preview's copies to the source view's.
+- **A table is an inlay**, built like the window, in both views:
+  - The table is a raised bezel of `--body` that floats on `--float-surface-low`. The
+    header rides its top rail, the strip of the bezel above the pane.
+  - The header labels are inked with `--table-head-ink` and pressed into the rail with
+    `--label-pressed`.
+  - The body rows sit in a pane sunk into the bezel, on `--table-floor`.
+  - A `--table-floor-rule` hairline splits the rows, and no rule divides the columns.
+  - In the source view, hovered and cursor rows band 7% toward `--ink` off `--table-floor`
+    (`ui/src/lib/diffview/coreStyles.ts`), because the diff library's light hover band is
+    the light floor's own colour.
+- **A table's pane is painted onto its rows**, because a border or a wrapping element
+  would shift the monospace grid that search, drag ranges, vim motions and comment anchors
+  resolve against.
+  - Every row draws crisp 1px edges, and only the first row takes the soft shade under the
+    rail. A blurred shadow on every row would break at each row boundary.
+  - The preview draws that shade as a gradient on the first row's cells, from
+    `--table-pane-sink-shade`, for the same reason at each cell boundary.
 - A chip has one depth. It sits on the chip's outermost member; a nested member, such as
   bold inside a link, carries it on its `::after` through `--nest-depth`, so the members
   show no seam (`ui/src/lib/diffview/coreStyles.ts`).

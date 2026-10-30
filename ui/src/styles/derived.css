@@ -57,6 +57,14 @@
      pane's sunk floor for the pane to read as set in. */
   --body: color-mix(in lab, var(--paper-raised), var(--ink) 7%);
 
+  /* A table is a bezel of --body with its rows in a pane sunk into it. The pane's floor
+     steps below the plan, and its row hairline is that floor stepped toward ink. The
+     header ink takes a step toward --ink because --ink-soft on --body misses AA on the
+     palest palettes. */
+  --table-floor: color-mix(in lab, var(--paper-sunk), black 25%);
+  --table-floor-rule: color-mix(in lab, var(--table-floor), var(--ink) 9%);
+  --table-head-ink: color-mix(in lab, var(--ink-soft), var(--ink) 10%);
+
   /* A settings section's rows sit in a group recessed into the modal's sheet. Dark steps
      it toward black, since a step toward ink would lift it off a sheet this dark. */
   --group-floor: color-mix(in lab, var(--paper-raised), black 28%);
@@ -97,6 +105,7 @@
   --neutral-face-hover: color-mix(in lab, var(--paper-raised), var(--ink) 4%);
   --neutral-face-down: color-mix(in lab, var(--paper-raised), var(--ink) 6%);
   --body: color-mix(in lab, var(--paper-sunk), var(--ink) 5%);
+  --table-floor: color-mix(in lab, var(--paper-sunk), var(--ink) 3%);
   /* The code panel would leave a row description under AA on the palest palettes. */
   --group-floor: color-mix(in lab, var(--paper-raised), var(--ink) 4%);
   --knob-face: var(--paper-raised);

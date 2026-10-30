@@ -29,8 +29,9 @@ it. User theme files follow
 | Syntax and markdown colours | the `syntax` and `markdown` blocks of each theme file |
 
 The derived tier, colours a palette implies rather than sets (`--chip`, `--chip-hover`,
-`--ink-wash`, `--attention-wash`, `--code-panel`, the window's `--body`, and the tactile
-kit's `--well-floor`, `--field-floor`, `--group-floor`, `--neutral-face` steps,
+`--ink-wash`, `--attention-wash`, `--code-panel`, the window's `--body`, a table's
+`--table-floor`, `--table-floor-rule` and `--table-head-ink`, and the tactile kit's
+`--well-floor`, `--field-floor`, `--group-floor`, `--neutral-face` steps,
 `--danger-face-hover`, the switch's `--knob-face`, `--knob-face-hover`,
 `--knob-face-down`, `--knob-edge` and `--switch-on`, the meter's `--meter-off`, and the
 `--float-surface-low`, `-mid` and `-high` composites), is mixed in
@@ -57,9 +58,12 @@ All in `ui/src/styles/tokens.css`:
   `--float-high`) and `--shadow-chip` for small hints, the submit tray's `--cap-submit-h`,
   the comment stamp's `--stamp-*` strengths, `--unsent-floor` (the share of `--attention`
   in an unsent comment's well, 16% dark and 8% light), the switch knob's `--knob-hi` and
-  `--knob-lo`, the plan pane's `--pane-recess`, `--pane-lip` and `--pane-shade`, and the
-  plan's `--chip-stamped`, `--chip-raised` and `--panel-recess`. `--shadow-card` still
-  comes from the palette.
+  `--knob-lo`, the plan pane's `--pane-recess`, `--pane-lip` and `--pane-shade`, a table's
+  pane (`--table-pane-edge` for its crisp 1px edges, `--table-pane-sink` for the shade
+  under the rail plus the pane's top edge, and `--table-pane-sink-shade` for that shade's
+  colour, which the preview's gradient spends too), the pressed-in label shadow
+  `--label-pressed`, and the plan's `--chip-stamped`, `--chip-raised` and
+  `--panel-recess`. `--shadow-card` still comes from the palette.
 - **Layout:** `--pane-gap` (6px), the inset around the plan pane, and `--status-bar-h`
   (2rem), the status bar's height, are in `ui/src/styles/layout.css`.
 

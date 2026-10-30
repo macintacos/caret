@@ -88,6 +88,25 @@ Chosen through side-by-side previews.
   - a neutral well holding a tinted "Unsent" pill, which read as another state stamp from
     the saved card's set;
   - a dashed bubble glyph, which reads as a marquee square at 14px.
+- **Tables:** "Inlay", chosen over two other tactile builds:
+  - Engraved: the recessed panel with every rule cut into it as a groove, and the header
+    pressed in;
+  - Keys: the table as a tray, with each row a rubber key in it that lifts on hover and
+    sinks when pressed.
+
+  The user preferred Inlay and gave no reason against the other two. A table is now built
+  like the window. A raised bezel of the window's body material carries the header on its
+  top rail, and the body rows sit in a pane sunk into the bezel. A faint hairline splits
+  the rows, and no rule divides the columns, which read from their alignment. This
+  replaces the recessed panel that tables took on 2026-10-29. An earlier round kept that
+  panel and varied only its lines: a header band, alternating row stripes, and an open
+  table with three rules. The user found those "very minor variations of the current
+  design", not tactile enough. The build differs from the mockup in two places:
+  - The header ink is `--ink-soft` stepped 10% toward `--ink`. Plain `--ink-soft` on the
+    bezel falls under the 4.5:1 text floor in Catppuccin Latte, Catppuccin Frappé and
+    Dawnfox.
+  - Hovered and cursor rows band 7% toward ink off the pane's floor. The source view's
+    light hover band is the same colour as the light floor, so it disappeared there.
 
 ## 2026-10-29: tactile refresh
 

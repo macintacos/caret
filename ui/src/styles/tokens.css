@@ -112,7 +112,11 @@
      the line's slack.
    - The window: a pane set into the body takes --pane-recess, the window-scale sibling
      of --panel-recess, with the body's lit edge below it as --pane-lip. --pane-shade is
-     the shade an edge casts on text scrolled under it. */
+     the shade an edge casts on text scrolled under it.
+   - Tables: a table's pane takes --pane-recess's alphas as crisp 1px edges plus one sink
+     under the rail, whose negative spread keeps it off the sides. The preview draws that
+     sink's --table-pane-sink-shade as a gradient instead. Its header labels are
+     pressed into the rail with --label-pressed. */
 :root,
 [data-theme="dark"] {
   --well-shade:
@@ -183,6 +187,12 @@
     inset 0 0 0 1px rgb(0 0 0 / 0.8);
   --pane-lip: 0 1px 0 rgb(255 255 255 / 0.1);
   --pane-shade: rgb(0 0 0 / 0.7);
+  --table-pane-edge: rgb(0 0 0 / 0.8);
+  --table-pane-sink-shade: rgb(0 0 0 / 0.6);
+  --table-pane-sink:
+    inset 0 3px 3px -2px var(--table-pane-sink-shade),
+    inset 0 1px 0 var(--table-pane-edge);
+  --label-pressed: 0 -1px 0 rgb(0 0 0 / 0.7);
 }
 [data-theme="light"] {
   --well-shade:
@@ -248,4 +258,10 @@
     inset 0 0 0 1px rgb(0 0 0 / 0.08);
   --pane-lip: 0 1px 0 rgb(255 255 255 / 0.8);
   --pane-shade: rgb(0 0 0 / 0.1);
+  --table-pane-edge: rgb(0 0 0 / 0.08);
+  --table-pane-sink-shade: rgb(0 0 0 / 0.07);
+  --table-pane-sink:
+    inset 0 2px 2px -1px var(--table-pane-sink-shade),
+    inset 0 1px 0 var(--table-pane-edge);
+  --label-pressed: 0 1px 0 rgb(255 255 255 / 0.9);
 }

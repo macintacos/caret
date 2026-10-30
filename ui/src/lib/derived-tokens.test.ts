@@ -77,6 +77,9 @@ describe("the derived-token tier", () => {
       "--neutral-face-hover",
       "--neutral-face-latched",
       "--switch-on",
+      "--table-floor",
+      "--table-floor-rule",
+      "--table-head-ink",
       "--well-floor",
     ]);
   });

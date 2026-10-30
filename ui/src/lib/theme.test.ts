@@ -108,20 +108,6 @@ function banded(bg: string, ink: string, pct: number): string {
  * and the widest band, which is the darkest ground any decoration sits on. */
 const ROW_BANDS = [0, 0.02, 0.08] as const;
 
-/** The table card's own fill (EXC-1136), quoted from the code card:
- * `color-mix(in lab, var(--paper-sunk), var(--ink) 6%)`. A table's marks are drawn on
- * THIS rather than on the bare surface, so it joins the grounds they are measured over. */
-const TABLE_CARD_FILL = 0.06;
-
-/** The grounds a table's rules are drawn on — NOT the row bands verbatim. A carded table
- * never sits on bare --paper-sunk: an unbanded row is cleared to transparent and shows
- * the card's own fill, and a banded one paints its band in place of it. So the bare
- * surface drops out and the fill takes its place, leaving the resting panel and the two
- * banded cases a row can be in. A 0 here would measure a ground that only exists outside
- * the card, and the LIGHTEST one — quietly setting the top of the spread the rules case
- * checks. */
-const TABLE_GROUNDS = [0.02, TABLE_CARD_FILL, 0.08] as const;
-
 /** The declarations a scheme resolves across the flat sheet, in cascade order: the
  * derived tier's `:root, [data-theme]` block, which carries dark's recipe, and the
  * blocks keyed on the scheme's own `[data-theme="…"]`. */
@@ -628,81 +614,38 @@ describe("every theme", () => {
     );
   });
 
-  // The table's rules — the column dividers, the delimiter rule and the row hairlines —
-  // are one mark declared once as --table-rule (diffview/coreStyles.ts).
-  //
-  // THIS CASE DELIBERATELY DOES NOT MEASURE 3:1, AND THAT IS THE POINT OF READING IT.
-  // The rules are a design call (EXC-1136): a low-contrast style, closer to the surface
-  // than to the ink, consistently on every palette. 1.4.11's non-text floor does not bind
-  // them the way it binds a replacement decoration, because a table's columns are ALSO
-  // carried by the layout — the cells are max-content tracks with the source's own spacing
-  // between them — so a faint divider degrades the reading rather than removing it. A
-  // table with no vertical rules at all is a normal, legible rendering; one with
-  // unreadable TEXT is not, which is why the header case below still measures a real
-  // floor.
-  //
-  // So what is pinned here is the style itself, in two halves:
-  //
-  //   PRESENT — every palette stays clear of its ground on every one of them. The floor is
-  //   deliberately low: at a 12% step the mark IS at the edge of perceptibility on the
-  //   lightest palettes (catppuccin-latte reaches ~1.05 on a hovered row, which the epic
-  //   calls a line in the DOM and not on the screen), and that edge is the requested look
-  //   rather than a defect. What this half still catches is the failure that would be a
-  //   bug — a step that resolves to the same colour as the ground it is drawn on, which is
-  //   what a palette bump or a changed card fill could silently produce.
-  //
-  //   CONSISTENT — the spread across palettes stays inside a narrow band, which is the
-  //   property the design call actually asked for. Softening --ink-soft by a fixed amount
-  //   would land in two different places on a light and a dark palette and need a
-  //   light-dark() with two numbers; stating the colour the other way round — --paper-sunk
-  //   stepped 12% toward --ink — makes one number land in the same place everywhere,
-  //   because the operands flip with the scheme. Reintroduce a per-scheme arm and the
-  //   spread widens and this reds.
-  //
-  // The heaviest ground is the widest ROW BAND, not the card's resting fill: a rule inside
-  // a table still has to be findable on a hovered, cursored or selected row.
-  test("keeps a table's rules a faint, evenly-spread step off the surface", () => {
-    const STEP = 0.12;
-    const seen: number[] = [];
+  // A table's body rows sit in a pane sunk into a bezel of the window's --body, and the
+  // header labels ride the bezel's top rail. Both are text, so both hold AA.
+  test("keeps table body text at AA on the sunk pane's floor", () => {
     for (const [id, theme] of themeEntries()) {
-      const sunk = theme.tokens["--paper-sunk"];
-      const ink = theme.tokens["--ink"];
-      // color-mix(in lab, var(--paper-sunk), var(--ink) 12%) — banded() is that same mix.
-      const painted = banded(sunk, ink, STEP);
-      for (const pct of TABLE_GROUNDS) {
-        const ratio = contrast(painted, banded(sunk, ink, pct));
-        seen.push(ratio);
-        expect(
-          ratio,
-          `${id} table rule stepped ${STEP * 100}% on --paper-sunk banded ${pct * 100}%`,
-        ).toBeGreaterThan(1.03);
-      }
+      const floor = derived("--table-floor", theme);
+      expect(
+        contrast(theme.tokens["--ink"], floor),
+        `${id} table --ink on --table-floor`,
+      ).toBeGreaterThanOrEqual(4.5);
     }
-    // One number, one look. A palette landing well outside the others means the mechanism
-    // stopped being scheme-symmetric, whatever each individual ratio says.
-    expect(Math.max(...seen)).toBeLessThan(1.45);
   });
 
-  // The table header is plain --ink-soft on the card's own fill (EXC-1136). The ink is
-  // spent neat — only the GROUND is unusual — which is what separates this from the rules
-  // case above.
-  //
-  // THE FLOOR HERE IS 3:1 AND THAT IS A DELIBERATE, NARROW EXEMPTION. A header cell is
-  // text, so 1.4.3's 4.5:1 would ordinarily bind, and the ink-ramp case further up holds
-  // --ink-soft to exactly that on the two CHROME surfaces. On this ground it does not clear
-  // it everywhere: catppuccin-latte binds at 4.34, 0.16 short. 3:1 ships on the reasoning
-  // that the row is uppercase, short, and sits directly above body copy at full --ink.
-  // Soften the ink at all and latte drops below 4 — measure before touching it.
-  // doc/agents/svelte-rules.md § CSS-token discipline carries the range and the rest of
-  // the argument.
-  test("keeps a table header above the non-text floor on the card's own fill", () => {
+  test("keeps a table header at AA on the bezel's rail", () => {
     for (const [id, theme] of themeEntries()) {
-      const ground = banded(theme.tokens["--paper-sunk"], theme.tokens["--ink"], TABLE_CARD_FILL);
       expect(
-        contrast(theme.tokens["--ink-soft"], ground),
-        `${id} table header --ink-soft on --paper-sunk banded ${TABLE_CARD_FILL * 100}%`,
-      ).toBeGreaterThanOrEqual(3);
+        contrast(derived("--table-head-ink", theme), derived("--body", theme)),
+        `${id} table header --table-head-ink on --body`,
+      ).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  // The hairline between body rows is a deliberately faint step off the pane floor: the
+  // rows also read from their own spacing. What is pinned is that it stays visible and
+  // lands at about the same weight on every palette.
+  test("keeps a table's row hairline a faint, evenly-spread step off the pane floor", () => {
+    const seen: number[] = [];
+    for (const [id, theme] of themeEntries()) {
+      const ratio = contrast(derived("--table-floor-rule", theme), derived("--table-floor", theme));
+      seen.push(ratio);
+      expect(ratio, `${id} --table-floor-rule on --table-floor`).toBeGreaterThan(1.03);
+    }
+    expect(Math.max(...seen)).toBeLessThan(1.45);
   });
 
   test("keeps every comment stamp's word at AA on its stamp", () => {
