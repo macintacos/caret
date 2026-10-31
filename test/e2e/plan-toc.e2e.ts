@@ -73,7 +73,7 @@ const filler = (label: string) =>
 // stored with the second at level 2 and quietly change the tree these specs assert.
 
 // Twenty-four sections under one top-level heading — enough rows that the popup's list
-// overflows its 36rem max-height, which is what makes "the current heading is scrolled
+// overflows its 25rem max-height, which is what makes "the current heading is scrolled
 // into view on open" a claim about scrolling rather than about a list that fits whole.
 // The count tracks that height and nothing else: EXC-1102 doubled the panel from 18rem,
 // and a fixture left at twelve sections then fit whole, turning the out-of-view half of
@@ -308,10 +308,10 @@ async function openTocAt(page: Page, daemon: Daemon, plan: string, heading: stri
   await openToc(page);
 }
 
-/** The indent's origin in px — `0.5rem` at the default root size, the offset every
- * row's padding and every guide band is measured from. Named because two specs below
- * assert against it and a bare `8` reads as a magic number in both. */
-const INDENT_ORIGIN_PX = 8;
+/** How far each guide hangs into its ancestor's key, in px — `--toc-guide-x`, `0.55rem` at
+ * the default root size. Named because two specs below assert against it and a bare
+ * `8.8` reads as a magic number in both. */
+const GUIDE_X_PX = 8.8;
 
 /** Each row's indent guides, measured off the ::before that paints them (EXC-1106).
  *
@@ -362,7 +362,7 @@ test("opens on the heading being read, scrolled into view", async ({ daemon, pag
   // end, which is not enough room to bring the FINAL heading up to the reading zone, so
   // a jump there clamps short and the tracked heading stays on the section above it.
   // Whiskey is still far enough down that a popup opening at the top would leave its row
-  // below the list's 36rem fold.
+  // below the list's 25rem fold.
   await openTocAt(page, daemon, TALL_PLAN, "Whiskey");
   const current = options(page).and(page.locator('[aria-current="location"]'));
   await expect(current).toHaveText("Whiskey");
@@ -871,14 +871,15 @@ test("the indent guides sit on the indent's own grid and join across rows", asyn
   expect(bands).toHaveLength(6);
 
   for (const [index, band] of bands.entries()) {
-    // The band ends exactly where the text begins, so its rightmost hairline sits one
-    // indent step left of the first glyph and every column lines up with the level that
-    // opens it. This is what would catch a guide drawn on a grid of its own.
-    expect(band.left + band.width).toBeCloseTo(band.padding, 2);
-    // This plan opens at `#`, so every band starts at the indent's origin and a row's
+    // The band ends one guide offset past where the row's key begins, so its rightmost
+    // hairline hangs into the parent's key one indent step to the left and every column
+    // lines up with the level that opens it. This is what would catch a guide drawn on a
+    // grid of its own.
+    expect(band.left + band.width).toBeCloseTo(band.padding + GUIDE_X_PX, 1);
+    // This plan opens at `#`, so every band starts at the first guide's offset and a row's
     // guide count is exactly its depth. The `##`-rooted spec below is what makes the
     // --toc-depth term in that offset falsifiable; here it contributes nothing.
-    expect(band.left).toBeCloseTo(INDENT_ORIGIN_PX, 2);
+    expect(band.left).toBeCloseTo(GUIDE_X_PX, 1);
     // Full row height, and rows that meet — so two same-depth neighbours join instead of
     // striping at the padding-block each row carries.
     expect(band.height).toBeCloseTo(band.rowHeight, 2);
@@ -908,12 +909,14 @@ test("a plan that opens at `##` draws no guide for the root it does not have", a
   expect(await rowDepths(page)).toEqual(["1", "2", "1"]);
 
   const bands = await measureGuides(page);
-  // Every band starts ONE step in from the indent's origin — the column `## Setup`
-  // occupies — rather than at the origin itself.
-  expect(bands.map((b) => Math.round(b.left))).toEqual([20, 20, 20]);
+  // Every band starts ONE step in from the first guide's offset — the column `## Setup`
+  // occupies — rather than at the offset itself.
+  expect(bands.map((b) => Math.round(b.left))).toEqual([25, 25, 25]);
   // And the plan's own top level still draws nothing: it is a root, not a nested row.
-  expect(bands.map((b) => Math.round(b.width))).toEqual([0, 12, 0]);
-  for (const band of bands) expect(band.left + band.width).toBeCloseTo(band.padding, 2);
+  expect(bands.map((b) => Math.round(b.width))).toEqual([0, 16, 0]);
+  for (const band of bands) {
+    expect(band.left + band.width).toBeCloseTo(band.padding + GUIDE_X_PX, 1);
+  }
 });
 
 test("filtering drops the guides, headers and all", async ({ daemon, page }) => {
@@ -1270,4 +1273,98 @@ test("reduced motion collapses the surface and leaves it fully usable", async ({
   await page.keyboard.press("Enter");
   await expect(panel(page)).toHaveCount(0);
   await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("rollout-notes");
+});
+
+// The peek beside the outline. Hover moving the selection is bits-ui's pointer selection
+// answering a real pointermove, the keyboard ring is a computed outline that only a real
+// cascade resolves, an option's description is something only the role engine computes,
+// and the narrow stack is layout. The peek's content for a given selection is the unit
+// suite's (PlanToc.test.ts).
+
+const peek = (page: Page) => panel(page).locator(".toc-peek");
+const peekTitle = (page: Page) => peek(page).locator(".toc-peek-title");
+
+/** The selected row's key — the part of the row that wears the ring. */
+const walkedKey = (page: Page) => walkedTo(page).locator(".toc-key");
+
+/** What `--accent` resolves to in this page, through the same serialisation an outline
+ * colour gets. */
+const accent = (page: Page) =>
+  page.evaluate(() => {
+    const probe = document.createElement("div");
+    probe.style.color = "var(--accent)";
+    document.body.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+
+test("hovering a row selects it, and the peek follows the pointer", async ({ daemon, page }) => {
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
+  await expect(peekTitle(page)).toHaveText("Setup");
+
+  await options(page).filter({ hasText: "Rollout notes" }).hover();
+  await expect(walkedTo(page)).toHaveText("Rollout notes");
+  await expect(peekTitle(page)).toHaveText("Rollout notes");
+});
+
+test("the keyboard's ring shows only while keys drive the selection", async ({ daemon, page }) => {
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
+  const ring = () => walkedKey(page).evaluate((el) => getComputedStyle(el).outlineColor);
+
+  await options(page).filter({ hasText: "Rollout" }).first().hover();
+  await expect(walkedTo(page)).toHaveText("Rollout");
+  await expect.poll(ring).toBe("rgba(0, 0, 0, 0)");
+
+  await page.keyboard.press("ArrowDown");
+  await expect(walkedTo(page)).toHaveText("Rollout notes");
+  await expect.poll(ring).toBe(await accent(page));
+});
+
+test("the filter field shows focus without a ring", async ({ daemon, page }) => {
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
+  await expect(field(page)).toBeFocused();
+  // A ring is a shadow layer drawn OUTSIDE the field: not inset, with a positive spread.
+  // The field's own edges are all inset, and its lip is a 1px offset with no spread.
+  const rings = await panel(page)
+    .locator("[data-slot='input-group']")
+    .evaluate((el) =>
+      getComputedStyle(el)
+        .boxShadow.split(/,(?![^(]*\))/)
+        .filter((layer) => !layer.includes("inset") && /\s[1-9]\d*(\.\d+)?px$/.test(layer.trim())),
+    );
+  expect(rings).toEqual([]);
+});
+
+test("an option is named by its heading and described by its comments and change", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seedVersions(2, [
+    BRANCHED_PLAN.replace("Setup detail", "Setup note"),
+    BRANCHED_PLAN,
+  ]);
+  const plan = (await daemon.getReview(id)).body?.currentPlan ?? "";
+  const line = plan.split("\n").findIndex((l) => l.startsWith("Setup detail line 1")) + 1;
+  await daemon.putDraft(id, {
+    version: 2,
+    annotations: [{ id: "a1", startLine: line, endLine: line, comment: "Which hosts?" }],
+  });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+  await openToc(page);
+
+  const setup = panel(page).getByRole("option", { name: "Setup", exact: true });
+  await expect(setup).toHaveAccessibleDescription("1 comment, edited since v1");
+});
+
+test("a narrow window stacks the peek below the outline", async ({ daemon, page }) => {
+  await page.setViewportSize({ width: 560, height: 800 });
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
+
+  const list = await listbox(page).boundingBox();
+  const side = await peek(page).boundingBox();
+  const box = await panel(page).boundingBox();
+  expect(side?.y ?? 0).toBeGreaterThanOrEqual((list?.y ?? 0) + (list?.height ?? 0));
+  expect((box?.x ?? -1) >= 0 && (box?.x ?? 0) + (box?.width ?? 0) <= 560).toBe(true);
 });

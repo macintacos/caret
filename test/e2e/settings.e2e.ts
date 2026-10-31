@@ -183,6 +183,17 @@ function initGrantedNotification() {
   (window as { Notification: unknown }).Notification = StubNotification;
 }
 
+// The modal focuses its own panel on open, and after a key press that focus is
+// :focus-visible, which base.css would ring.
+test("Settings opened by its key draws no ring around the modal", async ({ daemon, page }) => {
+  await seedAndOpen(page, daemon);
+  await waitPastSafeModeGrace(page);
+  await page.keyboard.press(",");
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(dialog).toBeFocused();
+  await expect(dialog).toHaveCSS("outline-style", "none");
+});
+
 test("opens the Appearance pane with theme, hints, and the folded-in Diff view section", async ({
   daemon,
   page,

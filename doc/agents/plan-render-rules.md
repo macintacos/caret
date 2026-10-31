@@ -207,15 +207,38 @@ exist today.
   Links, reference chips and inline code wear the source view's chips, and a link whose
   label holds code, a reference or an image gives way to it, so a label mixing code and
   prose shows the code chip alone; `coreStyles.test.ts` pins each copy to the
-  `coreStyles.ts` rule it mirrors. A table wears the source view's table card: the code
-  panel's fill, no frame, `--table-rule` between columns and rows (pinned the same way),
-  an uppercase `--ink-soft` header that never wraps, and cells aligned on their first
-  line. The header row stays at the top of the plan's view while its rows pass under it:
-  `position: sticky` would pin it inside the table, which scrolls sideways, so a
-  scroll-driven animation on the table's view timeline slides it down instead, as far as
-  the view scrolls, and stops it on the last row at the `--pin-travel` `PlanPreview`
-  measures. Pinned, it takes the card's fill and a rule beneath; at rest it stays clear,
-  so a band over its own row shows through.
+  `coreStyles.ts` rule it mirrors. A table wears the source view's inlay, pinned the same
+  way:
+  - a raised bezel of `--body` with the header on its top rail;
+  - the body cells on `--table-floor`, in a pane sunk into the bezel;
+  - `--table-floor-rule` between rows and no rule between columns;
+  - an uppercase `--table-head-ink` header that never wraps;
+  - cells aligned on their first line.
+
+  The pane's edges are crisp per-cell box-shadows. Its soft shade under the rail is a
+  gradient on the first row's cells, because a blurred shadow per cell breaks at every
+  cell boundary. The header row stays at the top of the plan's view while its rows pass
+  under it. `position: sticky` would pin it inside the table, which scrolls sideways, so a
+  scroll-driven animation on the table's view timeline slides it down as far as the view
+  scrolls. It stops on the last row at the `--pin-travel` that `PlanPreview` measures.
+  Pinned, the header takes the bezel's fill. At rest it stays clear, so a band over its
+  own row shows through.
+
+  A code block's `pre` wears the source view's code card (`[data-code-card]`), pinned the
+  same way:
+  - the transparent border that draws the bezel;
+  - the bezel's `--radius-lg` corners;
+  - the backgrounds that fill the bezel and the pane;
+  - the pane's edges, with the ring and drop shadow outside the bezel;
+  - the scrollbar: its height, transparent track and thumb.
+
+  Change the card's `--caret-code-bar` and the preview's `12px` bar height together,
+  because `coreStyles.test.ts` compares them by value. The preview repeats the height as a
+  literal because the diff view declares `--caret-code-bar` in its shadow root, out of the
+  `pre`'s reach.
+
+  The `pre` is the block's scroll container, so that frame stays put while a wide block
+  scrolls. Its 4.5rem inline-end padding holds the copy and wrap tray off the code.
 - **Code blocks.** A code block renders `<pre><code>` with its escaped text and no class.
   A fence's info string resolves through `fenceGrammar` to a bundled grammar, carried as
   `RenderedPlan.codeLanguages` keyed by the code marker's line, and never as markup; an
@@ -370,7 +393,7 @@ highlight run only where the `commentThreads` row runs.
   splitting its text node there, moved out of each element that character opens, so a list
   item's gap opens between the items, never under the next one's bullet, and before the
   source-line markers leading it, so a code block's marker stays directly before its `pre`
-  for `previewCodeBlocks`, the code chrome and the panel's `[data-source-code] + pre`
+  for `previewCodeBlocks`, the code chrome and the bezel's `[data-source-code] + pre`
   rules. A gap in a table opens before the next table row, never between its cells. A
   block's last row's gap opens after all of its content. Gaps hold no text and splitting
   keeps the text in order, so the source map, search and the visual lines read past them,

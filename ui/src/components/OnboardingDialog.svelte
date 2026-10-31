@@ -59,7 +59,7 @@
 
   {#snippet footer()}
     <Button variant="ghost" onclick={dismiss}>Maybe later</Button>
-    <Button onclick={enable}>Enable notifications</Button>
+    <span class="tray"><Button onclick={enable}>Enable notifications</Button></span>
   {/snippet}
 </Modal>
 

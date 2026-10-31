@@ -34,6 +34,8 @@ const field = (page: Page) => page.locator("input[aria-label='Search plan']");
 // The pill's tabular "n / total" counter, parsed.
 async function counter(page: Page): Promise<{ current: number; total: number }> {
   const raw = (await page.locator(".search-count").textContent()) ?? "";
+  // A blank counter (no query) and "No matches" both count nothing.
+  if (!raw.includes("/")) return { current: 0, total: 0 };
   const [current, total] = raw.replace(/\s+/g, "").split("/").map(Number);
   return { current: current ?? 0, total: total ?? 0 };
 }
@@ -89,12 +91,12 @@ test("Enter commits: the cursor lands on a match and the pill persists as a HUD"
   await openPlanForKeys(page, daemon, PLAN);
   await commitWidgetSearch(page);
 
-  // The field is blurred so n/N fire globally, and read-only in the committed HUD so a
-  // click can't desync the counter (re-edit via /).
+  // The query is stamped and the field gone, so nothing in the sheet can take focus and
+  // swallow the bare n / N (re-edit via /).
   expect(((await cursor(page).textContent()) ?? "").toLowerCase()).toContain("widget");
   await expect(pill(page)).toBeVisible();
-  await expect(field(page)).not.toBeFocused();
-  await expect(field(page)).toHaveJSProperty("readOnly", true);
+  await expect(field(page)).toHaveCount(0);
+  await expect(page.locator(".search-stamp")).toHaveText(/\/\s*widget/);
 });
 
 test("n / N cycle matches, wrapping back to the start after a full loop", async ({
@@ -122,14 +124,12 @@ test("/ reopens the previous committed search, prefilled and selected", async ({
 }) => {
   await openPlanForKeys(page, daemon, PLAN);
   await commitWidgetSearch(page);
-  await expect(field(page)).not.toBeFocused();
 
   // The whole value comes back selected, so typing replaces it the way a browser find
   // does. Escaping without committing does NOT remember — see smartcase below.
   await page.keyboard.press("/");
   await expect(field(page)).toBeFocused();
   await expect(field(page)).toHaveValue("widget");
-  await expect(field(page)).toHaveJSProperty("readOnly", false);
   const selection = await field(page).evaluate((el: HTMLInputElement) => [
     el.selectionStart,
     el.selectionEnd,
@@ -148,10 +148,10 @@ test("n resumes a closed search from the cursor, reopening the pill as a HUD", a
   await dismissSearch(page);
 
   // With the pill closed, n resumes the remembered search from where the cursor sat.
-  // The pill returns as a HUD with the field NOT refocused, so bare keys keep flowing.
+  // The pill returns stamped, with no field to take focus, so bare keys keep flowing.
   await page.keyboard.press("n");
   await expect(pill(page)).toBeVisible();
-  await expect(field(page)).not.toBeFocused();
+  await expect(page.locator(".search-stamp")).toBeVisible();
   await expect(cursor(page)).toHaveCount(1);
   await expect(cursor(page)).not.toHaveAttribute("data-line", String(committed));
   await expect.poll(async () => (await highlightSizes(page)).current).toBe(1);
@@ -221,9 +221,9 @@ test("Esc dismisses from the field and from a committed search, clearing highlig
   await expect.poll(async () => (await highlightSizes(page)).current).toBe(1);
   await dismissSearch(page);
 
-  // From a committed search, field blurred.
+  // From a committed search, stamped.
   await commitWidgetSearch(page);
-  await expect(field(page)).not.toBeFocused();
+  await expect(page.locator(".search-stamp")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(pill(page)).toHaveCount(0);
 });

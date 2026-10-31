@@ -359,6 +359,7 @@
     padding: var(--chip-pad-block) var(--chip-pad-inline);
     border-radius: var(--radius);
     background-color: var(--chip-code);
+    box-shadow: var(--chip-stamped);
     color: var(--markdown-code-color, var(--accent-bright));
     font-weight: var(--markdown-code-font-weight);
     font-style: var(--markdown-code-font-style);
@@ -380,6 +381,7 @@
     padding: var(--chip-pad-block) var(--chip-pad-inline);
     border-radius: var(--radius);
     background-color: var(--chip-link);
+    box-shadow: var(--chip-raised);
   }
   .plan-preview :global(:is(ul, ol)) {
     padding-inline-start: 2em;
@@ -469,12 +471,11 @@
     background: var(--ink-soft);
   }
   /* display: block lets a wide table scroll without a wrapper element. The source view's
-     table card: the code panel's fill, no frame, and one faint rule between columns and
-     between rows, the header's included. Separate borders, since a collapsed one stays
-     behind a pinned header row as a see-through slit; no block-axis scroll, since that row
-     can overhang the bottom by a rounding pixel. */
+     inlay: a bezel of --body carries the header on its top rail and the body cells sit in
+     a pane sunk into it, inset by the bezel's padding. Separate borders, since a collapsed
+     one stays behind a pinned header row as a see-through slit; no block-axis scroll,
+     since that row can overhang the bottom by a rounding pixel. */
   .plan-preview :global(table) {
-    --table-rule: color-mix(in lab, var(--paper-sunk), var(--ink) 12%);
     display: block;
     width: max-content;
     max-width: 100%;
@@ -482,8 +483,10 @@
     overflow-y: hidden;
     border-collapse: separate;
     border-spacing: 0;
-    border-radius: var(--radius);
-    background-color: var(--code-panel);
+    padding: 0 0.25rem 0.25rem;
+    border-radius: var(--radius-lg);
+    background-color: var(--body);
+    box-shadow: var(--float-surface-low);
     font-variant-numeric: tabular-nums;
     view-timeline: --table block;
   }
@@ -500,7 +503,7 @@
     animation-timeline: --table;
     animation-range: exit-crossing 0px exit-crossing var(--pin-travel, 0px);
   }
-  /* Filled and ruled from its first pixel pinned; clear at rest, so a band over the
+  /* Filled with the bezel from its first pixel pinned; clear at rest, so a band over the
      header's own row shows through. The fill reaches a pixel above the row, over the sliver
      a fractional view top leaves when the row's layer snaps to the pixel grid. */
   .plan-preview :global(th) {
@@ -516,10 +519,8 @@
   }
   @keyframes pin-fill {
     to {
-      background-color: var(--code-panel);
-      box-shadow:
-        inset 0 -1px var(--table-rule),
-        0 -1px var(--code-panel);
+      background-color: var(--body);
+      box-shadow: 0 -1px var(--body);
     }
   }
   /* A row reads along its cells' first lines, as a source row does. */
@@ -527,21 +528,56 @@
     padding: 0.375em 0.8em;
     vertical-align: baseline;
   }
-  .plan-preview :global(:is(th, td) + :is(th, td)) {
-    border-inline-start: 1px solid var(--table-rule);
-  }
+  /* The pane's edges, composed per cell so each lands only on the sides facing out. The
+     first row's sink is a gradient rather than the source view's blurred shadow: a blur
+     fades at every cell's sides and notches the shade at each column boundary. */
   .plan-preview :global(td) {
-    border-block-start: 1px solid var(--table-rule);
+    background-color: var(--table-floor);
+    box-shadow:
+      var(--pane-top-edge, 0 0 transparent),
+      var(--pane-bottom-edge, 0 0 transparent),
+      var(--pane-start-edge, 0 0 transparent),
+      var(--pane-end-edge, 0 0 transparent);
   }
-  /* The source view's header cap: uppercase in --ink-soft. A label never wraps, so a
-     column is at least as wide as its header. */
+  .plan-preview :global(tbody > tr:first-child > td) {
+    --pane-top-edge: inset 0 1px var(--table-pane-edge);
+    background-image: linear-gradient(var(--table-pane-sink-shade), transparent 4px);
+  }
+  .plan-preview :global(tbody > tr:last-child > td) {
+    --pane-bottom-edge: inset 0 -1px var(--table-pane-edge);
+  }
+  .plan-preview :global(td:first-child) {
+    --pane-start-edge: inset 1px 0 var(--table-pane-edge);
+  }
+  .plan-preview :global(td:last-child) {
+    --pane-end-edge: inset -1px 0 var(--table-pane-edge);
+  }
+  .plan-preview :global(tbody > tr:first-child > td:first-child) {
+    border-start-start-radius: var(--radius);
+  }
+  .plan-preview :global(tbody > tr:first-child > td:last-child) {
+    border-start-end-radius: var(--radius);
+  }
+  .plan-preview :global(tbody > tr:last-child > td:first-child) {
+    border-end-start-radius: var(--radius);
+  }
+  .plan-preview :global(tbody > tr:last-child > td:last-child) {
+    border-end-end-radius: var(--radius);
+  }
+  .plan-preview :global(tbody > tr + tr > td) {
+    border-block-start: 1px solid var(--table-floor-rule);
+  }
+  /* The source view's header cap, pressed into the rail. A label never wraps, so a column
+     is at least as wide as its header. */
   .plan-preview :global(th) {
+    padding-block: 0.6em 0.5em;
     font-size: calc(var(--text-xs) * var(--preview-scale));
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     white-space: nowrap;
-    color: var(--ink-soft);
+    color: var(--table-head-ink);
+    text-shadow: var(--label-pressed);
   }
   /* Chromium's UA sheet centres a header cell; start it like a body cell. */
   .plan-preview :global(th:not([align])) {
@@ -551,19 +587,49 @@
     overflow-x: auto;
     overflow-wrap: normal;
   }
-  /* Matches the source view's code panel fill. The inline-end padding keeps the
-     top-right copy and wrap chrome off the code. */
+  /* The source view's code card: a bezel of --body round a pane sunk into it, drawn by the
+     border, the backgrounds and the inset shadows, which stay put while the code scrolls.
+     The inline-end padding keeps the top-right copy and wrap chrome off the code. */
   .plan-preview :global([data-source-code] + pre) {
     padding-block: 0.6rem;
     padding-inline: 2ch 4.5rem;
-    border-radius: var(--radius);
-    background-color: var(--code-panel);
+    border: var(--code-bezel) solid transparent;
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(var(--table-floor), var(--table-floor)) padding-box,
+      linear-gradient(var(--float-rim-ink) 1px, transparent 1px) border-box,
+      var(--body);
+    box-shadow:
+      var(--table-pane-sink),
+      inset 1px 0 var(--table-pane-edge),
+      inset -1px 0 var(--table-pane-edge),
+      inset 0 -1px var(--table-pane-edge),
+      0 0 0 1px var(--rule),
+      var(--float-low);
     font-family: var(--font-mono);
     font-size: 0.9em;
     line-height: var(--leading-relaxed);
   }
   .plan-preview :global([data-source-code] + pre > code) {
     font-family: inherit;
+  }
+  /* The source card's bar. Its height is that sheet's --caret-code-bar, which lives in the
+     diff view's shadow root. */
+  .plan-preview :global([data-source-code] + pre::-webkit-scrollbar) {
+    height: 12px;
+  }
+  .plan-preview :global([data-source-code] + pre::-webkit-scrollbar-track) {
+    background: transparent;
+  }
+  .plan-preview :global([data-source-code] + pre::-webkit-scrollbar-thumb) {
+    background: color-mix(in lab, var(--paper-sunk), var(--ink) 45%);
+    border: 3px solid transparent;
+    border-radius: var(--radius);
+    background-clip: content-box;
+  }
+  .plan-preview :global([data-source-code] + pre::-webkit-scrollbar-thumb:hover) {
+    background: color-mix(in lab, var(--paper-sunk), var(--ink) 60%);
+    background-clip: content-box;
   }
   .plan-preview :global([data-source-code] + pre[data-code-reflow]) {
     white-space: pre-wrap;
@@ -579,6 +645,7 @@
     padding: var(--chip-pad-block) var(--chip-pad-inline);
     border-radius: var(--radius);
     background-color: var(--chip-ref);
+    box-shadow: var(--chip-raised);
   }
   .plan-preview :global([data-file-ref]::before) {
     content: "";
@@ -601,10 +668,18 @@
   .plan-preview :global([data-file-ref]:hover::before) {
     background-color: var(--ink);
   }
-  /* A backticked reference reads as one pill: the code chip takes the reference tint and
-     the hover, and the reference inside it gives up its own box. */
+  /* A raised chip sinks into the line when pressed. */
+  .plan-preview :global(:is([data-file-ref], code:has(> [data-file-ref])):active) {
+    box-shadow: var(--chip-pressed);
+  }
+  .plan-preview :global(a:not(:has(code, [data-file-ref], img)):active) {
+    box-shadow: var(--chip-pressed);
+  }
+  /* A backticked reference reads as one pill: the code chip takes the reference tint, the
+     raise and the hover, and the reference inside it gives up its own box. */
   .plan-preview :global(code:has(> [data-file-ref])) {
     background-color: var(--chip-ref);
+    box-shadow: var(--chip-raised);
   }
   .plan-preview :global(code:has(> [data-file-ref]:hover)) {
     background-color: var(--accent-wash);
@@ -613,5 +688,6 @@
   .plan-preview :global(code > [data-file-ref]:hover) {
     padding: 0;
     background-color: transparent;
+    box-shadow: none;
   }
 </style>

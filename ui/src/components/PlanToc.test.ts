@@ -6,6 +6,7 @@ import type { ComponentProps } from "svelte";
 import { capture, flushUntil, render } from "@ui/support/mount.ts";
 import { HEADINGS, releaseKey } from "@ui/support/plan-nav.ts";
 import PlanToc from "@/components/PlanToc.svelte";
+import type { CommentIndexEntry } from "$lib/feedback.ts";
 import type { TocHeading } from "$lib/toc.ts";
 
 // EXC-1103's own worked example, and the shape test/e2e/plan-toc.e2e.ts fixtures:
@@ -185,7 +186,15 @@ type TocProps = ComponentProps<typeof PlanToc>;
 /** Mount PlanToc against the shared three-level fixture, closed. Every prop can
  * be overridden; the defaults are the shape most tests read against. */
 function mountToc(props: Partial<TocProps> = {}): { target: HTMLElement; flush: () => void } {
-  return render(PlanToc, { headings: HEADINGS, activeLine: 9, onJump: () => {}, ...props });
+  return render(PlanToc, {
+    headings: HEADINGS,
+    activeLine: 9,
+    plan: "",
+    comments: [],
+    previous: null,
+    onJump: () => {},
+    ...props,
+  });
 }
 
 /** Mount and open the popup via its trigger. */
@@ -884,6 +893,138 @@ describe("PlanToc entry points", () => {
     // Still claimed while held, so the browser's own tab move stays suppressed for
     // as long as the key is down rather than only on its first press.
     expect(event.defaultPrevented).toBe(true);
+    await close(target, flush);
+  });
+});
+
+// HEADINGS' own source, with prose under each heading, so the per-section props have a
+// plan whose lines agree with the fixture's.
+const PLAN = [
+  "# Overview", //                     1
+  "", //                               2
+  "The whole plan.", //                3
+  "", //                               4
+  "## Approach", //                    5
+  "", //                               6
+  "How it goes.", //                   7
+  "", //                               8
+  "### Details", //                    9
+  "", //                              10
+  "Read the **frames** first.", //    11
+  "Then decode them.", //             12
+  ...Array.from({ length: 7 }, () => ""), // 13–19
+  "## Verification", //               20
+  "", //                              21
+  "Run the suite.", //                22
+].join("\n");
+
+function note(line: number, text: string, draft = false): CommentIndexEntry {
+  return { id: `${line}:${text}`, line, label: `Line ${line}`, text, draft, linkable: true };
+}
+
+/** The row whose label is `text`. */
+function row(text: string): HTMLElement {
+  const found = options().find((o) => o.querySelector(".toc-label")?.textContent === text);
+  if (found === undefined) throw new Error(`no row labelled ${text}`);
+  return found;
+}
+
+function peek(): HTMLElement | null {
+  return panel()?.querySelector<HTMLElement>(".toc-peek") ?? null;
+}
+
+function peekPart(name: string): string {
+  return peek()?.querySelector(`.toc-peek-${name}`)?.textContent?.trim() ?? "";
+}
+
+describe("PlanToc section notes", () => {
+  test("describes a row's comments, unsent ones and change apart from its name", async () => {
+    const { target, flush } = await openToc({
+      plan: PLAN,
+      comments: [note(11, "Which frames?"), note(12, "Say how.", true)],
+      previous: { version: 3, plan: PLAN.replace("Then decode them.", "Then parse them.") },
+    });
+    const details = row("Details");
+    const described = document.getElementById(details.getAttribute("aria-describedby") ?? "");
+    expect(described?.textContent?.trim()).toBe("1 comment, 1 unsent, edited since v3");
+    // The stamps a sighted reviewer reads carry the same facts, so they stay out of the
+    // name the option is announced by.
+    expect(details.querySelector(".toc-meta")?.getAttribute("aria-hidden")).toBe("true");
+    await close(target, flush);
+  });
+});
+
+describe("PlanToc peek", () => {
+  test("shows where the selected heading sits, its range, its opening and its comments", async () => {
+    const { target, flush } = await openTocSelected({
+      plan: PLAN,
+      comments: [note(11, "Which frames?"), note(12, "Say how.", true)],
+    });
+    expect(peekPart("trail")).toBe("Overview › Approach");
+    expect(peekPart("title")).toBe("Details");
+    expect(peekPart("facts")).toContain("Lines 9–12");
+    expect(peekPart("facts")).toContain("1 unsent");
+    expect(peekPart("excerpt")).toBe("Read the frames first. Then decode them.");
+    const notes = [...(peek()?.querySelectorAll(".toc-peek-notes li") ?? [])];
+    expect(notes.map((li) => li.textContent?.replace(/\s+/g, " ").trim())).toEqual([
+      "L11 Which frames?",
+      "L12 Say how.",
+    ]);
+    await close(target, flush);
+  });
+
+  test("follows the selection as it walks", async () => {
+    const { target, flush } = await openTocSelected({ plan: PLAN });
+    pressTab(flush);
+    await flushUntil(flush, () => peekPart("title") === "Verification");
+    expect(peekPart("title")).toBe("Verification");
+    expect(peekPart("excerpt")).toBe("Run the suite.");
+    await close(target, flush);
+  });
+
+  test("counts the comments a section's subsections hold", async () => {
+    const { target, flush } = await openTocSelected({
+      activeLine: 5,
+      plan: PLAN,
+      comments: [note(11, "Which frames?"), note(12, "Say how.", true)],
+    });
+    expect(peekPart("title")).toBe("Approach");
+    expect(peekPart("trail")).toBe("Overview");
+    expect(peekPart("deeper")).toBe("2 more comments in subsections.");
+    await close(target, flush);
+  });
+
+  test("says nothing is selected when no heading matches", async () => {
+    const { target, flush } = await openToc({ plan: PLAN });
+    await typeQuery("nothing matches this", flush, () => options().length === 0);
+    await flushUntil(flush, () => peekPart("empty") !== "");
+    expect(peekPart("empty")).toBe("Nothing selected.");
+    await close(target, flush);
+  });
+});
+
+describe("PlanToc filter states", () => {
+  test("counts the rows a query leaves, and nothing while the query is empty", async () => {
+    const { target, flush } = await openToc({ headings: BRANCHED, activeLine: null });
+    expect(panel()?.querySelector(".toc-match-count")?.textContent?.trim() ?? "").toBe("");
+    await typeQuery("notes", flush, () => options().length === 3);
+    expect(panel()?.querySelector(".toc-match-count")?.textContent?.trim()).toBe("3");
+    await close(target, flush);
+  });
+
+  test("offers to clear a query that matches nothing, beside the status rather than in it", async () => {
+    const { target, flush } = await openToc();
+    await typeQuery("nothing matches this", flush, () => options().length === 0);
+    const clear = [...(panel()?.querySelectorAll("button") ?? [])].find(
+      (b) => b.textContent?.trim() === "Clear filter",
+    );
+    if (clear === undefined) throw new Error("no Clear filter control");
+    expect(helper()?.contains(clear)).toBe(false);
+
+    clear.click();
+    await flushUntil(flush, () => options().length === 4);
+    expectUnfilteredOutline();
+    expect(field()?.value).toBe("");
     await close(target, flush);
   });
 });

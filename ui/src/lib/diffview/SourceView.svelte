@@ -21,7 +21,11 @@
   import { headingLines, tagHeadingRows } from "$lib/diffview/headings.ts";
   import { decorateInlineRuns } from "$lib/diffview/inlineDecorate.ts";
   import type { InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
-  import { applyCodeBlockReflow, syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
+  import {
+    applyCodeBlockReflow,
+    markScrollingCards,
+    syncCodeBlockCards,
+  } from "$lib/diffview/codeBlockScroll.ts";
   import { paintCardSelection, type SelectedLines } from "$lib/diffview/cardSelection.ts";
   import { selectionIn, selectionText } from "$lib/diffview/selectionCopy.ts";
   import { tagThematicBreakRows, thematicBreakLines } from "$lib/diffview/thematicBreaks.ts";
@@ -544,12 +548,14 @@
     const quotes = quoteDepth;
     const reflowed = reflowedBlocks;
     let raf = 0;
-    // Tag the rows, then wrap each overflowing block in its scroll card (EXC-729). Both re-run
-    // after every library repaint via the observer below; syncCodeBlockCards is idempotent (an
+    let release = 0;
+    // Tag the rows, then wrap each block in its card (EXC-729). Both re-run after every
+    // library repaint via the observer below; syncCodeBlockCards is idempotent (an
     // already-correct block mutates nothing), so its own wrap/unwrap settles in one extra frame
     // rather than looping the observer. Tagging runs first so the rows carry data-code-line etc.
     // before they are moved into a card.
     const tag = () => {
+      raf = 0;
       tagCodeBlockRows(root, ranges);
       // Mark the rows that ARE a horizontal rule (EXC-862). Beside the code-block tagging
       // because it is the same kind of pass — one attribute per row, no nodes — and it
@@ -559,6 +565,8 @@
       syncCodeBlockCards(root, ranges);
       // Always run, so a populated→empty transition clears the marks too.
       applyCodeBlockReflow(root, reflowed ?? EMPTY_REFLOWED);
+      // After the reflow marks, which change a card's width.
+      markScrollingCards(root);
       // Card each table and group its rows' tokens into cells (EXC-864). BEFORE the
       // inline pass, which walks a row through tokenChildren: it has to see the
       // celled row so both passes partition the same column space. Idempotent for
@@ -596,22 +604,40 @@
       // into their cards above, and the library marked them while they were still
       // flat, so this is what re-states the marks a re-card could not carry.
       paintCardSelection(root, selectionMirror);
+      cancelAnimationFrame(release);
+      release = requestAnimationFrame(() => {
+        if (raf === 0) container?.style.removeProperty("overflow-anchor");
+      });
     };
     const schedule = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(tag);
     };
     tag();
-    const observer = new MutationObserver(schedule);
+    // Scroll anchoring stays off from a repaint until the pass above has re-carded it: in
+    // between, every card above the view is flat rows, and an anchor taken then shifts the
+    // plan by the cards' whole height difference.
+    const hold = () => {
+      container?.style.setProperty("overflow-anchor", "none");
+      schedule();
+    };
+    const observer = new MutationObserver(hold);
     observer.observe(root, { childList: true, subtree: true });
-    // A resize changes the card's drawn width — it is capped, but shrinks below its cap on a
-    // narrow viewport — so re-run to re-measure, since a resize fires no DOM mutation the
-    // observer above would catch.
+    // A repaint rebuilds a failed image, which shows as a broken-image box until its error
+    // hides it (inlineImages.ts). The box arrived under the hold, so its removal must too;
+    // the error can land after the release, and the hide is not a childList mutation.
+    root.addEventListener("error", hold, true);
+    // A resize can move a block across the fit/overflow line — its card is capped, but
+    // shrinks below its cap on a narrow viewport — and fires no DOM mutation the observer
+    // above would catch.
     const resize = new ResizeObserver(schedule);
     if (container != null) resize.observe(container);
     return () => {
       cancelAnimationFrame(raf);
+      cancelAnimationFrame(release);
+      container?.style.removeProperty("overflow-anchor");
       observer.disconnect();
+      root.removeEventListener("error", hold, true);
       resize.disconnect();
     };
   });

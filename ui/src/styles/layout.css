@@ -16,8 +16,9 @@
   --w-tight: 640px;
   --w-narrow: 960px;
   /* Bottom status-bar height (EXC-787), consumed by StatusBar and by the
-     CommentNavigator that docks above it — named once so the two stay in sync. */
-  --status-bar-h: 1.75rem;
+     CommentNavigator that docks above it — named once so the two stay in sync. Tall
+     enough that the help cap's well clears the plan pane's edge above it. */
+  --status-bar-h: 2rem;
   /* Shared max-width of the review's confirm surfaces — the approve/reject guard
      (UnsentCommentsDialog) and the Request Changes dialog — so the two read as one
      width and update together. Each rule caps it with min(…, calc(100% - 2rem)) to
@@ -27,6 +28,9 @@
      app — the TopBar, the compare/breadcrumbs control row, and the daemon banner
      between them — so their left and right edges line up as one column. */
   --bar-inset: clamp(0.5rem, 1vw, 0.85rem);
+  /* How far the plan pane, and the file drawer beside it, sit in from the window's
+     sides. App.svelte's arrival curtain takes the same inset. */
+  --pane-gap: 6px;
 }
 
 /* ----- App shell: plan + annotation-gutter grid ----- */
@@ -47,17 +51,16 @@
   display: grid;
   /* Positioned so a grid-placed but out-of-flow child anchors to its grid AREA rather
      than to the viewport — which is how App.svelte's `.arrival` curtain (EXC-894) covers
-     the content row without becoming a grid item. It has to stay out of flow: DiffPlanView
-     renders `.control-row` and `.diff-surface` as two siblings rather than one root, and
-     auto-placement puts them in rows 2 and 3, so an in-flow item claiming row 3 explicitly
-     is placed first and pushes `.diff-surface` into an implicit fifth row below the status
-     bar. */
+     the content row without becoming a grid item. */
   position: relative;
-  /* Rows: TopBar | optional daemon-replaced banner | content | bottom status bar
-     (EXC-787). The middle row collapses to 0 when the banner is absent; content
-     keeps the 1fr regardless (App.svelte pins each child to its row). */
-  grid-template-rows: auto auto 1fr auto;
+  /* Rows: TopBar | optional daemon-replaced banner | the plan's control row | content |
+     bottom status bar (EXC-787). The banner and control rows collapse to 0 when absent;
+     content keeps the 1fr regardless (App.svelte pins each child to its row). */
+  grid-template-rows: auto auto auto 1fr auto;
   height: 100%;
+  /* The window is one body: the chrome's controls are cut into it and the plan is a
+     pane set into it, so no bar paints a face of its own. */
+  background: var(--body);
   /* Supported-minimum floor: below --w-min the shell overflows the viewport and
      the window scrolls horizontally rather than collapsing the layout further.
      min-width is safe under the transform/containment caveat above — it

@@ -5,9 +5,8 @@
   // NotificationsPane (EXC-847): it owns its two fetches and its per-block degrade,
   // and the shell renders it on the Advanced category branch. The fetchers are
   // injected (defaulting to the api client) so the render + degrade unit-test
-  // without a daemon; the pure formatters live in lib/diagnostics.ts. Copy is
-  // delegated up via onCopyDiagnostic — App writes the clipboard and fires the one
-  // shared success alert (EXC-850), so this pane never stands up a second toast.
+  // without a daemon; the pure formatters live in lib/diagnostics.ts. Each block is a
+  // plan-view code block whose tray copies and wraps it in place.
   import {
     Field,
     FieldDescription,
@@ -17,21 +16,17 @@
   import { getDiagnostics, getHealth } from "$lib/api.ts";
   import { configToToml, formatUptime, readDaemonPort } from "$lib/diagnostics.ts";
   import type { DaemonDiagnostics, HealthIdentity } from "@core/lib/types";
+  import CodeChromeTray from "@/components/CodeChromeTray.svelte";
 
   interface Props {
-    /** Copy a block's full text — App writes the clipboard and fires the EXC-850
-     * success alert (the shared createAlerts/AlertHost path). */
-    onCopyDiagnostic: (text: string) => void;
     /** The build-identity probe; defaults to the real client, injected in tests. */
     loadHealth?: () => Promise<HealthIdentity>;
     /** The daemon self-diagnostics probe; defaults to the real client. */
     loadDiagnostics?: () => Promise<DaemonDiagnostics>;
+    /** Clipboard writer, handed to each block's tray; injectable for tests. */
+    copy?: (text: string) => Promise<void>;
   }
-  let {
-    onCopyDiagnostic,
-    loadHealth = getHealth,
-    loadDiagnostics = getDiagnostics,
-  }: Props = $props();
+  let { loadHealth = getHealth, loadDiagnostics = getDiagnostics, copy }: Props = $props();
 
   // Two independent fetches, so each block degrades on its own: health feeds
   // VERSION, diagnostics feeds the other three. A failed probe leaves its state
@@ -82,14 +77,31 @@
   const configText = $derived(diagnostics ? configToToml(diagnostics.settings) : null);
   const configPath = $derived(diagnostics?.config.path ?? "");
 
-  // One descriptor per block. `available` gates the placeholder and the copy affordance;
-  // `text` is both what's shown and what's copied.
+  // One descriptor per block. `available` gates the placeholder and the tray; `text` is
+  // both what's shown and what's copied.
   const blocks = $derived<Block[]>([
     { key: "version", label: "Version", text: versionText ?? "", available: versionText !== null },
     { key: "daemon", label: "Daemon", text: daemonText ?? "", available: daemonText !== null },
     { key: "system", label: "System", text: systemText ?? "", available: systemText !== null },
     { key: "config", label: "Config", text: configText ?? "", available: configText !== null },
   ]);
+
+  // Per block: wrapped by the reviewer, and too wide for its box unwrapped. A wrapped
+  // block no longer overflows, so its wrap cap stays while it is wrapped.
+  const reflowed = $state<Partial<Record<Block["key"], boolean>>>({});
+  const overflowing = $state<Partial<Record<Block["key"], boolean>>>({});
+
+  // Re-attached whenever the block's text changes, and re-measured whenever its box
+  // resizes: a value arriving or a narrower modal can each push it past the edge.
+  function watchOverflow(key: Block["key"], _text: string) {
+    return (pre: HTMLElement) => {
+      const observer = new ResizeObserver(() => {
+        overflowing[key] = pre.scrollWidth > pre.clientWidth;
+      });
+      observer.observe(pre);
+      return () => observer.disconnect();
+    };
+  }
 </script>
 
 <!-- The pane composes the shadcn field parts (EXC-1112). A block DISPLAYS a value and
@@ -102,40 +114,35 @@
   <FieldGroup class="diag-list">
     {#each blocks as block (block.key)}
       <Field class="diag-section" data-diag={block.key} aria-labelledby="diag-{block.key}-label">
-        <div class="diag-head">
-          <FieldTitle id="diag-{block.key}-label" class="diag-label settings-block-label">{block.label}</FieldTitle>
-          {#if block.available}
-            <button
-              class="diag-copy"
-              aria-label={`Copy ${block.label} to clipboard`}
-              onclick={() => onCopyDiagnostic(block.text)}
-            >
-              Copy
-            </button>
-          {/if}
-        </div>
+        <FieldTitle id="diag-{block.key}-label" class="diag-label settings-block-label">{block.label}</FieldTitle>
 
         {#if block.key === "config" && block.available}
           <FieldDescription class="diag-path">{configPath}</FieldDescription>
         {/if}
 
-        <!-- The sunk-paper block DISPLAYS the value — a presentational element that
-             stays in the accessibility tree, so a screen reader reads the value like
-             any text. The labelled Copy button above is the keyboard / AT control;
-             the block's own click is a mouse-only convenience for the "click a block
-             to copy" affordance (EXC-850), so its absent key handler is deliberate. -->
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="diag-block settings-copy-box"
-          class:is-config={block.key === "config"}
-          class:is-unavailable={!block.available}
-          onclick={() => block.available && onCopyDiagnostic(block.text)}
-        >
-          {#if block.key === "daemon"}
-            <span class="diag-dot" data-live={block.available}></span>
+        <div class="diag-block">
+          <pre
+            class="diag-code settings-copy-box settings-copy-text"
+            class:is-config={block.key === "config"}
+            class:is-unavailable={!block.available}
+            data-reflow={reflowed[block.key] ? "" : undefined}
+            {@attach watchOverflow(block.key, block.text)}>{#if block.key === "daemon"}<span
+                class="diag-dot"
+                data-live={block.available}></span>{/if}<code class="diag-text"
+              >{block.available ? block.text : "Unavailable"}</code></pre>
+          {#if block.available}
+            <div class="diag-chrome">
+              <CodeChromeTray
+                text={block.text}
+                copyName={block.label}
+                wrapName="in {block.label}"
+                wrappable={reflowed[block.key] === true || overflowing[block.key] === true}
+                reflowed={reflowed[block.key] === true}
+                onToggleReflow={() => (reflowed[block.key] = !reflowed[block.key])}
+                {copy}
+              />
+            </div>
           {/if}
-          <code class="diag-text settings-copy-text">{block.available ? block.text : "Unavailable"}</code>
         </div>
       </Field>
     {/each}
@@ -162,33 +169,6 @@
   .advanced :global(.diag-section) {
     gap: 0.4rem;
   }
-  .diag-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 1.25rem;
-  }
-  /* The Copy affordance: a quiet chip in the label row, brightening on hover. It
-     is the keyboard / screen-reader control; the success toast (EXC-850) confirms
-     the copy, so the chip needs no flash of its own. */
-  .diag-copy {
-    appearance: none;
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    padding: 0.1rem 0.4rem;
-    border-radius: var(--radius);
-    font-size: var(--text-2xs);
-    letter-spacing: 0.02em;
-    color: var(--ink-soft);
-    transition:
-      color var(--dur-state) var(--ease-out),
-      background-color var(--dur-state) var(--ease-out);
-  }
-  .diag-copy:hover {
-    color: var(--ink);
-    background: var(--ink-wash);
-  }
 
   .advanced :global(.diag-path) {
     margin: 0;
@@ -198,50 +178,60 @@
     overflow-wrap: anywhere;
   }
 
-  /* The sunk-paper block: recessed off the pane on --paper-sunk, mono, and the
-     whole surface is the click-to-copy target. A subtle hover deepens the border
-     and fill so it reads as interactive. That hover mixes off --paper-sunk rather
-     than taking a derived token: it is an opaque 4% step into the recessed surface,
-     where the tier's opaque fills ride --paper-raised and --ink-wash is a
-     translucent tint at twice this strength. */
   .diag-block {
-    width: 100%;
-    margin: 0;
-    text-align: left;
-    cursor: pointer;
-    transition:
-      border-color var(--dur-state) var(--ease-out),
-      background-color var(--dur-state) var(--ease-out);
+    position: relative;
+    min-width: 0;
   }
-  .diag-block:not(.is-unavailable):hover {
-    border-color: var(--rule-strong);
-    background: color-mix(in lab, var(--paper-sunk), var(--ink) 4%);
+  /* The inline-end padding keeps the tray clear of the first line's text. */
+  .diag-code {
+    padding: 0.6rem 4.5rem 0.6rem 2ch;
+    font-variant-ligatures: none;
+    tab-size: 2;
   }
-  .diag-block.is-unavailable {
-    cursor: default;
+  .diag-code[data-reflow] {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
-  /* The config block preserves the TOML's line breaks and caps its height,
-     scrolling when the parsed config runs long. */
-  .diag-block.is-config {
+  .diag-code.is-config {
     max-height: 12rem;
     overflow-y: auto;
   }
-
-  /* A degraded block reads muted — it's a placeholder, not data. */
-  .diag-block.is-unavailable .diag-text {
-    color: var(--ink-faint);
+  /* A placeholder, not data: --ink-soft would fall under AA on the palest palettes'
+     code panel, so it keeps full ink and reads as a placeholder by its slant. */
+  .diag-code.is-unavailable .diag-text {
+    font-family: var(--font-sans);
+    font-style: italic;
   }
 
-  /* The daemon live dot: --ok when the diagnostics probe answered, muted when it
-     didn't — a plain colored disc, not an icon. */
+  /* The tray rests dimmed in the block's corner, as over a plan code block, and comes
+     up as the reviewer reaches the block or tabs into it. */
+  .diag-chrome {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+    z-index: 1;
+    opacity: 0.4;
+    transition: opacity var(--dur-state) var(--ease-out);
+  }
+  .diag-block:hover .diag-chrome,
+  .diag-chrome:focus-within {
+    opacity: 1;
+  }
+
+  /* The daemon's live light sits in a socket cut into the block, the status strip's
+     connection light; unlit when the diagnostics probe failed. */
   .diag-dot {
     display: inline-block;
-    width: 0.5rem;
-    height: 0.5rem;
-    margin-right: 0.5rem;
-    border-radius: 50%;
-    vertical-align: middle;
+    width: 0.45rem;
+    height: 0.45rem;
+    margin-right: 0.6rem;
+    border-radius: 99px;
+    vertical-align: 0.05em;
     background: var(--ink-faint);
+    box-shadow:
+      inset 0 -1px 1px var(--socket-shade),
+      0 0 0 1.5px var(--code-panel),
+      0 0 0 2px var(--socket-ring);
   }
   .diag-dot[data-live="true"] {
     background: var(--ok);

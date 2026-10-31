@@ -659,9 +659,8 @@
     overflow: hidden;
     background: var(--paper-raised);
     color: var(--ink);
-    border: 1px solid var(--rule);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--float-surface-mid);
     animation: ft-in var(--dur-state) var(--ease-out);
   }
   .ft-elided,

@@ -10,7 +10,7 @@
 {#if version > 1}
   <Badge
     variant="secondary"
-    class="version metric float-chip"
+    class="version metric stamp"
     style="color: var(--ink-soft)"
     title="Revision {version} of this plan"
   >

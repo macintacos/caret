@@ -133,9 +133,11 @@
 </script>
 
 <Select.Root type="single" {value} onValueChange={(v) => onSelect(v)} bind:open={menuOpen}>
-  <Select.Trigger {id} class="setting-trigger float-chip">
-    <span class="trigger-label">{triggerLabel}</span>
-  </Select.Trigger>
+  <span class="tray">
+    <Select.Trigger {id} class="setting-trigger float-chip">
+      <span class="trigger-label">{triggerLabel}</span>
+    </Select.Trigger>
+  </span>
 
   <Select.Content bind:ref={menuEl} align="end" class="setting-menu">
     {#each options as option (option.value)}
@@ -198,14 +200,13 @@
     pointer-events: none;
   }
 
-  /* Trigger: the vendored Select.Trigger wearing the topbar's floating chip (soft fill,
-     no hard border, ink-soft label brightening on hover / while open — the .float-chip
-     atom supplies the fill + ink treatment). Global rather than scoped because Svelte
+  /* Trigger: the vendored Select.Trigger wearing the rubber cap in its .tray (no hard
+     border; .float-chip supplies the cap face + ink treatment). Global rather than scoped because Svelte
      does not scope-hash a `class` passed to a COMPONENT, which is also why the panel
      rules below are global. The vendored trigger already carries this control's gap,
      radius, padding and text size; the only thing it has that caret's language forbids
      is the outline border (doc/agents/shadcn-rules.md § The caret surface language —
-     the chip fill is the affordance). */
+     the cap is the affordance). */
   :global(.setting-trigger) {
     border: none;
   }
@@ -231,9 +232,10 @@
 
   /* The panel carries the scope hash into the portal via these classes. Rows lay out as
      [label] [swatch] with the vendored check indicator in the trailing column the item's
-     own `pr-8` reserves. Selection wins the fill and the highlight marks the row carrying
-     both with a ring; the reasoning for that ordering, which is specific to a Select, is
-     in doc/agents/shadcn-rules.md § The caret surface language. */
+     own `pr-8` reserves. The highlight is the fill and the selection is the check in full
+     ink, so neither hides the other: bits-ui parks the highlight on the selected row as
+     the panel opens, and the highlight is the listbox's keyboard cursor. No amber: it is
+     kept for the primary action. */
   :global(.setting-menu [data-select-viewport]) {
     /* The rows' own container: select-content ships no padding, where
        dropdown-menu-content ships p-1. On the content instead of the viewport this would
@@ -248,16 +250,7 @@
     color: var(--ink);
   }
   :global(.setting-menu .setting-item[data-selected]) {
-    background: var(--accent-wash);
     color: var(--ink);
-  }
-  :global(.setting-menu .setting-item[data-selected][data-highlighted]) {
-    box-shadow: inset 0 0 0 1px var(--accent);
-  }
-  /* The vendored indicator inherits the row's ink; amber is what marks a selection
-     here, and it is what the version picker's own check wears. */
-  :global(.setting-menu [data-icon="check"]) {
-    color: var(--accent);
   }
   :global(.setting-menu .name) {
     flex: 1 1 auto;

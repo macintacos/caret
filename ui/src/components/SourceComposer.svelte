@@ -151,47 +151,52 @@
       <!-- Edit mode: revise a saved comment. Cancel reverts (the comment survives,
            so no confirm), Save commits — same amber primary + ⌘↵ hint as Comment. -->
       <Button variant="ghost" class="cancel" onclick={onDiscard}>Cancel</Button>
-      <Button class="save" onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
-        Save
-        <SubmitCap />
-      </Button>
+      <span class="tray tray-submit">
+        <Button class="save" onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
+          Save
+          <SubmitCap />
+        </Button>
+      </span>
     {:else}
       <Button variant="ghost" class="keep" onclick={keep} disabled={!canKeep}>Keep for later</Button>
       <!-- Dropping a non-empty draft loses typed text with no undo, so it confirms
            (EXC-749); an empty box discards at once. The rule lives in the branch
            rather than the click handler because Popover.Trigger opens
            unconditionally — the empty case must never get a trigger. -->
-      {#if canKeep}
-        <ConfirmPopover
-          question="Discard this comment?"
-          confirmLabel="Discard"
-          cancelLabel="Keep editing"
-          onConfirm={onDiscard}
-          trigger={discardButton}
-        />
-      {:else}
-        {@render discardButton({ onclick: onDiscard })}
-      {/if}
-      <Button onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
-        Comment
-        <SubmitCap />
-      </Button>
+      <span class="tray tray-submit">
+        {#if canKeep}
+          <ConfirmPopover
+            question="Discard this comment?"
+            confirmLabel="Discard"
+            cancelLabel="Keep editing"
+            onConfirm={onDiscard}
+            trigger={discardButton}
+          />
+        {:else}
+          {@render discardButton({ onclick: onDiscard })}
+        {/if}
+        <Button onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
+          Comment
+          <SubmitCap />
+        </Button>
+      </span>
     {/if}
   </div>
 </Card>
 
 <style>
   /* Inline within the library's annotation row — a Card reshaped to caret's tight
-     inline padding and raised shadow (see SourceAnnotationCard's .body). The
-     compound [data-slot] selector (0,2,0) outranks the copied Card's utilities. */
+     inline padding, floating over the plan on the mid float (see
+     SourceAnnotationCard's .body). The compound [data-slot] selector (0,2,0) outranks
+     the copied Card's utilities. */
   :global([data-slot="card"].composer) {
     display: block;
     max-width: min(46rem, 100%);
     margin: 0.4rem 0 0.55rem;
     padding: 0.7rem 0.75rem 0.6rem;
-    border: 1px solid var(--rule-strong);
+    border: 0;
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--float-surface-mid);
     /* Opacity only: this opens inside the library-reserved annotation row, so a
        transform that grew or shifted the box would change the row's measured
        height mid-reveal and fight the preventScroll guard. */
@@ -207,6 +212,7 @@
   .row {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: 0.4rem;
     margin-top: 0.55rem;
   }

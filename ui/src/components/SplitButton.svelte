@@ -1,7 +1,7 @@
 <script lang="ts">
   // A reusable split button (EXC-760): a primary action fused to a slim options
   // toggle that opens a shadcn DropdownMenu. It reads as ONE control at rest — the
-  // halves share a radius with no divider — and splits on hover, where each half
+  // halves share one rim and dome, with no divider — and splits on hover, where each half
   // tints just itself. bits-ui owns the menu's open/Escape/outside-click; the
   // action-specific bits (variants, labels) stay with the caller via snippets.
   import type { Snippet } from "svelte";
@@ -72,34 +72,67 @@
 </div>
 
 <style>
-  /* One fused control that splits on hover. The inner corners are squared and their
-     inner (transparent) borders removed so the two fills touch with no gap and no
-     divider line; hovering either half tints only that half (--split-hover-bg), so
-     the seam surfaces as a soft colour edge and is invisible otherwise. The :global
-     reaches the composed shadcn Buttons but is bounded by `.split`, so nothing
-     leaks. */
+  /* One fused control that splits on hover. The inner corners are squared so the two
+     faces touch with no gap; hovering either half tints only that half
+     (--split-hover-bg, as the cap's hover face), so the seam surfaces as a soft colour
+     edge and is invisible otherwise. The :global reaches the composed shadcn Buttons
+     but is bounded by `.split`, so nothing leaks. */
   .split {
+    position: relative;
     display: inline-flex;
+    border-radius: var(--radius);
+  }
+  /* A rim and dome on each half would draw a divider at the seam, so the halves keep
+     only their face and grain at rest, and the wrapper lays one rim and dome over
+     both. A press hands the half its own rim back and lifts the shared one. */
+  .split::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow:
+      inset 0 0 0 var(--split-inset, 0px) var(--well-floor),
+      inset 0 calc(1px + var(--split-inset, 0px)) 0 var(--split-rim-top, var(--rim-top)),
+      inset 0 0 0 calc(1px + var(--split-inset, 0px)) var(--split-rim-side, var(--rim-side)),
+      inset 0 4px 5px -3px var(--split-dome-hi, var(--dome-hi)),
+      inset 0 -3px 6px 0 var(--split-dome-lo, var(--dome-lo));
+    transition: opacity var(--dur-state) var(--ease-out);
+  }
+  .split:has(> :global(.cap-accent)) {
+    --split-inset: var(--tinted-inset);
+    --split-rim-top: var(--tinted-rim-top);
+    --split-rim-side: var(--tinted-rim-side);
+    --split-dome-hi: var(--tinted-dome-hi);
+    --split-dome-lo: var(--tinted-dome-lo);
+  }
+  .split:has(:global(button:not(:disabled):is(:active, [data-key-pressed])))::after {
+    opacity: 0;
+  }
+  .split :global(.split-primary),
+  .split :global(.split-toggle) {
+    --cap-face-hover: var(--split-hover-bg);
+    --cap-inset: 0px;
+    --cap-rim-top: transparent;
+    --cap-dome-hi: transparent;
+    --cap-dome-lo: transparent;
+  }
+  .split :global(:is(.split-primary, .split-toggle):not(:is(:active, [data-key-pressed]))) {
+    --cap-rim-side: transparent;
   }
   .split :global(.split-primary) {
     border-top-right-radius: 0;
     border-bottom-right-radius: 0;
-    border-right-width: 0;
     /* Pull the seam in toward the label so the chevron sits close, not stranded. */
     padding-right: 0.25rem;
   }
   .split :global(.split-toggle) {
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
-    border-left-width: 0;
     /* Slim the toggle to hug the seam; height stays 2rem from size-8. */
     width: auto;
     padding-left: 0.25rem;
     padding-right: 0.5rem;
-  }
-  .split :global(.split-primary:not(:disabled):hover),
-  .split :global(.split-toggle:not(:disabled):hover) {
-    background: var(--split-hover-bg);
   }
 
   /* Mac disclosure affordance on the options toggle: the chevron points RIGHT at

@@ -42,11 +42,13 @@
                screen reader's button list — a bare verb like "View" says nothing about
                which alert it acts on, so the message describes it. -->
           {#if a.action}
-            <button
-              type="button"
-              class="alert-action"
-              aria-describedby="alert-message-{a.id}"
-              onclick={a.action.run}>{a.action.label}</button>
+            <span class="tray action-tray">
+              <button
+                type="button"
+                class="alert-action float-chip"
+                aria-describedby="alert-message-{a.id}"
+                onclick={a.action.run}>{a.action.label}</button>
+            </span>
           {/if}
         </div>
         <button type="button" class="alert-dismiss" aria-label="Dismiss" onclick={() => onDismiss(a.id)}>
@@ -76,16 +78,16 @@
     width: min(22rem, calc(100vw - 2.5rem));
     pointer-events: none;
   }
-  /* Mold Alert.Root (a card by default) into a floating toast lifted on
-     --shadow-card. :global because the class rides the shadcn Alert root, which
-     carries no scope hash. A leaving card reverses the enter, then the queue removes
-     it. */
+  /* Mold Alert.Root (a card by default) into a toast floating on the mid float.
+     :global because the class rides the shadcn Alert root, which carries no scope
+     hash. A leaving card reverses the enter, then the queue removes it. */
   :global(.alert-item) {
     display: flex;
     align-items: flex-start;
     gap: 0.6rem;
     pointer-events: auto;
-    box-shadow: var(--shadow-card);
+    border: 0;
+    box-shadow: var(--float-surface-mid);
     animation: alert-in var(--dur-state) var(--ease-out);
   }
   :global(.alert-item.leaving) {
@@ -108,31 +110,21 @@
     line-height: var(--leading-snug);
     overflow-wrap: anywhere;
   }
-  /* A text button, not a clickable card: the card already holds the dismiss control,
-     and nesting interactive controls is an accessibility defect. It rides the card's
-     variant colour rather than the accent, so the underline carries the whole
-     affordance — declared explicitly, since a <button> inherits none. It self-starts
-     so its hit area is the label, not the card's full width. */
-  .alert-action {
+  /* A small cap in its own well, not a clickable card: the card already holds the
+     dismiss control, and nesting interactive controls is an accessibility defect. The
+     well self-starts so its hit area is the cap, not the card's full width. */
+  .action-tray {
     align-self: flex-start;
-    margin-top: 0.2rem;
-    appearance: none;
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    color: inherit;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    line-height: var(--leading-snug);
-    text-decoration-line: underline;
-    text-decoration-color: currentColor;
-    text-underline-offset: 0.2em;
-    opacity: 0.75;
-    transition: opacity var(--dur-state) var(--ease-out);
+    margin-top: 0.35rem;
   }
-  .alert-action:hover {
-    opacity: 1;
+  .alert-action {
+    display: inline-flex;
+    align-items: center;
+    height: 1.5rem;
+    padding: 0 0.5rem;
+    border-radius: var(--radius);
+    font-size: var(--text-xs);
+    font-weight: 500;
   }
   /* Quiet dismiss affordance: the glyph rides the card's variant color at
      reduced opacity, brightening on hover. */

@@ -410,9 +410,8 @@ test("a table's columns line up down its length, ragged source and all", async (
   expect(rule.row).toBeGreaterThan(0);
   expect(rule.row).toBeLessThan(prose.row);
 
-  // And what the reader sees in place of the dashes: the glyphs transparent, one
-  // full-width hairline painted across the row. Resolved across the shadow boundary —
-  // an unresolved token would come back as the initial ink rather than the palette's.
+  // And what the reader sees in place of the dashes: nothing. The glyphs are transparent
+  // and the row is the rail's air under the header.
   const ruleRow = await page.evaluate(async (want) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const row = [...(sh?.querySelectorAll("[data-content] [data-line]") ?? [])].find(
@@ -423,9 +422,7 @@ test("a table's columns line up down its length, ragged source and all", async (
     return { color: cs.color, image: cs.backgroundImage, size: cs.backgroundSize };
   }, A_RULE);
   expect(ruleRow?.color).toBe("rgba(0, 0, 0, 0)");
-  expect(ruleRow?.image).toContain("linear-gradient");
-  expect(ruleRow?.image).not.toContain("rgba(0, 0, 0, 0)");
-  expect(ruleRow?.size).toBe("100% 1px");
+  expect(ruleRow?.image).toBe("none");
 });
 
 test("each column wears the alignment its delimiter row declared", async ({ page, daemon }) => {
@@ -502,7 +499,7 @@ test("a wrapped cell's continuation lines follow its column too", async ({ page,
   );
 });
 
-test("no pipe glyph paints, and the rules stand where the pipes did", async ({ page, daemon }) => {
+test("no pipe glyph paints, and the table sits in an inlay", async ({ page, daemon }) => {
   await openPlan(page, daemon, TABLE_PLAN);
   await carded(page);
 
@@ -518,57 +515,22 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
   expect([...new Set(pipes.map((p) => p.text))]).toEqual(["|"]);
   expect([...new Set(pipes.map((p) => p.color))]).toEqual(["rgba(0, 0, 0, 0)"]);
 
-  // A divider on every cell that opens a column, and none on the cell that opens the
-  // ROW — a table's outer edges belong to the card, whose own edge closes them off, and a
-  // rule half a character inside it would read as a doubled line. Table B is written with
-  // no outer pipes, so its first column has no character for a rule to stand in for
-  // either way.
-  const cells = await page.evaluate(() => {
-    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
-    return [...(sh?.querySelectorAll("[data-content] [data-table-cell]") ?? [])].map((cell) => ({
-      edge: cell.getAttribute("data-table-edge"),
-      first: cell.previousElementSibling === null,
-      layers: getComputedStyle(cell).backgroundImage,
-    }));
-  });
-  const layerCount = (fill: string) =>
-    fill === "none" ? 0 : fill.split("linear-gradient").length - 1;
-  expect(cells.length).toBeGreaterThan(0);
-  for (const cell of cells) {
-    const opens = cell.edge === "start" || cell.edge === "both";
-    const wanted = opens && !cell.first ? 1 : 0;
-    expect(layerCount(cell.layers), `edge ${String(cell.edge)} first ${cell.first}`).toBe(wanted);
-    // The ink resolved across the shadow boundary rather than falling back to nothing.
-    if (wanted > 0) expect(cell.layers).not.toContain("rgba(0, 0, 0, 0)");
-  }
-  // Every case the loop distinguishes is on the page, so it is vacuous for none of them:
-  // a first cell that opens with a pipe (drawn by the frame, not by the cell), a first
-  // cell that does not (table B), and an interior cell that does.
-  for (const [name, match] of [
-    ["first cell with a pipe", (c: (typeof cells)[number]) => c.first && c.edge !== null],
-    ["first cell without one", (c: (typeof cells)[number]) => c.first && c.edge === null],
-    ["interior cell", (c: (typeof cells)[number]) => !c.first && c.edge !== null],
-  ] as const) {
-    expect(cells.some(match), `no ${name}`).toBe(true);
-  }
-
-  // And what the edges were handed to (EXC-1136): not a frame any more but a surface —
-  // the code card's own fill, a radius and a lift. The rows inside give up the library's
-  // opaque per-row fill so that panel reaches the screen, and the corner rounding on the
-  // end rows survives for the banded case, where a row IS opaque again and would
-  // otherwise paint its square corner over the card's arc.
+  // The edges are handed to the inlay: a bezel of the window's --body floating on the
+  // plan, and a pane of --table-floor sunk into it under the rail. The rail's rows clear
+  // the library's opaque per-row fill to show the bezel; the pane's rows paint the floor.
+  // The pane's corners are concentric with the bezel's, at --radius.
   const surface = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const card = sh?.querySelector("[data-content] > [data-table-card]") as HTMLElement;
     const cs = getComputedStyle(card);
-    // The panel fill the sheet asks for, resolved here rather than transcribed — this
-    // plan carries no fenced block to read the code card's own off, and coreStyles.test.ts
-    // already pins that the two cards name one colour.
-    const probe = document.createElement("span");
-    probe.style.backgroundColor = "color-mix(in lab, var(--paper-sunk), var(--ink) 6%)";
-    sh?.appendChild(probe);
-    const panel = getComputedStyle(probe).backgroundColor;
-    probe.remove();
+    const resolve = (value: string) => {
+      const probe = document.createElement("span");
+      probe.style.backgroundColor = value;
+      sh?.appendChild(probe);
+      const resolved = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return resolved;
+    };
     const corners = (el: Element) => {
       const s = getComputedStyle(el);
       return [
@@ -580,44 +542,41 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
     };
     return {
       fill: cs.backgroundColor,
-      panel,
+      body: resolve("var(--body)"),
+      floor: resolve("var(--table-floor)"),
       shadow: cs.boxShadow,
       radius: cs.borderTopLeftRadius,
-      interiorRow: getComputedStyle(card.children[1] as Element).backgroundColor,
+      paneRadius: getComputedStyle(card.children[2] as Element).borderTopLeftRadius,
+      delimiterRow: getComputedStyle(card.children[1] as Element).backgroundColor,
+      paneRow: getComputedStyle(card.children[3] as Element).backgroundColor,
       head: corners(card.firstElementChild as Element),
+      paneTop: corners(card.children[2] as Element),
       foot: corners(card.lastElementChild as Element),
-      middle: corners(card.children[1] as Element),
+      middle: corners(card.children[3] as Element),
     };
   });
-  // The panel fill really reaches the card: the color-mix resolved across the shadow
-  // boundary rather than falling back to nothing. Non-transparent, so this cannot pass by
-  // both sides being unset.
+  // Both fills resolved across the shadow boundary rather than falling back to nothing.
   expect(surface.fill).not.toBe("rgba(0, 0, 0, 0)");
-  expect(surface.fill).toBe(surface.panel);
+  expect(surface.fill).toBe(surface.body);
   expect(surface.shadow).not.toBe("none");
-  expect(Number.parseFloat(surface.radius)).toBeGreaterThan(0);
-  // The premise of the whole trade: an unbanded row no longer paints over the card, so
-  // the fill above is what the reader actually sees behind the table's text.
-  expect(surface.interiorRow).toBe("rgba(0, 0, 0, 0)");
+  expect(Number.parseFloat(surface.radius)).toBeGreaterThan(Number.parseFloat(surface.paneRadius));
+  expect(surface.delimiterRow).toBe("rgba(0, 0, 0, 0)");
+  expect(surface.paneRow).toBe(surface.floor);
   const flat = "0px";
-  expect(surface.head).toEqual([surface.radius, surface.radius, flat, flat]);
-  expect(surface.foot).toEqual([flat, flat, surface.radius, surface.radius]);
-  // And only the ends: an interior row meets no corner, so rounding one would cut a
-  // notch out of the middle of the table.
+  const pane = surface.paneRadius;
+  expect(Number.parseFloat(pane)).toBeGreaterThan(0);
+  expect(surface.head).toEqual([pane, pane, flat, flat]);
+  expect(surface.paneTop).toEqual([pane, pane, flat, flat]);
+  expect(surface.foot).toEqual([flat, flat, pane, pane]);
+  // An interior row meets no corner, so rounding one would notch the pane.
   expect(surface.middle).toEqual([flat, flat, flat, flat]);
 
-  // The hairline under every body row, and the two rows that must not have one: the head
-  // row, whose separator is the delimiter row directly below it, and the delimiter row
-  // itself, which IS one. Plus the header cap the same change put above them.
-  //
-  // The two inks are resolved by painting them onto a throwaway span rather than read off
-  // the custom property, which for an untyped --* would hand back the color-mix() source
-  // text instead of the colour it resolves to. --table-rule is written out as the sheet
-  // writes it for that reason: what is being claimed is that the DERIVED value reaches the
-  // row, not that a hex transcribed into this file still matches.
-  const [inkSoft, ruleInk] = await Promise.all([
-    probeColor(page, "--ink-soft"),
-    probeColor(page, "color-mix(in lab, var(--paper-sunk), var(--ink) 12%)"),
+  // The hairline under every body row, and the rail's two rows, which have none. Plus
+  // the header cap above them. The inks are resolved by painting them onto a throwaway
+  // span, so the DERIVED value is what is compared.
+  const [headInk, ruleInk] = await Promise.all([
+    probeColor(page, "--table-head-ink"),
+    probeColor(page, "--table-floor-rule"),
   ]);
 
   const marks = await page.evaluate(() => {
@@ -659,33 +618,114 @@ test("no pipe glyph paints, and the rules stand where the pipes did", async ({ p
   for (const row of body) {
     expect(row.image).toContain(ruleInk);
     expect(row.size).toBe("100% 1px");
-    // Bottom edge, where the delimiter row's identical layer sits at the centre.
     expect(row.position).toBe("50% 100%");
     expect(row.edges).toEqual(["0px", "0px"]);
   }
-  const delimiter = marks.rows.find((r) => r.delimiter);
-  expect(delimiter?.position).toBe("50% 50%");
-  // And the head row draws no separator of its own: the delimiter below it is the one.
+  expect(marks.rows.find((r) => r.delimiter)?.image).toBe("none");
   expect(marks.rows.find((r) => r.head)?.image).toBe("none");
-  // Nor does the card's last row. Its hairline would land a pixel above the panel's own
-  // bottom edge, where it reads as half a frame — the card's top has no matching line.
+  // Nor does the card's last row, whose hairline would double the pane's bottom edge.
   // This table's last row is a body row, so the case is really exercised.
   const last = marks.rows.at(-1);
   expect(last?.head).toBe(false);
   expect(last?.delimiter).toBe(false);
   expect(last?.image).toBe("none");
 
-  // The header is a cap: uppercase, on --ink-soft, with the pipes still gone. The
+  // The header is a cap: uppercase, on --table-head-ink, with the pipes still gone. The
   // transform is a rendering-time one, so the copy spec further down still reads the
   // source's own case back out of this row.
   expect(marks.header.transform).toBe("uppercase");
-  expect(marks.header.color).toBe(inkSoft);
+  expect(marks.header.color).toBe(headInk);
   // Every inked token takes the header's ink rather than shiki's — one colour, not a
   // per-token spread.
-  expect(marks.header.inked).toEqual([inkSoft]);
+  expect(marks.header.inked).toEqual([headInk]);
   // And the :not([data-table-pipe]) exclusion held: the 0,5,0 arm would otherwise have
   // outranked the rule that hid them and put the picket fence back.
   expect(marks.header.pipes).toEqual(["rgba(0, 0, 0, 0)"]);
+});
+
+test("a chip in the pane clears its edges and hairlines, and the numbers stay on their rows", async ({
+  page,
+  daemon,
+}) => {
+  // A chip fills its line box, and the pane's edges and hairlines paint under it, so on
+  // an unpadded row it covers them and the pane reads as clipped. One table puts a chip
+  // on a row that is both the pane's first and last; the other on its first, an interior
+  // and its last row.
+  await openPlan(
+    page,
+    daemon,
+    `# Chips in the pane
+
+| Case | Link |
+| ---- | ---- |
+| Cell | [a long link in a table cell](https://example.com/reflow/table-cell) |
+
+Prose between the tables.
+
+| Case | Note |
+| ---- | ---- |
+| one | \`code\` here |
+| two | **bold** here |
+| three | [a link](https://example.com/three) |
+`,
+  );
+  await carded(page, 2);
+
+  const rows = await page.evaluate(() => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    const pane = [
+      ...(sh?.querySelectorAll(
+        "[data-content] > [data-table-card] > [data-line]:not([data-table-head], [data-table-rule])",
+      ) ?? []),
+    ];
+    return pane.map((row) => {
+      const box = row.getBoundingClientRect();
+      const chips = [...row.querySelectorAll("[data-md]")].flatMap((el) => [
+        ...el.getClientRects(),
+      ]);
+      const line = Number(row.getAttribute("data-line"));
+      const number = [...(sh?.querySelectorAll("[data-line-number-content]") ?? [])].find(
+        (n) => (n.parentElement as HTMLElement)?.dataset.lineIndex === String(line - 1),
+      );
+      return {
+        text: row.textContent ?? "",
+        chipTop: Math.min(...chips.map((r) => r.top)) - box.top,
+        chipBottom: box.bottom - Math.max(...chips.map((r) => r.bottom)),
+        cellTop: (row.querySelector("[data-table-cell]") as Element).getBoundingClientRect().top,
+        numberTop: (number as Element).getBoundingClientRect().top,
+      };
+    });
+  });
+
+  expect(rows).toHaveLength(4);
+  for (const row of rows) {
+    // Clear of a 1px edge with air to spare on both ends.
+    expect(row.chipTop, row.text).toBeGreaterThanOrEqual(2);
+    expect(row.chipBottom, row.text).toBeGreaterThanOrEqual(2);
+    expect(Math.abs(row.numberTop - row.cellTop), row.text).toBeLessThanOrEqual(1);
+  }
+
+  // The hover "+" hangs from its cell's padding edge, so a padded row has to step it down
+  // with the number: the header's rail air and a pane row's both.
+  for (const text of ["| Case | Link |", "| Cell | a long link in a table cell |"]) {
+    const line = await lineOf(page, text);
+    await revealGutterPlus(page, line);
+    const off = await page.evaluate((n) => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const cell = sh?.querySelector(
+        `[data-gutter] [data-table-card-gutter] > [data-column-number="${n}"]`,
+      ) as HTMLElement;
+      const mid = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        return r.top + r.height / 2;
+      };
+      return (
+        mid(sh?.querySelector("[data-utility-button]") as Element) -
+        mid(cell.querySelector("[data-line-number-content]") as Element)
+      );
+    }, line);
+    expect(Math.abs(off), text).toBeLessThanOrEqual(1);
+  }
 });
 
 test("the delimiter row is a dot and a hairline, not a numbered line", async ({ page, daemon }) => {
@@ -1144,9 +1184,16 @@ test("a cell past the cap wraps inside its own column", async ({ page, daemon })
 
   // And the gutter number grew with it, which is what keeps a line number pointing at
   // its own text — the card's subgrid does that with no height syncing anywhere.
-  const heights = await rowHeights(page, await lineOf(page, B_WRAPPED));
+  const [heights, plainHeights] = await Promise.all([
+    rowHeights(page, await lineOf(page, B_WRAPPED)),
+    rowHeights(page, await lineOf(page, B_ROW2)),
+  ]);
   expect(heights.number).toBe(heights.row);
-  expect(heights.row).toBe(Math.round(note?.height ?? 0));
+  // The row grew by exactly what its cell did, over the air every pane row carries.
+  const air = (row: number, cell = 0) => row - Math.round(cell);
+  expect(
+    Math.abs(air(heights.row, note?.height) - air(plainHeights.row, plain?.height)),
+  ).toBeLessThanOrEqual(1);
   // The first column kept its natural width beside the wrapped one.
   expect(wrapped[0]?.width).toBe(short[0]?.width);
 });
@@ -1299,6 +1346,85 @@ test("a comment on an interior table row lands between it and the next", async (
   // And no column moved: a spanning grid item otherwise contributes its own max-content
   // to every track it covers, and a composer's is wide enough to stretch the table.
   expect(await cellBoxes(page, A_HEAD)).toEqual(before);
+});
+
+test("opening a composer below the tables leaves its line where it was", async ({
+  page,
+  daemon,
+}) => {
+  // The composer's repaint flattens every card for a frame before the pass re-cards it,
+  // and a scroll anchor taken in that frame shifts the plan by the cards' whole height
+  // difference. Enough tail to put the line mid-view with every table above it.
+  const tail = Array.from({ length: 60 }, (_, i) => `- tail item ${i + 1}`).join("\n");
+  await openPlan(page, daemon, `${TABLE_PLAN}\n${tail}\n`);
+  await carded(page);
+
+  const line = await lineOf(page, "- tail item 40");
+  const rowTop = () =>
+    page.evaluate((ln) => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const row = sh?.querySelector(`[data-content] [data-line="${ln}"]`);
+      return Math.round(row?.getBoundingClientRect().top ?? Number.NaN);
+    }, line);
+  await page.evaluate((ln) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    sh?.querySelector(`[data-content] [data-line="${ln}"]`)?.scrollIntoView({ block: "center" });
+  }, line);
+  const plus = await revealGutterPlus(page, line);
+  const before = await rowTop();
+
+  await plus.click();
+  await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
+  // Settled: the composer's row is in, and the re-card has put every table back in its card.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+        if (sh?.querySelector("[data-content] [data-line-annotation]") == null) return -1;
+        return sh.querySelectorAll("[data-content] > [data-table-card]").length;
+      }),
+    )
+    .toBe(TABLES.length);
+  // A later repaint can flatten the tables again for a frame; a lasting shift still fails.
+  await expect.poll(rowTop).toBe(before);
+});
+
+test("an image in a table that fails to load after the composer opens leaves the line where it was", async ({
+  page,
+  daemon,
+}) => {
+  // Every repaint rebuilds the image, and a failed one is fetched again: it shows as a
+  // broken-image box until its error hides it. Failing it late lands the hide after the
+  // re-card.
+  await page.route("https://assets.invalid/**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await route.abort();
+  });
+  const tail = Array.from({ length: 60 }, (_, i) => `- tail item ${i + 1}`).join("\n");
+  await openPlan(page, daemon, `${TABLE_PLAN}\n${tail}\n`);
+  await carded(page);
+  const hiddenImage = page.locator(".diffview [data-md-image][hidden]");
+  await expect(hiddenImage).toHaveCount(1);
+
+  const line = await lineOf(page, "- tail item 40");
+  const rowTop = () =>
+    page.evaluate((ln) => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const row = sh?.querySelector(`[data-content] [data-line="${ln}"]`);
+      return Math.round(row?.getBoundingClientRect().top ?? Number.NaN);
+    }, line);
+  await page.evaluate((ln) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    sh?.querySelector(`[data-content] [data-line="${ln}"]`)?.scrollIntoView({ block: "center" });
+  }, line);
+  const plus = await revealGutterPlus(page, line);
+  const before = await rowTop();
+
+  await plus.click();
+  await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
+  await expect(hiddenImage).toHaveCount(0);
+  await expect(hiddenImage).toHaveCount(1);
+  await expect.poll(rowTop).toBe(before);
 });
 
 test("a drag bands a table's rows in both columns, inside it and into it", async ({

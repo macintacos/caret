@@ -6,8 +6,8 @@
   //
   // Both slots stay on screen because they are persistent settings, not a function
   // of the current mode; showing both is what teaches that the pairing exists. The
-  // live one wears an IN USE pill, the block's single amber mark. Which one that is
-  // comes from the live appearance module, so the pill and the summary line track an
+  // live one wears an IN USE stamp. Which one that is
+  // comes from the live appearance module, so the stamp and the summary line track an
   // OS flip while the modal is open without a subscription of this section's own. The
   // slot rows read the live appearance too, so a slot that a late-registering custom
   // theme resolves shows its real selection.
@@ -16,8 +16,8 @@
   // section, and hands it that section's fields — which the /-search may have
   // filtered — so each row is rendered only when its field is present.
   //
-  // It renders ONLY inside the settings pane, and leans on that: the row rhythm
-  // (group gap, row padding, the hairline separator) is declared once in
+  // It renders ONLY inside the settings pane, and leans on that: the row rhythm and
+  // the recessed group (row padding, the hairline separator) are declared once in
   // SettingsDialog's `.settings :global(…)` rules, which reach these rows through the
   // component boundary — so this component is not self-sufficient elsewhere. A second
   // consumer moves that rhythm into a caret-owned stylesheet keyed on
@@ -77,7 +77,7 @@
     }
   }
 
-  // Which slot wears the pill: the live resolved scheme, so an OS flip moves it.
+  // Which slot wears the stamp: the live resolved scheme, so an OS flip moves it.
   const liveKey = $derived(appearance.scheme === "light" ? THEME_FIELD.light : THEME_FIELD.dark);
 
   // Render in registry order, skipping any field the search filtered out — so a
@@ -110,13 +110,13 @@
           >
             <span>{field.label}</span>
             {#if field.key === liveKey}
-              <!-- The block's one amber mark: which palette is actually showing.
-                   aria-hidden is load-bearing: this pill sits INSIDE the row's <label>,
+              <!-- Which palette is actually showing: a passive label, so it is stamped
+                   into the group. aria-hidden is load-bearing: it sits INSIDE the row's <label>,
                    and a <button> takes its name from its label — so without it the slot
                    trigger would be named "Dark theme In use", a name that silently moves
                    between the two rows on an OS flip. The resolved-state line below is
                    how that reaches a screen reader instead. -->
-              <Badge class="in-use" aria-hidden="true">In use</Badge>
+              <Badge class="in-use stamp" aria-hidden="true">In use</Badge>
             {/if}
           </FieldLabel>
           <FieldDescription>{field.description}</FieldDescription>
@@ -149,12 +149,14 @@
 
   <div class="theme-upload" data-theme-upload>
     <div class="upload-row">
-      <Button
-        variant="secondary"
-        class="float-chip"
-        disabled={uploading}
-        onclick={() => picker?.click()}>Upload theme file…</Button
-      >
+      <span class="tray">
+        <Button
+          variant="secondary"
+          class="float-chip"
+          disabled={uploading}
+          onclick={() => picker?.click()}>Upload theme file…</Button
+        >
+      </span>
       <p class="upload-hint">Adds a .json theme file, or replaces the theme with the same id.</p>
     </div>
     <input
@@ -186,22 +188,20 @@
     flex-direction: column;
     gap: 0.5rem;
   }
-  /* The label line carries the moving IN USE pill beside its text — the row's type is
-     SettingsDialog's, so only the pill's layout is declared here. */
+  /* The label line carries the moving IN USE stamp beside its text — the row's type is
+     SettingsDialog's, so only the stamp's layout is declared here. */
   .theme-section :global(.setting-item .field-label) {
     display: flex;
     align-items: center;
     gap: 0.45rem;
   }
-  /* IN USE: an amber-wash pill in the eyebrow's uppercase treatment. The label is
+  /* IN USE: a stamp (styles/atoms.css) in the eyebrow's uppercase treatment. The label is
      written in sentence case and uppercased here, so it is announced as words rather
-     than spelled out. The pill unmounts from one row and mounts in the other as the
-     live scheme changes, which replays the reveal on arrival. */
+     than spelled out. It unmounts from one row and mounts in the other as the live
+     scheme changes, which replays the reveal on arrival. */
   .theme-section :global(.in-use) {
     border: 0;
-    padding: 0.1rem 0.4rem;
-    background: var(--accent-wash);
-    color: var(--accent);
+    padding: 0.1rem 0.45rem;
     font-size: var(--text-2xs);
     font-weight: 600;
     letter-spacing: 0.12em;

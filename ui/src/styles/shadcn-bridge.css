@@ -110,8 +110,7 @@
   /* shadcn's neutral hover/active wash — NOT caret amber (that's --color-primary).
      A neutral grey mixed off the RAISED paper (the --popover surface menus render
      on) toward ink, matching --chip-hover's formula (paper-raised + 15% ink) so a
-     menu/select highlight reads at the same strength as the topbar's .float-chip
-     buttons. Kept a self-contained color-mix rather than a var(--chip-hover)
+     menu/select highlight reads at --chip-hover's strength. Kept a self-contained color-mix rather than a var(--chip-hover)
      reference so the bridge block stays self-describing (a pinned contract in
      shadcn-bridge.test.ts); the operands flip per scheme, so it reads right in both
      without a second block. */
@@ -168,14 +167,19 @@
    The scrim is a black at an alpha rather than a caret token, deliberately:
    ColorToken in lib/theme.ts is a closed union every palette must supply, so minting
    a --scrim is a change to every palette — and a scrim is a shadow cast OVER the app rather
-   than a surface of it, so it should not flip with the scheme the way a bridged token
-   would. It is the one non-token color the bridge declares; its weight was judged by
-   eye on both caret schemes, with the blur doing the separation work. */
+   than a surface of it, so it should not flip its hue with the scheme the way a bridged
+   token would. Only its weight does, like every other shadow: the same black reads far
+   heavier over light paper than over dark. It is the one non-token color the bridge
+   declares; its weight was judged by eye on both caret schemes, with the blur doing the
+   separation work. */
 [data-slot="dialog-overlay"],
 [data-slot="alert-dialog-overlay"] {
-  background: rgb(0 0 0 / 0.28);
+  background: rgb(0 0 0 / 0.45);
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
+}
+[data-theme="light"] :is([data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"]) {
+  background: rgb(0 0 0 / 0.22);
 }
 
 [data-slot="dialog-overlay"],
@@ -186,3 +190,33 @@
   --tw-ease: var(--ease-out);
 }
 
+/* A modal opened by a key waits out the key's press: mounted and focused at once,
+   invisible until the cap's sink has been seen. The delay is PRESS_HOLD_MS in
+   pressEcho.ts; keep the two in sync. */
+[data-key-echo] :is(
+    [data-slot="dialog-overlay"],
+    [data-slot="dialog-content"],
+    [data-slot="alert-dialog-overlay"],
+    [data-slot="alert-dialog-content"]
+  ) {
+  animation-delay: 110ms;
+  animation-fill-mode: backwards;
+}
+
+
+/* The modal's rise rides the custom properties tw-animate-css's `enter`/`exit`
+   keyframes read, so the vendored animation stays the one that plays. */
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-content"] {
+  --tw-enter-translate-y: var(--float-arrive);
+  --tw-exit-translate-y: var(--float-arrive);
+  box-shadow: var(--float-surface-high);
+}
+
+/* Menus, popovers and select lists float a step lower. */
+[data-slot="dropdown-menu-content"],
+[data-slot="dropdown-menu-sub-content"],
+[data-slot="popover-content"],
+[data-slot="select-content"] {
+  box-shadow: var(--float-surface-mid);
+}

@@ -176,22 +176,19 @@ describe("SettingSelect row states", () => {
   // stripping comments first, which cannot work here (this file's are `/* */`).
   const at = (selector: string) => componentSource.indexOf(`${selector} {`);
 
-  test("selection wins the fill over the highlight, not the other way round", () => {
-    // A listbox parks its highlight on the selected row as soon as it opens (bits-ui's
-    // setInitialHighlightedNode), so unlike a DropdownMenu — where the highlight only ever
-    // greys a row transiently under the cursor — losing to the highlight here would leave
-    // the resting panel with no amber selection mark at all.
-    const highlighted = at(".setting-item[data-highlighted])");
-    const selected = at(".setting-item[data-selected])");
-    expect(highlighted).toBeGreaterThan(-1);
-    expect(selected).toBeGreaterThan(highlighted);
-  });
+  // The rule's body, up to its closing brace.
+  const rule = (selector: string) => {
+    const from = at(selector);
+    return from === -1 ? "" : componentSource.slice(from, componentSource.indexOf("}", from));
+  };
 
-  test("the row carrying both still shows the keyboard cursor", () => {
-    // [data-highlighted] is this listbox's keyboard cursor — bits-ui focuses no row — so
-    // it needs a mark of its own on the row selection has already filled.
-    expect(at(".setting-item[data-selected][data-highlighted])")).toBeGreaterThan(-1);
-    expect(componentSource).toMatch(/\[data-selected\]\[data-highlighted\]\)\s*\{\s*box-shadow:/);
+  test("the highlight is the only fill, so the keyboard cursor shows on the selected row too", () => {
+    // [data-highlighted] is this listbox's keyboard cursor — bits-ui focuses no row — and
+    // bits-ui parks it on the selected row as the panel opens. A fill on the selection
+    // would hide the cursor there, so the selection is marked by its check and ink.
+    expect(rule(".setting-item[data-highlighted])")).toContain("background:");
+    expect(rule(".setting-item[data-selected])")).not.toBe("");
+    expect(rule(".setting-item[data-selected])")).not.toContain("background");
   });
 });
 

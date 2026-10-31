@@ -158,6 +158,7 @@
     <!-- Request changes' scratch treatment, so the two dialogs read as one form. -->
     <section class="group unsent" aria-labelledby="{uid}-unsent">
       <span class="form-label" id="{uid}-unsent">
+        <Icon name="message-square-more" size={14} />
         Unsent comments
         <Badge variant="outline" class="tally">{itemCount}</Badge>
       </span>
@@ -187,23 +188,26 @@
   {/if}
 
   {#snippet footer()}
-    <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
-    {#if hasQueued}
-      <Button variant="secondary" class="float-chip" onclick={onRequestChanges}>
-        <Icon name="corner-up-left" size={14} />
-        Request changes
+    <span class="tray tray-submit">
+      <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
+      {#if hasQueued}
+        <Button variant="secondary" class="float-chip" onclick={onRequestChanges}>
+          <Icon name="corner-up-left" size={14} />
+          Request changes
+        </Button>
+      {/if}
+      <Button
+        bind:ref={confirmEl}
+        class={comments === undefined ? "cap-danger" : undefined}
+        onclick={() => onConfirm(notes)}
+        onkeydown={onKey}
+        aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}
+      >
+        {#if icon}<Icon name={icon} size={14} />{/if}
+        {confirmLabel}
+        <SubmitCap />
       </Button>
-    {/if}
-    <Button
-      bind:ref={confirmEl}
-      onclick={() => onConfirm(notes)}
-      onkeydown={onKey}
-      aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}
-    >
-      {#if icon}<Icon name={icon} size={14} />{/if}
-      {confirmLabel}
-      <SubmitCap />
-    </Button>
+    </span>
   {/snippet}
 </Modal>
 
@@ -280,15 +284,23 @@
     align-items: center;
     gap: 0.4rem;
   }
+  .unsent .form-label :global(.icon) {
+    color: color-mix(in lab, var(--attention), var(--stamp-word-toward) var(--stamp-word-mix));
+  }
   .unsent-note {
     margin: 0 0 0.4rem;
     font-size: var(--text-sm);
     color: var(--ink-faint);
   }
-  /* Dashed neutral rail, the source view's Resume-marker idiom: an unsent comment
-     never reads as one that will be sent. */
+  /* The source marker's tinted well: an unsent comment never reads as one that will be
+     sent. --ink-faint misses AA on the tint in some palettes, so the anchor steps up. */
   .unsent .comments {
-    border-style: dashed;
+    border: none;
+    background: color-mix(in lab, var(--well-floor), var(--attention) var(--unsent-floor));
+    box-shadow: var(--well-shade), var(--well-lip);
+  }
+  .unsent .anchor {
+    color: var(--ink-soft);
   }
 
   /* Optional reviewer-notes field (EXC-791), reusing the request-changes form

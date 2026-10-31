@@ -37,7 +37,9 @@ export function codeBlockRanges(text: string): CodeBlockRange[] {
       start = null;
     }
   }
-  if (start != null) ranges.push({ start, end: lines.length });
+  // The view renders no row for the empty entry a trailing newline leaves.
+  const last = lines.at(-1) === "" ? lines.length - 1 : lines.length;
+  if (start != null) ranges.push({ start, end: Math.max(start, last) });
   return ranges;
 }
 
@@ -117,7 +119,7 @@ export function tagCodeBlockRows(root: ParentNode, ranges: CodeBlockRange[]): vo
     tagged.removeAttribute("data-code-lang");
     tagged.removeAttribute("data-code-fence");
   }
-  // Descendant, not child: an overflowing block's rows get moved into a scroll card
+  // Descendant, not child: every block's rows get moved into a card
   // (codeBlockScroll.ts), so on the repaint pass after wrapping they are no longer direct
   // children of [data-content]. A descendant query re-tags them wherever they sit.
   for (const row of root.querySelectorAll<HTMLElement>("[data-content] [data-line]")) {
@@ -128,14 +130,5 @@ export function tagCodeBlockRows(root: ParentNode, ranges: CodeBlockRange[]): vo
     row.toggleAttribute("data-code-end", code && endLines.has(n));
     if (code && startLines.has(n)) tagLanguageToken(row);
     if (code && endLines.has(n)) tagFenceToken(row);
-  }
-  // Also tag each code line's gutter number cell (line numbers only, no
-  // start/end): the panel stays content-only, but the tag lets the focused-line
-  // cursor and hover band brighten the gutter half to match the content on a code
-  // row (coreStyles.ts) — CSS can't relate a gutter cell to its content sibling
-  // across the two grid columns, so the tag is the only bridge.
-  for (const cell of root.querySelectorAll<HTMLElement>("[data-gutter] [data-column-number]")) {
-    const n = Number(cell.getAttribute("data-column-number"));
-    cell.toggleAttribute("data-code-line", Number.isFinite(n) && inCode(n));
   }
 }

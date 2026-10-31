@@ -74,7 +74,7 @@ const DECORATIONS = [
   ["data-md-rule", "thematic breaks (EXC-862)"],
   ["data-md-image", "inline images (EXC-870)"],
   ["data-code-fence", "fence markers (EXC-869)"],
-  ["data-code-card", "the scroll card an overflowing fence gets (EXC-729)"],
+  ["data-code-card", "the card every fence gets (EXC-729)"],
   ["data-table-cell", "table cells (EXC-864)"],
   ["data-table-pipe", "table pipes (EXC-864)"],
   ["data-table-card", "the card every GFM table gets (EXC-864)"],
@@ -505,13 +505,9 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
     probeColor(page, "--ink-faint"),
     // Latte styles its list markers, and the bullet takes that style rather than the ink.
     probeColor(page, "--markdown-list-marker-color"),
-    // A table's rules are not an ink at all: EXC-1136 restated them as one step off the
-    // SURFACE — --paper-sunk 12% toward --ink, the same idiom as the card fill and the
-    // row bands — so one number reads the same on every palette without a light-dark().
-    // Written as the sheet writes it, and resolved here the same way the tokens above
-    // are, so it stays a claim about the DERIVED value reaching the sheet rather than a
-    // hex transcribed into this file.
-    probeColor(page, "color-mix(in lab, var(--paper-sunk), var(--ink) 12%)"),
+    // A table's row hairline is not an ink at all: it is the pane's floor stepped toward
+    // --ink, a derived token resolved here the same way as the tokens above.
+    probeColor(page, "--table-floor-rule"),
   ]);
 
   const paint = await page.evaluate(() => {
@@ -538,13 +534,9 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
       rule: pick("[data-content] [data-line][data-md-rule]", (el) => {
         return getComputedStyle(el).backgroundImage;
       }),
-      // A table's header rule, the same background-layer shape the break takes.
-      tableRule: pick("[data-content] [data-line][data-table-rule]", (el) => {
-        return getComputedStyle(el).backgroundImage;
-      }),
-      // And its column rules, which ride the cell rather than the row.
-      tableColumn: pick(
-        "[data-content] [data-table-cell]:not(:first-child)[data-table-edge]",
+      // A table's row hairline, the same background-layer shape the break takes.
+      tableRule: pick(
+        "[data-content] > [data-table-card] > [data-line]:not([data-table-head], [data-table-rule]):not(:last-child)",
         (el) => {
           return getComputedStyle(el).backgroundImage;
         },
@@ -562,13 +554,11 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
   expect(paint.quoteBar).toBe(inkSoft);
   expect(paint.checkbox).toBe(inkSoft);
   expect(paint.rule).toContain(inkSoft);
-  // The table's two rules are one mark and spend one colour, stepped off --paper-sunk
-  // rather than taken from a token of their own — so they track a flavour bump with
-  // everything else, and stay well clear of the ink ramp they used to be softened from.
+  // The table's hairline is a step off its pane's floor, so it tracks a flavour bump with
+  // everything else and stays clear of the ink ramp.
   expect(tableInk).not.toBe(inkSoft);
   expect(tableInk).not.toBe(inkFaint);
   expect(paint.tableRule).toContain(tableInk);
-  expect(paint.tableColumn).toContain(tableInk);
 
   // The chip is four background layers, one per member, each resolving to `transparent`
   // through its var() fallback when its member is absent — so "contains a gradient" would

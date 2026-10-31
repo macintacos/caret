@@ -1,4 +1,4 @@
-/* Shared chrome atoms — .mono, the floating chip, .metric, .eyebrow, the form
+/* Shared chrome atoms — .mono, the tactile kit, .metric, .eyebrow, the form
    label, the count chip, the keycap, the settings pane's section label and copy
    block, the quiet badge, the clamped line, the reference-surface header, and
    the completion preview panel. @imported by app.css after the base layer. */
@@ -10,29 +10,287 @@
   letter-spacing: 0.01em;
 }
 
-/* Floating chip: the shared "floats above the background" look worn by the
-   topbar's neutral badges (DevBadge, VersionLabel) and its neutral buttons
-   (Request changes, the review switcher) — a soft solid fill lifted just off the
-   raised topbar surface, no hard border. The fill itself is --chip / --chip-hover
-   from the derived tier (styles/derived.css), so it retints on theme switch.
-   Unlayered, so it wins over the shadcn variant's Tailwind bg utility. On a
-   <button> it lifts on hover / while its menu is open; passive <span> badges
-   stay at rest. */
-.float-chip {
-  background: var(--chip);
+/* ----- The tactile kit -----
+
+   Controls are rubber caps sitting in wells cut into the surface; passive labels are
+   stamped into it; floating surfaces (menus, popovers, toasts, the composer, modals)
+   are smooth and lit along their top edge. The geometry is in styles/tokens.css and
+   the palette-mixed floors and faces in styles/derived.css, so every rule below
+   serves every palette unchanged. */
+
+/* The well a control sits in. A group of controls shares one; a lone control gets its
+   own. Its radius is the cap's plus the bezel, so the two curves stay concentric. */
+.tray {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--tray-gap);
+  padding: var(--well-pad);
+  border-radius: calc(var(--radius) + var(--well-pad));
+  background: var(--well-floor);
+  box-shadow: var(--well-shade), var(--well-lip);
 }
-/* On a button the label rides the badges' quiet ink-soft tone at rest and
-   brightens to full ink on hover / while its menu is open — the "subtle" half of
-   the transformation, the part that makes a neutral button read as a quiet chip
-   rather than a full-contrast control. Passive <span> badges set their own
-   color, so this only reaches the buttons. */
-button.float-chip {
+
+/* The rubber cap. .float-chip IS the neutral cap: every neutral control wears it by
+   that name, and the amber primary wears .cap-accent, which the vendored Button's
+   default variant stamps. Every cap sits in a .tray.
+   The shading leaves the face's middle untouched, so the amber stays verbatim.
+   Unlayered, so it wins over the Button variant's Tailwind fill, and over its small
+   sizes' tighter corners, which wouldn't nest in the tray's curve. The resting rule is
+   specificity zero and the state rules are not, so tune a cap through its --cap-*
+   variables. The chosen segment of a segmented control is a cap face that can't be
+   pushed, so it wears the face alone. */
+:where(.cap, button.float-chip, [data-slot="toggle-group-item"][data-state="on"], .compare-picker .seg-pill) {
+  --cap-face: var(--neutral-face);
+  --cap-face-hover: var(--neutral-face-hover);
+  --cap-face-down: var(--neutral-face-down);
+  --cap-rim-side: var(--rim-side);
+  --cap-rim-top: var(--rim-top);
+  --cap-dome-hi: var(--dome-hi);
+  --cap-dome-lo: var(--dome-lo);
+  --cap-press-shade: var(--press-shade);
+  --cap-press-ring: var(--press-ring);
+  --cap-label: var(--ink-soft);
+  --cap-label-hover: var(--ink);
+  --cap-inset: 0px;
+  background-color: var(--cap-face);
+  background-image: var(--grain);
+  background-size: 128px;
+  background-blend-mode: soft-light;
+  box-shadow:
+    inset 0 0 0 var(--cap-inset) var(--well-floor),
+    inset 0 calc(1px + var(--cap-inset)) 0 var(--cap-rim-top),
+    inset 0 0 0 calc(1px + var(--cap-inset)) var(--cap-rim-side),
+    inset 0 4px 5px -3px var(--cap-dome-hi),
+    inset 0 -3px 6px 0 var(--cap-dome-lo);
+}
+:where(.cap, button.float-chip) {
+  border-width: 0;
+  border-radius: var(--radius);
+  color: var(--cap-label);
+  transition:
+    background-color var(--dur-state) var(--ease-out),
+    color var(--dur-state) var(--ease-out),
+    box-shadow var(--dur-state) var(--ease-out);
+}
+/* A tray that is itself the button (the scratch marker) hovers and presses the cap it
+   holds, wherever in the row the pointer is. */
+:where(.cap, button.float-chip):not(:disabled):is(:hover, [aria-expanded="true"]),
+button.tray:hover > .cap {
+  background-color: var(--cap-face-hover);
+  color: var(--cap-label-hover);
+}
+/* The press sinks the cap into its well. Nothing translates, so the label stays
+   centred. Rest and press share their layers, so the change transitions.
+   data-key-pressed is the same press played by the control's shortcut
+   (lib/shortcuts/pressEcho.ts); a toggle that is on stays latched down. */
+:where(.cap, button.float-chip):not(:disabled):is(:active, [data-key-pressed], [aria-pressed="true"]),
+button.tray:is(:active, [data-key-pressed]) > .cap {
+  background-color: var(--cap-face-down);
+  color: var(--cap-label-hover);
+  box-shadow:
+    inset 0 0 0 1px var(--well-floor),
+    inset 0 1px 0 transparent,
+    inset 0 0 0 2px var(--cap-rim-side),
+    inset 0 4px 5px -1px var(--cap-press-shade),
+    inset 0 0 4px 1px var(--cap-press-ring);
+}
+/* A latched toggle still answers hover, a step lighter than its latched face. */
+:where(.cap, button.float-chip):not(:disabled)[aria-pressed="true"]:hover:not(:active, [data-key-pressed]) {
+  background-color: color-mix(in lab, var(--cap-face-down), var(--cap-face-hover));
+}
+/* The primary action, and the one destructive confirm: a coloured face with the
+   lighting retuned for it. .cap-danger-hover keeps a neutral face at rest and turns
+   danger only under the pointer or a press (Reject). */
+.cap-accent {
+  --cap-face: var(--accent);
+  --cap-face-hover: var(--accent-bright);
+  --cap-face-down: var(--accent);
+  --cap-label: var(--accent-ink);
+  --cap-label-hover: var(--accent-ink);
+}
+.cap-danger {
+  --cap-face: var(--danger);
+  --cap-face-hover: var(--danger-face-hover);
+  --cap-face-down: var(--danger);
+  --cap-label: var(--accent-ink);
+  --cap-label-hover: var(--accent-ink);
+}
+.cap-danger-hover:not(:disabled):is(:hover, :active, [data-key-pressed]) {
+  --cap-face-hover: var(--danger);
+  --cap-face-down: var(--danger);
+  --cap-label-hover: var(--paper);
+}
+.cap-accent,
+.cap-danger,
+.cap-danger-hover:not(:disabled):is(:hover, :active, [data-key-pressed]) {
+  --cap-rim-side: var(--tinted-rim-side);
+  --cap-rim-top: var(--tinted-rim-top);
+  --cap-dome-hi: var(--tinted-dome-hi);
+  --cap-dome-lo: var(--tinted-dome-lo);
+  --cap-press-shade: var(--tinted-press-shade);
+  --cap-press-ring: var(--tinted-press-ring);
+}
+.cap-accent,
+.cap-danger {
+  --cap-inset: var(--tinted-inset);
+}
+
+/* A tray holding a submit runs a step under the rest of the kit: at full size the
+   amber cap, its bezel and its keycap read heavier than the action. The whole tray
+   steps down, so every cap in it keeps the same bezel gap. */
+.tray-submit :is(.cap, button.float-chip) {
+  height: var(--cap-submit-h);
+  font-size: var(--text-base);
+}
+.tray-submit > .cap-square {
+  width: var(--cap-submit-h);
+}
+/* A control with no chrome at rest has no cap to push, so a press leaves a dimple. The
+   vendored Button's ghost variant stamps .cap-ghost. A ghost Button reshaped into
+   something with its own look (the reference-hint dot) opts out. */
+.cap-ghost {
+  transition:
+    background-color var(--dur-state) var(--ease-out),
+    color var(--dur-state) var(--ease-out),
+    box-shadow var(--dur-state) var(--ease-out);
+}
+.cap-ghost:not(:disabled, .ref-hint):is(:active, [data-key-pressed]) {
+  background-color: var(--ink-wash);
+  box-shadow: inset 0 1px var(--press-blur) var(--press-shade);
+}
+
+/* A passive label can't be pressed, so it is stamped into the surface rather than
+   standing on it. Anything raised can be pressed. */
+.stamp {
+  background: var(--well-floor);
+  box-shadow: var(--well-shade), var(--well-lip);
   color: var(--ink-soft);
 }
-button.float-chip:not(:disabled):hover,
-button.float-chip[aria-expanded="true"]:not(:disabled) {
-  background: var(--chip-hover);
-  color: var(--ink);
+
+/* A text field is cut into the surface, a shallower cut than a control's well. Its
+   edge is the inset --rule ring, so a vendored field's own border steps aside. Focus
+   wears no ring: the text cursor shows it, and the edge firms a step. */
+.field-well {
+  border-color: transparent;
+  background: var(--field-floor);
+  box-shadow:
+    var(--field-shade),
+    inset 0 0 0 1px var(--rule),
+    var(--well-lip);
+  transition: box-shadow var(--dur-state) var(--ease-out);
+}
+.field-well:focus-within {
+  box-shadow:
+    var(--field-shade),
+    inset 0 0 0 1px var(--rule-strong),
+    var(--well-lip);
+}
+
+/* A switch is a latching key: a square-shouldered knob in a well whose corners nest
+   around it, 2px out. On, the knob slides over and stays latched down, and the channel
+   lifts a step toward ink. The knob is light in both schemes so its position stands off
+   the well (styles/derived.css). */
+[data-slot="switch"] {
+  width: 2.5rem;
+  height: 1.375rem;
+  padding: 0 2px;
+  border-width: 0;
+  border-radius: calc(var(--radius) + 2px);
+  background: var(--well-floor);
+  box-shadow: var(--well-shade), var(--well-lip);
+  transition: background-color var(--dur-state) var(--ease-out);
+}
+[data-slot="switch"][data-state="checked"] {
+  background: var(--switch-on);
+}
+[data-slot="switch-thumb"] {
+  width: calc(1.375rem - 4px);
+  height: calc(1.375rem - 4px);
+  border-radius: var(--radius);
+  background-color: var(--knob-face);
+  background-image: var(--grain);
+  background-size: 96px;
+  background-blend-mode: soft-light;
+  box-shadow:
+    inset 0 1px 0 var(--knob-hi),
+    inset 0 0 0 1px var(--knob-edge),
+    inset 0 -2px 4px 0 var(--knob-lo);
+  transition:
+    translate var(--dur-state) var(--ease-out),
+    background-color var(--dur-state) var(--ease-out),
+    box-shadow var(--dur-state) var(--ease-out);
+}
+[data-slot="switch-thumb"][data-state="checked"] {
+  translate: calc(2.5rem - 1.375rem) 0;
+}
+[data-slot="switch"]:not(:disabled):hover > [data-slot="switch-thumb"] {
+  background-color: var(--knob-face-hover);
+}
+[data-slot="switch"]:not(:disabled):active > [data-slot="switch-thumb"] {
+  background-color: var(--knob-face-down);
+}
+[data-slot="switch"]:not(:disabled):active > [data-slot="switch-thumb"] {
+  box-shadow:
+    inset 0 0 0 1px var(--knob-edge),
+    inset 0 2px 3px 0 var(--press-shade),
+    inset 0 0 3px 1px var(--press-ring);
+}
+/* Latched, the knob drops its lit top edge for a hard shade line. A held blur smears a
+   knob this small. */
+[data-slot="switch-thumb"][data-state="checked"] {
+  box-shadow:
+    inset 0 0 0 1px var(--knob-edge),
+    inset 0 1px 0 var(--knob-lo);
+}
+
+/* A slider is a level meter: twenty pips in a well, one per 5% step, lit up to the
+   level. The mask cuts the track and bits-ui's range into pips. The invisible thumb keeps
+   bits-ui's role, keys and pointer handling; at zero width bits-ui insets the range by
+   nothing, so it lands on the pips. Focus rings the well. */
+[data-slot="slider"][data-orientation="horizontal"] {
+  width: auto;
+  padding: var(--well-pad);
+  border-radius: calc(2px + var(--well-pad));
+  background: var(--well-floor);
+  box-shadow: var(--well-shade), var(--well-lip);
+}
+[data-slot="slider"]:has(> [data-slot="slider-thumb"]:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+[data-slot="slider-track"][data-orientation="horizontal"] {
+  flex: none;
+  width: calc(20 * 7px - 2px);
+  height: 1rem;
+  border-radius: 0;
+  background: var(--meter-off);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 16' preserveAspectRatio='none'%3E%3Crect width='5' height='16' rx='2'/%3E%3C/svg%3E")
+    0 0 / 7px 100% repeat-x;
+}
+[data-slot="slider-range"] {
+  background: var(--ink-soft);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    inset 0 -1px 0 rgb(0 0 0 / 0.18);
+  transition: background-color var(--dur-state) var(--ease-out);
+}
+[data-slot="slider"]:hover [data-slot="slider-range"] {
+  background: color-mix(in lab, var(--ink-soft), var(--ink) 40%);
+}
+[data-slot="slider"]:active [data-slot="slider-range"] {
+  background: var(--ink);
+}
+[data-slot="slider-thumb"] {
+  width: 0;
+  border-width: 0;
+  opacity: 0;
+}
+
+/* A segmented control is one well; the chosen segment is the only cap in it, and wears
+   the cap's face (above). */
+[data-slot="toggle-group"] {
+  background: var(--well-floor);
+  box-shadow: var(--well-shade), var(--well-lip);
 }
 
 /* Numeric chrome. Carries the mono family and tabular figures together so a
@@ -84,6 +342,8 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
   font-size: var(--text-2xs);
   font-variant-numeric: tabular-nums;
   color: var(--ink-faint);
+  background: var(--well-floor);
+  box-shadow: var(--well-shade);
 }
 /* The modifier for a count doing the novelty job — one that asks to be noticed
    rather than reporting a static fact. Both fill and ink derive from the one
@@ -94,6 +354,7 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
 [data-slot="badge"].count-attention {
   background: var(--attention-wash);
   color: var(--attention);
+  box-shadow: inset 0 1px 1px var(--count-shade);
 }
 
 /* Keycap: every Kbd renders as a small key, consistent across surfaces. The fill
@@ -174,20 +435,28 @@ button.float-chip[aria-expanded="true"]:not(:disabled) {
   letter-spacing: 0.04em;
   color: var(--ink-faint);
 }
-/* The sunk-paper box behind a settings pane's copyable/reference text (the
-   Advanced diagnostics blocks, the Updates upgrade command). */
+/* The box behind a settings pane's copyable text (the Advanced diagnostics blocks, the
+   Updates upgrade command): a recessed code panel. The upgrade command is a read-only
+   field, so focus firms its edge rather than ringing it. */
 .settings-copy-box {
   display: block;
+  margin: 0;
   padding: 0.6rem 0.75rem;
-  border: 1px solid var(--rule);
+  border: 0;
   border-radius: var(--radius);
-  background: var(--paper-sunk);
+  background: var(--code-panel);
+  box-shadow: var(--panel-recess);
   overflow-x: auto;
+}
+.settings-copy-box:focus-within {
+  box-shadow:
+    var(--panel-recess),
+    inset 0 0 0 1px var(--rule-strong);
 }
 .settings-copy-text {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
-  line-height: var(--leading-normal);
+  line-height: var(--leading-relaxed);
   color: var(--ink);
   white-space: pre;
 }

@@ -65,15 +65,15 @@
     }}
   >
     <p class="question">{question}</p>
-    <div class="actions">
-      <Popover.Close class="cancel">{cancelLabel}</Popover.Close>
+    <div class="actions tray tray-submit">
+      <Popover.Close class="cancel float-chip">{cancelLabel}</Popover.Close>
       <!-- Deliberately NOT a Popover.Close, unlike Cancel: it handles Enter/Space
            itself and calls preventDefault, so the native click never fires and an
            onclick on it is silently skipped on keyboard activation — the bubble would
            close without confirming, which reads as a completed action. A plain button
            keeps Enter, Space and the pointer on one path. -->
       <button
-        class="confirm"
+        class="confirm cap cap-danger"
         type="button"
         bind:this={confirmEl}
         onclick={() => {
@@ -110,9 +110,9 @@
     gap: 0;
     padding: 0.6rem 0.7rem 0.55rem;
     background: var(--pop-bg);
-    border: 1px solid var(--rule-strong);
+    border: 0;
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--float-surface-mid);
   }
   :global(.confirm-popover .question) {
     margin: 0 0 0.5rem;
@@ -122,38 +122,18 @@
     color: var(--ink);
     white-space: nowrap;
   }
+  /* The two caps share one well at the bubble's end. The confirm is the destructive
+     completion, in caret's danger red so "yes" reads as the irreversible act it is;
+     the back-out is a quiet neutral cap that never competes with it. */
   :global(.confirm-popover .actions) {
     display: flex;
-    justify-content: flex-end;
-    gap: 0.4rem;
+    width: fit-content;
+    margin-left: auto;
   }
   :global(.confirm-popover .cancel),
   :global(.confirm-popover .confirm) {
     border-radius: var(--radius);
-    font-size: var(--text-sm);
-    font-weight: 600;
-    padding: 0.3rem 0.7rem;
-    cursor: pointer;
-  }
-  /* Quiet back-out — never competes with the destructive confirm. */
-  :global(.confirm-popover .cancel) {
-    background: transparent;
-    color: var(--ink-soft);
-    border: 1px solid var(--rule);
-  }
-  :global(.confirm-popover .cancel:hover) {
-    color: var(--ink);
-    border-color: var(--rule-strong);
-  }
-  /* The destructive completion, in caret's danger red so "yes" reads as the
-     irreversible act it is. */
-  :global(.confirm-popover .confirm) {
-    background: var(--danger);
-    color: var(--accent-ink);
-    border: 1px solid var(--danger);
-  }
-  :global(.confirm-popover .confirm:hover) {
-    filter: brightness(1.08);
+    padding: 0 0.7rem;
   }
   /* The tail that makes it read as popping *out of* the button: a rotated square
      wearing the bubble's own fill + border, at the aligned edge to match
@@ -171,8 +151,7 @@
     height: 0.55rem;
     margin-bottom: -0.3rem;
     background: var(--pop-bg);
-    border-left: 1px solid var(--rule-strong);
-    border-top: 1px solid var(--rule-strong);
+    box-shadow: -1px -1px 0 0 var(--rule-strong);
     transform: rotate(45deg);
   }
   /* Flipped above the trigger (no room below): the tail moves to the bottom edge and
@@ -182,9 +161,6 @@
     bottom: auto;
     margin-top: -0.3rem;
     margin-bottom: 0;
-    border-left: none;
-    border-top: none;
-    border-right: 1px solid var(--rule-strong);
-    border-bottom: 1px solid var(--rule-strong);
+    box-shadow: 1px 1px 0 0 var(--rule-strong);
   }
 </style>

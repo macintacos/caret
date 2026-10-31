@@ -15,7 +15,6 @@
   // animationend a headless DOM never fires.
   import { untrack } from "svelte";
   import type { LineAnnotation } from "@core/lib/types";
-  import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import { commentState } from "$lib/commentState.ts";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
@@ -59,8 +58,8 @@
   // Rendered to sanitized HTML for display; the stored value stays literal text.
   const renderedComment = $derived(renderMarkdown(annotation.comment));
 
-  // The same dot + label shows collapsed and expanded, so draft-vs-resolved reads
-  // without opening the card.
+  // The same stamp shows collapsed and expanded, so draft-vs-resolved reads without
+  // opening the card.
   const stateView = $derived(commentState(annotation.state));
 
   function toggle() {
@@ -136,9 +135,7 @@
       >
         <Icon name="chevron-down" size={12} />
         <span class="ref">{label}</span>
-        <Badge variant="outline" class="quiet-badge state state-{stateView.tone}">
-          <span class="dot" aria-hidden="true"></span>{stateView.label}
-        </Badge>
+        <span class="stamp state"><Icon name={stateView.icon} size={11} />{stateView.label}</span>
         {#if !expanded}
           <span class="clamp-line preview">{annotation.comment}</span>
         {/if}
@@ -173,42 +170,40 @@
 </div>
 
 <style>
-  /* Capped so the comment reads as a block under its line, not a full-bleed band. */
+  /* Capped so the comment reads as a block under its line, not a full-bleed band. It
+     sits on the composer's sheet with no rail on its edge; its state is the stamp in
+     its header, inked in the state's own hue (--st). */
   .card {
+    --st: var(--attention);
+    --st-settle: 1;
     max-width: min(46rem, 100%);
     margin: 0.4rem 0 0.55rem;
-    border: 1px solid var(--rule);
-    border-left: 3px solid var(--state-accent);
     border-radius: var(--radius-lg);
     background: var(--paper-raised);
-    /* Unresolved comments stay caret amber so they read brand-active; the terminal
-       states below drop to quieter settled hues. */
-    --state-accent: var(--accent);
+    box-shadow: var(--float-surface-low);
     /* Opacity only: the card mounts inside the library-reserved annotation row, so
        a transform that grew or shifted its box would change the row's measured
        height and fight the preventScroll guard. */
     animation: reveal var(--dur-state) var(--ease-out);
-    transition: background-color var(--dur-state) var(--ease-out);
+    transition:
+      background-color var(--dur-state) var(--ease-out),
+      box-shadow var(--dur-state) var(--ease-out);
+  }
+  .card[data-state="rejected"] {
+    --st: var(--danger);
   }
   .card[data-state="approved"] {
-    --state-accent: var(--ok);
+    --st: var(--ok);
+    --st-settle: 0.5;
   }
-  .card[data-state="expired"] {
-    --state-accent: var(--ink-faint);
-  }
-  /* The state-hued left rail is re-asserted so the focus ring never overwrites it —
-     the current card should keep, not lose, its status cue. */
   .card.focused {
-    border-color: var(--rule-strong);
-    border-left-color: var(--state-accent);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--float-surface-mid);
   }
   /* While editing the card is just the composer, which owns its own surface — so
      the card drops its border/paper/box and lets the composer be the sole frame. */
   .card.editing {
     margin: 0;
     max-width: none;
-    border: 0;
     border-radius: 0;
     background: none;
     box-shadow: none;
@@ -220,7 +215,7 @@
     cursor: pointer;
   }
   .card:not(.editing):hover {
-    background: var(--chip);
+    background: color-mix(in lab, var(--paper-raised), var(--ink) 3%);
   }
 
   /* Centered so a taller action button and the one-line trigger read as one row. */
@@ -228,11 +223,11 @@
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.15rem 0.3rem 0.15rem 0;
+    padding: 0.15rem 0.3rem 0.15rem 0.35rem;
   }
   /* Grows to fill the head so the whole line is a click target. The compound
-     [data-slot] selector (0,2,0) outranks the copied button's utilities. */
-  :global([data-slot="button"].chip) {
+     button.chip selector outranks the copied button's utilities. */
+  :global(button.chip) {
     display: flex;
     align-items: center;
     justify-content: flex-start;
@@ -240,18 +235,23 @@
     flex: 1 1 auto;
     height: auto;
     min-width: 0;
-    padding: 0.35rem 0.4rem 0.35rem 0.5rem;
+    padding: 0.35rem 0.4rem;
     background: none;
     text-align: start;
     font-weight: 400;
     color: inherit;
   }
-  :global([data-slot="button"].chip .icon) {
+  /* The whole card is the toggle, so its header row takes no dimple of its own. */
+  :global(button.chip.cap-ghost:is(:active, [data-key-pressed])) {
+    background: none;
+    box-shadow: none;
+  }
+  :global(button.chip > .icon) {
     flex: none;
     color: var(--ink-faint);
     transition: transform var(--dur-state) var(--ease-out);
   }
-  :global([data-slot="button"].chip[aria-expanded="false"] .icon) {
+  :global(button.chip[aria-expanded="false"] > .icon) {
     transform: rotate(-90deg);
   }
   .ref {
@@ -261,16 +261,31 @@
     letter-spacing: 0.02em;
     color: var(--ink-soft);
   }
-  /* The dot carries the state hue via the inherited --state-accent; the label stays
-     neutral so the indicator reads as chrome, not a second accent. */
-  :global([data-slot="badge"].state) {
-    gap: 0.3rem;
+  /* The .stamp atom, its floor tinted toward the state's hue (half as far for a settled
+     one) and its glyph and word inked in it, at the --stamp-* strengths. */
+  .state {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    height: 1.25rem;
+    padding: 0 0.5rem 0 0.4rem;
+    border-radius: 99px;
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: var(--leading-none);
+    white-space: nowrap;
+    background: color-mix(
+      in lab,
+      var(--well-floor),
+      var(--st) calc(var(--stamp-floor) * var(--st-settle))
+    );
+    color: color-mix(in lab, var(--st), var(--stamp-word-toward) var(--stamp-word-mix));
   }
-  .dot {
-    width: 0.4rem;
-    height: 0.4rem;
-    border-radius: 50%;
-    background: var(--state-accent);
+  .card[data-state="expired"] .state {
+    background: var(--well-floor);
+    color: var(--ink-soft);
   }
 
   .actions {
@@ -334,7 +349,7 @@
   .body {
     overflow: hidden;
     min-height: 0;
-    padding: 0 0.6rem 0 0.9rem;
+    padding: 0 0.6rem 0 0.75rem;
   }
   .card.expanded .body {
     /* Folds in only while open, so a collapsed card's grid row truly measures 0. */

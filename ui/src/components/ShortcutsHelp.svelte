@@ -83,7 +83,7 @@
          (the input is not autofocused). The cap renders through the same shadcn
          Kbd as every other cap, in an InputGroup inline-end addon (EXC-1113) that
          gives it a track of its own beside the control. -->
-    <InputGroup.Root class="help-search">
+    <InputGroup.Root class="help-search field-well">
       <InputGroup.Input
         type="text"
         placeholder="Search shortcuts…"
@@ -173,13 +173,6 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
-  }
-  /* The field recesses off the dialog's --paper-raised, the step every other recessed
-     control in the chrome takes. The group's own fill is dark-scheme only, so without
-     this the field would sit flush on the panel with just its hairline — the same
-     reason command-input.svelte paints its own surface rather than taking the stock. */
-  .help :global(.help-search) {
-    background: var(--paper);
   }
   /* The grouped sections flow across up to three newspaper columns (EXC-835) so
      the whole keymap fits at a glance; the count drops as the viewport narrows.

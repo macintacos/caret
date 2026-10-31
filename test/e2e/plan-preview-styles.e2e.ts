@@ -424,7 +424,7 @@ const TABLE_PLAN = `| Left | Centre | Right | Plain |
 |${" x |".repeat(WIDE_COLUMNS.length)}
 `;
 
-test("a table has headers, borders, column alignment and scrolls on its own", async ({
+test("a table has headers, a sunk pane, column alignment and scrolls on its own", async ({
   daemon,
   page,
 }) => {
@@ -433,7 +433,7 @@ test("a table has headers, borders, column alignment and scrolls on its own", as
     .poll(async () => {
       const styles = await stylesOf(page, {
         weight: ["th", "Left", "font-weight"],
-        border: ["td", "a", "border-top-width"],
+        floor: ["td", "a", "background-color"],
         left: ["th", "Left", "text-align"],
         centre: ["th", "Centre", "text-align"],
         right: ["th", "Right", "text-align"],
@@ -441,7 +441,7 @@ test("a table has headers, borders, column alignment and scrolls on its own", as
       });
       return {
         bold: Number(styles.weight) >= 600,
-        bordered: Number.parseFloat(styles.border ?? "0") > 0,
+        floored: (styles.floor ?? "rgba(0, 0, 0, 0)") !== "rgba(0, 0, 0, 0)",
         // Chromium maps a cell's align attribute to -webkit-left and the like.
         left: /left$/.test(styles.left ?? ""),
         centre: /center$/.test(styles.centre ?? ""),
@@ -449,7 +449,7 @@ test("a table has headers, borders, column alignment and scrolls on its own", as
         plain: styles.plain,
       };
     })
-    .toEqual({ bold: true, bordered: true, left: true, centre: true, right: true, plain: "start" });
+    .toEqual({ bold: true, floored: true, left: true, centre: true, right: true, plain: "start" });
 
   await expect
     .poll(() =>

@@ -241,9 +241,8 @@
     width: min(21rem, calc(100vw - 1.4rem));
     max-height: min(60vh, 24rem);
     background: var(--paper-raised);
-    border: 1px solid var(--rule-strong);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--float-surface-mid);
     overflow: hidden;
     animation: nav-open var(--dur-state) var(--ease-out);
   }

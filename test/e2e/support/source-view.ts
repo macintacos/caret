@@ -99,18 +99,6 @@ export function rowLabel(lines: readonly number[]): string {
   return first === last ? `Line ${first}` : `Lines ${first}–${last}`;
 }
 
-/**
- * A banded code row's gutter→content seam-fill strip, as Chromium serializes it: a shadow
- * layer pulled left by the two insets, with no blur and no spread.
- *
- * Matching the strip's own negative offset is what keeps a "this row is banded" assertion
- * pointed at the strip. Every code row carries the `--caret-card-lift` contact shadow
- * (EXC-1145), so the presence of a box-shadow no longer separates a banded row from a
- * resting one — and a length or "not none" comparison would pass on any second layer at
- * all. Two specs make that claim, so the pattern lives here rather than in either.
- */
-export const SEAM_STRIP = /-[\d.]+px 0px 0px 0px/;
-
 /** Resolve once the seeded plan has rendered, returning the container for the callers
  * that go on to scroll it or scope a query inside it. */
 export async function planSurface(page: Page): Promise<Locator> {

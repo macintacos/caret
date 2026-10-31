@@ -217,6 +217,39 @@ describe("createShortcutDispatcher", () => {
     expect(gg.calls()).toBe(0);
   });
 
+  describe("the onRun hook", () => {
+    let ran: string[];
+
+    function mountWithHook() {
+      ran = [];
+      disp = createShortcutDispatcher({
+        target,
+        registry,
+        isEditingContext: () => editing,
+        activeScope: () => scope,
+        now: () => 0,
+        onRun: (entry) => ran.push(entry.id),
+      });
+    }
+
+    test("hears each shortcut that runs", () => {
+      const a = spyEntry("approve", [{ key: "a" }]);
+      registry.register(a.entry);
+      mountWithHook();
+      keydown("a");
+      expect(a.calls()).toBe(1);
+      expect(ran).toEqual(["approve"]);
+    });
+
+    test("does not hear a disabled shortcut", () => {
+      const a = spyEntry("approve", [{ key: "a" }], { enabled: () => false });
+      registry.register(a.entry);
+      mountWithHook();
+      keydown("a");
+      expect(ran).toEqual([]);
+    });
+  });
+
   test("destroy() removes the listener", () => {
     const a = spyEntry("approve", [{ key: "a" }]);
     registry.register(a.entry);

@@ -45,24 +45,27 @@
              ("Widget Cache Refactor 2") — a name that says nothing about the control
              and changes on every switch. The count rides a hidden span, which accname
              still reads because aria-describedby references it directly. -->
-        <Button
-          {...props}
-          variant="secondary"
-          size="sm"
-          class="switcher-trigger float-chip"
-          aria-label="Switch review"
-          aria-describedby="switcher-count"
-        >
-          <span class="title">{stripTitleLinks(active?.title ?? "—")}</span>
-          <Badge variant="secondary" class="count metric">{reviews.length}</Badge>
-          {#if unreadCount > 0}
-            <!-- Keyed on the arrival counter so the jiggle replays each time a plan
-                 lands, rather than only on the dot's first mount. -->
-            {#key arrivals}<span class="unread-dot" aria-hidden="true"></span>{/key}
-          {/if}
-          <span class="chev"><Icon name="chevron-down" size={14} /></span>
-          <span id="switcher-count" hidden>{countDescription}</span>
-        </Button>
+        <!-- A lone control, so it sits in a well of its own. -->
+        <span class="tray switcher-tray">
+          <Button
+            {...props}
+            variant="secondary"
+            size="sm"
+            class="switcher-trigger float-chip"
+            aria-label="Switch review"
+            aria-describedby="switcher-count"
+          >
+            <span class="title">{stripTitleLinks(active?.title ?? "—")}</span>
+            <Badge variant="secondary" class="count metric">{reviews.length}</Badge>
+            {#if unreadCount > 0}
+              <!-- Keyed on the arrival counter so the jiggle replays each time a plan
+                   lands, rather than only on the dot's first mount. -->
+              {#key arrivals}<span class="unread-dot" aria-hidden="true"></span>{/key}
+            {/if}
+            <span class="chev"><Icon name="chevron-down" size={14} /></span>
+            <span id="switcher-count" hidden>{countDescription}</span>
+          </Button>
+        </span>
       {/snippet}
     </DropdownMenu.Trigger>
     <!-- Bounded width: comfortable minimum, and a max so a long plan title
@@ -99,6 +102,11 @@
 {/if}
 
 <style>
+  /* Shrinks with the trigger inside it, so the title still truncates first. */
+  .switcher-tray {
+    flex-shrink: 1;
+    min-width: 0;
+  }
   /* Inert single-review label: no control chrome, just the title reading inline
      with the wordmark to its left. */
   .switcher.single {

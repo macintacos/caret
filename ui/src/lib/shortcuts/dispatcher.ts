@@ -7,7 +7,12 @@
 // App.svelte's $effect exactly like createSafeModeGuard.
 
 import { matchKeydown, type SequenceState } from "$lib/shortcuts/match.ts";
-import type { KeySpec, ShortcutRegistry, ShortcutScope } from "$lib/shortcuts/registry.ts";
+import type {
+  KeySpec,
+  ShortcutEntry,
+  ShortcutRegistry,
+  ShortcutScope,
+} from "$lib/shortcuts/registry.ts";
 import { isEntryActive } from "$lib/shortcuts/scope.ts";
 
 const DEFAULT_SEQUENCE_TIMEOUT_MS = 1000;
@@ -29,6 +34,8 @@ export interface ShortcutDispatcherOptions {
   now?: () => number;
   /** Max gap between the two keys of a sequence (gg, ]]). */
   sequenceTimeoutMs?: number;
+  /** Hears each shortcut as it runs — the app's press echo (pressEcho.ts). */
+  onRun?: (entry: ShortcutEntry) => void;
 }
 
 export interface ShortcutDispatcher {
@@ -97,7 +104,10 @@ export function createShortcutDispatcher(opts: ShortcutDispatcherOptions): Short
     if (!held) seq = state;
     if (entry && entry.enabled?.() !== false) {
       e.preventDefault();
-      if (!held) entry.run?.();
+      if (!held) {
+        opts.onRun?.(entry);
+        entry.run?.();
+      }
     }
   }
 

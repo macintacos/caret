@@ -27,7 +27,7 @@
   // docked panel instead, revealing their line on the side
   // they belong to for the two rendered versions and listing non-interactively for
   // anything in between.
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import SourceView from "$lib/diffview/SourceView.svelte";
   import SourceDiffView from "$lib/diffview/SourceDiffView.svelte";
   import {
@@ -68,6 +68,7 @@
   import { resolveFileRefs } from "$lib/api.ts";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { shortCwd } from "$lib/cwd.ts";
+  import { commentIndex } from "$lib/feedback.ts";
   import { createFolderMemory } from "$lib/folderTree.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { buildLinkLayer } from "$lib/diffview/links.ts";
@@ -78,7 +79,7 @@
   import { createPlanKeyboard, type PlanKeyboardStore } from "@/state/planKeyboard.svelte.ts";
   import { setHeadingSlug, takeHeadingSlug } from "@/state/headingLink.ts";
   import VersionComparePicker from "@/components/VersionComparePicker.svelte";
-  import PlanSearch from "@/components/PlanSearch.svelte";
+  import SearchDock from "@/components/SearchDock.svelte";
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
   import type {
     DiffSide,
@@ -1109,7 +1110,7 @@
   // Keep every block's chrome anchored. The preview re-anchors on previewLayoutRev; the
   // source re-syncs, rAF-throttled, from a ResizeObserver over its content
   // (`geometry.observed`). Content coordinates survive scrolling, so only a block's box
-  // changing matters — a library repaint, a block entering or leaving its scroll card, a
+  // changing matters — a library repaint, a block being re-carded after a repaint, a
   // viewport resize — and each changes the rendered height the observer watches. The
   // chrome is a light-DOM child of .diff-plan, so it scrolls with the rows for free.
   $effect(() => {
@@ -1173,7 +1174,7 @@
   //
   // The content RESIZES. Content coordinates survive scrolling by construction, but
   // not a change in the height of anything above the token — a web font arriving,
-  // shiki repainting a row, an over-wide fenced block moving into its own card. A badge
+  // shiki repainting a row, a fenced block moving back into its card. A badge
   // holding coordinates from before such a shift sits where its token used to be, and
   // observing the host catches all of them: they all change the rendered height.
   //
@@ -1963,6 +1964,30 @@
     };
   });
 
+  // Which pane edges have text under them, for the lip's shades. Its own listener, as the
+  // heading tracking above doesn't run on compare. Rows paint after mount without resizing
+  // the scroller, so its children are observed too, afresh for each surface and content.
+  let paneScrolled = $state(false);
+  let paneMoreBelow = $state(false);
+  $effect(() => {
+    const el = scrollEl;
+    if (!el) return;
+    void surface;
+    void contentKey;
+    void diffContentKey;
+    const update = () => {
+      paneScrolled = el.scrollTop > 2;
+      paneMoreBelow = el.scrollTop + el.clientHeight < el.scrollHeight - 2;
+    };
+    const resize = new ResizeObserver(update);
+    for (const box of [el, ...el.children]) resize.observe(box);
+    el.addEventListener("scroll", update, { passive: true });
+    return () => {
+      resize.disconnect();
+      el.removeEventListener("scroll", update);
+    };
+  });
+
   // ----- Keyboard line cursor + vim motion (EXC-788) -----
   // Each reserved motion binding (keymap.ts) maps to a cursor motion; registering
   // with the SAME id upgrades the display-only reservation to a live entry, so the
@@ -1994,14 +2019,11 @@
   }
 
   // ----- Plan search field focus (EXC-832) -----
-  // `/` reopens the search prefilled with the last committed query and its text selected,
-  // so it comes right back where you left it, yet typing immediately replaces it (like
-  // browser find). On the FIRST open the pill isn't mounted yet, so this focus/select is
-  // a no-op and PlanSearch's own mount step lands the caret and selection; on a REOPEN
-  // over a committed HUD the pill is already mounted (its mount step won't re-fire), so
-  // focusing/selecting here is what brings the field forward. Injected into the keyboard
-  // factory as its focusField dep.
-  function focusSearchField(): void {
+  // `/` reopens the search with the last committed query selected, so typing replaces it.
+  // PlanSearch focuses its field whenever it mounts; this covers `/` over a field that is
+  // mounted but blurred, and waits a tick so it selects the prefilled value.
+  async function focusSearchField(): Promise<void> {
+    await tick();
     const el = document.querySelector<HTMLInputElement>("input[aria-label='Search plan']");
     el?.focus();
     el?.select();
@@ -2336,23 +2358,9 @@
 
 <!-- Control row above the surface. The version-compare picker is always shown; its
      toggle disables itself when there are no other versions to compare (EXC-664).
-     The Preview toggle (off compare only), the heading breadcrumbs and the
-     working-directory path each earn their place conditionally alongside it. -->
+     Contents and the Preview toggle share its tray; the heading breadcrumbs and the
+     working-directory path each earn their place conditionally beside it. -->
 <div class="control-row" class:comparing={compareStore.comparing}>
-  <!-- The plan's table of contents (EXC-1095): every heading at once, the
-       see-the-whole-shape surface the breadcrumbs bar beside it is not. It reads
-       the SAME headings and activeLine that bar does, so neither tracks a scroll
-       of its own, and it is gated on the same headingTracking row — elsewhere no
-       heading is tracked, so a contents popup there would open on a stale plan. -->
-  {#if runs("headingTracking")}
-    <PlanToc
-      {headings}
-      {activeLine}
-      {showShortcutHints}
-      onJump={pickHeading}
-      onExposeOpen={(open) => (openToc = open)}
-    />
-  {/if}
   <VersionComparePicker
     versions={review.versions}
     comparing={compareStore.comparing}
@@ -2368,24 +2376,46 @@
     onSelectTarget={compare.setTarget}
     onSetDiffStyle={compare.setDiffStyle}
     onSetDiffIndicators={compare.setDiffIndicators}
-  />
-  <!-- The source / preview switch. Outside any branch on planView, so it keeps
-       focus across a flip. -->
-  {#if !showDiff}
-    <Button
-      variant="secondary"
-      size="sm"
-      class="preview-toggle float-chip"
-      aria-pressed={planView === "preview"}
-      aria-keyshortcuts={ariaKeyshortcutsFor("actions.togglePreview")}
-      onclick={togglePlanView}
-    >
-      Preview
-      {#if showShortcutHints}
-        <Kbd class="kbd-sm" aria-hidden="true">p</Kbd>
+  >
+    {#snippet leading()}
+      <!-- The plan's table of contents (EXC-1095): every heading at once, the
+           see-the-whole-shape surface the breadcrumbs bar beside it is not. It reads
+           the SAME headings and activeLine that bar does, so neither tracks a scroll
+           of its own, and it is gated on the same headingTracking row — elsewhere no
+           heading is tracked, so a contents popup there would open on a stale plan. -->
+      {#if runs("headingTracking")}
+        <PlanToc
+          {headings}
+          {activeLine}
+          {showShortcutHints}
+          plan={review.currentPlan}
+          previous={review.versions.at(-2) ?? null}
+          comments={commentIndex(annotations, scratches)}
+          onJump={pickHeading}
+          onExposeOpen={(open) => (openToc = open)}
+        />
       {/if}
-    </Button>
-  {/if}
+    {/snippet}
+    {#snippet trailing()}
+      <!-- The source / preview switch. Outside any branch on planView, so it keeps
+           focus across a flip. -->
+      {#if !showDiff}
+        <Button
+          variant="secondary"
+          size="sm"
+          class="preview-toggle float-chip"
+          aria-pressed={planView === "preview"}
+          aria-keyshortcuts={ariaKeyshortcutsFor("actions.togglePreview")}
+          onclick={togglePlanView}
+        >
+          Preview
+          {#if showShortcutHints}
+            <Kbd class="kbd-sm" aria-hidden="true">p</Kbd>
+          {/if}
+        </Button>
+      {/if}
+    {/snippet}
+  </VersionComparePicker>
   <!-- Heading breadcrumbs (EXC-946): where in the plan the reviewer is, and the
        menus to move sideways or deeper — the drill-down surface beside the ToC's
        whole-shape one. It rides the activeLine the scroll observer below tracks
@@ -2421,35 +2451,25 @@
   bind:clientWidth={surfaceWidth}
   bind:clientHeight={surfaceHeight}
 >
-  <div class="plan-pane">
-    <!-- The vim `/` search dock (EXC-832), top-right of the plan (search surfaces only).
-         Absolutely positioned within .plan-pane so it stays put over the scrolling
-         plan, and so it tracks the plan's edge rather than the drawer's when one is
-         open. Holds either the "/ to search" hint chip (Show Hints on) or the open search
-         pill; pressing `/` swaps the chip for the pill, which expands from this same
-         top-right corner (its CSS enter animation), reading as the chip growing into the
-         field. Esc/✕ swaps back to the chip. -->
+  <div
+    class="plan-pane"
+    data-scrolled={paneScrolled || undefined}
+    data-more-below={paneMoreBelow || undefined}
+  >
     {#if runs("search")}
-      <div class="search-dock">
-        {#if keyboardStore.searchOpen}
-          <PlanSearch
-            bind:query={keyboardStore.searchQuery}
-            matchCount={searchMatches.length}
-            currentIndex={keyboardStore.searchIndex}
-            committed={keyboardStore.searchCommitted}
-            closing={keyboardStore.searchClosing}
-            oncommit={() => keyboard.commitSearch()}
-            onnext={() => keyboard.stepSearch(1)}
-            onprev={() => keyboard.stepSearch(-1)}
-            onclose={() => keyboard.closeSearch()}
-          />
-        {:else if showShortcutHints}
-          <div class="search-hint" role="note">
-            <Kbd class="kbd-sm">/</Kbd>
-            <span>to search</span>
-          </div>
-        {/if}
-      </div>
+      <SearchDock
+        open={keyboardStore.searchOpen}
+        hints={showShortcutHints}
+        bind:query={keyboardStore.searchQuery}
+        matchCount={searchMatches.length}
+        currentIndex={keyboardStore.searchIndex}
+        committed={keyboardStore.searchCommitted}
+        closing={keyboardStore.searchClosing}
+        oncommit={() => keyboard.commitSearch()}
+        onnext={() => keyboard.stepSearch(1)}
+        onprev={() => keyboard.stepSearch(-1)}
+        onclose={() => keyboard.closeSearch()}
+      />
     {/if}
     <!-- The gutter composer is the source view only. The compare diff
          is a clean surface with no gutter and no inline annotations; the compared
@@ -2474,7 +2494,7 @@
             start={chromeBox.start}
             top={chromeBox.top}
             left={chromeBox.left}
-            carded={chromeBox.carded}
+            wrappable={chromeBox.wrappable}
             reflowed={reflowedBlocks.has(chromeBox.start)}
             hovered={hoveredBlockStart === chromeBox.start}
             onToggleReflow={() => toggleReflow(chromeBox.start)}
@@ -2793,6 +2813,7 @@
         {@render visualHint()}
       {/if}
     </div>
+    <span class="pane-lip" aria-hidden="true"></span>
   </div>
   <!-- The filename-reference preview (EXC-687, docked since EXC-937): a lane
        beside the plan holding the referenced file's excerpt. It takes layout
@@ -2858,24 +2879,18 @@
     opacity: 0;
     pointer-events: none;
   }
-  /* A view option, not a selection — neutral, like the soft-wrap toggle. */
-  .control-row :global(button.preview-toggle[aria-pressed="true"]:not(:disabled)) {
-    background: var(--chip-hover);
-    color: var(--ink);
-  }
-
-  /* The control bar above the surface. Carries the bar chrome (raised paper,
-     hairline rule) for the version-compare picker: the "Versions" toggle sits at
-     the left, and (in compare mode) the layout / indicator toggles are pushed to
+  /* The row of plan controls above the surface, cut straight into the window's body
+     like the top bar, so it has no face or rule of its own: the plan view's tray sits
+     at the left, and (in compare mode) the layout / indicator toggles are pushed to
      the right edge. The horizontal inset is the app's shared --bar-inset, the same
      the TopBar and the shell use. */
   .control-row {
     display: flex;
     align-items: center;
     gap: 0.85rem;
-    padding: 0.5rem var(--bar-inset);
-    border-bottom: 1px solid var(--rule);
-    background: var(--paper-raised);
+    /* Trimmed by the wells' bezel; the top bar's own bottom padding spaces the two
+       rows, and the 2px below keep the trays' lip off the pane's edge. */
+    padding: 0 var(--bar-inset) calc(0.5rem - var(--well-pad) + 2px);
     /* The shared control height every child in the row sizes to. */
     --ctl-h: 1.75rem;
     /* As a .shell grid item this row defaults to min-width:auto, which floors it
@@ -2934,7 +2949,8 @@
     border: none;
     padding: 0;
     font-size: inherit;
-    color: var(--ink-faint);
+    /* Soft, not faint: --ink-faint falls under 4.5:1 on the body in some palettes. */
+    color: var(--ink-soft);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -2948,7 +2964,7 @@
     animation: cwd-reveal var(--dur-state) var(--ease-out);
   }
   .cwd:hover {
-    color: var(--ink-soft);
+    color: var(--ink);
   }
   @keyframes cwd-reveal {
     from {
@@ -2963,10 +2979,14 @@
 
   /* The plan and the file drawer (EXC-937) divide this surface between them: a
      row when the drawer docks right, a column when it docks bottom. With no
-     drawer open the plan pane is the only child and takes the whole thing. */
+     drawer open the plan pane is the only child and takes the whole thing. Both are
+     panes set into the window's body, inset from its sides. */
   .diff-surface {
     display: flex;
     min-height: 0;
+    margin-inline: var(--pane-gap);
+    /* Room under the clip for the panes' lip. */
+    padding-bottom: 1px;
     overflow: hidden;
   }
   .diff-surface.dock-bottom {
@@ -2984,46 +3004,33 @@
     display: flex;
     min-width: 0;
     min-height: 0;
-  }
-
-  /* The search dock: pinned to the top-right of the plan area, clear of the scrollbar,
-     above the plan's own sticky rails (drag readout/hints are z-index 3). It sits
-     outside the .diff-plan scroller so it never scrolls with the content. Right-anchored
-     so the hint chip and the (wider) search pill grow from the same corner. */
-  .search-dock {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.85rem;
-    z-index: 4;
-  }
-
-  /* The "/ to search" discovery chip (EXC-832): the collapsed state of the search pill,
-     wearing the same sheer --paper-veil surface so `/` reads as expanding this chip
-     into the field. Shown only with the Show Hints setting on; fades in on mount.
-     On the chip-scale --shadow-chip, not the panel-scale --shadow-card, which at this
-     size casts a plume wider than the chip; the pill it expands into rides the same
-     one so the two read as one surface growing. */
-  .search-hint {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.35rem 0.6rem;
-    background: var(--paper-veil);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-chip);
-    color: var(--ink-soft);
-    font-size: var(--text-sm);
-    white-space: nowrap;
-    user-select: none;
-    animation: search-hint-in var(--dur-state) var(--ease-out);
+    overflow: hidden;
+    background: var(--paper);
+    box-shadow: var(--pane-lip);
   }
-  @keyframes search-hint-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
+  /* The recess, on its own layer over the plan and over SearchDock (z-index 4), which
+     tucks under the pane's top edge. An idle shade stays an inset layer so it fades
+     rather than snaps. */
+  .pane-lip {
+    --top-shade: inset 0 0 0 0 transparent;
+    --bottom-shade: inset 0 0 0 0 transparent;
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    border-radius: inherit;
+    pointer-events: none;
+    box-shadow:
+      var(--top-shade),
+      var(--bottom-shade),
+      var(--pane-recess);
+    transition: box-shadow var(--dur-state) var(--ease-out);
+  }
+  .plan-pane[data-scrolled] .pane-lip {
+    --top-shade: inset 0 7px 8px -7px var(--pane-shade);
+  }
+  .plan-pane[data-more-below] .pane-lip {
+    --bottom-shade: inset 0 -7px 8px -7px var(--pane-shade);
   }
 
   /* Fills the content row and scrolls on its own; the SourceView renders its
