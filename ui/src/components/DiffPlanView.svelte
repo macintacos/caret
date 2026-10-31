@@ -1110,7 +1110,7 @@
   // Keep every block's chrome anchored. The preview re-anchors on previewLayoutRev; the
   // source re-syncs, rAF-throttled, from a ResizeObserver over its content
   // (`geometry.observed`). Content coordinates survive scrolling, so only a block's box
-  // changing matters — a library repaint, a block entering or leaving its scroll card, a
+  // changing matters — a library repaint, a block being re-carded after a repaint, a
   // viewport resize — and each changes the rendered height the observer watches. The
   // chrome is a light-DOM child of .diff-plan, so it scrolls with the rows for free.
   $effect(() => {
@@ -1174,7 +1174,7 @@
   //
   // The content RESIZES. Content coordinates survive scrolling by construction, but
   // not a change in the height of anything above the token — a web font arriving,
-  // shiki repainting a row, an over-wide fenced block moving into its own card. A badge
+  // shiki repainting a row, a fenced block moving back into its card. A badge
   // holding coordinates from before such a shift sits where its token used to be, and
   // observing the host catches all of them: they all change the rendered height.
   //
@@ -2494,7 +2494,7 @@
             start={chromeBox.start}
             top={chromeBox.top}
             left={chromeBox.left}
-            carded={chromeBox.carded}
+            wrappable={chromeBox.wrappable}
             reflowed={reflowedBlocks.has(chromeBox.start)}
             hovered={hoveredBlockStart === chromeBox.start}
             onToggleReflow={() => toggleReflow(chromeBox.start)}

@@ -55,15 +55,18 @@ All in `ui/src/styles/tokens.css`:
   (`--rim-*`, `--dome-*`, the `--press-*` set, the `--tinted-*` set that lights an amber
   or danger face, `--grain`), the sockets (`--socket-shade`, `--socket-ring`,
   `--count-shade`), the floats (`--float-rim`, `--float-low`, `--float-mid`,
-  `--float-high`) and `--shadow-chip` for small hints, the submit tray's `--cap-submit-h`,
-  the comment stamp's `--stamp-*` strengths, `--unsent-floor` (the share of `--attention`
-  in an unsent comment's well, 16% dark and 8% light), the switch knob's `--knob-hi` and
-  `--knob-lo`, the plan pane's `--pane-recess`, `--pane-lip` and `--pane-shade`, a table's
-  pane (`--table-pane-edge` for its crisp 1px edges, `--table-pane-sink` for the shade
-  under the rail plus the pane's top edge, and `--table-pane-sink-shade` for that shade's
-  colour, which the preview's gradient spends too), the pressed-in label shadow
-  `--label-pressed`, and the plan's `--chip-stamped`, `--chip-raised` and
-  `--panel-recess`. `--shadow-card` still comes from the palette.
+  `--float-high`) and `--shadow-chip` for small hints, `--float-rim-ink` (the colour of
+  `--float-rim`'s lit edge, for a float that draws it as a border, such as the plan's code
+  card), the submit tray's `--cap-submit-h`, the comment stamp's `--stamp-*` strengths,
+  `--unsent-floor` (the share of `--attention` in an unsent comment's well, 16% dark and
+  8% light), the switch knob's `--knob-hi` and `--knob-lo`, the plan pane's
+  `--pane-recess`, `--pane-lip` and `--pane-shade`, a table's pane (`--table-pane-edge`
+  for its crisp 1px edges, `--table-pane-sink` for the shade under the rail plus the
+  pane's top edge, and `--table-pane-sink-shade` for that shade's colour, which the
+  preview's gradient spends too), a code block's `--code-bezel` (the bezel's width, which
+  the copy and wrap tray steps in by), the pressed-in label shadow `--label-pressed`, the
+  plan's `--chip-stamped` and `--chip-raised`, and `--panel-recess` for the recessed
+  groups in Settings and the Contents peek. `--shadow-card` still comes from the palette.
 - **Layout:** `--pane-gap` (6px), the inset around the plan pane, and `--status-bar-h`
   (2rem), the status bar's height, are in `ui/src/styles/layout.css`.
 

@@ -11,7 +11,7 @@ const BASE_PROPS = {
   text: "x",
   top: 0,
   left: 0,
-  carded: false,
+  wrappable: false,
   reflowed: false,
   start: 42,
   hovered: false,
@@ -29,7 +29,7 @@ describe("CodeBlockChrome", () => {
   });
 
   test("names its controls after the block's opening line", () => {
-    const { target, flush } = render(CodeBlockChrome, { ...BASE_PROPS, carded: true });
+    const { target, flush } = render(CodeBlockChrome, { ...BASE_PROPS, wrappable: true });
     flush();
     expect(target.querySelector("button.code-copy")?.getAttribute("aria-label")).toBe(
       "Copy code from line 42",

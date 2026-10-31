@@ -99,27 +99,6 @@ export function rowLabel(lines: readonly number[]): string {
   return first === last ? `Line ${first}` : `Lines ${first}–${last}`;
 }
 
-/**
- * A banded code row's gutter→content seam-fill strip, as Chromium serializes it: an outer
- * shadow layer pulled left by the two insets, with no blur and no spread.
- *
- * Matching the strip's own negative offset is what keeps a "this row is banded" assertion
- * pointed at the strip. Every code row carries the panel recess, so the presence of a
- * box-shadow does not separate a banded row from a resting one — and a length or "not
- * none" comparison would pass on any second layer at all. The recess's right edge is an
- * inset layer at the same kind of offset, which is why an inset layer never matches.
- */
-export const SEAM_STRIP = /-[\d.]+px 0px 0px 0px(?! inset)/;
-
-/**
- * The two side edges of the panel recess, as Chromium serializes them. Every fitting code
- * row carries these, where the shade and the top and bottom edges ride only the block's
- * first and last rows, so they are what two rows' shadows have in common.
- */
-export function recessSides(shadow: string): string {
-  return (shadow.match(/\S+\([^)]*\) -?1px 0px 0px 0px inset/g) ?? []).join(", ");
-}
-
 /** Resolve once the seeded plan has rendered, returning the container for the callers
  * that go on to scroll it or scope a query inside it. */
 export async function planSurface(page: Page): Promise<Locator> {

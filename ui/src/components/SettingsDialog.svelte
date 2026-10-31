@@ -554,8 +554,7 @@
     margin: 0 0 0.5rem;
   }
 
-  /* Each section's rows sit in a group recessed into the sheet, the plan's code-panel
-     recess, with a full-bleed hairline between rows: a section reads as a table of
+  /* Each section's rows sit in a group recessed into the sheet with a full-bleed hairline between rows: a section reads as a table of
      settings. `align-items: center` out-specifies Field's own
      has-[field-content]:items-start, which would otherwise top-align the control against
      a two-line description. */

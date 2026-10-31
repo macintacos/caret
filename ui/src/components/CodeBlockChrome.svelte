@@ -17,7 +17,7 @@
     left: number;
     /** The block overflows its reading width unwrapped, so wrapping it means something.
      * A block that fits gets no wrap button. */
-    carded: boolean;
+    wrappable: boolean;
     /** The block's 1-based opening line. It names this block's controls, which are
      * otherwise indistinguishable from every other block's in the tab order. */
     start: number;
@@ -30,7 +30,7 @@
     copy?: (text: string) => Promise<void>;
   }
 
-  let { text, top, left, carded, reflowed, start, hovered, onToggleReflow, copy }: Props =
+  let { text, top, left, wrappable, reflowed, start, hovered, onToggleReflow, copy }: Props =
     $props();
 </script>
 
@@ -39,7 +39,7 @@
     {text}
     copyName="code from line {start}"
     wrapName="from line {start}"
-    wrappable={carded}
+    {wrappable}
     {reflowed}
     {onToggleReflow}
     {copy}
@@ -47,11 +47,15 @@
 </div>
 
 <style>
-  /* Anchored at the block's top-right corner; the translate insets the whole row just
-     inside it, which is what keeps both buttons clear of the first line's text. */
+  /* Anchored at the block's top-right corner; the translate insets the whole row past the
+     bezel to just inside the pane, which is what keeps both buttons clear of the first
+     line's text. */
   .code-chrome {
     position: absolute;
-    transform: translate(calc(-100% - 0.4rem), 0.4rem);
+    transform: translate(
+      calc(-100% - 0.4rem - var(--code-bezel)),
+      calc(0.4rem + var(--code-bezel))
+    );
     z-index: 4;
     /* Rests dimmed so it stays quiet while the code is read, and comes up as the reviewer
        reaches the block. Keyboard focus lights it the same way a pointer does. */

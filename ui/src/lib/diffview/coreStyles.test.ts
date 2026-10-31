@@ -123,10 +123,13 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     // the CHROME radius, sized for panels and chips, and a checkbox is a control roughly
     // one em across — at that size the shared token rounds it most of the way to a circle.
     // Its corner is part of the shape being drawn, the way its border width and its size
-    // are, so it is measured in the same em the rest of the control is. A table's bezel
-    // is exempt too: it is a float standing on the plan, and floats round at --radius-lg.
+    // are, so it is measured in the same em the rest of the control is. A table's or a code
+    // block's bezel is exempt too: it is a float standing on the plan, and floats round at
+    // --radius-lg.
     const radiusRules = (overrideDecls.match(/[^{}]*\{[^{}]*border-[a-z-]*radius:[^{}]*\}/g) ?? [])
-      .filter((block) => !block.includes("checkbox") && !/\[data-table-card\]\s*\{/.test(block))
+      .filter(
+        (block) => !block.includes("checkbox") && !/\[data-(?:table|code)-card\]\s*\{/.test(block),
+      )
       .flatMap((block) => block.match(/border-[a-z-]*radius:\s*[^;]+;/g) ?? []);
     expect(radiusRules.length).toBeGreaterThan(0);
     for (const rule of radiusRules) {
@@ -257,7 +260,7 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     expect(extension?.[1]).toMatch(
       /width:\s*calc\(var\(--caret-seam\)\s*\+\s*var\(--caret-card-inset\)\)/,
     );
-    // inherit rather than a named fill, so one rule covers selection, hover and cursor.
+    // inherit rather than a named fill, so one rule covers selection and the change tints.
     expect(extension?.[1]).toMatch(/background-color:\s*inherit/);
     // Offset from the cell's BORDER box. 100% alone resolves against the padding box,
     // which on a gutter cell is two pixels short of the card — the strip would leave a
@@ -312,20 +315,19 @@ describe('the combined "both" indicators overlay', () => {
   });
 });
 
-// EXC-692: fenced code blocks in the plan view read as a darker, rounded, slightly-
-// indented panel in the content column. caret tags the shadow-DOM rows (data-code-
-// line / -start / -end; see codeBlocks.ts) and this override sheet styles them. This
-// suite pins the panel contract structurally so a drift fails the unit suite.
-describe("the fenced code-block panel (EXC-692)", () => {
-  test("fills code-line rows one step darker than the diff surface, scheme-correct", () => {
-    // color-mix toward --ink carries correct depth in both schemes, matching the
-    // layered-surface idiom; --paper-sunk is the diff surface the rows sit on.
+// EXC-692: caret tags a fenced block's shadow-DOM rows (data-code-line / -start / -end; see
+// codeBlocks.ts) and this override sheet styles them. Until codeBlockScroll.ts moves them into
+// their card — the frame after a library repaint, or for good if that pass never runs — they
+// are direct children of the content column, and stand in for the pane. This suite pins that
+// contract structurally so a drift fails the unit suite.
+describe("a fenced block's rows outside their card (EXC-692)", () => {
+  test("fills an uncarded code row with the pane's floor", () => {
     expect(overrideDecls).toMatch(
-      /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*background-color:\s*color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) \d+%\)/,
+      /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*background-color:\s*var\(--table-floor\)/,
     );
   });
 
-  test("makes the panel a contained card — inset both sides and width-capped", () => {
+  test("insets and caps an uncarded row where its card will sit", () => {
     const body =
       overrideDecls.match(
         /\[data-line\]\[data-code-line\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
@@ -339,11 +341,9 @@ describe("the fenced code-block panel (EXC-692)", () => {
 
   test("stops every code row inflating the track, without capping the selected one", () => {
     // EXC-1228: a code row that stretches the content column's track widens the whole plan
-    // surface AND collapses its own scrollWidth onto its clientWidth, so the block reports
-    // no overflow and never cards. Unselected rows are held by the panel's reading cap;
-    // a selected row is size-contained instead, because capping it would end the amber band
-    // short of the panel it sits in. Both halves are asserted so a later tidy-up cannot
-    // collapse them into one rule and silently take the band or the card decision with it.
+    // surface. Unselected rows are held by the reading cap; a selected row is size-contained
+    // instead, so its amber band keeps its full-bleed box. Both halves are asserted so a
+    // later tidy-up cannot collapse them into one rule and silently take the band with it.
     const selected =
       overrideDecls.match(
         /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]\[data-selected-line\]\s*\{[^}]*\}/,
@@ -363,26 +363,24 @@ describe("the fenced code-block panel (EXC-692)", () => {
     expect(shared).toMatch(/overflow-x:\s*clip/);
   });
 
-  test("pads only the outer edges of the fence lines (they hug the code within)", () => {
-    const startBody =
-      overrideDecls.match(/\[data-code-start\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/)?.[0] ??
-      "";
-    const endBody =
-      overrideDecls.match(/\[data-code-end\]:not\(\[data-selected-line\]\)\s*\{[^}]*\}/)?.[0] ?? "";
-    // Opening fence: space above only; closing fence: space below only — so the
-    // fence lines hug the code and there's no inner gap.
-    expect(startBody).toContain("padding-block-start:");
-    expect(startBody).not.toMatch(/padding-block-end:|padding-block:/);
-    expect(endBody).toContain("padding-block-end:");
-    expect(endBody).not.toMatch(/padding-block-start:|padding-block:/);
-  });
-
-  test("rounds only the block's first (top) and last (bottom) lines with var(--radius)", () => {
-    expect(overrideDecls).toMatch(
-      /\[data-line\]\[data-code-start\]:not\(\[data-selected-line\]\)\s*\{[^}]*border-top-left-radius:\s*var\(--radius\)[^}]*border-top-right-radius:\s*var\(--radius\)/,
+  test("gives an uncarded block's end rows the card's whole height, so re-carding moves nothing", () => {
+    // Opening fence: space above only; closing fence: space below only — so the fence lines
+    // hug the code. Each is the pane's air plus the bezel the card draws there.
+    const padding = (selector: string, side: "start" | "end") =>
+      overrideDecls.match(
+        new RegExp(String.raw`${selector}\s*\{[^}]*padding-block-${side}:\s*([^;]+);`),
+      )?.[1];
+    const card = String.raw`\[data-content\]\s*>\s*\[data-code-card\]\s*>\s*\[data-line\]`;
+    const flat = String.raw`\[data-content\]\s*>\s*\[data-line\]`;
+    const cardTop = padding(String.raw`${card}\[data-code-start\]`, "start");
+    const cardBottom = padding(String.raw`${card}\[data-code-end\]`, "end");
+    expect(cardTop).toBeDefined();
+    expect(cardBottom).toBeDefined();
+    expect(padding(String.raw`${flat}\[data-code-start\]`, "start")).toBe(
+      `calc(var(--code-bezel) + ${cardTop})`,
     );
-    expect(overrideDecls).toMatch(
-      /\[data-line\]\[data-code-end\]:not\(\[data-selected-line\]\)\s*\{[^}]*border-bottom-left-radius:\s*var\(--radius\)[^}]*border-bottom-right-radius:\s*var\(--radius\)/,
+    expect(padding(String.raw`${flat}\[data-code-end\]`, "end")).toBe(
+      `calc(${cardBottom} + var(--code-bezel))`,
     );
   });
 
@@ -1135,20 +1133,29 @@ describe("the task-list checkbox (EXC-860)", () => {
   });
 });
 
-// EXC-729: a fenced-code line wider than the panel must stay INSIDE the card and scroll
-// horizontally, not break out of the background. The EXC-692 panel caps rows at max-width, but
-// the library renders source lines white-space: pre, so an over-wide line overflowed the
-// capped box and floated over the surface. The fix wraps an overflowing block in ONE scroll
-// card ([data-code-card]) that is a single native horizontal scroll container — the whole
-// block scrolls as one unit (short lines follow, one scrollbar, no per-row jelly) and its
-// subgrid rows keep the gutter aligned. This suite pins the CSS side.
-describe("the fenced code-block scroll card (EXC-729)", () => {
+// EXC-729: every fenced block sits in ONE card ([data-code-card]) that is a single native
+// horizontal scroll container — a wide block scrolls as one unit (short lines follow, one
+// scrollbar, no per-row jelly) and its subgrid rows keep the gutter aligned. The card is also
+// the block's frame: a bezel of the window's body round a pane sunk into it, built as a table
+// is. This suite pins the CSS side.
+describe("the fenced code-block card (EXC-729)", () => {
   const cardBody =
     overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-card\]\s*\{[^}]*\}/)?.[0] ?? "";
   const sharedRowBody =
     overrideDecls.match(
       /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]\s*\{[^}]*\}/,
     )?.[0] ?? "";
+  /** A comma-separated value's layers, split only on top-level commas. */
+  const layers = (value: string) => {
+    const out = [""];
+    let depth = 0;
+    for (const ch of value.replace(/\s+/g, " ")) {
+      depth += ch === "(" ? 1 : ch === ")" ? -1 : 0;
+      if (ch === "," && depth === 0) out.push("");
+      else out[out.length - 1] += ch;
+    }
+    return out.map((l) => l.trim());
+  };
 
   test("wraps the block in a single subgrid horizontal scroll container", () => {
     expect(cardBody).toMatch(/display:\s*grid/);
@@ -1159,63 +1166,98 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
     expect(cardBody).toMatch(/overflow-y:\s*hidden/);
   });
 
-  test("sizes the scroll content to the widest line while capping the visible card", () => {
-    // max-content columns let the content grow to the longest line (the scroll range); the
-    // max-width holds the visible card to its reading width so it scrolls WITHIN the card.
-    expect(cardBody).toMatch(/grid-auto-columns:\s*max-content/);
+  test("sizes the scroll content to the widest line but never narrower than the pane", () => {
+    // max-content lets the content grow to the longest line (the scroll range), and the 100%
+    // floor stretches a fitting block's rows across the pane, so a band runs edge to edge.
+    // The max-width holds the visible card to its reading width so it scrolls WITHIN it.
+    expect(cardBody).toMatch(/grid-auto-columns:\s*minmax\(100%,\s*max-content\)/);
     expect(cardBody).toContain("max-width:");
   });
 
-  test("carries the same panel look as the per-row card so both read identically", () => {
-    // A fitting block keeps the per-row card path; a scrolling block uses this wrapper. They
-    // share the fill, inset, rounding and elevation (EXC-1145), so the two paths are
-    // visually indistinguishable.
-    expect(cardBody).toMatch(
-      /background-color:\s*color-mix\(in lab, var\(--paper-sunk\), var\(--ink\) \d+%\)/,
+  test("is a bezel of the window's own material, round a pane sunk into it", () => {
+    // The bezel is the card's border, the one box edge that stays put while the code scrolls
+    // and that the scrollport stops at; the backgrounds and inset shadows below are fixed to
+    // the box too. The floor fills the padding box, which is the pane, and the body shows
+    // through the transparent border round it.
+    expect(cardBody).toMatch(/border:\s*var\(--code-bezel\) solid transparent/);
+    expect(cardBody).toMatch(/border-radius:\s*var\(--radius-lg\)/);
+    const background = layers(cardBody.match(/background:\s*([^;]+);/)?.[1] ?? "");
+    expect(background[0]).toBe(
+      "linear-gradient(var(--table-floor), var(--table-floor)) padding-box",
     );
-    expect(cardBody).toContain("margin-inline:");
-    expect(cardBody).toMatch(/border-radius:\s*var\(--radius\)/);
+    expect(background.at(-1)).toBe("var(--body)");
+    // The pane's crisp edges and its sink under the top edge, then the table card's ring and
+    // drop shadow outside the bezel.
+    const shadow = layers(cardBody.match(/box-shadow:\s*([^;]+);/)?.[1] ?? "");
+    expect(shadow).toEqual([
+      "var(--table-pane-sink)",
+      "inset 1px 0 var(--table-pane-edge)",
+      "inset -1px 0 var(--table-pane-edge)",
+      "inset 0 -1px var(--table-pane-edge)",
+      "0 0 0 1px var(--rule)",
+      "var(--float-low)",
+    ]);
+    // Over the rows either side, as the table card is, so the ring and drop shadow show.
+    expect(cardBody).toMatch(/z-index:\s*1;/);
   });
 
-  test("every box-shadow on a carded code or table surface carries the recess", () => {
-    // box-shadow does not cascade additively, so ANY rule that out-ranks the base row rule
-    // and declares one erases the depth. The banded-row rule is that trap today; the
-    // next such rule — a change tint if the plan surface ever stops being single-version, a
-    // focus ring, a drag affordance — would take the depth out silently. Pinning the whole
-    // SET rather than three named selectors is what makes a fifth rule opt in or argue here.
-    const shadowed = [...overrideDecls.matchAll(/([^{}]+)\{([^}]*)\}/g)]
-      .map((rule) => ({ selector: rule[1] ?? "", body: rule[2] ?? "" }))
-      .filter(
-        ({ selector, body }) =>
-          /\[data-code-line\]|\[data-code-card\]/.test(selector) && body.includes("box-shadow:"),
-      );
-    // The card, the fitting row, and the row's banded state.
-    expect(shadowed).toHaveLength(3);
-    for (const { selector, body } of shadowed) {
-      expect(body, selector.trim().replace(/\s+/g, " ")).toMatch(
-        /var\(--(?:panel-recess|caret-row-recess)\)/,
-      );
-    }
+  test("lights the bezel's top edge, not the pane's", () => {
+    // An inset shadow paints inside the border, so --float-rim on this box would light the
+    // pane. The rim is a background strip over the border box instead, in the same ink.
+    expect(cardBody).not.toContain("var(--float-rim)");
+    const background = layers(cardBody.match(/background:\s*([^;]+);/)?.[1] ?? "");
+    expect(background).toContain(
+      "linear-gradient(var(--float-rim-ink) 1px, transparent 1px) border-box",
+    );
   });
 
-  test("keeps the recess on a hovered or cursored fitting row", () => {
-    // The band rule sets box-shadow to paint the gutter→content seam strip, and it outranks
-    // the base row rule. box-shadow does not cascade additively, so without the recess
-    // restated here a hovered code row silently drops it. Seam strip first: on a banded row
-    // the block's edge should read as band, not as shadow.
-    const bandedRowBody =
+  test("bands a hovered or cursored code row off the pane's floor", () => {
+    const band = overrideDecls.match(
+      /\[data-content\]\s+\[data-line\]\[data-code-line\]:is\(\[data-hovered\], \[data-caret-cursor\]\):not\(\[data-selected-line\]\)\s*\{([^}]*)\}/,
+    );
+    expect(band?.[1]).toMatch(
+      /background-color:\s*color-mix\(in lab, var\(--table-floor\), var\(--ink\) 7%\)/,
+    );
+  });
+
+  test("sets the gutter's end cells clear of the bezel and the lane, as the rows are", () => {
+    // The card's border and a scrolling card's bar land in its end row tracks, outside its
+    // first and last rows, and the gutter mirror is display: contents — so the cells beside
+    // those rows spend the same space as margin, keeping each number on its line and each
+    // band as tall on the gutter side as on the code. The bar's margin also holds its lane
+    // open: Chromium leaves a subgrid's auto scrollbar out of tracks it has already sized.
+    // The first cell takes the first row's air as padding; the hover "+" hangs from the
+    // padding edge, so it steps down with it.
+    const lead = overrideDecls.match(
+      /\[data-content\]\s*>\s*\[data-code-card\]\s*>\s*\[data-line\]\[data-code-start\]\s*\{[^}]*padding-block-start:\s*([^;]+);/,
+    )?.[1];
+    expect(lead).toBeDefined();
+    const gutterRule = (tail: string) =>
       overrideDecls.match(
-        /\[data-content\]\s*>\s*\[data-line\]\[data-code-line\]:is\(\[data-hovered\], \[data-caret-cursor\]\):not\(\[data-selected-line\]\)\s*\{[^}]*\}/,
+        new RegExp(String.raw`\[data-gutter\]\s+\[data-code-card-gutter\]${tail}\s*\{[^}]*\}`),
       )?.[0] ?? "";
-    const shadow = bandedRowBody.match(/box-shadow:\s*([^;]+);/)?.[1] ?? "";
-    expect(shadow).toContain("calc(");
-    expect(shadow).toContain("var(--caret-row-recess)");
-    expect(shadow.indexOf("calc(")).toBeLessThan(shadow.indexOf("var(--caret-row-recess)"));
+    const first = gutterRule(String.raw`\s*>\s*:first-child`);
+    expect(first).toMatch(/margin-block-start:\s*var\(--code-bezel\)/);
+    expect(first).toContain(`--row-lead: ${lead}`);
+    expect(first).toMatch(/padding-block-start:\s*var\(--row-lead\)/);
+    expect(gutterRule(String.raw`\s*>\s*:last-child`)).toMatch(
+      /margin-block-end:\s*var\(--code-bezel\)/,
+    );
+    expect(gutterRule(String.raw`\[data-code-card-scrolls\]\s*>\s*:last-child`)).toMatch(
+      /margin-block-end:\s*calc\(var\(--code-bezel\) \+ var\(--caret-code-bar\)\)/,
+    );
+    expect(overrideDecls).toMatch(
+      /\[data-gutter\]\s+\[data-code-card-gutter\]\s+\[data-gutter-utility-slot\]\s*\{[^}]*top:\s*var\(--row-lead, 0\)/,
+    );
+    // The lane is the bar's own height, from one value.
+    expect(overrideDecls).toMatch(
+      /\[data-code-card\]::-webkit-scrollbar\s*\{\s*height:\s*var\(--caret-code-bar\);/,
+    );
   });
 
   test("clips a not-yet-wrapped row so it can't break out before the card wraps it", () => {
     // The per-row rule is the graceful floor for the frame before codeBlockScroll.ts wraps the
-    // block (or if the script never runs): the over-wide line clips at the card's right edge
+    // block (or if the script never runs): the over-wide line clips at the pane's right edge
     // instead of spilling over the surface. Inline axis only, so the block stays visible and
     // the EXC-692 fence-glyph nudges are not shaved.
     expect(sharedRowBody).toMatch(/overflow-x:\s*clip/);
@@ -1224,8 +1266,8 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
 
   test("keeps a comment inside the card from resizing it", () => {
     // EXC-1228: the comment row rides in the card, and the card is a max-content grid — so
-    // an uncontained composer sizes its implicit track and inflates the very scrollWidth the
-    // keep-or-retire branch measures, leaving a card that can never retire.
+    // an uncontained composer sizes its implicit track and inflates the card's scrollWidth,
+    // which offers the wrap toggle on a block whose code fits.
     const annotation =
       overrideDecls.match(
         /\[data-content\]\s*>\s*\[data-code-card\]\s*>\s*\[data-line-annotation\]\s*\{[^}]*\}/,
@@ -1239,35 +1281,29 @@ describe("the fenced code-block scroll card (EXC-729)", () => {
   test("draws the comment at the card's width, and drops the library's gutter offset", () => {
     // The library sizes [data-annotation-content] for its own scrollport: a definite
     // `width` of the whole content column, and a sticky `left` clearing the gutter. Inside
-    // the card both are wrong — the column is 2x --caret-card-inset wider than the card, so
-    // a comment would overflow it and the keep-or-retire branch would read that forever;
-    // and the card's left edge is already past the gutter. A max-width cannot fix the
-    // first: the library's is a definite width, so this must override it outright.
+    // the card both are wrong — the column is wider than the pane by the card's insets and
+    // its bezel, so a comment would overflow it and offer the wrap toggle for good; and the
+    // card's left edge is already past the gutter. A max-width cannot fix the first: the
+    // library's is a definite width, so this must override it outright.
     const wrapper =
       overrideDecls.match(
         /\[data-code-card\]\s*>\s*\[data-line-annotation\]\s*>\s*\[data-annotation-content\]\s*\{[^}]*\}/,
       )?.[0] ?? "";
-    expect(wrapper).toMatch(/width:\s*min\(/);
+    expect(wrapper).toMatch(/width:\s*calc\(\s*min\(/);
     expect(wrapper).toContain("var(--caret-read-max)");
     expect(wrapper).toMatch(/var\(--caret-card-inset\)/);
+    expect(wrapper).toMatch(/2 \* var\(--code-bezel\)/);
     expect(wrapper).toMatch(/inset-inline-start:\s*0/);
   });
 });
 
 // EXC-729: one scrollbar per block, not one per line. The card is a native scroll container,
-// so a single classic scrollbar sits at its bottom in a reserved lane. Styling
-// ::-webkit-scrollbar keeps that bar always-visible (the standard scrollbar-* props would let
-// Chromium pull back the auto-hiding overlay bar); the last row's track reserves the lane so
-// the bar never overlaps the code, and the gutter's matching track grows with it via subgrid.
+// so a single classic scrollbar sits at the pane's bottom. Styling ::-webkit-scrollbar keeps
+// that bar always-visible (the standard scrollbar-* props would let Chromium pull back the
+// auto-hiding overlay bar).
 describe("the single per-block code scrollbar (EXC-729)", () => {
   const cardBody =
     overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-card\]\s*\{[^}]*\}/)?.[0] ?? "";
-
-  test("reserves a bottom lane on the card's last row for the bar", () => {
-    expect(overrideDecls).toMatch(
-      /\[data-code-card\]\s*>\s*\[data-line\]\[data-code-end\]\s*\{[^}]*padding-block-end:/,
-    );
-  });
 
   test("styles the bar via ::-webkit-scrollbar only, so it stays always-visible", () => {
     // Setting scrollbar-width/color on the card would let Chromium pull back the auto-hiding
@@ -1611,6 +1647,38 @@ describe("the preview's copies of the link, code and reference chips (EXC-2021)"
       sourceRule("> [data-table-card] > [data-line][data-table-head]")["text-shadow"],
     );
   });
+
+  test("a code block wears the source view's bezel and pane", () => {
+    const card = sourceRule("> [data-code-card]");
+    const pre = previewRule("[data-source-code] + pre");
+    for (const prop of ["border", "border-radius", "background", "box-shadow"]) {
+      expect(card[prop], prop).toBeDefined();
+      expect(pre[prop], prop).toBe(card[prop]);
+    }
+  });
+
+  test("a code block's scrollbar is the source view's", () => {
+    // The bar's height is a shadow-root property the preview cannot see, so it is
+    // compared by value.
+    const host = declarations(
+      overrideDecls.match(/:host\s*\{[^}]*--caret-code-bar:[^}]*\}/)?.[0] ?? "",
+    );
+    const bar = host["--caret-code-bar"];
+    expect(bar).toBeDefined();
+    for (const part of ["", "-track", "-thumb", "-thumb:hover"]) {
+      const card = sourceRule(`> [data-code-card]::-webkit-scrollbar${part}`);
+      expect(Object.keys(card), part).not.toEqual([]);
+      const resolved = Object.fromEntries(
+        Object.entries(card).map(([prop, value]) => [
+          prop,
+          value.replace("var(--caret-code-bar)", bar ?? ""),
+        ]),
+      );
+      expect(previewRule(`[data-source-code] + pre::-webkit-scrollbar${part}`), part).toEqual(
+        resolved,
+      );
+    }
+  });
 });
 
 describe("the plan-search highlights (EXC-832, rehued EXC-905)", () => {
@@ -1649,8 +1717,10 @@ test("spends no --rule token anywhere on the diff body", () => {
   // the 1.05 threshold (doc/agents/svelte-rules.md § CSS-token discipline) — a line that
   // is in the DOM and not on the screen. Every mark this epic draws there spends the ink
   // ramp instead. Scanned over the declarations, so the prose above (and this comment)
-  // can keep naming the tokens.
-  expect(overrideDecls).not.toContain("--rule");
+  // can keep naming the tokens. A card that floats on the body is the one exception: its
+  // ring is the float's own, which the table card spends through --float-surface-low and
+  // the code card spells out beside its rim strip.
+  expect(overrideDecls.replace("0 0 0 1px var(--rule),", "")).not.toContain("--rule");
 });
 
 // EXC-863: blockquote level bars. The bar belongs to the epic's transform-in-place

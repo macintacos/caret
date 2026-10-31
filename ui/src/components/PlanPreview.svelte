@@ -587,20 +587,49 @@
     overflow-x: auto;
     overflow-wrap: normal;
   }
-  /* Matches the source view's code panel fill. The inline-end padding keeps the
-     top-right copy and wrap chrome off the code. */
+  /* The source view's code card: a bezel of --body round a pane sunk into it, drawn by the
+     border, the backgrounds and the inset shadows, which stay put while the code scrolls.
+     The inline-end padding keeps the top-right copy and wrap chrome off the code. */
   .plan-preview :global([data-source-code] + pre) {
     padding-block: 0.6rem;
     padding-inline: 2ch 4.5rem;
-    border-radius: var(--radius);
-    background-color: var(--code-panel);
-    box-shadow: var(--panel-recess);
+    border: var(--code-bezel) solid transparent;
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(var(--table-floor), var(--table-floor)) padding-box,
+      linear-gradient(var(--float-rim-ink) 1px, transparent 1px) border-box,
+      var(--body);
+    box-shadow:
+      var(--table-pane-sink),
+      inset 1px 0 var(--table-pane-edge),
+      inset -1px 0 var(--table-pane-edge),
+      inset 0 -1px var(--table-pane-edge),
+      0 0 0 1px var(--rule),
+      var(--float-low);
     font-family: var(--font-mono);
     font-size: 0.9em;
     line-height: var(--leading-relaxed);
   }
   .plan-preview :global([data-source-code] + pre > code) {
     font-family: inherit;
+  }
+  /* The source card's bar. Its height is that sheet's --caret-code-bar, which lives in the
+     diff view's shadow root. */
+  .plan-preview :global([data-source-code] + pre::-webkit-scrollbar) {
+    height: 12px;
+  }
+  .plan-preview :global([data-source-code] + pre::-webkit-scrollbar-track) {
+    background: transparent;
+  }
+  .plan-preview :global([data-source-code] + pre::-webkit-scrollbar-thumb) {
+    background: color-mix(in lab, var(--paper-sunk), var(--ink) 45%);
+    border: 3px solid transparent;
+    border-radius: var(--radius);
+    background-clip: content-box;
+  }
+  .plan-preview :global([data-source-code] + pre::-webkit-scrollbar-thumb:hover) {
+    background: color-mix(in lab, var(--paper-sunk), var(--ink) 60%);
+    background-clip: content-box;
   }
   .plan-preview :global([data-source-code] + pre[data-code-reflow]) {
     white-space: pre-wrap;

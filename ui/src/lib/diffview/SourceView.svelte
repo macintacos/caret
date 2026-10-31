@@ -21,7 +21,11 @@
   import { headingLines, tagHeadingRows } from "$lib/diffview/headings.ts";
   import { decorateInlineRuns } from "$lib/diffview/inlineDecorate.ts";
   import type { InlineSpanMap } from "$lib/diffview/inlineSpans.ts";
-  import { applyCodeBlockReflow, syncCodeBlockCards } from "$lib/diffview/codeBlockScroll.ts";
+  import {
+    applyCodeBlockReflow,
+    markScrollingCards,
+    syncCodeBlockCards,
+  } from "$lib/diffview/codeBlockScroll.ts";
   import { paintCardSelection, type SelectedLines } from "$lib/diffview/cardSelection.ts";
   import { selectionIn, selectionText } from "$lib/diffview/selectionCopy.ts";
   import { tagThematicBreakRows, thematicBreakLines } from "$lib/diffview/thematicBreaks.ts";
@@ -545,8 +549,8 @@
     const reflowed = reflowedBlocks;
     let raf = 0;
     let release = 0;
-    // Tag the rows, then wrap each overflowing block in its scroll card (EXC-729). Both re-run
-    // after every library repaint via the observer below; syncCodeBlockCards is idempotent (an
+    // Tag the rows, then wrap each block in its card (EXC-729). Both re-run after every
+    // library repaint via the observer below; syncCodeBlockCards is idempotent (an
     // already-correct block mutates nothing), so its own wrap/unwrap settles in one extra frame
     // rather than looping the observer. Tagging runs first so the rows carry data-code-line etc.
     // before they are moved into a card.
@@ -561,6 +565,8 @@
       syncCodeBlockCards(root, ranges);
       // Always run, so a populated→empty transition clears the marks too.
       applyCodeBlockReflow(root, reflowed ?? EMPTY_REFLOWED);
+      // After the reflow marks, which change a card's width.
+      markScrollingCards(root);
       // Card each table and group its rows' tokens into cells (EXC-864). BEFORE the
       // inline pass, which walks a row through tokenChildren: it has to see the
       // celled row so both passes partition the same column space. Idempotent for
@@ -616,9 +622,9 @@
       schedule();
     });
     observer.observe(root, { childList: true, subtree: true });
-    // A resize changes the card's drawn width — it is capped, but shrinks below its cap on a
-    // narrow viewport — so re-run to re-measure, since a resize fires no DOM mutation the
-    // observer above would catch.
+    // A resize can move a block across the fit/overflow line — its card is capped, but
+    // shrinks below its cap on a narrow viewport — and fires no DOM mutation the observer
+    // above would catch.
     const resize = new ResizeObserver(schedule);
     if (container != null) resize.observe(container);
     return () => {

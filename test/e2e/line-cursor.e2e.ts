@@ -22,12 +22,7 @@ import type { Page } from "@playwright/test";
 import { cursor, expectCursorLine, goToTop, readCursorLine } from "@test/e2e/support/cursor.ts";
 import { bodyFiller, headedFillerPlan } from "@test/e2e/support/fixture-plan.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import {
-  openPlanForKeys,
-  PLAN_SURFACE,
-  recessSides,
-  SEAM_STRIP,
-} from "@test/e2e/support/source-view.ts";
+import { openPlanForKeys, PLAN_SURFACE, probeColor } from "@test/e2e/support/source-view.ts";
 
 // Tall enough that G and the half-page jump actually scroll, with three headings
 // so ]]/[[ have distinct targets.
@@ -49,6 +44,21 @@ const PLAN_WITH_CODE = [
   bodyFiller("Bravo", 14),
   "",
 ].join("\n\n");
+
+// A banded code row's fill: 7% toward ink off the pane's floor, as a table row's.
+const PANE_BAND = "color-mix(in lab, var(--table-floor), var(--ink) 7%)";
+
+/** A code line's gutter cell fill, and the fill of any strip it paints across the seam to
+ * the block's card (null when it paints none). */
+function gutterBand(page: Page, line: number) {
+  return page.locator(`.diffview [data-gutter] [data-column-number="${line}"]`).evaluate((el) => {
+    const strip = getComputedStyle(el, "::before");
+    return {
+      fill: getComputedStyle(el).backgroundColor,
+      strip: strip.content === "none" ? null : strip.backgroundColor,
+    };
+  });
+}
 
 // The cursor marker's gutter cell — SourceView also tags it data-caret-cursor,
 // alongside the content cell cursor.ts reads. Playwright's CSS engine pierces the
@@ -231,7 +241,7 @@ test("holding j keeps the cursor on-screen and follows it, never yanking it to t
   expect(await relTop(page)).toBeGreaterThan(0.4);
 });
 
-test("the focused-line cursor band paints the code row, not just its gutter", async ({
+test("the focused-line cursor bands a code row in its pane, the gutter marked by its bar alone", async ({
   daemon,
   page,
 }) => {
@@ -259,46 +269,20 @@ test("the focused-line cursor band paints the code row, not just its gutter", as
   }
   expect(codeLines.has(onCode)).toBe(true);
 
-  // The cursor'd code row's content cell carries a band DISTINCT from a plain
-  // code row's panel fill — the highlight reaches the code, not just the gutter.
-  // A value comparison (not a fixed color) so a palette change doesn't churn it.
-  const other = [...codeLines].find((n) => n !== onCode) ?? onCode;
+  // The cursor'd code row's content cell carries the pane's band, a step off its floor —
+  // the highlight reaches the code, not just the gutter.
   const bandBg = await page
     .locator(`.diffview [data-content] [data-line="${onCode}"]`)
     .evaluate((el) => getComputedStyle(el).backgroundColor);
-  const panelBg = await page
-    .locator(`.diffview [data-content] [data-line="${other}"]`)
-    .evaluate((el) => getComputedStyle(el).backgroundColor);
-  expect(bandBg).not.toBe(panelBg);
+  expect(bandBg).toBe(await probeColor(page, PANE_BAND));
 
-  // The gutter half matches the content band — the row is banded across BOTH
-  // columns, not just the content (the "band dies at the gutter" report).
-  const gutterBg = await page
-    .locator(`.diffview [data-gutter] [data-column-number="${onCode}"]`)
-    .evaluate((el) => getComputedStyle(el).backgroundColor);
-  expect(gutterBg).toBe(bandBg);
-
-  // …and the gutter→content SEAM between them is filled (a left box-shadow paints
-  // the strip the panel inset would otherwise leave dark), so the band reads
-  // continuous across the join like a non-code row — a plain code row has no strip.
-  const shadowOf = (line: number) =>
-    page
-      .locator(`.diffview [data-content] [data-line="${line}"]`)
-      .evaluate((el) => getComputedStyle(el).boxShadow);
-  const banded = await shadowOf(onCode);
-  const plain = await shadowOf(other);
-  expect(banded).toMatch(SEAM_STRIP);
-  expect(plain).not.toMatch(SEAM_STRIP);
-  // The strip is IN FRONT OF the recess both code rows carry, not instead of it: this
-  // rule's box-shadow replaces the base row's outright.
-  expect(recessSides(plain)).not.toBe("");
-  expect(recessSides(banded)).toBe(recessSides(plain));
+  // The band stays in the block's frame: the gutter cell keeps a resting line's fill and
+  // paints no strip toward the card, leaving the bar to mark the row.
+  const resting = [...codeLines].find((n) => n !== onCode) ?? Number.NaN;
+  expect(await gutterBand(page, onCode)).toEqual(await gutterBand(page, resting));
 });
 
-test("hovering a code row bands both columns, consistent with the cursor", async ({
-  daemon,
-  page,
-}) => {
+test("hovering a code row bands it as the cursor does", async ({ daemon, page }) => {
   await openPlanForKeys(page, daemon, PLAN_WITH_CODE);
 
   const codeCells = page.locator(".diffview [data-content] [data-line][data-code-line]");
@@ -309,12 +293,7 @@ test("hovering a code row bands both columns, consistent with the cursor", async
     if (Number.isFinite(n)) codeLines.push(n);
   }
   expect(codeLines.length).toBeGreaterThan(1);
-  const hovered = codeLines[Math.floor(codeLines.length / 2)];
-  const plain = codeLines.find((n) => n !== hovered) ?? hovered;
-
-  const bgOf = (sel: string) =>
-    page.locator(sel).evaluate((el) => getComputedStyle(el).backgroundColor);
-  const panelBg = await bgOf(`.diffview [data-content] [data-line="${plain}"]`);
+  const hovered = codeLines[Math.floor(codeLines.length / 2)] ?? Number.NaN;
 
   await page.locator(`.diffview [data-content] [data-line="${hovered}"]`).hover();
   // Web-first: wait for the library to flag the row hovered before reading colors.
@@ -322,22 +301,9 @@ test("hovering a code row bands both columns, consistent with the cursor", async
     page.locator(`.diffview [data-content] [data-line="${hovered}"][data-hovered]`),
   ).toBeAttached();
 
-  // Content shows a band (not the flat panel fill) AND the gutter matches it — the
-  // same both-columns band the cursor gets, so hover and cursor read consistently.
-  const contentBg = await bgOf(`.diffview [data-content] [data-line="${hovered}"]`);
-  const gutterBg = await bgOf(`.diffview [data-gutter] [data-column-number="${hovered}"]`);
-  expect(contentBg).not.toBe(panelBg);
-  expect(gutterBg).toBe(contentBg);
-
-  // The gutter→content seam is filled the same way it is for the cursor (a left
-  // box-shadow), so the hovered code row's band is continuous across the join — and
-  // the recess stays under it, as above.
-  const shadowOf = (sel: string) =>
-    page.locator(sel).evaluate((el) => getComputedStyle(el).boxShadow);
-  const bandedShadow = await shadowOf(`.diffview [data-content] [data-line="${hovered}"]`);
-  const plainShadow = await shadowOf(`.diffview [data-content] [data-line="${plain}"]`);
-  expect(bandedShadow).toMatch(SEAM_STRIP);
-  expect(plainShadow).not.toMatch(SEAM_STRIP);
-  expect(recessSides(plainShadow)).not.toBe("");
-  expect(recessSides(bandedShadow)).toBe(recessSides(plainShadow));
+  // The pane's band, the cursor's own, so hover and cursor read consistently.
+  const contentBg = await page
+    .locator(`.diffview [data-content] [data-line="${hovered}"]`)
+    .evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(contentBg).toBe(await probeColor(page, PANE_BAND));
 });

@@ -74,7 +74,7 @@ const DECORATIONS = [
   ["data-md-rule", "thematic breaks (EXC-862)"],
   ["data-md-image", "inline images (EXC-870)"],
   ["data-code-fence", "fence markers (EXC-869)"],
-  ["data-code-card", "the scroll card an overflowing fence gets (EXC-729)"],
+  ["data-code-card", "the card every fence gets (EXC-729)"],
   ["data-table-cell", "table cells (EXC-864)"],
   ["data-table-pipe", "table pipes (EXC-864)"],
   ["data-table-card", "the card every GFM table gets (EXC-864)"],

@@ -223,6 +223,22 @@ exist today.
   scrolls. It stops on the last row at the `--pin-travel` that `PlanPreview` measures.
   Pinned, the header takes the bezel's fill. At rest it stays clear, so a band over its
   own row shows through.
+
+  A code block's `pre` wears the source view's code card (`[data-code-card]`), pinned the
+  same way:
+  - the transparent border that draws the bezel;
+  - the bezel's `--radius-lg` corners;
+  - the backgrounds that fill the bezel and the pane;
+  - the pane's edges, with the ring and drop shadow outside the bezel;
+  - the scrollbar: its height, transparent track and thumb.
+
+  Change the card's `--caret-code-bar` and the preview's `12px` bar height together,
+  because `coreStyles.test.ts` compares them by value. The preview repeats the height as a
+  literal because the diff view declares `--caret-code-bar` in its shadow root, out of the
+  `pre`'s reach.
+
+  The `pre` is the block's scroll container, so that frame stays put while a wide block
+  scrolls. Its 4.5rem inline-end padding holds the copy and wrap tray off the code.
 - **Code blocks.** A code block renders `<pre><code>` with its escaped text and no class.
   A fence's info string resolves through `fenceGrammar` to a bundled grammar, carried as
   `RenderedPlan.codeLanguages` keyed by the code marker's line, and never as markup; an
@@ -377,7 +393,7 @@ highlight run only where the `commentThreads` row runs.
   splitting its text node there, moved out of each element that character opens, so a list
   item's gap opens between the items, never under the next one's bullet, and before the
   source-line markers leading it, so a code block's marker stays directly before its `pre`
-  for `previewCodeBlocks`, the code chrome and the panel's `[data-source-code] + pre`
+  for `previewCodeBlocks`, the code chrome and the bezel's `[data-source-code] + pre`
   rules. A gap in a table opens before the next table row, never between its cells. A
   block's last row's gap opens after all of its content. Gaps hold no text and splitting
   keeps the text in order, so the source map, search and the visual lines read past them,

@@ -58,6 +58,10 @@
   --radius: 6px;
   --radius-lg: 10px;
 
+  /* The bezel round a plan code block's pane, in both plan views; the block's copy and
+     wrap tray steps in by it. */
+  --code-bezel: 0.25rem;
+
   /* Chip padding (inline-markup pills, file references). Inline keeps abutting chips
      apart; block only paints (it never grows the line box), so keep it under the
      line's slack. */
@@ -107,6 +111,8 @@
      weaker one. The two URIs differ only in the matrix's last alpha; keep them in step.
    - Floats: low for a card on the page, mid for menus, popovers, toasts and the composer,
      high for modals. styles/derived.css adds each one's ring as --float-surface-*.
+     --float-rim-ink is the lit top edge's colour, for a float that cannot take it as an
+     inset shadow: the plan's code card, whose border would put it on the pane.
    - The plan: chip lines are crisp and unblurred, because a chip fragmented across
      several elements must show no seam. The raised chip's 1px under-edge stays inside
      the line's slack.
@@ -149,7 +155,8 @@
      stamp, and light paper shows the hue at half. theme.test.ts holds it at AA too. */
   --unsent-floor: 16%;
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='.33 .33 .33 0 0 .33 .33 .33 0 0 .33 .33 .33 0 0 0 0 0 0 0.12'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='2' intercept='-.5'/%3E%3CfeFuncG type='linear' slope='2' intercept='-.5'/%3E%3CfeFuncB type='linear' slope='2' intercept='-.5'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23g%29'/%3E%3C/svg%3E");
-  --float-rim: inset 0 1px 0 rgb(255 255 255 / 0.07);
+  --float-rim-ink: rgb(255 255 255 / 0.07);
+  --float-rim: inset 0 1px 0 var(--float-rim-ink);
   --float-low:
     0 1px 2px rgb(0 0 0 / 0.35),
     0 3px 8px -3px rgb(0 0 0 / 0.35);
@@ -220,7 +227,8 @@
   --stamp-word-mix: 50%;
   --unsent-floor: 8%;
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='.33 .33 .33 0 0 .33 .33 .33 0 0 .33 .33 .33 0 0 0 0 0 0 0.2'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='2' intercept='-.5'/%3E%3CfeFuncG type='linear' slope='2' intercept='-.5'/%3E%3CfeFuncB type='linear' slope='2' intercept='-.5'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23g%29'/%3E%3C/svg%3E");
-  --float-rim: inset 0 1px 0 rgb(255 255 255 / 0.8);
+  --float-rim-ink: rgb(255 255 255 / 0.8);
+  --float-rim: inset 0 1px 0 var(--float-rim-ink);
   --float-low:
     0 1px 2px rgb(0 0 0 / 0.06),
     0 3px 8px -3px rgb(0 0 0 / 0.08);

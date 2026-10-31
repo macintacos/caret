@@ -176,9 +176,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - Hover and drag highlights in the preview cover full visual lines, never part of a line.
 - Passive chips (bold, italic, code) are pressed into the line with `--chip-stamped`, and
   clickable ones (links, file references, citations) stand 1px above it with
-  `--chip-raised`, in both views. Fenced code blocks are recessed with `--panel-recess`.
-  The preview and the source view share these values, and `coreStyles.test.ts` pins the
-  preview's copies to the source view's.
+  `--chip-raised`, in both views. The preview and the source view share these values, and
+  `coreStyles.test.ts` pins the preview's copies to the source view's.
 - **A table is an inlay**, built like the window, in both views:
   - The table is a raised bezel of `--body` that floats on `--float-surface-low`. The
     header rides its top rail, the strip of the bezel above the pane.
@@ -196,17 +195,37 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
     rail. A blurred shadow on every row would break at each row boundary.
   - The preview draws that shade as a gradient on the first row's cells, from
     `--table-pane-sink-shade`, for the same reason at each cell boundary.
+- **A fenced code block sits in a bezel**, framed as a table is but with no rail, in both
+  views:
+  - The block is a raised bezel of `--body`, `--code-bezel` wide on all four sides. Like a
+    table, it carries the 1px `--rule` ring and the `--float-low` drop shadow of
+    `--float-surface-low`.
+  - Its pane is sunk into the bezel on `--table-floor`, with the table pane's
+    `--table-pane-edge` edges and its `--table-pane-sink` under the top edge.
+  - Every line sits in the pane, both fences included. The copy and wrap tray floats over
+    the end of the first line, inside the pane.
+  - In the source view, hovered and cursor rows band 7% toward `--ink` off the floor, as a
+    table's do. A selected line keeps the amber band.
+- **A code block's frame stays put while its code scrolls.** The source view's card and
+  the preview's `pre` are each their block's scroll container, so the frame is drawn only
+  with parts that stay fixed to that box: the border is the bezel, a background clipped to
+  the padding box is the floor, and inset shadows are the pane's edges. The lit top edge
+  is a strip of `--float-rim-ink` across the border, stopping where the corners curve,
+  because `--float-rim` is an inset shadow and would light the pane's top edge instead. A
+  wide block's scrollbar sits in the pane, in its own strip below the last line. Both
+  views draw the same thin bar.
+- **A row in a table or a code block bands inside its pane.** In the source view, a
+  hovered or cursor row bands in the pane alone, and its line number stays unbanded. A
+  band in the gutter would show a gap and the bezel between it and the pane's band. The
+  number and the "+" mark a hovered row, and the keyboard cursor's bar at the gutter's
+  left edge marks a cursor row. A selected line still bands the gutter and the pane in
+  amber, so a dragged range reads as one band.
 - A chip has one depth. It sits on the chip's outermost member; a nested member, such as
   bold inside a link, carries it on its `::after` through `--nest-depth`, so the members
   show no seam (`ui/src/lib/diffview/coreStyles.ts`).
 - Only a link that is itself a chip sinks when pressed in the preview, along with
   reference and citation code. A link wrapping code, a file reference or an image does not
   (`ui/src/components/PlanPreview.svelte`).
-- The recess is a contact edge, not a shadow: every outer layer of `--panel-recess` has no
-  blur or spread and moves at most 1px, in both schemes, which `coreStyles.test.ts` pins.
-  A code block that fits without scrolling draws its edges on its end rows: the first row
-  carries the top edge and the `0 2px 3px` shade, the last the bottom edge and the 1px
-  outer lip.
 - Rendering rules live in [`plan-render-rules.md`](../doc/agents/plan-render-rules.md).
 
 ### Keyboard

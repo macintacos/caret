@@ -37,9 +37,8 @@
      does the novelty job and needs a fill rather than just ink. */
   --attention-wash: color-mix(in lab, var(--attention) 18%, transparent);
 
-  /* The fenced-code panel: the ground the preview's code blocks sit on. The source
-     view still mixes the same 6% in coreStyles.ts and diffview.css; change them
-     together. */
+  /* A recessed code panel's ground, under Settings' copyable text and the Contents
+     peek's excerpt. */
   --code-panel: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
 
   /* The tactile surfaces (their geometry is in styles/tokens.css), in their dark

@@ -107,6 +107,30 @@ Chosen through side-by-side previews.
     Dawnfox.
   - Hovered and cursor rows band 7% toward ink off the pane's floor. The source view's
     light hover band is the same colour as the light floor, so it disappeared there.
+- **Code blocks:** "Bezel", chosen over two other builds:
+  - Inlay: the table's build, with the opening fence and the copy and wrap tray on a top
+    rail, the closing fence in the pane, and a rim below;
+  - Rails: both fences on rails, so the pane holds only code.
+
+  The user chose Bezel because it "gets out of the way but still looks close to the
+  aesthetic we're going for". A fenced block is framed as a table is, without the rail: a
+  raised bezel of the window's body material, an even 0.25rem on all four sides, round a
+  pane sunk into it on the table's floor. Every line sits in the pane, both fences
+  included, so a block is only the bezel's 0.5rem taller than before. The copy and wrap
+  tray floats over the end of the first line, inside the pane. The preview frames its code
+  the same way and shows no language. This replaces the recessed panel that code blocks
+  took on 2026-10-29. The build differs from the mockup in two places:
+  - The pane keeps the old panel's padding: 0.5rem above the opening fence (the mockup's
+    was 0.375rem) and 0.1rem below the closing one (the mockup's was 0.3rem).
+  - The bezel's lit top edge stops where its corners start to curve. It is drawn across
+    the bezel, because `--float-rim` would light the pane's top edge instead.
+- **Framed-row bands:** a hovered or cursor row in a table card or a code card bands
+  inside its pane alone. The gutter keeps its resting fill, and no band paints across the
+  card's margin or its bezel. The line number and the hover "+" mark a hovered row, and
+  the 3px bar marks a cursor row. The user approved this from screenshots. It was chosen
+  over keeping a band on the number cell, which still read as two pieces and showed as a
+  smudge in dark. A drag's amber keeps its gutter half and its strip, so a selected range
+  reads as one band. The preview's bands stay full-bleed.
 
 ## 2026-10-29: tactile refresh
 

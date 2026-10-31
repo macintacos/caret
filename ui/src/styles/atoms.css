@@ -436,8 +436,8 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
   color: var(--ink-faint);
 }
 /* The box behind a settings pane's copyable text (the Advanced diagnostics blocks, the
-   Updates upgrade command): the plan's recessed code panel. The upgrade command is a
-   read-only field, so focus firms its edge rather than ringing it. */
+   Updates upgrade command): a recessed code panel. The upgrade command is a read-only
+   field, so focus firms its edge rather than ringing it. */
 .settings-copy-box {
   display: block;
   margin: 0;

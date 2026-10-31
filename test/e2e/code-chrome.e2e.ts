@@ -1,5 +1,5 @@
 // Per-block soft wrap in the always-visible code chrome (EXC-1386). A fenced block wide
-// enough to be carded (EXC-729) carries a wrap toggle beside its copy button; pressing it
+// enough to scroll in its card (EXC-729) carries a wrap toggle beside its copy button; pressing it
 // reflows that one block in place, leaving every other block scrolling horizontally, and
 // the choice is transient.
 //
@@ -30,7 +30,7 @@ import { previewToggle } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
 import { PLAN_PREVIEW, planSurface, settledMutations } from "@test/e2e/support/source-view.ts";
 
-// One block far wider than the reading width (so it cards and offers the wrap toggle) and
+// One block far wider than the reading width (so it scrolls and offers the wrap toggle) and
 // one inside it (so it does not) — the pair every assertion below reads the per-block
 // claim against. The wide block's line is a run of ordinary words, so it has break
 // opportunities and can actually reflow; a line of one unbroken token could not. The
@@ -61,21 +61,21 @@ ${Array.from({ length: 30 }, (_, i) => `Filler line ${i + 1} giving the surface 
 const WIDE = 5;
 const NARROW = 11;
 
-/** The content-column metrics of the block opening at `start` — its card's when carded,
- * else its first row's. `carded` is the overflow state the wrap toggle gates on. */
+/** The metrics of the card of the block opening at `start`, or null in the frame before
+ * the block is carded. `scrolls` is the overflow state the wrap toggle gates on, and
+ * `marked` the card pass's record of it, which reserves the scrollbar's lane. */
 function blockMetrics(page: Page, start: number) {
   return page.evaluate((line) => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot ?? null;
-    const card = sh?.querySelector(`[data-content] > [data-code-card="${line}"]`) ?? null;
-    const box = (card ??
-      sh?.querySelector(`[data-content] [data-line="${line}"]`)) as HTMLElement | null;
-    if (box == null) return null;
+    const card = sh?.querySelector<HTMLElement>(`[data-content] > [data-code-card="${line}"]`);
+    if (card == null) return null;
     return {
-      carded: card !== null,
-      reflowed: card?.hasAttribute("data-code-card-reflow") ?? false,
-      scrollWidth: box.scrollWidth,
-      clientWidth: box.clientWidth,
-      height: box.getBoundingClientRect().height,
+      scrolls: card.scrollWidth > card.clientWidth,
+      marked: card.hasAttribute("data-code-card-scrolls"),
+      reflowed: card.hasAttribute("data-code-card-reflow"),
+      scrollWidth: card.scrollWidth,
+      clientWidth: card.clientWidth,
+      height: card.getBoundingClientRect().height,
     };
   }, start);
 }
@@ -104,14 +104,14 @@ function reflowMarkCount(page: Page): Promise<number> {
   );
 }
 
-/** Seeds the mixed plan and waits until the wide block has been measured and carded —
- * the precondition every assertion below rests on. Returns the seeded review's id. */
+/** Seeds the mixed plan and waits until the wide block is carded and scrolls — the
+ * precondition every assertion below rests on. Returns the seeded review's id. */
 async function openMixedPlan(page: Page, daemon: Daemon): Promise<string> {
   const id = await daemon.seed({ plan: MIXED_CODE_PLAN });
   await page.goto("/");
   await planSurface(page);
   await expect(page.getByText("Intro prose here.")).toBeVisible();
-  await expect.poll(async () => (await blockMetrics(page, WIDE))?.carded).toBe(true);
+  await expect.poll(async () => (await blockMetrics(page, WIDE))?.scrolls).toBe(true);
   return id;
 }
 
@@ -135,7 +135,7 @@ test("both controls are offered without a pointer, and only where wrapping means
 
   await expect(page.getByRole("button", { name: "Copy code" })).toHaveCount(2);
   await expect(wrapToggle(page)).toHaveCount(1);
-  expect((await blockMetrics(page, NARROW))?.carded).toBe(false);
+  expect((await blockMetrics(page, NARROW))?.scrolls).toBe(false);
 });
 
 test("wrapping a block reflows it in place and unwrapping restores its scrolling", async ({
@@ -194,11 +194,15 @@ test("a wrapped block keeps its gutter numbers aligned and its columns balanced"
     const card = sh?.querySelector(`[data-content] > [data-code-card="${line}"]`) ?? null;
     const mirror = sh?.querySelector(`[data-gutter] > [data-code-card-gutter="${line}"]`) ?? null;
     if (card == null || mirror == null) return null;
-    const drift = [...card.querySelectorAll("[data-line]")].map((row) => {
+    // Text tops: the first row's own air and the bezel above it are padding on the gutter
+    // cell, and the row's air is its own padding.
+    const drift = [...card.querySelectorAll<HTMLElement>("[data-line]")].map((row) => {
       const n = row.getAttribute("data-line");
-      const cell = mirror.querySelector(`[data-column-number="${n}"]`);
-      if (cell == null) return Number.NaN;
-      return Math.abs(row.getBoundingClientRect().top - cell.getBoundingClientRect().top);
+      const number = mirror.querySelector(`[data-column-number="${n}"] [data-line-number-content]`);
+      if (number == null) return Number.NaN;
+      const textTop =
+        row.getBoundingClientRect().top + Number.parseFloat(getComputedStyle(row).paddingTop);
+      return Math.abs(textTop - number.getBoundingClientRect().top);
     });
     const gutter = sh?.querySelector("[data-gutter]");
     const content = sh?.querySelector("[data-content]");
@@ -275,51 +279,43 @@ test("the chrome brightens on the block under the pointer, and follows a scroll 
   await expect(wideChrome).not.toHaveAttribute("data-lit", "");
 });
 
-test("no viewport moves a block across the fit/overflow line", async ({ daemon, page }) => {
-  // The fit/overflow threshold, measured rather than assumed. The two box kinds differ: a
-  // loose `[data-line]` row is `white-space: pre` with no overflow, so it grows the plan
-  // column to its own content (capped at 720) and reads scrollWidth === clientWidth at every
-  // viewport, while a `[data-code-card]` contributes nothing and takes whatever the column
-  // gives, so it narrows with the viewport — which is why a resize re-runs the card pass at
-  // all. Neither crosses the `--caret-read-max` 720px cap, in either direction: a card
-  // exists only because its content already passed 720, which no width the column can offer
-  // it beats. So the wrap button neither appears nor disappears on a resize — but only while
-  // the cap is a CONSTANT; make it relative (a vw, a percentage, a clamp) and either
-  // crossing becomes reachable again.
+test("a resize carries a block across the fit/overflow line, its wrap toggle with it", async ({
+  daemon,
+  page,
+}) => {
+  // The fit/overflow threshold, measured rather than assumed. A card takes whatever the
+  // column gives, up to the `--caret-read-max` 720px cap, so it narrows with the viewport:
+  // the narrow block's ~60-character line fits its card at full width and overflows it on a
+  // phone-width viewport. The pass re-runs on a resize to re-mark the card that scrolls,
+  // whose lane the sheet reserves, and the wrap toggle follows the same overflow.
   await openMixedPlan(page, daemon);
   const reference = await blockMetrics(page, WIDE);
+  expect((await blockMetrics(page, NARROW))?.marked).toBe(false);
 
   await page.setViewportSize({ width: 420, height: 900 });
-  await expect
-    .poll(async () => (await blockMetrics(page, WIDE))?.clientWidth)
-    .toBeLessThan(reference?.clientWidth as number);
-  const narrowed = await blockMetrics(page, WIDE);
-  expect(narrowed?.carded).toBe(true);
-  expect(narrowed?.scrollWidth).toBeGreaterThan(narrowed?.clientWidth as number);
-  const fitting = await blockMetrics(page, NARROW);
-  expect(fitting?.carded).toBe(false);
-  expect(fitting?.scrollWidth).toBe(fitting?.clientWidth);
-  await expect(wrapToggle(page)).toHaveCount(1);
+  await expect.poll(async () => (await blockMetrics(page, NARROW))?.marked).toBe(true);
+  expect((await blockMetrics(page, NARROW))?.scrolls).toBe(true);
+  await expect(wrapToggle(page)).toHaveCount(2);
 
   await page.setViewportSize({ width: 1600, height: 900 });
   await expect
     .poll(async () => (await blockMetrics(page, WIDE))?.clientWidth)
     .toBe(reference?.clientWidth);
-  expect((await blockMetrics(page, NARROW))?.carded).toBe(false);
+  await expect.poll(async () => (await blockMetrics(page, NARROW))?.marked).toBe(false);
+  expect((await blockMetrics(page, NARROW))?.scrolls).toBe(false);
+  expect((await blockMetrics(page, WIDE))?.marked).toBe(true);
   await expect(wrapToggle(page)).toHaveCount(1);
 });
 
 test("a wrapped block stays wrapped across a viewport resize", async ({ daemon, page }) => {
-  // The card pass re-runs on resize and retires a card that stops overflowing — a wrapped
-  // block always stops overflowing, so the reflow mark is what has to hold the card open
-  // across the re-run rather than fall out of it.
+  // The card pass re-runs on resize and rebuilds a card the library repainted, so the
+  // reflow mark has to come back with it every time rather than fall out of it.
   await openMixedPlan(page, daemon);
   await wrapToggle(page).click();
   await expect.poll(async () => (await blockMetrics(page, WIDE))?.reflowed).toBe(true);
 
-  // Settle before reading, rather than polling for a true: without the reflow mark holding
-  // the card open the block flips between carded and loose forever, and a poll is satisfied
-  // by any one of those frames.
+  // Settle before reading, rather than polling for a true: a poll is satisfied by any one
+  // frame, and the mark has to hold in all of them.
   await page.setViewportSize({ width: 420, height: 900 });
   await settledMutations(page);
   expect((await blockMetrics(page, WIDE))?.reflowed).toBe(true);
@@ -397,7 +393,7 @@ test.describe("on the preview", () => {
   async function flipToSource(page: Page): Promise<void> {
     await previewToggle(page).click();
     await expect(page.locator(PLAN_PREVIEW)).toHaveCount(0);
-    await expect.poll(async () => (await blockMetrics(page, WIDE))?.carded).toBe(true);
+    await expect.poll(async () => (await blockMetrics(page, WIDE)) !== null).toBe(true);
   }
 
   test("copy is offered on both blocks and wrap only on the wide one", async ({ daemon, page }) => {

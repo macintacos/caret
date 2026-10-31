@@ -81,17 +81,15 @@ const CARET_OVERRIDES = `
      together, so they share one named value rather than coupled literals. */
   :host { --caret-seam: 20px; }
   [data-content] { padding-inline-start: var(--caret-seam); }
-  /* Three more of the same kind, one level down (EXC-865). Their depth is the shared
-     --panel-recess (styles/tokens.css, inherited into this shadow root): two cards a hair
-     apart side by side read as a mistake. Only its 1px bottom lip leaves the card's box,
-     so nothing spills into the --caret-card-inset gutter lane.
+  /* Four more of the same kind, one level down (EXC-865).
 
-     --caret-card-inset is how far the content column's own indented surfaces sit in
-     from it — the fenced-code row and the code card both spend it — and
-     the band extension that reaches across it must be the same number or the band
-     stops short. --caret-read-max is the reading cap those same three share; a comment
-     anchored inside a card is capped by it too, so the composer cannot outgrow the card
-     that scrolls it. EXC-870's inline image spends both as well.
+     --caret-card-inset is how far the content column's own indented surfaces sit in from
+     it — the fenced-code row and the code card both spend it — and the band extension that
+     reaches across it must be the same number or the band stops short. --caret-read-max is
+     the reading cap those two surfaces share; a comment anchored inside a card is capped by
+     it too, so the composer cannot outgrow the card that scrolls it. EXC-870's inline image
+     spends both as well. --caret-code-bar is a scrolling code card's bar, whose lane the
+     gutter clears beside the card's last row.
 
      --caret-gutter-divider is NOT caret's: it restates the library's own
      border-right on a gutter cell (2px, its --diffs-gap-style default, which caret
@@ -101,6 +99,7 @@ const CARET_OVERRIDES = `
   :host {
     --caret-card-inset: 0.75rem;
     --caret-read-max: 720px;
+    --caret-code-bar: 12px;
     --caret-gutter-divider: 2px;
   }
   /* The task-list checkbox's size (EXC-860) — the box the masked Lucide glyph is painted
@@ -145,17 +144,15 @@ const CARET_OVERRIDES = `
      distinct: bar + row band = cursor, "+" = hover, amber band = selection. No
      transition — the diff surface swaps state instantly (svelte-rules § Motion).
      :not([data-selected-line]) yields a selected line to the amber band; declared
-     before the code-block rules so a cursor on a fenced line keeps its panel fill.
+     before the code-block rules so a cursor on a fenced line gets the pane's band.
      The band joins across the gutter→content seam through the shared seam-fill
      :is() groups below, which list data-caret-cursor alongside hover/selection.
 
      Descendant rather than child, here and in the three gutter rules that follow it
-     (the selection tick and its ::after, and the divider clearing below). A carded
-     block's gutter cells sit inside a display:contents card — codeBlockScroll.ts's for
-     an overflowing fence — so a child combinator stops
-     matching them and the row reads half-banded: the content half paints from its own
-     descendant selector while the gutter half, and the 3px caret bar with it, silently
-     drops out. The card has no box, so widening changes nothing else. */
+     (the selection tick and its ::after, and the divider clearing below). A fence's or a
+     table's gutter cells sit inside a display:contents card, so a child combinator stops
+     matching them and the 3px caret bar silently drops out. The card has no box, so
+     widening changes nothing else. */
   [data-gutter] [data-column-number][data-caret-cursor]:not([data-selected-line]) {
     background-color: color-mix(in lab, var(--paper), var(--ink) 7%);
     box-shadow: inset 3px 0 0 0 var(--ink);
@@ -192,21 +189,11 @@ const CARET_OVERRIDES = `
     pointer-events: none;
   }
 
-  /* A code row's white-space: pre text must never stretch the content column's track to
-     the widest line: that is what widens the whole plan surface, and it also collapses the
-     row's own scrollWidth onto its clientWidth so the block reports no overflow and never
-     cards (EXC-1228). Two ways to stop it, because the two states want different boxes.
-
-     An UNSELECTED row is capped at the reading width — the panel's own look (EXC-692),
-     below. A SELECTED row is size-contained instead: it contributes nothing to the track
-     either way, but keeps its full-bleed box, so the amber band runs to the column's edge
-     the way a selected prose row's does. Capping it would end the band short of the panel
-     it sits in, which reads as a rendering fault rather than as a narrower band.
-
-     The clip is shared. Both states leave the text wider than its box, and without it that
-     text spills across the surface — the guard for the frame before the scroll card wraps
-     the block, and the floor if the script never runs (EXC-729). Inline axis only, so the
-     fence-glyph nudges below are not shaved. */
+  /* An uncarded code row's white-space: pre text must never stretch the content column's
+     track to the widest line, which widens the whole plan surface. An unselected row is
+     capped at the reading width, below; a selected one, which keeps its full-bleed band, is
+     size-contained instead. Both leave the text wider than its box, so the clip keeps it off
+     the surface. Inline axis only, so the fence-glyph nudges below are not shaved. */
   [data-content] > [data-line][data-code-line] {
     overflow-x: clip;
   }
@@ -214,65 +201,25 @@ const CARET_OVERRIDES = `
     contain: inline-size;
   }
 
-  /* EXC-692: a fenced code block reads as a slightly-indented, darker, rounded
-     panel in the content column. The library paints no per-line code marker, so
-     caret tags each content line inside a fence with data-code-line, plus
-     data-code-start / -end on the block's first / last line (see codeBlocks.ts,
-     re-applied after every repaint by SourceView). Line numbers stay in the gutter
-     — the panel is the content column only. The fill mixes one step toward --ink
-     off the diff surface (--paper-sunk) with the same in-lab color-mix the layered
-     surfaces use, so it carries correct depth in both schemes (a sunk panel on
-     light paper, a raised one on dark). The panel is a contained card: inset from
-     the gutter (margin-inline-start) and from the right (margin-inline-end), and
-     capped at a comfortable reading width (max-width) so it never stretches
-     full-bleed across a wide viewport — when the content column is narrower than the
-     cap, the right margin still keeps it off the edge. The code keeps the library's
-     default 2ch inset within the card (no extra indent). Only the OUTER edges of the
-     block are padded — the opening fence's top and the closing fence's bottom — so
-     the fence lines hug the code (no gap below the opening markers or above the
-     closing markers). The closing fence's bottom pad is smaller than the opening
-     fence's top pad on purpose: a fence marker glyph sits high in its line box (a
-     digit at the baseline), so an equal pad would leave a visibly larger gap below
-     the closing markers; the smaller value evens the top and bottom margins by eye.
-     This is a glyph metric, not a gutter thing, so the gutter stays as-is. The
-     :not([data-selected-line]) guard yields a selected code line to the amber
-     band below: CARET_OVERRIDES is adopted after the core sheet, so without it this
-     fill would win over the library's selection highlight. Rounding hangs off the
-     block's first line (top) and last line (bottom), tagged explicitly rather than
-     via :not(~) since a plan may hold several blocks. */
+  /* A fenced block's rows outside their card: the frame between a library repaint and the
+     pass that re-cards them (codeBlockScroll.ts), and the floor if that pass never runs. A
+     row cannot carry the card's bezel, whose ring and drop shadow would seam at every row
+     boundary, so it shows the pane's floor where the pane will be, at the card's inset and
+     cap. The end rows take the card's whole height, bezel included, so re-carding moves
+     nothing below the block. */
   [data-content] > [data-line][data-code-line]:not([data-selected-line]) {
-    background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
+    background-color: var(--table-floor);
     margin-inline-start: var(--caret-card-inset);
     margin-inline-end: var(--caret-card-inset);
     max-width: var(--caret-read-max);
     padding-inline-start: 2ch;
     padding-inline-end: 0.75rem;
-    /* A fitting block has no card element — every row paints its own fill — so it takes
-       the recess in pieces that tile without a seam: the side edges on every row, the
-       shade and top edge on the first, the bottom edge and lip on the last. Declared on
-       the row, where the first and last rows' pieces resolve.
-
-       A selected row's :not() carve-out takes the recess with the fill and the rounding —
-       the amber band owns that row. The banded-row rule far below restates this value:
-       box-shadow does not cascade additively, so both sites move together. */
-    --caret-row-recess:
-      inset 1px 0 0 var(--panel-edge),
-      inset -1px 0 0 var(--panel-edge),
-      var(--caret-row-top, 0 0 transparent),
-      var(--caret-row-bottom, 0 0 transparent);
-    box-shadow: var(--caret-row-recess);
   }
-  [data-content] > [data-line][data-code-start]:not([data-selected-line]) {
-    border-top-left-radius: var(--radius);
-    border-top-right-radius: var(--radius);
-    padding-block-start: 0.5rem;
-    --caret-row-top: var(--panel-shade), inset 0 1px 0 var(--panel-edge);
+  [data-content] > [data-line][data-code-start] {
+    padding-block-start: calc(var(--code-bezel) + 0.5rem);
   }
-  [data-content] > [data-line][data-code-end]:not([data-selected-line]) {
-    border-bottom-left-radius: var(--radius);
-    border-bottom-right-radius: var(--radius);
-    padding-block-end: 0.1rem;
-    --caret-row-bottom: inset 0 -1px 0 var(--panel-edge), var(--well-lip);
+  [data-content] > [data-line][data-code-end] {
+    padding-block-end: calc(0.1rem + var(--code-bezel));
   }
   /* EXC-692 glyph centering. A fence marker glyph sits high in its line box, so it
      reads as too high when the row is not top-padded. The opening markers already
@@ -1082,30 +1029,50 @@ const CARET_OVERRIDES = `
     color: transparent;
   }
 
-  /* EXC-729: an overflowing fenced block is wrapped in one scroll card (codeBlockScroll.ts)
-     that is a single native horizontal scroll container — the whole block scrolls as one unit
-     (short lines follow the wide ones, one scrollbar at the bottom, no per-row jelly). The card
-     is a subgrid, so its rows still map to the parent row tracks and the gutter line numbers
-     stay aligned; grid-auto-columns: max-content sizes the scroll content to the widest line
-     while max-width caps the visible card. It carries the same panel look as the per-row card
-     above — a fitting block keeps that path (its direct-child rows never match this card
-     selector), so a scrolling block and a fitting one read identically. */
+  /* EXC-729: every fenced block is wrapped in one card (codeBlockScroll.ts) that is a single
+     native horizontal scroll container — a wide block scrolls as one unit (short lines follow
+     the wide ones, one scrollbar at the bottom, no per-row jelly). The card is a subgrid, so
+     its rows still map to the parent row tracks and the gutter line numbers stay aligned. Its
+     column is at least the pane's width, so a band on a fitting block runs edge to edge, and
+     at most the widest line, which is the scroll range; max-width caps the visible card.
+
+     The card is also the block's frame, built as a table's is: a raised bezel of the window's
+     --body round a pane sunk into it, on --table-floor. Everything that draws it stays put
+     while the code scrolls, because none of it is content: the bezel is the border, which
+     the scrollport stops at; the floor is a background clipped to the padding box; the pane's
+     edges are inset shadows, which paint inside the border. That is also why the float's rim
+     is a strip over the border box rather than --float-rim, which as an inset shadow would
+     light the pane's top edge instead of the bezel's. A wide block's scrollbar sits inside
+     the pane, below its last line. */
   [data-content] > [data-code-card] {
     grid-column: 1 / -1;
     display: grid;
     grid-template-rows: subgrid;
-    grid-auto-columns: max-content;
+    grid-auto-columns: minmax(100%, max-content);
     overflow-x: auto;
     overflow-y: hidden;
     max-width: var(--caret-read-max);
     margin-inline: var(--caret-card-inset);
-    background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
-    border-radius: var(--radius);
-    box-shadow: var(--panel-recess);
+    border: var(--code-bezel) solid transparent;
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(var(--table-floor), var(--table-floor)) padding-box,
+      linear-gradient(var(--float-rim-ink) 1px, transparent 1px) border-box,
+      var(--body);
+    box-shadow:
+      var(--table-pane-sink),
+      inset 1px 0 var(--table-pane-edge),
+      inset -1px 0 var(--table-pane-edge),
+      inset 0 -1px var(--table-pane-edge),
+      0 0 0 1px var(--rule),
+      var(--float-low);
+    /* Over the rows either side, as the table card is, or they paint over its ring and drop
+       shadow. */
+    z-index: 1;
   }
   /* The library paints every line with its own --diffs-bg, so clear it inside the card for
-     the darker panel fill to show through; keep the code's 2ch inset and end padding. A
-     selected line is left to the library's amber highlight (EXC-664) via the :not guard. */
+     the floor to show through; keep the code's 2ch inset and end padding. A selected line is
+     left to the library's amber highlight (EXC-664) via the :not guard. */
   [data-content] > [data-code-card] > [data-line][data-code-line] {
     padding-inline-start: 2ch;
     padding-inline-end: 0.75rem;
@@ -1113,16 +1080,37 @@ const CARET_OVERRIDES = `
   [data-content] > [data-code-card] > [data-line][data-code-line]:not([data-selected-line]) {
     background-color: transparent;
   }
-  /* Symmetric breathing room top and bottom. The ::-webkit-scrollbar height (below) makes the
-     browser reserve the bar's own lane at the card's bottom edge, so this padding is only the
-     gap between the last code line and that bar — no extra bar-height reservation is needed
-     here (that double-counted and left a dead gap). The gutter's matching tracks grow with
-     these paddings via subgrid, so the line numbers stay aligned. */
+  /* The pane's air above the opening fence and below the closing one; less below, because a
+     fence glyph sits high in its line box. A wide block's scrollbar takes a lane of its own
+     under the closing fence. */
   [data-content] > [data-code-card] > [data-line][data-code-start] {
     padding-block-start: 0.5rem;
   }
   [data-content] > [data-code-card] > [data-line][data-code-end] {
-    padding-block-end: 0.5rem;
+    padding-block-end: 0.1rem;
+  }
+  /* The card's border, and a scrolling card's bar, land in its end row tracks outside its
+     first and last rows. The gutter mirror is display: contents, so the cells beside those
+     rows clear the same space as margin, which keeps each number on its line and a band as
+     tall in the gutter as on the code. The first cell takes its row's air as padding; the
+     hover "+" hangs from the cell's padding edge, so it steps down with the number.
+
+     The bar's margin is also what holds its lane open in the row track: Chromium leaves a
+     subgrid's auto scrollbar out of the tracks it has already sized, and the bar then hangs
+     over the line below the block. codeBlockScroll.ts marks a scrolling card's mirror. */
+  [data-gutter] [data-code-card-gutter] > :first-child {
+    --row-lead: 0.5rem;
+    margin-block-start: var(--code-bezel);
+    padding-block-start: var(--row-lead);
+  }
+  [data-gutter] [data-code-card-gutter] > :last-child {
+    margin-block-end: var(--code-bezel);
+  }
+  [data-gutter] [data-code-card-gutter][data-code-card-scrolls] > :last-child {
+    margin-block-end: calc(var(--code-bezel) + var(--caret-code-bar));
+  }
+  [data-gutter] [data-code-card-gutter] [data-gutter-utility-slot] {
+    top: var(--row-lead, 0);
   }
   /* EXC-1386: the reviewer soft-wraps one block in place. grid-auto-columns is the
      load-bearing swap — max-content measures a pre-wrap row at its UNWRAPPED width, so without
@@ -1147,7 +1135,7 @@ const CARET_OVERRIDES = `
      back in Chromium, where caret renders); the thumb is a caret-neutral ink mix — no amber,
      the diff surface reserves amber for selection — inset by a transparent border so it reads
      as a thin pill in the lane. */
-  [data-content] > [data-code-card]::-webkit-scrollbar { height: 12px; }
+  [data-content] > [data-code-card]::-webkit-scrollbar { height: var(--caret-code-bar); }
   [data-content] > [data-code-card]::-webkit-scrollbar-track { background: transparent; }
   [data-content] > [data-code-card]::-webkit-scrollbar-thumb {
     background: color-mix(in lab, var(--paper-sunk), var(--ink) 45%);
@@ -1159,7 +1147,7 @@ const CARET_OVERRIDES = `
     background: color-mix(in lab, var(--paper-sunk), var(--ink) 60%);
     background-clip: content-box;
   }
-  /* The card's fence lines need the same glyph-centering nudges as the per-row card above
+  /* The card's fence lines need the same glyph-centering nudges as the uncarded fallback above
      (whose rules match direct-child rows only). */
   [data-content] > [data-code-card] > [data-line][data-code-end]:not([data-selected-line]) [data-code-fence] {
     position: relative;
@@ -1183,23 +1171,24 @@ const CARET_OVERRIDES = `
      and position: sticky with left: var(--diffs-column-number-width) — correct while the
      scrollport is the whole view, wrong now that the card is one.
 
-     The width must be the CARD's, and nothing inside a scroll container can read that in
+     The width must be the PANE's, and nothing inside a scroll container can read that in
      CSS — a percentage resolves against the scrolled track, as wide as the widest code line
-     — so it is reconstructed from the three insets between the two: the column's own seam
-     padding, and the card's margin either side. Wider than the card and the block can never
-     retire it, which is why diff-surface.e2e.ts measures the drawn comment against the drawn
-     card. A cap cannot do this job: the library's is a definite width, so this replaces it.
+     — so it is reconstructed from the insets between the two: the column's own seam padding,
+     and the card's margin and bezel either side. Wider than the pane and the block scrolls
+     and offers the wrap toggle for good, which is why diff-surface.e2e.ts measures the drawn
+     comment against the drawn pane. A cap cannot do this job: the library's is a definite
+     width, so this replaces it.
 
      The sticky offset clears a gutter that is outside the card, so inside one it indents the
      composer by the gutter's width and pins it there. Zeroed, the composer sits on the code's
      own left edge and stays put while the code scrolls under it. */
   [data-content] > [data-code-card] > [data-line-annotation] > [data-annotation-content] {
-    width: min(
-      var(--caret-read-max),
-      calc(
-        var(--diffs-column-content-width, 100%) - var(--caret-seam) - 2 *
-          var(--caret-card-inset)
-      )
+    width: calc(
+      min(
+          var(--caret-read-max),
+          var(--diffs-column-content-width, 100%) - var(--caret-seam) - 2 *
+            var(--caret-card-inset)
+        ) - 2 * var(--code-bezel)
     );
     inset-inline-start: 0;
   }
@@ -1651,48 +1640,14 @@ const CARET_OVERRIDES = `
     max-width: var(--caret-read-max);
   }
 
-  /* EXC-788: a banded row — the focused-line cursor OR a pointer hover — ON a
-     fenced code line. The code-panel fill above is same-specificity-but-later than
-     the base cursor/hover bands, so on a code row the band dies at the seam: the
-     content cell keeps the flat panel fill (hover), or the gutter cell keeps the
-     dim base cursor tint (cursor), so the row reads half-banded. Re-assert the band
-     on BOTH columns as a brighter step OF the panel — paper-sunk + ink 9%, ~one
-     prose-cursor step (+2.8 L) above the panel base — so a focused/hovered code row
-     lifts within the block the way a prose row lifts off the surface: visible over
-     the syntax colors, panel identity intact, cursor and hover consistent (the caret
-     bar vs the "+" still tell them apart). The content arm is a descendant combinator
-     so it also covers an overflowing block's rows (moved into [data-code-card]); the
-     gutter arm needs its number cell tagged data-code-line (tagCodeBlockRows), since
-     CSS can't relate a gutter cell to its content sibling across the two grid
-     columns. Placed after the card rules so it beats the card's transparent fill on
-     source order. Yields to the amber selection; the +/- change tints never reach
-     the panel (it is single-version only). */
-  [data-content] [data-line][data-code-line]:is([data-hovered], [data-caret-cursor]):not([data-selected-line]),
-  [data-gutter] > [data-column-number][data-code-line]:is([data-hovered], [data-caret-cursor]):not([data-selected-line]) {
-    background-color: color-mix(in lab, var(--paper-sunk), var(--ink) 9%);
-  }
-  /* Fill the gutter→content seam on a banded code row so the band reads continuous
-     across it, like a non-code row does. A non-code banded row pulls its content
-     cell left across --caret-seam (the seam-fill group below) to cover the seam;
-     a code row can't — its panel inset (margin-inline-start, on top of the content
-     column's --caret-seam) overrides that pull, so the strip between the banded
-     gutter cell and the inset band stays unpainted. A left box-shadow paints exactly
-     that strip (width = the two insets, --caret-seam + --caret-card-inset) WITHOUT
-     moving the cell or its code text, and without fighting the panel's
-     overflow-x: clip / max-width the way a negative margin would. Same band color as
-     the fill; the gutter's own divider is already cleared to transparent for banded
-     rows (seam-fill group), so gutter band + this strip + content band read as one.
-     Fitting-block rows only ([data-content] > …); an overflowing block's card owns
-     its own inset. Yields to the amber selection via the shared :not guard. */
-  [data-content] > [data-line][data-code-line]:is([data-hovered], [data-caret-cursor]):not([data-selected-line]) {
-    /* The recess is restated here because this rule outranks the base row rule and
-       box-shadow does not cascade additively — without it a hovered code row silently drops
-       its depth. The seam strip stays FIRST, so it paints over the recess's lip at the
-       block's last row: on a banded row the block's edge should read as band. */
-    box-shadow:
-      calc(-1 * (var(--caret-seam) + var(--caret-card-inset))) 0 0 0
-        color-mix(in lab, var(--paper-sunk), var(--ink) 9%),
-      var(--caret-row-recess);
+  /* EXC-788: a banded row — the focused-line cursor OR a pointer hover — ON a fenced code
+     line. The library mixes its hover and cursor bands into the plan's paper, which on light
+     palettes lands on the pane floor's own colour; here they step off the floor, as a table
+     row's do. A descendant combinator, so it reaches the rows inside a card. Placed after the
+     card rules so it beats the card's transparent fill on source order. Yields to the amber
+     selection; the +/- change tints never reach the pane (it is single-version only). */
+  [data-content] [data-line][data-code-line]:is([data-hovered], [data-caret-cursor]):not([data-selected-line]) {
+    background-color: color-mix(in lab, var(--table-floor), var(--ink) 7%);
   }
 
   /* EXC-664: the drag-to-comment selection reads as ONE continuous amber band
@@ -1780,8 +1735,9 @@ const CARET_OVERRIDES = `
      kinds share: a ::before hung off the banded gutter
      cell's inline-end edge, spanning the content column's seam plus the card's own
      inset — exactly the gap between the two halves. background-color: inherit takes
-     the cell's own band, so one rule covers selection amber, hover grey and the
-     cursor tint without naming any of them, and follows the library if it recolors.
+     the cell's own band, so one rule covers selection amber and the change tints
+     without naming any of them, and follows the library if it recolors. A hovered or
+     cursored row has no gutter half to carry (below).
      ::before rather than ::after: the multi-line selection tick above owns ::after on
      these same cells. Reached through the gutter card, which is display: contents and
      so does not disturb matching.
@@ -1793,8 +1749,8 @@ const CARET_OVERRIDES = `
      transparent on a banded row) and leaving two unpainted in the seam.
 
      position: relative is set unconditionally rather than on the same state list: it
-     costs nothing on an unbanded cell, and two copies of a six-state list is a rule
-     that silently mispositions the strip the day someone extends one of them. */
+     costs nothing on an unbanded cell, and two copies of a state list is a rule that
+     silently mispositions the strip the day someone extends one of them. */
   [data-gutter] :is([data-table-card-gutter], [data-code-card-gutter]) > [data-column-number] {
     position: relative;
   }
@@ -1802,10 +1758,8 @@ const CARET_OVERRIDES = `
     :is([data-table-card-gutter], [data-code-card-gutter])
     > [data-column-number]:is(
       [data-selected-line],
-      [data-hovered],
       [data-line-type="change-addition"],
-      [data-line-type="change-deletion"],
-      [data-caret-cursor]
+      [data-line-type="change-deletion"]
     )::before {
     content: "";
     position: absolute;
@@ -1815,6 +1769,22 @@ const CARET_OVERRIDES = `
     width: calc(var(--caret-seam) + var(--caret-card-inset));
     background-color: inherit;
     pointer-events: none;
+  }
+  /* A hovered or cursored row in a card bands in its pane alone. A gutter half would stand
+     apart from it across the seam, the card's margin and the bezel, so the number and the
+     hover "+" mark a hovered row and the bar a cursored one. The library's hover band is
+     undone inside its own --diffs-* chain, so a selected row keeps its amber; the cursor's
+     fill is caret's own, above. A drag keeps its gutter half and the strip, so the range
+     reads as one band. */
+  [data-gutter]
+    :is([data-table-card-gutter], [data-code-card-gutter])
+    > [data-column-number][data-hovered]:not([data-selected-line]) {
+    --diffs-computed-hovered-line-bg: var(--diffs-computed-editor-active-line-bg);
+  }
+  [data-gutter]
+    :is([data-table-card-gutter], [data-code-card-gutter])
+    > [data-column-number][data-caret-cursor]:not([data-selected-line]) {
+    background-color: var(--diffs-line-bg);
   }
 
   /* Combined markers — caret's "both" indicators (the library has no such mode).
