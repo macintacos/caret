@@ -617,11 +617,16 @@
     // Scroll anchoring stays off from a repaint until the pass above has re-carded it: in
     // between, every card above the view is flat rows, and an anchor taken then shifts the
     // plan by the cards' whole height difference.
-    const observer = new MutationObserver(() => {
+    const hold = () => {
       container?.style.setProperty("overflow-anchor", "none");
       schedule();
-    });
+    };
+    const observer = new MutationObserver(hold);
     observer.observe(root, { childList: true, subtree: true });
+    // A repaint rebuilds a failed image, which shows as a broken-image box until its error
+    // hides it (inlineImages.ts). The box arrived under the hold, so its removal must too;
+    // the error can land after the release, and the hide is not a childList mutation.
+    root.addEventListener("error", hold, true);
     // A resize can move a block across the fit/overflow line — its card is capped, but
     // shrinks below its cap on a narrow viewport — and fires no DOM mutation the observer
     // above would catch.
@@ -632,6 +637,7 @@
       cancelAnimationFrame(release);
       container?.style.removeProperty("overflow-anchor");
       observer.disconnect();
+      root.removeEventListener("error", hold, true);
       resize.disconnect();
     };
   });

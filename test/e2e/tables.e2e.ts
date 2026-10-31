@@ -1385,7 +1385,46 @@ test("opening a composer below the tables leaves its line where it was", async (
       }),
     )
     .toBe(TABLES.length);
-  expect(await rowTop()).toBe(before);
+  // A later repaint can flatten the tables again for a frame; a lasting shift still fails.
+  await expect.poll(rowTop).toBe(before);
+});
+
+test("an image in a table that fails to load after the composer opens leaves the line where it was", async ({
+  page,
+  daemon,
+}) => {
+  // Every repaint rebuilds the image, and a failed one is fetched again: it shows as a
+  // broken-image box until its error hides it. Failing it late lands the hide after the
+  // re-card.
+  await page.route("https://assets.invalid/**", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    await route.abort();
+  });
+  const tail = Array.from({ length: 60 }, (_, i) => `- tail item ${i + 1}`).join("\n");
+  await openPlan(page, daemon, `${TABLE_PLAN}\n${tail}\n`);
+  await carded(page);
+  const hiddenImage = page.locator(".diffview [data-md-image][hidden]");
+  await expect(hiddenImage).toHaveCount(1);
+
+  const line = await lineOf(page, "- tail item 40");
+  const rowTop = () =>
+    page.evaluate((ln) => {
+      const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+      const row = sh?.querySelector(`[data-content] [data-line="${ln}"]`);
+      return Math.round(row?.getBoundingClientRect().top ?? Number.NaN);
+    }, line);
+  await page.evaluate((ln) => {
+    const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
+    sh?.querySelector(`[data-content] [data-line="${ln}"]`)?.scrollIntoView({ block: "center" });
+  }, line);
+  const plus = await revealGutterPlus(page, line);
+  const before = await rowTop();
+
+  await plus.click();
+  await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
+  await expect(hiddenImage).toHaveCount(0);
+  await expect(hiddenImage).toHaveCount(1);
+  await expect.poll(rowTop).toBe(before);
 });
 
 test("a drag bands a table's rows in both columns, inside it and into it", async ({
