@@ -939,7 +939,7 @@
     color: var(--ink);
   }
   :global(.plan-toc-panel [data-slot="command-item"][aria-current="location"][data-selected] .toc-key) {
-    --key-face: var(--neutral-face-hover);
+    --key-face: var(--neutral-face-latched-hover);
   }
   :global(.plan-toc-panel [data-slot="command-item"]:is(:active, [data-key-pressed]) .toc-key) {
     --key-face: var(--neutral-face-press);

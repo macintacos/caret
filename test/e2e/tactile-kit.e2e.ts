@@ -8,7 +8,12 @@ import { openSettings, previewToggle } from "@test/e2e/support/chrome.ts";
 import { colorDistance, toLab } from "@test/e2e/support/color.ts";
 import { openWithPendingScratch } from "@test/e2e/support/decision.ts";
 import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
-import { planSurface, revealGutterPlus, seedAndOpen } from "@test/e2e/support/source-view.ts";
+import {
+  jumpToHeading,
+  planSurface,
+  revealGutterPlus,
+  seedAndOpen,
+} from "@test/e2e/support/source-view.ts";
 
 /** The review page with one kept scratch, so the gate also reaches its marker's cap. */
 async function openWithScratchMarker(daemon: Daemon, page: Page): Promise<void> {
@@ -237,7 +242,56 @@ test("a key under keyboard focus reads apart from its resting face", async ({ da
   await expect(key).toHaveCSS("outline-style", "none");
   await expect
     .poll(async () => colorDistance(page, rest, await face()))
-    .toBeGreaterThanOrEqual(3.5);
+    .toBeGreaterThanOrEqual(4.5);
+});
+
+/** An element's face once its state's transition, started on the next frame, has run out. */
+function settledFace(target: Locator): Promise<string> {
+  return target.evaluate(async (el) => {
+    await new Promise(requestAnimationFrame);
+    await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {})));
+    return getComputedStyle(el).backgroundColor;
+  });
+}
+
+/** Light paper's cursor darkens the face it lands on, by theme.test.ts's FOUND. */
+async function expectCursorDarkens(page: Page, cursor: string, resting: string): Promise<void> {
+  const [cursorLab = [], restLab = []] = await toLab(page, [cursor, resting]);
+  expect(cursorLab[0]).toBeLessThan(restLab[0] ?? Number.NaN);
+  expect(await colorDistance(page, resting, cursor)).toBeGreaterThanOrEqual(4.5);
+}
+
+// A latched face is tinted with the accent, darker than a plain hover face, so the cursor
+// steps the latched face rather than trading it for the hover face.
+test("on light paper the cursor darkens the Contents row being read", async ({ daemon, page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  const section = (name: string) =>
+    [`## ${name}`, ...Array.from({ length: 30 }, (_, i) => `${name} line ${i + 1}.`)].join("\n\n");
+  await daemon.seed({ plan: ["# Alpha", section("Bravo"), section("Delta")].join("\n\n") });
+  await page.goto("/");
+  await planSurface(page);
+  await jumpToHeading(page, "Bravo");
+  await page.getByRole("button", { name: "Contents" }).click();
+  const read = page.locator(".plan-toc-panel [aria-current='location']");
+  await expect(read).toHaveAttribute("data-selected", "");
+  const cursor = await settledFace(read.locator(".toc-key"));
+  await page.keyboard.press("ArrowDown");
+  await expect(read).not.toHaveAttribute("data-selected", "");
+  await expectCursorDarkens(page, cursor, await settledFace(read.locator(".toc-key")));
+});
+
+test("on light paper the pointer darkens the latched compare toggle", async ({ daemon, page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await daemon.seedVersions(2, ["# Plan\n\nalpha line\n", "# Plan\n\nbeta line\n"]);
+  await page.goto("/");
+  await planSurface(page);
+  const toggle = page.getByRole("button", { name: /^Versions/ });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+  await page.mouse.move(0, 0);
+  const resting = await settledFace(toggle);
+  await toggle.hover();
+  await expectCursorDarkens(page, await settledFace(toggle), resting);
 });
 
 // On light paper a hovered key is darker than its rest, so a press that fell back to a
@@ -248,10 +302,16 @@ test("a press on light paper never lightens the key under the pointer", async ({
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await seedAndOpen(page, daemon);
-  for (const key of [
-    page.getByRole("button", { name: "Request changes" }),
-    page.getByRole("button", { name: /^Copy path / }),
+  for (const reach of [
+    async () => page.getByRole("button", { name: "Request changes" }),
+    async () => page.getByRole("button", { name: /^Copy path / }),
+    async () => {
+      await previewToggle(page).click();
+      await (await planSurface(page)).locator("[data-source-start]").first().hover();
+      return page.locator(".preview-plus > button");
+    },
   ]) {
+    const key = await reach();
     // The face once the state's transition, started on the next frame, has run out.
     const face = () =>
       key.evaluate(async (el) => {
@@ -384,4 +444,43 @@ test("a dropdown menu shows one risen row when the keyboard leaves the row under
   await page.keyboard.press("ArrowDown");
   await expect(rows.nth(1)).toHaveAttribute("data-highlighted", "");
   await expect.poll(() => pointed.evaluate((el) => getComputedStyle(el).translate)).toBe("none");
+});
+
+// A ghost control has no face of its own, so its hover is a wash over whatever surface it
+// sits on: on light paper it can only darken the lifted card, never punch a pale hole in it.
+test("a saved comment's delete control hovers darker than the lifted card on light paper", async ({
+  daemon,
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "Configurable TTL?" }],
+  });
+  await page.goto("/");
+  await planSurface(page);
+  const control = page
+    .locator("[data-annotation-card='ann-1']")
+    .getByRole("button", { name: "Discard comment" });
+  await control.hover();
+  // The control's painted face: its wash composited over the card's settled face.
+  const [cardL, controlL] = await control.evaluate(async (el) => {
+    const host = el.closest<HTMLElement>("[data-annotation-card]");
+    if (host === null) throw new Error("no card");
+    await new Promise(requestAnimationFrame);
+    await Promise.all(host.getAnimations({ subtree: true }).map((a) => a.finished.catch(() => {})));
+    const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    if (ctx === null) throw new Error("no 2d context");
+    const luma = () => {
+      const [r = 0, g = 0, b = 0] = ctx.getImageData(0, 0, 1, 1).data;
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    ctx.fillStyle = getComputedStyle(host).backgroundColor;
+    ctx.fillRect(0, 0, 1, 1);
+    const under = luma();
+    ctx.fillStyle = getComputedStyle(el).backgroundColor;
+    ctx.fillRect(0, 0, 1, 1);
+    return [under, luma()];
+  });
+  expect(controlL).toBeLessThan(cardL);
 });

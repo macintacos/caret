@@ -52,15 +52,16 @@
      3:1 on its floor (theme.test.ts). */
   --field-edge-focus: var(--ink-faint);
   --neutral-face: color-mix(in lab, var(--paper), var(--ink) 15%);
-  /* Focus wears the hover face and no ring, so it steps as far as Catppuccin Frappé's
-     --ink keeps 4.5:1 on it (theme.test.ts). */
+  /* Focus wears the hover face and no ring, so it steps nearly as far as Catppuccin
+     Frappé's --ink keeps 4.5:1 on it (theme.test.ts). */
   --neutral-face-hover: color-mix(in lab, var(--paper), var(--ink) 27%);
   --neutral-face-down: color-mix(in lab, var(--paper), var(--ink) 12%);
   /* A press sinks at least as deep as the hover it comes from. Dark presses down to the
      latched face; light's hover is already the darker, so a press keeps it. */
   --neutral-face-press: var(--neutral-face-down);
-  /* A crumb lies flat on the bar's --body rather than on paper. */
-  --crumb-face-hover: var(--neutral-face-hover);
+  /* A crumb lies flat on the bar's --body, which some palettes lift near the hover face, so
+     it steps further: as far as Catppuccin Frappé's --ink keeps 4.5:1 on it. */
+  --crumb-face-hover: color-mix(in lab, var(--paper), var(--ink) 30%);
 
   /* The material the window is made of: every chrome control is cut into it and the plan
      pane is set into it. Dark lifts it off the raised paper, which sits too close to the
@@ -97,13 +98,15 @@
   --switch-on: color-mix(in lab, var(--well-floor), var(--accent) 30%);
   --meter-off: color-mix(in lab, var(--well-floor), var(--ink) 7%);
 
-  /* The accent and danger caps' hover faces, and the latched face of a toggle that
-     switches a mode on (the compare toggle): the pressed face tinted with the accent. */
+  /* The accent and danger caps' faces, and the latched face of a toggle that switches a
+     mode on (the compare toggle): the pressed face tinted with the accent. */
+  --danger-face: var(--danger);
   --accent-face-hover: color-mix(in lab, var(--accent), var(--ink) 40%);
   --danger-face-hover: color-mix(in lab, var(--danger), var(--ink) 30%);
   --accent-face-press: var(--accent);
   --danger-face-press: var(--danger);
   --neutral-face-latched: color-mix(in lab, var(--neutral-face-down), var(--accent) 14%);
+  --neutral-face-latched-hover: var(--neutral-face-hover);
 
   /* A list row's two key states (the .key-row atom, styles/atoms.css): risen on the
      hover face, with a key's lift, side and cast shadow, and latched down on the pressed
@@ -145,14 +148,21 @@
   --field-floor: color-mix(in lab, var(--paper-raised), var(--ink) 3%);
   --neutral-face: var(--paper-raised);
   /* Light darkens a hover face, so it steps only as far as FOUND needs (theme.test.ts); any
-     further reads as disabled. The rise and cast shadow carry the rest. */
-  --neutral-face-hover: color-mix(in lab, var(--paper-raised), var(--ink) 13%);
-  --neutral-face-down: color-mix(in lab, var(--paper-raised), var(--ink) 6%);
+     further reads as disabled. The rise and cast shadow carry the rest. A light face steps
+     toward black, not toward --ink, because the palettes' papers share a lightness and
+     their inks don't. */
+  --neutral-face-hover: color-mix(in lab, var(--paper-raised), black 10%);
+  --neutral-face-down: color-mix(in lab, var(--paper-raised), black 5%);
   --neutral-face-press: var(--neutral-face-hover);
+  /* The hover face is lighter than a latched face, so the cursor steps the latched face. */
+  --neutral-face-latched-hover: color-mix(in lab, var(--neutral-face-latched), black 6%);
   /* That step lands on the grey bar's own shade, so a crumb rises to a key's white face. */
   --crumb-face-hover: var(--neutral-face);
-  --accent-face-hover: color-mix(in lab, var(--accent), black 30%);
+  --accent-face-hover: color-mix(in lab, var(--accent), black 10%);
   --accent-face-press: var(--accent-face-hover);
+  /* Dawnfox's --danger is too light for a light label at AA. */
+  --danger-face: color-mix(in lab, var(--danger), black 10%);
+  --danger-face-hover: color-mix(in lab, var(--danger), black 18%);
   --danger-face-press: var(--danger-face-hover);
   --body: color-mix(in lab, var(--paper-sunk), var(--ink) 5%);
   --table-floor: color-mix(in lab, var(--paper-sunk), var(--ink) 3%);
@@ -161,8 +171,8 @@
   /* The code panel would leave a row description under AA on the palest palettes. */
   --group-floor: color-mix(in lab, var(--paper-raised), var(--ink) 4%);
   --knob-face: var(--paper-raised);
-  --knob-face-hover: color-mix(in lab, var(--paper-raised), var(--ink) 7%);
-  --knob-face-down: color-mix(in lab, var(--paper-raised), var(--ink) 7%);
+  --knob-face-hover: color-mix(in lab, var(--paper-raised), black 5%);
+  --knob-face-down: color-mix(in lab, var(--paper-raised), black 5%);
   --knob-edge: color-mix(in lab, var(--ink-faint), var(--ink-soft) 50%);
   --switch-on: color-mix(in lab, var(--well-floor), var(--accent) 18%);
 }

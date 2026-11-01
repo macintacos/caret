@@ -601,7 +601,6 @@ test("no pipe glyph paints, and the table stands as a raised pad", async ({ page
         };
       }),
       header: {
-        transform: getComputedStyle(head).textTransform,
         color: getComputedStyle(head).color,
         pipes: colorsOf((t) => t.hasAttribute("data-table-pipe")),
         inked: colorsOf(
@@ -631,10 +630,7 @@ test("no pipe glyph paints, and the table stands as a raised pad", async ({ page
   expect(last?.image).not.toContain(ruleInk);
   expect(last?.image).toMatch(/^linear-gradient\(to top,/);
 
-  // The header is a cap: uppercase, on --table-head-ink, with the pipes still gone. The
-  // transform is a rendering-time one, so the copy spec further down still reads the
-  // source's own case back out of this row.
-  expect(marks.header.transform).toBe("uppercase");
+  // The header is on --table-head-ink, with the pipes still gone.
   expect(marks.header.color).toBe(headInk);
   // Every inked token takes the header's ink rather than shiki's — one colour, not a
   // per-token spread.

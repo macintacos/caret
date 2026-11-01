@@ -302,6 +302,7 @@
   }
   .compare-picker :global(.compare-toggle[aria-pressed="true"]:not(:disabled)) {
     --cap-face-down: var(--neutral-face-latched);
+    --cap-face-hover: var(--neutral-face-latched-hover);
     color: var(--ink);
   }
   /* Nudge the `d` shortcut cap a hair further right of the label than the
@@ -327,8 +328,6 @@
   .lbl {
     color: var(--ink-soft);
     font-size: var(--text-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
   }
   .arrow {
     color: var(--ink-faint);

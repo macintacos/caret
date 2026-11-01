@@ -32,7 +32,9 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - **A dialog labels its fields and sections in sentence case** (`.form-label`), at
   `--text-sm`, weight 600, `--ink-soft`, as Settings heads its sections. "(optional)"
   follows the label at body weight. The shortcut groups and the Contents panel's
-  breadcrumb headers wear it too, so no section label is set in capitals.
+  breadcrumb headers wear it too. No label or stamp is styled in capitals; only a key's
+  legend (the letters on a shortcut keycap, such as `ESC`) is, because it mirrors the key.
+  `ui/src/lib/sentence-case.test.ts` fails on a new label styled in capitals.
 - **Read-only text inside a dialog**, such as the compiled preview and the context lines,
   sits in a cut on `--group-floor`.
 - **The window is a body, and the plan is a pane set into it.** Every control is cut into
@@ -88,16 +90,21 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `--key-radius` for keys and key rows, `--radius` for fields. The outer shape rounds at
   that plus the inset, as a bed rounds at `--key-radius` plus `--well-pad`. Where the
   outer radius would leave the inner one at zero or less, the inner shape keeps its kit
-  radius and the outer one grows to that radius plus the inset. A setting group is the one
-  exception. Its padding, `--group-pad`, is so wide that you can't compare the gap at its
-  corner with the gap along its sides, and the concentric radius, 25px, made the group
-  much rounder than the keys inside it. The group is a bed, so it rounds as one:
-  `--key-radius` plus `--well-pad`, 11px. `test/e2e/concentric.e2e.ts` holds the group and
-  each of these to half a pixel:
-  - a modal with a footer shelf rounds at its tray's corner (`--key-radius` plus
-    `--well-pad`) plus the shelf's padding;
-  - Settings, which has no shelf, rounds at its search field's `--radius` plus the rail
-    header's padding;
+  radius and the outer one grows to that radius plus the inset. Two shapes are exceptions.
+  Their padding is so wide that you can't compare the gap at the corner with the gap along
+  the sides, and the concentric radius made them much rounder than the keys inside them:
+  - A setting group, padded `--group-pad`, would round at 25px. The group is a bed, so it
+    rounds as one: `--key-radius` plus `--well-pad`, 11px.
+  - A modal whose action tray rests on a footer shelf padded 1rem would round at 27px.
+    Every modal rounds at `--modal-radius` (14px) instead: the corner Settings' search
+    field nests in, the field's `--radius` plus the 0.5rem padding round it. Below 640px
+    wide, Settings keeps a wider corner of its own, listed below.
+
+  `test/e2e/concentric.e2e.ts` holds the setting group at its beds' radius, Request
+  changes, Approve and Reject at `--modal-radius`, and each of these to half a pixel:
+  - Settings' search field nests in `--modal-radius`. Below 640px wide, Settings' section
+    list folds into a bar with a section picker, and Settings rounds at the picker's bed
+    corner plus the bar's 0.6rem padding, 20.6px;
   - the comment composer rounds at `--composer-radius`: its tray's corner plus
     `--composer-inset`, its padding;
   - a menu, the Select listbox, and the Contents and heading-filter panels round at
@@ -121,8 +128,10 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   segment is a resting key that hovers and presses.
 - **Caps.** `.float-chip` is the neutral cap, and every neutral control wears it. The
   amber primary wears `.cap-accent`, which the vendored Button's default variant applies.
-  A destructive confirm, such as Reject anyway, wears `.cap-danger`; the top bar's Reject
-  stays neutral and takes the danger face on hover (`.cap-danger-hover`). One cap rule in
+  A destructive confirm, such as Reject anyway, wears `.cap-danger`, which rests on
+  `--danger-face`: in light that is the danger stepped toward black, so its label holds AA
+  in Dawnfox. The top bar's Reject stays neutral and takes the danger key's face and label
+  under the pointer, keyboard focus and a press (`.cap-danger-hover`). One cap rule in
   `atoms.css` paints every cap and every segment of a toggle group. A cap is a soft rubber
   key:
   - Its face is domed: a lift along its top (`--cap-lift`), kept above the label, and a
@@ -151,20 +160,28 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   springs back past rest (`--ease-spring`). A toggle that is on (`aria-pressed`) stays
   down and shows a small amber light with a soft glow in its corner, so a latch reads
   apart from a press. A disabled cap sits at its place, with no rise and a 1px side, and
-  the Button fades it. A ghost control (`.cap-ghost`) has no cap, so a press leaves a
-  shallow inset shadow instead. Under reduced motion `--key-rise` and `--key-sink` are 0,
-  so no key moves and only its shading changes.
+  the Button fades it. A ghost control (`.cap-ghost`) has no cap. Its hover is
+  `--ink-wash`, a tint of ink over whatever it sits on, so it darkens a light surface and
+  lightens a dark one. A saved comment's header chip, which fills a card that lifts, takes
+  no wash: the lift shows the hover. A press leaves a shallow inset shadow. Under reduced
+  motion `--key-rise` and `--key-sink` are 0, so no key moves and only its shading
+  changes.
 - **Focus is the hover.** A control under keyboard focus wears exactly its hover look and
   draws no ring: no outline, halo, inset ring or glow. Text fields are the exception
   (below).
   - Add `:focus-visible` beside every `:hover` rule, and give a focusable control with no
     hover look one.
-  - A hover face is the only mark of keyboard focus, so it reads at least 3.5 CIE76 ΔE
-    (colour difference) off its rest in every palette, which `theme.test.ts` pins. In
-    light it steps no further than that, because a darker hover reads as disabled rather
-    than raised. On a risen face only `--ink` holds AA, so quieter text there steps up to
-    `--ink`. A glyph there needs only 3:1, so it steps to a neutral key's label ink and
-    stays a rung under the text.
+  - A hover face is the only mark of keyboard focus, so it reads at least 4.5 CIE76 ΔE
+    (colour difference) off its rest in every palette, as the browser mixes it, which
+    `theme.test.ts` pins. In light it steps no further than its tightest pair, the cursor
+    on a chosen row, needs to clear that floor, because a darker hover reads as disabled
+    rather than raised. It steps toward black rather than `--ink`, so every light palette
+    moves the same distance. On a risen face only `--ink` holds AA, so quieter text there
+    steps up to `--ink`. A glyph there needs only 3:1, so it steps to a neutral key's
+    label ink and stays a rung under the text.
+  - The cursor on a latched face, such as the Contents row being read or the latched
+    compare toggle, takes `--neutral-face-latched-hover`. In light that is the latched
+    face stepped toward black, because the plain hover face is lighter than it there.
   - A control that shows only under the pointer, such as the gutter "+", stays while it
     holds keyboard focus.
   - `base.css` drops the browser's outline. In a shadow root, drop it in the root's own
@@ -183,8 +200,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   pocket. Unlike a bed, a pocket has a darker floor (`--well-floor`) and its own shade and
   lip (`--well-shade`, `--well-lip`), and holds no cap. A passive status mark, such as the
   Notifications bell, sits in a pocket too, and a state word beside it takes the comment
-  stamps' word ink. `.tag` is the stamp that names a kind in small caps: Folder, Preview
-  and Settings' "In use". Text fields (`.field-well`) take a shallower cut,
+  stamps' word ink. `.tag` is the stamp that names a kind, in sentence case: Folder,
+  Preview and Settings' "In use". Text fields (`.field-well`) take a shallower cut,
   `--panel-recess`, with no ink ring.
 - **Settled values are stamped.** A committed value leaves its field for a `.stamp` set on
   the field's exact pixels, so committing changes only the material. The committed search
@@ -216,9 +233,10 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
     site, because `PlanToc` draws its own key inside the item;
   - the Settings nav, the theme list, the version picker, the breadcrumb menu, whose
     headings on the trail latch (the crumbs in the bar borrow only the risen state, on
-    `--crumb-face-hover`, which in light is the white face the bar's keys rest on, and
-    never latch; the current crumb is marked by weight), the comment navigator and the cwd
-    path;
+    `--crumb-face-hover`, and never latch; the current crumb is marked by weight), the
+    comment navigator and the cwd path. In light the crumb's face is the white face the
+    bar's keys rest on. In dark it steps further toward `--ink` than the hover face,
+    because some palettes lift the bar close to the hover face;
   - the folder tree, a shadow-DOM list that wears the `--key-row-*` tokens directly, with
     a `:focus-visible` row risen and the chosen row latched. It keys on `:focus-visible`
     rather than the library's `data-item-focused`, so a pointer click never raises the
@@ -232,9 +250,10 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   the `--key-row-*` rise and press, so it stands as low as every other key row. It rises
   from its indent onward, and latches onto `--neutral-face-latched` while it is the
   section being read, an open exception to the accent rule
-  ([`decisions.md`](decisions.md)). A key row's keyboard indicator is its hover look, so
-  the row the keys move to looks exactly like the row the pointer moves to. A chosen row
-  under the highlight stays down on the hover face, so the highlight reads on it too.
+  ([`decisions.md`](decisions.md)). The cursor on it takes `--neutral-face-latched-hover`.
+  A key row's keyboard indicator is its hover look, so the row the keys move to looks
+  exactly like the row the pointer moves to. A chosen row under the highlight stays down
+  on the hover face, so the highlight reads on it too.
 - **Setting groups.** Each Settings section's rows sit in a bed on `--group-floor` with
   `--bed-shade`, rounded at `--key-radius` plus `--well-pad` plus `--group-pad`, parted by
   space with no hairline. The nav's sections share one bed (`.tray` on `--group-floor`),
@@ -323,8 +342,9 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - Radii follow size: 10px panels (`--radius-lg`), 6px fields and menu rows (`--radius`),
   pill badges and meters. The keypad rounds rounder: 8px keys (`--key-radius`), wells at
   that plus their pad, 5px keycaps and the switch's key (`--nub-radius`), 12px pads
-  (`--pad-radius`) and the 14px plan pane (`--pane-radius`). A container whose corner
-  holds another rounded shape rounds wider, per **Nested corners** in the tactile kit.
+  (`--pad-radius`), the 14px plan pane (`--pane-radius`) and 14px modals
+  (`--modal-radius`). A container whose corner holds another rounded shape rounds wider,
+  per **Nested corners** in the tactile kit.
 
 ### Motion
 

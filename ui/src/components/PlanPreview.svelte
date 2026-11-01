@@ -589,8 +589,6 @@
     padding-block: 0.6em 0.5em;
     font-size: calc(var(--text-xs) * var(--preview-scale));
     font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
     white-space: nowrap;
     color: var(--table-head-ink);
     text-shadow: var(--label-pressed);

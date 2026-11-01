@@ -457,7 +457,7 @@ test("the theme menu's cursor reads apart from the chosen row, on it and off it"
 
   await expect.poll(() => face(chosen)).toBe(risen);
   await expect(chosen).toHaveCSS("outline-style", "none");
-  expect(await colorDistance(page, latched, risen)).toBeGreaterThanOrEqual(3.5);
+  expect(await colorDistance(page, latched, risen)).toBeGreaterThanOrEqual(4.5);
   await page.keyboard.press("ArrowDown");
   await expect(chosen).not.toHaveAttribute("data-highlighted", "");
   await expect.poll(() => face(chosen)).toBe(latched);

@@ -99,8 +99,6 @@
      inks are --ink-soft: --ink-faint falls under 4.5:1 on the group's floor in light. */
   .thread-count {
     font-size: var(--text-2xs);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
     color: var(--ink-soft);
   }
   .thread-item {

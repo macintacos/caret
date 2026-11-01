@@ -34,17 +34,18 @@ The derived tier, colours a palette implies rather than sets (`--chip`, `--chip-
 `--pad-top` and side `--pad-side`, and the tactile kit's `--well-floor`, `--field-floor`,
 `--group-floor` (the settings beds and nav, the modal footer shelf, and a dialog's
 read-only cuts), `--field-edge-focus` (a focused field's lit wall, `--ink-faint`), the
-`--neutral-face` steps (with `--neutral-face-press`, the face a press takes), a crumb's
-risen face `--crumb-face-hover`, the key row's `--key-row-up`, `--key-row-up-image`,
-`--key-row-down` and `--key-row-down-image`, the accent and danger keys' hover and press
-faces `--accent-face-hover`, `--accent-face-press`, `--danger-face-hover` and
-`--danger-face-press`, the switch's `--knob-face`, `--knob-face-hover`,
-`--knob-face-down`, `--knob-edge` and `--switch-on`, the meter's `--meter-off`, and the
-`--float-surface-low`, `-mid` and `-high` composites), is mixed in
-`ui/src/styles/derived.css`. In light, the top bar, control row and status bar re-cut
-`--well-floor` from `--body`, so a stamp's or a count chip's pocket stays visible on it.
-Focus has no token of its own, since it wears each control's hover faces. shadcn-svelte's
-token names map onto these roles in `ui/src/styles/shadcn-bridge.css`.
+`--neutral-face` steps (with `--neutral-face-press`, the face a press takes, and
+`--neutral-face-latched-hover`, the face the cursor gives a latched one), a crumb's risen
+face `--crumb-face-hover`, the key row's `--key-row-up`, `--key-row-up-image`,
+`--key-row-down` and `--key-row-down-image`, the danger key's face `--danger-face`, the
+accent and danger keys' hover and press faces `--accent-face-hover`,
+`--accent-face-press`, `--danger-face-hover` and `--danger-face-press`, the switch's
+`--knob-face`, `--knob-face-hover`, `--knob-face-down`, `--knob-edge` and `--switch-on`,
+the meter's `--meter-off`, and the `--float-surface-low`, `-mid` and `-high` composites),
+is mixed in `ui/src/styles/derived.css`. In light, the top bar, control row and status bar
+re-cut `--well-floor` from `--body`, so a stamp's or a count chip's pocket stays visible
+on it. Focus has no token of its own, since it wears each control's hover faces.
+shadcn-svelte's token names map onto these roles in `ui/src/styles/shadcn-bridge.css`.
 
 ## Type, motion, radius, depth
 
@@ -60,8 +61,10 @@ All in `ui/src/styles/tokens.css`:
 - **Radius:** `--radius` for fields and menu rows, `--radius-lg` for panels, `99px` for
   badges. The keypad has its own: `--key-radius` for keys, `--nub-radius` for keycaps and
   the switch's key, `--pad-radius` for a table's or a code block's pad, and
-  `--pane-radius` for the plan pane. `--composer-radius` rounds the comment composer: its
-  tray's corner plus `--composer-inset`, its padding.
+  `--pane-radius` for the plan pane. `--modal-radius` (14px) rounds every modal: the
+  `--radius` of Settings' search field plus the 0.5rem padding round it. Settings widens
+  its corner below 640px wide. `--composer-radius` rounds the comment composer: its tray's
+  corner plus `--composer-inset`, its padding.
 - **Depth:** the tactile geometry is hand-written here, its alphas keyed per scheme:
   - the beds: `--well-pad` (the gap round a key), `--well-top` and `--well-foot` (the pads
     above and below a key, which take its rise and side), `--tray-gap`, and `--bed-shade`;

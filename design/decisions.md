@@ -32,14 +32,6 @@ Open items first, then the log, newest first.
   mix the accent rather than using it verbatim, and they fall outside its list of uses. In
   Settings, the switch's tint is also a second amber emphasis beside the primary action. A
   latched key's corner light is the accent itself, also outside that list.
-- **Amber and danger labels in some third-party palettes:** the label on the amber key's
-  hover face (`--accent-ink` on `--accent-bright`) measures 2.78:1 in Catppuccin Latte and
-  3.97:1 in Dawnfox. The label on Reject's danger face (`--paper` on `--danger`) measures
-  3.26:1 in Dawnfox, 4.39:1 in Dracula and 4.41:1 in Catppuccin Latte. Both pairs are the
-  palettes' own tokens, and the key's shading leaves the face behind the letters at that
-  colour. They stay open until a fix changes those palettes' colours or the way the kit
-  picks a label for a bright face. `theme.test.ts` holds only caret's two palettes to
-  these pairs.
 - **Search-only flat disabled cap:** the amber text cursor now covers every field, but the
   flat disabled cap is still local to the search sheet. The sheet's disabled step lies
   flat on the well's floor with no side, where every other disabled cap keeps its face and
@@ -49,18 +41,109 @@ Open items first, then the log, newest first.
   (`--attention`, Dawnfox, settings panel) and 2.32:1 (`--ok`, Latte, code panel). Each
   sits beside words that carry the state, so it is never the only signal. The status bar's
   LED uses the same tokens.
-- **Focus under `GLANCE`:** keyboard focus shows only as a control's hover face. Steps
-  here are CIE76 colour differences (ΔE), where about 2.3 is just noticeable. In dark a
-  hover face steps as far as the palette's `--ink` keeps 4.5:1 on it. In light it steps
-  only as far as the 3.5 ΔE floor needs. So no palette's neutral key clears
-  `theme.test.ts`'s `GLANCE` (20 ΔE). The weakest dark steps are in Catppuccin Frappé: 3.8
-  for a crumb on the bar, 5.7 for the cursor on the Contents row being read, 8.1 for a
-  menu row and 8.2 for a neutral key. The weakest light step is the cursor on a chosen row
-  in Catppuccin Latte, 3.9. `theme.test.ts` holds every hover step to 3.5 in every
-  palette.
+- **Focus under `GLANCE`:** no palette's neutral key clears `GLANCE`, the 20 ΔE step
+  `theme.test.ts` treats as telling two colours apart at a glance, and keyboard focus
+  shows only as a control's hover face. Steps here are CIE76 colour differences (ΔE),
+  where about 2.3 is just noticeable. In dark a hover face is `--paper` 27% toward
+  `--ink`, where Catppuccin Frappé's `--ink` holds 4.90:1. In light it steps only as far
+  as its tightest pair, the cursor on a chosen row, needs to clear the 4.5 ΔE floor. The
+  weakest light steps are that pair in Catppuccin Latte, 4.7, and Dawnfox's amber key,
+  4.8. The weakest dark steps are in Catppuccin Frappé: 4.7 for a crumb on the bar, where
+  `--ink` is at 4.53:1, 5.3 for the cursor on the Contents row being read, and 6.4 for a
+  menu row. `theme.test.ts` holds every hover step to 4.5 in every palette.
+- **Focus fails WCAG 2.4.13 Focus Appearance (AAA):** that criterion asks for a focus
+  indicator whose pixels change by at least 3:1 in contrast, over an area at least as
+  large as a 2px outline round the control. A hover face changes its pixels by 1.13:1 (a
+  light knob) to 1.95:1 (a Dracula settings row). Focus stays visible, which meets 2.4.7
+  (AA). Meeting 2.4.13 would take a ring, or a face so far off its rest that a light hover
+  reads as disabled and dark's `--ink` labels fall under AA. "Focus looks like hover"
+  (2026-10-31) and "A light hover lifts, and the last corners and labels" (2026-11-01)
+  rule both out.
 - **Calls left to the user from the 2026-10-31 pass:** the one left was built and is
   waiting on the user's verdict.
   - `--ink-faint` line numbers in the file preview's gutter, 3.10:1 on Dawnfox's paper.
+
+## 2026-11-01: every modal rounds as Settings does
+
+Every modal now rounds at 14px (`--modal-radius`), the corner Settings had: its search
+field's `--radius` plus the 0.5rem padding round the field. The user preferred that corner
+to the 27px of the Request changes, Approve and Reject modals, and asked for it on those
+modals. Those modals rounded at their action tray's corner plus the footer shelf's 1rem
+padding, per the nested-corners rule. Like a setting group's padding, that inset is too
+wide for you to compare the gap at the corner with the gap along the sides. Modals without
+a footer shelf take the same corner. Below 640px wide, Settings keeps its own wider
+corner, 20.6px, so its section picker's bed still nests in it.
+
+## 2026-11-01: coloured hovers lift, and focus holds 4.5 ΔE
+
+In light, a hovered amber or danger key turned dark (Approve in caret light went dark
+brown), the way a neutral key did before "A light hover lifts, and the last corners and
+labels". Reject's hover label missed AA in Dawnfox and Catppuccin Latte. Keyboard focus,
+which wears the hover face, was hard to find in the faintest palettes. Each step below is
+CIE76 ΔE as the browser paints it.
+
+- **The floor is 4.5 ΔE, as the browser mixes it:** every hover face reads at least 4.5
+  off its rest in every palette, about twice the just-noticeable step. `theme.test.ts` now
+  mixes the derived tier in lab, as `color-mix(in lab)` does, where it mixed in sRGB. sRGB
+  overstated dark steps by up to a third, so Catppuccin Frappé's crumb measured 3.8 there
+  but painted 2.5. A browser probe of all eleven palettes matches the test within 0.1.
+- **A light face steps toward black:** the neutral hover, chosen, knob, amber and danger
+  faces in light mix toward black, not toward `--ink`. The light palettes' papers share a
+  lightness, but Latte's and Dawnfox's ink sits nearer their paper, so a step toward
+  `--ink` moved them a third less than caret light. The hover, 10%, and the knob, 5%, are
+  the smallest steps that keep their tightest pair at 4.5 in all four light palettes; the
+  hover's is the cursor on a chosen row. The chosen face, 5%, sits 4.9 off a resting key
+  in every light palette. A neutral key moves 9.5 to 10.1 off its rest, where it moved 8.3
+  to 12.2. The cursor on a chosen row moves 4.7 to 5.3, where it moved 4.3 to 6.6.
+- **The amber hover lifts:** in light, `--accent-face-hover` is the accent 10% toward
+  black, where it was 30%. A hovered Approve in caret light moves 8.7 off its rest, where
+  it moved 25.7. Dawnfox's dark teal moves least, 4.8. The label holds 5.5:1 or more. A
+  press keeps the hover face. Dark is unchanged: there a hover lightens the key, which
+  reads as a lift.
+- **The danger key holds AA, and Reject turns into it:** Dawnfox's `--danger` is too light
+  for a light label: `--accent-ink` on it measured 3.84:1 on the Discard confirm, and
+  Reject's `--paper` label 3.36:1.
+  - In light the danger key rests on `--danger-face`, the danger 10% toward black, and
+    hovers 18% toward black, where it hovered 30% toward `--ink`. Dark keeps `--danger`.
+  - Under the pointer, keyboard focus or a press, Reject wears the danger key's face and
+    label: `--danger-face` with `--accent-ink`, and `--danger-face-press` while pressed.
+  - Every amber and danger label holds 4.5:1 on each face it wears, in every palette. The
+    lowest is Dawnfox's danger key at rest, 4.64:1. `theme.test.ts` reads each coloured
+    cap rule from the sheet and checks its label on every face the rule sets.
+- **The cursor darkens a latched face:** the Contents row being read and the latched
+  compare toggle rest on `--neutral-face-latched`, the chosen face tinted with the accent.
+  In every light palette that face is darker than the hover face, so the cursor lightened
+  them and dropped the tint. They now take `--neutral-face-latched-hover`, the latched
+  face 6% toward black, which keeps the tint and darkens it by 4.9 to 5.4. Dark keeps the
+  hover face, which is lighter than the latched face there.
+- **A dark crumb steps further:** a crumb rests flat on the bar's `--body`, which the
+  Catppuccin darks lift close to the hover face. In dark, `--crumb-face-hover` is now
+  `--paper` 30% toward `--ink`, where it was the hover face's 27%. Frappé's crumb moves
+  4.7, where it moved 2.5. 30% is as far as Frappé's `--ink` keeps 4.5:1 (4.53). Caret
+  dark's crumb moves 18.7, where it moved 16.1.
+- **A press never lightens the preview "+":** it pressed back to `--accent`, lighter than
+  its hover in light, and now takes `--accent-face-press`. The gutter "+" never looks
+  pressed, because @pierre/diffs cancels the press, so it never matches `:active`.
+- **Focus still fails WCAG 2.4.13 (AAA):** the open item above records the measured change
+  and the cost.
+
+## 2026-11-01: a ghost hover washes its surface, and stamps take sentence case
+
+- **A ghost control's hover is a wash of ink:** the vendored ghost Button's hover,
+  keyboard focus and open menu paint `--ink-wash`, 8% ink over whatever the control sits
+  on. It painted the opaque `bg-muted`, which in light is paler than a saved comment's
+  lifted card, so the card's delete control turned paler than the card under the pointer.
+  A wash darkens any surface in light and lightens it in dark, and the delete glyph still
+  turns `--danger`. The card's header chip takes no wash: it fills the header, and the
+  card's lift already shows the pointer or the keys are on it. The composer's Cancel and
+  Keep for later are ghost Buttons, so they take the wash too.
+- **Stamps and labels take sentence case:** the `.tag` stamp ("Folder", "Preview", "In
+  use") drops its spaced capitals and keeps its pill, size, weight and ink. So do the
+  version compare labels, a thread's comment count, the comment navigator's title, the
+  Request changes dialog's "Context" label, and the table header in both the source view
+  and the preview. A key's legend (the letters on a shortcut keycap, such as `ESC`) stays
+  in capitals, because it mirrors the key. `ui/src/lib/sentence-case.test.ts` fails on any
+  CSS rule in `ui/src` that sets `text-transform: uppercase`, except the key legend's.
 
 ## 2026-11-01: a setting group rounds as a bed
 

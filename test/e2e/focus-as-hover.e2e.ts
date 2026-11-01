@@ -321,3 +321,29 @@ test("the gutter + goes once keyboard focus leaves it with the pointer away", as
   await page.keyboard.press("Tab");
   await expect(plus).toBeHidden();
 });
+
+test("a saved comment's chip lifts its card under keys as under the pointer, and wears no band", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "Configurable TTL?" }],
+  });
+  await page.goto("/");
+  await planSurface(page);
+  const card = page.locator("[data-annotation-card='ann-1']");
+  const chip = card.locator("button.chip");
+
+  await page.mouse.move(0, 0);
+  const restCard = await look(card);
+  const restChip = await look(chip);
+  await tabTo(page, chip);
+  const keyed = { card: await look(card), chip: await look(chip) };
+  expect(keyed.card).not.toEqual(restCard);
+  expect(keyed.chip.face).toBe(restChip.face);
+
+  await chip.evaluate((el) => (el as HTMLElement).blur());
+  await chip.hover();
+  expect({ card: await look(card), chip: await look(chip) }).toEqual(keyed);
+});

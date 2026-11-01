@@ -67,8 +67,7 @@ async function openSeeded(page: Page, daemon: Daemon): Promise<void> {
   await planSurface(page);
 }
 
-/** The bed a modal's actions rest in, on its footer shelf. */
-const footerBed = (dialog: Locator) => dialog.locator("[data-slot$='dialog-footer'] .tray").first();
+const radius = (l: Locator) => l.evaluate((el) => getComputedStyle(el).borderTopRightRadius);
 
 test("Request changes: a committed card nests in its tray, and the context lines in the card", async ({
   daemon,
@@ -108,20 +107,19 @@ test("the compiled preview's trigger takes its recess's corners, so the recess n
   await expect(recess).toHaveCSS("overflow", "visible");
 });
 
-test("a modal's action bed nests in the modal's corner", async ({ daemon, page }) => {
+test("Request changes, Approve and Reject round as Settings does", async ({ daemon, page }) => {
   await openSeeded(page, daemon);
-  let dialog = await openRequestChangesDialog(page);
-  await expectConcentric(dialog, footerBed(dialog), "br");
+  const settings = await openSettings(page);
+  const corner = await radius(settings);
   await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await expect(settings).toBeHidden();
 
-  dialog = await openApproveGuard(page);
-  await expectConcentric(dialog, footerBed(dialog), "br");
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
-
-  dialog = await openRejectGuard(page);
-  await expectConcentric(dialog, footerBed(dialog), "br");
+  for (const open of [openRequestChangesDialog, openApproveGuard, openRejectGuard]) {
+    const dialog = await open(page);
+    expect(await radius(dialog)).toBe(corner);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+  }
 });
 
 test("a modal's footer shelf rounds with the modal", async ({ daemon, page }) => {
@@ -177,7 +175,6 @@ test("Settings: the search field nests in the panel's corner, and a group rounds
   );
   // The group's padding is too wide for a concentric corner to read: it would round at 25px.
   const group = dialog.locator(".fields").first();
-  const radius = (l: Locator) => l.evaluate((el) => getComputedStyle(el).borderTopRightRadius);
   expect(await radius(group)).toBe(await radius(group.locator(".tray").last()));
 });
 

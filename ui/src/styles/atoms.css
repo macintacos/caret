@@ -167,18 +167,18 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
   --cap-label-hover: var(--accent-ink);
 }
 .cap-danger {
-  --cap-face: var(--danger);
+  --cap-face: var(--danger-face);
   --cap-face-hover: var(--danger-face-hover);
-  --cap-face-down: var(--danger);
+  --cap-face-down: var(--danger-face);
   --cap-face-press: var(--danger-face-press);
   --cap-label: var(--accent-ink);
   --cap-label-hover: var(--accent-ink);
 }
 .cap-danger-hover:not(:disabled):is(:hover, :focus-visible, :active, [data-key-pressed]) {
-  --cap-face-hover: var(--danger);
-  --cap-face-down: var(--danger);
-  --cap-face-press: var(--danger);
-  --cap-label-hover: var(--paper);
+  --cap-face-hover: var(--danger-face);
+  --cap-face-down: var(--danger-face);
+  --cap-face-press: var(--danger-face-press);
+  --cap-label-hover: var(--accent-ink);
 }
 .cap-accent,
 .cap-danger,
@@ -221,7 +221,7 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
   box-shadow: var(--well-shade), var(--well-lip);
   color: var(--ink-soft);
 }
-/* A tag is a stamp that names a kind in small caps: a reference surface's "Folder" or
+/* A tag is a stamp that names a kind: a reference surface's "Folder" or
    "Preview", Settings' "In use". Every tag in a header shares this one recipe. */
 :is(.tag, .ref-badge) {
   padding: 0.1rem 0.45rem;
@@ -232,8 +232,6 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
   font-family: var(--font-sans);
   font-size: var(--text-2xs);
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
 /* A status light: a lit LED in its state's colour (--led), bright toward its top, darker
@@ -470,12 +468,11 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
   background: var(--group-floor);
   box-shadow: inset 0 7px 8px -7px var(--pane-shade);
 }
-/* The action tray rests on the shelf 1rem (the shelf's padding) in from the modal's
-   corner, so the modal rounds at the tray's corner plus that inset. */
-:is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]):has(
-    > :is([data-slot="dialog-footer"], [data-slot="alert-dialog-footer"])
-  ) {
-  border-radius: calc(var(--key-radius) + var(--well-pad) + 1rem);
+/* Not concentric with the action tray on a footer shelf: the shelf's 1rem padding is too
+   wide an inset, and matching it rounded these modals at 27px. :where() lets a modal's own
+   rule, such as narrow Settings', override it. */
+:where([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+  border-radius: var(--modal-radius);
 }
 
 /* Numeric chrome. Carries the mono family and tabular figures together so a

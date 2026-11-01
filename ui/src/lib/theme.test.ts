@@ -158,23 +158,62 @@ function stampRecipe(scheme: Scheme) {
   };
 }
 
+type Lab = [number, number, number];
+/** CSS lab's D50 white, the space color-mix(in lab) mixes in; lab() below measures in D65,
+ * as the e2e specs do. */
+const D50: Lab = [0.3457 / 0.3585, 1, 0.2958 / 0.3585];
+
+function hexToLab50(hex: string): Lab {
+  const [r, g, b] = channels(hex).map((c) =>
+    c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4,
+  ) as Lab;
+  const f = (t: number) => (t > 216 / 24389 ? Math.cbrt(t) : ((24389 / 27) * t + 16) / 116);
+  const fx = f((0.4360747 * r + 0.3850649 * g + 0.1430804 * b) / D50[0]);
+  const fy = f(0.2225045 * r + 0.7168786 * g + 0.0606169 * b);
+  const fz = f((0.0139322 * r + 0.0971045 * g + 0.7141733 * b) / D50[2]);
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+
+function lab50ToHex([L, A, B]: Lab): string {
+  const fy = (L + 16) / 116;
+  const inv = (t: number) => (t ** 3 > 216 / 24389 ? t ** 3 : (116 * t - 16) / (24389 / 27));
+  const [x, y, z] = [inv(fy + A / 500) * D50[0], inv(fy), inv(fy - B / 200) * D50[2]];
+  return `#${[
+    3.1338561 * x - 1.6168667 * y - 0.4906146 * z,
+    -0.9787684 * x + 1.9161415 * y + 0.033454 * z,
+    0.0719453 * x - 0.2289914 * y + 1.4052427 * z,
+  ]
+    .map((c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055))
+    .map((c) =>
+      Math.round(Math.min(1, Math.max(0, c)) * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
 /** A colour as the sheet derives it for a theme's scheme: a palette token, or a
  * derived-tier color-mix(in lab, A, B N%) whose inputs are palette tokens, black or other
- * derived tokens, resolved through each other. Mixed in sRGB, as banded() documents. */
+ * derived tokens, resolved through each other. Mixed in lab and rounded once, as the browser
+ * paints it, rather than in banded()'s sRGB: a hover step sits close to its floor, and sRGB
+ * misreads a dark step by up to a third. */
 function derived(name: string, theme: (typeof THEMES)[BuiltinThemeId]): string {
   const decls = schemeDecls(theme.scheme);
   const tokens = theme.tokens as Record<string, string>;
-  const resolve = (ref: string): string => {
-    if (ref === "black") return "#000000";
+  const resolve = (ref: string): Lab => {
+    if (ref === "black") return [0, 0, 0];
     const token = /^var\((--[\w-]+)\)$/.exec(ref)?.[1] ?? ref;
-    if (tokens[token] !== undefined) return tokens[token];
+    if (tokens[token] !== undefined) return hexToLab50(tokens[token]);
     const value = decls[token] ?? "";
     const mix = /^color-mix\(in lab, (.+), (\S+) (\d+)%\)$/.exec(value);
-    if (mix !== null) return banded(resolve(mix[1]!), resolve(mix[2]!), Number(mix[3]) / 100);
+    if (mix !== null) {
+      const [p, q, pct] = [resolve(mix[1]!), resolve(mix[2]!), Number(mix[3]) / 100];
+      return p.map((v, i) => v * (1 - pct) + q[i]! * pct) as Lab;
+    }
     if (value.startsWith("var(")) return resolve(value);
     throw new Error(`can't resolve ${token}: ${value || "undeclared"}`);
   };
-  return resolve(name);
+  return lab50ToHex(resolve(name));
 }
 
 const themeEntries = () =>
@@ -636,7 +675,8 @@ describe("every theme", () => {
   });
 
   // A neutral key's label is --ink-soft stepped toward --ink (styles/atoms.css), on the
-  // neutral face; hovered or pressed, it is --ink on that state's face.
+  // neutral face; hovered or pressed, it is --ink on that state's face, as is a crumb's or a
+  // latched row's under the cursor.
   test("keeps a neutral key's label at AA on its face, hovered and pressed", () => {
     const step = /--cap-label:\s*color-mix\(in lab, var\(--ink-soft\), var\(--ink\) (\d+)%\)/.exec(
       readAppCss(),
@@ -649,7 +689,12 @@ describe("every theme", () => {
         contrast(label, derived("--neutral-face", theme)),
         `${id} key label on --neutral-face`,
       ).toBeGreaterThanOrEqual(4.5);
-      for (const face of ["--neutral-face-hover", "--neutral-face-down"]) {
+      for (const face of [
+        "--neutral-face-hover",
+        "--neutral-face-down",
+        "--crumb-face-hover",
+        "--neutral-face-latched-hover",
+      ]) {
         expect(
           contrast(tokens["--ink"], derived(face, theme)),
           `${id} --ink on ${face}`,
@@ -660,18 +705,20 @@ describe("every theme", () => {
 
   // Focus draws no ring and looks exactly like hover, so a hover face is the only place a
   // keyboard user sees where focus went. Each has to read apart from the face or ground it
-  // leaves by FOUND in CIE76. GLANCE would be the target, but in the lowest-contrast
-  // palettes the --ink label falls under 4.5:1 on any face that far off.
-  const FOUND = 3.5;
+  // leaves by FOUND in CIE76, about twice the step a reader can just tell apart. GLANCE
+  // would be the target, but in the lowest-contrast palettes the --ink label falls under
+  // 4.5:1 on any face that far off.
+  const FOUND = 4.5;
   const HOVER_STEPS: [string, string, string][] = [
     ["a neutral key or segment", "--neutral-face", "--neutral-face-hover"],
     ["a chosen key, segment or row", "--neutral-face-down", "--neutral-face-hover"],
-    ["the Contents row being read", "--neutral-face-latched", "--neutral-face-hover"],
+    ["a latched row or toggle", "--neutral-face-latched", "--neutral-face-latched-hover"],
     ["a row in a menu, listbox or panel", "--paper-raised", "--neutral-face-hover"],
     ["a row in the settings nav", "--group-floor", "--neutral-face-hover"],
     ["a crumb on the bar", "--body", "--crumb-face-hover"],
     ["an accent key or the gutter +", "--accent", "--accent-face-hover"],
-    ["a danger key or the preview's close key", "--danger", "--danger-face-hover"],
+    ["a danger key", "--danger-face", "--danger-face-hover"],
+    ["the preview's close key", "--danger", "--danger-face-hover"],
     ["a switch's knob", "--knob-face", "--knob-face-hover"],
   ];
   test("moves every hover face a findable step off its rest", () => {
@@ -685,16 +732,23 @@ describe("every theme", () => {
     }
   });
   // On light paper a hover face darkens, so a step past what FOUND needs reads as a stain
-  // rather than a key rising under the finger. The tightest pair is a chosen key under the
-  // cursor, which steps from the latched face.
-  test("steps a light key's hover face no further than FOUND needs", () => {
+  // rather than a key rising under the finger. Each light recipe is held at its tightest
+  // palette; the neutral one's is a chosen key under the cursor.
+  const LIGHT_RECIPES: [string, string, string][] = [
+    ["the neutral hover", "--neutral-face-down", "--neutral-face-hover"],
+    ["the latched hover", "--neutral-face-latched", "--neutral-face-latched-hover"],
+    ["the accent hover", "--accent", "--accent-face-hover"],
+    ["the danger hover", "--danger-face", "--danger-face-hover"],
+    ["the knob's hover", "--knob-face", "--knob-face-hover"],
+  ];
+  test("steps each light hover face no further than FOUND needs", () => {
     const light = themeEntries().filter(([, theme]) => theme.scheme === "light");
-    const tightest = Math.min(
-      ...light.map(([, theme]) =>
-        deltaE(derived("--neutral-face-down", theme), derived("--neutral-face-hover", theme)),
-      ),
-    );
-    expect(tightest).toBeLessThan(FOUND + 1);
+    for (const [what, rest, hover] of LIGHT_RECIPES) {
+      const tightest = Math.min(
+        ...light.map(([, theme]) => deltaE(derived(rest, theme), derived(hover, theme))),
+      );
+      expect(tightest, what).toBeLessThan(FOUND + 1);
+    }
   });
   // A press sinks the key it comes from. On light paper the hover face is the darker, so a
   // press that fell back to a lighter face would lighten the key under the finger.
@@ -713,13 +767,42 @@ describe("every theme", () => {
       }
     }
   });
-  test("keeps the accent and danger labels at AA on their hover faces", () => {
-    for (const [id, theme] of themeEntries()) {
-      for (const face of ["--accent-face-hover", "--danger-face-hover"]) {
-        expect(
-          contrast(theme.tokens["--accent-ink"], derived(face, theme)),
-          `${id} --accent-ink on ${face}`,
-        ).toBeGreaterThanOrEqual(4.5);
+  /** The `--cap-*` declarations of the cap rule (styles/atoms.css) whose selector opens with
+   * `cls` and which sets a label: the rule that paints that kind of key. */
+  function capRule(cls: string): Record<string, string> {
+    for (const block of readAppCss()
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .split("}")) {
+      const [head = "", body = ""] = block.split("{");
+      if (!new RegExp(`^\\${cls}(?![\\w-])`).test(head.trim()) || !body.includes("--cap-label")) {
+        continue;
+      }
+      return Object.fromEntries(
+        [...body.matchAll(/(--cap-[\w-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1]!, m[2]!.trim()]),
+      );
+    }
+    throw new Error(`no cap rule for ${cls}`);
+  }
+  // A coloured key's label rides every face the key wears: at rest, under the pointer or the
+  // keys, and pressed. Reject is a neutral key that wears a danger face only from its hover.
+  test("keeps every coloured key's label at AA on each face it wears", () => {
+    const WORN: [string, string][] = [
+      ["--cap-label", "--cap-face"],
+      ["--cap-label-hover", "--cap-face-hover"],
+      ["--cap-label-hover", "--cap-face-down"],
+      ["--cap-label-hover", "--cap-face-press"],
+    ];
+    for (const cls of [".cap-accent", ".cap-danger", ".cap-danger-hover"]) {
+      const rule = capRule(cls);
+      const pairs = WORN.filter(([label, face]) => rule[label] && rule[face]);
+      expect(pairs.length, cls).toBeGreaterThan(2);
+      for (const [id, theme] of themeEntries()) {
+        for (const [label, face] of pairs) {
+          expect(
+            contrast(derived(rule[label]!, theme), derived(rule[face]!, theme)),
+            `${id} ${cls} ${rule[label]} on ${rule[face]}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
       }
     }
   });

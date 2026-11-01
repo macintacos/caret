@@ -207,6 +207,11 @@ consistent with it rather than inventing a per-component treatment.
   that ticket) had quietly lost its trash-hover wobble. `atoms.css`'s `button.float-chip`
   is the durable form. For what is still on the fragile spelling, one trigger conversion
   away from the same failure: `grep -rn '\[data-slot="button"\]' ui/src`.
+- **A ghost Button washes, it doesn't paint.** The vendored `ghost` variant's hover, focus
+  and `aria-expanded` face is `bg-(--ink-wash)`, a translucent tint of ink, not stock's
+  opaque `bg-muted`. A ghost control sits on whatever surface holds it, and an opaque
+  `bg-muted` would paint lighter than a lifted light surface, such as a saved comment's
+  hovered card. A wash darkens in light and lightens in dark, so it reads on any surface.
 - **Amber stays the single primary.** One action per surface carries amber
   (`variant="default"` → `--primary`); everything else is a neutral chip. Don't spend
   amber on secondary controls.

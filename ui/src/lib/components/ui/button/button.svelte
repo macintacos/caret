@@ -23,6 +23,8 @@
 			"disabled:pointer-events-none disabled:opacity-50",
 		],
 		variants: {
+			// ghost washes `--ink-wash` over whatever it sits on, so it darkens a lifted light
+			// surface where an opaque `bg-muted` would paint a pale patch.
 			// caret's markers: `cap cap-accent`, `cap-ghost` and the icon size's `cap-square`
 			// are what the tactile kit in styles/atoms.css keys on. Neutral controls opt in
 			// with `.float-chip`.
@@ -30,7 +32,7 @@
 				default: "cap cap-accent bg-primary text-primary-foreground [a]:hover:bg-primary/80 [a]:focus-visible:bg-primary/80",
 				outline: "border-border bg-background hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 dark:focus-visible:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground",
 				secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 focus-visible:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
-				ghost: "cap-ghost hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground dark:hover:bg-muted/50 dark:focus-visible:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground",
+				ghost: "cap-ghost hover:bg-(--ink-wash) hover:text-foreground focus-visible:bg-(--ink-wash) focus-visible:text-foreground aria-expanded:bg-(--ink-wash) aria-expanded:text-foreground",
 				destructive: "bg-destructive/10 hover:bg-destructive/20 focus-visible:bg-destructive/20 dark:bg-destructive/20 text-destructive dark:hover:bg-destructive/30 dark:focus-visible:bg-destructive/30",
 				link: "text-primary underline-offset-4 hover:underline focus-visible:underline",
 			},

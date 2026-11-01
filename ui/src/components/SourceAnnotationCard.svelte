@@ -208,14 +208,12 @@
     background: none;
     box-shadow: none;
   }
-  /* The chip stays transparent (its `background: none` outranks the ghost hover
-     utilities) so the lift reads across the whole surface, not just the header.
-     Editing hands the surface to the composer, so it opts out. */
+  /* Editing hands the surface to the composer, so it opts out of the lift. */
   .card:not(.editing) {
     cursor: pointer;
   }
   /* A control inside the card under keyboard focus lifts it as the pointer over it does. */
-  .card:not(.editing):is(:hover, :has(:focus-visible)) {
+  .card:not(.editing):is(:hover, :has(:global(:focus-visible))) {
     background: color-mix(in lab, var(--paper-raised), var(--ink) 8%);
   }
 
@@ -236,7 +234,8 @@
     border-radius: calc(var(--radius-lg) - var(--head-pad-end));
   }
   /* Grows to fill the head so the whole line is a click target. The compound
-     button.chip selector outranks the copied button's utilities. */
+     button.chip selector outranks the copied button's utilities, so it takes no
+     ghost wash: the card's lift shows the hover. */
   :global(button.chip) {
     display: flex;
     align-items: center;

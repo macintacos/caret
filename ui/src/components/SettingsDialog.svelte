@@ -409,8 +409,6 @@
     padding: 0;
     gap: 0;
     overflow: hidden;
-    /* The search field rests the rail header's 0.5rem padding in from this corner. */
-    border-radius: calc(var(--radius) + 0.5rem);
   }
   /* The two-pane body. A fixed height gives the roomy mockup framing (the pane keeps
      its shape with few fields) and, being taller than a tiny viewport, lets the
