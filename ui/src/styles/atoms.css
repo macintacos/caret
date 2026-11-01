@@ -468,12 +468,11 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
   background: var(--group-floor);
   box-shadow: inset 0 7px 8px -7px var(--pane-shade);
 }
-/* The action tray rests on the shelf 1rem (the shelf's padding) in from the modal's
-   corner, so the modal rounds at the tray's corner plus that inset. */
-:is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]):has(
-    > :is([data-slot="dialog-footer"], [data-slot="alert-dialog-footer"])
-  ) {
-  border-radius: calc(var(--key-radius) + var(--well-pad) + 1rem);
+/* Not concentric with the action tray on a footer shelf: the shelf's 1rem padding is too
+   wide an inset, and matching it rounded these modals at 27px. :where() lets a modal's own
+   rule, such as narrow Settings', override it. */
+:where([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+  border-radius: var(--modal-radius);
 }
 
 /* Numeric chrome. Carries the mono family and tabular figures together so a

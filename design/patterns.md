@@ -90,16 +90,21 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `--key-radius` for keys and key rows, `--radius` for fields. The outer shape rounds at
   that plus the inset, as a bed rounds at `--key-radius` plus `--well-pad`. Where the
   outer radius would leave the inner one at zero or less, the inner shape keeps its kit
-  radius and the outer one grows to that radius plus the inset. A setting group is the one
-  exception. Its padding, `--group-pad`, is so wide that you can't compare the gap at its
-  corner with the gap along its sides, and the concentric radius, 25px, made the group
-  much rounder than the keys inside it. The group is a bed, so it rounds as one:
-  `--key-radius` plus `--well-pad`, 11px. `test/e2e/concentric.e2e.ts` holds the group and
-  each of these to half a pixel:
-  - a modal with a footer shelf rounds at its tray's corner (`--key-radius` plus
-    `--well-pad`) plus the shelf's padding;
-  - Settings, which has no shelf, rounds at its search field's `--radius` plus the rail
-    header's padding;
+  radius and the outer one grows to that radius plus the inset. Two shapes are exceptions.
+  Their padding is so wide that you can't compare the gap at the corner with the gap along
+  the sides, and the concentric radius made them much rounder than the keys inside them:
+  - A setting group, padded `--group-pad`, would round at 25px. The group is a bed, so it
+    rounds as one: `--key-radius` plus `--well-pad`, 11px.
+  - A modal whose action tray rests on a footer shelf padded 1rem would round at 27px.
+    Every modal rounds at `--modal-radius` (14px) instead: the corner Settings' search
+    field nests in, the field's `--radius` plus the 0.5rem padding round it. Below 640px
+    wide, Settings keeps a wider corner of its own, listed below.
+
+  `test/e2e/concentric.e2e.ts` holds the setting group at its beds' radius, Request
+  changes, Approve and Reject at `--modal-radius`, and each of these to half a pixel:
+  - Settings' search field nests in `--modal-radius`. Below 640px wide, Settings' section
+    list folds into a bar with a section picker, and Settings rounds at the picker's bed
+    corner plus the bar's 0.6rem padding, 20.6px;
   - the comment composer rounds at `--composer-radius`: its tray's corner plus
     `--composer-inset`, its padding;
   - a menu, the Select listbox, and the Contents and heading-filter panels round at
@@ -337,8 +342,9 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - Radii follow size: 10px panels (`--radius-lg`), 6px fields and menu rows (`--radius`),
   pill badges and meters. The keypad rounds rounder: 8px keys (`--key-radius`), wells at
   that plus their pad, 5px keycaps and the switch's key (`--nub-radius`), 12px pads
-  (`--pad-radius`) and the 14px plan pane (`--pane-radius`). A container whose corner
-  holds another rounded shape rounds wider, per **Nested corners** in the tactile kit.
+  (`--pad-radius`), the 14px plan pane (`--pane-radius`) and 14px modals
+  (`--modal-radius`). A container whose corner holds another rounded shape rounds wider,
+  per **Nested corners** in the tactile kit.
 
 ### Motion
 

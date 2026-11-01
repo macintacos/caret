@@ -67,6 +67,8 @@
   --nub-radius: 5px;
   --pad-radius: 12px;
   --pane-radius: 14px;
+  /* Every modal's corner. Settings' search field rests 0.5rem in from it, so the two nest. */
+  --modal-radius: calc(var(--radius) + 0.5rem);
   /* The comment composer's padding, which is also the gap round the tray on its shelf,
      so the composer rounds at the tray's corner plus it. */
   --composer-inset: 0.75rem;

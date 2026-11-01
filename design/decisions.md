@@ -63,6 +63,17 @@ Open items first, then the log, newest first.
   waiting on the user's verdict.
   - `--ink-faint` line numbers in the file preview's gutter, 3.10:1 on Dawnfox's paper.
 
+## 2026-11-01: every modal rounds as Settings does
+
+Every modal now rounds at 14px (`--modal-radius`), the corner Settings had: its search
+field's `--radius` plus the 0.5rem padding round the field. The user preferred that corner
+to the 27px of the Request changes, Approve and Reject modals, and asked for it on those
+modals. Those modals rounded at their action tray's corner plus the footer shelf's 1rem
+padding, per the nested-corners rule. Like a setting group's padding, that inset is too
+wide for you to compare the gap at the corner with the gap along the sides. Modals without
+a footer shelf take the same corner. Below 640px wide, Settings keeps its own wider
+corner, 20.6px, so its section picker's bed still nests in it.
+
 ## 2026-11-01: coloured hovers lift, and focus holds 4.5 ΔE
 
 In light, a hovered amber or danger key turned dark (Approve in caret light went dark

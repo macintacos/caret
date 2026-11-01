@@ -61,8 +61,10 @@ All in `ui/src/styles/tokens.css`:
 - **Radius:** `--radius` for fields and menu rows, `--radius-lg` for panels, `99px` for
   badges. The keypad has its own: `--key-radius` for keys, `--nub-radius` for keycaps and
   the switch's key, `--pad-radius` for a table's or a code block's pad, and
-  `--pane-radius` for the plan pane. `--composer-radius` rounds the comment composer: its
-  tray's corner plus `--composer-inset`, its padding.
+  `--pane-radius` for the plan pane. `--modal-radius` (14px) rounds every modal: the
+  `--radius` of Settings' search field plus the 0.5rem padding round it. Settings widens
+  its corner below 640px wide. `--composer-radius` rounds the comment composer: its tray's
+  corner plus `--composer-inset`, its padding.
 - **Depth:** the tactile geometry is hand-written here, its alphas keyed per scheme:
   - the beds: `--well-pad` (the gap round a key), `--well-top` and `--well-foot` (the pads
     above and below a key, which take its rise and side), `--tray-gap`, and `--bed-shade`;

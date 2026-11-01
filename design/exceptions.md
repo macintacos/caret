@@ -15,10 +15,10 @@ pill-shaped badges and meters, chosen over the default on 2026-10-23. The keypad
 rounder, chosen on 2026-10-31: 8px keys (`--key-radius`), beds at the key's radius plus
 their 3px side pad (11px), 4px where two ganged keys face each other, 5px keycaps and
 switch keys (`--nub-radius`), 12px table and code-block pads (`--pad-radius`), and the
-14px plan pane (`--pane-radius`). A container whose corner holds another rounded shape
-rounds at that shape's radius plus the inset, so a modal with a footer shelf, the comment
-composer, a setting group, the popup menus and the Discard confirm bubble round wider than
-these.
+14px plan pane (`--pane-radius`). Every modal rounds at 14px too (`--modal-radius`). A
+container whose corner holds another rounded shape rounds at that shape's radius plus the
+inset, so the comment composer, Settings below 640px wide, the popup menus and the Discard
+confirm bubble round wider than these.
 
 ## A key's spring
 
