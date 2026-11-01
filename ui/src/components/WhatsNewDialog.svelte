@@ -58,7 +58,6 @@
   kind="dialog"
   {open}
   {onClosed}
-  eyebrow={upgradedTo ? "What's new" : "Updates"}
   title={upgradedTo ? `Updated to caret ${upgradedTo}` : "What's new"}
   onDismiss={onClose}
   onOpenAutoFocus={focusDialog}
@@ -69,7 +68,7 @@
     {#if state.kind === "loading"}
       <div class="changes-status"><Spinner /></div>
     {:else if state.kind === "error"}
-      <p class="changes-status">Couldn't load what's new.</p>
+      <p class="changes-status">Couldn't load what's new — close this and open it again to retry.</p>
     {:else if state.changes.kind === "releases"}
       {#each state.changes.releases as release (release.version)}
         <section class="release">
@@ -139,7 +138,7 @@
     justify-content: center;
     margin: 0;
     padding: 1.5rem 0;
-    color: var(--ink-faint);
+    color: var(--ink-soft);
   }
   .release-version {
     margin: 0 0 0.4rem;
@@ -171,12 +170,14 @@
     line-height: var(--leading-tight);
     color: var(--ink-soft);
   }
+  /* The plan's code chip, stamped into the sheet, in the notes' own ink. */
   .release-body :global(code) {
     font-family: var(--font-mono);
     font-size: var(--text-sm);
-    background: var(--paper-sunk);
-    padding: 0.05em 0.3em;
-    border-radius: 3px;
+    padding: var(--chip-pad-block) var(--chip-pad-inline);
+    border-radius: var(--radius);
+    background: var(--chip-code);
+    box-shadow: var(--chip-stamped);
   }
   .release-body :global(pre) {
     padding: 0.5rem 0.6rem;
@@ -187,6 +188,7 @@
   .release-body :global(pre code) {
     padding: 0;
     background: none;
+    box-shadow: none;
   }
   .release-body :global(img) {
     max-width: 100%;
@@ -205,7 +207,7 @@
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
   }
-  .release-body :global(a:hover) {
+  .release-body :global(a:is(:hover, :focus-visible)) {
     color: var(--accent-bright);
     text-decoration-style: solid;
   }
@@ -230,8 +232,8 @@
     text-decoration-line: underline;
     text-underline-offset: 0.2em;
   }
-  .commits a:hover,
-  .upgrade a:hover {
+  .commits a:is(:hover, :focus-visible),
+  .upgrade a:is(:hover, :focus-visible) {
     color: var(--ink-soft);
   }
   .upgrade {

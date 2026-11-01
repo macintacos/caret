@@ -43,26 +43,43 @@
 
   /* The tactile surfaces (their geometry is in styles/tokens.css), in their dark
      recipe; light re-derives them in the block below. On dark paper a well steps
-     toward black, since a step toward ink would lift it, and a cap's face lifts toward
-     ink off its well. */
+     toward black, since a step toward ink would lift it, and a key's face lifts toward
+     ink off the paper. The paper rather than the raised paper, which some palettes
+     (Catppuccin Frappé, GitHub dark) set so light that a key's label falls under AA. */
   --well-floor: color-mix(in lab, var(--paper-raised), black 40%);
   --field-floor: color-mix(in lab, var(--paper-raised), black 30%);
-  --neutral-face: color-mix(in lab, var(--paper-raised), var(--ink) 12%);
-  --neutral-face-hover: color-mix(in lab, var(--paper-raised), var(--ink) 17%);
-  --neutral-face-down: color-mix(in lab, var(--paper-raised), var(--ink) 9%);
+  /* A field draws no focus ring, so the edge it firms to is its focus indicator and holds
+     3:1 on its floor (theme.test.ts). */
+  --field-edge-focus: var(--ink-faint);
+  --neutral-face: color-mix(in lab, var(--paper), var(--ink) 15%);
+  /* Focus wears the hover face and no ring, so it steps as far as Catppuccin Frappé's
+     --ink keeps 4.5:1 on it (theme.test.ts). */
+  --neutral-face-hover: color-mix(in lab, var(--paper), var(--ink) 27%);
+  --neutral-face-down: color-mix(in lab, var(--paper), var(--ink) 12%);
+  /* A press sinks at least as deep as the hover it comes from. Dark presses down to the
+     latched face; light's hover is already the darker, so a press keeps it. */
+  --neutral-face-press: var(--neutral-face-down);
+  /* A crumb lies flat on the bar's --body rather than on paper. */
+  --crumb-face-hover: var(--neutral-face-hover);
 
   /* The material the window is made of: every chrome control is cut into it and the plan
      pane is set into it. Dark lifts it off the raised paper, which sits too close to the
      pane's sunk floor for the pane to read as set in. */
   --body: color-mix(in lab, var(--paper-raised), var(--ink) 7%);
 
-  /* A table is a bezel of --body with its rows in a pane sunk into it. The pane's floor
-     steps below the plan, and its row hairline is that floor stepped toward ink. The
+  /* A table is a raised pad of --body with its rows in a scoop on its face. The scoop's
+     floor steps below the plan, and its row hairline is that floor stepped toward ink. The
      header ink takes a step toward --ink because --ink-soft on --body misses AA on the
      palest palettes. */
   --table-floor: color-mix(in lab, var(--paper-sunk), black 25%);
   --table-floor-rule: color-mix(in lab, var(--table-floor), var(--ink) 9%);
   --table-head-ink: color-mix(in lab, var(--ink-soft), var(--ink) 10%);
+
+  /* A raised rubber pad (a table, a code block) is made of the body: a lit band runs
+     along its top, and its side is the body darkened, as a key's side is its face
+     darkened. */
+  --pad-top: color-mix(in lab, var(--body), var(--ink) 7%);
+  --pad-side: color-mix(in lab, var(--body), black 50%);
 
   /* A settings section's rows sit in a group recessed into the modal's sheet. Dark steps
      it toward black, since a step toward ink would lift it off a sheet this dark. */
@@ -74,16 +91,42 @@
      toggle, as the compare toggle does. theme.test.ts holds each pair to the non-text
      floor in every palette. */
   --knob-face: var(--ink-soft);
-  --knob-face-hover: color-mix(in lab, var(--ink-soft), var(--ink) 35%);
+  --knob-face-hover: color-mix(in lab, var(--ink-soft), black 18%);
   --knob-face-down: color-mix(in lab, var(--ink-soft), black 10%);
   --knob-edge: color-mix(in lab, black 30%, transparent);
   --switch-on: color-mix(in lab, var(--well-floor), var(--accent) 30%);
   --meter-off: color-mix(in lab, var(--well-floor), var(--ink) 7%);
 
-  /* The danger cap's hover face, and the latched face of a toggle that switches a
-     mode on (the compare toggle): the pressed face tinted with the accent. */
-  --danger-face-hover: color-mix(in lab, var(--danger), var(--ink) 12%);
+  /* The accent and danger caps' hover faces, and the latched face of a toggle that
+     switches a mode on (the compare toggle): the pressed face tinted with the accent. */
+  --accent-face-hover: color-mix(in lab, var(--accent), var(--ink) 40%);
+  --danger-face-hover: color-mix(in lab, var(--danger), var(--ink) 30%);
+  --accent-face-press: var(--accent);
+  --danger-face-press: var(--danger);
   --neutral-face-latched: color-mix(in lab, var(--neutral-face-down), var(--accent) 14%);
+
+  /* A list row's two key states (the .key-row atom, styles/atoms.css): risen on the
+     hover face, with a key's lift, side and cast shadow, and latched down on the pressed
+     face. Tokens rather than the atom alone so a list in a shadow root, which the atom
+     can't reach, wears them too. Each shadow keeps the same five layers so a change of
+     state transitions. */
+  --key-row-up-image:
+    linear-gradient(var(--rubber-lift), transparent 32%, transparent 55%, var(--rubber-foot)),
+    var(--grain);
+  --key-row-up:
+    inset 0 2px 2px -1px var(--rubber-gloss),
+    0 calc(var(--key-side) - 1px) 0 color-mix(in lab, var(--neutral-face-hover), black var(--rubber-side)),
+    0 var(--key-side) 1px color-mix(in lab, var(--neutral-face-hover), black var(--rubber-side)),
+    0 calc(var(--key-side) * 5 / 3) calc(var(--key-side) * 2) -1px var(--rubber-cast-near),
+    0 calc(var(--key-side) * 8 / 3) calc(var(--key-side) * 14 / 3) calc(var(--key-side) * -2)
+      var(--rubber-cast);
+  --key-row-down-image: linear-gradient(var(--rubber-foot), transparent 40%), var(--grain);
+  --key-row-down:
+    inset 0 2px 4px var(--rubber-press),
+    0 0 0 transparent,
+    0 0 0 transparent,
+    0 1px 1px var(--rubber-cast-near),
+    0 0 0 transparent;
 
   /* A floating surface's whole box-shadow: the lit top edge, its ring and its lift.
      The ring follows the height: low and mid floats take --rule, a modal takes
@@ -101,20 +144,30 @@
   --well-floor: color-mix(in lab, var(--paper-raised), var(--ink) 6%);
   --field-floor: color-mix(in lab, var(--paper-raised), var(--ink) 3%);
   --neutral-face: var(--paper-raised);
-  --neutral-face-hover: color-mix(in lab, var(--paper-raised), var(--ink) 4%);
+  /* Light darkens a hover face, so it steps only as far as FOUND needs (theme.test.ts); any
+     further reads as disabled. The rise and cast shadow carry the rest. */
+  --neutral-face-hover: color-mix(in lab, var(--paper-raised), var(--ink) 13%);
   --neutral-face-down: color-mix(in lab, var(--paper-raised), var(--ink) 6%);
+  --neutral-face-press: var(--neutral-face-hover);
+  /* That step lands on the grey bar's own shade, so a crumb rises to a key's white face. */
+  --crumb-face-hover: var(--neutral-face);
+  --accent-face-hover: color-mix(in lab, var(--accent), black 30%);
+  --accent-face-press: var(--accent-face-hover);
+  --danger-face-press: var(--danger-face-hover);
   --body: color-mix(in lab, var(--paper-sunk), var(--ink) 5%);
   --table-floor: color-mix(in lab, var(--paper-sunk), var(--ink) 3%);
+  --pad-top: color-mix(in lab, var(--body), var(--paper-raised) 60%);
+  --pad-side: color-mix(in lab, var(--body), black 13%);
   /* The code panel would leave a row description under AA on the palest palettes. */
   --group-floor: color-mix(in lab, var(--paper-raised), var(--ink) 4%);
   --knob-face: var(--paper-raised);
-  --knob-face-hover: color-mix(in lab, var(--paper-raised), var(--ink) 3%);
+  --knob-face-hover: color-mix(in lab, var(--paper-raised), var(--ink) 7%);
   --knob-face-down: color-mix(in lab, var(--paper-raised), var(--ink) 7%);
   --knob-edge: color-mix(in lab, var(--ink-faint), var(--ink-soft) 50%);
   --switch-on: color-mix(in lab, var(--well-floor), var(--accent) 18%);
 }
-/* Light chrome is cut into the grey body rather than the raised paper, so its wells
-   re-cut off the body; modals and menus keep the paper's. */
+/* Light chrome is the grey body rather than the raised paper, so a stamp's or a count
+   chip's pocket there re-cuts off the body; modals and menus keep the paper's. */
 [data-theme="light"] :is(.topbar, .control-row, .status-bar) {
   --well-floor: color-mix(in lab, var(--body), var(--ink) 7%);
 }

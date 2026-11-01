@@ -13,12 +13,10 @@
 			"text-sm font-medium",
 			// Leading icon: default sizing, no pointer capture
 			"[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
-			// Motion + interaction. caret drops stock's `active:translate-y-px`: a press
-			// sinks the cap into its well in place (styles/atoms.css), so the label
-			// never moves.
+			// Motion + interaction. caret drops stock's `active:translate-y-px`: a key's
+			// travel is the tactile kit's own (styles/atoms.css). Keyboard focus wears
+			// each variant's hover rather than stock's ring.
 			"transition-all focus-visible:outline-hidden select-none",
-			// Focus ring
-			"focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-3",
 			// Invalid state
 			"aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 aria-invalid:ring-3",
 			// Disabled
@@ -29,12 +27,12 @@
 			// are what the tactile kit in styles/atoms.css keys on. Neutral controls opt in
 			// with `.float-chip`.
 			variant: {
-				default: "cap cap-accent bg-primary text-primary-foreground [a]:hover:bg-primary/80",
-				outline: "border-border bg-background hover:bg-muted hover:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground",
-				secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
-				ghost: "cap-ghost hover:bg-muted hover:text-foreground dark:hover:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground",
-				destructive: "bg-destructive/10 hover:bg-destructive/20 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/20 text-destructive focus-visible:border-destructive/40 dark:hover:bg-destructive/30",
-				link: "text-primary underline-offset-4 hover:underline",
+				default: "cap cap-accent bg-primary text-primary-foreground [a]:hover:bg-primary/80 [a]:focus-visible:bg-primary/80",
+				outline: "border-border bg-background hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 dark:focus-visible:bg-input/50 aria-expanded:bg-muted aria-expanded:text-foreground",
+				secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80 focus-visible:bg-secondary/80 aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+				ghost: "cap-ghost hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground dark:hover:bg-muted/50 dark:focus-visible:bg-muted/50 aria-expanded:bg-muted aria-expanded:text-foreground",
+				destructive: "bg-destructive/10 hover:bg-destructive/20 focus-visible:bg-destructive/20 dark:bg-destructive/20 text-destructive dark:hover:bg-destructive/30 dark:focus-visible:bg-destructive/30",
+				link: "text-primary underline-offset-4 hover:underline focus-visible:underline",
 			},
 			size: {
 				default: "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",

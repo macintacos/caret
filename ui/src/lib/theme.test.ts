@@ -635,6 +635,95 @@ describe("every theme", () => {
     }
   });
 
+  // A neutral key's label is --ink-soft stepped toward --ink (styles/atoms.css), on the
+  // neutral face; hovered or pressed, it is --ink on that state's face.
+  test("keeps a neutral key's label at AA on its face, hovered and pressed", () => {
+    const step = /--cap-label:\s*color-mix\(in lab, var\(--ink-soft\), var\(--ink\) (\d+)%\)/.exec(
+      readAppCss(),
+    )?.[1];
+    expect(step).toBeDefined();
+    for (const [id, theme] of themeEntries()) {
+      const tokens = theme.tokens;
+      const label = banded(tokens["--ink-soft"], tokens["--ink"], Number(step) / 100);
+      expect(
+        contrast(label, derived("--neutral-face", theme)),
+        `${id} key label on --neutral-face`,
+      ).toBeGreaterThanOrEqual(4.5);
+      for (const face of ["--neutral-face-hover", "--neutral-face-down"]) {
+        expect(
+          contrast(tokens["--ink"], derived(face, theme)),
+          `${id} --ink on ${face}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  // Focus draws no ring and looks exactly like hover, so a hover face is the only place a
+  // keyboard user sees where focus went. Each has to read apart from the face or ground it
+  // leaves by FOUND in CIE76. GLANCE would be the target, but in the lowest-contrast
+  // palettes the --ink label falls under 4.5:1 on any face that far off.
+  const FOUND = 3.5;
+  const HOVER_STEPS: [string, string, string][] = [
+    ["a neutral key or segment", "--neutral-face", "--neutral-face-hover"],
+    ["a chosen key, segment or row", "--neutral-face-down", "--neutral-face-hover"],
+    ["the Contents row being read", "--neutral-face-latched", "--neutral-face-hover"],
+    ["a row in a menu, listbox or panel", "--paper-raised", "--neutral-face-hover"],
+    ["a row in the settings nav", "--group-floor", "--neutral-face-hover"],
+    ["a crumb on the bar", "--body", "--crumb-face-hover"],
+    ["an accent key or the gutter +", "--accent", "--accent-face-hover"],
+    ["a danger key or the preview's close key", "--danger", "--danger-face-hover"],
+    ["a switch's knob", "--knob-face", "--knob-face-hover"],
+  ];
+  test("moves every hover face a findable step off its rest", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const [what, rest, hover] of HOVER_STEPS) {
+        expect(
+          deltaE(derived(rest, theme), derived(hover, theme)),
+          `${id} ${what}`,
+        ).toBeGreaterThanOrEqual(FOUND);
+      }
+    }
+  });
+  // On light paper a hover face darkens, so a step past what FOUND needs reads as a stain
+  // rather than a key rising under the finger. The tightest pair is a chosen key under the
+  // cursor, which steps from the latched face.
+  test("steps a light key's hover face no further than FOUND needs", () => {
+    const light = themeEntries().filter(([, theme]) => theme.scheme === "light");
+    const tightest = Math.min(
+      ...light.map(([, theme]) =>
+        deltaE(derived("--neutral-face-down", theme), derived("--neutral-face-hover", theme)),
+      ),
+    );
+    expect(tightest).toBeLessThan(FOUND + 1);
+  });
+  // A press sinks the key it comes from. On light paper the hover face is the darker, so a
+  // press that fell back to a lighter face would lighten the key under the finger.
+  const PRESSES: [string, string, string][] = [
+    ["a neutral key or row", "--neutral-face-hover", "--neutral-face-press"],
+    ["an accent key", "--accent-face-hover", "--accent-face-press"],
+    ["a danger key", "--danger-face-hover", "--danger-face-press"],
+    ["a switch's knob", "--knob-face-hover", "--knob-face-down"],
+  ];
+  test("never lightens a light key as it is pressed", () => {
+    for (const [id, theme] of themeEntries().filter(([, t]) => t.scheme === "light")) {
+      for (const [what, hover, press] of PRESSES) {
+        expect(luminance(derived(press, theme)), `${id} ${what}`).toBeLessThanOrEqual(
+          luminance(derived(hover, theme)),
+        );
+      }
+    }
+  });
+  test("keeps the accent and danger labels at AA on their hover faces", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const face of ["--accent-face-hover", "--danger-face-hover"]) {
+        expect(
+          contrast(theme.tokens["--accent-ink"], derived(face, theme)),
+          `${id} --accent-ink on ${face}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
   // The hairline between body rows is a deliberately faint step off the pane floor: the
   // rows also read from their own spacing. What is pinned is that it stays visible and
   // lands at about the same weight on every palette.
@@ -688,6 +777,15 @@ describe("every theme", () => {
     for (const [id, theme] of themeEntries()) {
       const group = derived("--group-floor", theme);
       expect(contrast(theme.tokens["--ink-soft"], group), id).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // A text field draws no focus ring, so the edge it firms to on focus is its focus
+  // indicator and has to stand off the field's floor.
+  test("keeps a focused text field's edge above the non-text floor on its floor", () => {
+    for (const [id, theme] of themeEntries()) {
+      const edge = derived("--field-edge-focus", theme);
+      expect(contrast(edge, derived("--field-floor", theme)), id).toBeGreaterThanOrEqual(3);
     }
   });
 

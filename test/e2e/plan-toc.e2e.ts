@@ -818,9 +818,14 @@ test("the level marker paints a dimmer rung of the ink ramp than the label", asy
     const marker = (row: HTMLElement) =>
       getComputedStyle(row.querySelector("[data-icon^='heading-'] svg path")!).stroke;
     const label = (row: HTMLElement) => getComputedStyle(row.querySelector(".toc-label")!).color;
+    const probe = document.body.appendChild(document.createElement("span"));
+    probe.style.color = "color-mix(in lab, var(--ink-soft), var(--ink) 15%)";
+    const keyLabelInk = getComputedStyle(probe).color;
+    probe.remove();
     return {
       inkSoft: resolve("--ink-soft"),
       ink: resolve("--ink"),
+      keyLabelInk,
       restingMarker: marker(resting),
       restingLabel: label(resting),
       walkedMarker: marker(walked),
@@ -834,9 +839,11 @@ test("the level marker paints a dimmer rung of the ink ramp than the label", asy
 
   // The row the keyboard is on, which is not a corner case: the popup seeds its selection
   // to the heading being read on every open, and the filtered view always lands on the
-  // first match. The marker must not be dragged up to the label's ink with the row.
-  expect(paint.walkedMarker).toBe(paint.inkSoft);
+  // first match. The marker must not be dragged up to the label's ink with the row: on the
+  // risen face, where --ink-soft misses 3:1, it steps only to a neutral key's label ink.
+  expect(paint.walkedMarker).toBe(paint.keyLabelInk);
   expect(paint.walkedLabel).toBe(paint.ink);
+  expect(paint.walkedMarker).not.toBe(paint.walkedLabel);
 });
 
 test("compare mode drops both of the popup's entry points (EXC-1097)", async ({ daemon, page }) => {
@@ -1276,28 +1283,29 @@ test("reduced motion collapses the surface and leaves it fully usable", async ({
 });
 
 // The peek beside the outline. Hover moving the selection is bits-ui's pointer selection
-// answering a real pointermove, the keyboard ring is a computed outline that only a real
-// cascade resolves, an option's description is something only the role engine computes,
+// answering a real pointermove, the selected row's look is a computed style that only a
+// real cascade resolves, an option's description is something only the role engine computes,
 // and the narrow stack is layout. The peek's content for a given selection is the unit
 // suite's (PlanToc.test.ts).
 
 const peek = (page: Page) => panel(page).locator(".toc-peek");
 const peekTitle = (page: Page) => peek(page).locator(".toc-peek-title");
 
-/** The selected row's key — the part of the row that wears the ring. */
-const walkedKey = (page: Page) => walkedTo(page).locator(".toc-key");
-
-/** What `--accent` resolves to in this page, through the same serialisation an outline
- * colour gets. */
-const accent = (page: Page) =>
-  page.evaluate(() => {
-    const probe = document.createElement("div");
-    probe.style.color = "var(--accent)";
-    document.body.append(probe);
-    const color = getComputedStyle(probe).color;
-    probe.remove();
-    return color;
-  });
+/** The selected row's key, the part of the row that rises, once its transitions finish:
+ * its face, shadow, lift and any outline. */
+const walkedKeyLook = (page: Page) =>
+  walkedTo(page)
+    .locator(".toc-key")
+    .evaluate(async (el) => {
+      await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {})));
+      const s = getComputedStyle(el);
+      return {
+        face: s.backgroundColor,
+        shadow: s.boxShadow,
+        lift: s.translate,
+        outline: s.outlineStyle,
+      };
+    });
 
 test("hovering a row selects it, and the peek follows the pointer", async ({ daemon, page }) => {
   await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
@@ -1308,17 +1316,22 @@ test("hovering a row selects it, and the peek follows the pointer", async ({ dae
   await expect(peekTitle(page)).toHaveText("Rollout notes");
 });
 
-test("the keyboard's ring shows only while keys drive the selection", async ({ daemon, page }) => {
+test("the row the keys select looks exactly as the row the pointer selects", async ({
+  daemon,
+  page,
+}) => {
   await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
-  const ring = () => walkedKey(page).evaluate((el) => getComputedStyle(el).outlineColor);
+  await options(page).filter({ hasText: "Rollout notes" }).hover();
+  await expect(walkedTo(page)).toHaveText("Rollout notes");
+  const pointed = await walkedKeyLook(page);
+  expect(pointed.outline).toBe("none");
 
-  await options(page).filter({ hasText: "Rollout" }).first().hover();
-  await expect(walkedTo(page)).toHaveText("Rollout");
-  await expect.poll(ring).toBe("rgba(0, 0, 0, 0)");
-
+  await page.mouse.move(0, 0);
+  await page.keyboard.press("ArrowUp");
+  await expect(walkedTo(page)).not.toHaveText("Rollout notes");
   await page.keyboard.press("ArrowDown");
   await expect(walkedTo(page)).toHaveText("Rollout notes");
-  await expect.poll(ring).toBe(await accent(page));
+  expect(await walkedKeyLook(page)).toEqual(pointed);
 });
 
 test("the filter field shows focus without a ring", async ({ daemon, page }) => {

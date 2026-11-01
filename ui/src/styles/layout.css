@@ -17,8 +17,9 @@
   --w-narrow: 960px;
   /* Bottom status-bar height (EXC-787), consumed by StatusBar and by the
      CommentNavigator that docks above it — named once so the two stay in sync. Tall
-     enough that the help cap's well clears the plan pane's edge above it. */
-  --status-bar-h: 2rem;
+     enough that the help key's bed clears the plan pane's edge above it and the
+     window's edge below. */
+  --status-bar-h: 2.25rem;
   /* Shared max-width of the review's confirm surfaces — the approve/reject guard
      (UnsentCommentsDialog) and the Request Changes dialog — so the two read as one
      width and update together. Each rule caps it with min(…, calc(100% - 2rem)) to
@@ -59,8 +60,12 @@
   grid-template-rows: auto auto auto 1fr auto;
   height: 100%;
   /* The window is one body: the chrome's controls are cut into it and the plan is a
-     pane set into it, so no bar paints a face of its own. */
-  background: var(--body);
+     pane set into it, so no bar paints a face of its own. It is grained rubber, lit
+     faintly from above over the chrome. */
+  background-color: var(--body);
+  background-image: linear-gradient(var(--chrome-light), transparent 110px), var(--grain);
+  background-size: auto, 128px;
+  background-blend-mode: normal, soft-light;
   /* Supported-minimum floor: below --w-min the shell overflows the viewport and
      the window scrolls horizontally rather than collapsing the layout further.
      min-width is safe under the transform/containment caveat above — it

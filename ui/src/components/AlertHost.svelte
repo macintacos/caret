@@ -122,7 +122,7 @@
     align-items: center;
     height: 1.5rem;
     padding: 0 0.5rem;
-    border-radius: var(--radius);
+    border-radius: var(--key-radius);
     font-size: var(--text-xs);
     font-weight: 500;
   }
@@ -144,7 +144,7 @@
     opacity: 0.6;
     transition: opacity var(--dur-state) var(--ease-out);
   }
-  .alert-dismiss:hover {
+  .alert-dismiss:is(:hover, :focus-visible) {
     opacity: 1;
   }
   @keyframes alert-in {

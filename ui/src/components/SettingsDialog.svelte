@@ -7,13 +7,12 @@
   // Appearance), each a FieldGroup of shadcn Fields.
   //
   // Two shadcn primitives carry the layout (compose-first, per doc/agents/shadcn-rules):
-  //   • Sidebar (collapsible="none") — the static category rail, flat on the sheet. The
-  //     SELECTED row is stamped into the sheet in full ink: a place you are, not a key.
-  //     Below 640px the rail folds into a bar of a section picker, a search key and a
-  //     close key.
+  //   • Sidebar (collapsible="none") — the static category rail. Its sections sit in one
+  //     bed, and the SELECTED one latches down in it in full ink. Below 640px the rail
+  //     folds into a bar of a section picker, a search key and a close key.
   //   • Field / FieldSet (EXC-1112) — one Field per setting (label + description +
-  //     control), hairline-separated within a FieldGroup recessed into the sheet, so a
-  //     section reads as a table of settings. A LABELLED section wraps its
+  //     control), within a FieldGroup set in a bed in the sheet, so a section reads as
+  //     a table of settings. A LABELLED section wraps its
   //     FieldGroup in a FieldSet whose FieldLegend is the header; an unlabelled one
   //     stays a plain div, since a fieldset with no legend is a group with no name.
   //     The FieldLabel is a real <label>, so the visible text IS each control's
@@ -28,7 +27,7 @@
   // those rules is written in the `.settings :global(…)` form.
   //
   // The Dialog primitive is composed directly rather than Modal.svelte — Modal's
-  // eyebrow/title/footer identity doesn't fit the two-pane layout — keeping a
+  // title/footer identity doesn't fit the two-pane layout — keeping a
   // visually-hidden Dialog.Title so the dialog's accessible name is "Settings".
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
@@ -39,7 +38,6 @@
     FieldGroup,
     FieldLabel,
     FieldLegend,
-    FieldSeparator,
     FieldSet,
   } from "$lib/components/ui/field/index.js";
   import * as InputGroup from "$lib/components/ui/input-group/index.js";
@@ -288,10 +286,11 @@
         </Sidebar.Header>
         <Sidebar.Content>
           <Sidebar.Group>
-            <Sidebar.Menu>
+            <Sidebar.Menu class="tray settings-nav">
               {#each categories as cat (cat.id)}
                 <Sidebar.MenuItem>
                   <Sidebar.MenuButton
+                    class="key-row"
                     isActive={cat.id === selected?.id}
                     data-category={cat.id}
                     aria-current={cat.id === selected?.id ? "page" : undefined}
@@ -313,7 +312,7 @@
           </Sidebar.Group>
         </Sidebar.Content>
         <Sidebar.Footer>
-          <p class="nav-hint" aria-hidden="true"><Kbd>esc</Kbd> <span>close</span></p>
+          <p class="nav-hint ref-esc-hint" aria-hidden="true"><Kbd>esc</Kbd> to close</p>
         </Sidebar.Footer>
       </Sidebar.Root>
 
@@ -374,8 +373,7 @@
 
 {#snippet rows(fields: StagedField[])}
   <FieldGroup class="fields">
-    {#each fields as field, i (field.key)}
-      {#if i > 0}<FieldSeparator />{/if}
+    {#each fields as field (field.key)}
       <!-- Field carries role="group"; naming it after the row's own label turns a
            nameless boundary into the row's structure. -->
       <Field
@@ -411,6 +409,8 @@
     padding: 0;
     gap: 0;
     overflow: hidden;
+    /* The search field rests the rail header's 0.5rem padding in from this corner. */
+    border-radius: calc(var(--radius) + 0.5rem);
   }
   /* The two-pane body. A fixed height gives the roomy mockup framing (the pane keeps
      its shape with few fields) and, being taller than a tiny viewport, lets the
@@ -432,10 +432,13 @@
   .settings :global(.settings-rail) {
     background: transparent;
   }
-  /* Nav rows sit a little apart (the shadcn menu ships gap-0) so a hover tint on
-     one doesn't crowd its neighbor. */
-  .settings :global([data-slot="sidebar-menu"]) {
-    gap: 0.25rem;
+  /* The sections share one bed (styles/atoms.css), as the top bar's keys do, stacked full
+     width. A bed this size takes the group's floor: on light paper a bare cut's lit lip
+     is white on white, and the bed fades out below its first rows. */
+  .settings :global(.settings-nav) {
+    display: flex;
+    align-items: stretch;
+    background: var(--group-floor);
   }
   /* Nav row: quiet --ink-soft at rest. Unselected rows must stay at the inherited weight —
      the vendored `data-[active=true]:font-medium` would leave them at 500, reading as
@@ -443,25 +446,13 @@
   .settings :global([data-slot="sidebar-menu-button"]) {
     justify-content: flex-start;
     color: var(--ink-soft);
-    transition:
-      background-color var(--dur-state) var(--ease-out),
-      color var(--dur-state) var(--ease-out),
-      box-shadow var(--dur-state) var(--ease-out);
   }
-  /* An unselected row is a ghost key: an --ink-wash under the pointer, and the ghost
-     press's dimple while held. */
-  .settings :global([data-slot="sidebar-menu-button"]:not([data-active="true"]):hover),
-  .settings :global([data-slot="sidebar-menu-button"]:not([data-active="true"]):active) {
-    background: var(--ink-wash);
+  /* Each row is a key row (styles/atoms.css): it rises under the pointer and the chosen
+     section latches down, in full ink. */
+  .settings :global([data-slot="sidebar-menu-button"]:is(:hover, :focus-visible, :active)) {
     color: var(--ink);
   }
-  .settings :global([data-slot="sidebar-menu-button"]:not([data-active="true"]):active) {
-    box-shadow: inset 0 1px var(--press-blur) var(--press-shade);
-  }
-  /* The selected row is stamped into the sheet in full ink: where you are, not a key. */
   .settings :global([data-slot="sidebar-menu-button"][data-active="true"]) {
-    background: var(--well-floor);
-    box-shadow: var(--well-shade), var(--well-lip);
     color: var(--ink);
     font-weight: 600;
   }
@@ -496,13 +487,9 @@
     display: none;
   }
   .nav-hint {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
     margin: 0;
     padding: 0 0.35rem;
     font-size: var(--text-xs);
-    color: var(--ink-faint);
   }
 
   .settings-pane {
@@ -533,7 +520,7 @@
     margin: 0;
     padding: 1.5rem 0;
     font-size: var(--text-sm);
-    color: var(--ink-faint);
+    color: var(--ink-soft);
   }
 
   /* A labelled section is a fieldset and an unlabelled one a plain div, so this sets the
@@ -554,35 +541,26 @@
     margin: 0 0 0.5rem;
   }
 
-  /* Each section's rows sit in a group recessed into the sheet with a full-bleed hairline between rows: a section reads as a table of
-     settings. `align-items: center` out-specifies Field's own
-     has-[field-content]:items-start, which would otherwise top-align the control against
-     a two-line description. */
+  /* Each section's rows sit in one bed cut into the sheet, on the group's floor, with no
+     line between rows: space parts them, as it parts the keys in a bed.
+     `align-items: center` out-specifies Field's own has-[field-content]:items-start, which
+     would otherwise top-align the control against a two-line description. */
   .settings :global(.fields) {
     --group-pad: 0.9rem;
     gap: 0;
     padding: 0 var(--group-pad);
-    border-radius: var(--radius-lg);
-    background-color: var(--group-floor);
-    box-shadow: var(--panel-recess);
+    /* A control's bed rests --group-pad in from the group's corner. */
+    border-radius: calc(var(--key-radius) + var(--well-pad) + var(--group-pad));
+    background: var(--group-floor);
+    box-shadow: var(--bed-shade);
   }
   .settings :global(.setting-item) {
     align-items: center;
     gap: 0.625rem;
-    padding-block: 0.7rem;
+    padding-block: 0.85rem;
   }
   .settings :global(.setting-item [data-slot="field-content"]) {
     gap: 0.25rem;
-  }
-  /* The separator ships as a 20px box with the rule floated through its middle. Shrink
-     the box to the hairline itself and pin the rule to its top — half of a 1px box is a
-     half-pixel offset, which renders the line soft. */
-  .settings :global([data-slot="field-separator"]) {
-    height: 1px;
-    margin: 0 calc(-1 * var(--group-pad));
-  }
-  .settings :global([data-slot="field-separator"] [data-slot="separator"]) {
-    top: 0;
   }
   .settings :global(.setting-item .field-label) {
     font-size: var(--text-sm);
@@ -597,6 +575,8 @@
     :global(.settings-content) {
       width: calc(100vw - 1rem);
       max-width: calc(100vw - 1rem);
+      /* The section picker's bed rests the bar's 0.6rem padding in from this corner. */
+      border-radius: calc(var(--key-radius) + var(--well-pad) + 0.6rem);
     }
     .settings {
       --sidebar-width: 100%;

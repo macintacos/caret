@@ -100,6 +100,7 @@
      what it covers. */
   :global(.confirm-popover) {
     --pop-bg: var(--chip);
+    --pop-inset: 0.6rem;
     /* Pin the sans stack explicitly: the bubble is portalled to the body — outside
        #app and the diff view's slotted content — so it inherits no font-family.
        Without this it fell back to the UA serif in the Request Changes dialog while
@@ -108,10 +109,11 @@
     width: max-content;
     max-width: 15rem;
     gap: 0;
-    padding: 0.6rem 0.7rem 0.55rem;
+    padding: var(--pop-inset);
     background: var(--pop-bg);
     border: 0;
-    border-radius: var(--radius-lg);
+    /* Concentric round the action bed, which rests --pop-inset in from the corner. */
+    border-radius: calc(var(--key-radius) + var(--well-pad) + var(--pop-inset));
     box-shadow: var(--float-surface-mid);
   }
   :global(.confirm-popover .question) {
@@ -132,7 +134,7 @@
   }
   :global(.confirm-popover .cancel),
   :global(.confirm-popover .confirm) {
-    border-radius: var(--radius);
+    border-radius: var(--key-radius);
     padding: 0 0.7rem;
   }
   /* The tail that makes it read as popping *out of* the button: a rotated square

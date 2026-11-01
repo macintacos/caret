@@ -118,6 +118,7 @@ function drawnRun(page: import("@playwright/test").Page, line: number) {
     if (row == null || first === undefined) return null;
     const rects = els.map((el) => el.getBoundingClientRect());
     const glyph = getComputedStyle(first, "::before");
+    const mark = getComputedStyle(first, "::after");
     // A token on the same row that the run does not cover — the ordinary text the
     // checkbox has to be indistinguishable from for the "no cursor change" criterion.
     const prose = [...row.children].find((el) => !el.hasAttribute("data-md-checkbox"));
@@ -125,6 +126,7 @@ function drawnRun(page: import("@playwright/test").Page, line: number) {
       text: els.map((el) => el.textContent).join(""),
       tokens: els.length,
       glyphs: els.map((el) => getComputedStyle(el, "::before").content),
+      marks: els.map((el) => getComputedStyle(el, "::after").content),
       // The brackets are invisible rather than removed — that is the whole
       // transform-in-place stance, and it is what keeps the columns and the copy.
       color: getComputedStyle(first).color,
@@ -132,12 +134,16 @@ function drawnRun(page: import("@playwright/test").Page, line: number) {
       proseCursor: prose == null ? null : getComputedStyle(prose).cursor,
       content: glyph.content,
       position: glyph.position,
-      // The box is a masked Lucide square, so what carries it is the mask (which glyph)
-      // and the background it paints through that mask (what ink). Resolved across the
-      // shadow boundary: a token that failed to resolve would come back as the initial
-      // color rather than the palette's ink.
-      boxMask: glyph.maskImage,
+      // The box is a stamped pocket, carried by its floor and its contact edge, and the
+      // state is the mark pressed into it: an L's border for a check, a filled bar for a
+      // slash, nothing when unchecked. Resolved across the shadow boundary: a token that
+      // failed to resolve would come back as the initial color rather than the palette's.
       boxFill: glyph.backgroundColor,
+      boxEdge: glyph.boxShadow,
+      markContent: mark.content,
+      markStroke: mark.borderRightColor,
+      markStrokeWidth: Number.parseFloat(mark.borderRightWidth),
+      markFill: mark.backgroundColor,
       boxWidth: Number.parseFloat(glyph.width),
       boxInsetStart: Number.parseFloat(glyph.insetInlineStart),
       width:
@@ -204,13 +210,12 @@ test("the box is painted over the brackets, which are still in the row", async (
   expect(box?.text).toBe("[x]");
   expect(box?.color).toBe("rgba(0, 0, 0, 0)");
   expect(box?.position).toBe("absolute");
-  // AN ICON rather than a typed glyph: the pseudo-element carries no character at all,
-  // and what makes it a checkbox is the vendored Lucide SVG masked into it — painted in
-  // the row's ink through background-color, which is also what proves the theme token
-  // resolved across the shadow boundary rather than falling back to the initial color.
+  // DRAWN rather than typed: the pseudo-element carries no character at all, and what
+  // makes it a checkbox is the pocket's floor and its contact edge, which is also what
+  // proves the theme tokens resolved across the shadow boundary.
   expect(box?.content).toBe('""');
-  expect(box?.boxMask).toContain("data:image/svg+xml");
   expect(box?.boxFill).not.toBe("rgba(0, 0, 0, 0)");
+  expect(box?.boxEdge).toMatch(/inset/);
   expect(box?.boxWidth).toBeGreaterThan(0);
   // Exactly THREE character cells wide, measured against a prose row rather than
   // asserted to be merely positive. Paired with the `position` assertion above, this
@@ -240,6 +245,8 @@ test("one box is drawn per run, however many tokens shiki cut the run into", asy
     const run = await drawnRun(page, await lineOf(page, text));
     const boxes = (run?.glyphs ?? []).filter((content) => content !== "none");
     expect(boxes.length, `${text} — ${run?.tokens} tagged token(s)`).toBe(1);
+    const marks = (run?.marks ?? []).filter((content) => content !== "none");
+    expect(marks.length, `${text} marks`).toBeLessThanOrEqual(1);
     // And the run still covers exactly its three characters however it was cut.
     expect(run?.width).toBeCloseTo(3 * (await cellWidth(page, PROSE_ABOVE)), 0);
   }
@@ -258,14 +265,17 @@ test("the three states differ in shape, not in colour", async ({ page, daemon })
   // The accessibility claim of this ticket, read off the rendered page rather than
   // inferred from the sheet. A state indicator separated only by a hue or an opacity
   // step fails for a colour-blind reader whatever the contrast maths says, so the three
-  // states are one ink and three glyphs: an empty square, a square with a check, a
-  // square with a slash.
+  // states are one pocket and one ink, told apart by the mark: none, a check, a slash.
   expect(checked?.boxFill).toBe(unchecked?.boxFill);
   expect(slashed?.boxFill).toBe(unchecked?.boxFill);
-  expect(new Set([checked?.boxMask, unchecked?.boxMask, slashed?.boxMask]).size).toBe(3);
+  expect(checked?.boxEdge).toBe(unchecked?.boxEdge);
+  expect(unchecked?.markContent).toBe("none");
+  expect(checked?.markStrokeWidth).toBeGreaterThan(0);
+  expect(slashed?.markStrokeWidth).toBe(0);
+  expect(checked?.markStroke).toBe(slashed?.markFill);
   // And the ink really resolved the theme token rather than falling back to initial ink
   // — which is also what the brackets under it are NOT wearing, since they are hidden.
-  expect(checked?.boxFill).not.toBe(checked?.color);
+  expect(checked?.markStroke).not.toBe(checked?.color);
 });
 
 test("the checkbox is not interactive", async ({ page, daemon }) => {

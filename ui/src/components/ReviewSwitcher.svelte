@@ -166,6 +166,10 @@
     margin-inline-start: auto;
     color: var(--ink-soft);
   }
+  /* A highlighted row rises onto a face only --ink holds AA on. */
+  :global([data-highlighted]) :is(.m-meta, .opt-check) {
+    color: var(--ink);
+  }
   .opt-unread {
     display: inline-flex;
     align-items: center;

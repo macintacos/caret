@@ -127,7 +127,8 @@
             class:is-unavailable={!block.available}
             data-reflow={reflowed[block.key] ? "" : undefined}
             {@attach watchOverflow(block.key, block.text)}>{#if block.key === "daemon"}<span
-                class="diag-dot"
+                class="diag-dot led"
+                class:led-off={!block.available}
                 data-live={block.available}></span>{/if}<code class="diag-text"
               >{block.available ? block.text : "Unavailable"}</code></pre>
           {#if block.available}
@@ -174,7 +175,7 @@
     margin: 0;
     font-family: var(--font-mono);
     font-size: var(--text-2xs);
-    color: var(--ink-faint);
+    color: var(--ink-soft);
     overflow-wrap: anywhere;
   }
 
@@ -218,22 +219,12 @@
     opacity: 1;
   }
 
-  /* The daemon's live light sits in a socket cut into the block, the status strip's
-     connection light; unlit when the diagnostics probe failed. */
+  /* The daemon's live light, the status strip's connection light (styles/atoms.css);
+     unlit when the diagnostics probe failed. */
   .diag-dot {
+    --led: var(--ok);
     display: inline-block;
-    width: 0.45rem;
-    height: 0.45rem;
     margin-right: 0.6rem;
-    border-radius: 99px;
     vertical-align: 0.05em;
-    background: var(--ink-faint);
-    box-shadow:
-      inset 0 -1px 1px var(--socket-shade),
-      0 0 0 1.5px var(--code-panel),
-      0 0 0 2px var(--socket-ring);
-  }
-  .diag-dot[data-live="true"] {
-    background: var(--ok);
   }
 </style>

@@ -23,7 +23,7 @@ test("? opens and toggles the help; the bar button opens it; search filters", as
   // ? opens the modal and moves focus into it.
   await page.keyboard.press("?");
   await expect(dialog).toBeVisible();
-  await expect(page.locator("[data-slot='dialog-title']")).toHaveText(/Shortcuts/);
+  await expect(page.locator("[data-slot='dialog-title']")).toHaveText("Keyboard shortcuts");
   const focusInDialog = await page.evaluate(
     () => document.activeElement?.closest("[data-slot='dialog-content']") != null,
   );

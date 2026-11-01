@@ -155,10 +155,14 @@ describe("motion tokens in app.css", () => {
     expect(alertsState).toContain(`deps.exitMs ?? ${exit};`); // AlertHost's alert-out
   });
 
-  test("declares one easing, a cubic-bezier", () => {
+  test("declares the state easing plus the key's spring, both cubic-beziers", () => {
+    // The spring times a rubber key's return from a press and nothing else; a third
+    // easing has to argue for itself in tokens.css first.
     const names = [...root.matchAll(/^\s*--ease-([\w-]+):/gm)].map(([, name]) => name);
-    expect(names).toEqual(["out"]);
-    expect(root.match(/--ease-out:\s*([^;]+);/)?.[1]).toContain("cubic-bezier");
+    expect(names.sort()).toEqual(["out", "spring"]);
+    for (const name of names) {
+      expect(root.match(new RegExp(`--ease-${name}:\\s*([^;]+);`))?.[1]).toContain("cubic-bezier");
+    }
   });
 
   test("documents the ambient/infinite carve-out", () => {

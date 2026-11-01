@@ -7,9 +7,6 @@
 import { HEADING_LEVELS } from "@core/theme/role-scopes.ts";
 import fileIconRaw from "@/icons/file.svg?raw";
 import folderIconRaw from "@/icons/folder.svg?raw";
-import squareIconRaw from "@/icons/square.svg?raw";
-import squareCheckIconRaw from "@/icons/square-check-big.svg?raw";
-import squareSlashIconRaw from "@/icons/square-slash.svg?raw";
 import { DIFFS_CORE_STYLES } from "$lib/diffview/diffsCoreStyles.ts";
 
 // The vendored Lucide `file` glyph as a CSS mask source (EXC-687). Rendered as a
@@ -18,14 +15,6 @@ import { DIFFS_CORE_STYLES } from "$lib/diffview/diffsCoreStyles.ts";
 export const FILE_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(fileIconRaw)}")`;
 // Its counterpart for a reference the daemon resolved to a directory (EXC-918).
 export const FOLDER_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(folderIconRaw)}")`;
-// The task-list checkbox's three states, one vendored Lucide glyph each. Masks for the
-// same reason the file glyph is one: the row's ink is a palette token, and a mask takes
-// it through background-color where an <img> would be stuck with whatever the file draws.
-const CHECKBOX_MASKS = {
-  unchecked: `url("data:image/svg+xml,${encodeURIComponent(squareIconRaw)}")`,
-  checked: `url("data:image/svg+xml,${encodeURIComponent(squareCheckIconRaw)}")`,
-  slashed: `url("data:image/svg+xml,${encodeURIComponent(squareSlashIconRaw)}")`,
-};
 
 /**
  * How far a blockquote's ink fades (EXC-863). Quoted prose is still body copy a
@@ -72,9 +61,9 @@ const HEADING_FONT_RULES = HEADING_LEVELS.map(
 // retargeting --diffs-modified-base (that would bleed amber into those too), so the
 // fill is set here, in the override sheet caret already adopts into the shadow root.
 // caret's accent tokens are :root custom properties and inherit through the shadow
-// boundary, so var(--accent) resolves correctly. The "+" reads accent at rest and
-// brightens on hover/focus, matching the composer's solid action button; the
-// focus-visible ring keeps the keyboard path to the composer visible.
+// boundary, so var(--accent) resolves correctly. The "+" is the top bar's accent key
+// standing on no tray, brightening on hover and on keyboard focus alike and sinking on
+// press.
 const CARET_OVERRIDES = `
   /* Single source for the gutter→content seam width (EXC-664). The content inset
      that opens the seam and the selected-band pull that fills it must move
@@ -102,36 +91,47 @@ const CARET_OVERRIDES = `
     --caret-code-bar: 12px;
     --caret-gutter-divider: 2px;
   }
-  /* The task-list checkbox's size (EXC-860) — the box the masked Lucide glyph is painted
-     into, which every state measures from. Lucide draws its square inset in the viewBox
-     (18 of 24 units), so the SQUARE a reader sees is about three quarters of this: the
-     number is the one that puts that square a little under 1em, inside the row's line box
-     rather than filling it. Em-relative so it tracks the type scale — the three source
-     columns it is drawn over are a fixed 3ch, so a fixed pixel would drift out of the
-     middle of them at any other size. */
+  /* The task-list box's side (EXC-860): a little under 1em, inside the row's line box
+     rather than filling it. Em-relative so it tracks the type scale, as the three source
+     columns it is drawn over do. PlanPreview.svelte's task box repeats it by value. */
   :host {
-    --checkbox-size: 1.23em;
+    --checkbox-size: 0.9em;
   }
   [data-utility-button] {
+    --plus-face: var(--accent);
+    --plus-side: color-mix(in lab, var(--plus-face), black var(--tinted-side));
     margin-right: calc(1ch - 1lh - 0.5rem);
-    background-color: var(--accent);
-    color: var(--accent-ink);
-    /* Raised, softened comment affordance: rounder corners and a layered drop
-       shadow (a tight contact shadow plus a wider ambient one) lift the "+" off
-       the diff surface, with a top-edge inset highlight for the bevel. Static (no
-       transition) — this sheet isn't in the motion.test chrome set, but keeping it
-       still avoids surprises. */
+    /* Keep in sync with DiffPlanView.svelte's .preview-plus > button rules. */
     border-radius: var(--radius);
+    background-color: var(--plus-face);
+    background-image:
+      linear-gradient(var(--tinted-lift), transparent 32%, transparent 55%, var(--tinted-foot)),
+      var(--grain);
+    background-size: auto, 128px;
+    background-blend-mode: normal, soft-light;
+    color: var(--accent-ink);
+    translate: 0 calc(-1 * var(--key-rise));
     box-shadow:
-      0 1px 1.5px #0000003d,
-      0 2px 5px #0000004d,
-      inset 0 1px 0 #ffffff4d;
+      inset 0 2px 2px -1px var(--rubber-gloss),
+      0 calc(var(--key-side) - 1px) 0 var(--plus-side),
+      0 var(--key-side) 1px var(--plus-side),
+      0 calc(var(--key-side) * 5 / 3) calc(var(--key-side) * 2) -1px var(--rubber-cast-near),
+      0 calc(var(--key-side) * 8 / 3) calc(var(--key-side) * 14 / 3) calc(var(--key-side) * -2)
+        var(--rubber-cast);
   }
-  [data-utility-button]:hover { background-color: var(--accent-bright); }
-  [data-utility-button]:focus-visible {
-    background-color: var(--accent-bright);
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
+  [data-utility-button]:is(:hover, :focus-visible) { --plus-face: var(--accent-face-hover); }
+  /* The page's ringless focus (styles/base.css) stops at the shadow root. */
+  :focus-visible { outline: none; }
+  @media (forced-colors: active) {
+    :focus-visible { outline: 2px solid transparent; outline-offset: 2px; }
+  }
+  [data-utility-button]:active {
+    --plus-face: var(--accent);
+    translate: 0 var(--key-sink);
+    background-image: linear-gradient(var(--tinted-foot), transparent 40%), var(--grain);
+    box-shadow:
+      inset 0 2px 4px var(--rubber-press),
+      0 1px 1px var(--rubber-cast-near);
   }
 
   /* EXC-788: the focused-line cursor. SourceView tags BOTH cells of the row the
@@ -203,9 +203,9 @@ const CARET_OVERRIDES = `
 
   /* A fenced block's rows outside their card: the frame between a library repaint and the
      pass that re-cards them (codeBlockScroll.ts), and the floor if that pass never runs. A
-     row cannot carry the card's bezel, whose ring and drop shadow would seam at every row
-     boundary, so it shows the pane's floor where the pane will be, at the card's inset and
-     cap. The end rows take the card's whole height, bezel included, so re-carding moves
+     row cannot carry the card's pad, whose side and cast shadow would seam at every row
+     boundary, so it shows the scoop's floor where the scoop will be, at the card's inset and
+     cap. The end rows take the card's whole height, rim included, so re-carding moves
      nothing below the block. */
   [data-content] > [data-line][data-code-line]:not([data-selected-line]) {
     background-color: var(--table-floor);
@@ -698,7 +698,7 @@ const CARET_OVERRIDES = `
      back as three tokens, as does a lowercase one on a row carrying other inline markup.
      inlineDecorate's tagRow tags EVERY token a run covers, so without the suppression rule
      below the sheet draws three boxes side by side rather than one. The rule leaves the
-     glyph on the run's FIRST tagged token, which is the token the run starts at and
+     box on the run's FIRST tagged token, which is the token the run starts at and
      therefore the one the centring offset is measured from. Two properties make it hold:
      it wins on selector weight rather than on source order — four attribute selectors
      against the state rules' three — so reordering this block cannot undo it; and it is
@@ -721,36 +721,19 @@ const CARET_OVERRIDES = `
      the row's optical middle — and it is small enough that no metric it could be derived
      from would be more honest than the number.
 
-     IT IS AN ICON, NOT A GLYPH. A checkbox spelled with U+2610 / U+2611 takes its weight,
-     its corner radius, its tick and its size from whichever font the platform resolves, it
-     renders at the text's own stroke weight beside prose set in the same face, and it reads
-     as ASCII art of a checkbox rather than as a control. What draws it instead is the same
-     vendored Lucide set the rest of the product wears (doc/agents/icon-rules.md), masked
-     into ::before exactly the way the file-reference glyph below is: square unchecked,
-     square-check-big checked, square-slash for the in-progress [/]. One property
-     separates the three — the mask image — because the box, the ink, the size and the
-     placement are the shared rule's, so a state cannot drift in anything but its shape.
-     A mask rather than an <img> or a background-image is what lets the ink stay a palette
-     token: the glyph is painted by background-color through the mask, so it inherits the
-     row's ramp the way Icon.svelte's SVGs inherit currentColor.
+     IT IS A STAMP. A box is passive, so it is pressed into the line as a stamp's pocket is
+     (styles/atoms.css): a floor a step off the paper, shaded under its top wall, with a lit
+     lip below. ::before is the pocket and ::after the mark pressed into it, a check for
+     [x] and a slash for [/]; an unchecked box has no mark. Both are drawn in CSS rather
+     than typed as U+2610 / U+2611, so no font decides their weight or shape.
 
-     The INK AND THE STATE. This is the one member of the marker family that WCAG 1.4.11
-     binds, because it reports STATE rather than merely marking structure, and that is why
-     it spends --ink-soft where every other marker here spends --ink-faint. The faint ink
-     is pinned above 3:1 only on --paper and --paper-raised (theme.test.ts); the diff
-     surface is --paper-sunk and its 2-8% ink mixes, where --ink-faint falls under the
-     floor 1.4.11 sets for a non-text indicator in the lightest palettes. One step up the
-     ramp clears it everywhere (doc/agents/svelte-rules.md § CSS-token discipline), and
-     theme.test.ts pins exactly that on the surface the checkbox actually renders on. The
-     faint markers around it are structure rather than state and are left as they are;
-     that gap is real but it is the epic's, not this rule's.
-
-     The three states are then told apart by SHAPE — an empty square, a square with a check,
-     a square with a slash — on one ink. Separating them by hue or by an opacity step
-     instead would fail outright for a colour-blind reader whatever a contrast ratio said
-     about it (the failure mode EXC-863 records one rule family over), so shape is what makes
-     the distinction palette-independent and is why this block still needs no subdue
-     constant.
+     The INK AND THE STATE. The box reports STATE, so WCAG 1.4.11's 3:1 floor binds it, and
+     the pocket alone cannot carry that: a floor a step off the paper measures barely above
+     1:1. So the pocket's contact edge and the marks spend --ink-soft, which theme.test.ts
+     pins above 3:1 on the surface the box renders on; --ink-faint falls under it there in
+     the lightest palettes (doc/agents/svelte-rules.md § CSS-token discipline). The three
+     states differ by shape on one ink, never by hue or opacity, so a colour-blind reader
+     loses nothing.
 
      No transition — the diff surface swaps state instantly (svelte-rules § Motion). */
   [data-content] [data-line] [data-md-checkbox] {
@@ -764,19 +747,42 @@ const CARET_OVERRIDES = `
     inset-block-start: calc((100% - var(--checkbox-size)) / 2);
     width: var(--checkbox-size);
     height: var(--checkbox-size);
-    background-color: var(--ink-soft);
-    -webkit-mask: ${CHECKBOX_MASKS.unchecked} no-repeat center / contain;
-    mask: ${CHECKBOX_MASKS.unchecked} no-repeat center / contain;
+    border-radius: 0.22em;
+    background-color: var(--well-floor);
+    box-shadow:
+      inset 0 0 0 1px var(--ink-soft),
+      inset 0 2px 2px -1px var(--rubber-press),
+      var(--well-lip);
     user-select: none;
   }
-  [data-content] [data-line] [data-md-checkbox="checked"]::before {
-    -webkit-mask-image: ${CHECKBOX_MASKS.checked};
-    mask-image: ${CHECKBOX_MASKS.checked};
+  /* An L stood on its corner, nudged up so the tick, not its box, sits in the middle. */
+  [data-content] [data-line] [data-md-checkbox="checked"]::after {
+    content: "";
+    position: absolute;
+    inset-inline-start: calc(1.5ch - 0.15em);
+    inset-block-start: calc(50% - 0.33em);
+    box-sizing: border-box;
+    width: 0.3em;
+    height: 0.52em;
+    border: solid var(--ink-soft);
+    border-width: 0 0.11em 0.11em 0;
+    rotate: 45deg;
+    user-select: none;
   }
-  [data-content] [data-line] [data-md-checkbox="slashed"]::before {
-    -webkit-mask-image: ${CHECKBOX_MASKS.slashed};
-    mask-image: ${CHECKBOX_MASKS.slashed};
+  /* Leaning as the bracket's own slash does. */
+  [data-content] [data-line] [data-md-checkbox="slashed"]::after {
+    content: "";
+    position: absolute;
+    inset-inline-start: calc(1.5ch - 0.055em);
+    inset-block-start: calc(50% - 0.26em);
+    width: 0.11em;
+    height: 0.52em;
+    border-radius: 0.055em;
+    background-color: var(--ink-soft);
+    rotate: 45deg;
+    user-select: none;
   }
+  [data-content] [data-line] [data-md-checkbox] ~ [data-md-checkbox]::after,
   [data-content] [data-line] [data-md-checkbox] ~ [data-md-checkbox]::before {
     content: none;
   }
@@ -808,12 +814,13 @@ const CARET_OVERRIDES = `
      and height stay auto so the aspect ratio survives whichever cap bites first, which is
      also why no object-fit is needed — with one axis free there is nothing to letterbox.
 
-     The hairline border is legibility rather than decoration: plan images are overwhelmingly
+     The frame is legibility rather than decoration: plan images are overwhelmingly
      screenshots and diagrams on a white ground, which dissolves into --paper with no edge in
-     the light scheme. The ink mix is the same color-mix idiom the panel fill and the scroll
-     thumb use, so it carries correct contrast in both schemes from one declaration. The
-     radius is the chip family's, so the figure reads as part of the same vocabulary. No
-     transition — the diff surface swaps state instantly (svelte-rules § Motion).
+     the light scheme. It is the table's raised pad, with the picture set into its face
+     inside a --code-bezel rim, so everything the plan embeds stands on it alike. The padding
+     is the rim: a replaced element's content stops at its content box, and its corners
+     round at the pad's radius less the rim. No transition — the diff surface swaps state
+     instantly (svelte-rules § Motion).
 
      user-select: none is the one declaration here that is not about looks, and it is
      load-bearing: without it the epic's copy contract breaks. Blink emits an image's alt
@@ -840,8 +847,15 @@ const CARET_OVERRIDES = `
     height: auto;
     margin-block: 0.35rem;
     margin-inline-start: var(--caret-card-inset);
-    border: 1px solid color-mix(in lab, var(--paper-sunk), var(--ink) 14%);
-    border-radius: var(--radius);
+    padding: var(--code-bezel);
+    border-radius: var(--pad-radius);
+    background-color: var(--body);
+    background-image: linear-gradient(var(--pad-top), transparent 28px), var(--grain);
+    background-size: auto, 128px;
+    background-blend-mode: normal, soft-light;
+    box-shadow:
+      inset 0 2px 2px -1px var(--rubber-gloss),
+      var(--pad-stand);
   }
   [data-content] [data-line] [data-md-image][hidden] {
     display: none;
@@ -1036,14 +1050,14 @@ const CARET_OVERRIDES = `
      column is at least the pane's width, so a band on a fitting block runs edge to edge, and
      at most the widest line, which is the scroll range; max-width caps the visible card.
 
-     The card is also the block's frame, built as a table's is: a raised bezel of the window's
-     --body round a pane sunk into it, on --table-floor. Everything that draws it stays put
-     while the code scrolls, because none of it is content: the bezel is the border, which
-     the scrollport stops at; the floor is a background clipped to the padding box; the pane's
-     edges are inset shadows, which paint inside the border. That is also why the float's rim
-     is a strip over the border box rather than --float-rim, which as an inset shadow would
-     light the pane's top edge instead of the bezel's. A wide block's scrollbar sits inside
-     the pane, below its last line. */
+     The card is also the block's frame, built as a table's is: a raised rubber pad of the
+     window's --body, its code in a scoop on its face, on --table-floor. Everything that draws
+     it stays put while the code scrolls, because none of it is content: the pad's rim is the
+     border, which the scrollport stops at; the floor is a background clipped to the padding
+     box; the scoop's shading is inset shadows, which paint inside the border; the pad's side
+     and cast shadow are outer ones. That is also why the pad's gloss is a strip over the
+     border box rather than an inset shadow, which would light the scoop's top edge instead
+     of the rim's. A wide block's scrollbar sits inside the scoop, below its last line. */
   [data-content] > [data-code-card] {
     grid-column: 1 / -1;
     display: grid;
@@ -1054,18 +1068,16 @@ const CARET_OVERRIDES = `
     max-width: var(--caret-read-max);
     margin-inline: var(--caret-card-inset);
     border: var(--code-bezel) solid transparent;
-    border-radius: var(--radius-lg);
+    border-radius: var(--pad-radius);
     background:
       linear-gradient(var(--table-floor), var(--table-floor)) padding-box,
-      linear-gradient(var(--float-rim-ink) 1px, transparent 1px) border-box,
+      linear-gradient(var(--rubber-gloss), transparent 2px) border-box,
+      linear-gradient(var(--pad-top), transparent 28px) border-box,
       var(--body);
     box-shadow:
-      var(--table-pane-sink),
-      inset 1px 0 var(--table-pane-edge),
-      inset -1px 0 var(--table-pane-edge),
-      inset 0 -1px var(--table-pane-edge),
-      0 0 0 1px var(--rule),
-      var(--float-low);
+      var(--scoop-top),
+      var(--scoop-foot),
+      var(--pad-stand);
     /* Over the rows either side, as the table card is, or they paint over its ring and drop
        shadow. */
     z-index: 1;
@@ -1240,10 +1252,10 @@ const CARET_OVERRIDES = `
      has its own spaces, so the breathing room inside one is text the author typed. The
      chip family's no-padding rule (EXC-867, EXC-869) lands here free.
 
-     AN INLAY. The table is built as the window is: a raised bezel of the window's --body
-     carries the header on its top rail, and the body rows sit in a pane sunk into it,
-     inset by the bezel's inline padding and the last row's end margin. The columns read
-     from their alignment, so no rules divide them. */
+     A RAISED PAD. The table is a rubber pad of the window's --body standing on the plan,
+     like a key: the header rides a lit band along its top, and the body rows sit in a
+     scoop on its face, inset by the pad's inline padding and the last row's end margin.
+     The columns read from their alignment, so no rules divide them. */
   [data-content] > [data-table-card] {
     grid-column: 1 / -1;
     display: grid;
@@ -1258,8 +1270,13 @@ const CARET_OVERRIDES = `
     margin-inline: var(--caret-card-inset);
     padding-inline: 0.25rem;
     background-color: var(--body);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--float-surface-low);
+    background-image: linear-gradient(var(--pad-top), transparent 28px), var(--grain);
+    background-size: auto, 128px;
+    background-blend-mode: normal, soft-light;
+    border-radius: var(--pad-radius);
+    box-shadow:
+      inset 0 2px 2px -1px var(--rubber-gloss),
+      var(--pad-stand);
     /* Over the rows either side, which the library positions and fills with the paper:
        left in the static layer, the bezel has its ring and drop shadow painted over above
        and below. A grid item takes a z-index without being positioned. */
@@ -1300,27 +1317,20 @@ const CARET_OVERRIDES = `
     ) {
     background-color: color-mix(in lab, var(--table-floor), var(--ink) 7%);
   }
-  /* The pane's edges, painted on its rows: a border or a wrapper would move the monospace
-     grid the search, drag ranges, vim motions and comment anchors resolve against. Every
-     row draws the crisp 1px sides; only the first takes the blurred sink under the rail
-     and only the last the bottom edge, since a blurred layer on every row would seam at
-     each row boundary. An annotation row on the table's last line is the pane's last
-     child, so the comment sits in the pane. */
-  [data-content] > [data-table-card] > :not([data-table-head], [data-table-rule]) {
-    box-shadow:
-      var(--pane-top-edge, 0 0 transparent),
-      var(--pane-bottom-edge, 0 0 transparent),
-      inset 1px 0 var(--table-pane-edge),
-      inset -1px 0 var(--table-pane-edge);
-  }
+  /* The scoop, painted on its rows: a border or a wrapper would move the monospace grid
+     the search, drag ranges, vim motions and comment anchors resolve against. Only the
+     first row takes the blurred shade under the rail, and the last takes the lit lip as
+     a gradient, since a blurred layer on every row would seam at each row boundary and a
+     blurred lip would glow up the last row's sides. An annotation row on the table's last
+     line is the pane's last child, so the comment sits in the scoop. */
   [data-content] > [data-table-card] > [data-table-rule] + * {
-    --pane-top-edge: var(--table-pane-sink);
-    border-top-left-radius: var(--radius);
-    border-top-right-radius: var(--radius);
+    box-shadow: var(--scoop-top);
+    border-top-left-radius: calc(var(--pad-radius) - 0.25rem);
+    border-top-right-radius: calc(var(--pad-radius) - 0.25rem);
   }
   /* The end rows' corners. A BANDED row is opaque, so a selected or cursored first row
      would paint square corners into the bezel's arc, and the last child's corners are the
-     pane's, concentric with the bezel (--radius plus the bezel's 0.25rem inset).
+     pane's, concentric with the pad (its radius less the 0.25rem rim).
 
      overflow: hidden on the card would do this in one declaration and is refused: it
      would make the card a scroll container, which is the one thing a table's card must
@@ -1330,13 +1340,13 @@ const CARET_OVERRIDES = `
      annotation row whenever someone comments on the table's final line, and it is then
      the row whose corners meet the card's. */
   [data-content] > [data-table-card] > :first-child {
-    border-top-left-radius: var(--radius);
-    border-top-right-radius: var(--radius);
+    border-top-left-radius: calc(var(--pad-radius) - 0.25rem);
+    border-top-right-radius: calc(var(--pad-radius) - 0.25rem);
   }
   [data-content] > [data-table-card] > :last-child {
-    --pane-bottom-edge: inset 0 -1px var(--table-pane-edge);
-    border-bottom-left-radius: var(--radius);
-    border-bottom-right-radius: var(--radius);
+    background-image: linear-gradient(to top, var(--scoop-lip), transparent 3px);
+    border-bottom-left-radius: calc(var(--pad-radius) - 0.25rem);
+    border-bottom-right-radius: calc(var(--pad-radius) - 0.25rem);
   }
   /* The rail's air above the header, and the bezel's rim below the pane: a margin there,
      so the pane's floor and bottom edge stop where the rim begins.

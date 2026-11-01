@@ -21,7 +21,6 @@
 import "@ui/support/mount.ts";
 
 import { describe, expect, test } from "bun:test";
-import { join } from "node:path";
 
 import { capture, flushUntil, render } from "@ui/support/mount.ts";
 import SettingSelect from "@/components/SettingSelect.svelte";
@@ -164,31 +163,19 @@ describe("SettingSelect panel", () => {
   });
 });
 
-// Asserted against the source, not a computed style: happy-dom applies no stylesheet, so
-// a mount cannot see which rule won. The same route shadcn-select.test.ts takes for
-// select-content's animation keys, and for the same reason — the DOM cannot tell the two
-// orderings apart, while the reader can.
-const componentSource = await Bun.file(join(import.meta.dir, "SettingSelect.svelte")).text();
-
 describe("SettingSelect row states", () => {
-  // Anchored on the opening brace so a rule is matched rather than any prose above it
-  // that happens to spell the same selector — the guard shadcn-select.test.ts gets from
-  // stripping comments first, which cannot work here (this file's are `/* */`).
-  const at = (selector: string) => componentSource.indexOf(`${selector} {`);
-
-  // The rule's body, up to its closing brace.
-  const rule = (selector: string) => {
-    const from = at(selector);
-    return from === -1 ? "" : componentSource.slice(from, componentSource.indexOf("}", from));
-  };
-
-  test("the highlight is the only fill, so the keyboard cursor shows on the selected row too", () => {
-    // [data-highlighted] is this listbox's keyboard cursor — bits-ui focuses no row — and
-    // bits-ui parks it on the selected row as the panel opens. A fill on the selection
-    // would hide the cursor there, so the selection is marked by its check and ink.
-    expect(rule(".setting-item[data-highlighted])")).toContain("background:");
-    expect(rule(".setting-item[data-selected])")).not.toBe("");
-    expect(rule(".setting-item[data-selected])")).not.toContain("background");
+  // Each row is a key row (styles/atoms.css): it rises under the listbox's cursor, and
+  // the chosen option latches down. bits-ui marks the chosen option [data-selected],
+  // which the key row reads as a cursor, so the chosen row is named by data-active.
+  test("the chosen option is the one row that latches down", async () => {
+    const { flush } = render(SettingSelect, baseProps);
+    flush();
+    await open(flush);
+    expect(option("split")?.classList.contains("key-row")).toBe(true);
+    expect(option("split")?.getAttribute("data-active")).toBe("true");
+    expect(option("unified")?.classList.contains("key-row")).toBe(true);
+    expect(option("unified")?.hasAttribute("data-active")).toBe(false);
+    await close(flush);
   });
 });
 

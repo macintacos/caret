@@ -989,7 +989,7 @@
 
 {#if safeMode}
   <div class="safe-mode-toast" role="status" aria-live="polite">
-    <span class="sm-dot" aria-hidden="true"></span>
+    <span class="sm-dot led" aria-hidden="true"></span>
     <div class="sm-text">
       <strong>Safe Mode</strong>
       <span>Ignoring input for a moment…</span>
@@ -1098,7 +1098,7 @@
   .shell > :global(.empty) {
     /* The gap the control row leaves above a plan's pane, which has none here. */
     margin: 0.25rem var(--pane-gap) 0;
-    border-radius: var(--radius-lg);
+    border-radius: var(--pane-radius);
     background: var(--paper);
     box-shadow:
       var(--pane-recess),
@@ -1106,11 +1106,6 @@
   }
   .shell > :global(.status-bar) {
     grid-row: 5;
-  }
-  /* DiffPlanView's read-only list of unanchored comments keeps the implicit row after
-     the status bar that auto-placement always gave it. */
-  .shell > :global(.legacy-list) {
-    grid-row: 6;
   }
 
   /* The hand-off's arrival, covering the content row OUT OF FLOW. The grid placement
@@ -1137,7 +1132,7 @@
     grid-row: 4 / 5;
     grid-column: 1 / 2;
     inset: 0 var(--pane-gap);
-    border-radius: var(--radius-lg);
+    border-radius: var(--pane-radius);
     pointer-events: none;
     background: var(--paper);
     box-shadow: var(--pane-recess);
@@ -1163,7 +1158,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    padding: 0 var(--bar-inset) calc(0.5rem - var(--well-pad));
+    padding: 0 var(--bar-inset) calc(0.5rem - var(--well-foot));
     background: none;
     color: var(--ink);
     border: 0;
@@ -1195,7 +1190,7 @@
   .safe-mode-toast {
     position: fixed;
     right: 1.25rem;
-    bottom: 1.25rem;
+    bottom: calc(var(--status-bar-h) + 1rem);
     z-index: 200;
     display: flex;
     align-items: center;
@@ -1210,11 +1205,7 @@
     animation: safe-mode-in var(--dur-state) var(--ease-out);
   }
   .sm-dot {
-    flex: none;
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 50%;
-    background: var(--accent);
+    --led: var(--attention);
     animation: safe-mode-pulse 1.2s ease-in-out infinite;
   }
   .sm-text {
@@ -1241,12 +1232,8 @@
     }
   }
   @keyframes safe-mode-pulse {
-    0%,
-    100% {
-      box-shadow: 0 0 0 0 var(--accent-wash);
-    }
     50% {
-      box-shadow: 0 0 0 4px transparent;
+      opacity: 0.45;
     }
   }
 </style>

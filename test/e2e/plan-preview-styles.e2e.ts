@@ -400,16 +400,17 @@ test("lists mark each depth and a task item shows its checkbox state", async ({ 
           return {
             checked: input.checked,
             indeterminate: input.indeterminate,
-            border: getComputedStyle(input).borderTopColor,
+            // The box is a stamped pocket: its contact edge is a layer of its shading.
+            edge: getComputedStyle(input).boxShadow,
           };
         };
         return [box("open task"), box("done task"), box("partial task")];
       }, PLAN_PREVIEW),
     )
     .toEqual([
-      { checked: false, indeterminate: false, border: inkSoft },
-      { checked: true, indeterminate: false, border: inkSoft },
-      { checked: false, indeterminate: true, border: inkSoft },
+      { checked: false, indeterminate: false, edge: expect.stringContaining(inkSoft) },
+      { checked: true, indeterminate: false, edge: expect.stringContaining(inkSoft) },
+      { checked: false, indeterminate: true, edge: expect.stringContaining(inkSoft) },
     ]);
 });
 

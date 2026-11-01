@@ -167,3 +167,16 @@ test("first-run onboarding invites a new user to enable notifications", async ({
   await expect(enable).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Notifications: default" })).toBeVisible();
 });
+
+test("first-run onboarding opens with focus on its panel, not an action", async ({
+  daemon,
+  page,
+}) => {
+  await page.addInitScript(initStub, "default");
+  await daemon.seed();
+  await page.goto("/");
+
+  const dialog = page.getByRole("dialog");
+  await expect(page.getByRole("button", { name: "Enable notifications" })).toBeVisible();
+  await expect(dialog).toBeFocused();
+});

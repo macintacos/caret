@@ -14,6 +14,8 @@
     /** The copy cap's name reads "Copy {copyName}", then "Copied {copyName}". It tells
      * this block's caps from every other block's in the tab order. */
     copyName: string;
+    /** The copy cap's tooltip at rest, naming what it copies. */
+    copyTooltip?: string;
     /** The wrap cap's name reads "Wrap long lines {wrapName}". */
     wrapName: string;
     /** The block overflows unwrapped, so wrapping it means something. A block that fits
@@ -40,6 +42,7 @@
   let {
     text,
     copyName,
+    copyTooltip = "Copy code",
     wrapName,
     wrappable,
     reflowed,
@@ -132,7 +135,7 @@
     {@render control({
       className: "code-copy",
       ariaLabel: copied ? `Copied ${copyName}` : `Copy ${copyName}`,
-      tooltip: copied ? "Copied" : "Copy code",
+      tooltip: copied ? "Copied" : copyTooltip,
       onclick: onCopyClick,
       glyph: copyGlyph,
     })}
@@ -141,27 +144,20 @@
 
 <style>
   .code-chrome-tray {
-    --well-pad: var(--well-pad-tight);
-    --tray-gap: var(--well-pad-tight);
+    --tray-gap: 4px;
     display: flex;
   }
 
   /* `.code-chrome-button` is handed to <Button>, so it carries no Svelte scope hash and is
-     styled via :global; the .float-chip cap supplies its face, press and latch (the wrap
-     toggle stays down while the block is wrapped). The cap's box-shadow suppresses the
-     Button's focus ring, so focus is shown by the explicit outline below. */
+     styled via :global; the .float-chip cap supplies its face, hover, press and latch (the
+     wrap toggle stays down while the block is wrapped). */
   :global(.code-chrome-button) {
     display: grid;
     place-items: center;
     width: 1.6rem;
     height: 1.6rem;
     padding: 0;
-    border-radius: var(--radius);
-  }
-
-  :global(.code-chrome-button:focus-visible) {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
+    border-radius: var(--key-radius);
   }
 
   .glyph {

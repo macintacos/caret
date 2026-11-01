@@ -355,6 +355,11 @@ describe("general comment optional vs required (EXC-762)", () => {
     expect(content()?.querySelector(".cm-content")?.getAttribute("aria-required")).toBe("false");
   });
 
+  test("sets the optional note a word apart from the label", async () => {
+    await mount({ ...baseProps, annotations: [lineAnn("a1", 3, 3, "tighten this")] });
+    expect(label()?.textContent?.trim()).toMatch(/\w \(optional\)$/);
+  });
+
   test("drops the optional label and marks the field required when nothing else will be sent", async () => {
     await mount(baseProps);
     expect(label()?.textContent).not.toContain("(optional)");

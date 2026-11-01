@@ -28,15 +28,17 @@ it back, without reaching for the mouse.
 A quiet, warm, near-monochrome code tool, polished in every detail and never in the way.
 Warm paper and ink in both schemes, hairline rules for structure, and one vivid amber
 accent: the `^` insertion mark the tool is named for, kept for the wordmark, the primary
-action, focus, and the cursor. Geist for UI text and Berkeley Mono for code, carets,
-paths, and the version tag. The chrome is tactile without being skeuomorphic. Controls are
-soft rubber caps sitting in shallow wells, and they sink into the well when pressed.
-Passive labels are pressed into the surface rather than raised from it. Menus float on
-soft layered shadows and modals on deep ones. No glass, no heavy gradients, no glows. One
-fast transition (160 ms, strong ease-out) confirms each change of state. Keyboard first,
-with vim keys and the key for each control shown on the control itself. Sound marks state
-changes and actions, on by default. A light and a dark theme always, following the system.
-Power features are there to be discovered, not shown all at once.
+action, and the text cursor. Geist for UI text and Berkeley Mono for code, carets, paths,
+and the version tag. The chrome is a silicone keypad, skeuomorphic on purpose. Controls
+are soft domed rubber keys that stand above rubber wells and travel down when pressed.
+Tables and code blocks stand on the plan as raised rubber pads. Passive labels are pressed
+into the surface rather than raised from it. Menus float on soft layered shadows and
+modals on deep ones. No glass and no heavy gradients; the only glows are lights, the
+status bar's LED and a latched key's corner light. One fast transition (160 ms, strong
+ease-out) confirms each change of state, and a key springs back from a press. Keyboard
+first, with vim keys and the key for each control shown on the control itself. Sound marks
+state changes and actions, on by default. A light and a dark theme always, following the
+system. Power features are there to be discovered, not shown all at once.
 
 In the terminal: say what changed and what to run next, put failures first, use the ANSI
 colour slots and plain Unicode symbols, and keep the lines the user knows.

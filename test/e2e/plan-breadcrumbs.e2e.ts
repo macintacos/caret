@@ -624,11 +624,16 @@ test("h steps out to the crumb before it once there is no submenu left to close"
   await expect(menu.getByRole("menuitem")).toHaveText(["Alpha"]);
   expect(await scrollTop(page)).toBe(parked);
 
-  // And from there the whole plan is a descent away.
+  // And from there the whole plan is a descent away. A submenu takes focus a frame or
+  // more after `l`, so each step waits for it before the next key.
   await page.keyboard.press("j");
   await page.keyboard.press("l");
+  const branches = page.locator(SUBMENU).first();
+  await expect(branches.getByRole("menuitem", { name: "Bravo" })).toBeFocused();
   await page.keyboard.press("j");
+  await expect(branches.getByRole("menuitem", { name: "Delta" })).toBeFocused();
   await page.keyboard.press("l");
+  await expect(page.locator(SUBMENU).nth(1).getByRole("menuitem", { name: "Echo" })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Delta", "Echo"]);
 });
@@ -1219,6 +1224,49 @@ test("a query matching nothing says so instead of emptying the panel", async ({ 
   await expect(page.locator(CRUMB)).toHaveText(["Alpha"]);
 });
 
+/** The contrast of a result's parent heading against the row's face. */
+function parentContrast(row: Locator): Promise<number> {
+  return row.evaluate((el) => {
+    const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    const parent = el.querySelector(".crumb-parent");
+    if (ctx === null || parent === null) throw new Error("no 2d context or parent heading");
+    const lum = (color: string) => {
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, 1, 1);
+      const lin = (c: number) =>
+        c / 255 <= 0.04045 ? c / 255 / 12.92 : ((c / 255 + 0.055) / 1.055) ** 2.4;
+      const [r = 0, g = 0, b = 0] = ctx.getImageData(0, 0, 1, 1).data;
+      return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+    };
+    const [hi, lo] = [
+      lum(getComputedStyle(parent).color),
+      lum(getComputedStyle(el).backgroundColor),
+    ].sort((x, y) => y - x) as [number, number];
+    return (hi + 0.05) / (lo + 0.05);
+  });
+}
+
+// GitHub dark is where the quietest ink sits furthest under a risen face.
+test("a risen or latched result's parent heading holds AA against the row", async ({
+  daemon,
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem("caret.theme.dark", "github-dark"));
+  await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
+  await page.keyboard.press("b");
+  await page.keyboard.press("/");
+  await expect(queryField(page)).toBeFocused();
+  await page.keyboard.type("r");
+  await expect(results(page)).toHaveText(["Bravo Alpha", "Charlie Bravo", "Foxtrot Alpha"]);
+  await expect(walkedTo(page)).toHaveText("Bravo Alpha");
+  const current = results(page).and(page.locator("[aria-current='location']"));
+  await expect(current).toHaveText("Charlie Bravo");
+
+  await expect.poll(() => parentContrast(walkedTo(page))).toBeGreaterThanOrEqual(4.5);
+  await expect.poll(() => parentContrast(current)).toBeGreaterThanOrEqual(4.5);
+});
+
 test("compare mode drops the bar, which tracks no heading there", async ({ daemon, page }) => {
   await daemon.seedVersions(2, [`# Alpha\n\n${filler("Alpha")}\n`, NESTED_PLAN]);
   await page.goto("/");
@@ -1543,4 +1591,32 @@ test("a level that comes back mid-exit leaves no hole where its chevron was", as
   // that level out of the widths the elision is computed from AND out of the cross-crumb
   // walk's reach, for as long as the node lives.
   await expect(page.locator(`${BAR} .crumb-leaving`)).toHaveCount(0);
+});
+
+/** A filter field's look: the cut it sits in and the wall focus firms. */
+const fieldLook = (field: Locator) =>
+  field.locator("xpath=ancestor::*[@data-slot='input-group'][1]").evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { floor: style.backgroundColor, cut: style.boxShadow, cursor: style.caretColor };
+  });
+
+// The bar's filter and the Contents panel filter the same headings, so a focused field
+// in either is cut and lit the same way.
+test("the filter field looks as the Contents filter's does under focus", async ({
+  daemon,
+  page,
+}) => {
+  await openFilterOn(page, daemon, NESTED_PLAN);
+  const ours = await fieldLook(queryField(page));
+  // Out of the filter, then out of the menu it opened from.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(filterPanel(page)).toHaveCount(0);
+  await expect(page.locator("[data-slot='dropdown-menu-content']")).toHaveCount(0);
+  await page.getByRole("button", { name: "Contents" }).click();
+  const contents = page
+    .locator(".plan-toc-panel")
+    .getByRole("combobox", { name: "Filter headings" });
+  await expect(contents).toBeFocused();
+  expect(ours).toEqual(await fieldLook(contents));
 });

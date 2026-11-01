@@ -383,6 +383,12 @@
     background-color: var(--chip-link);
     box-shadow: var(--chip-raised);
   }
+  /* A link is reached by Tab, and focus draws no ring, so it takes a reference chip's
+     hover. */
+  .plan-preview :global(a:not(:has(code, [data-file-ref], img)):is(:hover, :focus-visible)),
+  .plan-preview :global(a:is(:hover, :focus-visible) > code) {
+    background-color: var(--accent-wash);
+  }
   .plan-preview :global(:is(ul, ol)) {
     padding-inline-start: 2em;
   }
@@ -424,37 +430,48 @@
     list-style-type: none;
   }
   /* A loose list wraps the item in <p>; the box hangs in the marker gutter the hidden
-     bullet vacated. Drawn by hand so the only carrier of task state is on --ink-soft,
+     bullet vacated. The source view's stamped pocket and marks (coreStyles.ts), pinned by
+     coreStyles.test.ts: drawn by hand so the only carrier of task state is on --ink-soft,
      not the UA's faint disabled greys; the three states differ by shape. */
   .plan-preview :global(input[data-task]) {
     appearance: none;
-    display: inline-grid;
-    place-content: center;
+    position: relative;
+    display: inline-block;
     inline-size: 0.9em;
     block-size: 0.9em;
     margin: 0 0.2em 0.25em -1.4em;
-    border: 1.5px solid var(--ink-soft);
-    border-radius: 3px;
+    border: 0;
+    border-radius: 0.22em;
+    background-color: var(--well-floor);
+    box-shadow:
+      inset 0 0 0 1px var(--ink-soft),
+      inset 0 2px 2px -1px var(--rubber-press),
+      var(--well-lip);
     opacity: 1;
     vertical-align: middle;
   }
-  .plan-preview :global(input[data-task]:is(:checked, :indeterminate)) {
-    background: var(--ink-soft);
-  }
   .plan-preview :global(input[data-task]:checked::after) {
     content: "";
-    inline-size: 0.22em;
-    block-size: 0.45em;
-    margin-block-start: -0.1em;
-    border: solid var(--paper);
-    border-width: 0 2px 2px 0;
+    position: absolute;
+    inset-inline-start: calc(50% - 0.15em);
+    inset-block-start: calc(50% - 0.33em);
+    box-sizing: border-box;
+    width: 0.3em;
+    height: 0.52em;
+    border: solid var(--ink-soft);
+    border-width: 0 0.11em 0.11em 0;
     rotate: 45deg;
   }
   .plan-preview :global(input[data-task]:indeterminate::after) {
     content: "";
-    inline-size: 0.5em;
-    block-size: 2px;
-    background: var(--paper);
+    position: absolute;
+    inset-inline-start: calc(50% - 0.055em);
+    inset-block-start: calc(50% - 0.26em);
+    width: 0.11em;
+    height: 0.52em;
+    border-radius: 0.055em;
+    background-color: var(--ink-soft);
+    rotate: 45deg;
   }
   .plan-preview :global(blockquote) {
     padding-inline-start: 1em;
@@ -471,10 +488,10 @@
     background: var(--ink-soft);
   }
   /* display: block lets a wide table scroll without a wrapper element. The source view's
-     inlay: a bezel of --body carries the header on its top rail and the body cells sit in
-     a pane sunk into it, inset by the bezel's padding. Separate borders, since a collapsed
-     one stays behind a pinned header row as a see-through slit; no block-axis scroll,
-     since that row can overhang the bottom by a rounding pixel. */
+     pad: a raised pad of --body carries the header on a lit band along its top, and the
+     body cells sit in a scoop on its face, inset by the pad's padding. Separate borders,
+     since a collapsed one stays behind a pinned header row as a see-through slit; no
+     block-axis scroll, since that row can overhang the bottom by a rounding pixel. */
   .plan-preview :global(table) {
     display: block;
     width: max-content;
@@ -484,9 +501,14 @@
     border-collapse: separate;
     border-spacing: 0;
     padding: 0 0.25rem 0.25rem;
-    border-radius: var(--radius-lg);
+    border-radius: var(--pad-radius);
     background-color: var(--body);
-    box-shadow: var(--float-surface-low);
+    background-image: linear-gradient(var(--pad-top), transparent 28px), var(--grain);
+    background-size: auto, 128px;
+    background-blend-mode: normal, soft-light;
+    box-shadow:
+      inset 0 2px 2px -1px var(--rubber-gloss),
+      var(--pad-stand);
     font-variant-numeric: tabular-nums;
     view-timeline: --table block;
   }
@@ -528,41 +550,35 @@
     padding: 0.375em 0.8em;
     vertical-align: baseline;
   }
-  /* The pane's edges, composed per cell so each lands only on the sides facing out. The
-     first row's sink is a gradient rather than the source view's blurred shadow: a blur
-     fades at every cell's sides and notches the shade at each column boundary. */
+  /* The scoop, painted per cell as gradients: its shade along the first row's top and its
+     lit lip along the last row's foot. A blurred shadow would fade at every cell's sides
+     and notch the shade at each column boundary. */
   .plan-preview :global(td) {
     background-color: var(--table-floor);
-    box-shadow:
-      var(--pane-top-edge, 0 0 transparent),
-      var(--pane-bottom-edge, 0 0 transparent),
-      var(--pane-start-edge, 0 0 transparent),
-      var(--pane-end-edge, 0 0 transparent);
+    background-image:
+      var(--scoop-top-fill, linear-gradient(transparent, transparent)),
+      var(--scoop-foot-fill, linear-gradient(transparent, transparent));
   }
   .plan-preview :global(tbody > tr:first-child > td) {
-    --pane-top-edge: inset 0 1px var(--table-pane-edge);
-    background-image: linear-gradient(var(--table-pane-sink-shade), transparent 4px);
+    --scoop-top-fill: linear-gradient(
+      color-mix(in srgb, var(--scoop-shade) 55%, transparent),
+      transparent 0.375rem
+    );
   }
   .plan-preview :global(tbody > tr:last-child > td) {
-    --pane-bottom-edge: inset 0 -1px var(--table-pane-edge);
-  }
-  .plan-preview :global(td:first-child) {
-    --pane-start-edge: inset 1px 0 var(--table-pane-edge);
-  }
-  .plan-preview :global(td:last-child) {
-    --pane-end-edge: inset -1px 0 var(--table-pane-edge);
+    --scoop-foot-fill: linear-gradient(to top, var(--scoop-lip), transparent 3px);
   }
   .plan-preview :global(tbody > tr:first-child > td:first-child) {
-    border-start-start-radius: var(--radius);
+    border-start-start-radius: calc(var(--pad-radius) - 0.25rem);
   }
   .plan-preview :global(tbody > tr:first-child > td:last-child) {
-    border-start-end-radius: var(--radius);
+    border-start-end-radius: calc(var(--pad-radius) - 0.25rem);
   }
   .plan-preview :global(tbody > tr:last-child > td:first-child) {
-    border-end-start-radius: var(--radius);
+    border-end-start-radius: calc(var(--pad-radius) - 0.25rem);
   }
   .plan-preview :global(tbody > tr:last-child > td:last-child) {
-    border-end-end-radius: var(--radius);
+    border-end-end-radius: calc(var(--pad-radius) - 0.25rem);
   }
   .plan-preview :global(tbody > tr + tr > td) {
     border-block-start: 1px solid var(--table-floor-rule);
@@ -587,25 +603,24 @@
     overflow-x: auto;
     overflow-wrap: normal;
   }
-  /* The source view's code card: a bezel of --body round a pane sunk into it, drawn by the
-     border, the backgrounds and the inset shadows, which stay put while the code scrolls.
+  /* The source view's code card: a raised pad of --body, its code in a scoop on its face,
+     drawn by the border, the backgrounds and the shadows, which stay put while the code
+     scrolls.
      The inline-end padding keeps the top-right copy and wrap chrome off the code. */
   .plan-preview :global([data-source-code] + pre) {
     padding-block: 0.6rem;
     padding-inline: 2ch 4.5rem;
     border: var(--code-bezel) solid transparent;
-    border-radius: var(--radius-lg);
+    border-radius: var(--pad-radius);
     background:
       linear-gradient(var(--table-floor), var(--table-floor)) padding-box,
-      linear-gradient(var(--float-rim-ink) 1px, transparent 1px) border-box,
+      linear-gradient(var(--rubber-gloss), transparent 2px) border-box,
+      linear-gradient(var(--pad-top), transparent 28px) border-box,
       var(--body);
     box-shadow:
-      var(--table-pane-sink),
-      inset 1px 0 var(--table-pane-edge),
-      inset -1px 0 var(--table-pane-edge),
-      inset 0 -1px var(--table-pane-edge),
-      0 0 0 1px var(--rule),
-      var(--float-low);
+      var(--scoop-top),
+      var(--scoop-foot),
+      var(--pad-stand);
     font-family: var(--font-mono);
     font-size: 0.9em;
     line-height: var(--leading-relaxed);
@@ -635,8 +650,18 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
+  /* The source view's image pad (coreStyles.ts), pinned by coreStyles.test.ts. */
   .plan-preview :global(img) {
     max-width: 100%;
+    padding: var(--code-bezel);
+    border-radius: var(--pad-radius);
+    background-color: var(--body);
+    background-image: linear-gradient(var(--pad-top), transparent 28px), var(--grain);
+    background-size: auto, 128px;
+    background-blend-mode: normal, soft-light;
+    box-shadow:
+      inset 0 2px 2px -1px var(--rubber-gloss),
+      var(--pad-stand);
   }
   /* A resolved reference: coreStyles.ts's reference chip and glyph, pinned by
      coreStyles.test.ts. */

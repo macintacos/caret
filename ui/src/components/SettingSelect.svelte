@@ -148,7 +148,8 @@
       <Select.Item
         value={option.value}
         data-setting-option={option.value}
-        class="setting-item"
+        data-active={option.value === value ? "true" : undefined}
+        class="setting-item key-row"
         onHighlight={() => (highlightedValue = option.value)}
         onUnhighlight={() => {
           // Guarded: bits-ui fires the arriving row's onHighlight and the leaving
@@ -232,24 +233,22 @@
 
   /* The panel carries the scope hash into the portal via these classes. Rows lay out as
      [label] [swatch] with the vendored check indicator in the trailing column the item's
-     own `pr-8` reserves. The highlight is the fill and the selection is the check in full
-     ink, so neither hides the other: bits-ui parks the highlight on the selected row as
-     the panel opens, and the highlight is the listbox's keyboard cursor. No amber: it is
-     kept for the primary action. */
+     own `pr-8` reserves. Each row is a key row (styles/atoms.css): the highlight, the
+     listbox's keyboard cursor, rises, and the chosen option latches down beside its
+     check. No amber: it is kept for the primary action. */
   :global(.setting-menu [data-select-viewport]) {
     /* The rows' own container: select-content ships no padding, where
        dropdown-menu-content ships p-1. On the content instead of the viewport this would
        also inset the two scroll buttons, which are full-width children of it. */
     padding: 0.25rem;
   }
+  :global(.setting-menu) {
+    border-radius: calc(var(--key-radius) + 0.25rem);
+  }
   :global(.setting-menu .setting-item) {
     color: var(--ink-soft);
   }
-  :global(.setting-menu .setting-item[data-highlighted]) {
-    background: var(--chip-hover);
-    color: var(--ink);
-  }
-  :global(.setting-menu .setting-item[data-selected]) {
+  :global(.setting-menu .setting-item:is([data-highlighted], [data-selected])) {
     color: var(--ink);
   }
   :global(.setting-menu .name) {

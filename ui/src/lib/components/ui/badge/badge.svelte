@@ -11,20 +11,20 @@
 			"text-xs font-medium",
 			// Leading icon
 			"[&>svg]:pointer-events-none [&>svg]:size-3",
-			// Motion + focus ring
-			"transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+			// Motion. A link badge's keyboard focus wears its hover, in place of stock's ring.
+			"transition-[color,box-shadow]",
 			// Invalid state
 			"aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
 		],
 		variants: {
 			variant: {
 				default:
-					"bg-primary text-primary-foreground [a&]:hover:bg-primary/90 border-transparent",
+					"bg-primary text-primary-foreground [a&]:hover:bg-primary/90 [a&]:focus-visible:bg-primary/90 border-transparent",
 				secondary:
-					"bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90 border-transparent",
+					"bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90 [a&]:focus-visible:bg-secondary/90 border-transparent",
 				destructive:
-					"bg-destructive [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/70 border-transparent text-white",
-				outline: "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
+					"bg-destructive [a&]:hover:bg-destructive/90 [a&]:focus-visible:bg-destructive/90 dark:bg-destructive/70 border-transparent text-white",
+				outline: "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground [a&]:focus-visible:bg-accent [a&]:focus-visible:text-accent-foreground",
 			},
 		},
 		defaultVariants: {

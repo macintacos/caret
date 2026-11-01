@@ -2438,7 +2438,7 @@
          picker's display toggles reclaim the right edge. -->
     <button
       type="button"
-      class="cwd mono"
+      class="cwd mono key-row"
       aria-label={`Copy path ${review.cwd} to the clipboard`}
       onclick={() => onCopyCwd(review.cwd)}>{shortCwd(review.cwd)}</button>
   {/if}
@@ -2453,6 +2453,7 @@
 >
   <div
     class="plan-pane"
+    data-surface={surface}
     data-scrolled={paneScrolled || undefined}
     data-more-below={paneMoreBelow || undefined}
   >
@@ -2812,6 +2813,9 @@
         {/if}
         {@render visualHint()}
       {/if}
+      {#if legacyAnnotations.length > 0}
+        <LegacyAnnotationList annotations={legacyAnnotations} />
+      {/if}
     </div>
     <span class="pane-lip" aria-hidden="true"></span>
   </div>
@@ -2861,10 +2865,6 @@
   />
 {/if}
 
-{#if legacyAnnotations.length > 0}
-  <LegacyAnnotationList annotations={legacyAnnotations} />
-{/if}
-
 <style>
   /* Placed over the room its block's padding holds open; the bottom padding, matching
      .plan-preview's block margin, is the gap before the next block. */
@@ -2888,9 +2888,9 @@
     display: flex;
     align-items: center;
     gap: 0.85rem;
-    /* Trimmed by the wells' bezel; the top bar's own bottom padding spaces the two
-       rows, and the 2px below keep the trays' lip off the pane's edge. */
-    padding: 0 var(--bar-inset) calc(0.5rem - var(--well-pad) + 2px);
+    /* Trimmed by the beds' pad; the top bar's own bottom padding spaces the two
+       rows, and the 2px below keep the beds' lip off the pane's edge. */
+    padding: 0 var(--bar-inset) calc(0.5rem - var(--well-foot) + 2px);
     /* The shared control height every child in the row sizes to. */
     --ctl-h: 1.75rem;
     /* As a .shell grid item this row defaults to min-width:auto, which floors it
@@ -2938,32 +2938,34 @@
   /* The working-directory path (EXC-807). It pins itself to the row's right edge
      with margin-left: auto rather than relying on a stretched neighbour: the picker
      stretches only in compare mode, and the breadcrumbs beside it are absent on a
-     heading-less plan. It shrinks to an ellipsis on narrow widths. */
+     heading-less plan. It shrinks to an ellipsis on narrow widths. A click copies it, so
+     it is a key lying flat in the row (.key-row): it rises under the pointer and goes
+     down when pressed. */
   .cwd {
     flex: 0 1 auto;
     margin-left: auto;
     min-width: 0;
-    /* Button reset; .mono owns the family, so only the size is inherited here. */
+    /* Button reset; .mono owns the family, so only the size is inherited here. The key
+       row paints the face. */
     appearance: none;
-    background: none;
     border: none;
-    padding: 0;
+    padding: 0 0.5rem;
+    line-height: var(--ctl-h);
     font-size: inherit;
-    /* Soft, not faint: --ink-faint falls under 4.5:1 on the body in some palettes. */
-    color: var(--ink-soft);
+    /* A neutral key's label (atoms.css --cap-label): plain --ink-soft falls just under
+       4.5:1 on the body in some palettes. */
+    color: color-mix(in lab, var(--ink-soft), var(--ink) 15%);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    /* Brightens on hover to read as clickable. */
     cursor: pointer;
-    transition: color var(--dur-state) var(--ease-out);
     /* Returning to plan review (leaving compare mode) re-mounts the path, so it
        reveals with the same quick slide-in the compare controls use when entering
        (VersionComparePicker's compare-reveal, EXC-808), and the switch reads
        symmetric in both directions. The global #app reduced-motion guard zeroes it. */
     animation: cwd-reveal var(--dur-state) var(--ease-out);
   }
-  .cwd:hover {
+  .cwd:is(:hover, :focus-visible) {
     color: var(--ink);
   }
   @keyframes cwd-reveal {
@@ -3004,10 +3006,16 @@
     display: flex;
     min-width: 0;
     min-height: 0;
-    border-radius: var(--radius-lg);
+    border-radius: var(--pane-radius);
     overflow: hidden;
-    background: var(--paper);
+    --plan-floor: var(--paper);
+    background: var(--plan-floor);
     box-shadow: var(--pane-lip);
+  }
+  /* Where the diff library draws the plan, the room past its rows takes the rows' floor,
+     so the pane reads as one surface. Keep in step with --diffs-bg (styles/diffview.css). */
+  .plan-pane:not([data-surface='preview']) {
+    --plan-floor: var(--paper-sunk);
   }
   /* The recess, on its own layer over the plan and over SearchDock (z-index 4), which
      tucks under the pane's top edge. An idle shade stays an inset layer so it fades
@@ -3043,7 +3051,7 @@
     min-width: 0;
     min-height: 0;
     overflow: auto;
-    background: var(--paper);
+    background: var(--plan-floor);
     /* What the preview multiplies each --text-* step by: the base font size the settings
        set over --text-base, 13.12px at the 16px root. Here rather than on the preview, so
        the overlays sized to its rows scale with them. */
@@ -3096,10 +3104,10 @@
   .preview-hover {
     position: absolute;
     pointer-events: none;
-    background: light-dark(
-      color-mix(in lab, var(--ink) 3%, transparent),
-      color-mix(in lab, var(--ink) 9%, transparent)
-    );
+    background: color-mix(in lab, var(--ink) 9%, transparent);
+  }
+  :global([data-theme="light"]) .preview-hover {
+    background: color-mix(in lab, var(--ink) 3%, transparent);
   }
   /* The keyboard visual selection's wash. */
   .preview-drag {
@@ -3140,8 +3148,11 @@
     justify-content: center;
     pointer-events: none;
   }
-  /* Keep in sync with coreStyles.ts's [data-utility-button] rules and the library's. */
+  /* The accent key's recipe from atoms.css, on no tray. Keep in sync with coreStyles.ts's
+     [data-utility-button] rules and the library's. */
   .preview-plus > button {
+    --plus-face: var(--accent);
+    --plus-side: color-mix(in lab, var(--plus-face), black var(--tinted-side));
     appearance: none;
     display: flex;
     align-items: center;
@@ -3153,23 +3164,35 @@
     line-height: inherit;
     border: none;
     border-radius: var(--radius);
-    background-color: var(--accent);
+    background-color: var(--plus-face);
+    background-image:
+      linear-gradient(var(--tinted-lift), transparent 32%, transparent 55%, var(--tinted-foot)),
+      var(--grain);
+    background-size: auto, 128px;
+    background-blend-mode: normal, soft-light;
     color: var(--accent-ink);
     fill: currentColor;
     cursor: pointer;
     pointer-events: auto;
+    translate: 0 calc(-1 * var(--key-rise));
     box-shadow:
-      0 1px 1.5px #0000003d,
-      0 2px 5px #0000004d,
-      inset 0 1px 0 #ffffff4d;
+      inset 0 2px 2px -1px var(--rubber-gloss),
+      0 calc(var(--key-side) - 1px) 0 var(--plus-side),
+      0 var(--key-side) 1px var(--plus-side),
+      0 calc(var(--key-side) * 5 / 3) calc(var(--key-side) * 2) -1px var(--rubber-cast-near),
+      0 calc(var(--key-side) * 8 / 3) calc(var(--key-side) * 14 / 3) calc(var(--key-side) * -2)
+        var(--rubber-cast);
   }
-  .preview-plus > button:hover {
-    background-color: var(--accent-bright);
+  .preview-plus > button:is(:hover, :focus-visible) {
+    --plus-face: var(--accent-face-hover);
   }
-  .preview-plus > button:focus-visible {
-    background-color: var(--accent-bright);
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
+  .preview-plus > button:active {
+    --plus-face: var(--accent);
+    translate: 0 var(--key-sink);
+    background-image: linear-gradient(var(--tinted-foot), transparent 40%), var(--grain);
+    box-shadow:
+      inset 0 2px 4px var(--rubber-press),
+      0 1px 1px var(--rubber-cast-near);
   }
 
   /* The zero-height sticky rail that carries the live readout. Sticky to the top

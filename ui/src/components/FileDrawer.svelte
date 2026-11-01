@@ -224,7 +224,7 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
-    border-radius: var(--radius-lg);
+    border-radius: var(--pane-radius);
     background: var(--paper);
     box-shadow: var(--pane-lip);
   }
@@ -245,8 +245,7 @@
   /* The lane's one affordance, and at rest it is invisible — the gap between the
      panes IS the visual. The handle fills that gap, so the pointer finds the grab
      between the two panes; hover and keyboard focus draw a 2px seam down its middle
-     in --ink-faint, so the affordance appears where the pointer already is. The
-     app-wide :focus-visible ring (base.css) is left alone. */
+     in --ink-faint, so the affordance appears where the pointer already is. */
   .fd-handle {
     position: absolute;
     z-index: 1;

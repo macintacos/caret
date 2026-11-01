@@ -95,62 +95,6 @@
   // reviewer choosing a pair can tell which end is current without counting.
   // `ordered`'s head rather than a re-derived max: it is already sorted newest-first.
   const currentVersion = $derived(ordered[0]?.version);
-
-  // Sliding pill for the segmented ToggleGroups: one shared pill rides behind the
-  // options rather than each painting its own background, so a CSS transform/width
-  // transition carries the selection and redirects mid-slide when a third option is
-  // clicked. mountSlider injects the pill and keeps it aligned to the active
-  // [data-state="on"] option via measurement — options are content-sized, so a
-  // pure-CSS index offset wouldn't line up.
-  let layoutTrack = $state<HTMLElement | null>(null);
-  let indicatorsTrack = $state<HTMLElement | null>(null);
-
-  function mountSlider(node: HTMLElement) {
-    const pill = document.createElement("span");
-    pill.className = "seg-pill";
-    pill.setAttribute("aria-hidden", "true");
-    node.prepend(pill);
-
-    const sync = () => {
-      const active = node.querySelector<HTMLElement>('[data-state="on"]');
-      if (!active) {
-        pill.style.opacity = "0";
-        return;
-      }
-      const nb = node.getBoundingClientRect();
-      const ab = active.getBoundingClientRect();
-      pill.style.width = `${ab.width}px`;
-      pill.style.height = `${ab.height}px`;
-      pill.style.transform = `translate(${ab.left - nb.left}px, ${ab.top - nb.top}px)`;
-      pill.style.opacity = "1";
-    };
-
-    // Place the pill on the initial selection without animating in from the corner.
-    pill.style.transition = "none";
-    let raf = requestAnimationFrame(() => {
-      sync();
-      raf = requestAnimationFrame(() => {
-        pill.style.transition = "";
-      });
-    });
-
-    // bits-ui flips data-state on the options when the value changes; re-measure
-    // then, and on any resize (font load, window resize).
-    const mo = new MutationObserver(sync);
-    mo.observe(node, { attributes: true, attributeFilter: ["data-state"], subtree: true });
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
-    ro?.observe(node);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      mo.disconnect();
-      ro?.disconnect();
-      pill.remove();
-    };
-  }
-
-  $effect(() => (layoutTrack ? mountSlider(layoutTrack) : undefined));
-  $effect(() => (indicatorsTrack ? mountSlider(indicatorsTrack) : undefined));
 </script>
 
 <!-- A version picker, reused for both base and target. The chevron rotation (right
@@ -195,7 +139,7 @@
         onValueChange={(v) => onPick(Number(v))}
       >
         {#each ordered as v (v.version)}
-          <DropdownMenuPrimitive.RadioItem value={String(v.version)} class="vitem">
+          <DropdownMenuPrimitive.RadioItem value={String(v.version)} class="vitem key-row">
             {#snippet children({ checked })}
               <span class="check" aria-hidden="true">
                 {#if checked}<Icon name="check" size={15} />{/if}
@@ -304,7 +248,6 @@
           type="single"
           size="sm"
           aria-label="Diff layout"
-          bind:ref={layoutTrack}
           bind:value={
             () => diffStyle, (v) => { if (v) onSetDiffStyle(v as DiffStyle); }
           }
@@ -320,7 +263,6 @@
         type="single"
         size="sm"
         aria-label="Diff indicators"
-        bind:ref={indicatorsTrack}
         bind:value={
           () => diffIndicators, (v) => { if (v) onSetDiffIndicators(v as DiffIndicators); }
         }
@@ -400,7 +342,7 @@
     gap: 0.3rem;
     height: var(--ctl-h);
     padding: 0 0.55rem;
-    border-radius: var(--radius);
+    border-radius: var(--key-radius);
     font-size: var(--text-sm);
     line-height: 1;
   }
@@ -423,21 +365,18 @@
     transform: rotate(0deg);
   }
 
-  /* The version menu is portalled, so its rows are reached through :global. The
-     amber check on --accent is the DropdownMenu's own selection language. */
+  /* The version menu is portalled, so its rows are reached through :global. */
   :global(.vmenu .vitem) {
     display: flex;
     align-items: center;
     gap: 0.4rem;
     padding: 0.3rem 0.5rem;
-    border-radius: var(--radius);
     font-size: var(--text-sm);
     color: var(--ink-soft);
     cursor: pointer;
     outline: none;
   }
   :global(.vmenu .vitem[data-highlighted]) {
-    background: var(--chip-hover);
     color: var(--ink);
   }
   :global(.vmenu .vitem[aria-checked="true"]) {
@@ -447,7 +386,7 @@
     flex: none;
     display: inline-flex;
     width: 15px;
-    color: var(--accent);
+    color: var(--ink-soft);
   }
   /* The "(current)" marker on the newest row: the quietest ink in the menu, so it
      reads as an annotation on the version rather than a second label competing
@@ -455,6 +394,11 @@
   :global(.vmenu .cur) {
     color: var(--ink-faint);
     font-size: var(--text-xs);
+  }
+  /* On a risen row only --ink holds AA: the risen face is the cursor's only mark, so it
+     steps far off the menu. */
+  :global(.vmenu .vitem[data-highlighted] .cur) {
+    color: var(--ink);
   }
 
   /* The display-option cluster (layout + indicators), pushed to the trailing edge
@@ -466,52 +410,13 @@
     margin-left: auto;
   }
 
-  /* One well with a rubber cap on the active option — neutral, no amber — sized to
-     --ctl-h so it matches the compare Button and the version pickers. The cap is NOT
-     painted per-option: one shared .seg-pill (injected by mountSlider) rides behind
-     them and slides, and position: relative anchors it. The well's floor and shade
-     come from styles/atoms.css. */
-  .compare-picker :global([data-slot="toggle-group"]) {
-    position: relative;
-    gap: var(--well-pad-tight);
-    height: var(--ctl-h);
-    padding: var(--well-pad-tight);
-    border-radius: calc(var(--radius) + var(--well-pad-tight));
-  }
-  /* The sliding active-option pill, behind the option labels; it wears the cap's face
-     from styles/atoms.css. Its transition
-     redirects mid-slide when a new option is clicked, so rapid switches stay fluid;
-     the #app reduced-motion guard zeroes it, so it simply snaps. */
-  .compare-picker :global(.seg-pill) {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 0;
-    opacity: 0;
-    border-radius: var(--radius);
-    pointer-events: none;
-    transition:
-      transform var(--dur-state) var(--ease-out),
-      width var(--dur-state) var(--ease-out);
-  }
+  /* Each option is a key in one bed (styles/atoms.css), as tall as the compare Button
+     and the version pickers. */
   .compare-picker :global([data-slot="toggle-group-item"]) {
-    position: relative;
-    z-index: 1;
-    height: 100%;
+    height: var(--ctl-h);
     min-width: 0;
-    border: 0;
     padding: 0 0.55rem;
-    background: transparent;
-    box-shadow: none;
-    color: var(--ink-soft);
-    border-radius: var(--radius);
     font-size: var(--text-sm);
-  }
-  .compare-picker :global([data-slot="toggle-group-item"]:hover:not([data-state="on"])) {
-    color: var(--ink);
-  }
-  .compare-picker :global([data-slot="toggle-group-item"][data-state="on"]) {
-    color: var(--ink);
   }
 
   /* Entering compare mode reveals both clusters together with a quick slide-in

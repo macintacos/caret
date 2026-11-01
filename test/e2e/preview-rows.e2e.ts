@@ -161,6 +161,33 @@ function rowStarts(page: Page, line: number): Promise<string[]> {
   );
 }
 
+/** The opacity of the hover band's wash, or null while no band is drawn. */
+const bandAlpha = (page: Page) =>
+  page.evaluate((band) => {
+    const el = document.querySelector(band);
+    if (el === null) return null;
+    const alpha = /[/,]\s*([\d.]+)\)$/.exec(getComputedStyle(el).backgroundColor);
+    return alpha === null ? 1 : Number(alpha[1]);
+  }, PREVIEW_HOVER);
+
+test("the hover band is a fainter wash on light paper than on dark", async ({ daemon, page }) => {
+  const { prose } = await openRows(daemon, page);
+  const [y] = await rowsOf(page, prose);
+  if (y === undefined) throw new Error("PROSE renders no row");
+  const x = await textX(page);
+  await page.mouse.move(x, y);
+  await expect.poll(() => bandHolds(page, y)).toBe(true);
+  const dark = (await bandAlpha(page)) ?? 0;
+
+  // The repaint drops the band until the pointer next moves, so each try moves it.
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(async () => {
+    await page.mouse.move(x, y - 1);
+    await page.mouse.move(x, y);
+    expect(await bandAlpha(page)).toBeLessThan(dark);
+  }).toPass();
+});
+
 test("the hover band follows the pointer from row to row and under a wheel scroll", async ({
   daemon,
   page,

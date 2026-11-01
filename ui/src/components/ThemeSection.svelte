@@ -17,7 +17,7 @@
   // filtered — so each row is rendered only when its field is present.
   //
   // It renders ONLY inside the settings pane, and leans on that: the row rhythm and
-  // the recessed group (row padding, the hairline separator) are declared once in
+  // the group's bed (row padding, the floor and the cut) are declared once in
   // SettingsDialog's `.settings :global(…)` rules, which reach these rows through the
   // component boundary — so this component is not self-sufficient elsewhere. A second
   // consumer moves that rhythm into a caret-owned stylesheet keyed on
@@ -36,7 +36,6 @@
     FieldDescription,
     FieldGroup,
     FieldLabel,
-    FieldSeparator,
   } from "$lib/components/ui/field/index.js";
   import {
     settingLabelId,
@@ -91,8 +90,7 @@
 
 <div class="theme-section" data-theme-section>
   <FieldGroup class="fields">
-    {#each rows as field, i (field.key)}
-      {#if i > 0}<FieldSeparator />{/if}
+    {#each rows as field (field.key)}
       <Field
         orientation="horizontal"
         data-field={field.key}
@@ -116,7 +114,7 @@
                    trigger would be named "Dark theme In use", a name that silently moves
                    between the two rows on an OS flip. The resolved-state line below is
                    how that reaches a screen reader instead. -->
-              <Badge class="in-use stamp" aria-hidden="true">In use</Badge>
+              <Badge class="in-use tag" aria-hidden="true">In use</Badge>
             {/if}
           </FieldLabel>
           <FieldDescription>{field.description}</FieldDescription>
@@ -195,24 +193,19 @@
     align-items: center;
     gap: 0.45rem;
   }
-  /* IN USE: a stamp (styles/atoms.css) in the eyebrow's uppercase treatment. The label is
-     written in sentence case and uppercased here, so it is announced as words rather
-     than spelled out. It unmounts from one row and mounts in the other as the live
-     scheme changes, which replays the reveal on arrival. */
+  /* IN USE: a tag (styles/atoms.css). The label is written in sentence case and the tag
+     uppercases it, so it is announced as words rather than spelled out. It unmounts from
+     one row and mounts in the other as the live scheme changes, which replays the reveal
+     on arrival. */
   .theme-section :global(.in-use) {
     border: 0;
-    padding: 0.1rem 0.45rem;
-    font-size: var(--text-2xs);
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
     animation: in-use-in var(--dur-state) var(--ease-out);
   }
   .resolved,
   .upload-hint {
     margin: 0;
     font-size: var(--text-xs);
-    color: var(--ink-faint);
+    color: var(--ink-soft);
   }
 
   .theme-upload {

@@ -292,8 +292,8 @@
 
   // Kill the library's own transitions under reduced motion. They live inside its
   // shadow root, which the global `#app` rule in styles/base.css cannot reach, and
-  // `unsafeCSS` is the library's documented way in. Nothing else is injected here
-  // — the palette rides CSS custom properties, which inherit through the boundary.
+  // `unsafeCSS` is the library's documented way in. The palette rides CSS custom
+  // properties, which inherit through the boundary.
   //
   // The bare `*` that svelte-rules.md forbids in the light DOM is right here: the
   // shadow root IS the bound, so this reaches the library's own elements and
@@ -303,6 +303,77 @@
       *, *::before, *::after {
         transition: none !important;
         animation: none !important;
+      }
+    }
+  `;
+
+  // Each row is the kit's key row (.key-row in styles/atoms.css), which the shadow root
+  // keeps out, so it wears the --key-row-* tokens directly: flat at rest, risen under the
+  // pointer or the keyboard's focus, latched down when chosen or pressed. Every state
+  // keeps five shadow layers so a change of state transitions. On a latched face
+  // --ink-faint falls under 3:1, so a row's glyphs step up to --ink-soft there; a row's
+  // note is text, so it takes --ink-soft, to hold AA on the card. The risen face steps
+  // further: there the glyphs take a neutral key's label ink and the note --ink. The
+  // library flags a row focused on a click's focus too, so the rise keys on
+  // :focus-visible rather than that flag, and the library's ring never draws: the page's
+  // ringless focus (styles/base.css) stops at the shadow root.
+  const TREE_KEY_ROWS = `
+    [data-type="item"] {
+      background-size: auto, 128px;
+      background-blend-mode: normal, soft-light;
+      box-shadow:
+        inset 0 2px 2px -1px transparent,
+        0 0 0 transparent,
+        0 0 0 transparent,
+        0 0 0 transparent,
+        0 0 0 transparent;
+      transition:
+        translate var(--dur-state) var(--ease-spring),
+        background-color var(--dur-state) var(--ease-out),
+        box-shadow var(--dur-state) var(--ease-out);
+    }
+    [data-type="item"]:is(:hover, :focus-visible) {
+      z-index: 1;
+      background-color: var(--neutral-face-hover);
+      background-image: var(--key-row-up-image);
+      box-shadow: var(--key-row-up);
+      translate: 0 calc(-1 * var(--key-rise));
+    }
+    [data-type="item"]:is(:active, [data-item-selected="true"]) {
+      background-color: var(--neutral-face-down);
+      background-image: var(--key-row-down-image);
+      box-shadow: var(--key-row-down);
+      translate: 0 var(--key-sink);
+      transition-timing-function: var(--ease-out);
+    }
+    [data-type="item"][data-item-selected="true"]:is(:hover, :focus-visible):not(:active) {
+      background-color: var(--neutral-face-hover);
+    }
+    [data-type="item"]:active {
+      background-color: var(--neutral-face-press);
+    }
+    [data-type="item"]:is(:active, [data-item-selected="true"])
+      :is([data-item-section="icon"], [data-icon-token]) {
+      color: var(--ink-soft);
+    }
+    [data-item-section="decoration"] {
+      color: var(--ink-soft);
+    }
+    [data-type="item"]:is(:hover, :focus-visible):not(:active)
+      :is([data-item-section="icon"], [data-icon-token]) {
+      color: color-mix(in lab, var(--ink-soft), var(--ink) 15%);
+    }
+    [data-type="item"]:is(:hover, :focus-visible):not(:active) [data-item-section="decoration"] {
+      color: var(--ink);
+    }
+    [data-type="item"],
+    [data-type="item"]::before {
+      outline-style: none;
+    }
+    @media (forced-colors: active) {
+      [data-type="item"]:focus-visible {
+        outline: 2px solid transparent;
+        outline-offset: -2px;
       }
     }
   `;
@@ -483,7 +554,7 @@
       renaming: false,
       search: false,
       renderRowDecoration: rowDecoration,
-      unsafeCSS: TREE_REDUCED_MOTION,
+      unsafeCSS: TREE_KEY_ROWS + TREE_REDUCED_MOTION,
     });
     tree = owner;
     // The web-components entry is imported for its registration side effect, so
@@ -600,7 +671,7 @@
              on it instead of being dropped to the body. -->
         <button
           type="button"
-          class="ft-refresh ref-icon-btn"
+          class="ft-refresh ref-icon-btn key-row"
           aria-label="Re-read this folder"
           aria-disabled={refreshing}
           aria-busy={refreshing}
@@ -665,7 +736,7 @@
   }
   .ft-elided,
   .ft-stale {
-    color: var(--ink-faint);
+    color: var(--ink-soft);
     white-space: nowrap;
   }
   /* The live region is always mounted, so with no failure to report it has to
@@ -674,15 +745,18 @@
   .ft-stale:empty {
     margin-inline-end: calc(-1 * var(--ref-header-gap));
   }
-  /* The same button idiom FilePreview's header uses (.fp-close): a real control
-     at header scale. It takes no tint of its own — this is not a way out of the
-     card — so it sits in the header's faint ink and comes up to full ink under
-     the pointer. The focus ring is the app's global `button:focus-visible` in
-     styles/base.css. */
+  /* A key lying flat in the header (.key-row): a bare glyph at rest that rises as a
+     key under the pointer and sinks when pressed. It takes no tint of its own —
+     this is not a way out of the card — so it sits in --ink-soft and comes up to
+     full ink under the pointer or the keyboard's focus. Its face is 20px, so the
+     invisible target round it shrinks to keep 24px. */
   .ft-refresh {
-    background: none;
-    color: var(--ink-faint);
-    transition: color var(--dur-state) var(--ease-out);
+    width: 1.25rem;
+    height: 1.25rem;
+    color: var(--ink-soft);
+  }
+  .ft-refresh::after {
+    inset: -2px;
   }
   .ft-refresh:hover,
   .ft-refresh:focus-visible {
@@ -722,23 +796,23 @@
 
      The face is caret's mono: a file tree IS a listing of paths, and every other
      path in this app — the plan's references, the preview's gutter, the cwd —
-     reads mono. Amber reaches only the selected row (--accent-wash) and the focus
-     ring, which is the one job the token vocabulary assigns it. */
+     reads mono. No amber reaches it; the chosen row latches down on the neutral
+     pressed face, as a chosen segment does. The row faces match
+     TREE_KEY_ROWS, so the library's own hover and selection paint the same face.
+     The scrollbar is the plan's code-block bar. */
   .ft-tree :global(file-tree-container) {
     flex: 1;
     min-width: 0;
     --trees-bg-override: var(--paper-raised);
-    --trees-bg-muted-override: var(--paper-sunk);
+    --trees-bg-muted-override: var(--neutral-face-hover);
     --trees-fg-override: var(--ink);
     --trees-fg-muted-override: var(--ink-faint);
     --trees-accent-override: var(--ink-soft);
     --trees-border-color-override: var(--rule);
-    --trees-selected-bg-override: var(--accent-wash);
+    --trees-selected-bg-override: var(--neutral-face-down);
     --trees-selected-fg-override: var(--ink);
-    --trees-selected-focused-border-color-override: var(--accent);
-    --trees-focus-ring-color-override: var(--accent);
     --trees-indent-guide-bg-override: var(--rule);
-    --trees-scrollbar-thumb-override: var(--ink-faint);
+    --trees-scrollbar-thumb-override: color-mix(in lab, var(--paper-sunk), var(--ink) 45%);
     /* The library tints each file icon by file type — a green markdown glyph, a
        red npm one. caret's palette gives every hue a job (svelte-rules.md), and
        "this file is markdown" is not one of them; worse, green and red already
@@ -747,7 +821,7 @@
     --trees-file-icon-color: var(--ink-faint);
     --trees-font-family-override: var(--font-mono);
     --trees-font-size-override: var(--text-2xs);
-    --trees-border-radius-override: var(--radius);
+    --trees-border-radius-override: var(--key-radius);
   }
   .ft-message {
     font-family: var(--font-mono);

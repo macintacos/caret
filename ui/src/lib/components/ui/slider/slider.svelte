@@ -58,7 +58,7 @@ get along, so we shut typescript up by casting `value` to `never`.
 				index={thumb.index}
 				aria-labelledby={labelledBy}
 				aria-valuetext={valueText}
-				class="relative size-3 rounded-full border border-ring bg-background ring-ring/50 transition-[color,box-shadow] after:absolute after:-inset-2 hover:ring-3 focus-visible:ring-3 focus-visible:outline-hidden active:ring-3 block shrink-0 select-none disabled:pointer-events-none disabled:opacity-50"
+				class="relative size-3 rounded-full border bg-background transition-[color,box-shadow] after:absolute after:-inset-2 hover:ring-3 focus-visible:outline-hidden active:ring-3 block shrink-0 select-none disabled:pointer-events-none disabled:opacity-50"
 			/>
 		{/each}
 	{/snippet}

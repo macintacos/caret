@@ -661,6 +661,73 @@ describe("FilePreview scroll loading", () => {
   });
 });
 
+// The pane's edges shade the code under them, as the plan pane's do: its foot while
+// more of the file lies below the view, and the gutter's edge while the code is
+// scrolled sideways under it.
+describe("FilePreview scroll edges", () => {
+  const morePending = (target: HTMLElement) =>
+    target.querySelector("[data-file-preview]")?.hasAttribute("data-more-below");
+
+  test("marks the pane while loaded rows lie below the view, and clears it at the end", async () => {
+    // The whole 70-line file arrives in one window, so only scrolling can reach its end.
+    const { target, scrollTo } = await openScrollable(70, 70);
+    scrollTo(ROW_PX);
+    expect(await until(() => morePending(target) === true)).toBe(true);
+
+    scrollToBottom(target, scrollTo);
+    expect(await until(() => morePending(target) === false)).toBe(true);
+  });
+
+  test("keeps the pane marked at the region's end while unloaded file lies below", async () => {
+    const { target } = await openFailedScroll();
+    expect(await until(() => morePending(target) === true)).toBe(true);
+  });
+
+  test("marks the pane when a resize leaves rows below the view, with no scroll", async () => {
+    // happy-dom's observer never reports, so this one reports when the lane is resized.
+    const observed: ResizeObserverCallback[] = [];
+    const real = globalThis.ResizeObserver;
+    globalThis.ResizeObserver = class {
+      constructor(report: ResizeObserverCallback) {
+        observed.push(report);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+    try {
+      const { target } = await openScrollable(70, 70);
+      const region = target.querySelector(".fp-code") as HTMLElement;
+      let lane = 80 * ROW_PX;
+      Object.defineProperty(region, "clientHeight", { get: () => lane, configurable: true });
+      region.dispatchEvent(new Event("scroll"));
+      expect(await until(() => morePending(target) === false)).toBe(true);
+
+      lane = VIEWPORT_PX;
+      for (const report of observed) report([], {} as ResizeObserver);
+      expect(await until(() => morePending(target) === true)).toBe(true);
+    } finally {
+      globalThis.ResizeObserver = real;
+    }
+  });
+
+  test("marks the code region while it is scrolled sideways", async () => {
+    const { target } = await openScrollable(70, 70);
+    const region = target.querySelector(".fp-code") as HTMLElement;
+    let left = 0;
+    Object.defineProperty(region, "scrollLeft", { get: () => left, configurable: true });
+    const scrollSideways = (to: number) => {
+      left = to;
+      region.dispatchEvent(new Event("scroll"));
+    };
+
+    scrollSideways(40);
+    expect(await until(() => region.hasAttribute("data-scrolled-x"))).toBe(true);
+    scrollSideways(0);
+    expect(await until(() => !region.hasAttribute("data-scrolled-x"))).toBe(true);
+  });
+});
+
 describe("FilePreview keyboard reach", () => {
   test("the code region takes a tab stop and names the file it holds", async () => {
     // EXC-972: the panel has no other focusable control, and Chrome and Safari keep

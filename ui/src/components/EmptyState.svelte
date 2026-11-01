@@ -85,7 +85,7 @@
       </p>
     {/if}
   </EmptyHeader>
-  <div class="hint metric">listening &middot; polling /api/reviews</div>
+  <div class="hint stamp metric">listening &middot; polling /api/reviews</div>
   {#if connected}
     <p
       class="carrot-fact"
@@ -141,17 +141,13 @@
     vertical-align: -0.15em;
     margin-right: 0.3rem;
   }
-  /* The status pill shares the badge vocabulary: --paper-raised on a --rule
-     hairline, with the mono family and tabular figures of the .metric atom. */
+  /* A passive status, so a stamp, in the .metric atom's mono family and figures. */
   .hint {
     display: inline-flex;
     align-items: center;
     font-size: var(--text-xs);
     line-height: var(--leading-none);
     letter-spacing: 0.02em;
-    color: var(--ink-faint);
-    background: var(--paper-raised);
-    border: 1px solid var(--rule);
     border-radius: 99px;
     padding: 0.22rem 0.7rem;
   }
@@ -204,7 +200,7 @@
     text-underline-offset: 0.2em;
     pointer-events: auto;
   }
-  .carrot-fact a:hover {
+  .carrot-fact a:is(:hover, :focus-visible) {
     color: var(--ink-soft);
   }
 </style>

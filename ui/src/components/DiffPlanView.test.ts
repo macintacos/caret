@@ -485,6 +485,22 @@ describe("DiffPlanView annotation display", () => {
     expect(target.querySelector('[data-annotation-card="g1"]')).toBeNull();
   });
 
+  test("the unanchored list scrolls with the plan, inside its pane", async () => {
+    // Mounted beside the view's root instead, the list lands in the shell's grid as an
+    // extra row below the status bar, and the whole page scrolls to reach it.
+    const legacy = {
+      id: "g1",
+      blockId: "b0",
+      startOffset: 0,
+      endOffset: 5,
+      quote: "Title",
+      comment: "legacy note",
+    };
+    const { target } = render(DiffPlanView, props({ annotations: [legacy] }));
+    await until(() => target.querySelector(".legacy-list") != null);
+    expect(target.querySelector(".plan-pane .diff-plan .legacy-list")).not.toBeNull();
+  });
+
   test("shows no annotation cards in compare mode", async () => {
     const { target } = await enterCompareMode([lineAnn()]);
     expect(target.querySelector('[data-annotation-card="ln1"]')).toBeNull();

@@ -14,6 +14,7 @@
   import { syncInlineImages } from "$lib/diffview/inlineImages.ts";
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "$lib/diffview/options.ts";
   import { followCursorLine, scrollToLine } from "$lib/diffview/scroll.ts";
+  import { holdUtilityWhileFocused } from "$lib/diffview/utilityFocus.ts";
   import { tagCursorRow } from "$lib/diffview/lineCursor.ts";
   import { clearSearchHighlights, paintSearchHighlights } from "$lib/diffview/searchHighlight.ts";
   import type { SearchMatch } from "$lib/diffview/planSearch.ts";
@@ -276,6 +277,12 @@
       options: libOptions,
       annotations,
     });
+  });
+  // After the render above, which attaches the shadow root.
+  $effect(() => {
+    const root = container?.shadowRoot;
+    if (root == null) return;
+    return holdUtilityWhileFocused(root);
   });
 
   // The library highlights the doc as one "markdown" file and attaches only that

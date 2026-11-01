@@ -55,37 +55,17 @@
 </div>
 
 <style>
-  /* The track is one well (styles/atoms.css); the chosen segment is the only cap in
-     it. */
-  .segmented :global([data-slot="toggle-group"]) {
-    gap: var(--well-pad-tight);
-    padding: var(--well-pad);
-    border-radius: calc(var(--radius) + var(--well-pad));
-  }
-  /* A segment: icon + label, quiet ink-soft at rest. Height matches the
-     SettingSelect trigger beside it in the same pane, so the rows keep one rhythm. */
+  /* A segment: icon + label on a key (styles/atoms.css), the chosen one latched down. */
   .segmented :global([data-slot="toggle-group-item"]) {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
+    /* Matches the SettingSelect trigger beside it in the same pane. */
     height: 1.85rem;
+    /* The settings Field nudges every role="radio" inside it down a pixel (its mt-px is
+       meant for a radio beside its label), which would sit this key low in its bed. */
+    margin: 0;
     padding: 0 0.6rem;
-    border-radius: var(--radius);
     font-size: var(--text-sm);
-    color: var(--ink-soft);
-    transition:
-      background-color var(--dur-state) var(--ease-out),
-      color var(--dur-state) var(--ease-out);
-  }
-  /* Hover on an unpressed segment is a bare ink wash over the well floor. */
-  .segmented :global([data-slot="toggle-group-item"][data-state="off"]:hover) {
-    background: var(--ink-wash);
-    color: var(--ink);
-  }
-  /* The chosen segment is the cap, in full ink, so which mode is on reads at a
-     glance without opening anything. */
-  .segmented :global([data-slot="toggle-group-item"][data-state="on"]) {
-    color: var(--ink);
-    font-weight: 600;
   }
 </style>

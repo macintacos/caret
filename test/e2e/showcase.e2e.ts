@@ -526,10 +526,10 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
       quoteBar: pick("[data-content] [data-line] [data-md-quote]", (el) => {
         return getComputedStyle(el, "::before").backgroundColor;
       }),
-      // The checkbox is a masked Lucide square, so its ink rides the background the mask
-      // is painted through rather than any border or glyph colour.
+      // The checkbox is a stamped pocket, so its ink is the pocket's contact edge, a layer
+      // of its shading rather than any border or glyph colour.
       checkbox: pick("[data-content] [data-line] [data-md-checkbox]", (el) => {
-        return getComputedStyle(el, "::before").backgroundColor;
+        return getComputedStyle(el, "::before").boxShadow;
       }),
       rule: pick("[data-content] [data-line][data-md-rule]", (el) => {
         return getComputedStyle(el).backgroundImage;
@@ -552,7 +552,7 @@ test("a vendor palette resolves every decoration's paint", async ({ daemon, page
   expect(inkSoft).not.toBe(inkFaint);
   expect(paint.bullet).toBe(listMarker);
   expect(paint.quoteBar).toBe(inkSoft);
-  expect(paint.checkbox).toBe(inkSoft);
+  expect(paint.checkbox).toContain(inkSoft);
   expect(paint.rule).toContain(inkSoft);
   // The table's hairline is a step off its pane's floor, so it tracks a flavour bump with
   // everything else and stays clear of the ink ramp.

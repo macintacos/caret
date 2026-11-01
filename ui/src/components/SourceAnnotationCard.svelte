@@ -214,16 +214,26 @@
   .card:not(.editing) {
     cursor: pointer;
   }
-  .card:not(.editing):hover {
-    background: color-mix(in lab, var(--paper-raised), var(--ink) 3%);
+  /* A control inside the card under keyboard focus lifts it as the pointer over it does. */
+  .card:not(.editing):is(:hover, :has(:focus-visible)) {
+    background: color-mix(in lab, var(--paper-raised), var(--ink) 8%);
   }
 
   /* Centered so a taller action button and the one-line trigger read as one row. */
   .head {
+    --head-pad-y: 0.15rem;
+    --head-pad-end: 0.3rem;
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.15rem 0.3rem 0.15rem 0.35rem;
+    padding: var(--head-pad-y) var(--head-pad-end) var(--head-pad-y) 0.35rem;
+  }
+  /* The header's controls round concentric with the card's corners they sit in. */
+  .head :global(button.chip) {
+    border-radius: calc(var(--radius-lg) - var(--head-pad-y));
+  }
+  .actions :global(button.danger) {
+    border-radius: calc(var(--radius-lg) - var(--head-pad-end));
   }
   /* Grows to fill the head so the whole line is a click target. The compound
      button.chip selector outranks the copied button's utilities. */
@@ -311,13 +321,13 @@
     padding: 0.25rem 0.3rem;
     color: var(--ink-faint);
   }
-  :global(button.danger:hover) {
+  :global(button.danger:is(:hover, :focus-visible)) {
     color: var(--danger);
   }
   /* A wobble previewing the destructive action. The keyframes are declared -global-
      so the name still resolves from inside the :global() hover selector — Svelte only
      rewrites animation names for component-scoped rules. */
-  :global(button.danger:hover .icon) {
+  :global(button.danger:is(:hover, :focus-visible) .icon) {
     animation: trash-shake var(--dur-state) var(--ease-out);
   }
   @keyframes -global-trash-shake {
@@ -379,7 +389,7 @@
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
   }
-  .comment :global(a:hover) {
+  .comment :global(a:is(:hover, :focus-visible)) {
     color: var(--accent-bright);
     text-decoration-style: solid;
   }

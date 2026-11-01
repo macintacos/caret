@@ -21,7 +21,7 @@ it. User theme files follow
 | Text | `--ink` |
 | Secondary text | `--ink-soft`, then `--ink-faint` |
 | Separator | `--rule`, `--rule-strong` |
-| Accent | `--accent`; `--accent-bright` for hovers, `--accent-ink` for text on the accent, `--accent-wash` for tints |
+| Accent | `--accent`; `--accent-bright` for link and text hovers, `--accent-ink` for text on the accent, `--accent-wash` for tints |
 | Destructive | `--danger` |
 | Status | `--ok`, `--danger`, and `--attention` for novelty (new, unread) |
 | Highlight bands | `--mark`, `--mark-active`, `--mark-orphan` |
@@ -30,14 +30,21 @@ it. User theme files follow
 
 The derived tier, colours a palette implies rather than sets (`--chip`, `--chip-hover`,
 `--ink-wash`, `--attention-wash`, `--code-panel`, the window's `--body`, a table's
-`--table-floor`, `--table-floor-rule` and `--table-head-ink`, and the tactile kit's
-`--well-floor`, `--field-floor`, `--group-floor`, `--neutral-face` steps,
-`--danger-face-hover`, the switch's `--knob-face`, `--knob-face-hover`,
+`--table-floor`, `--table-floor-rule` and `--table-head-ink`, a raised pad's lit band
+`--pad-top` and side `--pad-side`, and the tactile kit's `--well-floor`, `--field-floor`,
+`--group-floor` (the settings beds and nav, the modal footer shelf, and a dialog's
+read-only cuts), `--field-edge-focus` (a focused field's lit wall, `--ink-faint`), the
+`--neutral-face` steps (with `--neutral-face-press`, the face a press takes), a crumb's
+risen face `--crumb-face-hover`, the key row's `--key-row-up`, `--key-row-up-image`,
+`--key-row-down` and `--key-row-down-image`, the accent and danger keys' hover and press
+faces `--accent-face-hover`, `--accent-face-press`, `--danger-face-hover` and
+`--danger-face-press`, the switch's `--knob-face`, `--knob-face-hover`,
 `--knob-face-down`, `--knob-edge` and `--switch-on`, the meter's `--meter-off`, and the
 `--float-surface-low`, `-mid` and `-high` composites), is mixed in
 `ui/src/styles/derived.css`. In light, the top bar, control row and status bar re-cut
-`--well-floor` from `--body`, so their wells stay visible on it. shadcn-svelte's token
-names map onto these roles in `ui/src/styles/shadcn-bridge.css`.
+`--well-floor` from `--body`, so a stamp's or a count chip's pocket stays visible on it.
+Focus has no token of its own, since it wears each control's hover faces. shadcn-svelte's
+token names map onto these roles in `ui/src/styles/shadcn-bridge.css`.
 
 ## Type, motion, radius, depth
 
@@ -47,28 +54,51 @@ All in `ui/src/styles/tokens.css`:
   font files ship; each stack falls back to the platform.
 - **Size:** the `--text-2xs` … `--text-xl` ramp, and the role-keyed `--leading-*` tokens.
   The reading base is the 15px on `<body>` in `ui/src/styles/base.css`.
-- **Motion:** `--dur-state` and `--ease-out` for every state transition, `--dur-travel`
-  for the plan's scroll. `ui/src/lib/motion.test.ts` pins the set.
-- **Radius:** `--radius` for controls, `--radius-lg` for panels, `99px` for badges.
-- **Depth:** the tactile geometry is hand-written here, its alphas keyed per scheme: the
-  wells (`--well-pad`, `--well-pad-tight`, `--well-shade`, `--well-lip`), the caps
-  (`--rim-*`, `--dome-*`, the `--press-*` set, the `--tinted-*` set that lights an amber
-  or danger face, `--grain`), the sockets (`--socket-shade`, `--socket-ring`,
-  `--count-shade`), the floats (`--float-rim`, `--float-low`, `--float-mid`,
-  `--float-high`) and `--shadow-chip` for small hints, `--float-rim-ink` (the colour of
-  `--float-rim`'s lit edge, for a float that draws it as a border, such as the plan's code
-  card), the submit tray's `--cap-submit-h`, the comment stamp's `--stamp-*` strengths,
-  `--unsent-floor` (the share of `--attention` in an unsent comment's well, 16% dark and
-  8% light), the switch knob's `--knob-hi` and `--knob-lo`, the plan pane's
-  `--pane-recess`, `--pane-lip` and `--pane-shade`, a table's pane (`--table-pane-edge`
-  for its crisp 1px edges, `--table-pane-sink` for the shade under the rail plus the
-  pane's top edge, and `--table-pane-sink-shade` for that shade's colour, which the
-  preview's gradient spends too), a code block's `--code-bezel` (the bezel's width, which
-  the copy and wrap tray steps in by), the pressed-in label shadow `--label-pressed`, the
-  plan's `--chip-stamped` and `--chip-raised`, and `--panel-recess` for the recessed
-  groups in Settings and the Contents peek. `--shadow-card` still comes from the palette.
+- **Motion:** `--dur-state` and `--ease-out` for every state transition, `--ease-spring`
+  for a key's return from a press, `--dur-travel` for the plan's scroll.
+  `ui/src/lib/motion.test.ts` pins the set.
+- **Radius:** `--radius` for fields and menu rows, `--radius-lg` for panels, `99px` for
+  badges. The keypad has its own: `--key-radius` for keys, `--nub-radius` for keycaps and
+  the switch's key, `--pad-radius` for a table's or a code block's pad, and
+  `--pane-radius` for the plan pane. `--composer-radius` rounds the comment composer: its
+  tray's corner plus `--composer-inset`, its padding.
+- **Depth:** the tactile geometry is hand-written here, its alphas keyed per scheme:
+  - the beds: `--well-pad` (the gap round a key), `--well-top` and `--well-foot` (the pads
+    above and below a key, which take its rise and side), `--tray-gap`, and `--bed-shade`;
+    a stamp's pocket: `--well-shade` and `--well-lip`;
+  - the keys: `--key-side` (the depth of a key's rubber side, which its rise, press and
+    cast shadow scale from), `--key-rise` (how far a resting key stands above its place)
+    and `--key-sink` (how far below it a press takes the key), the last two 0 under
+    reduced motion. `--pad-stand`, `--chip-raised` and `--float-low` scale from it too;
+    the `--rubber-*` set that lights and shades a neutral key (`--rubber-lift`,
+    `--rubber-foot`, `--rubber-side`, `--rubber-gloss`, `--rubber-cast-near`,
+    `--rubber-cast`, `--rubber-press`); the `--tinted-*` set for an amber or danger key
+    (`--tinted-lift`, `--tinted-foot`, `--tinted-side`); `--press-shade` and
+    `--press-blur` for a ghost control's press; `--grain`; and the submit tray's
+    `--cap-submit-h`;
+  - the keycaps: `--nub-side` for a keycap's side and `--nub-cast` for its shadow;
+  - the window: `--chrome-light`, the faint light over the chrome; the plan pane's
+    `--pane-recess`, `--pane-lip` and `--pane-shade`;
+  - the pads: `--pad-stand` for a table's or a code block's side and cast shadow, the
+    scoop's `--scoop-top` (the shade under its top edge), `--scoop-foot` (its lit lip),
+    and their colours `--scoop-shade` and `--scoop-lip`, which the preview's gradients
+    spend too; a code block's `--code-bezel` (its pad's rim, which the copy and wrap tray
+    steps in by); and the pressed-in label shadow `--label-pressed`;
+  - the sockets (`--socket-shade`, `--count-shade`), the comment stamp's `--stamp-*`
+    strengths, and `--unsent-floor` (the share of `--attention` in an unsent comment's
+    well, 16% dark and 8% light);
+  - the floats (`--float-rim`, `--float-rim-ink`, `--float-low`, `--float-mid`,
+    `--float-high`) and `--shadow-chip` for small hints;
+  - the plan's `--chip-stamped` and `--chip-raised`, `--panel-recess` for text fields,
+    copy boxes and the Contents peek, and `--field-wall`, the wall of a focused field's
+    cut that `--field-edge-focus` lights: the lower in dark, the upper in light.
+
+  `--checkbox-size`, a task box's side, lives in the `:host` of
+  `ui/src/lib/diffview/coreStyles.ts`.
+
+  `--shadow-card` still comes from the palette.
 - **Layout:** `--pane-gap` (6px), the inset around the plan pane, and `--status-bar-h`
-  (2rem), the status bar's height, are in `ui/src/styles/layout.css`.
+  (2.25rem), the status bar's height, are in `ui/src/styles/layout.css`.
 
 ## Terminal
 

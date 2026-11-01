@@ -10,6 +10,7 @@
   // keyboard so the plan's own shortcuts don't fire.
   import { type CommentIndexEntry, filterComments, highlightMatches } from "$lib/feedback.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
+  import Icon from "@/components/Icon.svelte";
 
   interface Props {
     /** Whether the navigator is shown. The status strip's tally button toggles it. */
@@ -135,7 +136,7 @@
   >
     <header class="nav-head">
       <span class="nav-title metric">{title}</span>
-      <span class="nav-count metric">{comments.length}</span>
+      <span class="nav-count metric stamp">{comments.length}</span>
       <button type="button" class="nav-close" aria-label="Close comments" onclick={onClose}>
         <span aria-hidden="true">&times;</span>
       </button>
@@ -144,7 +145,7 @@
     <div class="nav-search">
       <input
         bind:this={searchEl}
-        class="nav-input metric"
+        class="nav-input field-well"
         type="text"
         placeholder="Search comments…"
         aria-label="Search comments"
@@ -157,14 +158,16 @@
         <!-- A general entry has no range to name, so "General" takes the reference
              slot — the vocabulary the unsent-comments guard already uses. -->
         <span class="nav-item-ref metric">{entry.general ? "General" : entry.label}</span>
-        {#if entry.version != null}<span class="nav-version-tag metric">v{entry.version}</span>{/if}
+        {#if entry.version != null}<span class="nav-version-tag tag">v{entry.version}</span>{/if}
         <!-- Keyed on the version being absent from the diff, not on the row
              being inert: a general row is inert too, but its version may well be
              on screen — it just has no line to jump to, which "General" says. -->
         {#if entry.version != null && entry.side == null && !entry.general}<span
-            class="nav-unlinked-tag">not in diff</span
+            class="nav-unlinked-tag tag">not in diff</span
           >{/if}
-        {#if entry.draft}<span class="nav-draft-tag metric">draft</span>{/if}
+        {#if entry.draft}<span class="nav-unsent-tag"
+            ><Icon name="message-square-more" size={11} />unsent</span
+          >{/if}
       </span>
       <!-- Kept on one line so no whitespace text node splits the segments — the
            text is white-space: pre-wrap. -->
@@ -194,14 +197,13 @@
                  that goes nowhere. tabindex="-1" keeps it out of the tab order — a
                  nonnegative one is the a11y_no_noninteractive_tabindex anti-pattern
                  — and the list is reached with j/k or Enter from the search. -->
-            <li class="nav-item" data-nav-row tabindex="-1">{@render rowBody(entry)}</li>
+            <li class="nav-item key-row" class:draft={entry.draft} data-nav-row tabindex="-1">{@render rowBody(entry)}</li>
           {:else}
             <li>
               <button
                 type="button"
-                class="nav-item"
+                class="nav-item key-row"
                 data-nav-row
-                class:active={entry.id === activeId}
                 class:draft={entry.draft}
                 aria-current={entry.id === activeId ? "true" : undefined}
                 onclick={() => onReveal(entry)}
@@ -269,10 +271,9 @@
 
   .nav-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 0.5rem;
     padding: 0.55rem 0.7rem 0.45rem;
-    border-bottom: 1px solid var(--rule);
   }
   .nav-title {
     font-size: var(--text-2xs);
@@ -282,9 +283,10 @@
     color: var(--ink-faint);
   }
   .nav-count {
+    padding: 0 0.4rem;
+    border-radius: 99px;
     font-size: var(--text-2xs);
     font-weight: 600;
-    color: var(--ink-soft);
   }
   .nav-close {
     margin-left: auto;
@@ -302,25 +304,19 @@
     border-radius: var(--radius);
     cursor: pointer;
   }
-  .nav-close:hover {
+  .nav-close:is(:hover, :focus-visible) {
     color: var(--ink);
-  }
-  .nav-close:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
   }
 
   .nav-search {
-    padding: 0.5rem 0.6rem;
-    border-bottom: 1px solid var(--rule);
+    padding: 0.1rem 0.6rem 0.5rem;
   }
   .nav-input {
     width: 100%;
     padding: 0.35rem 0.5rem;
     font-size: var(--text-sm);
     color: var(--ink);
-    background: var(--paper-sunk);
-    border: 1px solid var(--rule);
+    border: none;
     border-radius: var(--radius);
   }
   .nav-input::placeholder {
@@ -328,7 +324,6 @@
   }
   .nav-input:focus-visible {
     outline: none;
-    border-color: var(--ring);
   }
 
   .nav-list {
@@ -344,42 +339,27 @@
     width: 100%;
     text-align: left;
     padding: 0.4rem 0.5rem;
-    background: none;
     border: none;
-    border-left: 2px solid transparent;
-    border-radius: var(--radius);
+    color: inherit;
     cursor: pointer;
   }
-  .nav-item:hover {
-    background: var(--paper-sunk);
-  }
-  /* No pointer and no hover lift, so nothing promises a click that leads nowhere.
-     The focus ring stays, since j/k still moves through these rows. */
+  /* No pointer, so nothing promises a click that leads nowhere. It still rises as a key
+     under the pointer and the keyboard, since j/k moves through these rows and focus
+     draws no ring. */
   li.nav-item {
     cursor: default;
   }
-  li.nav-item:hover {
-    background: none;
+  li.nav-item {
+    border-radius: var(--key-radius);
   }
-  /* A draft (an unsent composer scratch) reads as provisional: a dashed left rule +
-     a "draft" tag, distinct from a committed comment's solid frame. */
-  .nav-item.draft {
-    border-left-style: dashed;
-    border-left-color: var(--rule-strong);
-  }
-  /* Active (revealed) wins the left rule in amber — the brand cue the focused card
-     carries in the plan — even for a draft, whose tag still marks it provisional. */
-  .nav-item.active {
-    background: var(--paper-sunk);
-    border-left: 2px solid var(--accent);
-  }
-  .nav-item:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: -2px;
+  /* Resting only: hovered or current, the row is a key like any other. */
+  .nav-item.draft:not(:hover, :focus-visible, [aria-current="true"]) {
+    background-color: color-mix(in lab, var(--well-floor), var(--attention) var(--unsent-floor));
+    box-shadow: var(--well-shade), var(--well-lip);
   }
   .nav-item-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 0.4rem;
   }
   .nav-item-ref {
@@ -388,31 +368,38 @@
     letter-spacing: 0.02em;
     color: var(--ink-faint);
   }
-  /* One shared pill, so the pair reads as one statement of provenance ("v2, not in
-     diff"). Only the version tag tracks wide — the same tracking on the unlinked
-     tag's whole phrase would only make it harder to read. */
-  .nav-version-tag,
+  .nav-item-head :global(.tag) {
+    padding-block: 0;
+  }
+  /* The unlinked tag is a phrase; small-caps tracking would only slow it down. */
   .nav-unlinked-tag {
+    letter-spacing: 0.02em;
+    text-transform: none;
+  }
+  /* --ink-faint misses AA on the unsent tint. */
+  .nav-item.draft .nav-item-ref {
+    color: var(--ink-soft);
+  }
+  /* On a latched face --ink-soft misses AA in some palettes, so the row's quieter text
+     takes a neutral key's label ink (atoms.css --cap-label). The risen face steps further,
+     so there only --ink holds. */
+  .nav-item.key-row[aria-current="true"] :is(.nav-item-ref, .nav-item-text, .nav-unsent-tag) {
+    color: color-mix(in lab, var(--ink-soft), var(--ink) 15%);
+  }
+  .nav-item.key-row:is(:hover, :focus-visible) :is(.nav-item-ref, .nav-item-text, .nav-unsent-tag) {
+    color: var(--ink);
+  }
+  .nav-unsent-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
     font-size: var(--text-2xs);
     font-weight: 600;
-    color: var(--ink-faint);
-    padding: 0 0.3rem;
-    border: 1px solid var(--rule-strong);
-    border-radius: var(--radius);
+    color: var(--ink-soft);
   }
-  .nav-version-tag {
-    letter-spacing: 0.08em;
-  }
-  /* Kept neutral so amber stays the navigation cue. */
-  .nav-draft-tag {
-    font-size: var(--text-2xs);
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-faint);
-    padding: 0 0.3rem;
-    border: 1px dashed var(--rule-strong);
-    border-radius: var(--radius);
+  .nav-unsent-tag :global(.icon) {
+    align-self: center;
+    color: color-mix(in lab, var(--attention), var(--stamp-word-toward) var(--stamp-word-mix));
   }
   .nav-item-text {
     font-size: var(--text-sm);
@@ -451,7 +438,8 @@
     align-items: center;
     gap: 0.25rem 0.6rem;
     padding: 0.45rem 0.7rem;
-    border-top: 1px solid var(--rule);
+    background: var(--group-floor);
+    box-shadow: inset 0 7px 8px -7px var(--pane-shade);
     font-size: var(--text-2xs);
     color: var(--ink-faint);
   }

@@ -954,7 +954,7 @@ Closing prose below both blocks.
 /** A computed box-shadow's layers. Computed colours never nest parentheses. */
 const shadowLayers = (shadow: string) => shadow.split(/,(?![^(]*\))/).map((l) => l.trim());
 
-test("a code block wears a table's bezel, in both schemes", async ({ daemon, page }) => {
+test("a code block wears a table's pad, in both schemes", async ({ daemon, page }) => {
   await daemon.seed({ plan: CARD_FAMILY_PLAN });
   await page.goto("/");
   await planSurface(page);
@@ -997,8 +997,8 @@ test("a code block wears a table's bezel, in both schemes", async ({ daemon, pag
       };
     });
 
-    // The table's shadow opens on its rim, which the code card draws as a strip over its
-    // border instead; past that, the code card ends on the same ring and drop shadow.
+    // The table's shadow opens on its gloss, which the code card draws as a strip over its
+    // border instead; past that, the code card ends on the same side and cast shadow.
     const float = shadowLayers(family.table.shadow).slice(1);
     expect(float.length, scheme).toBeGreaterThan(1);
     for (const code of family.code) {

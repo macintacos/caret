@@ -123,12 +123,15 @@ describe("the drag-to-comment selection band (EXC-664)", () => {
     // the CHROME radius, sized for panels and chips, and a checkbox is a control roughly
     // one em across — at that size the shared token rounds it most of the way to a circle.
     // Its corner is part of the shape being drawn, the way its border width and its size
-    // are, so it is measured in the same em the rest of the control is. A table's or a code
-    // block's bezel is exempt too: it is a float standing on the plan, and floats round at
-    // --radius-lg.
+    // are, so it is measured in the same em the rest of the control is. A table's, a code
+    // block's or an image's pad is exempt too: it is a raised rubber pad standing on the plan, rounded at
+    // --pad-radius, and a table's scoop nests inside it at that radius less the pad's rim.
     const radiusRules = (overrideDecls.match(/[^{}]*\{[^{}]*border-[a-z-]*radius:[^{}]*\}/g) ?? [])
       .filter(
-        (block) => !block.includes("checkbox") && !/\[data-(?:table|code)-card\]\s*\{/.test(block),
+        (block) =>
+          !block.includes("checkbox") &&
+          !/\[data-(?:table|code)-card\]\s*\{/.test(block) &&
+          !block.includes("var(--pad-radius)"),
       )
       .flatMap((block) => block.match(/border-[a-z-]*radius:\s*[^;]+;/g) ?? []);
     expect(radiusRules.length).toBeGreaterThan(0);
@@ -878,12 +881,18 @@ describe("the inline image (EXC-870)", () => {
     );
   });
 
-  test("wears the chip family's radius and a scheme-correct hairline edge", () => {
-    // A screenshot on a white ground dissolves into --paper with no edge, so the border
-    // is legibility rather than decoration. The ink mix is the sheet's own idiom, which
-    // is what makes one declaration correct in both schemes — no literal color.
-    expect(imageRule).toMatch(new RegExp(String.raw`border-radius:\s*${RADIUS}`));
-    expect(imageRule).toMatch(/border:\s*1px solid color-mix\(in lab,/);
+  test("stands on the table's pad, so a white ground keeps an edge", () => {
+    // A screenshot on a white ground dissolves into --paper with no edge, so the frame
+    // is legibility rather than decoration. It is the table's pad, its rim the padding,
+    // so everything the plan embeds stands on the plan alike — no literal color.
+    const pad = rulesFor(String.raw`> \[data-table-card\]`)[0] ?? "";
+    for (const prop of ["border-radius", "background-color", "background-image", "box-shadow"]) {
+      const value = (rule: string) =>
+        rule.match(new RegExp(String.raw`${prop}:\s*([^;]+);`))?.[1]?.replace(/\s+/g, " ");
+      expect(value(imageRule), prop).toBeDefined();
+      expect(value(imageRule), prop).toBe(value(pad));
+    }
+    expect(imageRule).toMatch(/padding:\s*var\(--code-bezel\)/);
     expect(imageRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   });
 
@@ -995,64 +1004,44 @@ describe("the list markers (EXC-861)", () => {
 
 // EXC-860: the task-list checkbox, drawn over the `[ ]` / `[x]` / `[/]` run inlineSpans.ts
 // already tags. Structurally this is the list marker one block up scaled from one character
-// cell to three, and it is an ICON rather than a glyph: one vendored Lucide square per state,
-// masked into ::before. A typed U+2610 / U+2611 took its weight, its corner radius and its
-// size from whichever font the platform resolved, which is what made the pair read as ASCII
-// art of a checkbox rather than as a control. That the run really measures three cells and
-// that the box really paints is tasks.e2e.ts's job; this suite pins the declarations.
+// cell to three. It is a stamp: a pocket pressed into the line on ::before, and the mark
+// pressed into the pocket on ::after, both drawn in CSS so no font decides how they look. A
+// typed U+2610 / U+2611 took its weight, its corner radius and its size from whichever
+// font the platform resolved. That the run really measures three cells and that the box
+// really paints is tasks.e2e.ts's job; this suite pins the declarations.
 describe("the task-list checkbox (EXC-860)", () => {
   const runRule = rulesFor(String.raw`\[data-md-checkbox\]`)[0] ?? "";
-  const glyphRule = rulesFor(String.raw`\[data-md-checkbox\]::before`)[0] ?? "";
-  const checkedRule = rulesFor(String.raw`\[data-md-checkbox="checked"\]::before`)[0] ?? "";
-  const slashedRule = rulesFor(String.raw`\[data-md-checkbox="slashed"\]::before`)[0] ?? "";
+  const pocketRule = rulesFor(String.raw`\[data-md-checkbox\]::before`)[0] ?? "";
+  const checkedRule = rulesFor(String.raw`\[data-md-checkbox="checked"\]::after`)[0] ?? "";
+  const slashedRule = rulesFor(String.raw`\[data-md-checkbox="slashed"\]::after`)[0] ?? "";
   const suppressRule =
     rulesFor(String.raw`\[data-md-checkbox\] ~ \[data-md-checkbox\]::before`)[0] ?? "";
+  const drawn = [pocketRule, checkedRule, slashedRule];
 
-  test("hands the bracket run's own cells to the glyph drawn over them", () => {
+  test("hands the bracket run's own cells to the box drawn over them", () => {
     // Transform-in-place (EXC-855): the brackets are still in the DOM and still copied —
     // they are only made invisible so the checkbox can occupy the columns they already had.
     expect(runRule).toMatch(/color:\s*transparent/);
   });
 
   test("tells the three states apart by shape, not by colour", () => {
-    // Empty square, square with a check, square with a slash — three Lucide glyphs on one
-    // ink. Neither state rule introduces a hue or an opacity step of its own, so the
-    // distinction survives a reader who cannot separate two colours (EXC-863 records the
-    // same failure one rule family over).
-    for (const rule of [checkedRule, slashedRule]) {
-      expect(rule).toMatch(/mask-image:/);
-      expect(rule).not.toMatch(/color|opacity/);
-    }
-    // And the two really are different pictures, not the same one named twice.
-    expect(checkedRule).not.toBe(slashedRule);
+    // An empty pocket, a pocket with a check, a pocket with a slash, on one ink. Neither
+    // mark introduces a hue or an opacity step of its own, so the distinction survives a
+    // reader who cannot separate two colours (EXC-863 records the same failure one rule
+    // family over). The unchecked state is the pocket alone, so no mark rule names it.
+    expect(checkedRule).toMatch(/border:\s*solid var\(--ink-soft\)/);
+    expect(slashedRule).toMatch(/background-color:\s*var\(--ink-soft\)/);
+    for (const rule of [checkedRule, slashedRule]) expect(rule).not.toMatch(/opacity/);
+    expect(overrideDecls).not.toMatch(/\[data-md-checkbox="unchecked"\]/);
   });
 
-  test("is an icon rather than a glyph, so no font decides how it looks", () => {
-    // The whole point of the shape. A glyph renders at the text's own stroke weight in
-    // whichever face the platform resolved — and a colour emoji font may substitute a
-    // picture outright, which ignores color. An empty content string masked with a vendored
-    // SVG is the same control in every font and every palette. The mask is inlined as a
-    // data: URI, so it needs no network round-trip and no emitted asset either.
-    expect(glyphRule).toMatch(/content:\s*""/);
-    expect(glyphRule).toMatch(/mask:\s*\$\(CHECKBOX_MASKS\.unchecked\)/);
-    // Sized in em, so the control tracks the type scale rather than one viewport's pixels.
+  test("is drawn rather than typed, so no font decides how it looks", () => {
+    // A glyph renders at the text's own stroke weight in whichever face the platform
+    // resolved, and a colour emoji font may substitute a picture outright. An empty
+    // content string drawn by the box model is the same mark in every font. Sized in em,
+    // so the box tracks the type scale rather than one viewport's pixels.
+    for (const rule of drawn) expect(rule).toMatch(/content:\s*""/);
     expect(overrideDecls).toMatch(/--checkbox-size:\s*[\d.]+em/);
-  });
-
-  test("ships the same vendored Lucide squares the rest of the product wears", () => {
-    // doc/agents/icon-rules.md: icons live in ui/src/icons/ and are imported ?raw, never
-    // hand-drawn a second time in a stylesheet and never fetched from a CDN. The three
-    // states name three DIFFERENT files, so a copy-paste that pointed two states at one
-    // glyph fails here rather than in a screenshot. That each file is the verbatim Lucide
-    // SVG, and that the registry and the licence table know it, is icons.test.ts's job.
-    for (const icon of ["square", "square-check-big", "square-slash"]) {
-      expect(coreStyles).toContain(`@/icons/${icon}.svg?raw`);
-    }
-    expect(coreStyles).toMatch(/data:image\/svg\+xml,\$\{encodeURIComponent\(square/);
-    const masked = (rule: string) => rule.match(/CHECKBOX_MASKS\.(\w+)/)?.[1];
-    expect(new Set([glyphRule, checkedRule, slashedRule].map(masked))).toEqual(
-      new Set(["unchecked", "checked", "slashed"]),
-    );
   });
 
   test("spends one step above the faint marker ink, which the floor requires", () => {
@@ -1060,15 +1049,21 @@ describe("the task-list checkbox (EXC-860)", () => {
     // 1.4.11's 3:1 floor for a non-text indicator binds it — and on the surface it
     // renders on (--paper-sunk and the row's ink bands, not the --paper / --paper-raised
     // the ramp test measures) --ink-faint falls under that floor in the lightest
-    // palettes. theme.test.ts pins the ink chosen here against every palette on that
-    // surface; this only holds the sheet to the same token, so the two cannot drift
-    // apart. The mask is what makes the token reachable at all: background-color paints
-    // through it, so the glyph rides the palette rather than whatever colour an <img>
-    // would have baked in.
-    expect(glyphRule).toMatch(/background-color:\s*var\(--ink-soft\)/);
-    expect(glyphRule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-    expect(glyphRule).not.toMatch(/--chip-/);
-    expect(glyphRule).not.toMatch(/opacity/);
+    // palettes. The pocket's floor sits a step off the paper and cannot carry the box on
+    // its own, so its contact edge does. theme.test.ts pins the ink chosen here against
+    // every palette on that surface; this only holds the sheet to the same token.
+    expect(pocketRule).toMatch(/inset 0 0 0 1px var\(--ink-soft\)/);
+    for (const rule of drawn) {
+      expect(rule).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+      expect(rule).not.toMatch(/--ink-faint/);
+    }
+  });
+
+  test("is pressed into the line as a stamp's pocket is", () => {
+    // A box is passive, and passive marks are stamped into the surface rather than
+    // standing on it: the pocket takes the stamp's floor and lip.
+    expect(pocketRule).toMatch(/background-color:\s*var\(--well-floor\)/);
+    expect(pocketRule).toMatch(/var\(--well-lip\)/);
   });
 
   test("draws out of flow so no column moves", () => {
@@ -1076,58 +1071,68 @@ describe("the task-list checkbox (EXC-860)", () => {
     // in flow would push every glyph after it. Absolutely positioned, it contributes
     // nothing to the line whatever its size, so the three source columns keep their
     // advance and no margin is needed (or allowed) to claw any back.
-    expect(glyphRule).toMatch(/position:\s*absolute/);
-    expect(glyphRule).not.toMatch(/\bmargin[a-z-]*\s*:/);
+    for (const rule of drawn) {
+      expect(rule).toMatch(/position:\s*absolute/);
+      expect(rule).not.toMatch(/\bmargin[a-z-]*\s*:/);
+    }
   });
 
-  test("centres the glyph in the three-cell run", () => {
+  test("centres the box in the three-cell run", () => {
     // A bullet overdraws ONE cell and needs no offset; the brackets are THREE, so the box
     // has to be placed in them — 1.5ch is the run's middle, and half the box's own width
     // brings its edge back to centre it there. Anchored to the MARKER SPAN (position:
     // relative), because the static position of a pseudo-element on a later token would
-    // land the box past the run's three characters.
+    // land the box past the run's three characters. The marks centre on the same column.
     expect(runRule).toMatch(/position:\s*relative/);
-    expect(glyphRule).toMatch(/inset-inline-start:\s*calc\(1\.5ch/);
-    expect(glyphRule).toMatch(/var\(--checkbox-size\)/);
+    for (const rule of drawn) expect(rule).toMatch(/inset-inline-start:\s*calc\(1\.5ch/);
+    expect(pocketRule).toMatch(/var\(--checkbox-size\)/);
   });
 
   test("keeps the drawn box out of the clipboard", () => {
     // The epic's copy contract. Blink emits generated content into the plain-text flavour
     // of a copied selection, invisible to Selection.toString() and visible only in the real
-    // clipboard, which tasks.e2e.ts reads. A masked box cannot leak a character the way the
-    // ☐ glyph could, but generated content is still content, so it stays out of the
-    // selection outright.
-    expect(glyphRule).toMatch(/user-select:\s*none/);
+    // clipboard, which tasks.e2e.ts reads. The box carries no character, but generated
+    // content is still content, so it stays out of the selection outright.
+    for (const rule of drawn) expect(rule).toMatch(/user-select:\s*none/);
   });
 
   test("draws one box per run, however many tokens shiki cut the run into", () => {
     // A real defect rather than a hypothetical: shiki cuts a three-character run into
     // three tokens on some rows, inlineDecorate tags every one, and the sheet drew three
     // boxes. The sheet's block carries the reasoning; what is pinned here is the rule's
-    // two load-bearing properties.
+    // two load-bearing properties, for the pocket and its mark alike.
     expect(suppressRule).toMatch(/content:\s*none/);
+    expect(suppressRule).toContain("[data-md-checkbox] ~ [data-md-checkbox]::after");
     // GENERAL sibling, not adjacent: tagRow leaves a zero-length token untagged, which
     // would sit between two tagged ones and break an adjacent-only chain into two boxes.
-    expect(suppressRule).toContain("[data-md-checkbox] ~ [data-md-checkbox]");
-    // And it out-specifies the state rules that supply the content on WEIGHT rather than
-    // on source order, so reordering this block cannot undo it. Counted rather than
-    // asserted by spelling: one more attribute selector than the rule it has to beat.
-    const attrs = (rule: string) => (rule.match(/\[/g) ?? []).length;
-    expect(attrs(suppressRule)).toBeGreaterThan(attrs(checkedRule));
+    expect(suppressRule).toContain("[data-md-checkbox] ~ [data-md-checkbox]::before");
+    // And each selector out-specifies the state rules that supply the content on WEIGHT
+    // rather than on source order, so reordering this block cannot undo it. Counted rather
+    // than asserted by spelling: one more attribute selector than the rule it has to beat.
+    const attrs = (selector: string) => (selector.match(/\[/g) ?? []).length;
+    const selectors = suppressRule.slice(0, suppressRule.indexOf("{")).split(",");
+    expect(selectors).toHaveLength(2);
+    for (const selector of selectors) {
+      expect(attrs(selector)).toBeGreaterThan(
+        attrs(checkedRule.slice(0, checkedRule.indexOf("{"))),
+      );
+    }
   });
 
   test("carries no type metrics of its own, so the em sizes track the row", () => {
-    // The glyph is sized from --checkbox-size, which is em-relative — so it resolves
+    // The box is sized from --checkbox-size, which is em-relative — so it resolves
     // against the token's own inherited font-size. Declaring one here would silently
-    // decouple the control from the type scale the row is set in.
-    expect(glyphRule).not.toBe("");
-    expect(glyphRule).not.toMatch(/font-size|line-height|font-family/);
+    // decouple the box from the type scale the row is set in.
+    for (const rule of drawn) {
+      expect(rule).not.toBe("");
+      expect(rule).not.toMatch(/font-size|line-height|font-family/);
+    }
   });
 
   test("carries no transition", () => {
     // svelte-rules § Motion: the diff surface swaps state instantly. The non-empty guard is
     // what keeps this from passing on four selectors that resolved to nothing.
-    const all = [runRule, glyphRule, checkedRule, slashedRule];
+    const all = [runRule, ...drawn];
     expect(all.filter((rule) => rule !== "")).toHaveLength(4);
     expect(all.join("")).not.toMatch(/transition/);
   });
@@ -1136,8 +1141,8 @@ describe("the task-list checkbox (EXC-860)", () => {
 // EXC-729: every fenced block sits in ONE card ([data-code-card]) that is a single native
 // horizontal scroll container — a wide block scrolls as one unit (short lines follow, one
 // scrollbar, no per-row jelly) and its subgrid rows keep the gutter aligned. The card is also
-// the block's frame: a bezel of the window's body round a pane sunk into it, built as a table
-// is. This suite pins the CSS side.
+// the block's frame: a raised rubber pad of the window's body with the code in a scoop on its
+// face, built as a table is. This suite pins the CSS side.
 describe("the fenced code-block card (EXC-729)", () => {
   const cardBody =
     overrideDecls.match(/\[data-content\]\s*>\s*\[data-code-card\]\s*\{[^}]*\}/)?.[0] ?? "";
@@ -1174,40 +1179,34 @@ describe("the fenced code-block card (EXC-729)", () => {
     expect(cardBody).toContain("max-width:");
   });
 
-  test("is a bezel of the window's own material, round a pane sunk into it", () => {
-    // The bezel is the card's border, the one box edge that stays put while the code scrolls
-    // and that the scrollport stops at; the backgrounds and inset shadows below are fixed to
-    // the box too. The floor fills the padding box, which is the pane, and the body shows
-    // through the transparent border round it.
+  test("is a raised pad of the window's own material, its code in a scoop on its face", () => {
+    // The pad's rim is the card's border, the one box edge that stays put while the code
+    // scrolls and that the scrollport stops at; the backgrounds and inset shadows below are
+    // fixed to the box too. The floor fills the padding box, which is the scoop, and the
+    // body shows through the transparent border round it.
     expect(cardBody).toMatch(/border:\s*var\(--code-bezel\) solid transparent/);
-    expect(cardBody).toMatch(/border-radius:\s*var\(--radius-lg\)/);
+    expect(cardBody).toMatch(/border-radius:\s*var\(--pad-radius\)/);
     const background = layers(cardBody.match(/background:\s*([^;]+);/)?.[1] ?? "");
     expect(background[0]).toBe(
       "linear-gradient(var(--table-floor), var(--table-floor)) padding-box",
     );
+    expect(background).toContain("linear-gradient(var(--pad-top), transparent 28px) border-box");
     expect(background.at(-1)).toBe("var(--body)");
-    // The pane's crisp edges and its sink under the top edge, then the table card's ring and
-    // drop shadow outside the bezel.
+    // The scoop's shade under its top edge and its lit foot, then the pad's side and cast
+    // shadow outside the rim.
     const shadow = layers(cardBody.match(/box-shadow:\s*([^;]+);/)?.[1] ?? "");
-    expect(shadow).toEqual([
-      "var(--table-pane-sink)",
-      "inset 1px 0 var(--table-pane-edge)",
-      "inset -1px 0 var(--table-pane-edge)",
-      "inset 0 -1px var(--table-pane-edge)",
-      "0 0 0 1px var(--rule)",
-      "var(--float-low)",
-    ]);
-    // Over the rows either side, as the table card is, so the ring and drop shadow show.
+    expect(shadow).toEqual(["var(--scoop-top)", "var(--scoop-foot)", "var(--pad-stand)"]);
+    // Over the rows either side, as the table card is, so the side and shadow show.
     expect(cardBody).toMatch(/z-index:\s*1;/);
   });
 
-  test("lights the bezel's top edge, not the pane's", () => {
-    // An inset shadow paints inside the border, so --float-rim on this box would light the
-    // pane. The rim is a background strip over the border box instead, in the same ink.
-    expect(cardBody).not.toContain("var(--float-rim)");
+  test("lights the pad's top edge, not the scoop's", () => {
+    // An inset shadow paints inside the border, so a gloss drawn as one would light the
+    // scoop. The gloss is a background strip over the border box instead.
+    expect(cardBody).not.toMatch(/inset[^,;]*var\(--rubber-gloss\)/);
     const background = layers(cardBody.match(/background:\s*([^;]+);/)?.[1] ?? "");
     expect(background).toContain(
-      "linear-gradient(var(--float-rim-ink) 1px, transparent 1px) border-box",
+      "linear-gradient(var(--rubber-gloss), transparent 2px) border-box",
     );
   });
 
@@ -1612,26 +1611,31 @@ describe("the preview's copies of the link, code and reference chips (EXC-2021)"
     expectPinned(previewRule(target), sourceRule(target));
   });
 
-  test("a table's pane sink spends one shade in both views", async () => {
-    // The preview draws the soft sink as a gradient, which runs unbroken across its cells'
-    // boundaries; the source view blurs a shadow on one row box. One token keeps them one
-    // colour.
+  test("a table's scoop spends one shade and one lip in both views", async () => {
+    // The preview draws the scoop as gradients, which run unbroken across its cells'
+    // boundaries; the source view blurs the shade on one row box and paints the lip as a
+    // gradient on another. One token per colour keeps the two views alike.
     const tokens = await Bun.file(join(import.meta.dir, "../../styles/tokens.css")).text();
     for (const selector of [':root,\n[data-theme="dark"]', '[data-theme="light"]']) {
       const block = tokens.slice(tokens.indexOf(`${selector} {`)).match(/\{([^}]*)\}/)?.[1] ?? "";
-      expect(block, selector).toMatch(/--table-pane-sink-shade:/);
-      expect(block.match(/--table-pane-sink:([^;]+);/)?.[1], selector).toContain(
-        "var(--table-pane-sink-shade)",
-      );
+      expect(block.match(/--scoop-top:([^;]+);/)?.[1], selector).toContain("var(--scoop-shade)");
+      expect(block.match(/--scoop-foot:([^;]+);/)?.[1], selector).toContain("var(--scoop-lip)");
     }
-    const firstRow = previewRule("tbody > tr:first-child > td");
-    expect(firstRow["background-image"]).toMatch(
-      /^linear-gradient\(var\(--table-pane-sink-shade\), transparent [^)]+\)$/,
+    expect(previewRule("tbody > tr:first-child > td")["--scoop-top-fill"]).toContain(
+      "var(--scoop-shade)",
     );
-    expect(firstRow["--pane-top-edge"]).toBe("inset 0 1px var(--table-pane-edge)");
+    expect(previewRule("tbody > tr:last-child > td")["--scoop-foot-fill"]).toContain(
+      "var(--scoop-lip)",
+    );
+    expect(sourceRule("> [data-table-card] > [data-table-rule] + *")["box-shadow"]).toBe(
+      "var(--scoop-top)",
+    );
+    expect(sourceRule("> [data-table-card] > :last-child")["background-image"]).toContain(
+      "var(--scoop-lip)",
+    );
   });
 
-  test("a table wears the source view's bezel and pane", () => {
+  test("a table wears the source view's pad and scoop", () => {
     const bezel = sourceRule("> [data-table-card]");
     const table = previewRule("table");
     for (const prop of ["background-color", "border-radius", "box-shadow"]) {
@@ -1648,7 +1652,7 @@ describe("the preview's copies of the link, code and reference chips (EXC-2021)"
     );
   });
 
-  test("a code block wears the source view's bezel and pane", () => {
+  test("a code block wears the source view's pad and scoop", () => {
     const card = sourceRule("> [data-code-card]");
     const pre = previewRule("[data-source-code] + pre");
     for (const prop of ["border", "border-radius", "background", "box-shadow"]) {
@@ -1677,6 +1681,55 @@ describe("the preview's copies of the link, code and reference chips (EXC-2021)"
       expect(previewRule(`[data-source-code] + pre::-webkit-scrollbar${part}`), part).toEqual(
         resolved,
       );
+    }
+  });
+
+  test("a task box wears the source view's pocket and marks", () => {
+    // The box's side is a shadow-root property the preview cannot see, so it is compared
+    // by value. Each view places the box its own way: the source over the bracket run's
+    // middle column, the preview inside the input it styles.
+    const host = declarations(
+      overrideDecls.match(/:host\s*\{[^}]*--checkbox-size:[^}]*\}/)?.[0] ?? "",
+    );
+    const side = host["--checkbox-size"];
+    expect(side).toBeDefined();
+    const pocket = sourceRule("[data-line] [data-md-checkbox]::before");
+    const box = previewRule("input[data-task]");
+    expect(box["inline-size"]).toBe(side);
+    expect(box["block-size"]).toBe(side);
+    for (const prop of ["border-radius", "background-color", "box-shadow"]) {
+      expect(pocket[prop], prop).toBeDefined();
+      expect(box[prop], prop).toBe(pocket[prop]);
+    }
+    const marks = [
+      ['[data-line] [data-md-checkbox="checked"]::after', "input[data-task]:checked::after"],
+      ['[data-line] [data-md-checkbox="slashed"]::after', "input[data-task]:indeterminate::after"],
+    ] as const;
+    for (const [source, preview] of marks) {
+      const {
+        "inset-inline-start": _sourceAt,
+        "user-select": _unselectable,
+        ...sourceMark
+      } = sourceRule(source);
+      const { "inset-inline-start": _previewAt, ...previewMark } = previewRule(preview);
+      expectPinned(previewMark, sourceMark);
+    }
+  });
+
+  test("an image wears the source view's pad", () => {
+    const source = sourceRule("[data-line] [data-md-image]");
+    const preview = previewRule("img");
+    for (const prop of [
+      "padding",
+      "border-radius",
+      "background-color",
+      "background-image",
+      "background-size",
+      "background-blend-mode",
+      "box-shadow",
+    ]) {
+      expect(source[prop], prop).toBeDefined();
+      expect(preview[prop], prop).toBe(source[prop]);
     }
   });
 });
@@ -1869,13 +1922,11 @@ describe("tables (EXC-864)", () => {
     overrideDecls.match(
       /\[data-content\]\s*>\s*\[data-table-card\]\s*>\s*\[data-line\]\s*\{[^}]*\}/,
     )?.[0] ?? "";
-  // The pane: every child below the rail takes the floor unless it carries a band, and
-  // every one draws the pane's side edges.
+  // The scoop: every child below the rail takes the floor unless it carries a band.
   const paneRules = rulesFor(
     String.raw`>\s*\[data-table-card\]\s*>\s*:not\(\s*\[data-table-head\],\s*\[data-table-rule\][^{}]*\)`,
   );
   const floorRule = paneRules.find((r) => r.includes("background-color:")) ?? "";
-  const edgeRule = paneRules.find((r) => r.includes("box-shadow:")) ?? "";
   const railRule =
     rulesFor(
       String.raw`>\s*\[data-line\]:is\(\[data-table-head\],\s*\[data-table-rule\]\)[^{}]*`,
@@ -1936,7 +1987,6 @@ describe("tables (EXC-864)", () => {
       cardRule,
       rowRule,
       floorRule,
-      edgeRule,
       railRule,
       paneTopRule,
       hairlineRule,
@@ -1980,10 +2030,15 @@ describe("tables (EXC-864)", () => {
     expect(cardRule).toMatch(/justify-self:\s*start/);
   });
 
-  test("is a bezel of the window's own material, floating on the plan", () => {
+  test("is a raised pad of the window's own material, standing on the plan", () => {
     expect(cardRule).toMatch(/background-color:\s*var\(--body\)/);
-    expect(cardRule).toMatch(/border-radius:\s*var\(--radius-lg\)/);
-    expect(cardRule).toMatch(/box-shadow:\s*var\(--float-surface-low\)/);
+    expect(cardRule).toMatch(/border-radius:\s*var\(--pad-radius\)/);
+    // The header rides a lit band along the pad's top; the pad shows a side and casts a
+    // shadow, as a key does.
+    expect(cardRule).toMatch(
+      /background-image:\s*linear-gradient\(var\(--pad-top\), transparent [^)]+\)/,
+    );
+    expect(cardRule).toMatch(/box-shadow:[^;]*var\(--pad-stand\)/);
     // Inline padding insets the pane from the bezel's sides without touching the row
     // tracks; block padding would slide the rows against the gutter's numbers.
     expect(cardRule).toMatch(/padding-inline:/);
@@ -2064,33 +2119,29 @@ describe("tables (EXC-864)", () => {
     );
   });
 
-  test("draws the pane's edges as crisp paint, shading only its top edge", () => {
-    // Shadows on rows rather than a border or a wrapper: either would move the grid the
-    // search, drag and comment anchors resolve against. A blurred layer on every row
-    // would seam at each row boundary, so only the first body row takes the sink.
-    const layers = (rule: string) =>
-      (rule.match(/box-shadow:\s*([^;]+);/)?.[1] ?? "").split(/,(?![^(]*\))/).map((l) => l.trim());
-    const edges = layers(edgeRule).filter((l) => !l.startsWith("var("));
-    expect(edges.length).toBe(2);
-    for (const layer of edges) {
-      expect(layer).toMatch(/^inset -?1px 0 var\(--table-pane-edge\)$/);
-    }
-    expect(edgeRule).toContain("var(--pane-top-edge");
-    expect(edgeRule).toContain("var(--pane-bottom-edge");
-    expect(paneTopRule).toMatch(/--pane-top-edge:\s*var\(--table-pane-sink\)/);
-    expect(footRow).toMatch(/--pane-bottom-edge:\s*inset 0 -1px var\(--table-pane-edge\)/);
-    // The pane is concentric with the bezel: its corners at --radius, inset by the
-    // bezel's padding.
-    expect(paneTopRule).toMatch(/border-top-left-radius:\s*var\(--radius\)/);
-    expect(paneTopRule).toMatch(/border-top-right-radius:\s*var\(--radius\)/);
+  test("paints the scoop on its rows: a shade under the rail and a lit lip at the foot", () => {
+    // Paint on rows rather than a border or a wrapper: either would move the grid the
+    // search, drag and comment anchors resolve against. A blurred layer on every row would
+    // seam at each row boundary, so only the first body row takes the shade, and the lip
+    // is a gradient on the last, where a blurred one would glow up its sides.
+    expect(paneRules.some((r) => r.includes("box-shadow:"))).toBe(false);
+    expect(paneTopRule).toMatch(/box-shadow:\s*var\(--scoop-top\)/);
+    expect(footRow).toMatch(
+      /background-image:\s*linear-gradient\(to top, var\(--scoop-lip\), transparent [^)]+\)/,
+    );
+    // The scoop is concentric with the pad: its corners at the pad's radius less the rim.
+    expect(paneTopRule).toMatch(/border-top-left-radius:\s*calc\(var\(--pad-radius\) - 0\.25rem\)/);
+    expect(paneTopRule).toMatch(
+      /border-top-right-radius:\s*calc\(var\(--pad-radius\) - 0\.25rem\)/,
+    );
   });
 
   test.each([':root,\n[data-theme="dark"]', '[data-theme="light"]'])(
-    "the pane's sink in %s shades the top edge without reaching the sides",
+    "the scoop's shade in %s shades the top edge without reaching the sides",
     async (selector) => {
       const tokens = await Bun.file(join(import.meta.dir, "../../styles/tokens.css")).text();
       const block = tokens.slice(tokens.indexOf(`${selector} {`)).match(/\{([^}]*)\}/)?.[1] ?? "";
-      const sink = block.match(/--table-pane-sink:([^;]+);/)?.[1] ?? "";
+      const sink = block.match(/--scoop-top:([^;]+);/)?.[1] ?? "";
       const blurred = sink
         .split(/,(?![^(]*\))/)
         .map((l) =>
@@ -2184,10 +2235,11 @@ describe("tables (EXC-864)", () => {
     // paints its square corners straight over the card's own arc and the panel reads as a
     // rounded rectangle with a bite out of the corner. The same radius, so the row's edge
     // follows the card's rather than crossing it.
-    expect(headRow).toMatch(/border-top-left-radius:\s*var\(--radius\)/);
-    expect(headRow).toMatch(/border-top-right-radius:\s*var\(--radius\)/);
-    expect(footRow).toMatch(/border-bottom-left-radius:\s*var\(--radius\)/);
-    expect(footRow).toMatch(/border-bottom-right-radius:\s*var\(--radius\)/);
+    const nested = String.raw`calc\(var\(--pad-radius\) - 0\.25rem\)`;
+    expect(headRow).toMatch(new RegExp(`border-top-left-radius:\\s*${nested}`));
+    expect(headRow).toMatch(new RegExp(`border-top-right-radius:\\s*${nested}`));
+    expect(footRow).toMatch(new RegExp(`border-bottom-left-radius:\\s*${nested}`));
+    expect(footRow).toMatch(new RegExp(`border-bottom-right-radius:\\s*${nested}`));
     // Not by clipping. overflow on the card would round the corners in one declaration
     // and make the card a scroll container, which is the one thing it must never be —
     // the same reason the sizing test above refuses it.

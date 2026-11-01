@@ -63,7 +63,7 @@
         {#if showShortcutHints}
           <!-- Both caps typed, so the shift glyph is the shared icon, never a ⇧ char. -->
           <Kbd class="comments-key kbd-sm" aria-hidden="true"
-            ><KbdCap key="shift" size={8} /><KbdCap key="C" /></Kbd
+            ><KbdCap key="shift" /><KbdCap key="C" /></Kbd
           >
         {/if}
       </button>
@@ -94,7 +94,7 @@
         <Tooltip.Trigger>
           {#snippet child({ props })}
             <span {...props} class="conn" class:offline={!connected}>
-              <span class="dot" aria-hidden="true"></span>
+              <span class="led" aria-hidden="true"></span>
               {connected ? "live" : "offline"}
             </span>
           {/snippet}
@@ -141,15 +141,11 @@
     cursor: pointer;
     border-radius: var(--radius);
   }
-  .comments-toggle:hover .label,
+  .comments-toggle:is(:hover, :focus-visible) .label,
   .comments-toggle[aria-expanded="true"] .label {
     color: var(--ink);
     text-decoration: underline;
     text-underline-offset: 2px;
-  }
-  .comments-toggle:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
   }
   /* Lifts the C off .kbd-sm's 0.68em so it meets the shift icon at closer to one
      scale. :global because it rides the Kbd root, which carries no scope hash. */
@@ -195,22 +191,10 @@
     align-items: center;
     gap: 0.3rem;
     color: var(--ink-soft);
-  }
-  /* The connection light sits in a little socket in the bar. */
-  .dot {
-    width: 0.4rem;
-    height: 0.4rem;
-    border-radius: 99px;
-    background: var(--ok);
-    box-shadow:
-      inset 0 -1px 1px var(--socket-shade),
-      0 0 0 1.5px var(--well-floor),
-      0 0 0 2px var(--socket-ring);
+    --led: var(--ok);
   }
   .conn.offline {
     color: var(--danger);
-  }
-  .conn.offline .dot {
-    background: var(--danger);
+    --led: var(--danger);
   }
 </style>

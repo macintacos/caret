@@ -50,7 +50,7 @@ test("opens from the strip, filters + underlines by text, and reveals comments a
   // The unsent scratch is a distinct draft row (tag + text).
   const draft = nav.locator("[data-nav-row].draft");
   await expect(draft).toHaveCount(1);
-  await expect(draft).toContainText("draft");
+  await expect(draft.locator(".nav-unsent-tag")).toHaveText("unsent");
   await expect(draft).toContainText("an unsent thought to finish later");
 
   // Search filters by comment text and underlines the match ("sidecar" is only in

@@ -102,7 +102,7 @@ test.describe("with a pending update", () => {
     // `?` is global and keys dispatch in order: once its dialog is up, any dialog r or a
     // opened would be up too, which bounds the count.
     await page.keyboard.press("?");
-    await expect(page.getByRole("dialog", { name: /Shortcuts/ })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
     await expect(contents).toHaveCount(2);
 
     await page.keyboard.press("Escape");
@@ -135,6 +135,18 @@ test.describe("with a pending update", () => {
     await page.keyboard.press("Escape");
     await expect(whatsNew).toHaveCount(0);
     await expect(settings.locator("[data-updates-pane]")).toBeVisible();
+  });
+
+  test("the upgrade command's copy key says it copies the command", async ({ daemon, page }) => {
+    await daemon.seed();
+    await page.goto("/");
+    await planSurface(page);
+
+    await markedGear(page).click();
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    await settings.locator("[data-category='Updates']").click();
+    await settings.getByRole("button", { name: "Copy upgrade command" }).hover();
+    await expect(page.locator("[data-slot='tooltip-content']")).toHaveText("Copy command");
   });
 
   test("the opt-out silences a pending verdict — no toast, no marks", async ({ daemon, page }) => {

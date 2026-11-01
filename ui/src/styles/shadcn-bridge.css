@@ -14,9 +14,9 @@
    tokens it would reference already flip. Scheme lives entirely in the caret
    operands, exactly as it does for the .diffview bridge.
 
-   --primary carries caret's amber accent — the primary action's fill. Amber
-   reaches shadcn surfaces in just two controlled spots: this fill and --ring
-   (the focus outline, matching caret's global :focus-visible). shadcn's OTHER
+   --primary carries caret's amber accent — the primary action's fill, the one spot
+   amber reaches shadcn surfaces. No --ring is bridged: keyboard focus wears a
+   control's hover look rather than a ring (styles/base.css). shadcn's OTHER
    accent — a neutral hover/active wash — collides with caret's --accent (amber),
    so it is deliberately NOT declared here (that would clobber caret amber
    app-wide). It is set as a neutral --color-accent in @theme inline below.
@@ -46,10 +46,6 @@
   --success: var(--ok);
   --border: var(--rule);
   --input: var(--rule-strong);
-  /* Focus ring: a softened, translucent accent (a subtle hint, not a loud solid
-     frame) — flips per scheme with --accent-bright. caret's global :focus-visible
-     and the diffview share this same token. */
-  --ring: color-mix(in oklab, var(--accent-bright), transparent 70%);
   /* Sidebar surface (EXC-843): the Settings shell composes shadcn's Sidebar as its
      category rail. The rail is the recessed --paper, a shade under the raised
      popover pane it sits beside; its hover/active wash rides --chip-hover, the
@@ -63,7 +59,6 @@
   --sidebar-accent: var(--chip-hover);
   --sidebar-accent-foreground: var(--ink);
   --sidebar-border: var(--rule);
-  --sidebar-ring: var(--ring);
 }
 
 /* @theme inline: map shadcn's semantic vars onto Tailwind's color / radius / font /
@@ -122,8 +117,7 @@
   --color-success: var(--success);
   --color-border: var(--border);
   --color-input: var(--input);
-  --color-ring: var(--ring);
-  /* Emits the bg-sidebar / text-sidebar-foreground / *-sidebar-accent / ring-sidebar-*
+  /* Emits the bg-sidebar / text-sidebar-foreground / *-sidebar-accent / *-sidebar-border
      utilities the vendored Sidebar tree authors (EXC-843), riding the bridged
      --sidebar-* vars above so the rail paints on caret's palette and retints on
      theme switch. */
@@ -134,7 +128,6 @@
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
 }
 
 /* ── Modal choreography (EXC-892) ─────────────────────────────────────────────
@@ -219,4 +212,10 @@
 [data-slot="popover-content"],
 [data-slot="select-content"] {
   box-shadow: var(--float-surface-mid);
+}
+/* A menu's rows are key rows, inset by the shell's 1px border and p-1, so the shell rounds
+   at a key's corner plus that inset. */
+[data-slot="dropdown-menu-content"],
+[data-slot="dropdown-menu-sub-content"] {
+  border-radius: calc(var(--key-radius) + 0.25rem + 1px);
 }

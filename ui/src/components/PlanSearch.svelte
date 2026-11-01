@@ -134,7 +134,7 @@
       {#if committed}
         <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">n</Kbd>next</span>
         <span class="search-key" aria-hidden="true"
-          ><Kbd class="kbd-sm"><KbdCap key="shift" size={8} /><KbdCap key="N" /></Kbd
+          ><Kbd class="kbd-sm"><KbdCap key="shift" /><KbdCap key="N" /></Kbd
           >previous</span
         >
         <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">/</Kbd>edit</span>
@@ -162,9 +162,9 @@
      nest: cap, tight bezel, then the sheet's pad. */
   .plan-search {
     --search-cap: 24px;
-    --search-pad: 4px;
-    --search-row: calc(var(--search-cap) + 2 * var(--well-pad-tight));
-    --search-inner-r: calc(var(--radius) + var(--well-pad-tight));
+    --search-pad: 3px;
+    --search-row: calc(var(--search-cap) + var(--well-top) + var(--well-foot));
+    --search-inner-r: calc(var(--key-radius) + var(--well-pad));
     --search-r: calc(var(--search-inner-r) + var(--search-pad));
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -241,8 +241,7 @@
 
   .search-actions {
     grid-area: 1 / 2;
-    --well-pad: var(--well-pad-tight);
-    --tray-gap: var(--well-pad-tight);
+    --tray-gap: 4px;
   }
   .search-step,
   .search-close {
@@ -263,11 +262,6 @@
     color: var(--ink-faint);
     opacity: 0.75;
     cursor: default;
-  }
-  .search-step:focus-visible,
-  .search-close:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 1px;
   }
   /* Previous match points up: reuse the single chevron glyph, rotated. */
   .chev-up {

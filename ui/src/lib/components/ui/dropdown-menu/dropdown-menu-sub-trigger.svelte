@@ -33,11 +33,8 @@
 		"data-[inset=true]:ps-8",
 		// Disabled row
 		"data-disabled:pointer-events-none data-disabled:opacity-50",
-		// Highlighted (hover / keyboard) row
-		"data-highlighted:bg-accent data-highlighted:text-accent-foreground",
-		// While its submenu is open the row stays highlighted, so the trail from the
-		// parent menu to the open panel reads unbroken
-		"data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",
+		// Highlighted (hover / keyboard) row: rises as a key (.key-row, styles/atoms.css)
+		"key-row data-highlighted:text-accent-foreground data-[state=open]:text-accent-foreground",
 		className
 	)}
 	{...restProps}

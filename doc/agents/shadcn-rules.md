@@ -120,12 +120,15 @@ separator to `role="separator"`, so a caller that omits the prop is announced; c
 dividers are decorative, and a caller that means a semantic break passes
 `decorative={false}`. `separator.test.ts` guards it.
 
-**The focus-cued components use `focus-visible:outline-hidden` where the registry ships
-`outline-none`** (EXC-1412). At rest there is no outline in either mode. On
-`:focus-visible` the outline style is `none`, except under forced colors, where the
-browser paints a transparent 2px outline in a system color. The ring alone cannot do that,
-because forced colors strips box-shadows. `test/structure/shadcn-outline.test.ts` and the
-forced-colors spec in `test/e2e/settings.e2e.ts` guard it.
+**No vendored component paints a focus ring.** caret's keyboard focus wears a control's
+hover look, so the registry's `focus-visible:ring-*`, `focus-visible:border-ring` and
+`has-[…:focus-visible]:ring-*` utilities are stripped, and each `hover:` utility gains a
+`focus-visible:` twin. Fields keep no ring either: `.field-well` lights a wall of the cut
+(`styles/atoms.css`). `focus-visible:outline-hidden` stays where the registry ships
+`outline-none` (EXC-1412), and `styles/base.css` draws the outline under forced colors,
+which strip faces and shadows. `test/structure/shadcn-outline.test.ts` reds on a focus
+ring utility a re-sync brings back, and the forced-colors spec in
+`test/e2e/settings.e2e.ts` guards the outline.
 
 **That is the policy, not a one-off.** When the registry source is wrong on accessibility,
 patch the vendored file and leave a test that reds if a re-sync drops the patch — the pair
@@ -153,8 +156,8 @@ plan's two heading surfaces narrate identically.
 ## Token-bridge discipline
 
 Components consume caret's palette through the **bridged shadcn semantic variables**
-(`--background`, `--primary`, `--border`, `--ring`, …), never raw color. The bridge lives
-in exactly one place — the shadcn semantic `:root` block plus the `@theme inline` map in
+(`--background`, `--primary`, `--border`, …), never raw color. The bridge lives in exactly
+one place — the shadcn semantic `:root` block plus the `@theme inline` map in
 `ui/src/app.css` — mapping each shadcn var onto a caret token with `var(--caret-token)`
 (the same pattern the `.diffview` → `--diffs-*` bridge uses).
 
@@ -165,7 +168,7 @@ in exactly one place — the shadcn semantic `:root` block plus the `@theme inli
 - **No raw hex or oklch in a component.** A color belongs in a caret token, bridged to a
   shadcn var; a literal in a component bypasses both. `shadcn-bridge.test.ts` pins the
   mapping (every semantic var → a caret token, no hex/oklch, amber reaches shadcn only via
-  `--primary` and `--ring`), so a drift fails the unit suite.
+  `--primary`), so a drift fails the unit suite. No `--ring` is bridged.
 - **Tailwind generation is scoped to the copied tree.** `app.css` imports Tailwind with
   `source(none)` and a single `@source "./lib/components/ui"`, so utilities are emitted
   only for the shadcn components — caret's own semantic classes (`.chip`, `.collapse`, …)
@@ -190,11 +193,11 @@ consistent with it rather than inventing a per-component treatment.
 - **Neutral controls wear `.float-chip`.** A button, a dropdown trigger, or any resting
   control that isn't the primary action uses `variant="secondary"` **plus**
   `class="float-chip"` — the neutral rubber cap, a domed face (`--neutral-face`, hover
-  `--neutral-face-hover`, pressed `--neutral-face-down`) sitting in an inset `.tray` well
-  with **no hard border**, whose label rides `--ink-soft` and brightens to `--ink` on
-  hover / while its menu is open (`aria-expanded`). The atom lives in
-  `ui/src/styles/atoms.css`, its face tokens in `styles/derived.css`. Don't give a neutral
-  control an outline border; the cap is the affordance.
+  `--neutral-face-hover`, pressed `--neutral-face-press`) sitting in an inset `.tray` well
+  with **no hard border**, whose label rides `--ink-soft` stepped toward `--ink` and
+  brightens to `--ink` on hover / while its menu is open (`aria-expanded`). The atom lives
+  in `ui/src/styles/atoms.css`, its face tokens in `styles/derived.css`. Don't give a
+  neutral control an outline border; the cap is the affordance.
 - **Style a Button by element — `button.x`, never `[data-slot="button"].x`.** `Button`
   writes its own `data-slot="button"` *before* it spreads `{...restProps}`, so the moment
   that Button is also a bits-ui trigger the primitive's slot value wins and every
@@ -214,32 +217,34 @@ consistent with it rather than inventing a per-component treatment.
   quiet. For a floating panel edge prefer a soft ring (`ring-1 ring-foreground/10`) over a
   border. If you still see a bright divider, a component is overriding the bridged color —
   fix the component, don't add another border on top.
-- **Menu highlight vs. selection.** A menu/select row's hover/keyboard highlight is
-  `bg-accent`, bound (via `--color-accent`) to `--chip-hover` so it matches the topbar's
-  button hover app-wide. A `DropdownMenu`'s selected row keeps the amber wash
-  (`--accent-wash`), as the diff view marks a selection. **The highlight and the selection
-  must never hide each other, and a `Select` is where they meet.** A menu highlights
-  nothing until the reader moves, but a listbox has no such state: bits-ui parks the
-  highlight on the **selected** row as the content mounts (`setInitialHighlightedNode`).
-  So in `SettingSelect.svelte` the highlight is the only fill and the selection is the
-  vendored check icon in `--ink`, which survives under any fill. Settings spends no amber
-  on its select. The highlight is not decoration: bits-ui focuses no row (it drives
+- **Menu highlight vs. selection.** Every menu and select row is a `.key-row`
+  (`ui/src/styles/atoms.css`): the highlight raises the row as a key, and the chosen row
+  latches down on `--neutral-face-down`. Neither spends amber, and a check that marks the
+  current choice, such as the version picker's, is ink. In a menu or listbox the row rises
+  on `[data-highlighted]` alone, never on `:hover`, because the highlight already follows
+  the pointer. **The highlight and the selection must never hide each other, and a
+  `Select` is where they meet.** A menu highlights nothing until the reader moves, but a
+  listbox has no such state: bits-ui parks the highlight on the **selected** row as the
+  content mounts (`setInitialHighlightedNode`). bits-ui's `[data-selected]` on a Select
+  item means the chosen option, so `SettingSelect.svelte` names the chosen row with
+  `data-active` and latches it, and the vendored check icon in `--ink` survives under any
+  face. The highlight is not decoration: bits-ui focuses no row (it drives
   `aria-activedescendant` from the trigger), so `[data-highlighted]` **is** the listbox's
   keyboard cursor and has to stay visible on every row, the selected one included.
 - **Modals compose `Modal.svelte`.** `ui/src/components/Modal.svelte` is the shared shell:
   `kind="dialog"` (dismissible, e.g. Settings) or `kind="confirm"` (an `alertdialog`
-  guard, e.g. Approve/Reject) selects the bits-ui primitive, but the eyebrow, title,
-  description, footer band, and raised-paper surface are styled **once** so the modals
-  can't drift. A new modal reuses it instead of hand-rolling a Dialog. The shadcn
-  `dialog-*` and `alert-dialog-*` `content`/`footer` are kept visually aligned as its
-  base, and their **backdrop and their timing are shared outright** — one scrim, one blur,
-  one timing across all four Dialog and AlertDialog surfaces, declared in
-  `styles/shadcn-bridge.css` § Modal choreography (EXC-892) rather than per vendored file,
-  because a dismissible pane and a decision guard dimming the app differently is two
-  backdrop languages in one app. A modal built on either primitive inherits all of it and
-  should need no motion or backdrop CSS of its own. (`sheet-overlay.svelte` is not yet on
-  it — no caret surface composes a Sheet today, though the vendored tree is live on the
-  import graph; see § What stays custom. Fold it in when something reaches for one.)
+  guard, e.g. Approve/Reject) selects the bits-ui primitive, but the title, description,
+  footer shelf, and raised-paper surface are styled **once** so the modals can't drift. A
+  new modal reuses it instead of hand-rolling a Dialog. The shadcn `dialog-*` and
+  `alert-dialog-*` `content`/`footer` are kept visually aligned as its base, and their
+  **backdrop and their timing are shared outright** — one scrim, one blur, one timing
+  across all four Dialog and AlertDialog surfaces, declared in `styles/shadcn-bridge.css`
+  § Modal choreography (EXC-892) rather than per vendored file, because a dismissible pane
+  and a decision guard dimming the app differently is two backdrop languages in one app. A
+  modal built on either primitive inherits all of it and should need no motion or backdrop
+  CSS of its own. (`sheet-overlay.svelte` is not yet on it — no caret surface composes a
+  Sheet today, though the vendored tree is live on the import graph; see § What stays
+  custom. Fold it in when something reaches for one.)
 - **Palette-derived affordances read the registry.** Anything that visualizes a theme (the
   Settings theme swatch) derives its colors from the theme's tokens, resolved through
   `themeFor` in [`lib/theme.ts`](../../ui/src/lib/theme.ts), not literals — so any future

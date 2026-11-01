@@ -98,9 +98,6 @@
   let query = $state("");
   let queryEl = $state<HTMLInputElement | null>(null);
 
-  // Whether keys are driving the selection, which is when its ring shows. Hover moves the
-  // selection too, and a ring chasing the pointer would only repeat the hover face.
-  let keysDriving = $state(false);
   // The row Enter picked, which plays the key's press while the popup leaves.
   let pressedLine = $state<number | null>(null);
 
@@ -120,7 +117,6 @@
   // traps focus with a single tabbable inside, so untouched the key moved focus out
   // of the field and straight back to it, doing nothing at all.
   function onWalkKeydown(e: KeyboardEvent): void {
-    keysDriving = true;
     walkCommandList(e, queryEl, repeat);
   }
 
@@ -219,7 +215,6 @@
   function seed(): void {
     query = "";
     selected = activeLine === null ? "" : String(activeLine);
-    keysDriving = false;
     pressedLine = null;
     // The popup's cue, sounded from the open itself rather than from either caller
     // (EXC-1126) — the trigger's onOpenChange and openPopup below both land here, so
@@ -474,7 +469,6 @@
       loop
       bind:value={selected}
       onkeydown={onWalkKeydown}
-      data-keys={keysDriving ? "" : undefined}
     >
       <div class="toc-head">
         <Command.Input
@@ -507,7 +501,6 @@
       <Command.List
         aria-label="Plan headings"
         data-toc-view={searching ? "matches" : "outline"}
-        onpointermove={() => (keysDriving = false)}
         onscroll={(e) => e.currentTarget.toggleAttribute("data-scrolled", e.currentTarget.scrollTop > 0)}
       >
         {#if searching}
@@ -543,7 +536,7 @@
             {#if crumb === ""}
               {@render matchRows(group)}
             {:else}
-              <Command.Group value="group:{group.matches[0]?.line}" heading={crumb} headingClass="eyebrow">
+              <Command.Group value="group:{group.matches[0]?.line}" heading={crumb} headingClass="form-label">
                 {@render matchRows(group)}
               </Command.Group>
             {/if}
@@ -587,7 +580,7 @@
         {:else}
           {@const section = sections.get(peeked.line)}
           {#if peekTrail !== ""}
-            <p class="toc-peek-trail eyebrow">{peekTrail}</p>
+            <p class="toc-peek-trail form-label">{peekTrail}</p>
           {/if}
           <p class="toc-peek-title">{peeked.text}</p>
           {#if section !== undefined}
@@ -659,6 +652,8 @@
     padding: 0;
     gap: 0;
     overflow: hidden;
+    /* A row's key runs the list's 4px side padding in from this corner. */
+    border-radius: calc(var(--key-radius) + 4px);
   }
   :global(.plan-toc-panel:has([data-slot="command-item"])) {
     min-height: min(21rem, 70vh);
@@ -669,28 +664,15 @@
     background: transparent;
   }
 
-  /* The filter field, cut into the panel to the `.field-well` recipe, focus included: no
-     ring, only the text cursor and an edge a step firmer. The atom itself can't apply: the
-     vendored input group pins its box-shadow with `shadow-none!`, which only Tailwind's own
-     shadow variables reach. */
   :global(.plan-toc-panel .toc-head) {
     position: relative;
     z-index: 1;
     background: var(--paper-raised);
     transition: box-shadow var(--dur-state) var(--ease-out);
   }
+  /* The field's corner nests in the panel's: the panel's radius less the field's. */
   :global(.plan-toc-panel [data-slot="command-input-wrapper"]) {
-    padding: 4px;
-  }
-  :global(.plan-toc-panel [data-slot="command-input-wrapper"] [data-slot="input-group"]) {
-    border-color: transparent;
-    background: var(--field-floor);
-    --tw-inset-shadow: var(--field-shade);
-    --tw-inset-ring-shadow: inset 0 0 0 1px var(--rule);
-    --tw-ring-shadow: var(--well-lip);
-  }
-  :global(.plan-toc-panel [data-slot="command-input-wrapper"] [data-slot="input-group"]:focus-within) {
-    --tw-inset-ring-shadow: inset 0 0 0 1px var(--rule-strong);
+    padding: calc(var(--key-radius) + 4px - var(--radius));
   }
   :global(.plan-toc-panel [data-slot="command-input-wrapper"] [data-slot="input-group-addon"]) {
     opacity: 1;
@@ -905,37 +887,23 @@
     pointer-events: none;
   }
 
-  /* The key: a row's cap, flat on the panel at rest. It rises under the pointer, which
-     moves the selection; the keyboard's selection adds a solid --accent ring, since the
-     bridge's 30% --ring falls under 3:1 against the float and here the ring is the one
-     signal telling the keyboard's row from the pointer's. The heading being read is
-     latched down, as the compare toggle is when it is on. Every state draws the same five
-     shadow layers, so a change of state transitions. The layers are the kit's cap rest
-     and press (styles/atoms.css); a row is no `.cap`, which would claim a tray. */
-  :global(.plan-toc-panel) {
-    --toc-key-flat:
-      inset 0 0 0 0 transparent,
-      inset 0 1px 0 transparent,
-      inset 0 0 0 1px transparent,
-      inset 0 4px 5px -3px transparent,
-      inset 0 -3px 6px 0 transparent;
-    --toc-key-up:
-      inset 0 0 0 0 transparent,
-      inset 0 1px 0 var(--rim-top),
-      inset 0 0 0 1px var(--rim-side),
-      inset 0 4px 5px -3px var(--dome-hi),
-      inset 0 -3px 6px 0 var(--dome-lo);
-    --toc-key-down:
-      inset 0 0 0 1px var(--well-floor),
-      inset 0 1px 0 transparent,
-      inset 0 0 0 2px var(--rim-side),
-      inset 0 4px 5px -1px var(--press-shade),
-      inset 0 0 4px 1px var(--press-ring);
-  }
+  /* The key: a row's key, flat on the panel at rest. It rises on the selection, which the
+     pointer and the keys move alike, so the keyboard's row looks exactly as the pointer's.
+     The heading being read is latched down, as the compare toggle is when it is on, and
+     stays down on the hover face while selected. Every state draws the same five
+     shadow layers, so a change of state transitions. The rise and press are the key
+     row's (the --key-row-* tokens); a row is no `.key-row`, whose states key on the row
+     itself rather than on the command item around it. */
   :global(.plan-toc-panel .toc-key) {
     --key-face: transparent;
-    --key-grain: none;
-    --key-shadow: var(--toc-key-flat);
+    --key-image: none;
+    --key-shadow:
+      inset 0 2px 2px -1px transparent,
+      0 0 0 transparent,
+      0 0 0 transparent,
+      0 0 0 transparent,
+      0 0 0 transparent;
+    --key-shift: 0;
     flex: 1;
     min-width: 0;
     display: flex;
@@ -943,42 +911,42 @@
     gap: 0.5rem;
     min-height: 1.875rem;
     padding: 0 0.45rem 0 0.375rem;
-    border-radius: var(--radius);
+    border-radius: var(--key-radius);
     background-color: var(--key-face);
-    background-image: var(--key-grain);
-    background-size: 128px;
-    background-blend-mode: soft-light;
+    background-image: var(--key-image);
+    background-size: auto, 128px;
+    background-blend-mode: normal, soft-light;
     box-shadow: var(--key-shadow);
-    outline: 2px solid transparent;
-    outline-offset: 1px;
+    translate: 0 var(--key-shift);
     transition:
+      translate var(--dur-state) var(--ease-spring),
       background-color var(--dur-state) var(--ease-out),
       color var(--dur-state) var(--ease-out),
-      box-shadow var(--dur-state) var(--ease-out),
-      outline-color var(--dur-state) var(--ease-out);
+      box-shadow var(--dur-state) var(--ease-out);
   }
   :global(.plan-toc-panel [data-slot="command-item"][data-selected] .toc-key) {
     --key-face: var(--neutral-face-hover);
-    --key-grain: var(--grain);
-    --key-shadow: var(--toc-key-up);
+    --key-image: var(--key-row-up-image);
+    --key-shadow: var(--key-row-up);
+    --key-shift: calc(-1 * var(--key-rise));
     color: var(--ink);
-  }
-  :global(.plan-toc-panel [data-keys] [data-slot="command-item"][data-selected] .toc-key) {
-    outline-color: var(--accent);
   }
   :global(.plan-toc-panel [data-slot="command-item"][aria-current="location"] .toc-key) {
     --key-face: var(--neutral-face-latched);
-    --key-grain: var(--grain);
-    --key-shadow: var(--toc-key-down);
+    --key-image: var(--key-row-down-image);
+    --key-shadow: var(--key-row-down);
+    --key-shift: var(--key-sink);
     color: var(--ink);
   }
   :global(.plan-toc-panel [data-slot="command-item"][aria-current="location"][data-selected] .toc-key) {
-    --key-face: color-mix(in lab, var(--neutral-face-latched), var(--neutral-face-hover));
+    --key-face: var(--neutral-face-hover);
   }
   :global(.plan-toc-panel [data-slot="command-item"]:is(:active, [data-key-pressed]) .toc-key) {
-    --key-face: var(--neutral-face-down);
-    --key-grain: var(--grain);
-    --key-shadow: var(--toc-key-down);
+    --key-face: var(--neutral-face-press);
+    --key-image: var(--key-row-down-image);
+    --key-shadow: var(--key-row-down);
+    --key-shift: var(--key-sink);
+    transition-timing-function: var(--ease-out);
   }
 
   /* What a row says beyond its heading: an --attention dot when the section changed
@@ -1033,10 +1001,9 @@
     overflow: visible;
   }
 
-  /* The breadcrumb header. `.eyebrow` (styles/atoms.css) is caret's uppercase-label
-     vocabulary and supplies the whole of it — smaller than the rows, tracked,
-     uppercase, at the faintest ink — so the only thing left here is placing it: the
-     rows' own inline padding, so header and labels share one left edge, and the
+  /* The breadcrumb header. `.form-label` (styles/atoms.css) is caret's section-label
+     vocabulary and supplies its type and ink, so the only thing left here is placing it:
+     the rows' own inline padding, so header and labels share one left edge, and the
      space above that separates one group from the group before it. `:first-child`
      rather than a bottom margin on the group, so the first header sits flush
      against the leading space the list already carries.
@@ -1071,7 +1038,7 @@
   :global(.plan-toc-panel [data-command-group-heading]) {
     padding-inline: 0.5rem;
     padding-block: 0.25rem;
-    margin-block-start: 0.5rem;
+    margin-block: 0.5rem 0;
     font-style: italic;
     direction: rtl;
     text-align: left;
@@ -1096,11 +1063,16 @@
      rule on the wrapper loses the walked-to row without ever being overridden, and that row
      is no edge case: the popup seeds its selection to the heading being read on every open,
      and the filtered view always lands on the first match.
-     --ink-soft rather than the fainter rung the eyebrow takes, because the ground that
+     --ink-soft rather than --ink-faint, because the ground that
      decides it is not the panel but a raised or latched key's face, where --ink-faint
      falls under the 3:1 a non-text graphic wants. */
   :global(.plan-toc-panel [data-slot="command-item"] [data-icon^="heading-"] svg) {
     color: var(--ink-soft);
+  }
+  /* --ink-soft falls under 3:1 on the risen face; a neutral key's label ink holds it and
+     stays a rung under the label. */
+  :global(.plan-toc-panel [data-slot="command-item"][data-selected] [data-icon^="heading-"] svg) {
+    color: color-mix(in lab, var(--ink-soft), var(--ink) 15%);
   }
 
   /* A long heading truncates in its row rather than stretching the panel to the

@@ -84,8 +84,7 @@
   /* `.ref-hint` is handed to <Button>, so it carries no Svelte scope hash and is styled
      via :global. These unlayered rules mold the Button's surface in place — they beat the
      Button recipe's layered Tailwind utilities, so what is left of the control is the dot
-     itself. The unlayered box-shadow also suppresses the recipe's focus ring, so focus is
-     shown by the explicit outline below. */
+     itself. */
   :global(.ref-hint) {
     position: absolute;
     /* Sits ON the token's top-right corner rather than beside it, so the dot marks the
@@ -115,9 +114,8 @@
     z-index: 3;
   }
 
-  :global(.ref-hint:focus-visible) {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
+  :global(.ref-hint:is(:hover, :focus-visible)) {
+    background-color: color-mix(in lab, var(--attention), var(--ink) 35%);
   }
 
   /* The teaching ping: a ring that grows out of the dot and fades out. It rests at

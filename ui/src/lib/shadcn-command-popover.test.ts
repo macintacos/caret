@@ -119,7 +119,7 @@ test("the icon swap renders vendored SVGs, not the dropped @lucide/svelte compon
 // The second caret addition to the vendored command tree, alongside the Viewport
 // above (EXC-1103). The registry's command-group hardcodes its heading's classes and
 // offers no override, so a caret surface wanting its own label vocabulary — the ToC
-// popup dresses the breadcrumb header in the shared `.eyebrow` atom — has nowhere to
+// popup dresses the breadcrumb header in the shared `.form-label` atom — has nowhere to
 // put one. The guard belongs HERE rather than on that surface: it is the PRIMITIVE a
 // re-sync reverts, and a guard on the one consumer disappears the day that consumer
 // restyles (doc/agents/shadcn-rules.md § Edits a re-sync will silently undo).

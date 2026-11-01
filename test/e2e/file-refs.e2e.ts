@@ -621,6 +621,32 @@ test("a cited range washes every line it names, framed with context on both side
   }
 });
 
+test("a cited line's band runs the whole width the code scrolls to", async ({ daemon, page }) => {
+  // A long line elsewhere in the window widens the scroll range past the lane, and a
+  // reader scrolled sideways still sees the cited line washed edge to edge.
+  const wide = `const wide = "${"w".repeat(300)}";`;
+  const proj = await makeProject({ "src/wide.ts": `${wide}\nconst cited = 1;\n` });
+  try {
+    const preview = await openFileRefPreview(
+      page,
+      daemon,
+      proj.dir,
+      "# Refs\n\nThe flag is set at `src/wide.ts:2` today.\n",
+    );
+    await settleDrawer(page);
+    await expect(preview.locator(".fp-target")).toHaveCount(1);
+    const widths = await preview.locator(".fp-code").evaluate((region) => ({
+      lane: region.clientWidth,
+      scroll: region.scrollWidth,
+      band: region.querySelector<HTMLElement>(".fp-target")?.offsetWidth ?? 0,
+    }));
+    expect(widths.scroll).toBeGreaterThan(widths.lane);
+    expect(widths.band).toBe(widths.scroll);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 test("a range taller than the region opens at its first line, not centred", async ({
   daemon,
   page,
@@ -1057,21 +1083,21 @@ test("a keyboard reader walks the preview to both ends with no pointer", async (
     expect(focused).toBe(true);
     expect(await planScrollTop()).toBe(planBeforeTab);
 
-    // The app's own focus ring, inset: the lane clips the panel and the region
-    // runs flush to its edges, so an outset ring would be cut off on three sides.
-    const ring = await preview.locator(".fp-code").evaluate((el) => {
+    // A read-only text region, so its focus draws no ring and lights one wall, as a
+    // focused field's does.
+    const focus = await preview.locator(".fp-code").evaluate((el) => {
+      const probe = el.appendChild(document.createElement("div"));
+      probe.style.boxShadow = "var(--field-wall)";
+      const wall = getComputedStyle(probe).boxShadow;
+      probe.remove();
       const cs = getComputedStyle(el);
       return {
         focusVisible: el.matches(":focus-visible"),
-        style: cs.outlineStyle,
-        width: Number.parseFloat(cs.outlineWidth),
-        offset: cs.outlineOffset,
+        outline: cs.outlineStyle,
+        litWall: cs.boxShadow === wall,
       };
     });
-    expect(ring.focusVisible).toBe(true);
-    expect(ring.style).not.toBe("none");
-    expect(ring.width).toBeGreaterThan(0);
-    expect(ring.offset).toBe("-2px");
+    expect(focus).toEqual({ focusVisible: true, outline: "none", litWall: true });
 
     // End walks down a chunk at a time — each press scrolls the region, and that
     // scroll loads the next chunk exactly as a wheel notch would — until the

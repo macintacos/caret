@@ -152,6 +152,20 @@ describe("UnsentCommentsDialog render", () => {
     );
   });
 
+  test("the Reject variant sets unsent comments apart from the comments it drops", async () => {
+    await mount({
+      ...rejectProps,
+      items: [...twoItems, { label: "Line 9", text: "half a thought", unsent: true }],
+    });
+    const committed = region("Your comments")?.textContent ?? "";
+    expect(committed).toContain("explain the cold cost");
+    expect(committed).not.toContain("half a thought");
+    const unsent = region("Unsent comments")?.textContent ?? "";
+    expect(unsent).toContain("half a thought");
+    expect(unsent).not.toContain("explain the cold cost");
+    expect(description()?.textContent).toContain("3 pending comments");
+  });
+
   test("with no pending comments it is a plain confirm — no warning, no preview, no divert, no 'anyway'", async () => {
     await mount({ ...rejectProps, items: [] });
     expect(description()?.textContent).not.toContain("pending comment");

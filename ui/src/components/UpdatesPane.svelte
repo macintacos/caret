@@ -32,8 +32,7 @@
   // The dot is the pane's one hued element, and it carries the verdict before the
   // sentence does. --attention is the novelty job ("worth a glance"), --ok the positive
   // semantic, and everything else stays on the neutral ink ramp. Amber is deliberately
-  // not spent here: it marks selection and brand, and the rail row beside this pane is
-  // already wearing it.
+  // not spent here: it is kept for the wordmark, the primary action, focus and the cursor.
   const tone = $derived.by(() => {
     if (!report) return "quiet";
     if (isUpdatePending(report.status)) return "pending";
@@ -51,7 +50,12 @@
 
     {#if copy}
       <p class="update-headline">
-        <span class="update-dot" data-tone={tone} aria-hidden="true"></span>
+        <span
+          class="update-dot led"
+          class:led-off={tone === "quiet"}
+          data-tone={tone}
+          aria-hidden="true"
+        ></span>
         {copy.headline}
       </p>
       <p class="update-detail">{copy.detail}</p>
@@ -109,22 +113,17 @@
     line-height: var(--leading-snug);
     color: var(--ink-soft);
   }
-  /* A plain coloured disc, not an icon — the same affordance the Advanced pane's daemon
-     liveness dot is, and hued by the job its tone does. `align-self` rather than a
-     baseline shift: a disc has no baseline of its own to sit on. */
+  /* A status light (styles/atoms.css), as the Advanced pane's daemon light is, lit in the
+     colour of the job its tone does and dark when there is no verdict to show.
+     `align-self` rather than a baseline shift: a light has no baseline to sit on. */
   .update-dot {
-    flex: none;
     align-self: center;
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 50%;
-    background: var(--ink-faint);
   }
   .update-dot[data-tone="pending"] {
-    background: var(--attention);
+    --led: var(--attention);
   }
   .update-dot[data-tone="ok"] {
-    background: var(--ok);
+    --led: var(--ok);
   }
 
   .updates :global(.update-command) {
@@ -142,6 +141,6 @@
   .update-placeholder {
     margin: 0;
     font-size: var(--text-sm);
-    color: var(--ink-faint);
+    color: var(--ink-soft);
   }
 </style>

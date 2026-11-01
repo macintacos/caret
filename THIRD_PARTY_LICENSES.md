@@ -44,9 +44,6 @@ under the ISC license.
 | `refresh-cw` | [ui/src/icons/refresh-cw.svg](ui/src/icons/refresh-cw.svg) | [refresh-cw.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/refresh-cw.svg) |
 | `search` | [ui/src/icons/search.svg](ui/src/icons/search.svg) | [search.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/search.svg) |
 | `settings` | [ui/src/icons/settings.svg](ui/src/icons/settings.svg) | [settings.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/settings.svg) |
-| `square` | [ui/src/icons/square.svg](ui/src/icons/square.svg) | [square.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/square.svg) |
-| `square-check-big` | [ui/src/icons/square-check-big.svg](ui/src/icons/square-check-big.svg) | [square-check-big.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/square-check-big.svg) |
-| `square-slash` | [ui/src/icons/square-slash.svg](ui/src/icons/square-slash.svg) | [square-slash.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/square-slash.svg) |
 | `sun` | [ui/src/icons/sun.svg](ui/src/icons/sun.svg) | [sun.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/sun.svg) |
 | `text-wrap` | [ui/src/icons/text-wrap.svg](ui/src/icons/text-wrap.svg) | [text-wrap.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/text-wrap.svg) |
 | `trash-2` | [ui/src/icons/trash-2.svg](ui/src/icons/trash-2.svg) | [trash-2.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/trash-2.svg) |

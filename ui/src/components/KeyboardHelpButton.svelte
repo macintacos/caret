@@ -27,11 +27,7 @@
 </span>
 
 <style>
-  /* A small cap in a shallow well of its own, sized to fill the status bar's height
-     exactly. */
-  .kbd-help-well {
-    --well-pad: var(--well-pad-tight);
-  }
+  /* A small key in a well of its own, sized to fill the status bar's height. */
   .kbd-help {
     display: inline-flex;
     align-items: center;
@@ -41,10 +37,6 @@
     cursor: pointer;
     height: 1.5rem;
     padding: 0 0.4rem;
-    border-radius: var(--radius);
-  }
-  .kbd-help:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
+    border-radius: var(--key-radius);
   }
 </style>

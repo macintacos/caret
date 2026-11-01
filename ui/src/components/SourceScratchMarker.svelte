@@ -42,10 +42,6 @@
        preventScroll guard depends on it). */
     animation: reveal var(--dur-state) var(--ease-out);
   }
-  .scratch:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
-  }
   /* Inked like a comment stamp's word, so its hue matches the Draft stamp's while the
      word and glyph tell the two apart. */
   .unsent {

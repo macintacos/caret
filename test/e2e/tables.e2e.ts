@@ -499,7 +499,7 @@ test("a wrapped cell's continuation lines follow its column too", async ({ page,
   );
 });
 
-test("no pipe glyph paints, and the table sits in an inlay", async ({ page, daemon }) => {
+test("no pipe glyph paints, and the table stands as a raised pad", async ({ page, daemon }) => {
   await openPlan(page, daemon, TABLE_PLAN);
   await carded(page);
 
@@ -515,10 +515,10 @@ test("no pipe glyph paints, and the table sits in an inlay", async ({ page, daem
   expect([...new Set(pipes.map((p) => p.text))]).toEqual(["|"]);
   expect([...new Set(pipes.map((p) => p.color))]).toEqual(["rgba(0, 0, 0, 0)"]);
 
-  // The edges are handed to the inlay: a bezel of the window's --body floating on the
-  // plan, and a pane of --table-floor sunk into it under the rail. The rail's rows clear
-  // the library's opaque per-row fill to show the bezel; the pane's rows paint the floor.
-  // The pane's corners are concentric with the bezel's, at --radius.
+  // The edges are handed to the pad: a raised pad of the window's --body standing on the
+  // plan, and a scoop of --table-floor on its face under the rail. The rail's rows clear
+  // the library's opaque per-row fill to show the pad; the scoop's rows paint the floor.
+  // The scoop's corners nest inside the pad's.
   const surface = await page.evaluate(() => {
     const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
     const card = sh?.querySelector("[data-content] > [data-table-card]") as HTMLElement;
@@ -623,12 +623,13 @@ test("no pipe glyph paints, and the table sits in an inlay", async ({ page, daem
   }
   expect(marks.rows.find((r) => r.delimiter)?.image).toBe("none");
   expect(marks.rows.find((r) => r.head)?.image).toBe("none");
-  // Nor does the card's last row, whose hairline would double the pane's bottom edge.
+  // Nor does the card's last row, which carries the scoop's lit lip instead of a hairline.
   // This table's last row is a body row, so the case is really exercised.
   const last = marks.rows.at(-1);
   expect(last?.head).toBe(false);
   expect(last?.delimiter).toBe(false);
-  expect(last?.image).toBe("none");
+  expect(last?.image).not.toContain(ruleInk);
+  expect(last?.image).toMatch(/^linear-gradient\(to top,/);
 
   // The header is a cap: uppercase, on --table-head-ink, with the pipes still gone. The
   // transform is a rendering-time one, so the copy spec further down still reads the

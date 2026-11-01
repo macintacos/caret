@@ -150,6 +150,13 @@ The split mirrors the test layers:
   friends), which absorb the poll, debounce, and grace windows on their own. **Never**
   `page.waitForTimeout`: a fixed sleep is either slower than it needs to be or races the
   very window it is waiting on.
+- **`toBeVisible()` does not mean placed.** It passes as soon as the element has a box. A
+  panel that positions itself after it mounts must stay hidden until its first placement,
+  as the completion preview does. Otherwise the assertion passes before the panel is in
+  place.
+- **An `expect.poll` probe returns `null` instead of throwing.** `expect.poll` stops at
+  the predicate's first throw and does not retry it, so a probe polled across a navigation
+  must return `null` while the page mounts. `sourceTopLine` and `previewTopBlock` do this.
 - **Units inject the clock instead of waiting.** A load-bearing window is passed in rather
   than slept through — `ui/src/lib/safeMode.ts` takes `now` / `graceMs` / `durationMs`
   options, which `safeMode.test.ts` drives deterministically. Follow that pattern for new

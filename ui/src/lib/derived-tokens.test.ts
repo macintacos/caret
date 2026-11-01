@@ -36,10 +36,13 @@ function declaredTokens(body: string): Record<string, string> {
   return tokens;
 }
 
-// The floating surfaces are box-shadows over the tactile geometry, not colours.
+// The floating surfaces and the key row's states are box-shadows and backgrounds over the
+// tactile geometry, not colours.
 function colours(tokens: Record<string, string>): Record<string, string> {
   return Object.fromEntries(
-    Object.entries(tokens).filter(([name]) => !name.startsWith("--float-surface-")),
+    Object.entries(tokens).filter(
+      ([name]) => !name.startsWith("--float-surface-") && !name.startsWith("--key-row-"),
+    ),
   );
 }
 
@@ -55,18 +58,27 @@ describe("the derived-token tier", () => {
 
   test("names the tokens the chrome reads", () => {
     expect(Object.keys(tokens).sort()).toEqual([
+      "--accent-face-hover",
+      "--accent-face-press",
       "--attention-wash",
       "--body",
       "--chip",
       "--chip-hover",
       "--code-panel",
+      "--crumb-face-hover",
       "--danger-face-hover",
+      "--danger-face-press",
+      "--field-edge-focus",
       "--field-floor",
       "--float-surface-high",
       "--float-surface-low",
       "--float-surface-mid",
       "--group-floor",
       "--ink-wash",
+      "--key-row-down",
+      "--key-row-down-image",
+      "--key-row-up",
+      "--key-row-up-image",
       "--knob-edge",
       "--knob-face",
       "--knob-face-down",
@@ -76,6 +88,9 @@ describe("the derived-token tier", () => {
       "--neutral-face-down",
       "--neutral-face-hover",
       "--neutral-face-latched",
+      "--neutral-face-press",
+      "--pad-side",
+      "--pad-top",
       "--switch-on",
       "--table-floor",
       "--table-floor-rule",

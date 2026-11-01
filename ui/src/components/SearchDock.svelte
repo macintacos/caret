@@ -52,8 +52,8 @@
     gap: 0.4rem;
     height: 1.7rem;
     padding-inline: 0.65rem;
-    border-radius: 0 0 calc(var(--radius) + var(--well-pad-tight))
-      calc(var(--radius) + var(--well-pad-tight));
+    border-radius: 0 0 calc(var(--key-radius) + var(--well-pad))
+      calc(var(--key-radius) + var(--well-pad));
     background: var(--paper-raised);
     box-shadow:
       0 0 0 1px var(--rule),

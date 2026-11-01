@@ -433,14 +433,14 @@ describe("PlanToc surface", () => {
     await close(target, flush);
   });
 
-  // The header wears caret's shared uppercase-label atom rather than a treatment
-  // of its own. Pinned because the class reaches it through a `headingClass` prop
-  // added to the vendored command-group.svelte, which a registry re-sync reverts
-  // silently (doc/agents/shadcn-rules.md § Edits a re-sync will silently undo).
-  test("dresses the header in the shared eyebrow atom", async () => {
+  // The header wears caret's shared section-label atom rather than a treatment of its
+  // own. Pinned because the class reaches it through a `headingClass` prop added to the
+  // vendored command-group.svelte, which a registry re-sync reverts silently
+  // (doc/agents/shadcn-rules.md § Edits a re-sync will silently undo).
+  test("dresses the header in the shared section-label atom", async () => {
     const { target, flush } = await openToc();
     await typeQuery("details", flush);
-    expect(groupHeadings()[0]?.classList.contains("eyebrow")).toBe(true);
+    expect(groupHeadings()[0]?.classList.contains("form-label")).toBe(true);
     await close(target, flush);
   });
 

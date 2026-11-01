@@ -114,10 +114,8 @@
         Reject
         {#if showShortcutHints}
           <!-- Both caps typed, so the shift glyph is the shared icon, never a ⇧
-               char. KbdCap's `size` is px while the cap's text is em-relative, so 9
-               is ~0.8 of the resulting 11px glyph, seating the arrow at the letter's
-               cap height. Retune it if the button's font-size moves. -->
-          <Kbd aria-hidden="true"><KbdCap key="shift" size={9} /><KbdCap key="R" /></Kbd>
+               char. -->
+          <Kbd aria-hidden="true"><KbdCap key="shift" /><KbdCap key="R" /></Kbd>
         {/if}
       </Button>
 
@@ -190,7 +188,7 @@
             <!-- All three verdicts carry a cap once they collapse in here. -->
             {#if showShortcutHints}
               <Kbd class="menu-key" aria-hidden="true"
-                ><KbdCap key="shift" size={9} /><KbdCap key="R" /></Kbd
+                ><KbdCap key="shift" /><KbdCap key="R" /></Kbd
               >
             {/if}
           </DropdownMenu.Item>
@@ -297,9 +295,9 @@
     display: flex;
     align-items: center;
     gap: 1rem;
-    /* Trimmed by the wells' bezel. The shorter bottom spaces the trays from the
+    /* Trimmed by the beds' pad. The shorter bottom spaces the trays from the
        control row's, which has no top padding of its own. */
-    padding: calc(0.7rem - var(--well-pad)) var(--bar-inset) calc(0.4rem - var(--well-pad));
+    padding: calc(0.7rem - var(--well-top)) var(--bar-inset) calc(0.4rem - var(--well-foot));
     position: relative;
     z-index: 30;
     /* As a grid item of .shell, the default min-width:auto would expand the track
@@ -373,7 +371,7 @@
   .actions :global(.reject .icon) {
     color: var(--danger);
   }
-  .actions :global(.reject:not(:disabled):hover .icon) {
+  .actions :global(.reject:not(:disabled):is(:hover, :focus-visible) .icon) {
     color: inherit;
   }
   /* The ⇧ inside the key cap is an .icon too, and a keycap derives its hue from

@@ -194,16 +194,18 @@ button {
   }
 }
 
-button:focus-visible,
-a:focus-visible,
-[tabindex]:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-/* A modal takes focus itself on open, so its keys work at once. It is where focus rests,
-   not a control. */
-:is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]):focus-visible {
+/* Keyboard focus wears the control's hover look and draws no ring. Forced colors strips
+   that look, so there a transparent outline, which the browser repaints in a system
+   colour, still shows focus. A modal takes focus itself on open, so its keys work at
+   once; it is where focus rests, not a control. */
+:focus-visible {
   outline: none;
+}
+@media (forced-colors: active) {
+  :focus-visible:not([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+    outline: 2px solid transparent;
+    outline-offset: 2px;
+  }
 }
 
 /* Pointer (hand) cursor on interactive controls. Tailwind v4's Preflight no longer
