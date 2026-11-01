@@ -6,73 +6,42 @@ import {
   applyCodeBlockReflow,
   CARD_ATTR,
   GUTTER_CARD_ATTR,
-  type MetricsReader,
+  markScrollingCards,
   REFLOW_ATTR,
-  type RowMetrics,
+  SCROLLS_ATTR,
   syncCodeBlockCards,
 } from "$lib/diffview/codeBlockScroll.ts";
 import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
 
-// syncCodeBlockCards wraps an overflowing fenced block's rows in ONE per-block scroll card
-// and leaves a block that fits as plain direct-child rows (EXC-729). This suite pins the
-// wrap / keep / unwrap decisions, the gutter mirror that balances them, and the comment row
-// the card carries with its rows (EXC-1228). Overflow is measured through an injectable
-// reader because happy-dom reports 0 for every layout metric — without it every block would
-// read as fitting and nothing would ever wrap.
+// syncCodeBlockCards wraps every fenced block's rows in ONE per-block card. This suite pins
+// the wrap / keep / retire decisions, the gutter mirror that balances them, and the comment
+// row the card carries with its rows (EXC-1228).
 
 interface RowSpec {
   code?: boolean;
   start?: boolean;
   end?: boolean;
-  /** Fake layout metrics for this row (defaults to a fits-the-card 100x100 row). */
-  metrics?: Partial<RowMetrics>;
 }
 
-/** Appends one [data-line] row for `spec` at `line`, recording its fake metrics. */
-function appendRow(
-  content: HTMLElement,
-  spec: RowSpec,
-  line: string,
-  rowMetrics: Map<Element, RowMetrics>,
-): void {
+/** Appends one [data-line] row for `spec` at `line`. */
+function appendRow(content: HTMLElement, spec: RowSpec, line: string): void {
   const row = document.createElement("div");
   row.setAttribute("data-line", line);
   if (spec.code) row.setAttribute("data-code-line", "");
   if (spec.start) row.setAttribute("data-code-start", "");
   if (spec.end) row.setAttribute("data-code-end", "");
   content.appendChild(row);
-  rowMetrics.set(row, { scrollWidth: 100, clientWidth: 100, ...spec.metrics });
 }
 
-function buildContent(specs: RowSpec[]): {
-  root: HTMLElement;
-  content: HTMLElement;
-  rowMetrics: Map<Element, RowMetrics>;
-} {
+function buildContent(specs: RowSpec[]): { root: HTMLElement; content: HTMLElement } {
   const root = document.createElement("div");
   const content = document.createElement("div");
   content.setAttribute("data-content", "");
-  const rowMetrics = new Map<Element, RowMetrics>();
   specs.forEach((spec, i) => {
-    appendRow(content, spec, String(i + 1), rowMetrics);
+    appendRow(content, spec, String(i + 1));
   });
   root.appendChild(content);
-  return { root, content, rowMetrics };
-}
-
-// A reader keyed so tests can control both a row's metrics (does it overflow its capped box?)
-// and a card's metrics (does the wrapped block still overflow?). A card is created by the
-// module, so it is keyed by its CARD_ATTR value — the block's start line, which tests know.
-function makeReader(
-  rowMetrics: Map<Element, RowMetrics>,
-  cardMetrics: Record<string, RowMetrics> = {},
-): MetricsReader {
-  return (el) => {
-    if (el.hasAttribute(CARD_ATTR)) {
-      return cardMetrics[el.getAttribute(CARD_ATTR) ?? ""] ?? { scrollWidth: 0, clientWidth: 0 };
-    }
-    return rowMetrics.get(el) ?? { scrollWidth: 0, clientWidth: 0 };
-  };
+  return { root, content };
 }
 
 const cardsIn = (content: HTMLElement) =>
@@ -82,22 +51,9 @@ const directRows = (content: HTMLElement) =>
 const linesInCard = (card: HTMLElement) =>
   [...card.querySelectorAll(":scope > [data-line]")].map((r) => r.getAttribute("data-line"));
 
-// A block (lines 1-3) whose widest line overflows the capped card: the middle line's
-// scrollWidth 800 exceeds its clientWidth 300; the fences fit.
-const overflowingBlock: RowSpec[] = [
-  { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-  { code: true, metrics: { clientWidth: 300, scrollWidth: 800 } },
-  { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-];
-const overflowingRange: CodeBlockRange = { start: 1, end: 3 };
-// The same block (1-3) with every line inside the cap — the wrap decision's other answer.
-const fittingBlock: RowSpec[] = [
-  { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-  { code: true, metrics: { clientWidth: 300, scrollWidth: 280 } },
-  { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-];
-// A card that reports overflow, for re-runs on an already-wrapped block.
-const cardOverflows = { "1": { scrollWidth: 800, clientWidth: 300 } };
+// A three-line block (lines 1-3).
+const block: RowSpec[] = [{ code: true, start: true }, { code: true }, { code: true, end: true }];
+const blockRange: CodeBlockRange = { start: 1, end: 3 };
 
 // Two blocks (1-2 and 4-5) either side of a prose line at 3, addressed together —
 // shared by the tests below that sync both ranges in one pass.
@@ -105,39 +61,25 @@ const TWO_BLOCK_RANGES: CodeBlockRange[] = [
   { start: 1, end: 2 },
   { start: 4, end: 5 },
 ];
-
-// A fitting block (1-2), prose (3), then an overflowing block (4-5) — shared by
-// the content-only and gutter-mirror suites, which assert the same wrap decision
-// through their own column.
-const FITTING_THEN_OVERFLOWING_BLOCK: RowSpec[] = [
-  { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-  { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 280 } },
+const TWO_BLOCKS: RowSpec[] = [
+  { code: true, start: true },
+  { code: true, end: true },
   {},
-  { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-  { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 900 } },
-];
-
-// Overflowing blocks (1-2 and 4-5) either side of prose (3) — shared by the content-only and
-// gutter-mirror suites, which each assert a per-block decision across the pair.
-const BOTH_BLOCKS_OVERFLOWING: RowSpec[] = [
-  { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-  { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 900 } },
-  {},
-  { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-  { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 700 } },
+  { code: true, start: true },
+  { code: true, end: true },
 ];
 
 /** Asserts the content column carries no card and its rows are `lines`, in
- * order — the shared postcondition for a block that unwrapped or never carded. */
+ * order — the shared postcondition for a retired block. */
 function expectContentUnwrapped(content: HTMLElement, lines: string[]): void {
   expect(cardsIn(content)).toHaveLength(0);
   expect(directRows(content).map((r) => r.getAttribute("data-line"))).toEqual(lines);
 }
 
 describe("syncCodeBlockCards", () => {
-  test("wraps an overflowing block's rows in one card keyed by its start line", () => {
-    const { root, content, rowMetrics } = buildContent(overflowingBlock);
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+  test("wraps a block's rows in one card keyed by its start line", () => {
+    const { root, content } = buildContent(block);
+    syncCodeBlockCards(root, [blockRange]);
 
     const cards = cardsIn(content);
     expect(cards).toHaveLength(1);
@@ -150,22 +92,22 @@ describe("syncCodeBlockCards", () => {
   });
 
   test("spans the card across the block's rows so subgrid keeps the gutter aligned", () => {
-    const { root, content, rowMetrics } = buildContent(overflowingBlock);
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+    const { root, content } = buildContent(block);
+    syncCodeBlockCards(root, [blockRange]);
     const card = cardsIn(content)[0] as HTMLElement;
     expect(card.style.gridRow).toBe("span 3");
   });
 
   test("inserts the card at the block's position, preserving surrounding order", () => {
     // prose(1), block(2-4), prose(5)
-    const { root, content, rowMetrics } = buildContent([
+    const { root, content } = buildContent([
       {},
-      { code: true, start: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
-      { code: true, metrics: { clientWidth: 300, scrollWidth: 900 } },
-      { code: true, end: true, metrics: { clientWidth: 300, scrollWidth: 300 } },
+      { code: true, start: true },
+      { code: true },
+      { code: true, end: true },
       {},
     ]);
-    syncCodeBlockCards(root, [{ start: 2, end: 4 }], makeReader(rowMetrics));
+    syncCodeBlockCards(root, [{ start: 2, end: 4 }]);
     const kids = [...content.children];
     // prose 1, then the card, then prose 5.
     expect(kids[0]?.getAttribute("data-line")).toBe("1");
@@ -173,74 +115,32 @@ describe("syncCodeBlockCards", () => {
     expect(kids[2]?.getAttribute("data-line")).toBe("5");
   });
 
-  test("does not wrap a block that fits the card", () => {
-    const { root, content, rowMetrics } = buildContent(fittingBlock);
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
-    expect(cardsIn(content)).toHaveLength(0);
-    expect(directRows(content)).toHaveLength(3); // rows stay as direct children
-  });
-
-  test("gives each overflowing block its own card", () => {
-    const { root, content, rowMetrics } = buildContent(BOTH_BLOCKS_OVERFLOWING);
-    syncCodeBlockCards(root, TWO_BLOCK_RANGES, makeReader(rowMetrics));
+  test("gives each block its own card, and leaves the prose between them loose", () => {
+    const { root, content } = buildContent(TWO_BLOCKS);
+    syncCodeBlockCards(root, TWO_BLOCK_RANGES);
     const cards = cardsIn(content);
-    expect(cards).toHaveLength(2);
-    expect(cards.map((c) => c.getAttribute(CARD_ATTR)).sort()).toEqual(["1", "4"]);
+    expect(cards.map((c) => c.getAttribute(CARD_ATTR))).toEqual(["1", "4"]);
+    expect(directRows(content).map((r) => r.getAttribute("data-line"))).toEqual(["3"]);
   });
 
   test("is idempotent — re-running reuses the card and mutates nothing", () => {
-    const { root, content, rowMetrics } = buildContent(overflowingBlock);
-    const read = makeReader(rowMetrics, cardOverflows);
-    syncCodeBlockCards(root, [overflowingRange], read);
+    const { root, content } = buildContent(block);
+    syncCodeBlockCards(root, [blockRange]);
     const first = cardsIn(content)[0];
-    syncCodeBlockCards(root, [overflowingRange], read);
+    syncCodeBlockCards(root, [blockRange]);
     const cards = cardsIn(content);
     expect(cards).toHaveLength(1);
     expect(cards[0]).toBe(first); // same element reused, not re-created
     expect(linesInCard(cards[0] as HTMLElement)).toEqual(["1", "2", "3"]);
   });
 
-  test("unwraps a block that no longer overflows, returning its rows to the content", () => {
-    const { root, content, rowMetrics } = buildContent(overflowingBlock);
-    // First pass overflows → wrapped.
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardOverflows));
-    expect(cardsIn(content)).toHaveLength(1);
-    // Second pass: the card now fits (e.g. the viewport widened) → unwrapped.
-    const cardFits = { "1": { scrollWidth: 300, clientWidth: 300 } };
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardFits));
-    // Rows come back as direct children, in order.
-    expectContentUnwrapped(content, ["1", "2", "3"]);
-  });
-
-  test("keeps a reflowed card even though its wrapped rows now fit", () => {
-    // A reflowed block's rows wrap to the card width, so the card reads scrollWidth ===
-    // clientWidth — the very condition the retire pass unwraps on. Without the mark held
-    // above that read, the wrap would vanish the frame after the reviewer asked for it.
-    const { root, content, rowMetrics } = buildContent(overflowingBlock);
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardOverflows));
-    applyCodeBlockReflow(root, new Set([1]));
-    const cardFits = { "1": { scrollWidth: 300, clientWidth: 300 } };
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardFits));
-    expect(cardsIn(content)).toHaveLength(1);
-  });
-
   test("retires a card whose block no longer exists", () => {
-    const { root, content, rowMetrics } = buildContent(overflowingBlock);
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardOverflows));
+    const { root, content } = buildContent(block);
+    syncCodeBlockCards(root, [blockRange]);
     expect(cardsIn(content)).toHaveLength(1);
     // Re-run with no ranges (content replaced with prose) → orphaned card unwrapped.
-    syncCodeBlockCards(root, [], makeReader(rowMetrics, cardOverflows));
+    syncCodeBlockCards(root, []);
     expectContentUnwrapped(content, ["1", "2", "3"]);
-  });
-
-  test("leaves a fitting block and prose untouched while wrapping only the overflowing one", () => {
-    const { root, content, rowMetrics } = buildContent(FITTING_THEN_OVERFLOWING_BLOCK);
-    syncCodeBlockCards(root, TWO_BLOCK_RANGES, makeReader(rowMetrics));
-    const cards = cardsIn(content);
-    expect(cards).toHaveLength(1);
-    expect(cards[0]?.getAttribute(CARD_ATTR)).toBe("4"); // only the overflowing block
-    // The fitting block's rows and the prose row stay as direct children.
-    expect(directRows(content).map((r) => r.getAttribute("data-line"))).toEqual(["1", "2", "3"]);
   });
 });
 
@@ -257,7 +157,6 @@ function buildColumns(specs: RowSpec[]): {
   root: HTMLElement;
   gutter: HTMLElement;
   content: HTMLElement;
-  rowMetrics: Map<Element, RowMetrics>;
 } {
   const root = document.createElement("div");
   const code = document.createElement("div");
@@ -265,17 +164,16 @@ function buildColumns(specs: RowSpec[]): {
   gutter.setAttribute("data-gutter", "");
   const content = document.createElement("div");
   content.setAttribute("data-content", "");
-  const rowMetrics = new Map<Element, RowMetrics>();
   specs.forEach((spec, i) => {
     const n = String(i + 1);
     const cell = document.createElement("div");
     cell.setAttribute("data-column-number", n);
     gutter.appendChild(cell);
-    appendRow(content, spec, n, rowMetrics);
+    appendRow(content, spec, n);
   });
   code.append(gutter, content);
   root.appendChild(code);
-  return { root, gutter, content, rowMetrics };
+  return { root, gutter, content };
 }
 
 describe("syncCodeBlockCards — gutter mirror (keeps the library's selection walk balanced)", () => {
@@ -291,8 +189,7 @@ describe("syncCodeBlockCards — gutter mirror (keeps the library's selection wa
     );
 
   /** Asserts the gutter carries no card, its cells are `lines` in order, and the
-   * two columns still balance — the shared postcondition for a block that
-   * unwrapped or never carded. */
+   * two columns still balance — the shared postcondition for a retired block. */
   function expectGutterUnwrapped(gutter: HTMLElement, content: HTMLElement, lines: string[]): void {
     expect(gutterCardsIn(gutter)).toHaveLength(0);
     expect(gutterCells(gutter)).toEqual(lines);
@@ -300,8 +197,8 @@ describe("syncCodeBlockCards — gutter mirror (keeps the library's selection wa
   }
 
   test("wraps the block's gutter cells in a parallel display:contents card, restoring parity", () => {
-    const { root, gutter, content, rowMetrics } = buildColumns(overflowingBlock);
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+    const { root, gutter, content } = buildColumns(block);
+    syncCodeBlockCards(root, [blockRange]);
 
     const gcards = gutterCardsIn(gutter);
     expect(gcards).toHaveLength(1);
@@ -313,49 +210,37 @@ describe("syncCodeBlockCards — gutter mirror (keeps the library's selection wa
     expect(gutter.children.length).toBe(content.children.length);
   });
 
-  test("mirrors only the overflowing block; a fitting block's gutter cells stay loose", () => {
-    const { root, gutter, content, rowMetrics } = buildColumns(FITTING_THEN_OVERFLOWING_BLOCK);
-    syncCodeBlockCards(root, TWO_BLOCK_RANGES, makeReader(rowMetrics));
-    const gcards = gutterCardsIn(gutter);
-    expect(gcards).toHaveLength(1);
-    expect(gcards[0]?.getAttribute(GUTTER_CARD_ATTR)).toBe("4");
+  test("mirrors each block, leaving the prose cell between them loose", () => {
+    const { root, gutter, content } = buildColumns(TWO_BLOCKS);
+    syncCodeBlockCards(root, TWO_BLOCK_RANGES);
+    expect(gutterCardsIn(gutter).map((c) => c.getAttribute(GUTTER_CARD_ATTR))).toEqual(["1", "4"]);
+    expect(gutterCells(gutter)).toEqual(["3"]);
     expect(gutter.children.length).toBe(content.children.length);
   });
 
   test("is idempotent — a re-run reuses the gutter card, mutating nothing", () => {
-    const { root, gutter, rowMetrics } = buildColumns(overflowingBlock);
-    const read = makeReader(rowMetrics, cardOverflows);
-    syncCodeBlockCards(root, [overflowingRange], read);
+    const { root, gutter } = buildColumns(block);
+    syncCodeBlockCards(root, [blockRange]);
     const first = gutterCardsIn(gutter)[0];
-    syncCodeBlockCards(root, [overflowingRange], read);
+    syncCodeBlockCards(root, [blockRange]);
     const gcards = gutterCardsIn(gutter);
     expect(gcards).toHaveLength(1);
     expect(gcards[0]).toBe(first);
     expect(cellsInGutterCard(gcards[0] as HTMLElement)).toEqual(["1", "2", "3"]);
   });
 
-  test("unwraps the gutter card when the block fits again, returning cells in order", () => {
-    const { root, gutter, content, rowMetrics } = buildColumns(overflowingBlock);
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardOverflows));
-    expect(gutterCardsIn(gutter)).toHaveLength(1);
-    const cardFits = { "1": { scrollWidth: 300, clientWidth: 300 } };
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardFits));
-    expectGutterUnwrapped(gutter, content, ["1", "2", "3"]);
-  });
-
   test("retires the gutter card when the block no longer exists", () => {
-    const { root, gutter, content, rowMetrics } = buildColumns(overflowingBlock);
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardOverflows));
+    const { root, gutter, content } = buildColumns(block);
+    syncCodeBlockCards(root, [blockRange]);
     expect(gutterCardsIn(gutter)).toHaveLength(1);
-    syncCodeBlockCards(root, [], makeReader(rowMetrics, cardOverflows));
+    syncCodeBlockCards(root, []);
     expectGutterUnwrapped(gutter, content, ["1", "2", "3"]);
   });
 });
 
 // EXC-1228: the library emits a comment's annotation row as a sibling of the row it is
 // anchored to, carrying no data-line — so gathering a block's rows by data-line alone left
-// that row behind, and a comment inside an overflowing block rendered below the whole block,
-// beneath its scrollbar. The card takes the contiguous RUN of its column's children instead,
+// that row behind, and a comment inside a carded block rendered below the whole block. The card takes the contiguous RUN of its column's children instead,
 // the way tables.ts already did, so the comment rides inside the card at its anchor.
 describe("syncCodeBlockCards — an open comment inside a carded block", () => {
   /** A column's children as their keying attribute, or `annotation` for the rows the
@@ -367,19 +252,19 @@ describe("syncCodeBlockCards — an open comment inside a carded block", () => {
     root.querySelector<HTMLElement>(`[data-content] > [${CARD_ATTR}="1"]`);
 
   test("carries a mid-block comment's row into the card, in place", () => {
-    const { root, rowMetrics } = buildColumns(overflowingBlock);
+    const { root } = buildColumns(block);
     // A repaint rebuilds the column flat and re-emits the annotation row, so the pass
     // always meets this case unwrapped.
     openComment(root, 2);
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+    syncCodeBlockCards(root, [blockRange]);
     expect(slotOrder(contentCard(root), "data-line")).toEqual(["1", "2", "annotation", "3"]);
     expect(root.querySelector("[data-content] > [data-line-annotation]")).toBeNull();
   });
 
   test("carries the comment's gutter buffer into the mirror at the same index", () => {
-    const { root, rowMetrics } = buildColumns(overflowingBlock);
+    const { root } = buildColumns(block);
     openComment(root, 2);
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+    syncCodeBlockCards(root, [blockRange]);
     const mirror = root.querySelector(`[${GUTTER_CARD_ATTR}="1"]`);
     expect(slotOrder(mirror, "data-column-number")).toEqual(["1", "2", "annotation", "3"]);
   });
@@ -388,18 +273,18 @@ describe("syncCodeBlockCards — an open comment inside a carded block", () => {
     // For a fenced block the last line is the closing fence, which a reviewer can comment on
     // like any other. Left outside, it would land in the right place but at the uncarded
     // width, so two comments on one block would not match.
-    const { root, rowMetrics } = buildColumns(overflowingBlock);
+    const { root } = buildColumns(block);
     openComment(root, 3);
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+    syncCodeBlockCards(root, [blockRange]);
     expect(slotOrder(contentCard(root), "data-line")).toEqual(["1", "2", "3", "annotation"]);
     const mirror = root.querySelector(`[${GUTTER_CARD_ATTR}="1"]`);
     expect(slotOrder(mirror, "data-column-number")).toEqual(["1", "2", "3", "annotation"]);
   });
 
   test("keeps the two columns matching with a comment open", () => {
-    const { root, gutter, content, rowMetrics } = buildColumns(overflowingBlock);
+    const { root, gutter, content } = buildColumns(block);
     openComment(root, 2);
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+    syncCodeBlockCards(root, [blockRange]);
     expect(gutter.children.length).toBe(content.children.length);
   });
 
@@ -407,44 +292,31 @@ describe("syncCodeBlockCards — an open comment inside a carded block", () => {
     // grid-row is what maps the card's children onto the parent's row tracks, so a span
     // short by one drops the extra child into an implicit track and walks the gutter out
     // of alignment.
-    const { root, rowMetrics } = buildColumns(overflowingBlock);
+    const { root } = buildColumns(block);
     openComment(root, 2);
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
+    syncCodeBlockCards(root, [blockRange]);
     expect(contentCard(root)?.style.gridRow).toBe("span 4");
   });
 
-  test("does not card a fitting block because the open composer is wide", () => {
-    // The slice now also holds the annotation row, whose composer is far wider than the
-    // cap — so the overflow read must look only at the slice's own code rows.
-    const { root, content, rowMetrics } = buildColumns(fittingBlock);
-    openComment(root, 2);
-    const annotation = content.querySelector("[data-line-annotation]");
-    if (annotation !== null) rowMetrics.set(annotation, { clientWidth: 300, scrollWidth: 900 });
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics));
-    expect(cardsIn(content)).toHaveLength(0);
-  });
-
   test("returns a carded comment's row to its column when the block is retired", () => {
-    const { root, content, rowMetrics } = buildColumns(overflowingBlock);
+    const { root, content } = buildColumns(block);
     openComment(root, 2);
-    const read = makeReader(rowMetrics, cardOverflows);
-    syncCodeBlockCards(root, [overflowingRange], read);
-    syncCodeBlockCards(root, [], read);
+    syncCodeBlockCards(root, [blockRange]);
+    syncCodeBlockCards(root, []);
     expect(slotOrder(content, "data-line")).toEqual(["1", "2", "annotation", "3"]);
   });
 
   test("mutates nothing on a settled pass with a comment open", () => {
-    const { root, rowMetrics } = buildColumns(overflowingBlock);
-    const read = makeReader(rowMetrics, cardOverflows);
+    const { root } = buildColumns(block);
     openComment(root, 2);
-    syncCodeBlockCards(root, [overflowingRange], read);
+    syncCodeBlockCards(root, [blockRange]);
     const settled = root.innerHTML;
-    syncCodeBlockCards(root, [overflowingRange], read);
+    syncCodeBlockCards(root, [blockRange]);
     expect(root.innerHTML).toBe(settled);
   });
 });
 
-// EXC-1386: the reviewer soft-wraps ONE overflowing block by marking its content card and
+// EXC-1386: the reviewer soft-wraps ONE block by marking its content card and
 // gutter mirror with REFLOW_ATTR; this pass re-marks a card the frame a repaint rebuilds it.
 describe("applyCodeBlockReflow", () => {
   const contentCardFor = (root: HTMLElement, key: string) =>
@@ -454,8 +326,8 @@ describe("applyCodeBlockReflow", () => {
 
   /** A carded block (1-3) in both columns, ready to be reflowed. */
   function rootWithCardedBlock(): HTMLElement {
-    const { root, rowMetrics } = buildColumns(overflowingBlock);
-    syncCodeBlockCards(root, [overflowingRange], makeReader(rowMetrics, cardOverflows));
+    const { root } = buildColumns(block);
+    syncCodeBlockCards(root, [blockRange]);
     return root;
   }
 
@@ -475,8 +347,8 @@ describe("applyCodeBlockReflow", () => {
   });
 
   test("marks only the blocks in the set", () => {
-    const { root, rowMetrics } = buildColumns(BOTH_BLOCKS_OVERFLOWING);
-    syncCodeBlockCards(root, TWO_BLOCK_RANGES, makeReader(rowMetrics));
+    const { root } = buildColumns(TWO_BLOCKS);
+    syncCodeBlockCards(root, TWO_BLOCK_RANGES);
     applyCodeBlockReflow(root, new Set([4]));
     expect(contentCardFor(root, "1")?.hasAttribute(REFLOW_ATTR)).toBe(false);
     expect(contentCardFor(root, "4")?.hasAttribute(REFLOW_ATTR)).toBe(true);
@@ -493,16 +365,52 @@ describe("applyCodeBlockReflow", () => {
   test("re-marks a card the repaint rebuilt, since the mark rides the same pass", () => {
     // A repaint returns the rows to the column flat; syncCodeBlockCards re-cards them and
     // this pass, running right after it, puts the mark back on the fresh card.
-    const { root, rowMetrics } = buildColumns(overflowingBlock);
-    const read = makeReader(rowMetrics, cardOverflows);
-    syncCodeBlockCards(root, [overflowingRange], read);
+    const { root } = buildColumns(block);
+    syncCodeBlockCards(root, [blockRange]);
     applyCodeBlockReflow(root, new Set([1]));
     const staleCard = contentCardFor(root, "1");
-    syncCodeBlockCards(root, [], read); // repaint retires the card
-    syncCodeBlockCards(root, [overflowingRange], read); // ...and rebuilds it
+    syncCodeBlockCards(root, []); // repaint retires the card
+    syncCodeBlockCards(root, [blockRange]); // ...and rebuilds it
     applyCodeBlockReflow(root, new Set([1]));
     const rebuiltCard = contentCardFor(root, "1");
     expect(rebuiltCard).not.toBe(staleCard);
     expect(rebuiltCard?.hasAttribute(REFLOW_ATTR)).toBe(true);
+  });
+});
+
+// A card whose code is wider than it is marked, with its gutter mirror, so the sheet can clear
+// the scrollbar's lane beside the card's last row (coreStyles.ts).
+describe("markScrollingCards", () => {
+  function stubWidths(el: Element, scrollWidth: number, clientWidth: number): void {
+    Object.defineProperty(el, "scrollWidth", { configurable: true, value: scrollWidth });
+    Object.defineProperty(el, "clientWidth", { configurable: true, value: clientWidth });
+  }
+
+  /** Two carded blocks in both columns, with their content cards and gutter mirrors. */
+  function twoCards() {
+    const { root, content, gutter } = buildColumns(TWO_BLOCKS);
+    syncCodeBlockCards(root, TWO_BLOCK_RANGES);
+    const [first, second] = cardsIn(content) as [HTMLElement, HTMLElement];
+    const mirrors = [...gutter.querySelectorAll(`:scope > [${GUTTER_CARD_ATTR}]`)];
+    return { root, first, second, mirrors };
+  }
+
+  test("marks a card whose code is wider than it, and its gutter mirror, and only those", () => {
+    const { root, first, second, mirrors } = twoCards();
+    stubWidths(first, 900, 300);
+    stubWidths(second, 300, 300);
+    markScrollingCards(root);
+    expect([first, second].map((c) => c.hasAttribute(SCROLLS_ATTR))).toEqual([true, false]);
+    expect(mirrors.map((c) => c.hasAttribute(SCROLLS_ATTR))).toEqual([true, false]);
+  });
+
+  test("clears the mark from both once the code fits", () => {
+    const { root, first, mirrors } = twoCards();
+    stubWidths(first, 900, 300);
+    markScrollingCards(root);
+    stubWidths(first, 300, 300);
+    markScrollingCards(root);
+    expect(first.hasAttribute(SCROLLS_ATTR)).toBe(false);
+    expect(mirrors[0]?.hasAttribute(SCROLLS_ATTR)).toBe(false);
   });
 });

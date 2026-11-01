@@ -13,6 +13,7 @@
   // primary; here it appears only as the --accent-wash "active-state" marker (the
   // SettingSelect/diff-selection language) on the pressed compare toggle. All colors
   // ride the shadcn↔caret token bridge; no raw colors.
+  import type { Snippet } from "svelte";
   import type { PlanVersion } from "@core/lib/types";
   import type { DiffIndicators, DiffStyle } from "$lib/diffview/types.ts";
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
@@ -49,6 +50,10 @@
      * gated on the app's shortcut-hints setting like the other hints. Defaults
      * false (the hint is opt-in via the parent). */
     showShortcutHints?: boolean;
+    /** Caps that share the Versions toggle's tray, before and after it: the plan's
+     * view keys are one group, so they sit in one well. */
+    leading?: Snippet;
+    trailing?: Snippet;
     onSetComparing: (comparing: boolean) => void;
     onSelectBase: (version: number) => void;
     onSelectTarget: (version: number) => void;
@@ -66,6 +71,8 @@
     diffIndicators,
     layoutLocked = false,
     showShortcutHints = false,
+    leading,
+    trailing,
     onSetComparing,
     onSelectBase,
     onSelectTarget,
@@ -88,62 +95,6 @@
   // reviewer choosing a pair can tell which end is current without counting.
   // `ordered`'s head rather than a re-derived max: it is already sorted newest-first.
   const currentVersion = $derived(ordered[0]?.version);
-
-  // Sliding pill for the segmented ToggleGroups: one shared pill rides behind the
-  // options rather than each painting its own background, so a CSS transform/width
-  // transition carries the selection and redirects mid-slide when a third option is
-  // clicked. mountSlider injects the pill and keeps it aligned to the active
-  // [data-state="on"] option via measurement — options are content-sized, so a
-  // pure-CSS index offset wouldn't line up.
-  let layoutTrack = $state<HTMLElement | null>(null);
-  let indicatorsTrack = $state<HTMLElement | null>(null);
-
-  function mountSlider(node: HTMLElement) {
-    const pill = document.createElement("span");
-    pill.className = "seg-pill";
-    pill.setAttribute("aria-hidden", "true");
-    node.prepend(pill);
-
-    const sync = () => {
-      const active = node.querySelector<HTMLElement>('[data-state="on"]');
-      if (!active) {
-        pill.style.opacity = "0";
-        return;
-      }
-      const nb = node.getBoundingClientRect();
-      const ab = active.getBoundingClientRect();
-      pill.style.width = `${ab.width}px`;
-      pill.style.height = `${ab.height}px`;
-      pill.style.transform = `translate(${ab.left - nb.left}px, ${ab.top - nb.top}px)`;
-      pill.style.opacity = "1";
-    };
-
-    // Place the pill on the initial selection without animating in from the corner.
-    pill.style.transition = "none";
-    let raf = requestAnimationFrame(() => {
-      sync();
-      raf = requestAnimationFrame(() => {
-        pill.style.transition = "";
-      });
-    });
-
-    // bits-ui flips data-state on the options when the value changes; re-measure
-    // then, and on any resize (font load, window resize).
-    const mo = new MutationObserver(sync);
-    mo.observe(node, { attributes: true, attributeFilter: ["data-state"], subtree: true });
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(sync) : null;
-    ro?.observe(node);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      mo.disconnect();
-      ro?.disconnect();
-      pill.remove();
-    };
-  }
-
-  $effect(() => (layoutTrack ? mountSlider(layoutTrack) : undefined));
-  $effect(() => (indicatorsTrack ? mountSlider(indicatorsTrack) : undefined));
 </script>
 
 <!-- A version picker, reused for both base and target. The chevron rotation (right
@@ -153,26 +104,28 @@
   <DropdownMenu.Root>
     <DropdownMenu.Trigger>
       {#snippet child({ props })}
-        <button {...props} type="button" class="vpick float-chip" aria-label={ariaLabel}>
-          <span class="vpick-label">v{current}</span>
-          <!-- Vendored-icon convention (doc/agents/icon-rules.md): inline the Lucide
-               chevron-down glyph so it can carry the rotation class. -->
-          <svg
-            class="chevron"
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </button>
+        <span class="tray">
+          <button {...props} type="button" class="vpick float-chip" aria-label={ariaLabel}>
+            <span class="vpick-label">v{current}</span>
+            <!-- Vendored-icon convention (doc/agents/icon-rules.md): inline the Lucide
+                 chevron-down glyph so it can carry the rotation class. -->
+            <svg
+              class="chevron"
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        </span>
       {/snippet}
     </DropdownMenu.Trigger>
 
@@ -186,7 +139,7 @@
         onValueChange={(v) => onPick(Number(v))}
       >
         {#each ordered as v (v.version)}
-          <DropdownMenuPrimitive.RadioItem value={String(v.version)} class="vitem">
+          <DropdownMenuPrimitive.RadioItem value={String(v.version)} class="vitem key-row">
             {#snippet children({ checked })}
               <span class="check" aria-hidden="true">
                 {#if checked}<Icon name="check" size={15} />{/if}
@@ -210,62 +163,66 @@
 {/snippet}
 
 <div class="compare-picker">
-  {#if canCompare}
-    <Button
-      variant="secondary"
-      size="sm"
-      class="compare-toggle float-chip"
-      aria-pressed={comparing}
-      aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleDiff")}
-      aria-label={otherCount > 0
-        ? `Versions, ${otherCount} other version${otherCount === 1 ? "" : "s"}`
-        : undefined}
-      onclick={() => onSetComparing(!comparing)}
-    >
-      {@render compareLabel()}
-      <!-- How many other versions there are to compare against (EXC-804): the TopBar
-           pending-count Badge, shape and hue alike — both are counts doing the
-           novelty job, so both wear .count-attention (atoms.css). Guarded on the
-           count, since a "0" tally would be noise. aria-hidden because ARIA prohibits
-           a name on a <span> (role=generic); the count reaches AT through the
-           button's own aria-label above instead. -->
-      {#if otherCount > 0}
-        <Badge variant="secondary" class="count count-attention metric" aria-hidden="true">
-          {otherCount}
-        </Badge>
-      {/if}
-      <!-- The `d` shortcut toggles compare mode; the cap teaches it. Only on the
-           enabled toggle (the disabled one has no shortcut), aria-hidden so the
-           cap's glyph never lands in the button's name. -->
-      {#if showShortcutHints}
-        <Kbd class="kbd-sm shortcut-cap" aria-hidden="true">d</Kbd>
-      {/if}
-    </Button>
-  {:else}
-    <!-- Nothing to compare: shown-but-disabled (EXC-664). A disabled button
-         swallows pointer events, so the "why" tooltip hangs off a span-wrapped
-         trigger rather than the button itself. -->
-    <Tooltip.Provider delayDuration={0}>
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <span {...props} class="compare-toggle-wrap">
-              <Button
-                variant="secondary"
-                size="sm"
-                class="compare-toggle float-chip"
-                disabled
-                aria-pressed={false}
-              >
-                {@render compareLabel()}
-              </Button>
-            </span>
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>No other versions to compare yet</Tooltip.Content>
-      </Tooltip.Root>
-    </Tooltip.Provider>
-  {/if}
+  <span class="tray">
+    {@render leading?.()}
+    {#if canCompare}
+      <Button
+        variant="secondary"
+        size="sm"
+        class="compare-toggle float-chip"
+        aria-pressed={comparing}
+        aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleDiff")}
+        aria-label={otherCount > 0
+          ? `Versions, ${otherCount} other version${otherCount === 1 ? "" : "s"}`
+          : undefined}
+        onclick={() => onSetComparing(!comparing)}
+      >
+        {@render compareLabel()}
+        <!-- How many other versions there are to compare against (EXC-804): the TopBar
+             pending-count Badge, shape and hue alike — both are counts doing the
+             novelty job, so both wear .count-attention (atoms.css). Guarded on the
+             count, since a "0" tally would be noise. aria-hidden because ARIA prohibits
+             a name on a <span> (role=generic); the count reaches AT through the
+             button's own aria-label above instead. -->
+        {#if otherCount > 0}
+          <Badge variant="secondary" class="count count-attention metric" aria-hidden="true">
+            {otherCount}
+          </Badge>
+        {/if}
+        <!-- The `d` shortcut toggles compare mode; the cap teaches it. Only on the
+             enabled toggle (the disabled one has no shortcut), aria-hidden so the
+             cap's glyph never lands in the button's name. -->
+        {#if showShortcutHints}
+          <Kbd class="kbd-sm shortcut-cap" aria-hidden="true">d</Kbd>
+        {/if}
+      </Button>
+    {:else}
+      <!-- Nothing to compare: shown-but-disabled (EXC-664). A disabled button
+           swallows pointer events, so the "why" tooltip hangs off a span-wrapped
+           trigger rather than the button itself. -->
+      <Tooltip.Provider delayDuration={0}>
+        <Tooltip.Root>
+          <Tooltip.Trigger>
+            {#snippet child({ props })}
+              <span {...props} class="compare-toggle-wrap">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  class="compare-toggle float-chip"
+                  disabled
+                  aria-pressed={false}
+                >
+                  {@render compareLabel()}
+                </Button>
+              </span>
+            {/snippet}
+          </Tooltip.Trigger>
+          <Tooltip.Content>No other versions to compare yet</Tooltip.Content>
+        </Tooltip.Root>
+      </Tooltip.Provider>
+    {/if}
+    {@render trailing?.()}
+  </span>
 
   {#if comparing}
     <div class="pair">
@@ -291,7 +248,6 @@
           type="single"
           size="sm"
           aria-label="Diff layout"
-          bind:ref={layoutTrack}
           bind:value={
             () => diffStyle, (v) => { if (v) onSetDiffStyle(v as DiffStyle); }
           }
@@ -307,7 +263,6 @@
         type="single"
         size="sm"
         aria-label="Diff indicators"
-        bind:ref={indicatorsTrack}
         bind:value={
           () => diffIndicators, (v) => { if (v) onSetDiffIndicators(v as DiffIndicators); }
         }
@@ -339,19 +294,15 @@
     font-size: var(--text-base);
   }
 
-  /* .float-chip (app.css) supplies the resting + hover skin; the compare toggle adds
-     a pressed state carrying the --accent-wash "active-state" marker — the same amber
-     wash the SettingSelect's active row and the diff selection use — so the mode
-     switch is visible at a glance. */
+  /* .float-chip (styles/atoms.css) supplies the cap, its press and its latch; the
+     compare toggle latches onto an accent-tinted face (--neutral-face-latched), so the
+     mode switch is visible at a glance. */
   .compare-picker :global(.compare-toggle) {
     white-space: nowrap;
   }
   .compare-picker :global(.compare-toggle[aria-pressed="true"]:not(:disabled)) {
-    background: var(--accent-wash);
+    --cap-face-down: var(--neutral-face-latched);
     color: var(--ink);
-  }
-  .compare-picker :global(.compare-toggle[aria-pressed="true"]:not(:disabled):hover) {
-    background: var(--accent-wash);
   }
   /* Nudge the `d` shortcut cap a hair further right of the label than the
      button's own gap gives it. */
@@ -372,8 +323,9 @@
     align-items: center;
     gap: 0.35rem;
   }
+  /* Soft, not faint: on the window's body --ink-faint falls under 4.5:1. */
   .lbl {
-    color: var(--ink-faint);
+    color: var(--ink-soft);
     font-size: var(--text-xs);
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -390,7 +342,7 @@
     gap: 0.3rem;
     height: var(--ctl-h);
     padding: 0 0.55rem;
-    border-radius: var(--radius);
+    border-radius: var(--key-radius);
     font-size: var(--text-sm);
     line-height: 1;
   }
@@ -413,21 +365,18 @@
     transform: rotate(0deg);
   }
 
-  /* The version menu is portalled, so its rows are reached through :global. The
-     amber check on --accent is the DropdownMenu's own selection language. */
+  /* The version menu is portalled, so its rows are reached through :global. */
   :global(.vmenu .vitem) {
     display: flex;
     align-items: center;
     gap: 0.4rem;
     padding: 0.3rem 0.5rem;
-    border-radius: var(--radius);
     font-size: var(--text-sm);
     color: var(--ink-soft);
     cursor: pointer;
     outline: none;
   }
   :global(.vmenu .vitem[data-highlighted]) {
-    background: var(--chip-hover);
     color: var(--ink);
   }
   :global(.vmenu .vitem[aria-checked="true"]) {
@@ -437,7 +386,7 @@
     flex: none;
     display: inline-flex;
     width: 15px;
-    color: var(--accent);
+    color: var(--ink-soft);
   }
   /* The "(current)" marker on the newest row: the quietest ink in the menu, so it
      reads as an annotation on the version rather than a second label competing
@@ -445,6 +394,11 @@
   :global(.vmenu .cur) {
     color: var(--ink-faint);
     font-size: var(--text-xs);
+  }
+  /* On a risen row only --ink holds AA: the risen face is the cursor's only mark, so it
+     steps far off the menu. */
+  :global(.vmenu .vitem[data-highlighted] .cur) {
+    color: var(--ink);
   }
 
   /* The display-option cluster (layout + indicators), pushed to the trailing edge
@@ -456,51 +410,13 @@
     margin-left: auto;
   }
 
-  /* One recessed track with a lifted pill on the active option — neutral, no amber
-     — sized to --ctl-h so it matches the compare Button and the version pickers. The
-     active fill is NOT painted per-option: one shared .seg-pill (injected by
-     mountSlider) rides behind them and slides, and position: relative anchors it. */
-  .compare-picker :global([data-slot="toggle-group"]) {
-    position: relative;
-    gap: 2px;
-    height: var(--ctl-h);
-    padding: 2px;
-    background: var(--paper-sunk);
-    border-radius: var(--radius);
-  }
-  /* The sliding active-option pill, behind the option labels. Its transition
-     redirects mid-slide when a new option is clicked, so rapid switches stay fluid;
-     the #app reduced-motion guard zeroes it, so it simply snaps. */
-  .compare-picker :global(.seg-pill) {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 0;
-    opacity: 0;
-    border-radius: calc(var(--radius) - 2px);
-    background: var(--chip);
-    pointer-events: none;
-    transition:
-      transform var(--dur-state) var(--ease-out),
-      width var(--dur-state) var(--ease-out);
-  }
+  /* Each option is a key in one bed (styles/atoms.css), as tall as the compare Button
+     and the version pickers. */
   .compare-picker :global([data-slot="toggle-group-item"]) {
-    position: relative;
-    z-index: 1;
-    height: 100%;
+    height: var(--ctl-h);
     min-width: 0;
-    border: 0;
     padding: 0 0.55rem;
-    background: transparent;
-    color: var(--ink-soft);
-    border-radius: calc(var(--radius) - 2px);
     font-size: var(--text-sm);
-  }
-  .compare-picker :global([data-slot="toggle-group-item"]:hover:not([data-state="on"])) {
-    color: var(--ink);
-  }
-  .compare-picker :global([data-slot="toggle-group-item"][data-state="on"]) {
-    color: var(--ink);
   }
 
   /* Entering compare mode reveals both clusters together with a quick slide-in

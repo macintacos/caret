@@ -949,6 +949,7 @@
           {#each matches as match (match.heading.line)}
             <Command.Item
               value={String(match.heading.line)}
+              class="key-row"
               aria-current={match.heading.line === activeLine ? "location" : undefined}
               onSelect={() => pick(match.heading.line)}
             >
@@ -1141,11 +1142,13 @@
   :global(.plan-breadcrumbs .crumb),
   :global(.plan-breadcrumbs .crumb-ellipsis) {
     border: none;
-    border-radius: var(--radius);
+    border-radius: var(--key-radius);
     background: transparent;
     cursor: pointer;
     transition:
-      background var(--dur-state) var(--ease-out),
+      background-color var(--dur-state) var(--ease-out),
+      box-shadow var(--dur-state) var(--ease-out),
+      translate var(--dur-state) var(--ease-spring),
       color var(--dur-state) var(--ease-out);
   }
   :global(.plan-breadcrumbs .crumb) {
@@ -1174,11 +1177,19 @@
   :global(.plan-breadcrumbs .crumb-ellipsis) {
     color: inherit;
   }
-  :global(.plan-breadcrumbs .crumb:hover),
+  /* A crumb is a key that lies flat in the trail and rises under the pointer or the
+     keyboard's focus, the .key-row's risen state without its latched one: the current
+     crumb is marked by weight, so the trail never boxes a crumb at rest. */
+  :global(.plan-breadcrumbs .crumb:is(:hover, :focus-visible)),
   :global(.plan-breadcrumbs .crumb[aria-expanded="true"]),
-  :global(.plan-breadcrumbs .crumb-ellipsis:hover),
+  :global(.plan-breadcrumbs .crumb-ellipsis:is(:hover, :focus-visible)),
   :global(.plan-breadcrumbs .crumb-ellipsis[aria-expanded="true"]) {
-    background: var(--chip-hover);
+    background-color: var(--crumb-face-hover);
+    background-image: var(--key-row-up-image);
+    background-size: auto, 128px;
+    background-blend-mode: normal, soft-light;
+    box-shadow: var(--key-row-up);
+    translate: 0 calc(-1 * var(--key-rise));
     color: var(--ink);
   }
 
@@ -1211,6 +1222,16 @@
     width: 22rem;
     padding: 0;
     gap: 0;
+    /* A row's key runs the Command's 4px padding in from this corner. */
+    border-radius: calc(var(--key-radius) + 4px);
+  }
+  :global(.plan-crumb-filter [data-slot="command"]) {
+    border-radius: inherit;
+  }
+  /* With the Command's 4px, this sets the field's inset to the panel's radius less the
+     field's, so the two corners nest. */
+  :global(.plan-crumb-filter [data-slot="command-input-wrapper"]) {
+    padding: calc(var(--key-radius) - var(--radius)) calc(var(--key-radius) - var(--radius)) 0;
   }
 
   :global(.plan-crumb-menu .crumb-label),
@@ -1220,35 +1241,16 @@
     white-space: nowrap;
     text-overflow: ellipsis;
   }
-  /* The heading the reader is already on, marked with the amber wash the menu
-     language reserves for the active choice (shadcn-rules.md § Menu highlight vs.
-     selection). Being unlayered, it also out-specifies the catalog's layered
-     `data-highlighted` background, so the row the reader is on needs the rule
-     below to show any movement under j/k. */
-  :global(.plan-crumb-menu [aria-current="location"]) {
-    background: var(--accent-wash);
+  /* A heading on the trail latches down as a .key-row; this only lifts its ink. */
+  :global(:is(.plan-crumb-menu, .plan-crumb-filter) [aria-current="location"]) {
     color: var(--ink);
   }
-  /* Walking onto the row the reader is already on: the wash warms toward the same
-     --chip-hover every other highlighted row takes, so the amber keeps saying "you
-     are here" while the fill still says "the keyboard is on it". The app's global
-     focus outline lands here too, but only by cascade — base.css sits outside
-     @layer base and so beats the item recipe's `outline-hidden` — and the recipe
-     means to suppress it, so the fill is what this leans on. */
-  :global(.plan-crumb-menu [aria-current="location"][data-highlighted]) {
-    background: color-mix(in lab, var(--accent-wash), var(--chip-hover) 40%);
-  }
-
-  /* The same pair for the filter's rows. The command marks the row its roving
-     selection is on `data-selected` where the menu marks a focused row
-     `data-highlighted`; the treatment is identical, so the mark reads the same
-     whichever view of the surface the reviewer is in. */
-  :global(.plan-crumb-filter [aria-current="location"]) {
-    background: var(--accent-wash);
-    color: var(--ink);
-  }
-  :global(.plan-crumb-filter [aria-current="location"][data-selected]) {
-    background: color-mix(in lab, var(--accent-wash), var(--chip-hover) 40%);
+  /* A row whose submenu is open stays risen, so the trail to the panel reads unbroken. */
+  :global(.plan-crumb-menu .key-row[data-state="open"]:not([aria-current="location"])) {
+    background-color: var(--neutral-face-hover);
+    background-image: var(--key-row-up-image);
+    box-shadow: var(--key-row-up);
+    translate: 0 calc(-1 * var(--key-rise));
   }
 
   /* The enclosing heading, trailing its row: what tells two identically titled
@@ -1268,6 +1270,15 @@
     text-overflow: ellipsis;
     color: var(--ink-faint);
     font-size: var(--text-xs);
+  }
+  /* --ink-faint misses AA on a risen or latched row: a neutral key's label ink (atoms.css --cap-label). */
+  :global(.plan-crumb-filter .key-row:is([data-selected], [aria-current="location"]) .crumb-parent) {
+    color: color-mix(in lab, var(--ink-soft), var(--ink) 15%);
+  }
+  /* The risen face is the cursor's only mark, so it steps far enough that only --ink holds
+     AA on it. */
+  :global(.plan-crumb-filter .key-row[data-selected] .crumb-parent) {
+    color: var(--ink);
   }
 
   /* A query with no hits says so, in the row's own geometry, rather than

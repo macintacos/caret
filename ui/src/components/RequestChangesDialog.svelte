@@ -5,7 +5,6 @@
   // (general comment, scratches) lives in App.svelte so it survives the dialog
   // unmounting on Cancel / Escape / scrim.
   import { type Annotation, isLineAnnotation, type LineAnnotation } from "@core/lib/types";
-  import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Collapsible from "$lib/components/ui/collapsible/index.js";
   import { type ComposerScratch, rangeLabel } from "$lib/diffview/commenting.ts";
@@ -52,7 +51,7 @@
     // Discard a committed inline comment outright (with confirmation) — the same
     // delete path as the in-source annotation card (EXC-762).
     onDiscardAnnotation: (id: string) => void;
-    // "Mark as draft": demote a committed line comment into the unsent-scratch
+    // "Mark as unsent": demote a committed line comment into the unsent-scratch
     // section. Only line-anchored comments can demote (a scratch is line-ranged).
     onDraftAnnotation: (annotation: LineAnnotation) => void;
     // The review being sent back, forwarded to the general-comment editor so
@@ -80,7 +79,7 @@
   // Live preview of exactly what the agent will receive.
   let preview = $derived(formatFeedback(annotations, generalComment, planText, citation));
   // The committed inline comments actually reaching the agent (non-blank), each
-  // listed below for a per-comment Discard or Mark-as-draft.
+  // listed below for a per-comment Discard or Mark as unsent.
   let inlineComments = $derived(pendingInline(annotations));
   let inlineCount = $derived(inlineComments.length);
   // Distinct source locations the pending comments anchor to; only worth showing
@@ -104,8 +103,8 @@
   // comments [N]" chip below — so say plainly they won't go unless Saved (EXC-746).
   let draftsHint = $derived(
     scratches.length === 1
-      ? "1 unsent draft below won't be sent unless you Save it."
-      : `${scratches.length} unsent drafts below won't be sent unless you Save them.`,
+      ? "1 unsent comment below won't be sent unless you Save it."
+      : `${scratches.length} unsent comments below won't be sent unless you Save them.`,
   );
 
   function submit() {
@@ -122,13 +121,11 @@
 
 <!-- kind="dialog": Escape + backdrop dismiss, routed to onCancel. The host mounts
      this per open (ModalPresence) and keeps it through the exit. The title is the
-     heading bits-ui wires as the accessible name; the eyebrow keeps caret's dialog
-     signature. -->
+     heading bits-ui wires as the accessible name. -->
 <Modal
   kind="dialog"
   {open}
   {onClosed}
-  eyebrow="Request changes"
   title="Send the plan back for revision"
   contentClass="rcd-content"
   onDismiss={onCancel}
@@ -142,7 +139,7 @@
   <div class="body" role="presentation" onkeydown={onKey}>
     <div class="field">
       <span class="form-label">
-        General comment{#if !generalRequired}<span class="optional"> (optional)</span>{/if}
+        General comment{#if !generalRequired}{" "}<span class="optional">(optional)</span>{/if}
       </span>
       <MarkdownEditor
         value={generalComment}
@@ -168,7 +165,7 @@
       <p class="drafts-hint">{draftsHint}</p>
     {/if}
 
-    <!-- Marking as a draft demotes a comment into "Unsent comments" below, where it
+    <!-- Marking as unsent demotes a comment into "Unsent comments" below, where it
          drops out of the compiled preview and can be Saved back. Only line-anchored
          comments can demote; legacy selection-anchored ones (no line range) offer
          Discard only. -->
@@ -176,7 +173,7 @@
       <section class="inline-comments" aria-labelledby="inline-label">
         <span class="form-label" id="inline-label">
           Inline comments
-          <Badge variant="outline" class="tally">{inlineCount}</Badge>
+          <span class="tally stamp metric">{inlineCount}</span>
         </span>
         <!-- A real list, so assistive tech gets a count and each row's position
              instead of a flat run of buttons (EXC-1057). Unnamed on purpose: the
@@ -198,7 +195,7 @@
                     </span>
                     <span class="clamp-line">{a.comment}</span>
                   </Collapsible.Trigger>
-                  <div class="inline-actions">
+                  <div class="inline-actions tray">
                     {#if isLineAnnotation(a)}
                       <Button
                         variant="secondary"
@@ -206,7 +203,7 @@
                         class="float-chip mark-draft"
                         onclick={() => onDraftAnnotation(a)}
                       >
-                        Mark as draft
+                        Mark as unsent
                       </Button>
                     {/if}
                     {@render discard(() => onDiscardAnnotation(a.id))}
@@ -246,8 +243,9 @@
     {#if scratches.length > 0}
       <section class="scratches" aria-labelledby="scratches-label">
         <span class="form-label" id="scratches-label">
+          <Icon name="message-square-more" size={14} />
           Unsent comments
-          <Badge variant="outline" class="tally">{scratches.length}</Badge>
+          <span class="tally tally-unsent stamp metric">{scratches.length}</span>
         </span>
         <p class="scratches-note">
           Comments you started but never sent. Save one to include it, or discard it.
@@ -262,7 +260,7 @@
                     <span class="anchor metric">{rangeLabel(s.startLine, s.endLine)}</span>
                     <span class="clamp-line">{s.text}</span>
                   </Collapsible.Trigger>
-                  <div class="scratch-actions">
+                  <div class="scratch-actions tray">
                     <Button
                       variant="secondary"
                       size="sm"
@@ -300,16 +298,18 @@
   </div>
 
   {#snippet footer()}
-    <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
-    <Button onclick={submit} disabled={!preview} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
-      Send for revision
-      <SubmitCap />
-    </Button>
+    <span class="tray tray-submit">
+      <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
+      <Button onclick={submit} disabled={!preview} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
+        Send for revision
+        <SubmitCap />
+      </Button>
+    </span>
   {/snippet}
 </Modal>
 
 <!-- Discarding is the destructive one, so it routes through a confirmation; Mark as
-     draft and Save do not. The bubble anchors itself to the trigger — this dialog's
+     unsent and Save do not. The bubble anchors itself to the trigger — this dialog's
      body scrolls, and bits-ui tracks the button through it. Opening a second row's
      bubble dismisses the first as an outside interaction. -->
 {#snippet discard(onConfirm: () => void)}
@@ -353,53 +353,60 @@
   .field {
     display: block;
   }
+  /* The muted notes below take --ink-soft at their faintest: --ink-faint falls under
+     4.5:1 on the raised sheet in several palettes. */
   .summary {
     /* Matches the .mono atom's size (--text-sm) but stays in the sans face — this
        is a count summary, not code, so it takes the size without the mono font. */
     font-size: var(--text-sm);
-    color: var(--ink-faint);
+    color: var(--ink-soft);
   }
   /* The empty-state nudge reads as guidance, not a tally — italic to set it apart
-     from the count summary without spending a stronger ink or the accent. */
+     from the count summary without spending the accent. */
   .summary.empty {
     font-style: italic;
-    color: var(--ink-soft);
   }
   /* The unsent-draft clarifier: the same muted register as the count summary,
      since it qualifies that count rather than competing with it. */
   .drafts-hint {
     margin: 0;
     font-size: var(--text-sm);
-    color: var(--ink-faint);
+    color: var(--ink-soft);
   }
 
-  /* Committed inline comments: the solid rail reads "committed" against the scratch
-     rows' dashed "started, not sent" below. */
-  .inline-comments {
-    padding: 0.7rem 0.8rem;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    background: var(--paper-sunk);
-  }
   .inline-comments .form-label {
     display: flex;
     align-items: center;
     gap: 0.4rem;
     margin-bottom: 0.4rem;
   }
-  /* Both row groups are real lists (EXC-1057); the ul carries no spacing of its
-     own, which lives on .inline-row / .scratch-row below. */
+  /* Both row groups are real lists (EXC-1057). The minmax column keeps a long
+     unbroken comment from widening the list past the modal. */
   .row-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.4rem;
     list-style: none;
     margin: 0;
     padding: 0;
   }
+  /* Committed comments are raised cards, so they rest in a tray cut into the sheet,
+     which gives them a ground to stand on; the unsent wells are cut straight into the
+     sheet. */
+  .inline-comments .row-list {
+    padding: 0.4rem;
+    /* The card's corner plus this padding, so the two stay concentric. */
+    border-radius: calc(var(--key-radius) + 2 * var(--well-pad) + 0.4rem);
+    background: var(--group-floor);
+    box-shadow: var(--panel-recess);
+  }
+  /* A saved comment's card, as it floats over the plan. Its padding is the bezel, so
+     the actions' tray nests in its corner, as in an unsent row. */
   .inline-row {
-    border-left: 3px solid var(--rule-strong);
-    border-radius: var(--radius);
-    background: var(--paper);
-    margin-top: 0.4rem;
-    padding: 0.15rem 0.25rem;
+    border-radius: calc(var(--key-radius) + 2 * var(--well-pad));
+    background: var(--paper-raised);
+    box-shadow: var(--float-surface-low);
+    padding: var(--well-pad);
   }
   .inline-comments :global(.inline-disclosure) {
     min-width: 0;
@@ -415,52 +422,60 @@
   .inline-actions,
   .scratch-actions {
     flex: none;
-    display: flex;
-    gap: 0.5rem;
   }
 
-  /* Unsent-scratch section: the source view's Resume-marker idiom — dashed neutral
-     rails, no accent — so an unsent draft never carries the actionable accent the
-     dialog reserves for real feedback. */
-  .scratches {
-    padding: 0.7rem 0.8rem;
-    border: 1px dashed var(--rule);
-    border-radius: var(--radius);
-    background: var(--paper-sunk);
-  }
   .scratches .form-label {
     display: flex;
     align-items: center;
     gap: 0.4rem;
     margin-bottom: 0;
   }
-  /* The count chip beside a section label: an outline Badge, kept to the tabular
-     metric face so a growing count stays fixed-width. */
+  .scratches .form-label :global(.icon) {
+    color: color-mix(in lab, var(--attention), var(--stamp-word-toward) var(--stamp-word-mix));
+  }
+  /* The count beside a section label, stamped into the sheet as the Contents panel's
+     counts are; an unsent count takes the comment stamp's tint. Global because the
+     approve and reject guard (UnsentCommentsDialog) wears it too. */
   :global(.tally) {
-    font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
-    text-transform: none;
+    display: inline-flex;
+    align-items: center;
+    height: 1.15rem;
+    padding: 0 0.42rem;
+    border-radius: 99px;
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    line-height: 1;
     letter-spacing: 0;
+    text-transform: none;
+  }
+  :global(.tally.tally-unsent) {
+    background: color-mix(in lab, var(--well-floor), var(--attention) var(--stamp-floor));
+    color: color-mix(in lab, var(--attention), var(--stamp-word-toward) var(--stamp-word-mix));
   }
   .scratches-note {
     margin: 0.35rem 0 0.6rem;
     font-size: var(--text-sm);
-    color: var(--ink-faint);
+    color: var(--ink-soft);
   }
+  /* A committed row is a card; an unsent one is the source marker's tinted well, so it
+     never reads as a comment that will be sent. */
   .scratch-row {
-    border-left: 3px dashed var(--ink-faint);
-    border-radius: var(--radius);
-    background: var(--paper);
-    margin-top: 0.4rem;
-    padding: 0.15rem 0.25rem;
+    border-radius: calc(var(--key-radius) + 2 * var(--well-pad));
+    background: color-mix(in lab, var(--well-floor), var(--attention) var(--unsent-floor));
+    box-shadow: var(--well-shade), var(--well-lip);
+    padding: var(--well-pad);
+  }
+  :is(.inline-row, .scratch-row) :global(.row-trigger) {
+    border-radius: calc(var(--key-radius) + var(--well-pad));
   }
   .scratches :global(.scratch-disclosure) {
     min-width: 0;
   }
 
   /* Shared row disclosure trigger (inline + scratch + nested context): a bits-ui
-     Collapsible.Trigger (a <button>) reset to read as a plain summary line, with a
-     raised-paper hover wash signalling the whole line toggles it. */
+     Collapsible.Trigger (a <button>) reset to read as a plain summary line, with an ink
+     wash on hover, which shows on the card and the tinted well alike, signalling the
+     whole line toggles it. */
   :global(.row-trigger) {
     display: flex;
     align-items: center;
@@ -477,8 +492,13 @@
     font: inherit;
     transition: background var(--dur-state) var(--ease-out);
   }
-  :global(.row-trigger:hover) {
-    background: var(--paper-raised);
+  :global(.row-trigger:is(:hover, :focus-visible)) {
+    background: var(--ink-wash);
+  }
+  /* The wash takes --ink-soft under 4.5:1 on the unsent tint and the card in some
+     palettes, so a hovered row's small labels step up to --ink. */
+  :global(.row-trigger:is(:hover, :focus-visible)) :is(.anchor, .context-label) {
+    color: var(--ink);
   }
   /* Children carry their own inset, so a scratch row (whose body has no wrapper) and
      an inline row read with the same left edge. */
@@ -492,7 +512,7 @@
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--ink-faint);
+    color: var(--ink-soft);
   }
   /* Every block of quoted text in the dialog — a comment's own text, the source
      lines it anchors to, the compiled preview — is source, wrapped rather than
@@ -506,11 +526,14 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
+  /* Read-only text sits in a cut, as the compiled preview does. It rests in the card's
+     foot, one pad in from the card's corner. */
   .context-lines {
     margin: 0.15rem 0 0;
     padding: 0.4rem 0.55rem;
-    border-radius: var(--radius);
-    background: var(--paper-sunk);
+    border-radius: calc(var(--key-radius) + var(--well-pad));
+    background: var(--group-floor);
+    box-shadow: var(--panel-recess);
     color: var(--ink-soft);
   }
   /* The line-anchor label: a numeric chrome surface, so it takes the tabular metric
@@ -527,34 +550,23 @@
     color: var(--ink);
   }
 
-  /* On hover each takes its semantic tint — green for the keep, red for the drop —
-     so the consequence reads before the click; resting stays the quiet float-chip. */
-  :global(.save) {
-    transition:
-      color var(--dur-state) var(--ease-out),
-      border-color var(--dur-state) var(--ease-out);
+  /* On hover each cap's label takes its semantic tint — green for the keep, red for
+     the drop — so the consequence reads before the click; resting stays quiet. */
+  .scratch-actions :global(.save) {
+    --cap-label-hover: var(--ok);
   }
-  :global(.save:hover) {
-    color: var(--ok);
-    border-color: var(--ok);
+  :is(.inline-actions, .scratch-actions) :global(.discard) {
+    --cap-label-hover: var(--danger);
   }
-  :global(.discard) {
-    transition:
-      color var(--dur-state) var(--ease-out),
-      border-color var(--dur-state) var(--ease-out);
-  }
-  :global(.discard:hover) {
-    color: var(--danger);
-    border-color: var(--danger);
-  }
-  /* Committed-feedback preview: a quiet sunk container behind a disclosure, showing
+  /* Committed-feedback preview: a group cut into the sheet behind a disclosure, showing
      exactly what the agent will receive after the draft/discard edits above. */
   .preview {
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    background: var(--paper-sunk);
-    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: var(--group-floor);
+    box-shadow: var(--panel-recess);
   }
+  /* The trigger fills the recess's top, so it takes the recess's corners rather than
+     being clipped to them: a clip would also cut off a forced-colors focus outline. */
   .preview :global(.preview-trigger) {
     display: flex;
     align-items: center;
@@ -562,6 +574,7 @@
     width: 100%;
     padding: 0.5rem 0.7rem;
     border: 0;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     background: none;
     text-align: start;
     cursor: pointer;
@@ -569,8 +582,11 @@
     color: var(--ink-soft);
     transition: background var(--dur-state) var(--ease-out);
   }
-  .preview :global(.preview-trigger:hover) {
-    background: var(--paper-raised);
+  .preview :global(.preview-trigger[data-state="closed"]) {
+    border-radius: var(--radius-lg);
+  }
+  .preview :global(.preview-trigger:is(:hover, :focus-visible)) {
+    background: var(--ink-wash);
   }
   .preview pre {
     margin: 0;
@@ -580,10 +596,11 @@
 
   /* The disclosure chevron, rotated by the Collapsible's data-state — right when
      closed, down when open. Scoped under .rcd-content so the global selector can't
-     reach collapsibles elsewhere. */
+     reach collapsibles elsewhere. --ink-faint misses the non-text floor on the unsent
+     tint in some palettes. */
   :global(.rcd-content [data-slot="collapsible-trigger"] svg) {
     flex: none;
-    color: var(--ink-faint);
+    color: var(--ink-soft);
     transition: transform var(--dur-state) var(--ease-out);
   }
   :global(.rcd-content [data-slot="collapsible-trigger"][data-state="closed"] svg) {

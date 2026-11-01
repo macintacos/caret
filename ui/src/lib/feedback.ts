@@ -108,6 +108,8 @@ export interface PendingItem {
   label: string;
   /** The comment / draft text, trimmed. */
   text: string;
+  /** Set on a retained composer scratch, which no verdict sends. */
+  unsent?: true;
 }
 
 /** The annotations in plan line order: line-anchored ones by start line, then the
@@ -137,7 +139,11 @@ export function commentItems(annotations: Annotation[], generalComment: string):
  * already trimmed (the controller keeps a scratch only when its trimmed text is
  * non-empty). */
 export function scratchItems(scratches: ComposerScratch[]): PendingItem[] {
-  return scratches.map((s) => ({ label: rangeLabel(s.startLine, s.endLine), text: s.text }));
+  return scratches.map((s) => ({
+    label: rangeLabel(s.startLine, s.endLine),
+    text: s.text,
+    unsent: true,
+  }));
 }
 
 /** Everything queued at a verdict, as a flat preview list: commentItems, then

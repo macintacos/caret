@@ -89,6 +89,45 @@ describe("SettingsDialog shell", () => {
   });
 });
 
+// Below 640px the rail folds into a bar: a section picker, a search key and a close key.
+// The bar is in the DOM at every width (CSS shows it), so its wiring is unit-testable;
+// what shows at which width is test/e2e/dialog-narrow.e2e.ts.
+describe("SettingsDialog narrow bar", () => {
+  const button = (name: string) =>
+    document.body.querySelector<HTMLButtonElement>(`button[aria-label='${name}']`);
+  const picker = () => document.body.querySelector("#settings-section");
+
+  test("the close key dismisses the dialog", async () => {
+    let closes = 0;
+    const { flush } = render(SettingsDialog, props({ onClose: () => (closes += 1) }));
+    await flushUntil(flush, mounted);
+    button("Close settings")?.click();
+    await flushUntil(flush, () => closes > 0);
+    expect(closes).toBe(1);
+  });
+
+  test("the search key moves focus into the search field", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    button("Search settings")?.click();
+    flush();
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Search settings");
+    expect(document.activeElement?.tagName).toBe("INPUT");
+  });
+
+  test("the section picker is labelled and shows the open section", async () => {
+    const { flush } = render(SettingsDialog, props());
+    await flushUntil(flush, mounted);
+    expect(document.body.querySelector("label[for='settings-section']")?.textContent).toBe(
+      "Section",
+    );
+    expect(picker()?.textContent?.trim()).toBe("Appearance");
+    document.body.querySelector<HTMLElement>("[data-category='Sound']")?.click();
+    flush();
+    expect(picker()?.textContent?.trim()).toBe("Sound");
+  });
+});
+
 describe("SettingsDialog label association (EXC-1112)", () => {
   // The visible row text IS the label element, so the accessible name and the rendered
   // string cannot drift apart. Asserted over EVERY rendered row, so a field added to the
@@ -381,9 +420,10 @@ describe("SettingsDialog search (EXC-845)", () => {
     flush();
   }
 
-  // The `/` hint cap rides an input-group addon slot (EXC-1113), so the group's own
-  // layout reserves its track beside the control.
-  test("the search field composes input-group with the / cap in a trailing addon", async () => {
+  // The key hints ride an input-group addon slot (EXC-1113), so the group's own layout
+  // reserves their track beside the control: `/` at rest, and `esc`, which clears the
+  // field, while it has focus (CSS swaps them).
+  test("the search field composes input-group with its key hints in a trailing addon", async () => {
     const { flush } = render(SettingsDialog, props());
     await flushUntil(flush, mounted);
     const group = document.body.querySelector("[data-slot='input-group']");
@@ -392,9 +432,9 @@ describe("SettingsDialog search (EXC-845)", () => {
       group?.querySelector("[data-slot='input-group-control'][aria-label='Search settings']") !==
         null,
     ).toBe(true);
-    const addon = group?.querySelector("[data-slot='input-group-addon']");
-    expect(addon?.getAttribute("data-align")).toBe("inline-end");
-    expect(addon?.textContent?.trim()).toBe("/");
+    const addon = group?.querySelector("[data-slot='input-group-addon'][data-align='inline-end']");
+    const keys = [...(addon?.querySelectorAll("[data-slot='kbd']") ?? [])];
+    expect(keys.map((k) => k.textContent?.trim())).toEqual(["/", "esc"]);
   });
 
   test("filters nav rows and fields to the matches only", async () => {

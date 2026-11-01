@@ -1,36 +1,32 @@
-// Per-block horizontal scroll for the plan source view's fenced-code panels (EXC-729).
-// @pierre/diffs renders each source line as an independent [data-line] cell, and EXC-692
-// caps each fenced-code row at a reading width, so a line wider than that cap broke out of
-// the panel background. The fix wraps an overflowing block's rows in ONE per-block card that
-// is a single native horizontal scroll container, so the whole block scrolls as one unit:
-// short lines scroll along with the wide ones (they share the card's scroll area), there is
-// exactly one scrollbar at the card's bottom, and — because the wrapper is a subgrid whose
-// rows still map to the parent's row tracks — the gutter line numbers stay perfectly aligned.
-// Per-row scroll with a JS sync is the alternative that does not work: a short line cannot
-// scroll at all, and syncing N ports lags into a visible "jelly".
+// Per-block cards for the plan source view's fenced code (EXC-729). @pierre/diffs renders
+// each source line as an independent [data-line] cell, so no single element frames a block.
+// This wraps EVERY block's rows in one card: a frame drawn across separate rows would seam
+// its ring and drop shadow at every row boundary, and a card is also a single native
+// horizontal scroll container, so a wide block scrolls as one unit — short lines scroll
+// along with the wide ones, there is exactly one scrollbar, and because the card is a
+// subgrid whose rows still map to the parent's row tracks, the gutter line numbers stay
+// aligned. Per-row scroll with a JS sync is the alternative that does not work: a short
+// line cannot scroll at all, and syncing N ports lags into a visible "jelly".
 //
 // The card takes the contiguous RUN of the column's children across the block rather than its
 // [data-line] rows alone (cardSlice.ts), so an open comment's annotation row — which carries
-// no line index — rides inside the card at its anchor instead of below the whole block,
-// beneath its scrollbar (EXC-1228).
+// no line index — rides inside the card at its anchor instead of below the whole block
+// (EXC-1228).
 //
 // The card styling and its scrollbar live in coreStyles.ts (CARD_ATTR selects the card); this
-// module only owns the DOM structure — which blocks are wrapped, kept, or unwrapped. A block
-// that fits is left as plain direct-child rows, which EXC-692's per-row rules still style. The
+// module only owns the DOM structure — which blocks are wrapped, kept, or retired. The
 // library owns and repaints these rows, so this re-runs after every repaint (SourceView's
-// MutationObserver) and on viewport resize (a card's drawn width narrows with the column); it
-// is idempotent — an already-correct block mutates nothing, so a re-run cannot re-trigger that
-// observer. happy-dom reports 0 for every layout metric, so overflow is read through an
-// injectable `read`.
+// MutationObserver); it is idempotent — an already-correct block mutates nothing, so a re-run
+// cannot re-trigger that observer.
 
 import { unwrappedSlice } from "$lib/diffview/cardSlice.ts";
 import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
 
-/** Marks a block's scroll card; its value is the block's 1-based start line, the key that
+/** Marks a block's card; its value is the block's 1-based start line, the key that
  * ties it to its block for idempotent reuse and for the card's coreStyles.ts styling. */
 export const CARD_ATTR = "data-code-card";
 
-/** Marks a block's gutter card — the line-number-column mirror of its content scroll card,
+/** Marks a block's gutter card — the line-number-column mirror of its content card,
  * keyed by the same 1-based start line. @pierre/diffs' selection walk
  * (InteractionManager.renderSelection) pairs the gutter and content columns by direct-child
  * index and THROWS when their child counts differ ("gutter and content children dont match");
@@ -51,27 +47,16 @@ export const GUTTER_CARD_ATTR = "data-code-card-gutter";
  * pre-wrap rows and a top-aligned line number. */
 export const REFLOW_ATTR = "data-code-card-reflow";
 
-/** The layout metrics that decide whether a block overflows its card. For an unwrapped block
- * these are read per row (does the capped row box overflow?); for a wrapped block they are
- * read from the card (does the block still overflow after wrapping?). */
-export interface RowMetrics {
-  scrollWidth: number;
-  clientWidth: number;
-}
-
-export type MetricsReader = (el: Element) => RowMetrics;
-
-const readMetrics: MetricsReader = (el) => ({
-  scrollWidth: el.scrollWidth,
-  clientWidth: el.clientWidth,
-});
+/** Marks a card whose code is wider than it, so it scrolls, and its gutter mirror, where
+ * coreStyles.ts clears the scrollbar's lane beside the card's last row. */
+export const SCROLLS_ATTR = "data-code-card-scrolls";
 
 /** A block's 1-based line numbers — the key sequence its card's slice must cover. */
 function blockLines(range: CodeBlockRange): number[] {
   return Array.from({ length: range.end - range.start + 1 }, (_, i) => range.start + i);
 }
 
-/** Wraps `slice` in a fresh scroll card at its position, keyed by `key`. The card spans one
+/** Wraps `slice` in a fresh card at its position, keyed by `key`. The card spans one
  * parent row track per child it takes — the block's rows plus any annotation row among them
  * — so its subgrid maps them back to the shared tracks, keeping the gutter aligned. */
 function wrapBlock(content: Element, key: string, slice: Element[]): void {
@@ -83,7 +68,7 @@ function wrapBlock(content: Element, key: string, slice: Element[]): void {
 }
 
 /** Unwraps a card, returning its children to the column in place, then removes it. Used for
- * both the content scroll card and the gutter mirror card. */
+ * both the content card and the gutter mirror card. */
 function unwrapCard(column: Element, card: HTMLElement): void {
   while (card.firstChild != null) column.insertBefore(card.firstChild, card);
   card.remove();
@@ -102,71 +87,39 @@ function wrapGutterBlock(gutter: Element, key: string, cells: Element[]): void {
 }
 
 /**
- * Ensures every overflowing fenced block is wrapped in one scroll card, and that blocks which
- * fit (or no longer exist) are not — except a card marked REFLOW_ATTR, which is kept while
- * its block exists. Idempotent: an already-wrapped block that still overflows
- * is left exactly as-is (no DOM mutation), and a fitting unwrapped block is left as plain
- * rows. `read` is injectable for tests — it is called on a row to decide whether an unwrapped
- * block overflows, and on a card to decide whether a wrapped block still overflows.
+ * Ensures every fenced block is wrapped in one card, and that a card whose block no longer
+ * exists is not. Idempotent: an already-wrapped block is left exactly as-is (no DOM
+ * mutation).
  */
-export function syncCodeBlockCards(
-  root: ParentNode,
-  ranges: CodeBlockRange[],
-  read: MetricsReader = readMetrics,
-): void {
+export function syncCodeBlockCards(root: ParentNode, ranges: CodeBlockRange[]): void {
   const content = root.querySelector<HTMLElement>("[data-content]");
   if (content == null) return;
 
   const wanted = new Set<string>();
   for (const range of ranges) {
     const key = String(range.start);
-    const card = content.querySelector<HTMLElement>(`:scope > [${CARD_ATTR}="${key}"]`);
-    if (card != null) {
-      // A reflowed card's rows wrap to its width, so it never reads as overflowing and the
-      // check below would retire it; its loose rows then overflow, get re-carded and
-      // re-marked, and the block flips forever. Kept until the reviewer toggles the wrap off,
-      // even once a widened viewport lets the block fit.
-      if (card.hasAttribute(REFLOW_ATTR)) {
-        wanted.add(key);
-        continue;
-      }
-      // Already wrapped: keep it only while it still overflows; otherwise the retire pass
-      // below unwraps it (e.g. the viewport widened until the block fits). No equivalent of
-      // tables.ts's cardHoldsRange, which re-validates a kept card's span: an annotation
-      // change makes the library's partial render ineligible, so a card never survives one
-      // to hold a stale span.
-      const cardMetrics = read(card);
-      if (cardMetrics.scrollWidth > cardMetrics.clientWidth) wanted.add(key);
+    if (content.querySelector(`:scope > [${CARD_ATTR}="${key}"]`) != null) {
+      // No equivalent of tables.ts's cardHoldsRange, which re-validates a kept card's
+      // span: an annotation change makes the library's partial render ineligible, so a
+      // card never survives one to hold a stale span.
+      wanted.add(key);
       continue;
     }
-    // Not wrapped: wrap it if any row overflows its capped box. Measured on the slice's
-    // [data-line] members alone — an open composer's annotation row rides in the slice too,
-    // and its scrollWidth would card a block whose code fits.
     const slice = unwrappedSlice(content, "data-line", blockLines(range));
     // A partial column is a mid-repaint state, not a block to card: a slice short of the
     // range would mis-size grid-row, and the next repaint brings this pass back.
     if (slice === null) continue;
-    const overflows = slice.some((el) => {
-      if (!el.hasAttribute("data-line")) return false;
-      const m = read(el);
-      return m.scrollWidth > m.clientWidth;
-    });
-    if (overflows) {
-      wrapBlock(content, key, slice);
-      wanted.add(key);
-    }
+    wrapBlock(content, key, slice);
+    wanted.add(key);
   }
 
-  // Unwrap any card that is no longer wanted — its block now fits, or no longer exists.
   for (const card of content.querySelectorAll<HTMLElement>(`:scope > [${CARD_ATTR}]`)) {
     if (!wanted.has(card.getAttribute(CARD_ATTR) ?? "")) unwrapCard(content, card);
   }
 
   // Mirror the content cards into the gutter column so the two columns keep matching
-  // direct-child counts (see GUTTER_CARD_ATTR). The overflow decision is content's alone — the
-  // gutter never overflows — so the gutter simply follows `wanted`: wrap the cells of any newly
-  // carded block, and unwrap any gutter card whose block was retired. Guarded on the gutter
-  // existing so the content-only test harness (and any gutterless layout) is unaffected.
+  // direct-child counts (see GUTTER_CARD_ATTR). Guarded on the gutter existing so the
+  // content-only test harness (and any gutterless layout) is unaffected.
   const gutter = root.querySelector<HTMLElement>("[data-gutter]");
   if (gutter == null) return;
   for (const range of ranges) {
@@ -191,5 +144,21 @@ export function applyCodeBlockReflow(root: ParentNode, reflowed: ReadonlySet<num
   for (const card of root.querySelectorAll(`[${CARD_ATTR}], [${GUTTER_CARD_ATTR}]`)) {
     const key = card.getAttribute(CARD_ATTR) ?? card.getAttribute(GUTTER_CARD_ATTR);
     card.toggleAttribute(REFLOW_ATTR, reflowed.has(Number(key)));
+  }
+}
+
+/**
+ * Marks every card whose code is wider than it, and its gutter mirror, and clears the mark
+ * from the rest. Reads layout, so it runs after the passes that change a card's width: the
+ * carding and the reflow marks above.
+ */
+export function markScrollingCards(root: ParentNode): void {
+  for (const card of root.querySelectorAll(`[data-content] > [${CARD_ATTR}]`)) {
+    const scrolls = card.scrollWidth > card.clientWidth;
+    card.toggleAttribute(SCROLLS_ATTR, scrolls);
+    const key = card.getAttribute(CARD_ATTR);
+    root
+      .querySelector(`[data-gutter] > [${GUTTER_CARD_ATTR}="${key}"]`)
+      ?.toggleAttribute(SCROLLS_ATTR, scrolls);
   }
 }

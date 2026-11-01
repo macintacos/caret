@@ -52,7 +52,7 @@
            real toggle button (aria-expanded) rather than an inert readout. -->
       <button
         type="button"
-        class="stat comments-toggle"
+        class="stat comments-toggle cap-ghost"
         aria-expanded={commentsOpen}
         aria-controls="comment-navigator"
         aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleComments")}
@@ -63,7 +63,7 @@
         {#if showShortcutHints}
           <!-- Both caps typed, so the shift glyph is the shared icon, never a ⇧ char. -->
           <Kbd class="comments-key kbd-sm" aria-hidden="true"
-            ><KbdCap key="shift" size={8} /><KbdCap key="C" /></Kbd
+            ><KbdCap key="shift" /><KbdCap key="C" /></Kbd
           >
         {/if}
       </button>
@@ -81,7 +81,7 @@
             {#snippet child({ props })}
               <!-- The same chip the TopBar VersionLabel shows. Only the ^ carries
                    amber, holding amber-scarcity. -->
-              <Badge {...props} variant="secondary" class="rev metric">
+              <Badge {...props} variant="secondary" class="rev metric stamp">
                 <span class="caret" aria-hidden="true">^</span>v{version}
               </Badge>
             {/snippet}
@@ -94,7 +94,7 @@
         <Tooltip.Trigger>
           {#snippet child({ props })}
             <span {...props} class="conn" class:offline={!connected}>
-              <span class="dot" aria-hidden="true"></span>
+              <span class="led" aria-hidden="true"></span>
               {connected ? "live" : "offline"}
             </span>
           {/snippet}
@@ -127,10 +127,12 @@
      .stat's baseline: this tally alone carries the taller Shift+C cap, which on a
      baseline row drags the shared baseline down and sinks "N comments" ~1px below
      the strip's other segments. */
+  /* The padding and its cancelling margin give a press's dimple room without moving
+     the tally. */
   .comments-toggle {
     align-items: center;
-    margin: 0;
-    padding: 0;
+    margin: 0 -0.2rem;
+    padding: 0.15rem 0.2rem;
     background: none;
     border: none;
     font: inherit;
@@ -139,24 +141,21 @@
     cursor: pointer;
     border-radius: var(--radius);
   }
-  .comments-toggle:hover .label,
+  .comments-toggle:is(:hover, :focus-visible) .label,
   .comments-toggle[aria-expanded="true"] .label {
     color: var(--ink);
     text-decoration: underline;
     text-underline-offset: 2px;
-  }
-  .comments-toggle:focus-visible {
-    outline: 2px solid var(--ring);
-    outline-offset: 2px;
   }
   /* Lifts the C off .kbd-sm's 0.68em so it meets the shift icon at closer to one
      scale. :global because it rides the Kbd root, which carries no scope hash. */
   .status-strip :global(.comments-key) {
     font-size: 0.9em;
   }
+  /* Soft, not faint: on the window's body --ink-faint falls under 4.5:1. */
   .num {
     font-weight: 600;
-    color: var(--ink-faint);
+    color: var(--ink-soft);
   }
   /* --attention, the hue the TopBar's pending badge and the compare picker's version
      count already wear, so all three counts read as one family; --ok stays reserved
@@ -192,17 +191,10 @@
     align-items: center;
     gap: 0.3rem;
     color: var(--ink-soft);
-  }
-  .dot {
-    width: 0.4rem;
-    height: 0.4rem;
-    border-radius: 99px;
-    background: var(--ok);
+    --led: var(--ok);
   }
   .conn.offline {
     color: var(--danger);
-  }
-  .conn.offline .dot {
-    background: var(--danger);
+    --led: var(--danger);
   }
 </style>

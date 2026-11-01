@@ -7,12 +7,12 @@
   // Appearance), each a FieldGroup of shadcn Fields.
   //
   // Two shadcn primitives carry the layout (compose-first, per doc/agents/shadcn-rules):
-  //   • Sidebar (collapsible="none") — the static category rail. The SELECTED row
-  //     wears a solid amber rail + wash and bold ink (caret's "amber marks the
-  //     selection" language), overriding shadcn's faint single-accent data-active
-  //     treatment so the current pane is unmistakable.
+  //   • Sidebar (collapsible="none") — the static category rail. Its sections sit in one
+  //     bed, and the SELECTED one latches down in it in full ink. Below 640px the rail
+  //     folds into a bar of a section picker, a search key and a close key.
   //   • Field / FieldSet (EXC-1112) — one Field per setting (label + description +
-  //     control), hairline-separated within a FieldGroup. A LABELLED section wraps its
+  //     control), within a FieldGroup set in a bed in the sheet, so a section reads as
+  //     a table of settings. A LABELLED section wraps its
   //     FieldGroup in a FieldSet whose FieldLegend is the header; an unlabelled one
   //     stays a plain div, since a fieldset with no legend is a group with no name.
   //     The FieldLabel is a real <label>, so the visible text IS each control's
@@ -27,8 +27,9 @@
   // those rules is written in the `.settings :global(…)` form.
   //
   // The Dialog primitive is composed directly rather than Modal.svelte — Modal's
-  // eyebrow/title/footer identity doesn't fit the two-pane layout — keeping a
+  // title/footer identity doesn't fit the two-pane layout — keeping a
   // visually-hidden Dialog.Title so the dialog's accessible name is "Settings".
+  import { Button } from "$lib/components/ui/button/index.js";
   import * as Dialog from "$lib/components/ui/dialog/index.js";
   import {
     Field,
@@ -37,7 +38,6 @@
     FieldGroup,
     FieldLabel,
     FieldLegend,
-    FieldSeparator,
     FieldSet,
   } from "$lib/components/ui/field/index.js";
   import * as InputGroup from "$lib/components/ui/input-group/index.js";
@@ -57,8 +57,10 @@
     UPDATES_CATEGORY,
   } from "$lib/settingsRegistry.ts";
   import AdvancedPane from "@/components/AdvancedPane.svelte";
+  import Icon from "@/components/Icon.svelte";
   import NotificationsPane from "@/components/NotificationsPane.svelte";
   import SettingControl from "@/components/SettingControl.svelte";
+  import SettingSelect from "@/components/SettingSelect.svelte";
   import ThemeSection from "@/components/ThemeSection.svelte";
   import UpdatesPane from "@/components/UpdatesPane.svelte";
   import type { ThemeFileError, UpdateReport } from "@core/lib/types";
@@ -76,10 +78,6 @@
     onChange: (field: StagedField, value: unknown) => void | Promise<void>;
     /** Dismiss (Escape / backdrop). App hides the modal. */
     onClose: () => void;
-    /** Copy a diagnostics block's text (the Advanced pane, EXC-848): App writes the
-     * clipboard and fires the shared success alert. Defaults to a no-op so mounts
-     * without the Advanced pane need not supply it. */
-    onCopyDiagnostic?: (text: string) => void;
     /** Opens the What's new modal from the Updates pane. */
     onWhatsNew?: () => void;
     /** Whether an update is waiting, badging the Updates rail row (EXC-1207). */
@@ -100,7 +98,6 @@
     entries,
     onChange,
     onClose,
-    onCopyDiagnostic = () => {},
     onWhatsNew = () => {},
     updatePending = false,
     updateReport = null,
@@ -137,6 +134,7 @@
   let selectedId = $state(SETTINGS_CATEGORIES[0]?.id ?? "");
   const selected = $derived(categories.find((c) => c.id === selectedId) ?? categories[0]);
   const paneFields = $derived(staged.filter((f) => f.category === selected?.id));
+  const sectionOptions = $derived(categories.map((c) => ({ value: c.id, label: c.id })));
 
   // Sub-group the pane's fields into labelled sections, preserving registry order: a
   // new group starts whenever the section label changes (sectionless fields lead).
@@ -220,15 +218,59 @@
          header band. The visible title is the per-category pane header. -->
     <Dialog.Title class="sr-only">Settings</Dialog.Title>
 
-    <div class="settings">
+    <div class="settings" data-query={query === "" ? undefined : ""}>
       <Sidebar.Root collapsible="none" class="settings-rail">
+        <!-- The narrow bar, shown below 640px in place of the rail's list. A phone has no
+             Esc, so the close key is its way out. The search key only moves focus: the
+             field reveals itself while focused or holding a query. -->
+        <div class="settings-bar">
+          <label for="settings-section" class="sr-only">Section</label>
+          <div class="section-pick">
+            <SettingSelect
+              id="settings-section"
+              value={selected?.id ?? ""}
+              options={sectionOptions}
+              onSelect={(id) => (selectedId = id)}
+            />
+          </div>
+          <span class="tray">
+            <Button
+              variant="secondary"
+              size="icon"
+              class="float-chip"
+              aria-label="Search settings"
+              onclick={() => searchInput?.focus()}
+            >
+              <Icon name="search" size={15} />
+            </Button>
+          </span>
+          <span class="tray">
+            <Dialog.Close>
+              {#snippet child({ props })}
+                <Button
+                  {...props}
+                  variant="secondary"
+                  size="icon"
+                  class="float-chip"
+                  aria-label="Close settings"
+                >
+                  <Icon name="x" size={15} />
+                </Button>
+              {/snippet}
+            </Dialog.Close>
+          </span>
+        </div>
         <!-- Search atop the rail (EXC-845), mirroring ShortcutsHelp's search field. The
-             `/` cap rides an InputGroup inline-end addon (EXC-1113), which reserves its
-             own track beside the control. The addon carries the aria-hidden rather than
-             the cap: it is a role="group", and one holding nothing announceable reads as
-             an empty group. -->
-        <Sidebar.Header>
-          <InputGroup.Root>
+             key hints ride an InputGroup inline-end addon (EXC-1113), which reserves its
+             own track beside the control: `/` at rest, and `esc`, which clears the field,
+             while it has focus. The addons carry the aria-hidden rather than their
+             contents: each is a role="group", and one holding nothing announceable reads
+             as an empty group. -->
+        <Sidebar.Header class="settings-search">
+          <InputGroup.Root class="field-well">
+            <InputGroup.Addon align="inline-start" aria-hidden="true">
+              <Icon name="search" size={14} />
+            </InputGroup.Addon>
             <InputGroup.Input
               type="text"
               placeholder="Search settings…"
@@ -237,16 +279,18 @@
               bind:ref={searchInput}
             />
             <InputGroup.Addon align="inline-end" aria-hidden="true">
-              <Kbd>/</Kbd>
+              <Kbd class="key-rest">/</Kbd>
+              <Kbd class="key-focused">esc</Kbd>
             </InputGroup.Addon>
           </InputGroup.Root>
         </Sidebar.Header>
         <Sidebar.Content>
           <Sidebar.Group>
-            <Sidebar.Menu>
+            <Sidebar.Menu class="tray settings-nav">
               {#each categories as cat (cat.id)}
                 <Sidebar.MenuItem>
                   <Sidebar.MenuButton
+                    class="key-row"
                     isActive={cat.id === selected?.id}
                     data-category={cat.id}
                     aria-current={cat.id === selected?.id ? "page" : undefined}
@@ -268,7 +312,7 @@
           </Sidebar.Group>
         </Sidebar.Content>
         <Sidebar.Footer>
-          <p class="nav-hint" aria-hidden="true"><Kbd>esc</Kbd> <span>close</span></p>
+          <p class="nav-hint ref-esc-hint" aria-hidden="true"><Kbd>esc</Kbd> to close</p>
         </Sidebar.Footer>
       </Sidebar.Root>
 
@@ -288,7 +332,7 @@
                category→component map here: the panes take different props, which a map
                can't thread. -->
           {#if selected.id === "Advanced"}
-            <AdvancedPane {onCopyDiagnostic} />
+            <AdvancedPane />
           {:else}
             {#if selected.id === UPDATES_CATEGORY}
               <UpdatesPane report={updateReport} {onWhatsNew} />
@@ -329,8 +373,7 @@
 
 {#snippet rows(fields: StagedField[])}
   <FieldGroup class="fields">
-    {#each fields as field, i (field.key)}
-      {#if i > 0}<FieldSeparator />{/if}
+    {#each fields as field (field.key)}
       <!-- Field carries role="group"; naming it after the row's own label turns a
            nameless boundary into the row's structure. -->
       <Field
@@ -366,6 +409,8 @@
     padding: 0;
     gap: 0;
     overflow: hidden;
+    /* The search field rests the rail header's 0.5rem padding in from this corner. */
+    border-radius: calc(var(--radius) + 0.5rem);
   }
   /* The two-pane body. A fixed height gives the roomy mockup framing (the pane keeps
      its shape with few fields) and, being taller than a tiny viewport, lets the
@@ -383,49 +428,33 @@
     border-radius: inherit;
   }
 
-  /* The shadcn Sidebar as the category rail: a hairline off the pane, its rounded
-     inner corners clipped by .settings. The rail surface (--sidebar → --paper) is a
-     shade under the raised pane, reading as recessed. */
+  /* The shadcn Sidebar as the category rail, flat on the sheet: no column fill, no rule. */
   .settings :global(.settings-rail) {
-    border-right: 1px solid var(--rule);
+    background: transparent;
   }
-  /* Nav rows sit a little apart (the shadcn menu ships gap-0) so a hover tint on
-     one doesn't crowd its neighbor. */
-  .settings :global([data-slot="sidebar-menu"]) {
-    gap: 0.25rem;
+  /* The sections share one bed (styles/atoms.css), as the top bar's keys do, stacked full
+     width. A bed this size takes the group's floor: on light paper a bare cut's lit lip
+     is white on white, and the bed fades out below its first rows. */
+  .settings :global(.settings-nav) {
+    display: flex;
+    align-items: stretch;
+    background: var(--group-floor);
   }
-  /* Nav row: quiet --ink-soft at rest. The SELECTED row is the single amber-filled row
-     ("amber marks the selection"), its rail pseudo-element anchored by `position:
-     relative`. Unselected rows must stay at the inherited weight — the vendored
-     `data-[active=true]:font-medium` would leave them at 500, reading as half-selected —
-     so the weight axis carries selection on its own. */
+  /* Nav row: quiet --ink-soft at rest. Unselected rows must stay at the inherited weight —
+     the vendored `data-[active=true]:font-medium` would leave them at 500, reading as
+     half-selected — so the weight axis carries selection on its own. */
   .settings :global([data-slot="sidebar-menu-button"]) {
-    position: relative;
     justify-content: flex-start;
     color: var(--ink-soft);
   }
-  /* Unselected rows are transparent at rest; on hover they take --ink-wash, the
-     shared neutral tint for a control the surface shows through — gentler than the
-     app-wide --chip-hover (15% ink) the shadcn button ships, so it never rivals the
-     selection's amber below. */
-  .settings :global([data-slot="sidebar-menu-button"]:not([data-active="true"]):hover),
-  .settings :global([data-slot="sidebar-menu-button"]:not([data-active="true"]):active) {
-    background: var(--ink-wash);
+  /* Each row is a key row (styles/atoms.css): it rises under the pointer and the chosen
+     section latches down, in full ink. */
+  .settings :global([data-slot="sidebar-menu-button"]:is(:hover, :focus-visible, :active)) {
     color: var(--ink);
   }
   .settings :global([data-slot="sidebar-menu-button"][data-active="true"]) {
-    background: var(--accent-wash);
     color: var(--ink);
     font-weight: 600;
-  }
-  .settings :global([data-slot="sidebar-menu-button"][data-active="true"])::before {
-    content: "";
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: 0;
-    width: 0.1875rem;
-    border-radius: 0 var(--radius) var(--radius) 0;
-    background: var(--accent);
   }
   .nav-label {
     min-width: 0;
@@ -435,21 +464,32 @@
   }
   /* The pending-update mark (EXC-1207): a bare disc, since an update either waits or it
      does not. It wears --attention, the novelty token the TopBar's pending counts already
-     use — amber is spent on the selected row beside it and must not be spent twice. */
+     use; amber is kept for the primary action. */
   .rail-dot {
     width: 0.4375rem;
     height: 0.4375rem;
     border-radius: 50%;
     background: var(--attention);
   }
+  /* The search glyph and the key hint stay quiet; the hint swaps to `esc` while the
+     field has focus, since that is what clears it. */
+  .settings :global(.settings-search [data-slot="input-group-addon"]) {
+    color: var(--ink-faint);
+  }
+  .settings :global(.settings-search .key-focused),
+  .settings :global(.settings-search:focus-within .key-rest) {
+    display: none;
+  }
+  .settings :global(.settings-search:focus-within .key-focused) {
+    display: inline-flex;
+  }
+  .settings-bar {
+    display: none;
+  }
   .nav-hint {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
     margin: 0;
     padding: 0 0.35rem;
     font-size: var(--text-xs);
-    color: var(--ink-faint);
   }
 
   .settings-pane {
@@ -480,7 +520,7 @@
     margin: 0;
     padding: 1.5rem 0;
     font-size: var(--text-sm);
-    color: var(--ink-faint);
+    color: var(--ink-soft);
   }
 
   /* A labelled section is a fieldset and an unlabelled one a plain div, so this sets the
@@ -501,37 +541,103 @@
     margin: 0 0 0.5rem;
   }
 
-  /* One setting = one shadcn Field (label block left, control flush right), sized to
-     caret's dense rows rather than shadcn's roomier defaults: rows stack flush so the
-     hairline FieldSeparator is the only thing between them, and `align-items: center`
-     out-specifies Field's own has-[field-content]:items-start, which would otherwise
-     top-align the control against a two-line description. */
+  /* Each section's rows sit in one bed cut into the sheet, on the group's floor, with no
+     line between rows: space parts them, as it parts the keys in a bed.
+     `align-items: center` out-specifies Field's own has-[field-content]:items-start, which
+     would otherwise top-align the control against a two-line description. */
   .settings :global(.fields) {
+    --group-pad: 0.9rem;
     gap: 0;
+    padding: 0 var(--group-pad);
+    /* Rounds as a bed, not concentric with its controls: --group-pad is too wide an inset. */
+    border-radius: calc(var(--key-radius) + var(--well-pad));
+    background: var(--group-floor);
+    box-shadow: var(--bed-shade);
   }
   .settings :global(.setting-item) {
     align-items: center;
     gap: 0.625rem;
-    /* 11px a side — 22px of pitch above the content. Spelled as the rem step plus the
-       device pixel rather than 0.6875rem so the two stay separable. */
-    padding-block: calc(0.625rem + 1px);
+    padding-block: 0.85rem;
   }
   .settings :global(.setting-item [data-slot="field-content"]) {
     gap: 0.25rem;
-  }
-  /* The separator ships as a 20px box with the rule floated through its middle. Shrink
-     the box to the hairline itself and pin the rule to its top — half of a 1px box is a
-     half-pixel offset, which renders the line soft. */
-  .settings :global([data-slot="field-separator"]) {
-    height: 1px;
-    margin-block: 0.5rem;
-  }
-  .settings :global([data-slot="field-separator"] [data-slot="separator"]) {
-    top: 0;
   }
   .settings :global(.setting-item .field-label) {
     font-size: var(--text-sm);
     font-weight: 600;
     color: var(--ink);
+  }
+
+  /* Below --w-tight the 15rem rail would leave the pane a sliver, so it folds into the
+     bar, and a wide control drops under its label. The search field stays in the tab
+     order but out of sight until it is focused or holds a query. */
+  @media (max-width: 639px) {
+    :global(.settings-content) {
+      width: calc(100vw - 1rem);
+      max-width: calc(100vw - 1rem);
+      /* The section picker's bed rests the bar's 0.6rem padding in from this corner. */
+      border-radius: calc(var(--key-radius) + var(--well-pad) + 0.6rem);
+    }
+    .settings {
+      --sidebar-width: 100%;
+      display: flex;
+      flex-direction: column;
+      height: min(44rem, calc(100dvh - 1rem));
+    }
+    .settings :global(.settings-rail) {
+      height: auto;
+    }
+    .settings-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.6rem 0.6rem 0.2rem;
+    }
+    .section-pick {
+      display: flex;
+      flex: 1;
+      min-width: 0;
+    }
+    .section-pick :global(.tray) {
+      display: flex;
+      flex: 1;
+      min-width: 0;
+    }
+    .section-pick :global(.setting-trigger) {
+      flex: 1;
+      min-width: 0;
+      justify-content: space-between;
+      font-weight: 600;
+    }
+    .settings :global(.settings-search) {
+      padding: 0.4rem 0.6rem 0;
+    }
+    .settings :global(.settings-rail [data-slot="sidebar-content"]),
+    .settings :global(.settings-rail [data-slot="sidebar-footer"]) {
+      display: none;
+    }
+    .settings:not([data-query]) :global(.settings-search:not(:focus-within)) {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+    .settings-pane {
+      flex: 1;
+      min-height: 0;
+      padding: 1rem 1rem 1.25rem;
+    }
+    .settings :global(.fields) {
+      --group-pad: 0.75rem;
+    }
+    .settings :global(.setting-item:not(:has([data-slot="switch"]))) {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.6rem;
+    }
+    .settings :global(.setting-item:not(:has([data-slot="switch"])) > :last-child) {
+      align-self: flex-start;
+    }
   }
 </style>

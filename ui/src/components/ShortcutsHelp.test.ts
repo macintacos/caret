@@ -52,11 +52,11 @@ describe("ShortcutsHelp render", () => {
     expect(mounted()).toBe(false);
   });
 
-  test("mounts a dialog titled Shortcuts", async () => {
+  test("mounts a dialog titled Keyboard shortcuts", async () => {
     await openHelp();
     expect(content()?.getAttribute("role")).toBe("dialog");
     expect(document.body.querySelector("[data-slot='dialog-title']")?.textContent).toContain(
-      "Shortcuts",
+      "Keyboard shortcuts",
     );
   });
 

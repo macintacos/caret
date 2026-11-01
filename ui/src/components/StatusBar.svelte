@@ -69,9 +69,9 @@
     justify-content: space-between;
     gap: 1rem;
     height: var(--status-bar-h);
-    padding: 0 0.7rem;
-    background: var(--paper-raised);
-    border-top: 1px solid var(--rule);
+    /* Cut into the window's body like the top bar, and inset to line up with the plan
+       pane's inner edge above it. */
+    padding: 0 calc(var(--pane-gap) + 0.2rem) 0 calc(var(--pane-gap) + 0.3rem);
     color: var(--ink-soft);
   }
   .status-bar-end {

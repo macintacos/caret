@@ -9,12 +9,12 @@
 			"rounded-md text-sm font-medium",
 			// Leading icon
 			"[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-			// Hover
-			"hover:bg-muted hover:text-muted-foreground",
+			// Hover, which keyboard focus wears too, in place of stock's ring
+			"hover:bg-muted hover:text-muted-foreground focus-visible:bg-muted focus-visible:text-muted-foreground",
 			// On (pressed) state
 			"data-[state=on]:bg-accent data-[state=on]:text-accent-foreground",
-			// Motion + focus ring
-			"transition-[color,box-shadow] focus-visible:outline-hidden focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+			// Motion
+			"transition-[color,box-shadow] focus-visible:outline-hidden",
 			// Invalid state
 			"aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
 			// Disabled
@@ -24,7 +24,7 @@
 			variant: {
 				default: "bg-transparent",
 				outline:
-					"border-input hover:bg-accent hover:text-accent-foreground border bg-transparent shadow-xs",
+					"border-input hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground border bg-transparent shadow-xs",
 			},
 			size: {
 				default: "h-9 min-w-9 px-2",

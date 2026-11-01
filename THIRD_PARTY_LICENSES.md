@@ -17,6 +17,7 @@ under the ISC license.
 | `chevron-down` | [ui/src/icons/chevron-down.svg](ui/src/icons/chevron-down.svg) | [chevron-down.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/chevron-down.svg) |
 | `chevron-right` | [ui/src/icons/chevron-right.svg](ui/src/icons/chevron-right.svg) | [chevron-right.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/chevron-right.svg) |
 | `chevron-up` | [ui/src/icons/chevron-up.svg](ui/src/icons/chevron-up.svg) | [chevron-up.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/chevron-up.svg) |
+| `circle-dashed` | [ui/src/icons/circle-dashed.svg](ui/src/icons/circle-dashed.svg) | [circle-dashed.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/circle-dashed.svg) |
 | `circle-question-mark` | [ui/src/icons/circle-question-mark.svg](ui/src/icons/circle-question-mark.svg) | [circle-question-mark.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/circle-question-mark.svg) |
 | `command` | [ui/src/icons/command.svg](ui/src/icons/command.svg) | [command.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/command.svg) |
 | `copy` | [ui/src/icons/copy.svg](ui/src/icons/copy.svg) | [copy.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/copy.svg) |
@@ -34,15 +35,15 @@ under the ISC license.
 | `heading-6` | [ui/src/icons/heading-6.svg](ui/src/icons/heading-6.svg) | [heading-6.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/heading-6.svg) |
 | `keyboard` | [ui/src/icons/keyboard.svg](ui/src/icons/keyboard.svg) | [keyboard.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/keyboard.svg) |
 | `loader-circle` | [ui/src/icons/loader-circle.svg](ui/src/icons/loader-circle.svg) | [loader-circle.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/loader-circle.svg) |
+| `message-square` | [ui/src/icons/message-square.svg](ui/src/icons/message-square.svg) | [message-square.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/message-square.svg) |
+| `message-square-more` | [ui/src/icons/message-square-more.svg](ui/src/icons/message-square-more.svg) | [message-square-more.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/message-square-more.svg) |
 | `monitor` | [ui/src/icons/monitor.svg](ui/src/icons/monitor.svg) | [monitor.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/monitor.svg) |
 | `moon` | [ui/src/icons/moon.svg](ui/src/icons/moon.svg) | [moon.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/moon.svg) |
 | `panel-left` | [ui/src/icons/panel-left.svg](ui/src/icons/panel-left.svg) | [panel-left.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/panel-left.svg) |
+| `pencil-line` | [ui/src/icons/pencil-line.svg](ui/src/icons/pencil-line.svg) | [pencil-line.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/pencil-line.svg) |
 | `refresh-cw` | [ui/src/icons/refresh-cw.svg](ui/src/icons/refresh-cw.svg) | [refresh-cw.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/refresh-cw.svg) |
 | `search` | [ui/src/icons/search.svg](ui/src/icons/search.svg) | [search.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/search.svg) |
 | `settings` | [ui/src/icons/settings.svg](ui/src/icons/settings.svg) | [settings.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/settings.svg) |
-| `square` | [ui/src/icons/square.svg](ui/src/icons/square.svg) | [square.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/square.svg) |
-| `square-check-big` | [ui/src/icons/square-check-big.svg](ui/src/icons/square-check-big.svg) | [square-check-big.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/square-check-big.svg) |
-| `square-slash` | [ui/src/icons/square-slash.svg](ui/src/icons/square-slash.svg) | [square-slash.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/square-slash.svg) |
 | `sun` | [ui/src/icons/sun.svg](ui/src/icons/sun.svg) | [sun.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/sun.svg) |
 | `text-wrap` | [ui/src/icons/text-wrap.svg](ui/src/icons/text-wrap.svg) | [text-wrap.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/text-wrap.svg) |
 | `trash-2` | [ui/src/icons/trash-2.svg](ui/src/icons/trash-2.svg) | [trash-2.svg](https://github.com/lucide-icons/lucide/blob/1.31.0/icons/trash-2.svg) |

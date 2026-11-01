@@ -21,6 +21,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { openSettings, previewToggle } from "@test/e2e/support/chrome.ts";
+import { colorDistance } from "@test/e2e/support/color.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import {
   PLAN_PREVIEW,
@@ -182,6 +183,17 @@ function initGrantedNotification() {
   }
   (window as { Notification: unknown }).Notification = StubNotification;
 }
+
+// The modal focuses its own panel on open, and after a key press that focus is
+// :focus-visible, which base.css would ring.
+test("Settings opened by its key draws no ring around the modal", async ({ daemon, page }) => {
+  await seedAndOpen(page, daemon);
+  await waitPastSafeModeGrace(page);
+  await page.keyboard.press(",");
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(dialog).toBeFocused();
+  await expect(dialog).toHaveCSS("outline-style", "none");
+});
 
 test("opens the Appearance pane with theme, hints, and the folded-in Diff view section", async ({
   daemon,
@@ -414,6 +426,59 @@ test("keyboard-highlighting a theme option previews it too (EXC-753)", async ({ 
   await page.keyboard.press("ArrowDown");
   await expect(preview).toBeVisible();
   await expect.poll(() => preview.getAttribute("style")).not.toBe(atOpen);
+});
+
+// The chosen palette's row latches down and the keyboard's cursor rises, so the cursor has
+// to read apart from the chosen row whether it sits on it or elsewhere — a computed face,
+// which only a real browser resolves. No ring marks the cursor, so on the chosen row it
+// stays down on the hover face, and light paper is where those two faces sit closest.
+test("the theme menu's cursor reads apart from the chosen row, on it and off it", async ({
+  daemon,
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await openSettingsReady(page, daemon);
+  await page.getByRole("combobox", { name: "Light theme" }).click();
+  const menu = page.locator(".setting-menu");
+  const chosen = menu.locator("[data-active='true']");
+  await expect(chosen).toHaveAttribute("data-highlighted", "");
+
+  const face = (row: Locator) => row.evaluate((el) => getComputedStyle(el).backgroundColor);
+  const token = (name: string) =>
+    page.evaluate((n) => {
+      const probe = document.body.appendChild(document.createElement("div"));
+      probe.style.backgroundColor = `var(${n})`;
+      const color = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return color;
+    }, name);
+  const latched = await token("--neutral-face-down");
+  const risen = await token("--neutral-face-hover");
+
+  await expect.poll(() => face(chosen)).toBe(risen);
+  await expect(chosen).toHaveCSS("outline-style", "none");
+  expect(await colorDistance(page, latched, risen)).toBeGreaterThanOrEqual(3.5);
+  await page.keyboard.press("ArrowDown");
+  await expect(chosen).not.toHaveAttribute("data-highlighted", "");
+  await expect.poll(() => face(chosen)).toBe(latched);
+  await expect.poll(() => face(menu.locator("[data-highlighted]"))).toBe(risen);
+});
+
+// The highlight follows the pointer, so it is the menu's one cursor: a row the keyboard
+// moves off rests, though the pointer still sits over it.
+test("the theme menu shows one cursor when the keyboard leaves the row under the pointer", async ({
+  daemon,
+  page,
+}) => {
+  await openSettingsReady(page, daemon);
+  await page.getByRole("combobox", { name: "Light theme" }).click();
+  const rows = page.locator(".setting-menu [data-setting-option]");
+  const pointed = rows.nth(1);
+  await pointed.hover();
+  await expect(pointed).toHaveAttribute("data-highlighted", "");
+  await page.keyboard.press("ArrowDown");
+  await expect(rows.nth(2)).toHaveAttribute("data-highlighted", "");
+  await expect.poll(() => pointed.evaluate((el) => getComputedStyle(el).translate)).toBe("none");
 });
 
 // The reopen path (the reported glitch): after switching themes, reopening the menu and

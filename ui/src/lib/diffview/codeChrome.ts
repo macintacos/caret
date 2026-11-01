@@ -3,22 +3,21 @@
 // container — the same host-overlay approach as bracket.ts, because neither surface paints
 // such a control. On the source view a block is shadow-root rows; on the preview it is a
 // light-DOM `pre`. The rect reader is injected so the math unit-tests without real layout
-// (happy-dom returns all-zero rects); the preview's overflow read (`pre.scrollWidth`) is
-// not.
+// (happy-dom returns all-zero rects); the overflow reads (`scrollWidth`) are not.
 
-import { CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
+import { CARD_ATTR, REFLOW_ATTR } from "$lib/diffview/codeBlockScroll.ts";
 import type { CodeBlockRange } from "$lib/diffview/codeBlocks.ts";
 import { type Box, contentOrigin, defaultReader, type RectReader } from "$lib/geometry.ts";
 import { previewCodeBlocks, previewCodeText } from "$lib/previewCode.ts";
 
 /** Where a block's chrome sits, in `scroller` content coordinates, and whether the block
- * is carded — the overflow predicate the wrap button gates on. */
+ * overflows its card or is wrapped — the predicate the wrap button gates on. */
 export interface CodeChromeAnchor {
   /** The block's 1-based opening line, which keys the chrome to its block. */
   start: number;
   top: number;
   left: number;
-  carded: boolean;
+  wrappable: boolean;
 }
 
 /** An anchor plus the text its copy button writes. */
@@ -46,9 +45,10 @@ function contentCorner(
 }
 
 /**
- * A block's visible box: its scroll card when the block overflows, else the union of its
- * rendered rows (they share the content column, so left/right come from any row and
- * top/bottom from the first and last). Null when the block's rows aren't present.
+ * A block's visible box: its card, else, in the frame between a library repaint and the
+ * pass that re-cards it, the union of its rendered rows (they share the content column, so
+ * left/right come from any row and top/bottom from the first and last). Null when the
+ * block's rows aren't present.
  *
  * The card comes FIRST because a carded row's box is max-content wide: its right edge sits
  * off past the card's visible edge and moves as the card scrolls, so neither a hit-test nor
@@ -60,9 +60,12 @@ function blockBox(
   root: ShadowRoot,
   range: CodeBlockRange,
   read: RectReader,
-): (Box & { carded: boolean }) | null {
+): (Box & { wrappable: boolean }) | null {
   const card = root.querySelector<HTMLElement>(`[data-content] > [${CARD_ATTR}="${range.start}"]`);
-  if (card != null) return { ...read(card), carded: true };
+  if (card != null) {
+    const wrappable = card.scrollWidth > card.clientWidth || card.hasAttribute(REFLOW_ATTR);
+    return { ...read(card), wrappable };
+  }
   const firstRow = root.querySelector<HTMLElement>(`[data-content] [data-line="${range.start}"]`);
   const lastRow = root.querySelector<HTMLElement>(`[data-content] [data-line="${range.end}"]`);
   if (firstRow == null || lastRow == null) return null;
@@ -73,7 +76,7 @@ function blockBox(
     bottom: Math.max(firstRect.bottom, lastRect.bottom),
     left: firstRect.left,
     right: firstRect.right,
-    carded: false,
+    wrappable: false,
   };
 }
 
@@ -100,7 +103,7 @@ export function codeBlockAtPoint(
 
 /**
  * The top-right corner of every rendered block, in the scroll container's content
- * coordinates, with whether each is carded. Chrome placed absolutely at one of these points
+ * coordinates, with whether each is wrappable. Chrome placed absolutely at one of these points
  * inside `scroller` sits at the block's top-right and scrolls with the rows; the chrome's
  * own translate insets it from the corner.
  */
@@ -120,7 +123,7 @@ export function codeChromeAnchors(
     anchors.push({
       start: range.start,
       ...contentCorner(box, origin),
-      carded: box.carded,
+      wrappable: box.wrappable,
     });
   }
   return anchors;
@@ -151,7 +154,7 @@ export function previewCodeChromeAnchors(
   return previewCodeBlocks(root).map(({ start, pre, code }) => ({
     start,
     ...contentCorner(read(pre), origin),
-    carded: pre.scrollWidth > pre.clientWidth || reflowed.has(start),
+    wrappable: pre.scrollWidth > pre.clientWidth || reflowed.has(start),
     text: previewCodeText(code),
   }));
 }

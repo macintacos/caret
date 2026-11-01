@@ -2,8 +2,8 @@
 // — the amber drag-select band, and the composer's own highlight — and applies it in
 // InteractionManager.renderSelection, which walks [data-content]'s DIRECT children and
 // `continue`s past anything carrying no line index. A card carries none, so the library
-// skips it whole and every row inside it goes unbanded: a gutter drag entirely within an
-// overflowing fenced block marks nothing at all, and one that runs from prose into it
+// skips it whole and every row inside it goes unbanded: a gutter drag entirely within a
+// fenced block marks nothing at all, and one that runs from prose into it
 // stops dead at the card while the range readout keeps counting. The card is what causes
 // the defect, not what is inside it.
 //

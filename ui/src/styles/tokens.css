@@ -1,6 +1,6 @@
 /* caret design tokens — the hand-written half, the one with no TS counterpart:
    the font stacks, the type scale and its leading roles, the motion vocabulary,
-   and the radius roles. The color palette is emitted instead, from
+   the radius roles, and the depth geometry, split per scheme. The color palette is emitted instead, from
    THEMES["caret-dark"], into the styles/palette.generated.css partial app.css
    @imports beside this one. */
 :root {
@@ -49,6 +49,9 @@
   --dur-state: 160ms;
   --dur-travel: 240ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  /* A rubber key's return from a press: it springs back past rest and settles. Only the
+     key's travel takes it; its shading and colour stay on --ease-out. */
+  --ease-spring: cubic-bezier(0.3, 1.6, 0.5, 1);
 
   /* Radius roles, shared by the shell chrome and the source-view surface so the
      two read as one system: --radius tags interactive controls (buttons,
@@ -57,6 +60,21 @@
      (the review count, version pills, the build tag). */
   --radius: 6px;
   --radius-lg: 10px;
+  /* The keypad's own radii, rounder than the chrome's: a rubber key, a keycap or a
+     switch's key (a nub), a raised rubber pad (a table or a code block), and the plan's
+     screen. A well rounds at its key's radius plus its pad. */
+  --key-radius: 8px;
+  --nub-radius: 5px;
+  --pad-radius: 12px;
+  --pane-radius: 14px;
+  /* The comment composer's padding, which is also the gap round the tray on its shelf,
+     so the composer rounds at the tray's corner plus it. */
+  --composer-inset: 0.75rem;
+  --composer-radius: calc(var(--key-radius) + var(--well-pad) + var(--composer-inset));
+
+  /* The bezel round a plan code block's pane, in both plan views; the block's copy and
+     wrap tray steps in by it. */
+  --code-bezel: 0.25rem;
 
   /* Chip padding (inline-markup pills, file references). Inline keeps abutting chips
      apart; block only paints (it never grows the line box), so keep it under the
@@ -74,12 +92,236 @@
      chip's own footprint. The dividing line is the surface's own height: anything
      shorter than --shadow-card's blur wears this, panels keep --shadow-card.
 
-     Hand-written rather than emitted per palette, and for the same reason
-     --caret-card-lift is (lib/diffview/coreStyles.ts, the shadow-DOM half of this
-     idea): the geometry is fixed and only the alpha moves — the same black reads
-     much heavier over a light ground than over a dark one — so one light-dark()
-     covers every palette. */
+     Hand-written rather than emitted per palette: only the alpha moves per scheme, so
+     it lives with the tactile geometry below. */
+
+  /* The scheme-free half of the tactile geometry; the alphas follow below. A key's depth
+     is --key-side, the rubber side that shows under its face: its rise, its press and its
+     cast shadow all scale from it. A resting key stands --key-rise above its place in the
+     layout and a press sinks it --key-sink below that place. A bed shows --well-pad round
+     the key you see, so its top pad takes the rise and its foot the side below that. */
+  --key-side: 1.5px;
+  --key-rise: calc(var(--key-side) / 2);
+  --key-sink: calc(var(--key-side) / 3);
+  --well-pad: 3px;
+  --well-top: calc(var(--well-pad) + var(--key-rise));
+  --well-foot: calc(var(--well-pad) + var(--key-side) - var(--key-rise));
+  --tray-gap: 5px;
+  --cap-submit-h: 1.75rem;
+  --press-blur: 2px;
+  /* How far a modal rises as it arrives. */
+  --float-arrive: 4px;
+}
+
+/* The tactile geometry, written once for every palette: only alphas live here. The hues
+   come from palette tokens at the use site or in styles/derived.css; the surfaces are
+   built in styles/atoms.css.
+
+   Keyed on data-theme, not light-dark(): Lightning CSS rewrites light-dark() into
+   variables only a stylesheet's own color-scheme declaration sets, so it never sees the
+   color-scheme paintTheme() writes inline. :root takes dark, like the static first
+   paint. The same black reads far heavier over a light ground, so every alpha splits.
+   These inherit into the diff view's shadow DOM.
+
+   - Wells: a bed (--bed-shade) is cut from the chrome's own rubber, so it has no floor,
+     only a shade under its top edge, a lit far wall and a lit lip. A stamp's pocket
+     (--well-shade) has a floor. A text field takes --panel-recess, a shallower cut.
+   - Keys: --rubber-* light and shade a neutral key, --tinted-* a coloured one, whose
+     brighter face takes a stronger lift and a lighter side. The side is the key's face
+     mixed toward black by the --*-side percentage, at the use site. --nub-* stand a
+     keycap off its key.
+   - Grain: soft-light vanishes on near-white but speckles a dark face, so dark takes a
+     weaker one. The two URIs differ only in the matrix's last alpha; keep them in step.
+   - Floats: low for a card on the page, mid for menus, popovers, toasts and the composer,
+     high for modals. styles/derived.css adds each one's ring as --float-surface-*.
+   - The plan: chip lines are crisp and unblurred, because a chip fragmented across
+     several elements must show no seam. The raised chip's under-edge stays inside
+     the line's slack.
+   - The window: a pane set into the body takes --pane-recess, the window-scale sibling
+     of --panel-recess, with the body's lit edge below it as --pane-lip. --pane-shade is
+     the shade an edge casts on text scrolled under it.
+   - Pads: a table or a code block stands on the plan as a rubber pad (--pad-stand, scaled from --key-side), its
+     rows or its code in a scoop on its face. A table paints the scoop on its rows, so its
+     shade (--scoop-top) keeps off the sides with a negative spread, and the preview
+     draws it as a gradient of --scoop-shade. A table's header labels are pressed into
+     the pad with --label-pressed. */
+:root,
+[data-theme="dark"] {
+  --well-shade:
+    inset 0 2px 6px rgb(0 0 0 / 0.8),
+    inset 0 0 0 1px rgb(0 0 0 / 0.5),
+    inset 0 -1px 2px rgb(255 255 255 / 0.04);
+  --well-lip: 0 1px 0 rgb(255 255 255 / 0.06);
+  --bed-shade:
+    inset 0 3px 5px -2px rgb(0 0 0 / 0.95),
+    inset 0 -1.5px 1px rgb(255 255 255 / 0.06),
+    0 1px 0 rgb(255 255 255 / 0.08),
+    0 -1px 0 rgb(0 0 0 / 0.4);
+  --rubber-lift: rgb(255 255 255 / 0.1);
+  --rubber-foot: rgb(0 0 0 / 0.22);
+  --rubber-side: 50%;
+  --rubber-gloss: rgb(255 255 255 / 0.14);
+  --rubber-cast-near: rgb(0 0 0 / 0.6);
+  --rubber-cast: rgb(0 0 0 / 0.7);
+  --rubber-press: rgb(0 0 0 / 0.6);
+  --tinted-lift: rgb(255 255 255 / 0.16);
+  --tinted-foot: rgb(0 0 0 / 0.14);
+  --tinted-side: 42%;
+  --press-shade: rgb(0 0 0 / 0.55);
+  --nub-side: rgb(0 0 0 / 0.5);
+  --nub-cast: rgb(0 0 0 / 0.5);
+  --chrome-light: rgb(255 255 255 / 0.03);
+  --socket-shade: rgb(0 0 0 / 0.35);
+  --count-shade: rgb(0 0 0 / 0.3);
+  /* A comment stamp: its floor tints the well this far toward the state's hue, and its
+     word mixes the hue this far toward ink (black on light paper, where a blue-grey ink
+     greys a pale hue first). theme.test.ts holds every palette at AA on them. */
+  --stamp-floor: 24%;
+  --stamp-word-toward: var(--ink);
+  --stamp-word-mix: 45%;
+  /* An unsent comment's marker tints a whole row, not a pill, so it takes less than a
+     stamp, and light paper shows the hue at half. theme.test.ts holds it at AA too. */
+  --unsent-floor: 16%;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='.33 .33 .33 0 0 .33 .33 .33 0 0 .33 .33 .33 0 0 0 0 0 0 0.12'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='2' intercept='-.5'/%3E%3CfeFuncG type='linear' slope='2' intercept='-.5'/%3E%3CfeFuncB type='linear' slope='2' intercept='-.5'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23g%29'/%3E%3C/svg%3E");
+  --float-rim-ink: rgb(255 255 255 / 0.07);
+  --float-rim: inset 0 1px 0 var(--float-rim-ink);
+  --float-low:
+    0 calc(var(--key-side) / 3) calc(var(--key-side) * 2 / 3) rgb(0 0 0 / 0.35),
+    0 var(--key-side) calc(var(--key-side) * 8 / 3) calc(var(--key-side) * -1) rgb(0 0 0 / 0.35);
+  --float-mid:
+    0 1px 1px rgb(0 0 0 / 0.3),
+    0 2px 4px -1px rgb(0 0 0 / 0.3),
+    0 6px 12px -3px rgb(0 0 0 / 0.35),
+    0 14px 28px -6px rgb(0 0 0 / 0.4);
+  --float-high:
+    0 1px 1px rgb(0 0 0 / 0.25),
+    0 2px 2px rgb(0 0 0 / 0.25),
+    0 4px 4px rgb(0 0 0 / 0.25),
+    0 8px 8px rgb(0 0 0 / 0.25),
+    0 16px 16px rgb(0 0 0 / 0.25),
+    0 24px 48px -8px rgb(0 0 0 / 0.35),
+    0 48px 64px -16px rgb(0 0 0 / 0.45);
+  --chip-stamped:
+    inset 0 1px 0 rgb(0 0 0 / 0.45),
+    inset 0 -1px 0 rgb(255 255 255 / 0.04);
+  --chip-raised:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 calc(var(--key-side) / 3) 0 rgb(0 0 0 / 0.55);
+  --chip-pressed: inset 0 1px 1px rgb(0 0 0 / 0.5);
+  --panel-shade: inset 0 2px 3px rgb(0 0 0 / 0.5);
   --shadow-chip:
-    0 1px 2px light-dark(rgb(0 0 0 / 0.07), rgb(0 0 0 / 0.3)),
-    0 2px 6px light-dark(rgb(0 0 0 / 0.06), rgb(0 0 0 / 0.22));
+    0 1px 2px rgb(0 0 0 / 0.3),
+    0 2px 6px rgb(0 0 0 / 0.22);
+  --panel-edge: rgb(0 0 0 / 0.35);
+  --panel-recess:
+    var(--panel-shade),
+    inset 0 0 0 1px var(--panel-edge),
+    var(--well-lip);
+  /* A focused field's edge is one wall of its cut catching the light: the lower wall on
+     dark paper, the shaded upper wall on light. */
+  --field-wall: inset 0 -1px 0 var(--field-edge-focus);
+  --pane-recess:
+    inset 0 6px 16px -4px rgb(0 0 0 / 0.85),
+    inset 0 0 0 1px rgb(0 0 0 / 0.75),
+    inset 0 -2px 5px rgb(255 255 255 / 0.03);
+  --pane-lip:
+    0 1px 1px rgb(255 255 255 / 0.08),
+    0 -1px 1px rgb(0 0 0 / 0.4);
+  --pane-shade: rgb(0 0 0 / 0.7);
+  --pad-stand:
+    0 calc(var(--key-side) * 2 / 3) 0 var(--pad-side),
+    0 var(--key-side) calc(var(--key-side) / 3) var(--pad-side),
+    0 calc(var(--key-side) * 2) calc(var(--key-side) * 10 / 3) calc(var(--key-side) * -1)
+      var(--rubber-cast-near);
+  --scoop-shade: rgb(0 0 0 / 0.85);
+  --scoop-top: inset 0 4px 6px -5px var(--scoop-shade);
+  --scoop-lip: rgb(255 255 255 / 0.03);
+  --scoop-foot: inset 0 -1px 3px var(--scoop-lip);
+  --label-pressed: 0 -1px 0 rgb(0 0 0 / 0.7);
+}
+[data-theme="light"] {
+  --well-shade:
+    inset 0 2px 5px rgb(0 0 0 / 0.16),
+    inset 0 0 0 1px rgb(0 0 0 / 0.04),
+    inset 0 -1px 2px rgb(255 255 255 / 0.8);
+  --well-lip: 0 1px 0 rgb(255 255 255 / 0.9);
+  --bed-shade:
+    inset 0 3px 5px -2px rgb(0 0 0 / 0.3),
+    inset 0 -1.5px 1px rgb(255 255 255 / 0.9),
+    0 1px 0 rgb(255 255 255 / 0.95),
+    0 -1px 0 rgb(0 0 0 / 0.06);
+  --rubber-lift: transparent;
+  --rubber-foot: rgb(0 0 0 / 0.08);
+  --rubber-side: 13%;
+  --rubber-gloss: rgb(255 255 255 / 0.95);
+  --rubber-cast-near: rgb(0 0 0 / 0.14);
+  --rubber-cast: rgb(0 0 0 / 0.18);
+  --rubber-press: rgb(0 0 0 / 0.16);
+  --tinted-lift: rgb(255 255 255 / 0.14);
+  --tinted-foot: rgb(0 0 0 / 0.1);
+  --tinted-side: 26%;
+  --press-shade: rgb(0 0 0 / 0.16);
+  --nub-side: rgb(0 0 0 / 0.16);
+  --nub-cast: rgb(0 0 0 / 0.12);
+  --chrome-light: rgb(255 255 255 / 0.35);
+  --socket-shade: rgb(0 0 0 / 0.2);
+  --count-shade: rgb(0 0 0 / 0.06);
+  --stamp-floor: 24%;
+  --stamp-word-toward: black;
+  --stamp-word-mix: 50%;
+  --unsent-floor: 8%;
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='.33 .33 .33 0 0 .33 .33 .33 0 0 .33 .33 .33 0 0 0 0 0 0 0.2'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='2' intercept='-.5'/%3E%3CfeFuncG type='linear' slope='2' intercept='-.5'/%3E%3CfeFuncB type='linear' slope='2' intercept='-.5'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23g%29'/%3E%3C/svg%3E");
+  --float-rim-ink: rgb(255 255 255 / 0.8);
+  --float-rim: inset 0 1px 0 var(--float-rim-ink);
+  --float-low:
+    0 calc(var(--key-side) / 3) calc(var(--key-side) * 2 / 3) rgb(0 0 0 / 0.06),
+    0 var(--key-side) calc(var(--key-side) * 8 / 3) calc(var(--key-side) * -1) rgb(0 0 0 / 0.08);
+  --float-mid:
+    0 1px 1px rgb(0 0 0 / 0.04),
+    0 2px 4px -1px rgb(0 0 0 / 0.05),
+    0 6px 12px -3px rgb(0 0 0 / 0.07),
+    0 14px 28px -6px rgb(0 0 0 / 0.08);
+  --float-high:
+    0 1px 1px rgb(0 0 0 / 0.03),
+    0 2px 2px rgb(0 0 0 / 0.03),
+    0 4px 4px rgb(0 0 0 / 0.03),
+    0 8px 8px rgb(0 0 0 / 0.04),
+    0 16px 16px rgb(0 0 0 / 0.04),
+    0 24px 48px -8px rgb(0 0 0 / 0.08),
+    0 48px 64px -16px rgb(0 0 0 / 0.12);
+  --chip-stamped:
+    inset 0 1px 0 rgb(0 0 0 / 0.1),
+    inset 0 -1px 0 rgb(255 255 255 / 0.55);
+  --chip-raised:
+    inset 0 1px 0 rgb(255 255 255 / 0.6),
+    0 calc(var(--key-side) / 3) 0 rgb(0 0 0 / 0.12);
+  --chip-pressed: inset 0 1px 1px rgb(0 0 0 / 0.12);
+  --panel-shade: inset 0 2px 3px rgb(0 0 0 / 0.08);
+  --shadow-chip:
+    0 1px 2px rgb(0 0 0 / 0.07),
+    0 2px 6px rgb(0 0 0 / 0.06);
+  --panel-edge: rgb(0 0 0 / 0.04);
+  --panel-recess:
+    var(--panel-shade),
+    inset 0 0 0 1px var(--panel-edge),
+    var(--well-lip);
+  --field-wall: inset 0 1px 0 var(--field-edge-focus);
+  --pane-recess:
+    inset 0 6px 14px -4px rgb(0 0 0 / 0.14),
+    inset 0 0 0 1px rgb(0 0 0 / 0.06),
+    inset 0 -2px 5px rgb(255 255 255 / 0.5);
+  --pane-lip:
+    0 1px 1px rgb(255 255 255 / 0.9),
+    0 -1px 1px rgb(0 0 0 / 0.05);
+  --pane-shade: rgb(0 0 0 / 0.1);
+  --pad-stand:
+    0 calc(var(--key-side) * 2 / 3) 0 var(--pad-side),
+    0 var(--key-side) calc(var(--key-side) / 3) var(--pad-side),
+    0 calc(var(--key-side) * 2) calc(var(--key-side) * 10 / 3) calc(var(--key-side) * -1)
+      var(--rubber-cast-near);
+  --scoop-shade: rgb(0 0 0 / 0.14);
+  --scoop-top: inset 0 4px 6px -5px var(--scoop-shade);
+  --scoop-lip: rgb(255 255 255 / 0.8);
+  --scoop-foot: inset 0 -1px 3px var(--scoop-lip);
+  --label-pressed: 0 1px 0 rgb(255 255 255 / 0.9);
 }

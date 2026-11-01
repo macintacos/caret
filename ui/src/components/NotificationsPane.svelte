@@ -84,20 +84,22 @@
     {#if presentation.canRequest}
       <!-- The pane's single primary action — amber, per the one-primary rule. -->
       <div class="notif-action">
-        <Button data-action="enable" onclick={enable}>Enable notifications</Button>
+        <span class="tray"><Button data-action="enable" onclick={enable}>Enable notifications</Button></span>
       </div>
     {:else if presentation.canTest}
       <!-- Diagnosis affordance: a granted toast the OS suppresses fails silently, so
            an active probe is the only tell. Neutral chip — not the primary. -->
       <div class="notif-action">
-        <Button
-          variant="secondary"
-          class="float-chip"
-          data-action="test"
-          onclick={fireTestNotification}
-        >
-          Send a test notification
-        </Button>
+        <span class="tray">
+          <Button
+            variant="secondary"
+            class="float-chip"
+            data-action="test"
+            onclick={fireTestNotification}
+          >
+            Send a test notification
+          </Button>
+        </span>
       </div>
     {/if}
   {/if}
@@ -111,31 +113,32 @@
     align-items: flex-start;
   }
 
-  /* Status line: a tone-tinted bell in a soft disc, beside the state word. Tone
-     lives on this row so both the icon (stroke="currentColor") and the word inherit
-     it; the disc tint is a low-alpha mix of that same tone over the surface. */
+  /* Status line: a tone-tinted bell stamped into the sheet, beside the state word. Tone
+     lives on this row so both the icon (stroke="currentColor") and the word inherit it,
+     inked as a comment stamp inks its word: the bare hue misses 3:1 on the sheet in the
+     palest palettes. */
   .notif-status {
     display: flex;
     align-items: center;
     gap: 0.6rem;
+    color: color-mix(in lab, var(--tone), var(--stamp-word-toward) var(--stamp-word-mix));
   }
   .tone-ok {
-    color: var(--ok);
+    --tone: var(--ok);
   }
   .tone-danger {
-    color: var(--danger);
+    --tone: var(--danger);
   }
   .tone-attention {
-    color: var(--attention);
+    --tone: var(--attention);
   }
-  /* The halo tints whatever tone class the row wears (.tone-danger, .tone-attention,
-     …), so it mixes off currentColor rather than a palette token — nothing in the
-     derived tier could stand in for it. */
+  /* A passive mark, so it sits in a stamp's pocket rather than on a tinted disc. */
   .notif-icon {
     display: inline-flex;
     padding: 0.5rem;
     border-radius: 50%;
-    background: color-mix(in lab, currentColor 12%, transparent);
+    background: var(--well-floor);
+    box-shadow: var(--well-shade), var(--well-lip);
   }
   .notif-word {
     font-size: var(--text-lg);

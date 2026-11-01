@@ -450,12 +450,29 @@
   let viewportH = $state(0);
   let rowH = $state(0);
   let padTop = $state(0);
+  /** Whether the code runs on past the view's foot — loaded rows scrolled out of
+   * sight, or file not yet loaded — and whether it is scrolled sideways under the
+   * gutter. The pane shades each edge the code passes under. */
+  let moreBelow = $state(false);
+  let scrolledX = $state(false);
 
-  /** Take the region's scroll offset back into state — on scroll, and after each
-   * programmatic scroll, so the mounted rows never trail a jump by a frame. */
+  /** Take the region's scroll position back into state — on scroll, on resize, and after
+   * each programmatic scroll, so the mounted rows never trail a jump by a frame. */
   function syncScroll(): void {
-    scrollTop = codeEl?.scrollTop ?? 0;
+    const region = codeEl;
+    scrollTop = region?.scrollTop ?? 0;
+    scrolledX = (region?.scrollLeft ?? 0) > 0;
+    moreBelow =
+      region !== null &&
+      ((meta?.below ?? 0) > 0 ||
+        region.scrollTop + region.clientHeight < region.scrollHeight - 1);
   }
+
+  // A landed region or chunk moves the foot without a scroll event.
+  $effect(() => {
+    if (preview.kind !== "ready") return;
+    void tick().then(syncScroll);
+  });
 
   // Keep the region's height and its row height current: the lane animates open
   // and is resizable by the reader, so neither is measured once. Rows are
@@ -482,6 +499,7 @@
     measure();
     const observer = new ResizeObserver(() => {
       measure();
+      syncScroll();
       if (region.scrollHeight > region.clientHeight) return;
       void fillEdges();
     });
@@ -588,7 +606,7 @@
   });
 </script>
 
-<div class="file-preview" data-file-preview>
+<div class="file-preview" data-file-preview data-more-below={moreBelow || undefined}>
   <div class="fp-header ref-header">
     <button
       type="button"
@@ -606,7 +624,7 @@
            ("lines 1–180 of 300") instead of the hundreds of rows that arrived.
            The span itself outlives every load — only its text changes — so the
            live region is in place long before the first chunk. -->
-      {#if meta}<span class="fp-range" role="status">{meta.label}</span>{/if}
+      {#if meta}<span class="fp-range stamp metric" role="status">{meta.label}</span>{/if}
       {#if showShortcutHints}
         <span class="fp-hint ref-esc-hint"><Kbd class="kbd-sm">esc</Kbd> to close</span>
       {/if}
@@ -637,6 +655,7 @@
         bind:this={codeEl}
         class="fp-code"
         class:fp-leaving={departing}
+        data-scrolled-x={scrolledX || undefined}
         role="region"
         tabindex="0"
         aria-label="Contents of {preview.path}"
@@ -685,6 +704,7 @@
      scrolls beneath it, and it takes the lane whole so a growing region pages
      inside the panel rather than stretching it. */
   .file-preview {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -694,6 +714,21 @@
     background: var(--paper);
     color: var(--ink);
   }
+  /* The pane's foot shades the code under it while more of the file lies below, as
+     the plan pane's does. Over the header (2) and the sticky gutter (1); an idle
+     shade stays an inset layer so it fades rather than snaps. */
+  .file-preview::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    box-shadow: inset 0 0 0 0 transparent;
+    transition: box-shadow var(--dur-state) var(--ease-out);
+  }
+  .file-preview[data-more-below]::after {
+    box-shadow: inset 0 -7px 8px -7px var(--pane-shade);
+  }
   /* The close circle: the macOS traffic light, at the pane's top-left where that
      idiom lives. Shape carries it — a filled disc the reader decodes before
      reading anything — with the glyph held back until hover or focus, as the
@@ -701,11 +736,47 @@
      every-hue-has-a-job rule; doc/agents/svelte-rules.md § CSS-token discipline
      records it and why, and theme.test.ts pins its 3:1 non-text contrast on
      --paper (WCAG 1.4.11, the clause that binds for a control carried by shape
-     alone). */
+     alone).
+
+     The disc is a round rubber key on no bed, as the gutter's "+" is: a domed face,
+     its side and cast shadow scaled from --key-side, sinking when pressed. */
   .fp-close {
+    --close-face: var(--danger);
+    --close-side: color-mix(in lab, var(--close-face), black var(--tinted-side));
     border-radius: 50%;
-    background: var(--danger);
+    background-color: var(--close-face);
+    background-image:
+      linear-gradient(var(--tinted-lift), transparent 32%, transparent 55%, var(--tinted-foot)),
+      var(--grain);
+    background-size: auto, 128px;
+    background-blend-mode: normal, soft-light;
     color: var(--paper);
+    translate: 0 calc(-1 * var(--key-rise));
+    box-shadow:
+      inset 0 2px 2px -1px var(--rubber-gloss),
+      0 calc(var(--key-side) - 1px) 0 var(--close-side),
+      0 var(--key-side) 1px var(--close-side),
+      0 calc(var(--key-side) * 5 / 3) calc(var(--key-side) * 2) -1px var(--rubber-cast-near),
+      0 calc(var(--key-side) * 8 / 3) calc(var(--key-side) * 14 / 3) calc(var(--key-side) * -2)
+        var(--rubber-cast);
+    transition:
+      translate var(--dur-state) var(--ease-spring),
+      background-color var(--dur-state) var(--ease-out),
+      box-shadow var(--dur-state) var(--ease-out);
+  }
+  .fp-close:is(:hover, :focus-visible) {
+    --close-face: var(--danger-face-hover);
+  }
+  .fp-close:active {
+    translate: 0 var(--key-sink);
+    background-image: linear-gradient(var(--tinted-foot), transparent 40%), var(--grain);
+    box-shadow:
+      inset 0 2px 4px var(--rubber-press),
+      0 0 0 transparent,
+      0 0 0 transparent,
+      0 1px 1px var(--rubber-cast-near),
+      0 0 0 transparent;
+    transition-timing-function: var(--ease-out);
   }
   /* Icon.svelte wraps its SVG in a .icon span, so the fade hangs on that rather
      than on the svg itself. The stroke is thickened to hold at this size: the
@@ -729,8 +800,16 @@
       opacity: 1;
     }
   }
+  /* A passive readout, so it is stamped into the header, as the Contents peek's
+     "Lines" fact is. */
   .fp-range {
-    color: var(--ink-faint);
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    height: 1.15rem;
+    padding: 0 0.45rem;
+    border-radius: 99px;
+    line-height: 1;
     white-space: nowrap;
   }
   /* The loaded region: one flex row per source line — a sticky line-number gutter
@@ -766,6 +845,9 @@
     line-height: var(--leading-relaxed);
     font-feature-settings: "tnum";
     color: var(--ink);
+    /* The widest loaded line's row: the gutter, its 1.4rem of padding, the line's
+       columns and its own 1.6rem of padding. */
+    --fp-width: calc(var(--fp-gutter, 2ch) + var(--fp-cols, 0) * 1ch + 3rem);
     /* A whole screen of code arriving in one frame reads as a cut. It settles up
        into place instead, on the chrome's enter curve. Only opacity and
        transform move: neither is a layout property, so the region's clientHeight
@@ -786,59 +868,80 @@
     animation: fp-out var(--dur-state) var(--ease-out) forwards;
     pointer-events: none;
   }
-  /* Inset the app-wide focus ring (base.css) rather than restyling it: the drawer
-     lane clips the panel, and the region runs flush to its edges, so an outset
-     ring would be cut off on three sides. */
+  /* A read-only text region, so its focus lights one wall as a focused field's does. */
   .fp-code:focus-visible {
-    outline-offset: -2px;
+    box-shadow: var(--field-wall);
   }
+  /* Every row is as wide as the widest loaded line, so a band reaches across the
+     whole width the reader can scroll to. */
   .fp-row {
     display: flex;
+    min-width: var(--fp-width);
   }
   /* Stand-ins for the rows the window left unmounted. Height: the block they
      replace, so the scrollbar measures the whole loaded region and an unmounted
      row is indistinguishable from a scrolled-past one. Width: the widest loaded
      line, so the horizontal range covers every line rather than only the mounted
-     ones — the gutter's own width plus the 1.4rem + 1.6rem of padding and the
-     hairline between them. Both spacers are always present, at zero height when
-     there is nothing to stand in for, so the width is too. Nothing paints. */
+     ones. Both spacers are always present, at zero height when there is nothing to
+     stand in for, so the width is too. Nothing paints. */
   .fp-spacer {
-    min-width: calc(var(--fp-gutter, 2ch) + var(--fp-cols, 0) * 1ch + 3rem + 1px);
+    min-width: var(--fp-width);
   }
   /* The referenced lines — washed so the reader's eye lands on them. Uses caret's
-     content-mark amber (--mark, the same attention wash source annotations use)
-     with a metadata-accent line number, NOT the brand-solid accent fill. Only a
-     reference that carried a :line has target rows; head previews mark nothing.
+     content-mark amber (--mark, the same attention wash source annotations use),
+     NOT the brand-solid accent fill. Only a reference that carried a :line has
+     target rows; head previews mark nothing.
 
      A cited range washes every one of its lines, contiguous rows reading as one
-     band, and each keeps the accent gutter rather than reserving it for the
-     span's first line: a range taller than the region opens parked at its head,
-     so a reader who scrolls into the middle of one would otherwise see a wash
-     with no accent anywhere and lose the only signal that they are still inside
-     the citation. */
+     band, and the band runs full-bleed, gutter included, as the plan's selection
+     band does: a range taller than the region opens parked at its head, so a
+     reader who scrolls into the middle of one still sees in the gutter that they
+     are inside the citation. Each number is bold in full ink, which holds AA on
+     the band where the accent does not. */
   .fp-target {
     background: var(--mark);
   }
   .fp-target .fp-lnum {
-    color: var(--accent);
+    color: var(--ink);
     font-weight: 700;
+    background: linear-gradient(var(--mark), var(--mark)), var(--paper);
   }
+  /* The gutter is the plan's: numbers on the code's own floor, with no rule. It is
+     opaque because code scrolled sideways passes under it. */
   .fp-lnum {
     position: sticky;
     left: 0;
     z-index: 1;
     flex: 0 0 auto;
     /* content-box so the digit column is exactly `--fp-gutter` wide and the
-       padding + border sit outside it — a real gutter, clearly parted from code. */
+       padding sits outside it. */
     box-sizing: content-box;
     width: var(--fp-gutter, 2ch);
     padding: 0 0.7rem;
     text-align: right;
     color: var(--ink-faint);
     background: var(--paper);
-    border-right: 1px solid var(--rule);
     user-select: none;
     white-space: pre;
+  }
+  /* The gutter's edge shades code scrolled under it, as the pane's edges shade text.
+     A gradient per row, because a blurred shadow per row breaks at each row's ends. */
+  .fp-lnum::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 100%;
+    width: 8px;
+    background: linear-gradient(
+      to right,
+      color-mix(in srgb, var(--pane-shade) 50%, transparent),
+      transparent
+    );
+    opacity: 0;
+    transition: opacity var(--dur-state) var(--ease-out);
+    pointer-events: none;
+  }
+  .fp-code[data-scrolled-x] .fp-lnum::after {
+    opacity: 1;
   }
   .fp-lcode {
     /* Set the font stack directly on the <code>, not just on .fp-code: the UA

@@ -1,12 +1,8 @@
 <script lang="ts">
-  // A setting rendered as a continuous slider (EXC-1101) — the sound volume is the
-  // one caret has. Composed from the vendored shadcn Slider, the same thin-wrapper
-  // shape SettingSegmented.svelte takes over ToggleGroup: the primitive keeps its
-  // behaviour and ARIA, and everything caret-specific lives in this file's scoped
-  // style rather than inside the vendored tree, which a re-sync reverts wholesale
-  // (doc/agents/shadcn-rules.md § Adding a component that collides with the vendored
-  // tree). Svelte does not scope-hash a class handed to a COMPONENT, so those rules
-  // are written in the `.volume :global(…)` form, exactly as SettingSegmented's are.
+  // A setting rendered as a slider (EXC-1101) — the sound volume is the one caret has.
+  // Composed from the vendored shadcn Slider, the same thin-wrapper shape
+  // SettingSegmented.svelte takes over ToggleGroup: the primitive keeps its behaviour
+  // and ARIA. The kit (styles/atoms.css) draws it as a level meter of one pip per STEP.
   //
   // The value is a WHOLE PERCENT. Its field converts to whatever unit the preference
   // stores (volume keeps a 0–1 multiplier), which is what lets the thumb announce
@@ -111,44 +107,11 @@
     align-items: center;
     gap: 0.625rem;
   }
-  /* A fixed track rather than the vendored `w-full`: this sits in the flush-right
-     control slot of a settings row, where a full-width slider would push the label
-     block off its own line. */
-  .volume :global([data-slot="slider"]) {
-    width: 9rem;
-  }
-  /* Track and fill are the Switch's two fills, unrolled: --rule-strong for the empty part
-     is the Switch's off state, and the filled part needs no rule here at all — the
-     vendored `bg-primary` already bridges to --accent, which is the Switch's on state.
-     The Sound pane's two rows then read as one control surface rather than two languages,
-     and the fill inherits the app's "amber marks the live value" convention.
-
-     Geometry is the vendored classes' job, gated by
-     test/structure/shadcn-data-variants.test.ts. */
-  .volume :global([data-slot="slider-track"]) {
-    background: var(--rule-strong);
-  }
-  /* The thumb matches the Switch's knob: same 1rem circle, same --paper fill (which the
-     vendored `bg-background` bridges to). Its border is the only thing defining it —
-     --paper against the pane's --paper-raised measures 1.02–1.46:1, so the fill
-     contributes nothing — and a slider thumb is a control whose position carries the
-     value, which puts it under WCAG 1.4.11's 3:1 non-text floor.
-
-     Hence --ink-soft, not a hairline token. --rule-strong measures 1.27–1.62:1 against
-     the pane and the registry's own --ring 1.33–2.03:1; both read as no edge at all.
-     This is the same verdict theme.test.ts reached for the thematic-break rule, down to
-     the token it settled on — see its RULE_INK case, which also rejects --ink-faint for
-     missing the floor on catppuccin-latte and github-light. The focus ring is left alone:
-     that IS the focus indicator. */
-  .volume :global([data-slot="slider-thumb"]) {
-    width: 1rem;
-    height: 1rem;
-    border-color: var(--ink-soft);
-  }
   /* Tabular figures and a reserved width, so the track does not shift as the number
      goes 0% → 100%. */
   .volume .readout {
     min-width: 2.5rem;
+    font-family: var(--font-mono);
     font-size: var(--text-xs);
     font-variant-numeric: tabular-nums;
     text-align: right;

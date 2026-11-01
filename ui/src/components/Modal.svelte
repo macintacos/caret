@@ -20,8 +20,6 @@
      * onOpenChangeComplete, narrowed to the close direction. ModalPresence
      * drops the component when this fires. */
     onClosed?: () => void;
-    /** Uppercase eyebrow over the title (caret's dialog signature). Optional. */
-    eyebrow?: string;
     /** The dialog heading — wired to aria-labelledby by bits-ui. */
     title: string;
     /** Any dismissal intent (Escape always; backdrop only for kind="dialog"). */
@@ -47,7 +45,6 @@
     kind = "dialog",
     open,
     onClosed,
-    eyebrow,
     title,
     onDismiss,
     onOpenAutoFocus,
@@ -66,7 +63,6 @@
   <AlertDialog.Root {open} onOpenChangeComplete={(o) => { if (!o) onClosed?.(); }}>
     <AlertDialog.Content onEscapeKeydown={() => onDismiss()} {onOpenAutoFocus} class={contentClass}>
       <AlertDialog.Header class="m-head">
-        {#if eyebrow}<span class="eyebrow">{eyebrow}</span>{/if}
         <AlertDialog.Title class="m-title">{title}</AlertDialog.Title>
         {#if description}
           <AlertDialog.Description>{@render description()}</AlertDialog.Description>
@@ -88,7 +84,6 @@
       class={contentClass}
     >
       <Dialog.Header class="m-head">
-        {#if eyebrow}<span class="eyebrow">{eyebrow}</span>{/if}
         <Dialog.Title class="m-title">{title}</Dialog.Title>
         {#if description}
           <Dialog.Description>{@render description()}</Dialog.Description>
@@ -101,16 +96,8 @@
 {/if}
 
 <style>
-  /* The shared modal identity. These classes ride this component's scope hash onto
-     the elements bits-ui portals into document.body, so the styling reaches the
-     portalled panel; keeping it in one <style> is what stops the two modals drifting. */
-  /* caret's dialog signature: the uppercase eyebrow over the title. */
-  .eyebrow {
-    font-size: var(--text-xs);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-soft);
-  }
+  /* The shared modal identity; keeping it in one <style> is what stops the two modals
+     drifting. */
   /* .m-head / .m-title land on the shadcn Header/Title CHILD components, so they
      carry no Modal scope hash — reached with :global, anchored under the header so
      the title rule can't leak. They override the alert header's small-screen

@@ -115,10 +115,10 @@ function openEditorWithCapture(text: string): {
   return { target, flush, edited };
 }
 
-/** Assert the chip/header state indicator's class and label together — the
- * two-line check every state-indicator case repeats. */
-function expectChipState(el: Element | null, cls: string, label: string): void {
-  expect(el?.classList.contains(cls)).toBe(true);
+/** Assert the chip/header state stamp's glyph and label together — the two-line
+ * check every state-indicator case repeats. */
+function expectChipState(el: Element | null, icon: string, label: string): void {
+  expect(el?.querySelector("[data-icon]")?.getAttribute("data-icon")).toBe(icon);
   expect(el?.textContent?.trim()).toBe(label);
 }
 
@@ -259,35 +259,35 @@ describe("SourceAnnotationCard state indicator", () => {
   test("an annotation with no state shows the pending Draft affordance", () => {
     const { target } = render(SourceAnnotationCard, stated(undefined));
     expect(target.querySelector(".card")?.getAttribute("data-state")).toBe("pending");
-    expectChipState(target.querySelector(".chip .state"), "state-draft", "Draft");
+    expectChipState(target.querySelector(".chip .state"), "pencil-line", "Draft");
   });
 
   test("a pending comment reads as a Draft", () => {
     const { target } = render(SourceAnnotationCard, stated("pending"));
-    expectChipState(target.querySelector(".chip .state"), "state-draft", "Draft");
+    expectChipState(target.querySelector(".chip .state"), "pencil-line", "Draft");
   });
 
   test("a rejected comment reads as a still-active Requested", () => {
     const { target } = render(SourceAnnotationCard, stated("rejected"));
     expect(target.querySelector(".card")?.getAttribute("data-state")).toBe("rejected");
-    expectChipState(target.querySelector(".chip .state"), "state-draft", "Requested");
+    expectChipState(target.querySelector(".chip .state"), "corner-up-left", "Requested");
   });
 
   test("an approved comment reads as an Accepted terminal", () => {
     const { target } = render(SourceAnnotationCard, stated("approved"));
     expect(target.querySelector(".card")?.getAttribute("data-state")).toBe("approved");
-    expectChipState(target.querySelector(".chip .state"), "state-accepted", "Accepted");
+    expectChipState(target.querySelector(".chip .state"), "check", "Accepted");
   });
 
   test("an expired comment reads as a quiet Expired terminal", () => {
     const { target } = render(SourceAnnotationCard, stated("expired"));
     expect(target.querySelector(".card")?.getAttribute("data-state")).toBe("expired");
-    expectChipState(target.querySelector(".chip .state"), "state-expired", "Expired");
+    expectChipState(target.querySelector(".chip .state"), "circle-dashed", "Expired");
   });
 
   test("the same state affordance shows in the expanded header", () => {
     const { target } = render(SourceAnnotationCard, stated("approved", { focused: true }));
-    expectChipState(target.querySelector(".head .state"), "state-accepted", "Accepted");
+    expectChipState(target.querySelector(".head .state"), "check", "Accepted");
   });
 });
 

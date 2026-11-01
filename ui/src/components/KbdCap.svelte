@@ -4,12 +4,13 @@
   // supplies the <Kbd> box, so the help modal can wrap one cap per key while the
   // status bar folds a whole chord (⇧C) into a single key. The KbdKey prop is the
   // schema kbdCap() exhausts, so the shift icon is reachable only by passing the
-  // literal "shift". `size` tunes the icon to the surrounding cap (smaller in the
-  // dense status bar than in the help modal); it is inert for a text cap.
+  // literal "shift". `size` is the icon's px box; its arrow spans two thirds of it,
+  // so 9 seats the arrow at the cap height of a keycap's ~9.5px glyphs. It is inert
+  // for a text cap.
   import { kbdCap, type KbdKey } from "$lib/shortcuts/index.ts";
   import Icon from "@/components/Icon.svelte";
 
-  let { key, size = 12 }: { key: KbdKey; size?: number } = $props();
+  let { key, size = 9 }: { key: KbdKey; size?: number } = $props();
   const render = $derived(kbdCap(key));
 </script>
 

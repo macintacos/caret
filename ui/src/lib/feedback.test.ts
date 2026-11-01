@@ -379,9 +379,9 @@ describe("pendingItems", () => {
     expect(pendingItems([lineAnn(3, 3, "   ")], "", [])).toEqual([]);
   });
 
-  test("a scratch is labeled by its range and carries its text", () => {
+  test("a scratch is labeled by its range, carries its text, and is marked unsent", () => {
     expect(pendingItems([], "", [scratch(7, 8, "half a thought")])).toEqual([
-      { label: "Lines 7–8", text: "half a thought" },
+      { label: "Lines 7–8", text: "half a thought", unsent: true },
     ]);
   });
 
@@ -392,7 +392,7 @@ describe("pendingItems", () => {
     expect(items).toEqual([
       { label: "General", text: "overall note" },
       { label: "Line 3", text: "inline note" },
-      { label: "Line 7", text: "draft note" },
+      { label: "Line 7", text: "draft note", unsent: true },
     ]);
   });
 
@@ -837,6 +837,8 @@ describe("commentItems and scratchItems", () => {
   });
 
   test("scratchItems is the scratches", () => {
-    expect(scratchItems([scratch(7, 8, "s")])).toEqual([{ label: "Lines 7–8", text: "s" }]);
+    expect(scratchItems([scratch(7, 8, "s")])).toEqual([
+      { label: "Lines 7–8", text: "s", unsent: true },
+    ]);
   });
 });

@@ -99,18 +99,6 @@ export function rowLabel(lines: readonly number[]): string {
   return first === last ? `Line ${first}` : `Lines ${first}–${last}`;
 }
 
-/**
- * A banded code row's gutter→content seam-fill strip, as Chromium serializes it: a shadow
- * layer pulled left by the two insets, with no blur and no spread.
- *
- * Matching the strip's own negative offset is what keeps a "this row is banded" assertion
- * pointed at the strip. Every code row carries the `--caret-card-lift` contact shadow
- * (EXC-1145), so the presence of a box-shadow no longer separates a banded row from a
- * resting one — and a length or "not none" comparison would pass on any second layer at
- * all. Two specs make that claim, so the pattern lives here rather than in either.
- */
-export const SEAM_STRIP = /-[\d.]+px 0px 0px 0px/;
-
 /** Resolve once the seeded plan has rendered, returning the container for the callers
  * that go on to scroll it or scope a query inside it. */
 export async function planSurface(page: Page): Promise<Locator> {
@@ -302,7 +290,10 @@ export async function wheelPlan(page: Page, dy: number, over = PLAN_SURFACE): Pr
 export function sourceTopLine(page: Page): Promise<number | null> {
   return page.evaluate(
     ({ surface, offset }) => {
-      const top = (document.querySelector(surface) as HTMLElement).getBoundingClientRect().top;
+      // Null while the surface mounts after a navigation: a throw would end the poll.
+      const scroller = document.querySelector(surface);
+      if (scroller === null) return null;
+      const top = scroller.getBoundingClientRect().top;
       const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
       const row = [...(sh?.querySelectorAll("[data-line]") ?? [])].find(
         (r) => r.getBoundingClientRect().bottom > top + offset,
@@ -320,7 +311,9 @@ export function previewTopBlock(
 ): Promise<{ start: number; end: number; top: number } | null> {
   return page.evaluate(
     ({ surface, preview, offset }) => {
-      const top = (document.querySelector(surface) as HTMLElement).getBoundingClientRect().top;
+      const scroller = document.querySelector(surface);
+      if (scroller === null) return null;
+      const top = scroller.getBoundingClientRect().top;
       const block = [...document.querySelectorAll<HTMLElement>(`${preview} > div`)].find(
         (b) => b.getBoundingClientRect().bottom > top + offset,
       );

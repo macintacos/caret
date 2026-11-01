@@ -14,15 +14,16 @@ import { join, resolve } from "node:path";
 
 import type { Plugin } from "vite";
 
-/** What ui/dist measured at EXC-1986, each with `bunx vite build` from ui/ and one alias
- * entry of ui/vite.config.ts's `resolve.alias` block deleted. The budget below is derived
- * from these, and bundle-budget.test.ts reds if the two drift apart.
+/** What ui/dist measured when the budget was last derived, each with `bunx vite build`
+ * from ui/ and one alias entry of ui/vite.config.ts's `resolve.alias` block deleted. The
+ * budget below is derived from these, and bundle-budget.test.ts reds if the two drift
+ * apart.
  *
  * Their deltas overlap, so none can be derived from the others by subtraction — each
  * number here is its own build. */
 export const MEASURED_BYTES = {
   /** A clean build, all four entries in place, across 359 files. */
-  baseline: 11_422_735,
+  baseline: 11_601_953,
   /** Added by un-aliasing `/^shiki\/wasm$/` alone — the Oniguruma WASM binary, and the
    * break the "~600 KB" claim on package.json's @pierre/diffs pin names. */
   shikiWasmBreak: 622_310,
@@ -31,7 +32,7 @@ export const MEASURED_BYTES = {
   pierreThemeBreak: 334_084,
   /** Added by un-aliasing the `@shikijs/themes/*` entry alone — every theme shiki ships,
    * none of which caret renders: its vendor themes are built from theme files. */
-  shikiThemesBreak: 1_326_604,
+  shikiThemesBreak: 1_331_118,
   /** Added by un-aliasing the bare `/^shiki$/` entry alone. About thirty times
    * smaller than the others, and the reason the constant below is explicit about what
    * it does not cover. */
@@ -55,7 +56,7 @@ export const MEASURED_BYTES = {
  * dist/ by `shikiBarrelBreak` — well inside the noise any usable headroom has to tolerate
  * — because that entry is a behaviour swap (which regex engine, whose themes) rather than
  * a payload it keeps out. */
-export const UI_BUNDLE_BUDGET_BYTES = 11_600_000;
+export const UI_BUNDLE_BUDGET_BYTES = 11_779_218;
 
 /** One emitted file, as measured under the dist root. */
 export interface DistFile {

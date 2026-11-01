@@ -372,6 +372,18 @@ describe("the preview panel", () => {
     }
   });
 
+  test("opens hidden and shows once it has a place beside the list", async () => {
+    const { view, toggle, dispose } = await openedList();
+    try {
+      flip(view, toggle);
+      const hidden = () => (panelIn() as HTMLElement | null)?.style.visibility === "hidden";
+      expect(hidden()).toBe(true);
+      expect(await until(() => !hidden())).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
   test("waits for the list to be placed rather than pinning itself to the top", async () => {
     // CodeMirror parks a tooltip it has not positioned yet far above the viewport
     // (`top: -10000px`), and every measure request's read runs before any of

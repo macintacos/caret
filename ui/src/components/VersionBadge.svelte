@@ -99,15 +99,16 @@
     padding: 0.15rem 0.35rem;
     transition:
       color var(--dur-state) var(--ease-out),
-      background-color var(--dur-state) var(--ease-out);
+      background-color var(--dur-state) var(--ease-out),
+      box-shadow var(--dur-state) var(--ease-out);
   }
-  .version-badge:hover {
+  .version-badge:is(:hover, :focus-visible) {
     color: var(--ink);
   }
-  /* Click feedback: the segment briefly takes the accent wash + hue — an
-     unmistakable "copied" flash that reverts after COPIED_MS. */
+  /* Copied: the tag is stamped in for COPIED_MS, a passive confirmation. */
   .version-badge.copied {
-    color: var(--accent);
-    background: var(--accent-wash);
+    color: var(--ink);
+    background: var(--well-floor);
+    box-shadow: var(--well-shade), var(--well-lip);
   }
 </style>

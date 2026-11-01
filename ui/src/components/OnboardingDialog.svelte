@@ -7,6 +7,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { uiLog } from "$lib/log.ts";
   import { markOnboarded } from "$lib/prefs.ts";
+  import { topmostDialogContent } from "$lib/modalStack.ts";
   import Modal from "@/components/Modal.svelte";
 
   interface Props {
@@ -37,15 +38,20 @@
     }
     dismiss();
   }
+
+  function focusDialog(e: Event): void {
+    e.preventDefault();
+    topmostDialogContent()?.focus();
+  }
 </script>
 
 <Modal
   kind="dialog"
   {open}
   {onClosed}
-  eyebrow="Welcome to caret"
-  title="Desktop notifications"
+  title="Welcome to caret"
   onDismiss={dismiss}
+  onOpenAutoFocus={focusDialog}
 >
   {#snippet description()}
     caret can alert you the moment a plan is ready for review — even when this tab is in the
@@ -58,8 +64,10 @@
   </p>
 
   {#snippet footer()}
-    <Button variant="ghost" onclick={dismiss}>Maybe later</Button>
-    <Button onclick={enable}>Enable notifications</Button>
+    <span class="tray tray-submit">
+      <Button variant="secondary" class="float-chip" onclick={dismiss}>Maybe later</Button>
+      <Button onclick={enable}>Enable notifications</Button>
+    </span>
   {/snippet}
 </Modal>
 

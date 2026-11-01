@@ -162,7 +162,7 @@ test("discarding an unsent comment asks to confirm before dropping it (EXC-762)"
   await expect(row).toHaveCount(0);
 });
 
-test("marking an inline comment as a draft demotes it into Unsent and out of the send (EXC-762)", async ({
+test("marking an inline comment as unsent demotes it into Unsent and out of the send (EXC-762)", async ({
   daemon,
   page,
 }) => {
@@ -177,7 +177,7 @@ test("marking an inline comment as a draft demotes it into Unsent and out of the
   await expect(send).toBeEnabled();
 
   // With nothing left to include, the primary action disables.
-  await inlineRows(dialog).getByRole("button", { name: "Mark as draft", exact: true }).click();
+  await inlineRows(dialog).getByRole("button", { name: "Mark as unsent", exact: true }).click();
   await expect(dialog.getByRole("region", { name: "Inline comments" })).toHaveCount(0);
   const scratchRow = unsentRows(dialog);
   await expect(scratchRow).toHaveCount(1);

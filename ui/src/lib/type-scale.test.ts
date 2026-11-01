@@ -56,11 +56,6 @@ describe("the --text-*/--leading-* type scale in app.css", () => {
     expect(rule).toMatch(/font-size:\s*var\(--text-/);
   });
 
-  test("the .eyebrow atom draws its font-size from the scale", () => {
-    const rule = appCss.match(/\.eyebrow\s*\{([^}]*)\}/)?.[1] ?? "";
-    expect(rule).toMatch(/font-size:\s*var\(--text-/);
-  });
-
   test("the .diffview bridge draws font-size/line-height from the scale", () => {
     const rule = appCss.match(/\.diffview\s*\{([\s\S]*?)\}/)?.[1] ?? "";
     expect(rule).toMatch(/--diffs-font-size:\s*var\(--text-/);

@@ -98,13 +98,14 @@
   </div>
 
   {#if active}
-    <div class="actions" class:busy>
-      <!-- Same quiet floating-chip as Request changes (soft fill, ink-soft label),
-           differentiated only by warming to danger on hover. Reject always routes
+    <!-- The verdicts share one well, like a remote's row of keys. -->
+    <div class="actions tray tray-submit" class:busy>
+      <!-- Same neutral cap as Request changes, differentiated only by warming to
+           danger on hover (.cap-danger-hover), the one place red belongs in the row. Reject always routes
            through a confirm dialog, so the resting button stays low-key. -->
       <Button
         variant="secondary"
-        class="reject float-chip"
+        class="reject float-chip cap-danger-hover"
         onclick={onReject}
         disabled={busy}
         aria-keyshortcuts={ariaKeyshortcutsFor("actions.reject")}
@@ -113,10 +114,8 @@
         Reject
         {#if showShortcutHints}
           <!-- Both caps typed, so the shift glyph is the shared icon, never a ⇧
-               char. KbdCap's `size` is px while the cap's text is em-relative, so 9
-               is ~0.8 of the resulting 11px glyph, seating the arrow at the letter's
-               cap height. Retune it if the button's font-size moves. -->
-          <Kbd aria-hidden="true"><KbdCap key="shift" size={9} /><KbdCap key="R" /></Kbd>
+               char. -->
+          <Kbd aria-hidden="true"><KbdCap key="shift" /><KbdCap key="R" /></Kbd>
         {/if}
       </Button>
 
@@ -189,7 +188,7 @@
             <!-- All three verdicts carry a cap once they collapse in here. -->
             {#if showShortcutHints}
               <Kbd class="menu-key" aria-hidden="true"
-                ><KbdCap key="shift" size={9} /><KbdCap key="R" /></Kbd
+                ><KbdCap key="shift" /><KbdCap key="R" /></Kbd
               >
             {/if}
           </DropdownMenu.Item>
@@ -239,7 +238,7 @@
   {/if}
 
   <!-- Always visible, pinned right in both layouts (see .bell-slot below). -->
-  <div class="bell-slot">
+  <div class="bell-slot tray">
     <NotifyBell />
     <!-- The update state rides the button's accessible name — a dot a screen reader
          can't reach is not a notification — so the dot itself is decorative.
@@ -290,15 +289,15 @@
 {/snippet}
 
 <style>
-  /* The hairline rule is what stacks it seamlessly with the compare bar
-     (VersionComparePicker) directly below. */
+  /* Cut straight into the window's body, so it has no face or rule of its own, and
+     the plan's control row below reads as the same surface. */
   .topbar {
     display: flex;
     align-items: center;
     gap: 1rem;
-    padding: 0.7rem var(--bar-inset);
-    border-bottom: 1px solid var(--rule);
-    background: var(--paper-raised);
+    /* Trimmed by the beds' pad. The shorter bottom spaces the trays from the
+       control row's, which has no top padding of its own. */
+    padding: calc(0.7rem - var(--well-top)) var(--bar-inset) calc(0.4rem - var(--well-foot));
     position: relative;
     z-index: 30;
     /* As a grid item of .shell, the default min-width:auto would expand the track
@@ -309,6 +308,7 @@
   /* Yields first: when the controls need room the plan title truncates rather than
      pushing them off-screen. */
   .lead {
+    --lead-min: 10rem;
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -324,7 +324,10 @@
     flex-shrink: 1;
     /* Enough name left to tell two plans apart. Raising it spills the trigger back
        under the controls, so topbar-overflow.e2e.ts's sweep bounds this number. */
-    min-width: 10rem;
+    min-width: var(--lead-min);
+  }
+  .lead :global(.switcher-tray) {
+    min-width: calc(var(--lead-min) + 2 * var(--well-pad));
   }
   .brand {
     font-family: var(--font-display);
@@ -341,8 +344,6 @@
   }
   .actions {
     display: flex;
-    align-items: center;
-    gap: 0.6rem;
     margin-left: auto;
     /* Never shrink — the lead truncates first, so the controls stay full-size. */
     flex-shrink: 0;
@@ -357,9 +358,6 @@
      row split the free space and strand this cluster mid-row, which is what the
      override below prevents. */
   .bell-slot {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
     margin-left: auto;
     /* Bell + Settings stay visible at every width — the lead truncates first. */
     flex-shrink: 0;
@@ -368,17 +366,12 @@
     margin-left: 0;
   }
 
-  /* Reject warms to danger on hover — the one place red belongs in the row. */
-  .actions :global(.reject:not(:disabled):hover) {
-    background: var(--danger);
-    color: var(--paper);
-  }
   /* The X glyph reads danger-red at rest (the reject affordance); on hover the chip
      fills with danger, so the glyph flips to the paper ink to stay legible on it. */
   .actions :global(.reject .icon) {
     color: var(--danger);
   }
-  .actions :global(.reject:not(:disabled):hover .icon) {
+  .actions :global(.reject:not(:disabled):is(:hover, :focus-visible) .icon) {
     color: inherit;
   }
   /* The ⇧ inside the key cap is an .icon too, and a keycap derives its hue from
@@ -425,8 +418,8 @@
   /* Fluid collapse (EXC-813): a control appearing across these breakpoints fades and
      scales in. Fading OUT is deliberately instant — a hiding control kept in flow to
      animate would keep stealing width mid-collapse and transiently shove the
-     bell/gear off-screen. background-color/color stay in the list so the chip's own
-     hover transition survives this override. */
+     bell/gear off-screen. background-color, color and box-shadow stay in the list so
+     the cap's own hover and press transitions survive this override. */
   .actions :global(.reject),
   .actions :global(.request),
   .actions :global(.overflow-trigger),
@@ -435,7 +428,8 @@
       opacity var(--dur-state) var(--ease-out),
       transform var(--dur-state) var(--ease-out),
       background-color var(--dur-state) var(--ease-out),
-      color var(--dur-state) var(--ease-out);
+      color var(--dur-state) var(--ease-out),
+      box-shadow var(--dur-state) var(--ease-out);
   }
   @starting-style {
     .actions :global(.reject),
@@ -480,19 +474,23 @@
     height: 7px;
     border-radius: 50%;
     background: var(--attention);
-    box-shadow: 0 0 0 1.5px var(--paper-raised);
+    box-shadow: 0 0 0 1.5px var(--cap-face);
   }
-  /* Lifted off the ellipsis with a paper ring, the NotifyBell dot pattern. */
+  /* Lifted off the ellipsis with a ring in the cap's face, the NotifyBell dot pattern. */
   .actions :global(.overflow-count) {
     position: absolute;
     top: -5px;
     right: -6px;
     padding: 0 0.3rem;
-    box-shadow: 0 0 0 1.5px var(--paper-raised);
+    box-shadow: 0 0 0 1.5px var(--cap-face);
     pointer-events: none;
   }
-  /* ≤ --w-tight the header keeps only ⋯ + bell + settings on the right. */
+  /* ≤ --w-tight the header keeps only ⋯ + bell + settings on the right, and the
+     "local build" stamp gives its room to the plan title. */
   @media (max-width: 639px) {
+    .lead :global(.dev-badge) {
+      display: none;
+    }
     .approve-slot {
       display: none;
       opacity: 0;

@@ -1,8 +1,8 @@
 // The settings Advanced pane (EXC-848): read-only, copyable diagnostics blocks
 // for the running build, daemon liveness, system, and the parsed config. The
-// values come from /api/health and /api/diagnostics — real browser fetch, plus
-// clipboard + the shared success alert on copy — so this is real-browser behavior,
-// not a unit (per doc/agents/browser-testing.md). The block VALUES are the
+// values come from /api/health and /api/diagnostics — real browser fetch, plus the
+// clipboard a copy writes and the layout that decides whether a block can wrap — so
+// this is real-browser behavior, not a unit (per doc/agents/browser-testing.md). The block VALUES are the
 // synthetic build identity + diagnostics wired in support/daemon-entry.ts; the two
 // are kept in sync deliberately.
 
@@ -17,6 +17,7 @@ async function openAdvanced(page: import("@playwright/test").Page) {
 }
 
 test("renders the diagnostics blocks and copies one to the clipboard", async ({ daemon, page }) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await daemon.seed();
   await page.goto("/");
   await planSurface(page);
@@ -43,9 +44,39 @@ test("renders the diagnostics blocks and copies one to the clipboard", async ({ 
   await expect(pane.locator("[data-diag='config'] .diag-text")).toContainText("[daemon]");
   await expect(pane.locator("[data-diag='config'] .diag-text")).toContainText("port = 42718");
 
-  // Copying a block fires the shared EXC-850 success alert.
-  await pane.locator("[data-diag='daemon'] .diag-copy").click();
-  await expect(page.getByText("Copied diagnostics to clipboard")).toBeVisible();
+  // A block copies in place: its copy cap writes the block's text and confirms on itself.
+  const daemonBlock = pane.locator("[data-diag='daemon']");
+  await daemonBlock.getByRole("button", { name: "Copy Daemon" }).click();
+  await expect(daemonBlock.getByRole("button", { name: "Copied Daemon" })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    "live · port 42718 · up 2h 14m",
+  );
+});
+
+test("a block offers to wrap only once its value overflows, and wrapping fits it", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.goto("/");
+  await planSurface(page);
+
+  await openAdvanced(page);
+  const pane = page.locator("[data-advanced-pane]");
+  const version = pane.locator("[data-diag='version']");
+  await expect(version.locator(".diag-text")).toContainText("caret");
+  // At a desktop width every value fits its block, so none offers to wrap.
+  await expect(pane.getByRole("button", { name: /^Wrap long lines/ })).toHaveCount(0);
+
+  // A phone-width modal pushes the version past its block's edge.
+  await page.setViewportSize({ width: 390, height: 800 });
+  const wrap = version.getByRole("button", { name: "Wrap long lines in Version" });
+  await expect(wrap).toBeVisible();
+  await wrap.click();
+  await expect(wrap).toHaveAttribute("aria-pressed", "true");
+  await expect
+    .poll(() => version.locator("pre").evaluate((pre) => pre.scrollWidth <= pre.clientWidth))
+    .toBe(true);
 });
 
 test("degrades daemon/system/config per-block when diagnostics fails; version survives", async ({
@@ -72,5 +103,5 @@ test("degrades daemon/system/config per-block when diagnostics fails; version su
     "data-live",
     "false",
   );
-  await expect(pane.locator("[data-diag='system'] .diag-copy")).toHaveCount(0);
+  await expect(pane.locator("[data-diag='system']").getByRole("button")).toHaveCount(0);
 });

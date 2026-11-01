@@ -86,3 +86,24 @@ test("a tall alert-dialog is height-capped to the viewport and scrolls instead o
 
   expectCappedAndScrolling(await readFit(guard));
 });
+
+// A phone has no Esc key, and the 15rem rail would leave the pane a sliver, so below 640px
+// the rail folds into a bar: a section picker standing in for the list, and a close key.
+test("at phone width the rail folds into a bar whose picker switches panes and whose close key dismisses", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed();
+  await page.setViewportSize({ width: 390, height: 760 });
+  await page.goto("/");
+
+  const dialog = await openSettings(page);
+  await expect(dialog.locator("[data-category='Sound']")).toBeHidden();
+
+  await dialog.locator("#settings-section").click();
+  await page.getByRole("option", { name: "Sound" }).click();
+  await expect(dialog.getByRole("heading", { name: "Sound" })).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Close settings" }).click();
+  await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
+});

@@ -12,6 +12,7 @@
   import chevronDown from "@/icons/chevron-down.svg?raw";
   import chevronRight from "@/icons/chevron-right.svg?raw";
   import chevronUp from "@/icons/chevron-up.svg?raw";
+  import circleDashed from "@/icons/circle-dashed.svg?raw";
   import circleQuestionMark from "@/icons/circle-question-mark.svg?raw";
   import command from "@/icons/command.svg?raw";
   import copy from "@/icons/copy.svg?raw";
@@ -29,15 +30,15 @@
   import heading6 from "@/icons/heading-6.svg?raw";
   import keyboard from "@/icons/keyboard.svg?raw";
   import loaderCircle from "@/icons/loader-circle.svg?raw";
+  import messageSquare from "@/icons/message-square.svg?raw";
+  import messageSquareMore from "@/icons/message-square-more.svg?raw";
   import monitor from "@/icons/monitor.svg?raw";
   import moon from "@/icons/moon.svg?raw";
   import panelLeft from "@/icons/panel-left.svg?raw";
+  import pencilLine from "@/icons/pencil-line.svg?raw";
   import refreshCw from "@/icons/refresh-cw.svg?raw";
   import search from "@/icons/search.svg?raw";
   import settings from "@/icons/settings.svg?raw";
-  import square from "@/icons/square.svg?raw";
-  import squareCheckBig from "@/icons/square-check-big.svg?raw";
-  import squareSlash from "@/icons/square-slash.svg?raw";
   import sun from "@/icons/sun.svg?raw";
   import textWrap from "@/icons/text-wrap.svg?raw";
   import trash2 from "@/icons/trash-2.svg?raw";
@@ -53,6 +54,7 @@
     "chevron-down": chevronDown,
     "chevron-right": chevronRight,
     "chevron-up": chevronUp,
+    "circle-dashed": circleDashed,
     "circle-question-mark": circleQuestionMark,
     command,
     copy,
@@ -70,15 +72,15 @@
     "heading-6": heading6,
     keyboard,
     "loader-circle": loaderCircle,
+    "message-square": messageSquare,
+    "message-square-more": messageSquareMore,
     monitor,
     moon,
     "panel-left": panelLeft,
+    "pencil-line": pencilLine,
     "refresh-cw": refreshCw,
     search,
     settings,
-    square,
-    "square-check-big": squareCheckBig,
-    "square-slash": squareSlash,
     sun,
     "text-wrap": textWrap,
     "trash-2": trash2,

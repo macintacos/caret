@@ -44,6 +44,8 @@ const pill = (page: Page) => page.getByRole("search");
 
 async function counter(page: Page): Promise<{ current: number; total: number }> {
   const raw = (await page.locator(".search-count").textContent()) ?? "";
+  // A blank counter (no query) and "No matches" both count nothing.
+  if (!raw.includes("/")) return { current: 0, total: 0 };
   const [current, total] = raw.replace(/\s+/g, "").split("/").map(Number);
   return { current: current ?? 0, total: total ?? 0 };
 }
@@ -217,7 +219,7 @@ test("Esc closes a committed search on the preview", async ({ daemon, page }) =>
   await openPreview(page, daemon);
   await search(page, "gadget", 3);
   await page.keyboard.press("Enter");
-  await expect(page.locator("input[aria-label='Search plan']")).not.toBeFocused();
+  await expect(page.locator(".search-stamp")).toBeVisible();
   await dismiss(page);
   await expect.poll(() => highlightTexts(page, "caret-preview-search-current")).toEqual([]);
 });

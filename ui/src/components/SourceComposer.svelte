@@ -151,47 +151,52 @@
       <!-- Edit mode: revise a saved comment. Cancel reverts (the comment survives,
            so no confirm), Save commits — same amber primary + ⌘↵ hint as Comment. -->
       <Button variant="ghost" class="cancel" onclick={onDiscard}>Cancel</Button>
-      <Button class="save" onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
-        Save
-        <SubmitCap />
-      </Button>
+      <span class="tray tray-submit">
+        <Button class="save" onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
+          Save
+          <SubmitCap />
+        </Button>
+      </span>
     {:else}
       <Button variant="ghost" class="keep" onclick={keep} disabled={!canKeep}>Keep for later</Button>
       <!-- Dropping a non-empty draft loses typed text with no undo, so it confirms
            (EXC-749); an empty box discards at once. The rule lives in the branch
            rather than the click handler because Popover.Trigger opens
            unconditionally — the empty case must never get a trigger. -->
-      {#if canKeep}
-        <ConfirmPopover
-          question="Discard this comment?"
-          confirmLabel="Discard"
-          cancelLabel="Keep editing"
-          onConfirm={onDiscard}
-          trigger={discardButton}
-        />
-      {:else}
-        {@render discardButton({ onclick: onDiscard })}
-      {/if}
-      <Button onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
-        Comment
-        <SubmitCap />
-      </Button>
+      <span class="tray tray-submit">
+        {#if canKeep}
+          <ConfirmPopover
+            question="Discard this comment?"
+            confirmLabel="Discard"
+            cancelLabel="Keep editing"
+            onConfirm={onDiscard}
+            trigger={discardButton}
+          />
+        {:else}
+          {@render discardButton({ onclick: onDiscard })}
+        {/if}
+        <Button onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
+          Comment
+          <SubmitCap />
+        </Button>
+      </span>
     {/if}
   </div>
 </Card>
 
 <style>
   /* Inline within the library's annotation row — a Card reshaped to caret's tight
-     inline padding and raised shadow (see SourceAnnotationCard's .body). The
-     compound [data-slot] selector (0,2,0) outranks the copied Card's utilities. */
+     inline padding, floating over the plan on the mid float (see
+     SourceAnnotationCard's .body). The compound [data-slot] selector (0,2,0) outranks
+     the copied Card's utilities. */
   :global([data-slot="card"].composer) {
     display: block;
     max-width: min(46rem, 100%);
     margin: 0.4rem 0 0.55rem;
-    padding: 0.7rem 0.75rem 0.6rem;
-    border: 1px solid var(--rule-strong);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
+    padding: 0.7rem var(--composer-inset) 0;
+    border: 0;
+    border-radius: var(--composer-radius);
+    box-shadow: var(--float-surface-mid);
     /* Opacity only: this opens inside the library-reserved annotation row, so a
        transform that grew or shifted the box would change the row's measured
        height mid-reveal and fight the preventScroll guard. */
@@ -204,19 +209,28 @@
     letter-spacing: 0.02em;
     color: var(--ink-soft);
   }
+  /* The actions rest on a shelf a step below the sheet, as a modal's footer does, its
+     top shaded by the sheet's edge. */
   .row {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     gap: 0.4rem;
-    margin-top: 0.55rem;
+    margin: 0.6rem calc(-1 * var(--composer-inset)) 0;
+    padding: var(--composer-inset);
+    border-bottom-right-radius: inherit;
+    border-bottom-left-radius: inherit;
+    background: var(--group-floor);
+    box-shadow: inset 0 7px 8px -7px var(--pane-shade);
   }
-  /* The quietest control in the row, so it drops to faint ink until hovered —
-     Discard and Comment must carry more weight than the stash. */
+  /* The quietest control in the row, so it drops to soft ink until hovered —
+     Discard and Comment must carry more weight than the stash. --ink-faint falls under
+     4.5:1 on the shelf in several palettes. */
   :global([data-slot="button"].keep) {
-    color: var(--ink-faint);
-  }
-  :global([data-slot="button"].keep:hover:not(:disabled)) {
     color: var(--ink-soft);
+  }
+  :global([data-slot="button"].keep:is(:hover, :focus-visible):not(:disabled)) {
+    color: var(--ink);
   }
   @keyframes reveal {
     from {

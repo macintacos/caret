@@ -207,15 +207,42 @@ exist today.
   Links, reference chips and inline code wear the source view's chips, and a link whose
   label holds code, a reference or an image gives way to it, so a label mixing code and
   prose shows the code chip alone; `coreStyles.test.ts` pins each copy to the
-  `coreStyles.ts` rule it mirrors. A table wears the source view's table card: the code
-  panel's fill, no frame, `--table-rule` between columns and rows (pinned the same way),
-  an uppercase `--ink-soft` header that never wraps, and cells aligned on their first
-  line. The header row stays at the top of the plan's view while its rows pass under it:
-  `position: sticky` would pin it inside the table, which scrolls sideways, so a
-  scroll-driven animation on the table's view timeline slides it down instead, as far as
-  the view scrolls, and stops it on the last row at the `--pin-travel` `PlanPreview`
-  measures. Pinned, it takes the card's fill and a rule beneath; at rest it stays clear,
-  so a band over its own row shows through.
+  `coreStyles.ts` rule it mirrors. A task box wears the source view's stamped pocket and
+  its pressed-in marks, and an image the source view's pad, both pinned the same way. The
+  box's side is the shadow root's `--checkbox-size`, which the preview repeats by value,
+  as it does `--caret-code-bar`. A table wears the source view's raised pad, pinned the
+  same way:
+  - a pad of `--body` standing on the plan, with its gloss, side and cast shadow, and the
+    header on a lit band along its top;
+  - the body cells on `--table-floor`, in a scoop on the pad's face;
+  - `--table-floor-rule` between rows and no rule between columns;
+  - an uppercase `--table-head-ink` header that never wraps;
+  - cells aligned on their first line.
+
+  The scoop's shade under the header and its lit lip at the foot are gradients on the
+  first and last rows' cells, because a blurred shadow per cell breaks at every cell
+  boundary. The header row stays at the top of the plan's view while its rows pass under
+  it. `position: sticky` would pin it inside the table, which scrolls sideways, so a
+  scroll-driven animation on the table's view timeline slides it down as far as the view
+  scrolls. It stops on the last row at the `--pin-travel` that `PlanPreview` measures.
+  Pinned, the header takes the pad's fill. At rest it stays clear, so a band over its own
+  row shows through.
+
+  A code block's `pre` wears the source view's code card (`[data-code-card]`), pinned the
+  same way:
+  - the transparent border that draws the pad's rim;
+  - the pad's `--pad-radius` corners;
+  - the backgrounds that fill the pad and the scoop, with the pad's gloss and lit band;
+  - the scoop's inset shade and lip, with the pad's side and cast shadow outside it;
+  - the scrollbar: its height, transparent track and thumb.
+
+  Change the card's `--caret-code-bar` and the preview's `12px` bar height together,
+  because `coreStyles.test.ts` compares them by value. The preview repeats the height as a
+  literal because the diff view declares `--caret-code-bar` in its shadow root, out of the
+  `pre`'s reach.
+
+  The `pre` is the block's scroll container, so that frame stays put while a wide block
+  scrolls. Its 4.5rem inline-end padding holds the copy and wrap tray off the code.
 - **Code blocks.** A code block renders `<pre><code>` with its escaped text and no class.
   A fence's info string resolves through `fenceGrammar` to a bundled grammar, carried as
   `RenderedPlan.codeLanguages` keyed by the code marker's line, and never as markup; an
@@ -370,14 +397,14 @@ highlight run only where the `commentThreads` row runs.
   splitting its text node there, moved out of each element that character opens, so a list
   item's gap opens between the items, never under the next one's bullet, and before the
   source-line markers leading it, so a code block's marker stays directly before its `pre`
-  for `previewCodeBlocks`, the code chrome and the panel's `[data-source-code] + pre`
-  rules. A gap in a table opens before the next table row, never between its cells. A
-  block's last row's gap opens after all of its content. Gaps hold no text and splitting
-  keeps the text in order, so the source map, search and the visual lines read past them,
-  and the root is otherwise the rendered HTML the map and `planPlace` index. The gaps live
-  as long as the preview root and `set` writes only what moved, so a re-sync over settled
-  layout writes nothing and never closes a gap for a frame. The overlay state (slot boxes,
-  the pointer and focus spans) resets on a version switch or a flip, as the code chrome's
+  for `previewCodeBlocks`, the code chrome and the pad's `[data-source-code] + pre` rules.
+  A gap in a table opens before the next table row, never between its cells. A block's
+  last row's gap opens after all of its content. Gaps hold no text and splitting keeps the
+  text in order, so the source map, search and the visual lines read past them, and the
+  root is otherwise the rendered HTML the map and `planPlace` index. The gaps live as long
+  as the preview root and `set` writes only what moved, so a re-sync over settled layout
+  writes nothing and never closes a gap for a frame. The overlay state (slot boxes, the
+  pointer and focus spans) resets on a version switch or a flip, as the code chrome's
   boxes do. A slot item's removal re-reads the two spans: a removed item fires no
   pointerleave, nor in WebKit a focusout, so a discarded composer's lines would otherwise
   stay highlighted.

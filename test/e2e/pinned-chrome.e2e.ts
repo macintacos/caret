@@ -10,8 +10,9 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { commentNavigator, commentTally } from "@test/e2e/support/chrome.ts";
+import { TALL_PLAN } from "@test/e2e/support/fixture-plan.ts";
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
+import { openPlan, PLAN_SURFACE, planSurface, wheelPlan } from "@test/e2e/support/source-view.ts";
 
 // A right-docked 21rem card is at most this wide; the full-bleed sheet is wider.
 const CARD_MAX_PX = 21 * 16 + 4; // 21rem + rounding headroom
@@ -129,4 +130,49 @@ test("at wide width the navigator stays a right-docked card above the bar", asyn
   expect(navBox).not.toBeNull();
   expect(navBox!.width).toBeLessThanOrEqual(CARD_MAX_PX);
   expect(navBox!.x).toBeGreaterThan(CARD_MAX_PX);
+});
+
+test("the plan pane's edges shade text under them: the top once scrolled, the bottom while plan lies below", async ({
+  daemon,
+  page,
+}) => {
+  await openPlan(page, daemon, TALL_PLAN);
+  const pane = page.locator(".plan-pane");
+  await expect(pane).toHaveAttribute("data-more-below");
+  await expect(pane).not.toHaveAttribute("data-scrolled");
+
+  await wheelPlan(page, 400);
+  await expect(pane).toHaveAttribute("data-scrolled");
+  await expect(pane).toHaveAttribute("data-more-below");
+
+  await wheelPlan(page, 100_000);
+  await expect(pane).toHaveAttribute("data-scrolled");
+  await expect(pane).not.toHaveAttribute("data-more-below");
+});
+
+test("the daemon-replaced banner pushes the plan down, and the plan still ends above the status bar", async ({
+  daemon,
+  page,
+}) => {
+  // The daemon behind the port is replaced once a later health probe names a new instance.
+  let replaced = false;
+  await page.route("**/api/health", async (route) => {
+    const res = await route.fetch();
+    const instanceId = replaced ? "replacement" : "original";
+    await route.fulfill({ response: res, json: { ...(await res.json()), instanceId } });
+  });
+  await daemon.seed();
+  await page.goto("/");
+  await planSurface(page);
+  replaced = true;
+  const banner = page.locator(".daemon-banner");
+  await expect(banner).toBeVisible({ timeout: 30_000 });
+
+  const bannerBox = await banner.boundingBox();
+  const rowBox = await page.locator(".control-row").boundingBox();
+  const planBox = await page.locator(PLAN_SURFACE).boundingBox();
+  const barBox = await page.getByRole("contentinfo", { name: "Status bar" }).boundingBox();
+  expect(bannerBox!.y + bannerBox!.height).toBeLessThanOrEqual(rowBox!.y + 1);
+  expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(planBox!.y + 1);
+  expect(planBox!.y + planBox!.height).toBeLessThanOrEqual(barBox!.y + 1);
 });

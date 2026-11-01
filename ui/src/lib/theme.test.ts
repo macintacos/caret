@@ -7,6 +7,7 @@ import { BUILTIN_THEME_IDS } from "@core/theme/builtin-ids.ts";
 import { HEADING_LEVELS, ROLE_SCOPES } from "@core/theme/role-scopes.ts";
 import type { MarkdownElement, RoleStyle, SyntaxRole } from "@core/theme/schema.ts";
 import { customThemeFile, readThemeFile, themeFileColors } from "@ui/support/theme-file.ts";
+import { readAppCss } from "$lib/appCss.ts";
 import { shikiThemeName } from "$lib/caret-theme.ts";
 import { QUOTE_SUBDUE } from "$lib/diffview/coreStyles.ts";
 import {
@@ -107,19 +108,74 @@ function banded(bg: string, ink: string, pct: number): string {
  * and the widest band, which is the darkest ground any decoration sits on. */
 const ROW_BANDS = [0, 0.02, 0.08] as const;
 
-/** The table card's own fill (EXC-1136), quoted from the code card:
- * `color-mix(in lab, var(--paper-sunk), var(--ink) 6%)`. A table's marks are drawn on
- * THIS rather than on the bare surface, so it joins the grounds they are measured over. */
-const TABLE_CARD_FILL = 0.06;
+/** The declarations a scheme resolves across the flat sheet, in cascade order: the
+ * derived tier's `:root, [data-theme]` block, which carries dark's recipe, and the
+ * blocks keyed on the scheme's own `[data-theme="…"]`. */
+function schemeDecls(scheme: Scheme): Record<string, string> {
+  const selector = `[data-theme="${scheme}"]`;
+  const decls: Record<string, string> = {};
+  for (const block of readAppCss()
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("}")) {
+    const [head = "", body] = block.split("{");
+    // Whole selectors only: a rule scoped below the scheme, such as the light chrome's
+    // re-cut well, re-derives a token for its own subtree and not for the scheme.
+    const selectors = head.split(",").map((s) => s.trim());
+    if (
+      body === undefined ||
+      !(selectors.includes(selector) || selectors.at(-1) === "[data-theme]")
+    ) {
+      continue;
+    }
+    for (const declaration of body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
+      decls[declaration[1]!] = declaration[2]!.trim();
+    }
+  }
+  return decls;
+}
 
-/** The grounds a table's rules are drawn on — NOT the row bands verbatim. A carded table
- * never sits on bare --paper-sunk: an unbanded row is cleared to transparent and shows
- * the card's own fill, and a banded one paints its band in place of it. So the bare
- * surface drops out and the fill takes its place, leaving the resting panel and the two
- * banded cases a row can be in. A 0 here would measure a ground that only exists outside
- * the card, and the LIGHTEST one — quietly setting the top of the spread the rules case
- * checks. */
-const TABLE_GROUNDS = [0.02, TABLE_CARD_FILL, 0.08] as const;
+/** A saved comment's state stamp (SourceAnnotationCard.svelte), per scheme, read from
+ * the sheet: its floor is the well floor (styles/derived.css) tinted --stamp-floor
+ * toward the state's hue, and its word is that hue mixed --stamp-word-mix toward
+ * --stamp-word-toward (styles/tokens.css). An unsent comment's marker
+ * (SourceScratchMarker.svelte) inks its word the same way on a well tinted --unsent-floor
+ * toward --attention. */
+function stampRecipe(scheme: Scheme) {
+  const decls = schemeDecls(scheme);
+  const wellMix = /color-mix\(in lab, var\(--paper-raised\), (black|var\(--ink\)) (\d+)%\)/.exec(
+    decls["--well-floor"] ?? "",
+  );
+  const toward = (c: string) =>
+    c === "black" ? "#000000" : c.replace(/^var\((--[\w-]+)\)$/, "$1");
+  const pct = (v: string | undefined) => Number.parseFloat(v ?? "NaN") / 100;
+  return {
+    wellToward: toward(wellMix?.[1] ?? ""),
+    well: pct(wellMix?.[2]),
+    floor: pct(decls["--stamp-floor"]),
+    inkToward: toward(decls["--stamp-word-toward"] ?? ""),
+    ink: pct(decls["--stamp-word-mix"]),
+    unsent: pct(decls["--unsent-floor"]),
+  };
+}
+
+/** A colour as the sheet derives it for a theme's scheme: a palette token, or a
+ * derived-tier color-mix(in lab, A, B N%) whose inputs are palette tokens, black or other
+ * derived tokens, resolved through each other. Mixed in sRGB, as banded() documents. */
+function derived(name: string, theme: (typeof THEMES)[BuiltinThemeId]): string {
+  const decls = schemeDecls(theme.scheme);
+  const tokens = theme.tokens as Record<string, string>;
+  const resolve = (ref: string): string => {
+    if (ref === "black") return "#000000";
+    const token = /^var\((--[\w-]+)\)$/.exec(ref)?.[1] ?? ref;
+    if (tokens[token] !== undefined) return tokens[token];
+    const value = decls[token] ?? "";
+    const mix = /^color-mix\(in lab, (.+), (\S+) (\d+)%\)$/.exec(value);
+    if (mix !== null) return banded(resolve(mix[1]!), resolve(mix[2]!), Number(mix[3]) / 100);
+    if (value.startsWith("var(")) return resolve(value);
+    throw new Error(`can't resolve ${token}: ${value || "undeclared"}`);
+  };
+  return resolve(name);
+}
 
 const themeEntries = () =>
   Object.entries(THEMES) as [BuiltinThemeId, (typeof THEMES)[BuiltinThemeId]][];
@@ -558,80 +614,205 @@ describe("every theme", () => {
     );
   });
 
-  // The table's rules — the column dividers, the delimiter rule and the row hairlines —
-  // are one mark declared once as --table-rule (diffview/coreStyles.ts).
-  //
-  // THIS CASE DELIBERATELY DOES NOT MEASURE 3:1, AND THAT IS THE POINT OF READING IT.
-  // The rules are a design call (EXC-1136): a low-contrast style, closer to the surface
-  // than to the ink, consistently on every palette. 1.4.11's non-text floor does not bind
-  // them the way it binds a replacement decoration, because a table's columns are ALSO
-  // carried by the layout — the cells are max-content tracks with the source's own spacing
-  // between them — so a faint divider degrades the reading rather than removing it. A
-  // table with no vertical rules at all is a normal, legible rendering; one with
-  // unreadable TEXT is not, which is why the header case below still measures a real
-  // floor.
-  //
-  // So what is pinned here is the style itself, in two halves:
-  //
-  //   PRESENT — every palette stays clear of its ground on every one of them. The floor is
-  //   deliberately low: at a 12% step the mark IS at the edge of perceptibility on the
-  //   lightest palettes (catppuccin-latte reaches ~1.05 on a hovered row, which the epic
-  //   calls a line in the DOM and not on the screen), and that edge is the requested look
-  //   rather than a defect. What this half still catches is the failure that would be a
-  //   bug — a step that resolves to the same colour as the ground it is drawn on, which is
-  //   what a palette bump or a changed card fill could silently produce.
-  //
-  //   CONSISTENT — the spread across palettes stays inside a narrow band, which is the
-  //   property the design call actually asked for. Softening --ink-soft by a fixed amount
-  //   would land in two different places on a light and a dark palette and need a
-  //   light-dark() with two numbers; stating the colour the other way round — --paper-sunk
-  //   stepped 12% toward --ink — makes one number land in the same place everywhere,
-  //   because the operands flip with the scheme. Reintroduce a per-scheme arm and the
-  //   spread widens and this reds.
-  //
-  // The heaviest ground is the widest ROW BAND, not the card's resting fill: a rule inside
-  // a table still has to be findable on a hovered, cursored or selected row.
-  test("keeps a table's rules a faint, evenly-spread step off the surface", () => {
-    const STEP = 0.12;
-    const seen: number[] = [];
+  // A table's body rows sit in a pane sunk into a bezel of the window's --body, and the
+  // header labels ride the bezel's top rail. Both are text, so both hold AA.
+  test("keeps table body text at AA on the sunk pane's floor", () => {
     for (const [id, theme] of themeEntries()) {
-      const sunk = theme.tokens["--paper-sunk"];
-      const ink = theme.tokens["--ink"];
-      // color-mix(in lab, var(--paper-sunk), var(--ink) 12%) — banded() is that same mix.
-      const painted = banded(sunk, ink, STEP);
-      for (const pct of TABLE_GROUNDS) {
-        const ratio = contrast(painted, banded(sunk, ink, pct));
-        seen.push(ratio);
+      const floor = derived("--table-floor", theme);
+      expect(
+        contrast(theme.tokens["--ink"], floor),
+        `${id} table --ink on --table-floor`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  test("keeps a table header at AA on the bezel's rail", () => {
+    for (const [id, theme] of themeEntries()) {
+      expect(
+        contrast(derived("--table-head-ink", theme), derived("--body", theme)),
+        `${id} table header --table-head-ink on --body`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // A neutral key's label is --ink-soft stepped toward --ink (styles/atoms.css), on the
+  // neutral face; hovered or pressed, it is --ink on that state's face.
+  test("keeps a neutral key's label at AA on its face, hovered and pressed", () => {
+    const step = /--cap-label:\s*color-mix\(in lab, var\(--ink-soft\), var\(--ink\) (\d+)%\)/.exec(
+      readAppCss(),
+    )?.[1];
+    expect(step).toBeDefined();
+    for (const [id, theme] of themeEntries()) {
+      const tokens = theme.tokens;
+      const label = banded(tokens["--ink-soft"], tokens["--ink"], Number(step) / 100);
+      expect(
+        contrast(label, derived("--neutral-face", theme)),
+        `${id} key label on --neutral-face`,
+      ).toBeGreaterThanOrEqual(4.5);
+      for (const face of ["--neutral-face-hover", "--neutral-face-down"]) {
         expect(
-          ratio,
-          `${id} table rule stepped ${STEP * 100}% on --paper-sunk banded ${pct * 100}%`,
-        ).toBeGreaterThan(1.03);
+          contrast(tokens["--ink"], derived(face, theme)),
+          `${id} --ink on ${face}`,
+        ).toBeGreaterThanOrEqual(4.5);
       }
     }
-    // One number, one look. A palette landing well outside the others means the mechanism
-    // stopped being scheme-symmetric, whatever each individual ratio says.
+  });
+
+  // Focus draws no ring and looks exactly like hover, so a hover face is the only place a
+  // keyboard user sees where focus went. Each has to read apart from the face or ground it
+  // leaves by FOUND in CIE76. GLANCE would be the target, but in the lowest-contrast
+  // palettes the --ink label falls under 4.5:1 on any face that far off.
+  const FOUND = 3.5;
+  const HOVER_STEPS: [string, string, string][] = [
+    ["a neutral key or segment", "--neutral-face", "--neutral-face-hover"],
+    ["a chosen key, segment or row", "--neutral-face-down", "--neutral-face-hover"],
+    ["the Contents row being read", "--neutral-face-latched", "--neutral-face-hover"],
+    ["a row in a menu, listbox or panel", "--paper-raised", "--neutral-face-hover"],
+    ["a row in the settings nav", "--group-floor", "--neutral-face-hover"],
+    ["a crumb on the bar", "--body", "--crumb-face-hover"],
+    ["an accent key or the gutter +", "--accent", "--accent-face-hover"],
+    ["a danger key or the preview's close key", "--danger", "--danger-face-hover"],
+    ["a switch's knob", "--knob-face", "--knob-face-hover"],
+  ];
+  test("moves every hover face a findable step off its rest", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const [what, rest, hover] of HOVER_STEPS) {
+        expect(
+          deltaE(derived(rest, theme), derived(hover, theme)),
+          `${id} ${what}`,
+        ).toBeGreaterThanOrEqual(FOUND);
+      }
+    }
+  });
+  // On light paper a hover face darkens, so a step past what FOUND needs reads as a stain
+  // rather than a key rising under the finger. The tightest pair is a chosen key under the
+  // cursor, which steps from the latched face.
+  test("steps a light key's hover face no further than FOUND needs", () => {
+    const light = themeEntries().filter(([, theme]) => theme.scheme === "light");
+    const tightest = Math.min(
+      ...light.map(([, theme]) =>
+        deltaE(derived("--neutral-face-down", theme), derived("--neutral-face-hover", theme)),
+      ),
+    );
+    expect(tightest).toBeLessThan(FOUND + 1);
+  });
+  // A press sinks the key it comes from. On light paper the hover face is the darker, so a
+  // press that fell back to a lighter face would lighten the key under the finger.
+  const PRESSES: [string, string, string][] = [
+    ["a neutral key or row", "--neutral-face-hover", "--neutral-face-press"],
+    ["an accent key", "--accent-face-hover", "--accent-face-press"],
+    ["a danger key", "--danger-face-hover", "--danger-face-press"],
+    ["a switch's knob", "--knob-face-hover", "--knob-face-down"],
+  ];
+  test("never lightens a light key as it is pressed", () => {
+    for (const [id, theme] of themeEntries().filter(([, t]) => t.scheme === "light")) {
+      for (const [what, hover, press] of PRESSES) {
+        expect(luminance(derived(press, theme)), `${id} ${what}`).toBeLessThanOrEqual(
+          luminance(derived(hover, theme)),
+        );
+      }
+    }
+  });
+  test("keeps the accent and danger labels at AA on their hover faces", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const face of ["--accent-face-hover", "--danger-face-hover"]) {
+        expect(
+          contrast(theme.tokens["--accent-ink"], derived(face, theme)),
+          `${id} --accent-ink on ${face}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  // The hairline between body rows is a deliberately faint step off the pane floor: the
+  // rows also read from their own spacing. What is pinned is that it stays visible and
+  // lands at about the same weight on every palette.
+  test("keeps a table's row hairline a faint, evenly-spread step off the pane floor", () => {
+    const seen: number[] = [];
+    for (const [id, theme] of themeEntries()) {
+      const ratio = contrast(derived("--table-floor-rule", theme), derived("--table-floor", theme));
+      seen.push(ratio);
+      expect(ratio, `${id} --table-floor-rule on --table-floor`).toBeGreaterThan(1.03);
+    }
     expect(Math.max(...seen)).toBeLessThan(1.45);
   });
 
-  // The table header is plain --ink-soft on the card's own fill (EXC-1136). The ink is
-  // spent neat — only the GROUND is unusual — which is what separates this from the rules
-  // case above.
-  //
-  // THE FLOOR HERE IS 3:1 AND THAT IS A DELIBERATE, NARROW EXEMPTION. A header cell is
-  // text, so 1.4.3's 4.5:1 would ordinarily bind, and the ink-ramp case further up holds
-  // --ink-soft to exactly that on the two CHROME surfaces. On this ground it does not clear
-  // it everywhere: catppuccin-latte binds at 4.34, 0.16 short. 3:1 ships on the reasoning
-  // that the row is uppercase, short, and sits directly above body copy at full --ink.
-  // Soften the ink at all and latte drops below 4 — measure before touching it.
-  // doc/agents/svelte-rules.md § CSS-token discipline carries the range and the rest of
-  // the argument.
-  test("keeps a table header above the non-text floor on the card's own fill", () => {
+  test("keeps every comment stamp's word at AA on its stamp", () => {
     for (const [id, theme] of themeEntries()) {
-      const ground = banded(theme.tokens["--paper-sunk"], theme.tokens["--ink"], TABLE_CARD_FILL);
-      expect(
-        contrast(theme.tokens["--ink-soft"], ground),
-        `${id} table header --ink-soft on --paper-sunk banded ${TABLE_CARD_FILL * 100}%`,
-      ).toBeGreaterThanOrEqual(3);
+      const recipe = stampRecipe(theme.scheme);
+      const tokens = theme.tokens as Record<string, string>;
+      const toward = (c: string) => tokens[c] ?? c;
+      const well = banded(tokens["--paper-raised"]!, toward(recipe.wellToward), recipe.well);
+      // Accepted is settled, so its floor tints half as far.
+      for (const [hue, settle] of [
+        ["--attention", 1],
+        ["--danger", 1],
+        ["--ok", 0.5],
+      ] as const) {
+        const stamp = banded(well, tokens[hue]!, recipe.floor * settle);
+        const word = banded(tokens[hue]!, toward(recipe.inkToward), recipe.ink);
+        expect(contrast(word, stamp), `${id} ${hue}`).toBeGreaterThanOrEqual(4.5);
+      }
+      expect(contrast(tokens["--ink-soft"]!, well), `${id} expired`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  test("tints an unsent comment's well and keeps its word and text at AA on it", () => {
+    for (const [id, theme] of themeEntries()) {
+      const recipe = stampRecipe(theme.scheme);
+      expect(recipe.unsent, `${theme.scheme} --unsent-floor`).toBeGreaterThan(0);
+      const tokens = theme.tokens as Record<string, string>;
+      const toward = (c: string) => tokens[c] ?? c;
+      const well = banded(tokens["--paper-raised"]!, toward(recipe.wellToward), recipe.well);
+      const floor = banded(well, tokens["--attention"]!, recipe.unsent);
+      const word = banded(tokens["--attention"]!, toward(recipe.inkToward), recipe.ink);
+      expect(contrast(word, floor), `${id} word`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(tokens["--ink-soft"]!, floor), `${id} text`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // Settings recesses each section's rows into a group on --group-floor, so every row's
+  // description sits on it.
+  test("keeps a settings row's description at AA on its group", () => {
+    for (const [id, theme] of themeEntries()) {
+      const group = derived("--group-floor", theme);
+      expect(contrast(theme.tokens["--ink-soft"], group), id).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // A text field draws no focus ring, so the edge it firms to on focus is its focus
+  // indicator and has to stand off the field's floor.
+  test("keeps a focused text field's edge above the non-text floor on its floor", () => {
+    for (const [id, theme] of themeEntries()) {
+      const edge = derived("--field-edge-focus", theme);
+      expect(contrast(edge, derived("--field-floor", theme)), id).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  // A switch's state is where its knob sits, so the knob has to stand off the channel it
+  // rides in, off and on. Dark's knob is a light face. Light's is the raised paper, which
+  // can't stand off a pale well, so its edge does the work and has to clear the face too.
+  test("keeps a switch's knob above the non-text floor in its channel, off and on", () => {
+    for (const [id, theme] of themeEntries()) {
+      const face = derived("--knob-face", theme);
+      const mark = theme.scheme === "dark" ? face : derived("--knob-edge", theme);
+      for (const channel of ["--well-floor", "--switch-on"]) {
+        expect(contrast(mark, derived(channel, theme)), `${id} ${channel}`).toBeGreaterThanOrEqual(
+          3,
+        );
+      }
+      if (theme.scheme === "light") {
+        expect(contrast(mark, face), `${id} edge on face`).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  // The volume meter lights its pips in --ink-soft up to the level, so the lit run is the
+  // value and has to stand off the unlit pips beside it.
+  test("keeps the meter's lit pips above the non-text floor against its unlit ones", () => {
+    for (const [id, theme] of themeEntries()) {
+      const off = derived("--meter-off", theme);
+      expect(contrast(theme.tokens["--ink-soft"], off), id).toBeGreaterThanOrEqual(3);
     }
   });
 

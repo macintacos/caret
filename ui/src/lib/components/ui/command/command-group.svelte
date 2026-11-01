@@ -5,7 +5,7 @@
 	// `headingClass` is caret's addition to the registry source, and a re-sync drops
 	// it silently. The stock heading is styled by the literal classes below and
 	// exposes no override, so a caret surface wanting its own label vocabulary — the
-	// ToC popup's breadcrumb header wears the shared `.eyebrow` atom — has nowhere
+	// ToC popup's breadcrumb header wears the shared `.form-label` atom — has nowhere
 	// to put it. Merged rather than replacing, so the stock look stays the default.
 	// `PlanToc.test.ts` reds when a re-sync reverts it.
 	let {

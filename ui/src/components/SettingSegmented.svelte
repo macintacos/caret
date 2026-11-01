@@ -5,12 +5,9 @@
   // Mode control (Light / Dark / System) is the case it exists for.
   //
   // Composed from the shadcn ToggleGroup (single-select, each option role="radio"),
-  // the same primitive the compare bar's layout/marker controls use. It carries NO
-  // amber, unlike those: in the theme section amber marks which palette is actually
-  // showing (the IN USE pill), so spending it on the mode segment too would flatten
-  // the distinction between what you picked and what that resolves to. The active
-  // segment instead wears the topbar's lifted-chip fill, which is the app's neutral
-  // "this control is engaged" language.
+  // the same primitive the compare bar's layout/marker controls use. The active segment
+  // wears the neutral cap's face, the app's "this control is engaged" language; amber is
+  // kept for the primary action.
   import * as ToggleGroup from "$lib/components/ui/toggle-group/index.js";
   import type { SettingOption } from "$lib/settingsRegistry.ts";
   import Icon from "@/components/Icon.svelte";
@@ -58,41 +55,17 @@
 </div>
 
 <style>
-  /* The track: a hairline-bounded group, transparent at rest, so the segments
-     read as one control without adding a second surface to the pane. */
-  .segmented :global([data-slot="toggle-group"]) {
-    gap: 2px;
-    padding: 2px;
-    border-radius: var(--radius);
-    box-shadow: inset 0 0 0 1px var(--rule);
-  }
-  /* A segment: icon + label, quiet ink-soft at rest. Height matches the
-     SettingSelect trigger beside it in the same pane, so the rows keep one rhythm. */
+  /* A segment: icon + label on a key (styles/atoms.css), the chosen one latched down. */
   .segmented :global([data-slot="toggle-group-item"]) {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
+    /* Matches the SettingSelect trigger beside it in the same pane. */
     height: 1.85rem;
+    /* The settings Field nudges every role="radio" inside it down a pixel (its mt-px is
+       meant for a radio beside its label), which would sit this key low in its bed. */
+    margin: 0;
     padding: 0 0.6rem;
-    border-radius: calc(var(--radius) - 1px);
     font-size: var(--text-sm);
-    color: var(--ink-soft);
-    background: transparent;
-    transition:
-      background-color var(--dur-state) var(--ease-out),
-      color var(--dur-state) var(--ease-out);
-  }
-  /* Hover on an unpressed segment takes the topbar's chip tint — the same
-     neutral hover every other control in the modal uses. */
-  .segmented :global([data-slot="toggle-group-item"][data-state="off"]:hover) {
-    background: var(--chip);
-    color: var(--ink);
-  }
-  /* The pressed segment is the lifted chip: a solid neutral fill and full ink,
-     so which mode is on reads at a glance without opening anything. */
-  .segmented :global([data-slot="toggle-group-item"][data-state="on"]) {
-    background: var(--chip-hover);
-    color: var(--ink);
-    font-weight: 600;
   }
 </style>

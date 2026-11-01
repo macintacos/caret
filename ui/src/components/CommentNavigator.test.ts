@@ -54,9 +54,8 @@ describe("CommentNavigator", () => {
 
   test("marks the active comment as current", () => {
     const { target } = render(CommentNavigator, { ...base, activeId: "a" });
-    const active = target.querySelector(".nav-item.active");
+    const active = target.querySelector('[data-nav-row][aria-current="true"]');
     expect(active).not.toBeNull();
-    expect(active!.getAttribute("aria-current")).toBe("true");
     expect(active!.textContent).toContain("Line 3");
   });
 
@@ -84,7 +83,7 @@ describe("CommentNavigator", () => {
     expect(target.querySelector(".nav-empty")!.textContent).toContain("No inline comments");
   });
 
-  test("marks a draft (unsent scratch) row distinctly but keeps it clickable", () => {
+  test("marks an unsent scratch row distinctly but keeps it clickable", () => {
     const withDraft: CommentIndexEntry[] = [
       { id: "a", line: 3, label: "Line 3", text: "committed", draft: false, linkable: true },
       {
@@ -105,7 +104,7 @@ describe("CommentNavigator", () => {
     const items = target.querySelectorAll<HTMLButtonElement>("[data-nav-row]");
     expect(items[0]!.classList.contains("draft")).toBe(false);
     expect(items[1]!.classList.contains("draft")).toBe(true);
-    expect(items[1]!.querySelector(".nav-draft-tag")!.textContent).toContain("draft");
+    expect(items[1]!.querySelector(".nav-unsent-tag")!.textContent).toContain("unsent");
     // It reveals the same way as a committed comment.
     items[1]!.click();
     expect(revealed?.id).toBe("s:1");

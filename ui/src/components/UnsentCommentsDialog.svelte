@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { PendingItem } from "$lib/feedback.ts";
   import type { IconName } from "$lib/icons.ts";
-  import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { isSubmitChord } from "$lib/keys.ts";
@@ -28,8 +27,8 @@
     /** Whether the verdict's message (comments and notes) reaches the agent. When
      * false the dialog warns instead of promising delivery. */
     delivered?: boolean;
-    /** The verdict's label, e.g. "Approve" or "Reject". Drives the title,
-     * eyebrow, and the confirm button. */
+    /** The verdict's label, e.g. "Approve" or "Reject". Drives the title and the
+     * confirm button. */
     action: string;
     /** One-line sentence describing what the verdict does, always shown. */
     consequence: string;
@@ -76,6 +75,9 @@
 
   let itemCount = $derived(items.length);
   let sentComments = $derived(comments ?? []);
+  // Approve's items are all unsent; Reject's also carry the committed comments it drops.
+  let listedComments = $derived(comments ?? items.filter((item) => !item.unsent));
+  let unsentItems = $derived(comments === undefined ? items.filter((item) => item.unsent) : items);
   let hasQueued = $derived(sentComments.length + itemCount > 0);
   // Only a verdict that sends no comments (Reject) drops feedback another verdict would
   // send, so only it confirms "anyway"; Approve's leftover items are unsaved drafts.
@@ -102,8 +104,8 @@
   }
 </script>
 
-{#snippet list(rows: PendingItem[], label?: string)}
-  <ul class="comments" aria-label={label}>
+{#snippet list(rows: PendingItem[])}
+  <ul class="comments">
     {#each rows as item, i (i)}
       <li class="comment">
         <span class="anchor metric">{item.label}</span>
@@ -118,7 +120,6 @@
   {kind}
   {open}
   {onClosed}
-  eyebrow={action}
   title="{action} this plan?"
   contentClass="guard-content"
   onDismiss={onCancel}
@@ -142,29 +143,26 @@
     {/if}
   {/snippet}
 
-  {#if sentComments.length > 0}
+  {#if listedComments.length > 0}
     <section class="group" aria-labelledby="{uid}-sent">
       <span class="form-label" id="{uid}-sent">
-        {delivered ? "Sent with your approval" : "Your comments"}
+        {comments !== undefined && delivered ? "Sent with your approval" : "Your comments"}
       </span>
-      {@render list(sentComments)}
+      {@render list(listedComments)}
     </section>
   {/if}
-  {#if dropsItems}
-    <!-- A preview of exactly what a plain confirm would leave behind, so the
-         reviewer sees their unsent work before deciding. -->
-    {@render list(items, "Your unsent comments")}
-  {:else if itemCount > 0}
+  {#if unsentItems.length > 0}
     <!-- Request changes' scratch treatment, so the two dialogs read as one form. -->
     <section class="group unsent" aria-labelledby="{uid}-unsent">
       <span class="form-label" id="{uid}-unsent">
+        <Icon name="message-square-more" size={14} />
         Unsent comments
-        <Badge variant="outline" class="tally">{itemCount}</Badge>
+        <span class="tally tally-unsent stamp metric">{unsentItems.length}</span>
       </span>
       <p class="unsent-note">
         Comments you started but never sent. To send one, cancel and save it first.
       </p>
-      {@render list(items)}
+      {@render list(unsentItems)}
     </section>
   {/if}
 
@@ -187,23 +185,26 @@
   {/if}
 
   {#snippet footer()}
-    <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
-    {#if hasQueued}
-      <Button variant="secondary" class="float-chip" onclick={onRequestChanges}>
-        <Icon name="corner-up-left" size={14} />
-        Request changes
+    <span class="tray tray-submit">
+      <Button variant="secondary" class="float-chip" onclick={onCancel}>Cancel</Button>
+      {#if hasQueued}
+        <Button variant="secondary" class="float-chip" onclick={onRequestChanges}>
+          <Icon name="corner-up-left" size={14} />
+          Request changes
+        </Button>
+      {/if}
+      <Button
+        bind:ref={confirmEl}
+        class={comments === undefined ? "cap-danger" : undefined}
+        onclick={() => onConfirm(notes)}
+        onkeydown={onKey}
+        aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}
+      >
+        {#if icon}<Icon name={icon} size={14} />{/if}
+        {confirmLabel}
+        <SubmitCap />
       </Button>
-    {/if}
-    <Button
-      bind:ref={confirmEl}
-      onclick={() => onConfirm(notes)}
-      onkeydown={onKey}
-      aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}
-    >
-      {#if icon}<Icon name={icon} size={14} />{/if}
-      {confirmLabel}
-      <SubmitCap />
-    </Button>
+    </span>
   {/snippet}
 </Modal>
 
@@ -224,18 +225,18 @@
     max-width: min(var(--confirm-dialog-width), calc(100% - 2rem));
   }
 
-  /* Preview of the queued feedback: a quiet sunk container — no accent, which is
-     reserved for actions. Height-capped and scrollable so a long queue never grows
-     the dialog past the viewport. */
+  /* Preview of the queued feedback: hairline rows in a group cut into the sheet, as a
+     Settings section's are. Height-capped and scrollable so a long queue never grows
+     the dialog past the viewport; the cut's shade stays put as the rows scroll under it. */
   .comments {
     list-style: none;
     margin: 0;
-    padding: 0.1rem 0.6rem;
+    padding: 0 0.8rem;
     max-height: 8.5rem;
     overflow-y: auto;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius);
-    background: var(--paper-sunk);
+    border-radius: var(--radius-lg);
+    background: var(--group-floor);
+    box-shadow: var(--panel-recess);
   }
   .comment {
     display: flex;
@@ -251,10 +252,10 @@
      the comment column aligns down the list. */
   .anchor {
     flex: none;
-    min-width: 3.5rem;
+    min-width: 4.75rem;
     font-size: var(--text-2xs);
     font-weight: 600;
-    color: var(--ink-faint);
+    color: var(--ink-soft);
   }
   .text {
     flex: 1 1 auto;
@@ -280,15 +281,19 @@
     align-items: center;
     gap: 0.4rem;
   }
+  .unsent .form-label :global(.icon) {
+    color: color-mix(in lab, var(--attention), var(--stamp-word-toward) var(--stamp-word-mix));
+  }
   .unsent-note {
     margin: 0 0 0.4rem;
     font-size: var(--text-sm);
-    color: var(--ink-faint);
+    color: var(--ink-soft);
   }
-  /* Dashed neutral rail, the source view's Resume-marker idiom: an unsent comment
-     never reads as one that will be sent. */
+  /* The source marker's tinted well: an unsent comment never reads as one that will be
+     sent. */
   .unsent .comments {
-    border-style: dashed;
+    background: color-mix(in lab, var(--well-floor), var(--attention) var(--unsent-floor));
+    box-shadow: var(--well-shade), var(--well-lip);
   }
 
   /* Optional reviewer-notes field (EXC-791), reusing the request-changes form

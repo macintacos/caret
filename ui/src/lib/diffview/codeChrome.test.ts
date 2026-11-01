@@ -2,7 +2,7 @@ import "@ui/support/setup.ts";
 import { describe, expect, test } from "bun:test";
 
 import { fillLines, scrolledOffsetReader } from "@ui/support/diffview-dom.ts";
-import { CARD_ATTR } from "$lib/diffview/codeBlockScroll.ts";
+import { CARD_ATTR, REFLOW_ATTR } from "$lib/diffview/codeBlockScroll.ts";
 import {
   codeBlockAtPoint,
   codeChromeAnchors,
@@ -24,9 +24,9 @@ function makeHost(lineCount: number): HTMLElement {
   return host;
 }
 
-/** Moves lines `start`..`end` into a scroll card, as codeBlockScroll.ts does for an
- * overflowing block — the shape that makes the block's rows non-direct children. */
-function wrapInCard(host: HTMLElement, start: number, end: number): void {
+/** Moves lines `start`..`end` into a card, as codeBlockScroll.ts does for every block —
+ * the shape that makes the block's rows non-direct children. Returns the card. */
+function wrapInCard(host: HTMLElement, start: number, end: number): HTMLElement {
   const content = host.shadowRoot?.querySelector("[data-content]") as HTMLElement;
   const rows = [];
   for (let n = start; n <= end; n++) {
@@ -36,6 +36,12 @@ function wrapInCard(host: HTMLElement, start: number, end: number): void {
   card.setAttribute(CARD_ATTR, String(start));
   content.insertBefore(card, rows[0] ?? null);
   for (const row of rows) card.appendChild(row);
+  return card;
+}
+
+function stubWidths(el: HTMLElement, scrollWidth: number, clientWidth: number): void {
+  Object.defineProperty(el, "scrollWidth", { configurable: true, value: scrollWidth });
+  Object.defineProperty(el, "clientWidth", { configurable: true, value: clientWidth });
 }
 
 // Lays each row on a vertical grid: row n spans y [ (n-1)*10, n*10 ], x [100, 300]. A card
@@ -84,7 +90,7 @@ describe("codeBlockAtPoint", () => {
     expect(codeBlockAtPoint(host, ranges, 150, 65, POINT_READER)).toEqual({ start: 6, end: 8 });
   });
 
-  test("hits an overflowing block through its scroll card", () => {
+  test("hits a carded block through its card", () => {
     const host = makeHost(8);
     wrapInCard(host, 2, 4);
     // The card spans y [10,60], x [100,250].
@@ -118,8 +124,8 @@ describe("codeChromeAnchors", () => {
         read,
       ),
     ).toEqual([
-      { start: 1, top: 0, left: 300, carded: false },
-      { start: 6, top: 50, left: 300, carded: false },
+      { start: 1, top: 0, left: 300, wrappable: false },
+      { start: 6, top: 50, left: 300, wrappable: false },
     ]);
   });
 
@@ -129,7 +135,7 @@ describe("codeChromeAnchors", () => {
     const read = scrolledOffsetReader(scroller);
     // top = 100 - (5 - 50) = 145 ; left = 300 - (8 - 10) = 302
     expect(codeChromeAnchors(host, scroller, [{ start: 1, end: 3 }], read)).toEqual([
-      { start: 1, top: 145, left: 302, carded: false },
+      { start: 1, top: 145, left: 302, wrappable: false },
     ]);
   });
 
@@ -137,9 +143,29 @@ describe("codeChromeAnchors", () => {
     const host = makeHost(8);
     wrapInCard(host, 2, 4);
     const scroller = document.createElement("div");
-    expect(codeChromeAnchors(host, scroller, [{ start: 2, end: 4 }], gridReader(scroller))).toEqual(
-      [{ start: 2, top: 10, left: 250, carded: true }],
-    );
+    expect(
+      codeChromeAnchors(host, scroller, [{ start: 2, end: 4 }], gridReader(scroller)).map(
+        ({ top, left }) => ({ top, left }),
+      ),
+    ).toEqual([{ top: 10, left: 250 }]);
+  });
+
+  test("offers the wrap on a card that overflows or is wrapped, not on one that fits", () => {
+    const host = makeHost(10);
+    const wide = wrapInCard(host, 1, 3);
+    const fits = wrapInCard(host, 6, 8);
+    stubWidths(wide, 500, 200);
+    stubWidths(fits, 200, 200);
+    const scroller = document.createElement("div");
+    const ranges = [
+      { start: 1, end: 3 },
+      { start: 6, end: 8 },
+    ];
+    const wrappable = () =>
+      codeChromeAnchors(host, scroller, ranges, gridReader(scroller)).map((a) => a.wrappable);
+    expect(wrappable()).toEqual([true, false]);
+    fits.setAttribute(REFLOW_ATTR, "");
+    expect(wrappable()).toEqual([true, true]);
   });
 
   test("skips a block whose rows are not rendered", () => {
@@ -172,11 +198,6 @@ describe("preview code chrome", () => {
     return { root, pres };
   }
 
-  function stubWidths(pre: HTMLElement, scrollWidth: number, clientWidth: number): void {
-    Object.defineProperty(pre, "scrollWidth", { configurable: true, value: scrollWidth });
-    Object.defineProperty(pre, "clientWidth", { configurable: true, value: clientWidth });
-  }
-
   // The first pre spans y [10,30], the second y [50,70], both x [100,300].
   function previewReader(pres: readonly Element[], scroller: HTMLElement): RectReader {
     return (el) => {
@@ -195,22 +216,22 @@ describe("preview code chrome", () => {
     const read = previewReader(pres, scroller);
     // top = 10 - (5 - 50) = 55 ; left = 300 - (8 - 10) = 302
     expect(previewCodeChromeAnchors(root, scroller, new Set(), read)).toEqual([
-      { start: 3, top: 55, left: 302, carded: false, text: "a" },
-      { start: 8, top: 95, left: 302, carded: false, text: "b" },
+      { start: 3, top: 55, left: 302, wrappable: false, text: "a" },
+      { start: 8, top: 95, left: 302, wrappable: false, text: "b" },
     ]);
     root.remove();
   });
 
-  test("cards an overflowing block and a wrapped one, not a fitting one", () => {
+  test("offers the wrap on an overflowing block and a wrapped one, not a fitting one", () => {
     const { root, pres } = mountPreview();
     const scroller = document.createElement("div");
     stubWidths(pres[0]!, 500, 200);
     stubWidths(pres[1]!, 200, 200);
     const read = previewReader(pres, scroller);
-    const carded = (reflowed: ReadonlySet<number>) =>
-      previewCodeChromeAnchors(root, scroller, reflowed, read).map((a) => a.carded);
-    expect(carded(new Set())).toEqual([true, false]);
-    expect(carded(new Set([8]))).toEqual([true, true]);
+    const wrappable = (reflowed: ReadonlySet<number>) =>
+      previewCodeChromeAnchors(root, scroller, reflowed, read).map((a) => a.wrappable);
+    expect(wrappable(new Set())).toEqual([true, false]);
+    expect(wrappable(new Set([8]))).toEqual([true, true]);
     root.remove();
   });
 

@@ -380,6 +380,58 @@ test("arrow keys move the focus ring without opening, Enter opens", async ({ dae
   }
 });
 
+/** A tree row's face, and whether it or its `::before`, where the library draws its focus
+ * ring, paints an outline. */
+function rowLook(target: Locator): Promise<{ face: string; ringed: boolean }> {
+  return target.evaluate((el) => {
+    const drawn = (s: CSSStyleDeclaration) =>
+      s.outlineStyle !== "none" && Number.parseFloat(s.outlineWidth) > 0;
+    return {
+      face: getComputedStyle(el).backgroundColor,
+      ringed: drawn(getComputedStyle(el)) || drawn(getComputedStyle(el, "::before")),
+    };
+  });
+}
+
+/** What a custom property resolves to as a background color. */
+function tokenColor(page: Page, name: string): Promise<string> {
+  return page.evaluate((n) => {
+    const probe = document.body.appendChild(document.createElement("div"));
+    probe.style.backgroundColor = `var(${n})`;
+    const color = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return color;
+  }, name);
+}
+
+test("a row clicked with the pointer rests latched, and the keyboard's next row rises, unringed", async ({
+  daemon,
+  page,
+}) => {
+  // The library flags a row focused on any DOM focus, a click's included, so the rise
+  // has to follow how focus arrived rather than that flag. Focus draws no ring either way.
+  const proj = await makeProject(NESTED);
+  try {
+    await openCard(daemon, page, proj.dir);
+    const clicked = page.locator(row("lib/"));
+    await clicked.click();
+    await expect(page.locator(row("lib/util.ts"))).toBeVisible();
+    await expect(clicked).toHaveAttribute("data-item-focused", "true");
+    await page.mouse.move(0, 0);
+    const latched = { face: await tokenColor(page, "--neutral-face-down"), ringed: false };
+    await expect.poll(() => rowLook(clicked)).toEqual(latched);
+
+    await waitPastSafeModeGrace(page);
+    await page.keyboard.press("ArrowDown");
+    await expect(clicked).not.toHaveAttribute("data-item-focused", "true");
+    const next = page.locator(`${rows}[data-item-focused="true"]`);
+    const risen = { face: await tokenColor(page, "--neutral-face-hover"), ringed: false };
+    await expect.poll(() => rowLook(next)).toEqual(risen);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 test("a click inside the card leaves it open, a click outside closes it", async ({
   daemon,
   page,

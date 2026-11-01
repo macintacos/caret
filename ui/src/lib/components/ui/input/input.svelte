@@ -37,8 +37,6 @@
 			"transition-[color,box-shadow] focus-visible:outline-hidden",
 			// Disabled
 			"disabled:cursor-not-allowed disabled:opacity-50",
-			// Focus ring
-			"focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
 			// Invalid state
 			"aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
 			className
@@ -65,8 +63,6 @@
 			"transition-[color,box-shadow] focus-visible:outline-hidden",
 			// Disabled
 			"disabled:cursor-not-allowed disabled:opacity-50",
-			// Focus ring
-			"focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
 			// Invalid state
 			"aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
 			className

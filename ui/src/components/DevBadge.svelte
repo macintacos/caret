@@ -13,7 +13,7 @@
 {#if isDev}
   <Badge
     variant="secondary"
-    class="dev-badge metric float-chip"
+    class="dev-badge metric stamp"
     style="color: var(--ink-soft)"
     title="Running from a local source build (mise run dev) — not an installed release"
   >
