@@ -167,18 +167,18 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
   --cap-label-hover: var(--accent-ink);
 }
 .cap-danger {
-  --cap-face: var(--danger);
+  --cap-face: var(--danger-face);
   --cap-face-hover: var(--danger-face-hover);
-  --cap-face-down: var(--danger);
+  --cap-face-down: var(--danger-face);
   --cap-face-press: var(--danger-face-press);
   --cap-label: var(--accent-ink);
   --cap-label-hover: var(--accent-ink);
 }
 .cap-danger-hover:not(:disabled):is(:hover, :focus-visible, :active, [data-key-pressed]) {
-  --cap-face-hover: var(--danger);
-  --cap-face-down: var(--danger);
-  --cap-face-press: var(--danger);
-  --cap-label-hover: var(--paper);
+  --cap-face-hover: var(--danger-face);
+  --cap-face-down: var(--danger-face);
+  --cap-face-press: var(--danger-face-press);
+  --cap-label-hover: var(--accent-ink);
 }
 .cap-accent,
 .cap-danger,

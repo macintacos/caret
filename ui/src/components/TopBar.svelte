@@ -367,7 +367,7 @@
   }
 
   /* The X glyph reads danger-red at rest (the reject affordance); on hover the chip
-     fills with danger, so the glyph flips to the paper ink to stay legible on it. */
+     fills with danger, so the glyph flips to the key's label ink to stay legible on it. */
   .actions :global(.reject .icon) {
     color: var(--danger);
   }

@@ -3187,7 +3187,7 @@
     --plus-face: var(--accent-face-hover);
   }
   .preview-plus > button:active {
-    --plus-face: var(--accent);
+    --plus-face: var(--accent-face-press);
     translate: 0 var(--key-sink);
     background-image: linear-gradient(var(--tinted-foot), transparent 40%), var(--grain);
     box-shadow:

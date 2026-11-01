@@ -123,8 +123,10 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   segment is a resting key that hovers and presses.
 - **Caps.** `.float-chip` is the neutral cap, and every neutral control wears it. The
   amber primary wears `.cap-accent`, which the vendored Button's default variant applies.
-  A destructive confirm, such as Reject anyway, wears `.cap-danger`; the top bar's Reject
-  stays neutral and takes the danger face on hover (`.cap-danger-hover`). One cap rule in
+  A destructive confirm, such as Reject anyway, wears `.cap-danger`, which rests on
+  `--danger-face`: in light that is the danger stepped toward black, so its label holds AA
+  in Dawnfox. The top bar's Reject stays neutral and takes the danger key's face and label
+  under the pointer, keyboard focus and a press (`.cap-danger-hover`). One cap rule in
   `atoms.css` paints every cap and every segment of a toggle group. A cap is a soft rubber
   key:
   - Its face is domed: a lift along its top (`--cap-lift`), kept above the label, and a
@@ -164,12 +166,17 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   (below).
   - Add `:focus-visible` beside every `:hover` rule, and give a focusable control with no
     hover look one.
-  - A hover face is the only mark of keyboard focus, so it reads at least 3.5 CIE76 ΔE
-    (colour difference) off its rest in every palette, which `theme.test.ts` pins. In
-    light it steps no further than that, because a darker hover reads as disabled rather
-    than raised. On a risen face only `--ink` holds AA, so quieter text there steps up to
-    `--ink`. A glyph there needs only 3:1, so it steps to a neutral key's label ink and
-    stays a rung under the text.
+  - A hover face is the only mark of keyboard focus, so it reads at least 4.5 CIE76 ΔE
+    (colour difference) off its rest in every palette, as the browser mixes it, which
+    `theme.test.ts` pins. In light it steps no further than its tightest pair, the cursor
+    on a chosen row, needs to clear that floor, because a darker hover reads as disabled
+    rather than raised. It steps toward black rather than `--ink`, so every light palette
+    moves the same distance. On a risen face only `--ink` holds AA, so quieter text there
+    steps up to `--ink`. A glyph there needs only 3:1, so it steps to a neutral key's
+    label ink and stays a rung under the text.
+  - The cursor on a latched face, such as the Contents row being read or the latched
+    compare toggle, takes `--neutral-face-latched-hover`. In light that is the latched
+    face stepped toward black, because the plain hover face is lighter than it there.
   - A control that shows only under the pointer, such as the gutter "+", stays while it
     holds keyboard focus.
   - `base.css` drops the browser's outline. In a shadow root, drop it in the root's own
@@ -221,9 +228,10 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
     site, because `PlanToc` draws its own key inside the item;
   - the Settings nav, the theme list, the version picker, the breadcrumb menu, whose
     headings on the trail latch (the crumbs in the bar borrow only the risen state, on
-    `--crumb-face-hover`, which in light is the white face the bar's keys rest on, and
-    never latch; the current crumb is marked by weight), the comment navigator and the cwd
-    path;
+    `--crumb-face-hover`, and never latch; the current crumb is marked by weight), the
+    comment navigator and the cwd path. In light the crumb's face is the white face the
+    bar's keys rest on. In dark it steps further toward `--ink` than the hover face,
+    because some palettes lift the bar close to the hover face;
   - the folder tree, a shadow-DOM list that wears the `--key-row-*` tokens directly, with
     a `:focus-visible` row risen and the chosen row latched. It keys on `:focus-visible`
     rather than the library's `data-item-focused`, so a pointer click never raises the
@@ -237,9 +245,10 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   the `--key-row-*` rise and press, so it stands as low as every other key row. It rises
   from its indent onward, and latches onto `--neutral-face-latched` while it is the
   section being read, an open exception to the accent rule
-  ([`decisions.md`](decisions.md)). A key row's keyboard indicator is its hover look, so
-  the row the keys move to looks exactly like the row the pointer moves to. A chosen row
-  under the highlight stays down on the hover face, so the highlight reads on it too.
+  ([`decisions.md`](decisions.md)). The cursor on it takes `--neutral-face-latched-hover`.
+  A key row's keyboard indicator is its hover look, so the row the keys move to looks
+  exactly like the row the pointer moves to. A chosen row under the highlight stays down
+  on the hover face, so the highlight reads on it too.
 - **Setting groups.** Each Settings section's rows sit in a bed on `--group-floor` with
   `--bed-shade`, rounded at `--key-radius` plus `--well-pad` plus `--group-pad`, parted by
   space with no hairline. The nav's sections share one bed (`.tray` on `--group-floor`),

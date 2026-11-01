@@ -34,17 +34,18 @@ The derived tier, colours a palette implies rather than sets (`--chip`, `--chip-
 `--pad-top` and side `--pad-side`, and the tactile kit's `--well-floor`, `--field-floor`,
 `--group-floor` (the settings beds and nav, the modal footer shelf, and a dialog's
 read-only cuts), `--field-edge-focus` (a focused field's lit wall, `--ink-faint`), the
-`--neutral-face` steps (with `--neutral-face-press`, the face a press takes), a crumb's
-risen face `--crumb-face-hover`, the key row's `--key-row-up`, `--key-row-up-image`,
-`--key-row-down` and `--key-row-down-image`, the accent and danger keys' hover and press
-faces `--accent-face-hover`, `--accent-face-press`, `--danger-face-hover` and
-`--danger-face-press`, the switch's `--knob-face`, `--knob-face-hover`,
-`--knob-face-down`, `--knob-edge` and `--switch-on`, the meter's `--meter-off`, and the
-`--float-surface-low`, `-mid` and `-high` composites), is mixed in
-`ui/src/styles/derived.css`. In light, the top bar, control row and status bar re-cut
-`--well-floor` from `--body`, so a stamp's or a count chip's pocket stays visible on it.
-Focus has no token of its own, since it wears each control's hover faces. shadcn-svelte's
-token names map onto these roles in `ui/src/styles/shadcn-bridge.css`.
+`--neutral-face` steps (with `--neutral-face-press`, the face a press takes, and
+`--neutral-face-latched-hover`, the face the cursor gives a latched one), a crumb's risen
+face `--crumb-face-hover`, the key row's `--key-row-up`, `--key-row-up-image`,
+`--key-row-down` and `--key-row-down-image`, the danger key's face `--danger-face`, the
+accent and danger keys' hover and press faces `--accent-face-hover`,
+`--accent-face-press`, `--danger-face-hover` and `--danger-face-press`, the switch's
+`--knob-face`, `--knob-face-hover`, `--knob-face-down`, `--knob-edge` and `--switch-on`,
+the meter's `--meter-off`, and the `--float-surface-low`, `-mid` and `-high` composites),
+is mixed in `ui/src/styles/derived.css`. In light, the top bar, control row and status bar
+re-cut `--well-floor` from `--body`, so a stamp's or a count chip's pocket stays visible
+on it. Focus has no token of its own, since it wears each control's hover faces.
+shadcn-svelte's token names map onto these roles in `ui/src/styles/shadcn-bridge.css`.
 
 ## Type, motion, radius, depth
 
