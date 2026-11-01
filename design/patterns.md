@@ -88,15 +88,18 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `--key-radius` for keys and key rows, `--radius` for fields. The outer shape rounds at
   that plus the inset, as a bed rounds at `--key-radius` plus `--well-pad`. Where the
   outer radius would leave the inner one at zero or less, the inner shape keeps its kit
-  radius and the outer one grows to that radius plus the inset.
-  `test/e2e/concentric.e2e.ts` holds each of these to half a pixel:
+  radius and the outer one grows to that radius plus the inset. A setting group is the one
+  exception. Its padding, `--group-pad`, is so wide that you can't compare the gap at its
+  corner with the gap along its sides, and the concentric radius, 25px, made the group
+  much rounder than the keys inside it. The group is a bed, so it rounds as one:
+  `--key-radius` plus `--well-pad`, 11px. `test/e2e/concentric.e2e.ts` holds the group and
+  each of these to half a pixel:
   - a modal with a footer shelf rounds at its tray's corner (`--key-radius` plus
     `--well-pad`) plus the shelf's padding;
   - Settings, which has no shelf, rounds at its search field's `--radius` plus the rail
     header's padding;
   - the comment composer rounds at `--composer-radius`: its tray's corner plus
     `--composer-inset`, its padding;
-  - a setting group rounds at its controls' tray corner plus `--group-pad`;
   - a menu, the Select listbox, and the Contents and heading-filter panels round at
     `--key-radius` plus the inset round their rows. Their filter field's inset is the
     panel's radius less `--radius`;

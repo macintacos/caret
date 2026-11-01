@@ -549,8 +549,8 @@
     --group-pad: 0.9rem;
     gap: 0;
     padding: 0 var(--group-pad);
-    /* A control's bed rests --group-pad in from the group's corner. */
-    border-radius: calc(var(--key-radius) + var(--well-pad) + var(--group-pad));
+    /* Rounds as a bed, not concentric with its controls: --group-pad is too wide an inset. */
+    border-radius: calc(var(--key-radius) + var(--well-pad));
     background: var(--group-floor);
     box-shadow: var(--bed-shade);
   }

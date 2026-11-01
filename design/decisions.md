@@ -62,6 +62,15 @@ Open items first, then the log, newest first.
   waiting on the user's verdict.
   - `--ink-faint` line numbers in the file preview's gutter, 3.10:1 on Dawnfox's paper.
 
+## 2026-11-01: a setting group rounds as a bed
+
+A setting group now rounds at 11px, the radius every bed takes (`--key-radius` plus
+`--well-pad`), where it rounded at 25px. The user said its corner was "way too round", and
+asked to bring it "closer to the corner radius that is used for the buttons". It is the
+one shape that breaks the nested-corners rule. The group's padding, `--group-pad`, is wide
+enough that the gap at its corner can't be compared with the gap along its sides, so
+matching them made the group much rounder than its keys.
+
 ## 2026-11-01: a light hover lifts, and the last corners and labels
 
 The 2026-10-31 focus pass made a hovered key or menu row in light a mid-grey slab. It was

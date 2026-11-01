@@ -164,7 +164,7 @@ test("a thread's cards nest in its recess, and so does the composer editing its 
   await expectConcentric(thread, composer, "br");
 });
 
-test("Settings: the search field nests in the panel's corner, and the controls in their groups", async ({
+test("Settings: the search field nests in the panel's corner, and a group rounds as its beds do", async ({
   daemon,
   page,
 }) => {
@@ -175,9 +175,10 @@ test("Settings: the search field nests in the panel's corner, and the controls i
     dialog.locator(".settings-search [data-slot='input-group']"),
     "tl",
   );
+  // The group's padding is too wide for a concentric corner to read: it would round at 25px.
   const group = dialog.locator(".fields").first();
-  await expectConcentric(group, group.locator("[data-slot='toggle-group']").first(), "tr");
-  await expectConcentric(group, group.locator(".tray").last(), "br");
+  const radius = (l: Locator) => l.evaluate((el) => getComputedStyle(el).borderTopRightRadius);
+  expect(await radius(group)).toBe(await radius(group.locator(".tray").last()));
 });
 
 test("Settings at a narrow width: the section picker's bed nests in the panel's corner", async ({
