@@ -577,6 +577,8 @@ class PreviewWindow {
     if (this.dom === null) {
       const shell = previewShell();
       shell.dom.id = PANEL_ID;
+      // Unplaced, it sits at its static position below the page until the first write.
+      shell.dom.style.visibility = "hidden";
       document.body.appendChild(shell.dom);
       this.dom = shell.dom;
       this.titleEl = shell.title;
