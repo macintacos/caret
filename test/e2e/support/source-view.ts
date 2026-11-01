@@ -290,7 +290,10 @@ export async function wheelPlan(page: Page, dy: number, over = PLAN_SURFACE): Pr
 export function sourceTopLine(page: Page): Promise<number | null> {
   return page.evaluate(
     ({ surface, offset }) => {
-      const top = (document.querySelector(surface) as HTMLElement).getBoundingClientRect().top;
+      // Null while the surface mounts after a navigation: a throw would end the poll.
+      const scroller = document.querySelector(surface);
+      if (scroller === null) return null;
+      const top = scroller.getBoundingClientRect().top;
       const sh = (document.querySelector(".diffview") as HTMLElement)?.shadowRoot;
       const row = [...(sh?.querySelectorAll("[data-line]") ?? [])].find(
         (r) => r.getBoundingClientRect().bottom > top + offset,
@@ -308,7 +311,9 @@ export function previewTopBlock(
 ): Promise<{ start: number; end: number; top: number } | null> {
   return page.evaluate(
     ({ surface, preview, offset }) => {
-      const top = (document.querySelector(surface) as HTMLElement).getBoundingClientRect().top;
+      const scroller = document.querySelector(surface);
+      if (scroller === null) return null;
+      const top = scroller.getBoundingClientRect().top;
       const block = [...document.querySelectorAll<HTMLElement>(`${preview} > div`)].find(
         (b) => b.getBoundingClientRect().bottom > top + offset,
       );
