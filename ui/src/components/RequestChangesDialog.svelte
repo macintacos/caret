@@ -510,8 +510,6 @@
   .context-label {
     font-size: var(--text-2xs);
     font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
     color: var(--ink-soft);
   }
   /* Every block of quoted text in the dialog — a comment's own text, the source

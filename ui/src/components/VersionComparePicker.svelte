@@ -327,8 +327,6 @@
   .lbl {
     color: var(--ink-soft);
     font-size: var(--text-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
   }
   .arrow {
     color: var(--ink-faint);

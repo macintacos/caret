@@ -385,3 +385,42 @@ test("a dropdown menu shows one risen row when the keyboard leaves the row under
   await expect(rows.nth(1)).toHaveAttribute("data-highlighted", "");
   await expect.poll(() => pointed.evaluate((el) => getComputedStyle(el).translate)).toBe("none");
 });
+
+// A ghost control has no face of its own, so its hover is a wash over whatever surface it
+// sits on: on light paper it can only darken the lifted card, never punch a pale hole in it.
+test("a saved comment's delete control hovers darker than the lifted card on light paper", async ({
+  daemon,
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  const id = await daemon.seed();
+  await daemon.putDraft(id, {
+    annotations: [{ id: "ann-1", startLine: 7, endLine: 8, comment: "Configurable TTL?" }],
+  });
+  await page.goto("/");
+  await planSurface(page);
+  const control = page
+    .locator("[data-annotation-card='ann-1']")
+    .getByRole("button", { name: "Discard comment" });
+  await control.hover();
+  // The control's painted face: its wash composited over the card's settled face.
+  const [cardL, controlL] = await control.evaluate(async (el) => {
+    const host = el.closest<HTMLElement>("[data-annotation-card]");
+    if (host === null) throw new Error("no card");
+    await new Promise(requestAnimationFrame);
+    await Promise.all(host.getAnimations({ subtree: true }).map((a) => a.finished.catch(() => {})));
+    const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+    if (ctx === null) throw new Error("no 2d context");
+    const luma = () => {
+      const [r = 0, g = 0, b = 0] = ctx.getImageData(0, 0, 1, 1).data;
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    ctx.fillStyle = getComputedStyle(host).backgroundColor;
+    ctx.fillRect(0, 0, 1, 1);
+    const under = luma();
+    ctx.fillStyle = getComputedStyle(el).backgroundColor;
+    ctx.fillRect(0, 0, 1, 1);
+    return [under, luma()];
+  });
+  expect(controlL).toBeLessThan(cardL);
+});

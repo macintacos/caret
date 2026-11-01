@@ -62,6 +62,24 @@ Open items first, then the log, newest first.
   waiting on the user's verdict.
   - `--ink-faint` line numbers in the file preview's gutter, 3.10:1 on Dawnfox's paper.
 
+## 2026-11-01: a ghost hover washes its surface, and stamps take sentence case
+
+- **A ghost control's hover is a wash of ink:** the vendored ghost Button's hover,
+  keyboard focus and open menu paint `--ink-wash`, 8% ink over whatever the control sits
+  on. It painted the opaque `bg-muted`, which in light is paler than a saved comment's
+  lifted card, so the card's delete control turned paler than the card under the pointer.
+  A wash darkens any surface in light and lightens it in dark, and the delete glyph still
+  turns `--danger`. The card's header chip takes no wash: it fills the header, and the
+  card's lift already shows the pointer or the keys are on it. The composer's Cancel and
+  Keep for later are ghost Buttons, so they take the wash too.
+- **Stamps and labels take sentence case:** the `.tag` stamp ("Folder", "Preview", "In
+  use") drops its spaced capitals and keeps its pill, size, weight and ink. So do the
+  version compare labels, a thread's comment count, the comment navigator's title, the
+  Request changes dialog's "Context" label, and the table header in both the source view
+  and the preview. A key's legend (the letters on a shortcut keycap, such as `ESC`) stays
+  in capitals, because it mirrors the key. `ui/src/lib/sentence-case.test.ts` fails on any
+  CSS rule in `ui/src` that sets `text-transform: uppercase`, except the key legend's.
+
 ## 2026-11-01: a setting group rounds as a bed
 
 A setting group now rounds at 11px, the radius every bed takes (`--key-radius` plus

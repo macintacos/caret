@@ -1478,21 +1478,15 @@ const CARET_OVERRIDES = `
     background-position: bottom;
   }
 
-  /* THE HEADER IS A CAP, NOT A SHOUT, pressed into the bezel's rail. Uppercase and a step
-     back from --ink label the columns more quietly than weight would. --table-head-ink
-     rather than --ink-soft, which misses AA on --body on the palest palettes.
-
-     On a monospace face uppercase costs the grid nothing — every glyph carries the same
-     advance width as the lowercase it replaces — and text-transform is a rendering-time
-     transform that never reaches textContent, so a copied table still yields the source
-     header. No font-size and no letter-spacing for the same grid reason turned the other
-     way: a header on a different advance width would set its columns on a different grid.
+  /* The header is pressed into the bezel's rail, a step back from --ink, which labels the
+     columns more quietly than weight would. --table-head-ink rather than --ink-soft, which
+     misses AA on --body on the palest palettes. No font-size and no letter-spacing: a
+     header on a different advance width would set its columns on a different grid.
 
      The ink is set here rather than routed through shiki's fontStyle, because
      @pierre/diffs carries that into an invalid font-weight: light-dark(...) and drops it
      (EXC-867's standing upstream finding). */
   [data-content] > [data-table-card] > [data-line][data-table-head] {
-    text-transform: uppercase;
     color: var(--table-head-ink);
     text-shadow: var(--label-pressed);
   }

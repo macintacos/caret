@@ -32,7 +32,9 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - **A dialog labels its fields and sections in sentence case** (`.form-label`), at
   `--text-sm`, weight 600, `--ink-soft`, as Settings heads its sections. "(optional)"
   follows the label at body weight. The shortcut groups and the Contents panel's
-  breadcrumb headers wear it too, so no section label is set in capitals.
+  breadcrumb headers wear it too. No label or stamp is styled in capitals; only a key's
+  legend (the letters on a shortcut keycap, such as `ESC`) is, because it mirrors the key.
+  `ui/src/lib/sentence-case.test.ts` fails on a new label styled in capitals.
 - **Read-only text inside a dialog**, such as the compiled preview and the context lines,
   sits in a cut on `--group-floor`.
 - **The window is a body, and the plan is a pane set into it.** Every control is cut into
@@ -151,9 +153,12 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   springs back past rest (`--ease-spring`). A toggle that is on (`aria-pressed`) stays
   down and shows a small amber light with a soft glow in its corner, so a latch reads
   apart from a press. A disabled cap sits at its place, with no rise and a 1px side, and
-  the Button fades it. A ghost control (`.cap-ghost`) has no cap, so a press leaves a
-  shallow inset shadow instead. Under reduced motion `--key-rise` and `--key-sink` are 0,
-  so no key moves and only its shading changes.
+  the Button fades it. A ghost control (`.cap-ghost`) has no cap. Its hover is
+  `--ink-wash`, a tint of ink over whatever it sits on, so it darkens a light surface and
+  lightens a dark one. A saved comment's header chip, which fills a card that lifts, takes
+  no wash: the lift shows the hover. A press leaves a shallow inset shadow. Under reduced
+  motion `--key-rise` and `--key-sink` are 0, so no key moves and only its shading
+  changes.
 - **Focus is the hover.** A control under keyboard focus wears exactly its hover look and
   draws no ring: no outline, halo, inset ring or glow. Text fields are the exception
   (below).
@@ -183,8 +188,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   pocket. Unlike a bed, a pocket has a darker floor (`--well-floor`) and its own shade and
   lip (`--well-shade`, `--well-lip`), and holds no cap. A passive status mark, such as the
   Notifications bell, sits in a pocket too, and a state word beside it takes the comment
-  stamps' word ink. `.tag` is the stamp that names a kind in small caps: Folder, Preview
-  and Settings' "In use". Text fields (`.field-well`) take a shallower cut,
+  stamps' word ink. `.tag` is the stamp that names a kind, in sentence case: Folder,
+  Preview and Settings' "In use". Text fields (`.field-well`) take a shallower cut,
   `--panel-recess`, with no ink ring.
 - **Settled values are stamped.** A committed value leaves its field for a `.stamp` set on
   the field's exact pixels, so committing changes only the material. The committed search

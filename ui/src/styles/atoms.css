@@ -221,7 +221,7 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
   box-shadow: var(--well-shade), var(--well-lip);
   color: var(--ink-soft);
 }
-/* A tag is a stamp that names a kind in small caps: a reference surface's "Folder" or
+/* A tag is a stamp that names a kind: a reference surface's "Folder" or
    "Preview", Settings' "In use". Every tag in a header shares this one recipe. */
 :is(.tag, .ref-badge) {
   padding: 0.1rem 0.45rem;
@@ -232,8 +232,6 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
   font-family: var(--font-sans);
   font-size: var(--text-2xs);
   font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
 /* A status light: a lit LED in its state's colour (--led), bright toward its top, darker

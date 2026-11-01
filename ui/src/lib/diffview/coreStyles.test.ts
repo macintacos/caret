@@ -1936,7 +1936,7 @@ describe("tables (EXC-864)", () => {
   // The hairline under every body row, a background LAYER rather than a fill.
   const hairlineRule = cardRows.find((r) => r.includes("background-image:"));
   const headCap = rulesFor(String.raw`\[data-line\]\[data-table-head\]`).find((r) =>
-    r.includes("text-transform:"),
+    r.includes("text-shadow:"),
   );
   const headTokens = rulesFor(String.raw`\[data-line\]\[data-table-head\][^{}]*`).find((r) =>
     r.includes("data-table-pipe"),
@@ -2350,10 +2350,8 @@ describe("tables (EXC-864)", () => {
     expect(slotOverride).toMatch(/:nth-child\(2 of \[data-column-number\]\)/);
   });
 
-  test("caps the header in subdued small-caps, pressed into the rail", () => {
-    // Uppercase plus a step back in the ink says "these are labels" quietly, where bold
-    // would shout it.
-    expect(headCap).toMatch(/text-transform:\s*uppercase/);
+  test("sets the header a step back in ink, pressed into the rail", () => {
+    // A step back in the ink says "these are labels" quietly, where bold would shout it.
     expect(headCap).toMatch(/color:\s*var\(--table-head-ink\)/);
     expect(headCap).toMatch(/text-shadow:\s*var\(--label-pressed\)/);
     // No font-size and no letter-spacing: a header on a different advance width would
