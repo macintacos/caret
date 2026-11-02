@@ -90,7 +90,7 @@ function stolenRightEdges(locator: Locator): Promise<string[]> {
   );
 }
 
-test("the edge takes the gap's clicks and none of the plan's, the rows' or the Hide key's", async ({
+test("the edge takes the gap's clicks and none of the plan's, the rows' or the column's outline key's", async ({
   daemon,
   page,
 }) => {
@@ -118,6 +118,32 @@ test("the edge takes the gap's clicks and none of the plan's, the rows' or the H
     expect(
       await stolenRightEdges(column(page).getByRole("button", { name: "Outline", exact: true })),
     ).toEqual([]);
+    expect(await stolenRightEdges(column(page).locator(".toc-title-row .header-tray"))).toEqual([]);
+  }
+});
+
+test("the grip stays clear of the column's outline key, however high the pointer finds the edge", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await open(page);
+  const edgeBox = await edge(page).boundingBox();
+  const tray = await column(page).locator(".toc-title-row .header-tray").boundingBox();
+  if (edgeBox === null || tray === null) throw new Error("the edge or the key's tray has no box");
+  const x = edgeBox.x + edgeBox.width / 2;
+
+  for (const y of [tray.y + tray.height / 2, edgeBox.y + 1]) {
+    await page.mouse.move(x, y);
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    const grip = await edge(page).locator(".grip").boundingBox();
+    if (grip === null) throw new Error("the grip has no box");
+    const meets =
+      grip.x < tray.x + tray.width &&
+      tray.x < grip.x + grip.width &&
+      grip.y < tray.y + tray.height &&
+      tray.y < grip.y + grip.height;
+    expect(meets, `pointer at y=${y}`).toBe(false);
   }
 });
 

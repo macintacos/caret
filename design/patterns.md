@@ -361,15 +361,16 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `role="separator"` whose value the arrow keys change
   (`ui/src/components/Splitter.svelte`). The file drawer's edge and the outline column's
   are the two. It lies over the bare gap between two panes and nothing else, so it never
-  takes a click meant for either. At rest the gap is all that shows. Under the pointer or
-  keyboard focus, a grip rises in the gap where the pointer is: the switch's key, light in
-  both schemes, 6px wide and a key's 2rem tall. Held, the grip goes down as a pressed key
-  does, its side folding away and its shading turning concave. `theme.test.ts` holds it to
-  3:1 on the body, risen and held. A mouse drag leaves the edge focused, but only focus
-  from the keyboard raises the grip, so it fades once the pointer leaves. The arrow keys
-  step the edge 24px. A double-click returns the pane to its opening size: 15.5rem for the
-  column, and 45% of the surface for the drawer. Beside a file, the column stops at the
-  widest width that fits, if that is less.
+  takes a click meant for either. The outline column's edge starts below the column's
+  head, whose outline key reaches into the gap. At rest the gap is all that shows. Under
+  the pointer or keyboard focus, a grip rises in the gap where the pointer is: the
+  switch's key, light in both schemes, 6px wide and a key's 2rem tall. Held, the grip goes
+  down as a pressed key does, its side folding away and its shading turning concave.
+  `theme.test.ts` holds it to 3:1 on the body, risen and held. A mouse drag leaves the
+  edge focused, but only focus from the keyboard raises the grip, so it fades once the
+  pointer leaves. The arrow keys step the edge 24px. A double-click returns the pane to
+  its opening size: 15.5rem for the column, and 45% of the surface for the drawer. Beside
+  a file, the column stops at the widest width that fits, if that is less.
 - **The copy and wrap tray.** `CodeChromeTray` is the one copy and wrap tray, and its host
   places it: `CodeBlockChrome` in the plan, the block corner in Settings, and
   `UpgradeCommand`, which sets its tooltip (`copyTooltip`) to "Copy command" in place of

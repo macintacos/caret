@@ -1202,11 +1202,15 @@
     else floatOpen = !floatOpen;
   }
 
-  // A pointer's click leaves the header's key pressed down, so the column it stands brings
-  // its key in latched. `:active` has lifted by the time the click lands.
+  // A press from the pointer or from Space holds the header's key down until its click
+  // lands, so the column it stands brings its key in latched; Enter's click shows no
+  // press. `:active` has lifted by the time the click lands, and Space's click, like
+  // Enter's, carries no `detail`, so the key notes a held Space itself.
   let outlineKeyClicked = false;
+  let outlineKeySpace = false;
   function clickOutlineKey(event: MouseEvent): void {
-    outlineKeyClicked = event.detail > 0;
+    outlineKeyClicked = event.detail > 0 || outlineKeySpace;
+    outlineKeySpace = false;
     toggleOutline();
     outlineKeyClicked = false;
   }
@@ -2818,6 +2822,7 @@
             aria-label="Outline"
             aria-pressed={floatOpen}
             aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleOutline")}
+            onkeydown={(e: KeyboardEvent) => (outlineKeySpace = e.key === " ")}
             onclick={clickOutlineKey}
           >
             <Icon name="panel-left" size={14} />
@@ -3423,11 +3428,12 @@
     min-height: 0;
     padding-left: calc(var(--bar-inset) - 0.45rem);
   }
-  /* The column's edge covers only the gap its rows leave before the plan pane, so it takes
-     no click meant for a row or the plan. Keep in step with the outline list's end padding
-     (PlanToc.svelte). */
+  /* The column's edge covers only the gap its rows leave before the plan pane, below the
+     column's head, so it takes no click meant for a row, the head's keys or the plan, and
+     its grip never rises over the head's outline key. Keep in step with the title row's
+     height and the outline list's end padding (PlanToc.svelte). */
   .plan-outline > :global(.splitter) {
-    inset: 0 0 0 auto;
+    inset: 2.6rem 0 0 auto;
     width: 0.5rem;
   }
   /* The parts of a layout slide (lib/layoutSlide.ts), each sliding home from the offset it

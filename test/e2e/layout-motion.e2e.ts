@@ -268,23 +268,9 @@ test("the outline key latches as it travels into the column, and lets go as it t
   await expect(hideKey(page)).toHaveAttribute("aria-pressed", "true");
 });
 
-test("a column stood by pressing the header's key brings its key in held down", async ({
-  daemon,
-  page,
-}) => {
-  await daemon.seed({ plan: PLAN });
-  await open(page);
-  await page.keyboard.press("Shift+Backslash");
-  await layoutStill(page);
-  const box = await outlineKey(page).boundingBox();
-  if (box === null) throw new Error("the header's outline key is not rendered");
-
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  await outlineKey(page).evaluate((key) =>
-    Promise.all(key.getAnimations().map((animation) => animation.finished)),
-  );
-  // How far the outline key, the header's or the column's, sits down in its well each frame.
+/** Sample, each frame from now on, how far the outline key, the header's or the column's,
+ * sits down in its well. */
+async function sampleKeySinks(page: Page): Promise<void> {
   await page.evaluate(() => {
     const w = window as unknown as { __sinks: number[]; __sampling: boolean };
     w.__sinks = [];
@@ -301,14 +287,62 @@ test("a column stood by pressing the header's key brings its key in held down", 
     };
     sample();
   });
-  await page.mouse.up();
-  await expect(hideKey(page)).toHaveAttribute("aria-pressed", "true");
-  await layoutStill(page);
-  const sinks = await page.evaluate(() => {
+}
+
+/** Stop sampling, and return the sinks sampled since `sampleKeySinks`. */
+function sampledKeySinks(page: Page): Promise<number[]> {
+  return page.evaluate(() => {
     const w = window as unknown as { __sinks: number[]; __sampling: boolean };
     w.__sampling = false;
     return w.__sinks;
   });
+}
+
+test("a column stood by pressing the header's key brings its key in held down", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await open(page);
+  await page.keyboard.press("Shift+Backslash");
+  await layoutStill(page);
+  const box = await outlineKey(page).boundingBox();
+  if (box === null) throw new Error("the header's outline key is not rendered");
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await outlineKey(page).evaluate((key) =>
+    Promise.all(key.getAnimations().map((animation) => animation.finished)),
+  );
+  await sampleKeySinks(page);
+  await page.mouse.up();
+  await expect(hideKey(page)).toHaveAttribute("aria-pressed", "true");
+  await layoutStill(page);
+  const sinks = await sampledKeySinks(page);
+
+  const [pressed = 0] = sinks;
+  expect(Math.min(...sinks)).toBeGreaterThan(pressed - 0.1);
+});
+
+test("a column stood by Space on the header's key brings its key in held down", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await open(page);
+  await page.keyboard.press("Shift+Backslash");
+  await layoutStill(page);
+
+  await outlineKey(page).focus();
+  await page.keyboard.down("Space");
+  await outlineKey(page).evaluate((key) =>
+    Promise.all(key.getAnimations().map((animation) => animation.finished)),
+  );
+  await sampleKeySinks(page);
+  await page.keyboard.up("Space");
+  await expect(hideKey(page)).toHaveAttribute("aria-pressed", "true");
+  await layoutStill(page);
+  const sinks = await sampledKeySinks(page);
 
   const [pressed = 0] = sinks;
   expect(Math.min(...sinks)).toBeGreaterThan(pressed - 0.1);

@@ -535,14 +535,18 @@ because neither surface virtualizes: the source view is the library's `File`, ne
   slots' gaps (`[data-preview-gap]`), carries `--preview-scale` from the live root, and
   sets `indeterminate` on each `[/]` task box, which no clone carries.
 - **Both.** A clone keeps no event listener, so each copied `<img>` gets the live views'
-  handler that hides an image when it fails to load.
+  handler that hides an image when it fails to load. Neither copy shows the search's
+  marks. Those are CSS Custom Highlight ranges on the live nodes, and a clone doesn't
+  carry them.
 
 `DiffPlanView` keeps one copy per heading in a `peekSnippet` function. It makes a new
 function whenever any of these change: the surface, the version, the theme, the
 soft-wrapped code blocks (`reflowedBlocks`), `previewLayoutRev`, or Preview's code
 highlight (`PlanPreview`'s `onHighlight`). An open peek copies again from each new
-function, so it follows a flip and the highlight landing after the text. A section the
-surface has not drawn yet is not kept, so the next ask copies it afresh. `OutlinePeek`
+function, so it follows a flip and the highlight landing after the text. If the view has
+not drawn the section within three frames, the peek closes. A theme change closes it,
+because the view takes longer than that to draw the section in the new theme. A section
+the surface has not drawn yet is not kept, so the next ask copies it afresh. `OutlinePeek`
 lets go of its copy once it has faded out, so the page holds each surface once, and no
 locator matches a closed peek.
 

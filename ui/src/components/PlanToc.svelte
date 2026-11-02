@@ -525,7 +525,7 @@
         <Button
           variant="secondary"
           size={showShortcutHints ? "sm" : "icon-sm"}
-          class="toc-hide float-chip"
+          class="float-chip"
           aria-label="Outline"
           aria-pressed={open}
           aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleOutline")}

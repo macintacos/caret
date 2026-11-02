@@ -183,7 +183,7 @@ the rest of caret.
 
   The bed takes `--ink-wash` under the pointer and keyboard focus, as a ghost control
   does, and a press leaves the ghost control's dimple in it. The path still shrinks to an
-  ellipsis, at column widths from 12rem to 28rem.
+  ellipsis, at column widths from 12rem to 30rem.
 
 ## 2026-11-02: the outline column resizes from its edge
 
@@ -220,6 +220,9 @@ with the rest of caret". This replaces the fixed 15.5rem width from 2026-11-01.
   leave a lit grip standing in the gap.
 - **The edge covers only the gap:** the 0.5rem (8px) the outline's rows leave before the
   plan pane. The outline's list hides its scrollbar, so the edge overlaps no scrollbar.
+  The edge starts below the column's head, because the head's outline key reaches 2.4px
+  into the gap. When the edge ran the column's full height, it took a press on the key's
+  rim, and its grip rose over the key.
 - **No transform or throttle on the drag:** the drag needs neither, because it already
   holds the display's frame rate. The column resizes live, and the plan lays out again
   each frame. Measured with bare `requestAnimationFrame` timestamps and the Long Animation
@@ -252,6 +255,8 @@ type".
   - Images are the plan's own `<img>` elements, copied, so they come from the browser's
     cache rather than standing in as placeholders. One that fails to load hides, as it
     does in the plan.
+  - Neither copy shows the search's marks. The search marks its matches with ranges over
+    the live text, which a copy doesn't carry.
 - **A heading with no text of its own shows its subsections.** Under `## Phase 1` sitting
   straight above `### Step 1.1`, the peek runs on to the next heading of its level or
   higher. Cut at the next heading of any level, it would show only the row's own name. 145
@@ -273,6 +278,9 @@ type".
   copy once that view has drawn the section, and closes if that takes more than three
   frames. On the 1,062-line rendering fixture the copy was there on the first frame, both
   ways.
+- **A theme change closes it.** The plan draws the section again in the new theme, which
+  takes longer than the three frames the peek waits for: about 80ms in source and 95ms in
+  Preview. So the peek closes rather than keep the old theme's copy.
 - **It sits where the eye already is.** It stands past the outline's right edge, measured
   live so a resized column carries it, level with the row. It stays 0.5rem inside the plan
   pane, so it never covers the top bar, the status bar or an open file. It measures itself
