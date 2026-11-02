@@ -848,6 +848,92 @@ test("a pick latches its heading at once, not each heading the plan passes on th
   expect(latched).toEqual(["Mike"]);
 });
 
+/** How far a row's key sits below its place, in px: positive while it is down, negative
+ * while it stands risen. */
+const keyDrop = (key: Locator) =>
+  key.evaluate((el) => Number.parseFloat(getComputedStyle(el).translate.split(" ")[1] ?? "0"));
+
+/** The key's drop on every frame while `during` runs, until the key leaves the page. */
+async function keyDropFrames(key: Locator, during: () => Promise<void>): Promise<number[]> {
+  await key.evaluate((el) => {
+    const w = window as Window & { __drops?: number[] };
+    const drops: number[] = [];
+    w.__drops = drops;
+    const sample = () => {
+      if (w.__drops !== drops || !el.isConnected) return;
+      drops.push(Number.parseFloat(getComputedStyle(el).translate.split(" ")[1] ?? "0"));
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await during();
+  return key.page().evaluate(() => {
+    const w = window as Window & { __drops?: number[] };
+    const drops = w.__drops ?? [];
+    w.__drops = undefined;
+    return drops;
+  });
+}
+
+// The row under the pointer is risen, so the press has to outrank the rise, and the latch
+// the click commits has to outrank it too, or the row stands back up on release.
+for (const placement of ["column", "float"] as const) {
+  test(`a row clicked in the ${placement} goes down under the press and stays down through the jump`, async ({
+    daemon,
+    page,
+  }) => {
+    if (placement === "float") await page.setViewportSize({ width: 880, height: 900 });
+    await daemon.seed({ plan: TALL_PLAN });
+    await page.goto("/");
+    await readingAt(page, "Alpha");
+    if (placement === "float") await openFloat(page);
+    const outline = page.locator(placement === "column" ? TOC : FLOAT);
+    const row = outline.getByRole("option").filter({ hasText: "India" });
+    const key = row.locator(".toc-key");
+
+    await row.hover();
+    await page.mouse.down();
+    await expect.poll(() => keyDrop(key)).toBeGreaterThan(0);
+    const drops = await keyDropFrames(key, async () => {
+      await page.mouse.up();
+      await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("india");
+      if (placement === "float") await expect(outline).toHaveCount(0);
+      else {
+        await expect(row).toHaveAttribute("aria-current", "location");
+        await key.evaluate((el) =>
+          Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {}))),
+        );
+      }
+    });
+    expect(drops.length).toBeGreaterThan(0);
+    expect(drops.filter((drop) => drop <= 0)).toEqual([]);
+  });
+}
+
+// A key springs only on its way back up; going down, a latch travels as a press does.
+test("a row Enter picks in the column goes down as a press does, never past where it stops", async ({
+  daemon,
+  page,
+}) => {
+  await openTocAt(page, daemon, TALL_PLAN, "Alpha");
+  await page.keyboard.press("ArrowDown");
+  const row = options(page).filter({ hasText: "Bravo" });
+  await expect(row).toHaveAttribute("data-selected", "");
+  const key = row.locator(".toc-key");
+
+  const drops = await keyDropFrames(key, async () => {
+    await page.keyboard.press("Enter");
+    await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("bravo");
+    await expect(row).toHaveAttribute("aria-current", "location");
+    await key.evaluate((el) =>
+      Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {}))),
+    );
+  });
+  const rest = await keyDrop(key);
+  expect(rest).toBeGreaterThan(0);
+  expect(Math.max(...drops)).toBeLessThanOrEqual(rest + 0.001);
+});
+
 // Comparing folds the column away, for the split diff needs the width and no reading
 // position is tracked there; the header's key drops the base version's changed sections
 // instead. Daemon state — two versions — so it is here.

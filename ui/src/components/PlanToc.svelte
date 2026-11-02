@@ -294,10 +294,16 @@
     });
   });
 
-  // A query re-forms the list under the peek.
+  // A query re-forms the list under the peek, so each edit closes it and the row the query
+  // lands on dwells afresh. bits-ui selects that row, the first match, a tick later, and
+  // often it is the row already selected, so no selection change comes to follow.
   $effect(() => {
     void query;
-    untrack(() => peek.hide());
+    untrack(() => {
+      peek.hide();
+      const landing = searching ? shown[0] : undefined;
+      if (landing !== undefined) peek.reach(landing.line);
+    });
   });
 
   // The reader turning elsewhere closes it: a wheel, a press, a resize, or any key but a
@@ -948,8 +954,10 @@
       color var(--dur-state) var(--ease-out),
       box-shadow var(--dur-state) var(--ease-out);
   }
-  .plan-toc[data-filtering] :global([data-slot="command-item"][data-selected] .toc-key),
-  .plan-toc:not([data-filtering]) :global([data-slot="command-item"]:hover .toc-key) {
+  /* `:where()` holds the rise to the latch's and the press's weight, so the rules below win
+     on order and the row under the pointer still goes down. */
+  .plan-toc:where([data-filtering]) :global([data-slot="command-item"][data-selected] .toc-key),
+  .plan-toc:where(:not([data-filtering])) :global([data-slot="command-item"]:hover .toc-key) {
     --key-face: var(--neutral-face-hover);
     --key-image: var(--key-row-up-image);
     --key-shadow: var(--key-row-up);
@@ -965,6 +973,7 @@
     --key-shadow: var(--key-row-down);
     --key-shift: var(--key-sink);
     color: var(--ink);
+    transition-timing-function: var(--ease-out);
   }
   .plan-toc[data-filtering] :global([data-slot="command-item"][aria-current="location"][data-selected] .toc-key),
   .plan-toc:not([data-filtering]) :global([data-slot="command-item"][aria-current="location"]:hover .toc-key) {

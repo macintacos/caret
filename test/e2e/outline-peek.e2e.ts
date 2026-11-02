@@ -1,8 +1,9 @@
 // The outline's peek: rest on an outline row, by pointer or by the keys, and the row's
-// section shows beside the outline as the plan's own view draws it. Once open it follows
-// the pointer and the keys from row to row, and across a flip of the plan's view. It
-// hides when the pointer leaves the list, the list loses focus, a key other than a walk
-// or the flip is pressed, a row is picked, or the reader scrolls the plan or the list.
+// section shows beside the outline as the plan's own view draws it. A query peeks at the
+// row it selects the same way. Once open it follows the pointer and the keys from row to
+// row, and across a flip of the plan's view. It hides when the pointer leaves the list,
+// the list loses focus, a key other than a walk or the flip is pressed, a row is picked,
+// or the reader scrolls the plan or the list.
 //
 // Everything here needs a real browser. The peek is a copy of the live render, so what
 // it shows is only as faithful as a real engine's cascade into a real shadow root makes
@@ -332,6 +333,18 @@ test("walking the filtered list with the keys peeks at the highlighted row", asy
   await page.keyboard.press("ArrowDown");
   await expect(peekHeading(page, "source")).toHaveText("## Intake");
   await page.keyboard.press("ArrowDown");
+  await expect(peekHeading(page, "source")).toHaveText("## Retention");
+});
+
+test("a query peeks at the row it selects", async ({ page }) => {
+  await openAt(page);
+  await awaitPlanReadyForKeys(page);
+  await page.keyboard.press("\\");
+  const field = page.locator(COLUMN).getByRole("combobox", { name: "Filter headings" });
+  await expect(field).toBeFocused();
+
+  // Each keystroke after the first leaves Retention selected.
+  await field.pressSequentially("ret");
   await expect(peekHeading(page, "source")).toHaveText("## Retention");
 });
 
