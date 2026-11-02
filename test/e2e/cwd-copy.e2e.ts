@@ -56,3 +56,42 @@ test("success alerts stack and a dismiss removes one", async ({ daemon, page }) 
   await alerts(page).first().getByRole("button", { name: "Dismiss" }).click();
   await expect(alerts(page)).toHaveCount(1);
 });
+
+/** The cwd control's box, the box of the outline foot it sits in, and whether its path is
+ * cut short. */
+const footBoxes = (cwd: Locator) =>
+  cwd.evaluate((el) => {
+    const foot = el.parentElement?.getBoundingClientRect();
+    const own = el.getBoundingClientRect();
+    return {
+      foot: { left: foot?.left ?? 0, right: foot?.right ?? 0 },
+      own: { left: own.left, right: own.right },
+      truncated:
+        (el.firstElementChild?.scrollWidth ?? 0) > (el.firstElementChild?.clientWidth ?? 0),
+    };
+  });
+
+test("the cwd path sits centred at the outline's foot", async ({ daemon, page }) => {
+  const cwd = await openCwdControl(page, daemon);
+  const { foot, own } = await footBoxes(cwd);
+  const style = await cwd.evaluate((el) => getComputedStyle(el.parentElement as Element));
+  const padLeft = Number.parseFloat(style.paddingLeft);
+  const padRight = Number.parseFloat(style.paddingRight);
+  expect(own.left - (foot.left + padLeft)).toBeCloseTo(foot.right - padRight - own.right, 0);
+});
+
+test("a path longer than the column shortens to an ellipsis inside the foot", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({
+    cwd: "/Users/dev/GitLocal/Play/a-project-directory-name-far-wider-than-the-outline",
+  });
+  await page.goto("/");
+  await planSurface(page);
+  const cwd = page.locator(".plan-outline button.cwd");
+  const { foot, own, truncated } = await footBoxes(cwd);
+  expect(truncated).toBe(true);
+  expect(own.left).toBeGreaterThanOrEqual(foot.left);
+  expect(own.right).toBeLessThanOrEqual(foot.right);
+});

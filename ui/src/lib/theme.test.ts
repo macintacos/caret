@@ -350,7 +350,10 @@ describe("THEMES", () => {
       "--accent-wash": "#f2842f29",
       "--accent-ink": "#0a0806",
       "--mark": "#ffa64d2e",
-      "--mark-active": "#ffa64d57",
+      "--mark-match": "#ffa64d5c",
+      "--mark-match-ink": "#f7f2ea",
+      "--mark-active": "#ffa64d",
+      "--mark-active-ink": "#0a0806",
       "--mark-orphan": "#9a8c7e29",
       "--chip-bold": "#f7f2ea24",
       "--chip-italic": "#bcb0a124",
@@ -380,7 +383,10 @@ describe("THEMES", () => {
       "--accent-wash": "#e07a2e1f",
       "--accent-ink": "#fff6ec",
       "--mark": "#e8882e24",
-      "--mark-active": "#e8882e47",
+      "--mark-match": "#e8882e5c",
+      "--mark-match-ink": "#191310",
+      "--mark-active": "#e8882e",
+      "--mark-active-ink": "#191310",
       "--mark-orphan": "#7a6f6329",
       "--chip-bold": "#1913101c",
       "--chip-italic": "#544b431c",
@@ -460,6 +466,42 @@ describe("every theme", () => {
     for (const [id, theme] of themeEntries()) {
       expect(theme.id, id).toBe(id);
       expect(theme.label.length, id).toBeGreaterThan(0);
+    }
+  });
+
+  // The preview lays its bands over the text: a held selection's `--accent-wash`, then the
+  // cursor's or the pointer's, up to 9% of `--ink`. The current match can sit under both.
+  test("holds the current search match's text to 4.5:1 under the preview's bands", () => {
+    for (const [id, theme] of themeEntries()) {
+      const { "--mark-active": mark, "--mark-active-ink": ink, "--ink": band } = theme.tokens;
+      for (const wash of [undefined, theme.tokens["--accent-wash"]]) {
+        for (const pct of [0, 0.09]) {
+          const under = (color: string) => banded(wash ? over(wash, color) : color, band, pct);
+          expect(
+            contrast(under(ink), under(mark)),
+            `${id} ${wash ? "selected, " : ""}${pct}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  });
+
+  // The source view sets a match's text over the match's wash on either paper or a code or
+  // table card's floor, under up to 9% `--ink` of the cursor's or the pointer's band and any
+  // chip, or on a table header's lit pad, strongest at its top.
+  test("holds every other search match's text to 4.5:1 on each ground the source view sets it on", () => {
+    const CHIPS = ["--chip-bold", "--chip-italic", "--chip-code", "--chip-link", "--chip-ref"];
+    for (const [id, theme] of themeEntries()) {
+      const tokens = theme.tokens as Record<string, string>;
+      const rows = [tokens["--paper"]!, tokens["--paper-sunk"]!, derived("--table-floor", theme)]
+        .flatMap((floor) => [floor, banded(floor, tokens["--ink"]!, 0.09)])
+        .flatMap((row) => [row, ...CHIPS.map((chip) => over(tokens[chip]!, row))]);
+      for (const ground of [...rows, derived("--body", theme), derived("--pad-top", theme)]) {
+        expect(
+          contrast(tokens["--mark-match-ink"]!, over(tokens["--mark-match"]!, ground)),
+          `${id} on ${ground}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
     }
   });
 

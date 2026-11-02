@@ -365,7 +365,8 @@ test("a key row pressed under the pointer goes down from where it rose", async (
   page,
 }) => {
   await seedAndOpen(page, daemon);
-  const keyRow = page.getByRole("button", { name: /^Copy path / });
+  const settings = await openSettings(page);
+  const keyRow = settings.locator(".settings-nav .key-row:not([aria-current])").first();
   const lift = () =>
     keyRow.evaluate((el) => Number.parseFloat(getComputedStyle(el).translate.split(" ")[1] ?? "0"));
   await keyRow.hover();

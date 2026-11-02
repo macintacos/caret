@@ -254,10 +254,12 @@
     background-color: var(--mark);
   }
   :global(::highlight(caret-preview-search)) {
-    background-color: var(--mark);
+    background-color: var(--mark-match);
+    color: var(--mark-match-ink);
   }
   :global(::highlight(caret-preview-search-current)) {
     background-color: var(--mark-active);
+    color: var(--mark-active-ink);
   }
 
   /* In the preview's own em, so every line wraps at the same word at any zoom, text size,

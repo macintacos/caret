@@ -183,7 +183,8 @@ const FLOAT = ".outline-float";
 const CRUMB_MENU = "[data-slot='dropdown-menu-content']";
 
 /** The header's outline key, present while the column is not shown. */
-const outlineKey = (page: Page) => page.getByRole("button", { name: "Show outline" });
+const outlineKey = (page: Page) =>
+  page.locator(".plan-header").getByRole("button", { name: "Outline", exact: true });
 /** The outline column. Every locator below is scoped through it, which is what lets them
  * be role queries: the breadcrumbs bar publishes a filter field with the SAME accessible
  * name, and an unscoped query would collect both (browser-testing.md § Locators). */
@@ -1340,7 +1341,7 @@ test("Shift+\\ hides the column and brings it back, focus riding the key that re
   // The column's own key hands focus to the header's as it leaves.
   await outlineKey(page).click();
   await expect(listbox(page)).toBeVisible();
-  const hide = panel(page).getByRole("button", { name: "Hide outline" });
+  const hide = panel(page).getByRole("button", { name: "Outline", exact: true });
   await hide.focus();
   await hide.press("Enter");
   await expect(outlineKey(page)).toBeFocused();
@@ -1436,7 +1437,7 @@ test("Escape closes the outline float before the file drawer it stands over", as
   }
 });
 
-test("widening past 960px with the float open hands focus to the column's Hide outline key", async ({
+test("widening past 960px with the float open hands focus to the column's outline key", async ({
   daemon,
   page,
 }) => {
@@ -1449,13 +1450,13 @@ test("widening past 960px with the float open hands focus to the column's Hide o
   await page.setViewportSize({ width: 1440, height: 900 });
   await expect(listbox(page)).toBeVisible();
   await expect(page.locator(FLOAT)).toHaveCount(0);
-  await expect(panel(page).getByRole("button", { name: "Hide outline" })).toBeFocused();
+  await expect(panel(page).getByRole("button", { name: "Outline", exact: true })).toBeFocused();
 });
 
-// The column's Hide outline key and the header's Show outline key replace each other in
-// place, so they stand one size, with the shortcut hints on and off.
+// The column's outline key and the header's replace each other in place, so they stand one
+// size, with the shortcut hints on and off.
 for (const hints of ["on", "off"]) {
-  test(`the outline's Hide and Show keys stand one size, hints ${hints}`, async ({
+  test(`the outline's column and header keys stand one size, hints ${hints}`, async ({
     daemon,
     page,
   }) => {
@@ -1464,7 +1465,7 @@ for (const hints of ["on", "off"]) {
     await page.goto("/");
     await planSurface(page);
 
-    const hide = panel(page).getByRole("button", { name: "Hide outline" });
+    const hide = panel(page).getByRole("button", { name: "Outline", exact: true });
     const hideBox = await hide.boundingBox();
     await hide.click();
     const showBox = await outlineKey(page).boundingBox();

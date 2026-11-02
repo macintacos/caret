@@ -1,6 +1,6 @@
 // caret's bundled theme files for suites outside the UI bundle: read whole, or as valid
 // theme-file text to put on disk.
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { z } from "zod";
@@ -12,6 +12,13 @@ const THEMES_DIR = join(import.meta.dirname, "..", "..", "ui/src/lib/themes");
 /** caret's own theme file for `scheme`, read as authored and unvalidated. */
 export function caretThemeFile(scheme: "light" | "dark" = "dark"): z.input<typeof ThemeFileSchema> {
   return JSON.parse(readFileSync(join(THEMES_DIR, `caret-${scheme}.json`), "utf8"));
+}
+
+/** Every bundled theme's id and scheme, one per file `THEMES` is built from. */
+export function bundledThemes(): { id: string; scheme: "light" | "dark" }[] {
+  return readdirSync(THEMES_DIR)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => JSON.parse(readFileSync(join(THEMES_DIR, name), "utf8")));
 }
 
 /** The text of a valid theme file with `id`: caret's file for `scheme` (dark by default),

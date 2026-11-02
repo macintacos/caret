@@ -88,10 +88,13 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - **The outline is a column, or a float.** The column stands left of the plan pane while
   the window has room for it. Under 960px wide, or once it yields to a file the plan could
   not keep its 800px reading column beside, the header's outline key drops it as a float
-  instead: a `--float-mid` float on `--paper-raised`, which opens on its filter. Comparing
-  folds the column too, without changing the reader's remembered choice. Its float then
-  lists only the sections that changed, each with its line count, or says "No sections
-  changed".
+  instead: a `--float-mid` float on `--paper-raised`, which opens on its filter. The
+  outline key is one toggle named "Outline", in the column's head while the column stands
+  and in the header while it is folded. It latches down with its corner light while the
+  outline is open, as a column or as a float, and stands up while it is closed. A press,
+  or ⇧ + `\`, opens or folds the outline. Comparing folds the column too, without changing
+  the reader's remembered choice. Its float then lists only the sections that changed,
+  each with its line count, or says "No sections changed".
 - **The outline column takes the width the reader drags it to.** Its right edge is a
   splitter (see **Splitters** in the tactile kit). The column opens 15.5rem wide and
   narrows to 12rem. It widens to 30rem, but only while the plan beside it keeps its 800px
@@ -153,6 +156,11 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `--key-radius` (8px), whatever its Button `size`. A bed rounds at `--key-radius` plus
   `--well-pad`, 11px, so the two corners stay concentric. The row-wide scratch marker is a
   `button.tray` and keeps its tinted floor.
+- **The working-directory path lies in a bed with no key.** It sits centred at the
+  outline's foot as a `button.tray`, because it is metadata the reader copies rather than
+  a control they work. Under the pointer or keyboard focus, the bed takes `--ink-wash` and
+  the path inks up, as a ghost control does. A press adds the ghost control's dimple to
+  the bed's shading. The path shrinks to an ellipsis when it outruns the column.
 - **Nested corners.** Where a rounded shape rests near another's corner, the inner radius
   is the outer radius less the inset between them, so the gap round the corner matches the
   gap along the sides. The inset is the distance from the outer shape's edge to the inner
@@ -262,13 +270,13 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `--cap-submit-h` (28px) with `--text-base` labels, where the other caps are 32px, and
   every cap in it shrinks with it. The top bar's bell and settings keys match it, so every
   key in the top bar is the same height. The plan header's view and outline keys stand at
-  that height too, though they submit nothing. So does the outline column's Hide outline
-  key: hiding the column puts the header's Show outline key in its place, and one height
-  keeps the key from changing size as they swap. Their trays, marked `.header-tray`, join
-  the same rule in `atoms.css`. The submit trays are Approve in the top bar, Comment and
-  Save in the composer, Send for revision, the guard confirms (Approve with comments,
-  Reject anyway) and the confirm bubble's Discard. Enable notifications is not a submit
-  and keeps the full size.
+  that height too, though they submit nothing. So does the outline column's own outline
+  key: hiding the column puts the header's outline key in its place, and one height keeps
+  the key from changing size as they swap. Their trays, marked `.header-tray`, join the
+  same rule in `atoms.css`. The submit trays are Approve in the top bar, Comment and Save
+  in the composer, Send for revision, the guard confirms (Approve with comments, Reject
+  anyway) and the confirm bubble's Discard. Enable notifications is not a submit and keeps
+  the full size.
 - **Stamps.** Passive labels (`.stamp`, counts, the comment states, the file preview's
   line-range readout, the waiting screen's hint, the build tag's "Copied") sit in a
   pocket. Unlike a bed, a pocket has a darker floor (`--well-floor`) and its own shade and
@@ -308,12 +316,12 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   - the Settings nav, the theme list, the version picker, the breadcrumb menu, whose
     headings on the trail latch (the crumbs in the plan header borrow only the risen
     state, on `--crumb-face-hover`, and never latch; the current crumb is marked by
-    weight), the comment navigator and the cwd path. The crumbs lie on the plan's own
-    floor, `--paper` over the preview and `--paper-sunk` over the source view. In light
-    their face steps toward black from the raised paper, because a key's white face is the
-    plan's own paper there and would not read as risen. In dark it steps further toward
-    `--ink` than the hover face, as far as Catppuccin Frappé's `--ink` keeps 4.5:1 on it.
-    `theme.test.ts` holds the step to 4.5 ΔE on both floors in every palette;
+    weight), and the comment navigator. The crumbs lie on the plan's own floor, `--paper`
+    over the preview and `--paper-sunk` over the source view. In light their face steps
+    toward black from the raised paper, because a key's white face is the plan's own paper
+    there and would not read as risen. In dark it steps further toward `--ink` than the
+    hover face, as far as Catppuccin Frappé's `--ink` keeps 4.5:1 on it. `theme.test.ts`
+    holds the step to 4.5 ΔE on both floors in every palette;
   - the folder tree, a shadow-DOM list that wears the `--key-row-*` tokens directly, with
     a `:focus-visible` row risen and the chosen row latched. It keys on `:focus-visible`
     rather than the library's `data-item-focused`, so a pointer click never raises the
@@ -472,6 +480,12 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   with the window's width changes with no motion too, because motion during a resize drag
   jitters. A pane a splitter resizes changes with no motion too, because the plan lays out
   again under the pointer every frame.
+- The outline key's latch rides its travel between the column's head and the header. The
+  key latches on `--dur-pane` as the column stands, and lets go on `--dur-state` as it
+  folds, both on `--ease-out` and from the slide's first frame. A click stands the column
+  with the key already down, so it comes in latched; ⇧ + `\` stands it with the key up, so
+  it latches on the way. A shortcut holds the key it stands for down for 110ms, its press
+  echo; the fold drops that echo, so the key rises while it travels.
 - A key's return from a press is the one spring: it travels back over `--dur-state` on
   `--ease-spring`, past rest and back. The press itself, and every shading and colour
   change, stays on `--ease-out`.
@@ -484,6 +498,24 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 
 ### Plan surface
 
+- **The current search match is the strongest mark on the page.** Both views share its
+  pair of marks.
+  - The current match is the mark itself, opaque (`--mark-active`). Its text is whichever
+    of `--ink`, `--paper`, `--paper-raised` and `--paper-sunk` reads most strongly on it
+    (`--mark-active-ink`). The preview draws a held selection's band, and the cursor's or
+    the pointer's, over the text. Where they would take that text under 4.5:1, it steps
+    toward white or black. Where not even white or black would hold, the mark steps away
+    from its text before the text steps.
+  - Every other match is a wash of the mark (`--mark-match`) a step over the `--mark` a
+    comment span wears. Its text is `--ink` (`--mark-match-ink`), stepped toward white in
+    dark or black in light where the palette needs it to hold 4.5:1 on the wash. That
+    holds on a chip, a code or table card's floor and a table header too, but not on a
+    chip inside a table header, where no text colour reaches 4.5:1 in five dark palettes.
+  - A thematic break (`---`) paints its dashes transparent under a match too, so the mark
+    shows as a plain band.
+  - `test/e2e/search-marks.e2e.ts` holds both marks' distance from their lines and from
+    each other, an other match's lead over a comment span's `--mark`, and their text's
+    contrast, in every palette and both views.
 - Hover and drag highlights in the preview cover full visual lines, never part of a line.
   The file preview's cited band follows the same rule, through the gutter and across the
   whole scroll width.

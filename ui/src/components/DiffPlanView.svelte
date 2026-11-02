@@ -1046,8 +1046,12 @@
   // The layout's live moves (lib/layoutSlide.ts): the column standing or folding, and a
   // file docking beside the plan or leaving it. A folding column stays mounted out of the
   // layout while it slides away, `columnLeaving`, and its key travels in its well to the
-  // header's Show outline key, which waits unseen until the column has gone.
+  // header's outline key, which waits unseen until the column has gone, letting go of its
+  // latch on the way. A standing column's key latches as it travels in, so it mounts at
+  // rest for the style pass the slide starts from, `keyEntry` "rest", then latches on
+  // the slide's clock, "latching"; a click's key is down already, and mounts latched.
   let columnLeaving = $state(false);
+  let keyEntry = $state<"rest" | "latching" | null>(null);
   let leaveTimer: ReturnType<typeof setTimeout> | undefined;
   let bodyEl = $state<HTMLElement | undefined>();
   let paneEl = $state<HTMLElement | undefined>();
@@ -1125,6 +1129,7 @@
         change();
         // In the same flush as the change, so the folding column is never unmounted.
         if (sliding && stood && !columnShown) leaveColumn();
+        if (sliding && !stood && columnShown && !outlineKeyClicked) keyEntry = "rest";
         flushSync();
       },
       {
@@ -1132,11 +1137,20 @@
         measured: aimLeavingKey,
       },
     );
+    if (keyEntry === null) return;
+    keyEntry = "latching";
+    flushSync();
+    // The latch starts in this style pass, on the arriving key's timing, which it keeps.
+    void outlineEl?.getBoundingClientRect();
+    keyEntry = null;
+    flushSync();
   }
 
   function leaveColumn(): void {
     clearTimeout(leaveTimer);
     columnLeaving = true;
+    // Its latch lets go as it travels, which a shortcut's press echo would hold down.
+    outlineEl?.querySelector(`${COLUMN_KEY} > [data-key-pressed]`)?.removeAttribute("data-key-pressed");
     leaveTimer = setTimeout(() => (columnLeaving = false), CLOSE_ANIM_MS);
   }
 
@@ -1188,6 +1202,15 @@
     else floatOpen = !floatOpen;
   }
 
+  // A pointer's click leaves the header's key pressed down, so the column it stands brings
+  // its key in latched. `:active` has lifted by the time the click lands.
+  let outlineKeyClicked = false;
+  function clickOutlineKey(event: MouseEvent): void {
+    outlineKeyClicked = event.detail > 0;
+    toggleOutline();
+    outlineKeyClicked = false;
+  }
+
   // `\` lands in the outline's filter wherever the outline stands.
   function filterOutline(): void {
     if (columnShown) openColumnFilter?.();
@@ -1216,7 +1239,7 @@
     if (!leaving.some((el) => el?.contains(document.activeElement))) return;
     void tick().then(() =>
       (shown
-        ? outlineEl?.querySelector<HTMLButtonElement>("button[aria-label='Hide outline']")
+        ? outlineEl?.querySelector<HTMLButtonElement>(`${COLUMN_KEY} > button`)
         : outlineKey
       )?.focus(),
     );
@@ -2742,6 +2765,7 @@
     <aside
       class="plan-outline"
       class:leaving={!columnShown}
+      class:key-arriving={keyEntry !== null}
       inert={!columnShown}
       aria-label="Outline"
       style:width="{columnWidth}px"
@@ -2791,10 +2815,10 @@
             size={showShortcutHints ? "sm" : "icon-sm"}
             class="outline-key float-chip"
             bind:ref={outlineKey}
-            aria-label="Show outline"
+            aria-label="Outline"
             aria-pressed={floatOpen}
             aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleOutline")}
-            onclick={toggleOutline}
+            onclick={clickOutlineKey}
           >
             <Icon name="panel-left" size={14} />
             {#if showShortcutHints}
@@ -3281,6 +3305,7 @@
     {showShortcutHints}
     onJump={placement === "float" ? pickFromFloat : jumpFromOutline}
     onHide={() => setOutline("hidden")}
+    open={columnShown && keyEntry !== "rest"}
     onExposeFilter={placement === "column" ? (open) => (openColumnFilter = open) : undefined}
     foot={placement === "column" ? cwdKey : undefined}
     onPeek={runs("outlinePeek") ? (target) => (peekTarget = target) : undefined}
@@ -3288,15 +3313,15 @@
   />
 {/snippet}
 
-<!-- Working-directory path (EXC-807), at the outline column's foot. The row shows the
+<!-- Working-directory path (EXC-807), at the outline column's foot. It shows the
      abbreviated path and copies the full absolute path on click — no hover popup
      (EXC-850). -->
 {#snippet cwdKey()}
   <button
     type="button"
-    class="cwd mono key-row"
+    class="cwd tray"
     aria-label={`Copy path ${review.cwd} to the clipboard`}
-    onclick={() => onCopyCwd(review.cwd)}>{shortCwd(review.cwd)}</button>
+    onclick={() => onCopyCwd(review.cwd)}><span class="mono">{shortCwd(review.cwd)}</span></button>
 {/snippet}
 
 <!-- The outline as a float, dropped from the header's outline key under --w-narrow or
@@ -3439,6 +3464,15 @@
     transform: translate(var(--key-dx, 0px), var(--key-dy, 0px));
     transition-duration: var(--dur-state);
   }
+  /* The key's latch rides its travel: it latches on --dur-pane as the column stands, and
+     lets go on --dur-state as it folds, on the travel's curve rather than a press's
+     spring. */
+  .plan-outline:is(.key-arriving, .leaving) :global(.toc-title-row .header-tray > button) {
+    transition-timing-function: var(--ease-out);
+  }
+  .plan-outline.key-arriving :global(.toc-title-row .header-tray > button) {
+    transition-duration: var(--dur-pane);
+  }
   .plan-body.column-leaving .plan-header > .header-tray {
     opacity: 0;
   }
@@ -3566,30 +3600,42 @@
     border-radius: calc(var(--key-radius) + 4px);
   }
 
-  /* The working-directory path (EXC-807), at the outline's foot. It shrinks to an
-     ellipsis when the path outruns the column. A click copies it, so it is a key lying
-     flat on the body (.key-row): it rises under the pointer and goes down when
-     pressed. */
+  /* The working-directory path (EXC-807), centred at the outline's foot. A click copies
+     it, but it is metadata rather than a control, so it lies in a bed (.tray) with no
+     key: under the pointer the bed takes the ink wash a ghost control takes, and a press
+     leaves the same dimple. The path shrinks to an ellipsis when it outruns the column. */
   .cwd {
     flex: 0 1 auto;
     min-width: 0;
-    /* Button reset; .mono owns the family, so only the size is inherited here. The key
-       row paints the face. */
+    margin-inline: auto;
     appearance: none;
     border: none;
-    padding: 0 0.5rem;
-    line-height: var(--ctl-h);
-    font-size: var(--text-sm);
+    height: var(--ctl-h);
+    padding: 0 0.7rem;
     /* A neutral key's label (atoms.css --cap-label): plain --ink-soft falls just under
        4.5:1 on the body in some palettes. */
     color: color-mix(in lab, var(--ink-soft), var(--ink) 15%);
+    cursor: pointer;
+    transition:
+      background-color var(--dur-state) var(--ease-out),
+      color var(--dur-state) var(--ease-out),
+      box-shadow var(--dur-state) var(--ease-out);
+  }
+  .cwd > span {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    cursor: pointer;
   }
   .cwd:is(:hover, :focus-visible) {
+    background-color: var(--ink-wash);
     color: var(--ink);
+  }
+  .cwd:active {
+    background-color: var(--ink-wash);
+    box-shadow:
+      var(--bed-shade),
+      inset 0 1px var(--press-blur) var(--press-shade);
   }
 
   /* The plan and the file drawer (EXC-937) divide this surface between them: a

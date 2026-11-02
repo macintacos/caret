@@ -146,9 +146,10 @@ async function tokens(page: Page): Promise<{ state: number; pane: number }> {
   };
 }
 
-const outlineKey = (page: Page) => page.getByRole("button", { name: "Show outline" });
+const outlineKey = (page: Page) =>
+  page.locator(".plan-header").getByRole("button", { name: "Outline", exact: true });
 const hideKey = (page: Page) =>
-  page.locator(".plan-outline").getByRole("button", { name: "Hide outline" });
+  page.locator(".plan-outline").getByRole("button", { name: "Outline", exact: true });
 const versions = (page: Page) => page.getByRole("button", { name: /^Versions/ });
 
 async function open(page: Page): Promise<void> {
@@ -196,6 +197,121 @@ test("the outline column folds on --dur-state and stands on --dur-pane, the plan
   }
   expect(together(stand)).toBe(true);
   expect(await page.evaluate(() => (window as unknown as { __moves: Move[] }).__moves)).toEqual([]);
+});
+
+test("the outline key latches as it travels into the column, and lets go as it travels back", async ({
+  daemon,
+  page,
+}) => {
+  await armSlideLog(page);
+  // Each move the column's key makes into or out of its latch, with its timing and frame.
+  await page.addInitScript(() => {
+    const w = window as unknown as { __latches: (Slide & { easing: string })[] };
+    w.__latches = [];
+    window.addEventListener(
+      "transitionrun",
+      (e) => {
+        const key = e.target as Element;
+        if (e.propertyName !== "translate" || !key.matches(".plan-outline .header-tray > button"))
+          return;
+        const timing = key
+          .getAnimations()
+          .find((a) => a instanceof CSSTransition && a.transitionProperty === "translate")
+          ?.effect?.getTiming();
+        w.__latches.push({
+          part: key.getAttribute("aria-pressed") === "true" ? "latch" : "release",
+          duration: Number(timing?.duration),
+          easing: String(timing?.easing),
+          frame: Number(document.timeline.currentTime),
+        });
+      },
+      { capture: true },
+    );
+  });
+  const latches = async () => {
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as unknown as { __latches: unknown[] }).__latches.length),
+      )
+      .toBe(1);
+    return page.evaluate(() => {
+      const w = window as unknown as { __latches: (Slide & { easing: string })[] };
+      return w.__latches.splice(0)[0] as Slide & { easing: string };
+    });
+  };
+  await daemon.seed({ plan: PLAN });
+  await open(page);
+  const { state, pane } = await tokens(page);
+  const easeOut = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.setProperty("transition-timing-function", "var(--ease-out)");
+    document.body.append(probe);
+    const value = getComputedStyle(probe).transitionTimingFunction;
+    probe.remove();
+    return value;
+  });
+  await expect(hideKey(page)).toHaveAttribute("aria-pressed", "true");
+
+  await page.keyboard.press("Shift+Backslash");
+  const fold = await slidesOf(page, ["column key"]);
+  const release = await latches();
+  expect(release).toMatchObject({ part: "release", duration: state, easing: easeOut });
+  expect(release.frame).toBe(fold["column key"]?.frame);
+  await layoutStill(page);
+  await expect(outlineKey(page)).toHaveAttribute("aria-pressed", "false");
+
+  await page.keyboard.press("Shift+Backslash");
+  const stand = await slidesOf(page, ["column key"]);
+  const latch = await latches();
+  expect(latch).toMatchObject({ part: "latch", duration: pane, easing: easeOut });
+  expect(latch.frame).toBe(stand["column key"]?.frame);
+  await expect(hideKey(page)).toHaveAttribute("aria-pressed", "true");
+});
+
+test("a column stood by pressing the header's key brings its key in held down", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await open(page);
+  await page.keyboard.press("Shift+Backslash");
+  await layoutStill(page);
+  const box = await outlineKey(page).boundingBox();
+  if (box === null) throw new Error("the header's outline key is not rendered");
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await outlineKey(page).evaluate((key) =>
+    Promise.all(key.getAnimations().map((animation) => animation.finished)),
+  );
+  // How far the outline key, the header's or the column's, sits down in its well each frame.
+  await page.evaluate(() => {
+    const w = window as unknown as { __sinks: number[]; __sampling: boolean };
+    w.__sinks = [];
+    w.__sampling = true;
+    const sample = () => {
+      const key =
+        document.querySelector(".plan-outline .header-tray > button") ??
+        document.querySelector(".plan-header .header-tray > button");
+      if (key?.parentElement)
+        w.__sinks.push(
+          key.getBoundingClientRect().top - key.parentElement.getBoundingClientRect().top,
+        );
+      if (w.__sampling) requestAnimationFrame(sample);
+    };
+    sample();
+  });
+  await page.mouse.up();
+  await expect(hideKey(page)).toHaveAttribute("aria-pressed", "true");
+  await layoutStill(page);
+  const sinks = await page.evaluate(() => {
+    const w = window as unknown as { __sinks: number[]; __sampling: boolean };
+    w.__sampling = false;
+    return w.__sinks;
+  });
+
+  const [pressed = 0] = sinks;
+  expect(Math.min(...sinks)).toBeGreaterThan(pressed - 0.1);
 });
 
 test("Versions and the search hint hold their place while the outline folds and stands", async ({
@@ -596,8 +712,8 @@ test("focus holds through compare: on Versions when it is pressed, and on whiche
   await expect(page.locator(".plan-header .pair")).toHaveCount(0);
   await expect(versions(page)).toBeFocused();
 
-  // Compare folds the column, so focus on its Hide key moves to the header's Show key, and
-  // back as the column stands again.
+  // Compare folds the column, so focus on its outline key moves to the header's, and back as
+  // the column stands again.
   await hideKey(page).focus();
   await page.keyboard.press("d");
   await expect(outlineKey(page)).toBeFocused();

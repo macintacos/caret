@@ -39,7 +39,7 @@ function filterKey(target: HTMLElement): HTMLButtonElement | null {
 }
 
 function hideKey(target: HTMLElement): HTMLButtonElement | null {
-  return target.querySelector<HTMLButtonElement>("button[aria-label='Hide outline']");
+  return target.querySelector<HTMLButtonElement>("button[aria-label='Outline']");
 }
 
 /** The keycaps a key wears when shortcut hints are on. */
@@ -617,7 +617,7 @@ describe("PlanToc view marker", () => {
 describe("PlanToc entry points", () => {
   // Derived from the reservations rather than typed here, so the advertised hints
   // cannot drift from the keys the dispatcher fires on.
-  test("the Outline key advertises \\ and the Hide outline key ⇧\\", () => {
+  test("the filter key advertises \\ and the outline key ⇧\\", () => {
     const { target } = mountToc();
     expect(filterKey(target)?.getAttribute("aria-keyshortcuts")).toBe("\\");
     expect(hideKey(target)?.getAttribute("aria-keyshortcuts")).toBe("|");
@@ -640,7 +640,7 @@ describe("PlanToc entry points", () => {
     expect([...caps(filterKey(target)), ...caps(hideKey(target))]).toEqual([]);
   });
 
-  test("the Hide outline key hides the column", () => {
+  test("the outline key hides the column", () => {
     let hidden = 0;
     const { target } = mountToc({ onHide: () => hidden++ });
     hideKey(target)?.click();

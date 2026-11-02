@@ -77,6 +77,113 @@ Open items first, then the log, newest first.
 - **Call left to the user from the 2026-11-01 outline build:** a hidden outline stays
   hidden across reloads. The browser remembers it, as it remembers Preview. The handoff
   left this open; it was built that way and is waiting on the user's verdict.
+- **Calls left to the user from the 2026-11-02 polish:** both were built and are waiting
+  on the user's verdict.
+  - The working-directory path in a bed at the outline's foot.
+  - The outline key's latch riding its travel as the column stands and folds.
+
+## 2026-11-02: search marks stand out, the outline key latches, the cwd sits in a bed
+
+The user asked for three pieces of the review screen to look designed and of a piece with
+the rest of caret.
+
+- **Search marks.** The current match of a `/` search had to be the most obvious thing on
+  the page in every theme, and the other matches clearly marked, a step below it.
+  - The current match is the mark itself, opaque (`--mark-active`). Its text is whichever
+    of `--ink`, `--paper`, `--paper-raised` and `--paper-sunk` reads most strongly on it
+    (`--mark-active-ink`). The preview draws its bands over the text, so they tint the
+    mark and its text alike: a held selection's `--accent-wash`, then up to 9% `--ink`
+    from the cursor's or the pointer's band. `V`, then `/`, extends a selection to a
+    match, so the current match can sit under both. Where not even white or black text
+    would reach 4.5:1 under the bands, the mark first steps away from its text, only as
+    far as it needs: Catppuccin Latte's and GitHub light's marks are mixed 10% toward
+    black. Then, where the bands would take the text under 4.5:1, the text steps toward
+    white if it is lighter than the mark, or black if darker, until it reaches 4.5:1.
+    Catppuccin Frappé and Latte, Dawnfox and Dracula step their text.
+    `ui/src/lib/theme.test.ts` holds the text to 4.5:1 under both bands in every palette.
+    Before, the current match was a 34% (dark) or 28% (light) wash of the mark, with the
+    line's own syntax colour as its text.
+  - Every other match is a 36% wash of the mark (`--mark-match`), a step over the 18%
+    (dark) or 14% (light) `--mark` a comment span wears. Its text is `--ink`
+    (`--mark-match-ink`). The source view sets that text on the wash over two kinds of
+    ground:
+    - paper, or a code or table card's floor, under the cursor's or the pointer's band and
+      any inline chip;
+    - a table header's pad, the raised `--body` fill under the header row, lit toward its
+      top edge by `--pad-top`.
+
+    Where a palette's `--ink` falls under 4.5:1 on any of them, the text steps toward
+    white in dark or black in light, only as far as 4.5:1 needs. caret's own palettes and
+    both GitHub palettes keep their `--ink`. Before, every other match wore `--mark`.
+  - A chip inside a table header is left out of those grounds, because on the pad's lit
+    top under a chip no text colour reaches 4.5:1 in five dark palettes. Where a header's
+    text sits, below that top, a match on a header's code chip measures 4.52:1 (Catppuccin
+    Frappé) or more.
+  - Both marks set their own text colour, over a syntax, heading or quote colour. An
+    italic run's last glyph can slant past the mark's box, and the part outside keeps the
+    mark's text colour, so on the paper beside the mark it can vanish. `::highlight()`
+    takes no padding to widen the box, so this is accepted.
+  - Measured as painted on a plain line, across the eleven bundled palettes and both
+    views, as CIE76 colour differences (ΔE):
+
+    | Pair | Before | After |
+    | --- | --- | --- |
+    | Other match against its line | 8.0 (Dawnfox) to 20.6 (caret dark) | 20.6 (Dawnfox) to 40.3 (Catppuccin Latte) |
+    | Current match against its line | 15.1 (Dawnfox) to 35.3 (caret dark) | 52.6 (Dawnfox) to 103.1 (Catppuccin Latte) |
+    | Current match against the others | 9.7 (caret light) to 20.2 (GitHub dark) | 35.1 (Dawnfox) to 64.1 (Catppuccin Latte) |
+
+    Text contrast was read from screenshot pixels: the pixel inside a glyph furthest from
+    the mark's colour, against the mark. At 1x, antialiasing blends a thin stem with the
+    mark, so that read comes out low; the 4.5:1 minimum is therefore checked at 2x. The
+    lowest text contrast rose from 2.9:1 (Catppuccin Frappé, read at 1x, so if anything
+    lower than the true value) to 4.8:1 (Catppuccin Frappé, an other match on a table
+    header, read at 2x). Under a held selection, the current match's text reads 4.6:1
+    (Catppuccin Latte) or more. Before, it read 3.9:1 to 4.4:1 there in five palettes.
+  - `test/e2e/search-marks.e2e.ts` holds, in every bundled palette and in both views:
+    - an other match at least 18 ΔE off its line, and at least 1.5 times as far off it as
+      a comment span's `--mark` on that line, which measures 1.86 (GitHub dark) to 2.62
+      (GitHub light) times;
+    - the current match at least 45 ΔE off its line and 30 ΔE off the others;
+    - the text inside every match at 4.5:1, a code chip under the cursor's band and a
+      table header among them;
+    - in the preview, the current match's text at 4.5:1 under a held selection.
+  - On a comment span, a selection, the cursor's and the pointer's bands, a heading, a
+    code block and a quote, an other match stays at least 17.9 ΔE off what it sits on
+    (Dawnfox, on a comment span). The current match stays at least 44.1 ΔE off it
+    (Catppuccin Frappé, on a selected line). A thematic break (`---`) draws a rule in
+    place of its dashes, which it paints transparent. A match on it keeps them
+    transparent, so the mark shows as a plain band.
+  - Not built: an underline on the other matches, because a link already underlines. A
+    wash weakened per palette until its `--ink` held 4.5:1, because Catppuccin Latte's
+    would have fallen under the old `--mark`.
+- **The outline key latches.** The column's key and the header's are one toggle named
+  "Outline", which supersedes the "Hide outline" and "Show outline" names of 2026-11-01. A
+  press, or ⇧ + `\`, opens or folds the outline. The key latches down with its corner
+  light while the outline is open, as the Preview key does, and stands up while it is
+  closed.
+  - The latch rides the key's travel. As the column stands, the key latches on
+    `--dur-pane`; as it folds, the key lets go on `--dur-state`. Both run on `--ease-out`
+    from the slide's first frame, not on the spring a key's return takes.
+  - A click stands the column with the header's key already pressed down, so the column's
+    key comes in latched. ⇧ + `\` stands it with the key up, so the key latches on the
+    way.
+  - A shortcut plays its press on the control it stands for, holding the key down for
+    110ms (the press echo). A fold from ⇧ + `\` drops that echo from the key, which would
+    otherwise hold it down past the end of its travel.
+  - Reduced motion snaps the latch with the slide.
+- **The working-directory path sits in a bed.** It is centred at the outline's foot, in a
+  bed with no key, a `button.tray`. Three variants were tried on the real app in light and
+  dark:
+  - Bed, built: the `.tray` recipe, cut into the body like the header's beds. The user
+    described it as "not a proper button, but just the bed".
+  - Copy box: a text field's floor and `--panel-recess`. In light its white floor and edge
+    read as a field to type in.
+  - Pocket: a stamp's darker floor, as a pill. The kit stamps passive labels this way, and
+    it read as a tag.
+
+  The bed takes `--ink-wash` under the pointer and keyboard focus, as a ghost control
+  does, and a press leaves the ghost control's dimple in it. The path still shrinks to an
+  ellipsis, at column widths from 12rem to 28rem.
 
 ## 2026-11-02: the outline column resizes from its edge
 

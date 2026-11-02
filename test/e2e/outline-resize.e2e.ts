@@ -116,7 +116,7 @@ test("the edge takes the gap's clicks and none of the plan's, the rows' or the H
     await expect(rows).toHaveCount(3);
     expect(await stolenRightEdges(rows)).toEqual([]);
     expect(
-      await stolenRightEdges(column(page).getByRole("button", { name: "Hide outline" })),
+      await stolenRightEdges(column(page).getByRole("button", { name: "Outline", exact: true })),
     ).toEqual([]);
   }
 });
@@ -317,7 +317,9 @@ test.describe("beside a file drawer", () => {
 
       await openFile(page);
       await expect(column(page)).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "Show outline" })).toBeVisible();
+      await expect(
+        page.locator(".plan-header").getByRole("button", { name: "Outline", exact: true }),
+      ).toBeVisible();
     } finally {
       await proj.cleanup();
     }

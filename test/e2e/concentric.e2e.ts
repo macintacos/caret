@@ -239,7 +239,7 @@ test("the outline's float: the filter nests in its corner, and so does a top-lev
   await page.setViewportSize({ width: 880, height: 900 });
   await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
-  await page.getByRole("button", { name: "Show outline" }).click();
+  await page.locator(".plan-header").getByRole("button", { name: "Outline", exact: true }).click();
   const panel = page.locator(".outline-float");
   await expect(panel).toBeVisible();
   await expectConcentric(panel, panel.locator("[data-slot='input-group']"), "tl");

@@ -148,9 +148,9 @@ describe("DiffPlanView outline", () => {
       ?.run?.();
   const column = (target: HTMLElement) => target.querySelector(".plan-outline");
   const showKey = (target: HTMLElement) =>
-    target.querySelector<HTMLButtonElement>(".plan-header button[aria-label='Show outline']");
+    target.querySelector<HTMLButtonElement>(".plan-header button[aria-label='Outline']");
   const hideKey = (target: HTMLElement) =>
-    target.querySelector<HTMLButtonElement>(".plan-outline button[aria-label='Hide outline']");
+    target.querySelector<HTMLButtonElement>(".plan-outline button[aria-label='Outline']");
 
   test("stands as a column beside the plan, with no outline key in the header", () => {
     const { target } = render(DiffPlanView, props());
@@ -158,7 +158,7 @@ describe("DiffPlanView outline", () => {
     expect(showKey(target)).toBeNull();
   });
 
-  test("Hide outline moves the outline key into the header, and Show outline brings the column back", async () => {
+  test("the column's outline key moves into the header, and the header's brings the column back", async () => {
     const { target } = render(DiffPlanView, props());
     hideKey(target)?.click();
     await until(() => column(target) == null);
@@ -169,6 +169,14 @@ describe("DiffPlanView outline", () => {
     await until(() => column(target) != null);
     expect(column(target)).not.toBeNull();
     expect(showKey(target)).toBeNull();
+  });
+
+  test("the outline key is pressed while the column stands, and up once it folds into the header", async () => {
+    const { target } = render(DiffPlanView, props());
+    expect(hideKey(target)?.getAttribute("aria-pressed")).toBe("true");
+    hideKey(target)?.click();
+    await until(() => column(target) == null);
+    expect(showKey(target)?.getAttribute("aria-pressed")).toBe("false");
   });
 
   // A hidden outline is a reading choice, kept like the source/preview one.

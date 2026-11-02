@@ -86,8 +86,10 @@
     /** Whether the keycaps are shown (the Show Hints setting). The keys work either
      * way. */
     showShortcutHints?: boolean;
-    /** Hide the column (its head's Hide outline key). */
+    /** Hide the column (its head's outline key). */
     onHide?: () => void;
+    /** Whether the column stands open, which latches its outline key. */
+    open?: boolean;
     /** Hand the parent an action that opens the filter and focuses it, so `\` can
      * reach the column. */
     onExposeFilter?: (open: () => void) => void;
@@ -112,6 +114,7 @@
     latchGlides = false,
     showShortcutHints = false,
     onHide,
+    open = true,
     onExposeFilter,
     foot,
     onPeek,
@@ -517,13 +520,14 @@
         Outline
         {#if showShortcutHints}<Kbd class="kbd-sm" aria-hidden="true">\</Kbd>{/if}
       </Button>
-      <!-- Sized as the header's Show outline key, which takes its place. -->
+      <!-- Sized as the header's outline key, which takes its place. -->
       <span class="tray header-tray">
         <Button
           variant="secondary"
           size={showShortcutHints ? "sm" : "icon-sm"}
           class="toc-hide float-chip"
-          aria-label="Hide outline"
+          aria-label="Outline"
+          aria-pressed={open}
           aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleOutline")}
           onclick={onHide}
         >
@@ -878,7 +882,7 @@
   .plan-toc :global(:is([data-level="1"], [data-level="2"]) .toc-label) {
     font-weight: 600;
   }
-  /* The Hide outline key and the header's Show outline key are one key in a layout move
+  /* The column's outline key and the header's are one key in a layout move
      (lib/paneMove.ts), travelling in its well between the column's head and the header. */
   :global(:root[data-pane-move]) .toc-title-row .header-tray {
     view-transition-name: outline-key;

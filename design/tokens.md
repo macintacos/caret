@@ -24,7 +24,7 @@ it. User theme files follow
 | Accent | `--accent`; `--accent-bright` for link and text hovers, `--accent-ink` for text on the accent, `--accent-wash` for tints |
 | Destructive | `--danger` |
 | Status | `--ok`, `--danger`, and `--attention` for novelty (new, unread) |
-| Highlight bands | `--mark`, `--mark-active`, `--mark-orphan` |
+| Highlight bands | `--mark`, `--mark-orphan`; the search's `--mark-match` and `--mark-active`, and their text, `--mark-match-ink` and `--mark-active-ink` |
 | Inline chips in the plan | `--chip-bold`, `--chip-italic`, `--chip-code`, `--chip-link`, `--chip-ref`, `--chip-skill` |
 | Syntax and markdown colours | the `syntax` and `markdown` blocks of each theme file |
 

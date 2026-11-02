@@ -67,7 +67,7 @@
 
       <!-- Plan pane as a redacted diff: prose bars, added (--ok) and removed
            (--danger) lines, and a closing prose line carrying two plan-search hits
-           (--mark, --mark-active) — so the mock samples every hue job the palette
+           (--mark-match, --mark-active) — so the mock samples every hue job the palette
            names, not just the accent. -->
       <div class="tp-plan">
         <Skeleton class="tp-bar tp-bar-title" />
@@ -230,11 +230,9 @@
   }
 
   /* The closing prose line, marked: two plan-search hits laid over an ordinary
-     .tp-bar — --mark for a match, --mark-active a step up for the current one. Both
-     tokens are translucent by recipe, so the bar reads through them the way syntax
-     colors read through a real highlight, and the two-step is what tells the reviewer
-     the palette distinguishes them. Wrapping a bar in a positioned row is the shape
-     .tp-line already uses for the diff tints, so the marked line costs no height. */
+     .tp-bar, as the plan paints them — --mark-match, translucent, for a match, and the
+     opaque --mark-active for the current one. Wrapping a bar in a positioned row is the
+     shape .tp-line already uses for the diff tints, so the marked line costs no height. */
   .tp-marked-line {
     position: relative;
   }
@@ -247,7 +245,7 @@
     height: 7px;
     width: 22px;
     border-radius: 2px;
-    background: var(--mark);
+    background: var(--mark-match);
   }
   .tp-mark-current {
     left: 31px;
