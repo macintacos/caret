@@ -147,6 +147,8 @@
   // What to do after upgrading, in the spawning harness's words, for What's new.
   // Undefined until the probe lands, or on a resident daemon, which withholds it.
   let restartHint = $state<string | undefined>(undefined);
+  // The daemon user's home directory, so the status bar shows the cwd from `~`.
+  let home = $state<string | undefined>(undefined);
   // The daemon's update verdict (EXC-1207), read on load and re-read after the
   // Updates toggle lands. Null when it can't be read — a daemon that wires no update
   // thunk 404s the route — and every surface then stays quiet. The `updates.check`
@@ -560,6 +562,7 @@
         commit = h.commit;
         source = h.source;
         restartHint = h.restartHint;
+        home = h.home;
         // Dev --fresh (EXC-781): reset the browser to a brand-new-user session. The
         // re-paint is needed because main.ts already painted whatever was stored
         // before this probe resolved. Keyed on instanceId because the daemon reports
@@ -777,12 +780,10 @@
     showDialog = false;
     void resolve.requestChanges(generalComment);
   }
-  // Copy the active review's working directory (EXC-850). The write is optimistic
-  // — the Clipboard API rejects in insecure contexts, where the path is still on
-  // screen to copy by hand — and the success alert reflects the click intent.
-  function onCopyCwd(cwd: string) {
-    void navigator.clipboard?.writeText(cwd).catch(() => {});
-    alerts.push({ variant: "success", message: "Copied path to clipboard" });
+  // Copy the active review's working directory (EXC-850). Async so an insecure context,
+  // where the browser withholds the Clipboard API, rejects like a refused write.
+  async function onCopyCwd(cwd: string): Promise<void> {
+    await navigator.clipboard.writeText(cwd);
   }
 </script>
 
@@ -895,6 +896,7 @@
     onOpenHelp={openHelp}
     {showShortcutHints}
     cwd={active?.cwd}
+    {home}
     {onCopyCwd}
   />
 </div>
