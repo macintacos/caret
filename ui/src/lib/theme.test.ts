@@ -923,6 +923,19 @@ describe("every theme", () => {
     }
   });
 
+  // A splitter's grip (Splitter.svelte) is the switch's knob standing in the bare body
+  // between two panes, risen under the pointer and pressed while held, so it has to stand
+  // off the body in both states.
+  test("keeps a splitter's grip above the non-text floor on the body, risen and held", () => {
+    for (const [id, theme] of themeEntries()) {
+      const body = derived("--body", theme);
+      for (const face of ["--knob-face", "--knob-face-down"]) {
+        const mark = theme.scheme === "dark" ? derived(face, theme) : derived("--knob-edge", theme);
+        expect(contrast(mark, body), `${id} ${face}`).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
   // The volume meter lights its pips in --ink-soft up to the level, so the lit run is the
   // value and has to stand off the unlit pips beside it.
   test("keeps the meter's lit pips above the non-text floor against its unlit ones", () => {

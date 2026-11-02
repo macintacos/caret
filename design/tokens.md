@@ -105,9 +105,9 @@ All in `ui/src/styles/tokens.css`:
   `--shadow-card` still comes from the palette.
 - **Layout:** `--pane-gap` (6px), the inset around the plan pane, and `--status-bar-h`
   (2.25rem), the status bar's height, are in `ui/src/styles/layout.css`. The outline
-  column's width is `OUTLINE_COLUMN_REM` in `ui/src/components/DiffPlanView.svelte`, and
-  the plan's reading width, which the column yields to a file to keep, is `MIN_READING_PX`
-  in `ui/src/lib/fileDrawer.ts`.
+  column's opening, narrowest and widest widths are `OUTLINE_REM` in
+  `ui/src/lib/outlineColumn.ts`. The plan's reading width is `MIN_READING_PX` in
+  `ui/src/lib/fileDrawer.ts`. The column stops widening, and yields to a file, to keep it.
 
 ## Terminal
 

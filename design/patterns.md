@@ -92,6 +92,15 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   folds the column too, without changing the reader's remembered choice. Its float then
   lists only the sections that changed, each with its line count, or says "No sections
   changed".
+- **The outline column takes the width the reader drags it to.** Its right edge is a
+  splitter (see **Splitters** in the tactile kit). The column opens 15.5rem wide and
+  narrows to 12rem. It widens to 30rem, but only while the plan beside it keeps its 800px
+  reading column. Even a narrow window lets it stand at 15.5rem. The column yields at the
+  width the reader chose, so a narrowed column stands beside a file that the opening width
+  would yield to. No gesture on the edge drops the column to a float. Beside a file
+  drawer, a drag stops where the column would yield, and a double-click returns the
+  opening width or, where that would yield, the widest width that fits. The browser
+  remembers the width.
 - One emphasis per view. The amber accent is used verbatim, never lightened, and only for
   the wordmark, the primary action, and the text cursor. Everything else steps down
   through `--ink-soft` and `--ink-faint`.
@@ -310,6 +319,19 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `--meter-off` and no knob; the meter is the target, and focus lights its pips as hover
   does. The switch's key nests 2px inside its well, so the well rounds at `--nub-radius`
   plus 2px.
+- **Splitters.** A pane's resizable edge is ARIA's window splitter pattern, a focusable
+  `role="separator"` whose value the arrow keys change
+  (`ui/src/components/Splitter.svelte`). The file drawer's edge and the outline column's
+  are the two. It lies over the bare gap between two panes and nothing else, so it never
+  takes a click meant for either. At rest the gap is all that shows. Under the pointer or
+  keyboard focus, a grip rises in the gap where the pointer is: the switch's key, light in
+  both schemes, 6px wide and a key's 2rem tall. Held, the grip goes down as a pressed key
+  does, its side folding away and its shading turning concave. `theme.test.ts` holds it to
+  3:1 on the body, risen and held. A mouse drag leaves the edge focused, but only focus
+  from the keyboard raises the grip, so it fades once the pointer leaves. The arrow keys
+  step the edge 24px. A double-click returns the pane to its opening size: 15.5rem for the
+  column, and 45% of the surface for the drawer. Beside a file, the column stops at the
+  widest width that fits, if that is less.
 - **The copy and wrap tray.** `CodeChromeTray` is the one copy and wrap tray, and its host
   places it: `CodeBlockChrome` in the plan, the block corner in Settings, and
   `UpgradeCommand`, which sets its tooltip (`copyTooltip`) to "Copy command" in place of
@@ -418,7 +440,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   the reader jumps to a heading, and moves with no motion while the plan scrolls under it,
   because motion on a change that runs through a scroll reads as lag. What comes and goes
   with the window's width changes with no motion too, because motion during a resize drag
-  jitters.
+  jitters. A pane a splitter resizes changes with no motion too, because the plan lays out
+  again under the pointer every frame.
 - A key's return from a press is the one spring: it travels back over `--dur-state` on
   `--ease-spring`, past rest and back. The press itself, and every shading and colour
   change, stays on `--ease-out`.

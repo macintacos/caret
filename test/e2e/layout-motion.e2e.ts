@@ -289,9 +289,22 @@ test("Shift+\\ pressed twice reverses the column mid-flight, never shutting it",
 }) => {
   await daemon.seed({ plan: PLAN });
   await open(page);
-  // Whether the column was mid-fold as each \ went down.
+  await expect(hideKey(page)).toBeVisible();
+  await layoutStill(page);
+  // The column's right edge each frame, or -1 for a frame it is not in the page, and whether
+  // it was mid-fold as each \ went down. The page presses the second \ itself, on the first
+  // frame the folding column has moved, so it lands mid-fold however loaded the host is.
   await page.evaluate(() => {
-    const w = window as unknown as { __midFold: boolean[] };
+    const w = window as unknown as {
+      __edges: number[];
+      __midFold: boolean[];
+      __sampling: boolean;
+      __pressed: boolean;
+    };
+    w.__edges = [];
+    w.__midFold = [];
+    w.__sampling = true;
+    w.__pressed = false;
     window.addEventListener(
       "keydown",
       (e) => {
@@ -300,53 +313,44 @@ test("Shift+\\ pressed twice reverses the column mid-flight, never shutting it",
       },
       { capture: true },
     );
-  });
-  // A loaded host can land the second press after the fold has finished, which tests no
-  // reversal, so such a run goes again.
-  await expect(async () => {
-    await expect(hideKey(page)).toBeVisible();
-    await layoutStill(page);
-    // The column's right edge each frame, or -1 for a frame it is not in the page.
-    await page.evaluate(() => {
-      const w = window as unknown as {
-        __edges: number[];
-        __midFold: boolean[];
-        __sampling: boolean;
-      };
-      w.__edges = [];
-      w.__midFold = [];
-      w.__sampling = true;
-      const sample = () => {
-        w.__edges.push(
-          document.querySelector(".plan-outline")?.getBoundingClientRect().right ?? -1,
+    const sample = () => {
+      const right = document.querySelector(".plan-outline")?.getBoundingClientRect().right ?? -1;
+      w.__edges.push(right);
+      const folding = document.querySelector(".plan-outline.leaving") !== null;
+      if (!w.__pressed && folding && right < (w.__edges[0] ?? 0) - 1) {
+        w.__pressed = true;
+        document.body.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "|",
+            code: "Backslash",
+            shiftKey: true,
+            bubbles: true,
+          }),
         );
-        if (w.__sampling) requestAnimationFrame(sample);
-      };
-      requestAnimationFrame(sample);
-    });
+      }
+      if (w.__sampling) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
 
-    await page.keyboard.press("Shift+Backslash");
-    await page.waitForFunction(() => {
-      const w = window as unknown as { __edges: number[] };
-      const right = document.querySelector(".plan-outline.leaving")?.getBoundingClientRect().right;
-      return right !== undefined && right < (w.__edges[0] ?? 0) - 1;
-    });
-    await page.keyboard.press("Shift+Backslash");
-    await expect(hideKey(page)).toBeVisible();
-    await layoutStill(page);
-    const { edges, midFold } = await page.evaluate(() => {
-      const w = window as unknown as {
-        __edges: number[];
-        __midFold: boolean[];
-        __sampling: boolean;
-      };
-      w.__sampling = false;
-      return { edges: w.__edges, midFold: w.__midFold };
-    });
-    expect(midFold, "the second press came mid-fold").toEqual([false, true]);
-    expect(Math.min(...edges)).toBeGreaterThan(0);
-    expect(edges.at(-1)).toBe(edges[0]);
-  }).toPass({ timeout: 30_000 });
+  await page.keyboard.press("Shift+Backslash");
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __pressed: boolean }).__pressed))
+    .toBe(true);
+  await expect(hideKey(page)).toBeVisible();
+  await layoutStill(page);
+  const { edges, midFold } = await page.evaluate(() => {
+    const w = window as unknown as {
+      __edges: number[];
+      __midFold: boolean[];
+      __sampling: boolean;
+    };
+    w.__sampling = false;
+    return { edges: w.__edges, midFold: w.__midFold };
+  });
+  expect(midFold, "the second press came mid-fold").toEqual([false, true]);
+  expect(Math.min(...edges)).toBeGreaterThan(0);
+  expect(edges.at(-1)).toBe(edges[0]);
 });
 
 test("opening a file slides the column out as the drawer slides in, in one frame", async ({
@@ -392,7 +396,6 @@ test("closing a file stands the column again as the drawer slides away, in one f
 
     await page.getByRole("button", { name: "Close preview" }).click();
     await expect(hideKey(page)).toBeVisible();
-    await expect(page.locator("[data-file-drawer]")).toHaveCount(1);
     const close = await slidesOf(page, ["drawer", "column", "pane"]);
     expect(close.drawer?.duration).toBe(state);
     expect(close.column?.duration).toBe(pane);

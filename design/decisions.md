@@ -59,12 +59,70 @@ Open items first, then the log, newest first.
   reads as disabled and dark's `--ink` labels fall under AA. "Focus looks like hover"
   (2026-10-31) and "A light hover lifts, and the last corners and labels" (2026-11-01)
   rule both out.
+- **Splitter targets under 24px:** both splitters fail WCAG 2.2's 2.5.8 and 2.5.7, and the
+  user decides the remedy.
+  - **2.5.8, target size:** the outline column's edge is 0.5rem (8px) wide and the file
+    drawer's 6px, under the 24px floor. The spacing exception doesn't apply, because a
+    24px circle centred on either edge overlaps the outline's rows or the plan. A wider
+    edge would take their clicks, so widening it is not the fix.
+  - **2.5.7, dragging movements:** neither edge offers a single-pointer alternative to the
+    drag. The arrow keys reach every size, but both criteria count pointer input only.
+  - **The conforming route:** an equivalent pointer control at least 24px across meets
+    both criteria and takes no click from the panes. One example is a Narrower, Default
+    and Wider stepper for the outline's width in Settings, with another for the drawer's.
+    It adds UI the user hasn't asked for, so it waits on their decision.
 - **Calls left to the user from the 2026-10-31 pass:** the one left was built and is
   waiting on the user's verdict.
   - `--ink-faint` line numbers in the file preview's gutter, 3.10:1 on Dawnfox's paper.
 - **Call left to the user from the 2026-11-01 outline build:** a hidden outline stays
   hidden across reloads. The browser remembers it, as it remembers Preview. The handoff
   left this open; it was built that way and is waiting on the user's verdict.
+
+## 2026-11-02: the outline column resizes from its edge
+
+The user asked to make the outline column resizable, "polished and intuitive, cohesive
+with the rest of caret". This replaces the fixed 15.5rem width from 2026-11-01.
+
+- **Bounds:** the column opens at 15.5rem, narrows to 12rem and widens to 30rem.
+  - At 12rem an H5 row, four steps in, still holds a few words a line.
+  - At 30rem a label's line reaches about 75 characters, the longest measure that reads
+    well.
+  - It widens only while the plan beside it keeps `MIN_READING_PX`, its 800px reading
+    column. A window too narrow for that still lets the column stand at 15.5rem, so no
+    window gives it less room than before.
+  - A width the window can't hold shrinks with the window, and comes back as the window
+    widens.
+- **Beside a file:** the column yields, folding into the header's float, at the width the
+  reader chose. A narrowed column stays beside a file that the opening width would yield
+  to, and a widened one yields sooner. No gesture on the edge drops the column to a float.
+  A drag beside a file stops where the column would yield. A double-click there returns
+  the opening width if it fits beside the file, and otherwise the widest width that does.
+  The browser remembers the width the double-click set, so the column keeps it once the
+  file closes.
+- **One splitter for both edges:** the file drawer's edge moved onto the same
+  `Splitter.svelte`, so the two edges look and behave alike. Its 2px `--ink-faint` seam
+  gave way to the grip. A full-height rule read as a hard line, which the chrome never
+  draws. A double-click on the drawer's edge returns it to its opening share, 45% of the
+  surface, and forgets the dragged size.
+- **The grip:** it is the switch's key, at a key's 2rem height. It rises in the gap under
+  the pointer and goes down while held. It follows the pointer along the edge, and stays
+  where it was grabbed during a drag. It takes the key's rest face, `--knob-face`, rather
+  than its hover face, because the hover face measures 2.94:1 on Catppuccin Frappé's body.
+  A mouse drag leaves the edge focused, so the arrow keys can fine-tune it, but that focus
+  doesn't raise the grip: only focus from the keyboard does. Otherwise every drag would
+  leave a lit grip standing in the gap.
+- **The edge covers only the gap:** the 0.5rem (8px) the outline's rows leave before the
+  plan pane. The outline's list hides its scrollbar, so the edge overlaps no scrollbar.
+- **No transform or throttle on the drag:** the drag needs neither, because it already
+  holds the display's frame rate. The column resizes live, and the plan lays out again
+  each frame. Measured with bare `requestAnimationFrame` timestamps and the Long Animation
+  Frames API at 1440px in headless Chromium on `scripts/tasks/dev/fake-plan.md`, a drag
+  holds 16.7ms frames, the display's rate, in both views. The page's first gesture pays
+  one 100 to 130ms frame, which is caret's sound unlocking audio on the window's first
+  `pointerdown`, whatever the gesture. Under a 4x CPU throttle the source view drops to 33
+  to 50ms frames during a drag, and a window resize to 67 to 83ms. The preview holds
+  16.7ms even there.
+- **Not built:** the window splitter's optional Home, End and Enter keys.
 
 ## 2026-11-01: the layout moves as one, and panes enter slower than they leave
 

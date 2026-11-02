@@ -120,6 +120,12 @@
     readDrawerSize,
     writeDrawerSize,
   } from "$lib/fileDrawer.ts";
+  import {
+    outlineBounds,
+    outlineReset,
+    outlineWidth,
+    outlineWidthPref,
+  } from "$lib/outlineColumn.ts";
   import { sectionDeltas } from "$lib/tocSections.ts";
   import {
     followBox,
@@ -174,6 +180,7 @@
   import LegacyAnnotationList from "@/components/LegacyAnnotationList.svelte";
   import PlanBreadcrumbs from "@/components/PlanBreadcrumbs.svelte";
   import PlanToc from "@/components/PlanToc.svelte";
+  import Splitter from "@/components/Splitter.svelte";
   import Icon from "@/components/Icon.svelte";
   import KbdCap from "@/components/KbdCap.svelte";
   import CodeBlockChrome from "@/components/CodeBlockChrome.svelte";
@@ -980,7 +987,7 @@
       drawerEdge,
     ),
   );
-  function setDrawerSize(px: number): void {
+  function setDrawerSize(px: number | null): void {
     chosenSize[drawerEdge] = px;
     writeDrawerSize(drawerEdge, px);
   }
@@ -994,15 +1001,20 @@
   let outline = $state<PlanOutline>(readPlanOutline());
   let floatOpen = $state(false);
   let bodyWidth = $state(0);
-  // Keep in step with .plan-outline's width.
-  const OUTLINE_COLUMN_REM = 15.5;
   const outlineRuns = $derived(runs("headingTracking") || showDiff);
   // A closing lane has left the layout, so the column stands again as it goes.
   const drawerRight = $derived(
     runs("fileReferences") && filePreview !== undefined && !drawerClosing && drawerEdge === "right",
   );
+  // The column stands at the width the reader chose, within the room the body leaves, and
+  // yields to a file at that width. A drag beside a file stops where it would yield.
+  let columnChosen = $state(outlineWidthPref.read());
+  const columnWidth = $derived(outlineWidth(columnChosen, bodyWidth, remPx()));
+  const columnBounds = $derived(
+    outlineBounds(bodyWidth, remPx(), drawerRight ? { chosen: chosenSize.right } : undefined),
+  );
   const columnRoom = $derived(
-    !narrow && (!drawerRight || outlineFits(bodyWidth, columnPx(), chosenSize.right)),
+    !narrow && (!drawerRight || outlineFits(bodyWidth, columnWidth, chosenSize.right)),
   );
   const columnStands = $derived(columnRoom && !showDiff);
   const columnShown = $derived(outlineRuns && outline === "shown" && columnStands);
@@ -1015,10 +1027,15 @@
     if (surfaceEl !== undefined) surfaceWidth = surfaceEl.clientWidth;
   });
 
-  // The column's width in px: in rem, so a larger default font widens it with the text.
-  function columnPx(): number {
+  // The column is sized in rem, so a larger default font widens it with the text.
+  function remPx(): number {
     const root = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
-    return OUTLINE_COLUMN_REM * (Number.isFinite(root) ? root : 16);
+    return Number.isFinite(root) ? root : 16;
+  }
+
+  function setColumnWidth(px: number | null): void {
+    columnChosen = px;
+    outlineWidthPref.write(px);
   }
 
   // The layout's live moves (lib/layoutSlide.ts): the column standing or folding, and a
@@ -2690,9 +2707,19 @@
       class:leaving={!columnShown}
       inert={!columnShown}
       aria-label="Outline"
+      style:width="{columnWidth}px"
       bind:this={outlineEl}
     >
       {@render outlineList("column")}
+      <Splitter
+        label="Resize outline"
+        grows="right"
+        size={columnWidth}
+        min={columnBounds.min}
+        max={columnBounds.max}
+        onResize={setColumnWidth}
+        onReset={() => setColumnWidth(outlineReset(columnBounds.max, remPx()))}
+      />
     </aside>
   {/if}
 <div
@@ -3182,6 +3209,7 @@
       size={drawerSize}
       available={drawerAxis}
       onResize={setDrawerSize}
+      onReset={() => setDrawerSize(null)}
       closing={drawerClosing}
     >
       {#snippet children()}
@@ -3318,9 +3346,15 @@
     flex: none;
     display: flex;
     flex-direction: column;
-    width: 15.5rem;
     min-height: 0;
     padding-left: calc(var(--bar-inset) - 0.45rem);
+  }
+  /* The column's edge covers only the gap its rows leave before the plan pane, so it takes
+     no click meant for a row or the plan. Keep in step with the outline list's end padding
+     (PlanToc.svelte). */
+  .plan-outline > :global(.splitter) {
+    inset: 0 0 0 auto;
+    width: 0.5rem;
   }
   /* The parts of a layout slide (lib/layoutSlide.ts), each sliding home from the offset it
      is let go at. The column stacks over the plan, so its key shows as it travels across. */

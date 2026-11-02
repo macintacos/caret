@@ -41,6 +41,7 @@ function mountDrawer(
     size: 420,
     available: 1200,
     onResize: () => {},
+    onReset: () => {},
     children,
     ...over,
   });

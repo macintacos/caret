@@ -181,12 +181,17 @@ the view you chose.
 
 The **outline** down the left of the plan lists its headings and marks the one you are
 reading. Click a heading to go to it. `\` filters the outline, and Shift+`\` hides or
-shows it. Your browser remembers a hidden outline. In a window under 960px wide, or when a
-file opened beside the plan would leave it too narrow to read, the outline folds into a
-button at the left of the plan's header, which opens it over the plan. While you compare
-versions, the outline folds into that button too, so the diff has the width. Opened, it
-lists only the sections that changed, each with its line count, and clicking one takes you
-to the change. Leaving compare brings the outline back to how it was before you compared.
+shows it. Your browser remembers a hidden outline. Drag the outline's right edge to make
+it wider or narrower, or tab to the edge and use the left and right arrow keys.
+Double-click the edge to return the outline to its default width. With a file open beside
+the plan, neither a drag nor a double-click widens the outline past the width that keeps
+it beside the plan. Your browser remembers the width too. In a window under 960px wide,
+the outline folds into a button at the left of the plan's header, which opens it over the
+plan. It folds the same way when a file opened beside the plan would leave the plan too
+narrow to read at the outline's current width. While you compare versions, the outline
+folds into that button too, so the diff has the width. Opened, it lists only the sections
+that changed, each with its line count, and clicking one takes you to the change. Leaving
+compare brings the outline back to how it was before you compared.
 
 ## References caret recognizes
 

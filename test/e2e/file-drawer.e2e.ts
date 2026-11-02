@@ -362,6 +362,39 @@ test("dragging the handle resizes the lane, and each edge remembers its own size
   }
 });
 
+test("a double-click on the handle returns the lane to the size it opened at, and forgets the dragged one", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await page.addInitScript(() => localStorage.setItem("caret.planOutline", "hidden"));
+    await seedCacheDrawer(daemon, page, proj.dir, WIDE);
+    await openPreview(page);
+    const opening = (await laneGeometry(page))?.drawer?.width ?? 0;
+    expect(opening).toBeGreaterThan(0);
+
+    const handle = page.getByRole("separator", { name: "Resize file preview" });
+    await handle.focus();
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await expect
+      .poll(async () => (await laneGeometry(page))?.drawer?.width ?? 0)
+      .toBeGreaterThan(opening + 40);
+    expect(await page.evaluate(() => localStorage.getItem("caret.fileDrawer.width"))).not.toBe(
+      null,
+    );
+
+    await handle.dblclick();
+    await expect
+      .poll(async () => (await laneGeometry(page))?.drawer?.width ?? 0)
+      .toBeCloseTo(opening, 0);
+    expect(await page.evaluate(() => localStorage.getItem("caret.fileDrawer.width"))).toBe(null);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 test("a reference on the plan's last line is still visible once the bottom drawer opens", async ({
   daemon,
   page,

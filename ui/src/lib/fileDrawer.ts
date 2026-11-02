@@ -2,18 +2,14 @@
 //
 // The drawer takes layout space beside the plan — right on a wide window, bottom
 // on a narrow one — so its size is bounded from both sides: it must stay usable
-// itself, and it must never squeeze the plan below a readable column. The drag
-// math is pure (the component supplies the DOM rects) so the resize is
-// unit-testable without a browser, mirroring diffview/lineDrag.ts.
+// itself, and it must never squeeze the plan below a readable column.
 //
 // The two edges remember their sizes under two keys, which is what makes
-// resizing the right drawer leave the bottom drawer's height alone. The
-// read/write pair is bespoke rather than a definePref factory — a clamped number
-// fits neither the flag nor the enum shape — and both fail safe
-// and never throw, degrading to "nothing remembered" rather than breaking the
-// view. registerPrefKey puts both keys in the `--fresh` reset set.
+// resizing the right drawer leave the bottom drawer's height alone. Both are px
+// prefs (definePref.ts), so they fail safe to "nothing remembered" rather than
+// breaking the view, and join the `--fresh` reset set.
 
-import { registerPrefKey } from "$lib/definePref.ts";
+import { definePxPref } from "$lib/definePref.ts";
 import { MIN_APP_WIDTH_PX } from "$lib/layout.ts";
 
 /** Which edge of the plan surface the drawer docks to. */
@@ -36,8 +32,10 @@ export const DEFAULT_DRAWER_SHARE = 0.45;
 export const FILE_DRAWER_WIDTH_KEY = "caret.fileDrawer.width";
 export const FILE_DRAWER_HEIGHT_KEY = "caret.fileDrawer.height";
 
-registerPrefKey(FILE_DRAWER_WIDTH_KEY);
-registerPrefKey(FILE_DRAWER_HEIGHT_KEY);
+const sizePrefs = {
+  right: definePxPref(FILE_DRAWER_WIDTH_KEY),
+  bottom: definePxPref(FILE_DRAWER_HEIGHT_KEY),
+};
 
 /**
  * The largest drawer that still leaves the plan its minimum of the `available` docking
@@ -73,45 +71,27 @@ export function outlineFits(available: number, column: number, chosen: number | 
 }
 
 /**
- * The drawer size the pointer is asking for, already clamped. The handle sits on
- * the drawer's *inner* edge, so the size is the distance back from the drawer's
- * own outer edge — its right edge when docked right, its bottom edge when docked
- * bottom, both of which sit on the surface's matching edge.
+ * The widest column `outlineFits` keeps beside a drawer docked right on `available`
+ * width: what is left once the plan has `MIN_READING_PX` and the drawer the rest of the
+ * surface would open it at. Floored, so the column it allows fits on whole pixels.
  */
-export function drawerSizeFromPointer(
-  edge: DrawerEdge,
-  pointer: { clientX: number; clientY: number },
-  outer: { right: number; bottom: number },
-  available: number,
-): number {
-  return edge === "right"
-    ? clampDrawerSize(outer.right - pointer.clientX, available, edge)
-    : clampDrawerSize(outer.bottom - pointer.clientY, available, edge);
+export function outlineRoom(available: number, chosen: number | null): number {
+  const surface =
+    chosen === null
+      ? MIN_READING_PX / (1 - DEFAULT_DRAWER_SHARE)
+      : MIN_READING_PX + Math.max(chosen, MIN_DRAWER_PX);
+  return Math.floor(available - surface);
 }
 
-function keyFor(edge: DrawerEdge): string {
-  return edge === "right" ? FILE_DRAWER_WIDTH_KEY : FILE_DRAWER_HEIGHT_KEY;
-}
-
-/** The remembered size for this edge, or `null` when unset, unparseable, or
- * unreadable so the caller applies its own default. Fail-safe. */
+/** The remembered size for this edge, or `null` when none is, so the caller applies
+ * its own default. Fail-safe. */
 export function readDrawerSize(edge: DrawerEdge): number | null {
-  try {
-    const stored = localStorage.getItem(keyFor(edge));
-    if (stored == null) return null;
-    const px = Number(stored);
-    return Number.isFinite(px) && px > 0 ? px : null;
-  } catch {
-    return null;
-  }
+  return sizePrefs[edge].read();
 }
 
-/** Persist the size of this edge. A storage failure is swallowed — the
- * preference is non-essential, so a write that can't land must not surface. */
-export function writeDrawerSize(edge: DrawerEdge, px: number): void {
-  try {
-    localStorage.setItem(keyFor(edge), String(px));
-  } catch {
-    // Storage unavailable (private mode, quota, disabled) — drop silently.
-  }
+/** Persist the size of this edge, or forget it with `null`. A storage failure is
+ * swallowed — the preference is non-essential, so a write that can't land must not
+ * surface. */
+export function writeDrawerSize(edge: DrawerEdge, px: number | null): void {
+  sizePrefs[edge].write(px);
 }

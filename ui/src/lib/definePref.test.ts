@@ -2,7 +2,13 @@ import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import { withBlockedStorage } from "@ui/support/storage.ts";
-import { defineFlagPref, definePref, knownPrefKeys, registerPrefKey } from "$lib/definePref.ts";
+import {
+  defineFlagPref,
+  definePref,
+  definePxPref,
+  knownPrefKeys,
+  registerPrefKey,
+} from "$lib/definePref.ts";
 
 afterEach(() => localStorage.clear());
 
@@ -123,6 +129,45 @@ describe("defineFlagPref (boolean flag)", () => {
   test("write swallows a localStorage failure", () => {
     withBlockedStorage(() => {
       expect(() => pref.write(true)).not.toThrow();
+    });
+  });
+});
+
+describe("definePxPref (a remembered size in px)", () => {
+  const KEY = "test.definePxPref.size";
+  const pref = definePxPref(KEY);
+
+  test("registers its key and surfaces it as KEY", () => {
+    expectKeyContract(pref, KEY);
+  });
+
+  test("reads null when nothing is stored", () => {
+    expect(pref.read()).toBeNull();
+  });
+
+  test("reads a stored positive size", () => {
+    localStorage.setItem(KEY, "312.5");
+    expect(pref.read()).toBe(312.5);
+  });
+
+  test("reads null for a stored value that is no usable size", () => {
+    for (const junk of ["wide", "0", "-40", "Infinity", ""]) {
+      localStorage.setItem(KEY, junk);
+      expect(pref.read()).toBeNull();
+    }
+  });
+
+  test("write persists a size, and write(null) forgets it", () => {
+    pref.write(300);
+    expect(pref.read()).toBe(300);
+    pref.write(null);
+    expect(localStorage.getItem(KEY)).toBeNull();
+  });
+
+  test("read fails safe to null and write swallows the failure when localStorage throws", () => {
+    withBlockedStorage(() => {
+      expect(pref.read()).toBeNull();
+      expect(() => pref.write(300)).not.toThrow();
     });
   });
 });

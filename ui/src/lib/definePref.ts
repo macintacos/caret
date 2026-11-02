@@ -23,8 +23,8 @@ export interface Pref<T> {
 const PREF_KEYS = new Set<string>();
 
 /** Register a preference key. For the factories below, and for a pref whose
- * read/write is too bespoke to fold into a factory (the file drawer's clamped
- * per-edge sizes) but which still must join the `--fresh` reset set. */
+ * read/write is too bespoke to fold into a factory but which still must join the
+ * `--fresh` reset set. */
 export function registerPrefKey(key: string): void {
   PREF_KEYS.add(key);
 }
@@ -49,6 +49,33 @@ export function definePref<T extends string>(
   registerPrefKey(key);
   const pref = enumLocalStoragePref<T>(key, allowed, fallback);
   return { KEY: key, read: pref.read, write: pref.write };
+}
+
+/** A remembered size in px, keyed in localStorage, and registered. Reads `null` when
+ * nothing usable is stored (unset, not a positive finite number, or an unreadable
+ * store), so the caller applies its own default; `write(null)` forgets the size. A
+ * write that can't land is dropped: the size is a convenience. */
+export function definePxPref(key: string): Pref<number | null> {
+  registerPrefKey(key);
+  return {
+    KEY: key,
+    read(): number | null {
+      try {
+        const px = Number(localStorage.getItem(key) ?? Number.NaN);
+        return Number.isFinite(px) && px > 0 ? px : null;
+      } catch {
+        return null;
+      }
+    },
+    write(px: number | null): void {
+      try {
+        if (px === null) localStorage.removeItem(key);
+        else localStorage.setItem(key, String(px));
+      } catch {
+        // Storage unavailable (private mode, quota, disabled) — drop silently.
+      }
+    },
+  };
 }
 
 /** A boolean flag persisted as `"1"` (set) / absent (unset), keyed in
