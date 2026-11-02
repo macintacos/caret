@@ -91,8 +91,9 @@ All in `ui/src/styles/tokens.css`:
     spend too; a code block's `--code-bezel` (its pad's rim, which the copy and wrap tray
     steps in by); and the pressed-in label shadow `--label-pressed`;
   - the sockets (`--socket-shade`, `--count-shade`), the comment stamp's `--stamp-*`
-    strengths, and `--unsent-floor` (the share of `--attention` in an unsent comment's
-    well, 16% dark and 8% light);
+    strengths, `--unsent-floor` (the share of `--attention` in an unsent comment's well,
+    16% dark and 8% light), and `--unsent-shade` (the unsent row's bed shade: in dark, a
+    weaker shade with no lip; in light, `--bed-shade`);
   - the floats (`--float-rim`, `--float-rim-ink`, `--float-low`, `--float-mid`,
     `--float-high`) and `--shadow-chip` for small hints;
   - the plan's `--chip-stamped` and `--chip-raised`, `--panel-recess` for text fields and

@@ -106,6 +106,25 @@ field.
   column it now sits under the field, where the rows would start. It used to sit at the
   column's foot, because the empty list still filled the column.
 
+## 2026-11-02: the unsent row reads centred on dark paper
+
+The user said the unsent row looked off-centre in dark mode and right in light. Its
+content was centred to the pixel: the Resume key stands 3px off both edges, and the label
+centres on the box. The shading moved where the eye took the edges.
+
+- **Cause:** the row's tinted floor is lighter than dark paper. The bed's shade,
+  `--bed-shade`, darkens the floor's top 2 to 2.5px to the paper's own lightness, so they
+  merge into the paper and the top edge read inside the box. The bed's lit lip drew an
+  edge 1.5px below the box. The row read 2px lower than its content, and the Resume key
+  seemed to touch its top. The gap was widest on paper near black: caret dark and GitHub
+  dark, and, in the preview, Catppuccin Mocha and Duskfox. On light paper the floor is the
+  darker of the two, so the same shade makes the top edge sharper instead.
+- **Change:** in dark the row takes `--unsent-shade`, the bed's shade with its top shadow
+  at 0.4 alpha rather than 0.95 and no lip. The visible row now centres within 0.25px of
+  its box in every dark palette, in the source view and the preview. Light keeps
+  `--bed-shade` and renders the same pixels as before. `unsent-marker.e2e.ts` reads the
+  edges off a screenshot in every dark palette.
+
 ## 2026-11-02: search marks stand out, the outline key latches, the cwd sits in a bed
 
 The user asked for three pieces of the review screen to look designed and of a piece with

@@ -406,9 +406,14 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `message-square-more` glyph and the word "Unsent" in the comment stamps' word ink, the
   kept text in `--ink-soft`, and a neutral Resume cap. The row hovers and presses that
   cap. It does so through the `button.tray:hover > .cap` and
-  `button.tray:is(:active, [data-key-pressed]) > .cap` rules in `atoms.css`.
-  `theme.test.ts` holds the word and the text to 4.5:1 on the tinted floor in every
-  palette, and `tactile-kit.e2e.ts` seeds an unsent comment to cover the marker's cap.
+  `button.tray:is(:active, [data-key-pressed]) > .cap` rules in `atoms.css`. On dark paper
+  the tinted floor is lighter than the paper. The bed's full shade would hide the row's
+  top edge, and its lip would add an edge below, so the row would read lower than its
+  centred content. The row's bed takes `--unsent-shade` instead: in dark, a weaker shade
+  with no lip, and in light, `--bed-shade`. `theme.test.ts` holds the word and the text to
+  4.5:1 on the tinted floor in every palette, `tactile-kit.e2e.ts` seeds an unsent comment
+  to cover the marker's cap, and `unsent-marker.e2e.ts` reads the row's edges off a
+  screenshot in every dark palette.
 - **Unsent everywhere.** Every surface marks an unsent comment with the word "unsent", the
   `message-square-more` glyph in the comment stamps' word ink, and the tinted well. The
   word is never "draft". Size picks the tint: a row or a list takes `--unsent-floor`, and
