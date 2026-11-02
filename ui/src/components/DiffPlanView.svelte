@@ -3488,7 +3488,7 @@
     display: flex;
     align-items: center;
     gap: 0.6rem;
-    height: 2.85rem;
+    height: var(--pane-header-h);
     min-width: 0;
     padding-inline: 1.15rem 0.5rem;
   }
@@ -3696,12 +3696,12 @@
       box-shadow var(--dur-state) var(--ease-out),
       transform var(--slide-dur, var(--dur-state)) var(--ease-out);
   }
-  /* The header's box, casting its foot shade. Keep its height in step with .plan-header. */
+  /* The header's box, casting its foot shade. */
   .pane-lip::before {
     content: "";
     position: absolute;
     inset: 0 0 auto;
-    height: 2.85rem;
+    height: var(--pane-header-h);
     box-shadow: 0 9px 8px -9px var(--pane-shade);
   }
   .plan-pane[data-more-below] .pane-lip {

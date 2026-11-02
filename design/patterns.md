@@ -91,6 +91,26 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   3. The header keys' hint caps, while the row is open, if the header is still too tight.
 
   The step keys and Close always keep their room.
+- **The file drawer's title bar stands level with the plan header.** Both bars are
+  `--pane-header-h` tall, and with the drawer docked right their top and bottom edges line
+  up across the two panes. The folder card's bar is the same height, because the two
+  reference surfaces share one header, `.ref-header` in `atoms.css`.
+  - The bar holds the close circle, the kind tag ("Preview" or "Folder"), the path, the
+    line range and the esc hint. The circle is its only key. Like the gutter "+", it
+    stands on no bed. The tag and the line range can't be pressed, so they stay stamps, in
+    pockets of one height.
+  - The path is the bar's one emphasis: mono at the plan header crumbs' `--text-sm`,
+    weight 600, in `--ink`. Everything else is at `--text-xs`, the size of "/ to search".
+    The folder card's refresh key lies flat at the crumbs' 24px.
+  - As the drawer narrows, the bar gives way so the path keeps some room. First the esc
+    hint goes, because the circle and Escape still close the drawer. Then the kind tag
+    goes. The line range stays, because it is the live region that announces each chunk of
+    the file as it loads.
+
+  `test/e2e/file-drawer.e2e.ts` holds:
+  - both bars at the plan header's height;
+  - the drawer's top edge level with the plan header's when docked right;
+  - the bar at the drawer's narrowest, with nothing overflowing and the path in view.
 - **The outline is a column, or a float.** The column stands left of the plan pane while
   the window has room for it. Under 960px wide, or once it yields to a file the plan could
   not keep its 800px reading column beside, the header's outline key drops it as a float

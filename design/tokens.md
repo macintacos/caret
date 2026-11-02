@@ -105,10 +105,12 @@ All in `ui/src/styles/tokens.css`:
 
   `--shadow-card` still comes from the palette.
 - **Layout:** `--pane-gap` (6px), the inset around the plan pane, and `--status-bar-h`
-  (2.25rem), the status bar's height, are in `ui/src/styles/layout.css`. The outline
-  column's opening, narrowest and widest widths are `OUTLINE_REM` in
-  `ui/src/lib/outlineColumn.ts`. The plan's reading width is `MIN_READING_PX` in
-  `ui/src/lib/fileDrawer.ts`. The column stops widening, and yields to a file, to keep it.
+  (2.25rem), the status bar's height, are in `ui/src/styles/layout.css`. So is
+  `--pane-header-h` (2.85rem), which sets the plan header's height and the file drawer's
+  and folder card's title bars to match. The outline column's opening, narrowest and
+  widest widths are `OUTLINE_REM` in `ui/src/lib/outlineColumn.ts`. The plan's reading
+  width is `MIN_READING_PX` in `ui/src/lib/fileDrawer.ts`. The column stops widening, and
+  yields to a file, to keep it.
 
 ## Terminal
 

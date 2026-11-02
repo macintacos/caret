@@ -800,12 +800,27 @@
       opacity: 1;
     }
   }
+  /* As the lane narrows, the header gives way so the path keeps some room: first the esc
+     hint, since the circle and Escape still close, then the kind tag. The line range
+     stays, being the live region a landing chunk speaks through. */
+  .fp-header {
+    container: fp-header / inline-size;
+  }
+  @container fp-header (width < 26rem) {
+    .fp-hint {
+      display: none;
+    }
+  }
+  @container fp-header (width < 20rem) {
+    .fp-badge {
+      display: none;
+    }
+  }
   /* A passive readout, so it is stamped into the header. */
   .fp-range {
-    align-self: center;
     display: inline-flex;
     align-items: center;
-    height: 1.15rem;
+    height: var(--ref-stamp-h);
     padding: 0 0.45rem;
     border-radius: 99px;
     line-height: 1;
@@ -821,7 +836,7 @@
      source view's own grid — the same font stack, --text-base size,
      --leading-normal rhythm, and tabular figures the .diffview bridge sets
      (app.css) — so an excerpt looks like a window onto the plan, not a smaller
-     sibling. The header stays at the --text-2xs label size. */
+     sibling. */
   .fp-code {
     flex: 1;
     min-height: 0;

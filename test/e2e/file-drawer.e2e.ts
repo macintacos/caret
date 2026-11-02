@@ -362,6 +362,40 @@ test("dragging the handle resizes the lane, and each edge remembers its own size
   }
 });
 
+test("dragged to its narrowest, the lane's title bar keeps the path in view and overflows nothing", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await seedCacheDrawer(daemon, page, proj.dir, WIDE);
+    await openPreview(page);
+
+    // Past the window's edge, so the lane stops at its minimum.
+    const handle = page.getByRole("separator", { name: "Resize file preview" });
+    const box = await handle.boundingBox();
+    expect(box).not.toBeNull();
+    const y = (box?.y ?? 0) + (box?.height ?? 0) / 2;
+    await page.mouse.move((box?.x ?? 0) + (box?.width ?? 0) / 2, y);
+    await page.mouse.down();
+    await page.mouse.move(WIDE.width - 1, y, { steps: 8 });
+    await page.mouse.up();
+    const min = Number(await handle.getAttribute("aria-valuemin"));
+    await expect
+      .poll(async () => (await laneGeometry(page))?.drawer?.width ?? 0)
+      .toBeCloseTo(min, 0);
+
+    const header = await page.locator("[data-file-preview] .ref-header").evaluate((el) => ({
+      overflow: el.scrollWidth - el.clientWidth,
+      path: (el.querySelector(".ref-path") as HTMLElement).getBoundingClientRect().width,
+    }));
+    expect(header.overflow).toBeLessThanOrEqual(0);
+    expect(header.path).toBeGreaterThan(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 test("a double-click on the handle returns the lane to the size it opened at, and forgets the dragged one", async ({
   daemon,
   page,
@@ -661,6 +695,46 @@ test("at a narrow width the card is placed clear of the bottom-docked lane", asy
     const drawer = (await laneGeometry(page))?.drawer;
     expect(drawer).toBeTruthy();
     expect((await cardRect(page)).bottom).toBeLessThanOrEqual(drawer!.top);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+/** Viewport rects of the plan header and the two reference surfaces' headers. */
+function headerRects(page: Page): Promise<{
+  plan: DOMRect;
+  file: DOMRect;
+  folder: DOMRect;
+}> {
+  return page.evaluate(() => {
+    const rect = (sel: string) =>
+      (document.querySelector(sel) as Element).getBoundingClientRect().toJSON() as DOMRect;
+    return {
+      plan: rect(".plan-header"),
+      file: rect("[data-file-preview] .ref-header"),
+      folder: rect("[data-folder-tree] .ref-header"),
+    };
+  });
+}
+
+test("the reference headers stand as tall as the plan header, level with it beside the plan", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject(COEXIST);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: COEXIST_PLAN });
+    for (const viewport of [WIDE, NARROW]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+      await openLaneThenCard(page);
+
+      const { plan, file, folder } = await headerRects(page);
+      expect(file.height).toBeCloseTo(plan.height, 0);
+      expect(folder.height).toBeCloseTo(plan.height, 0);
+      // Docked right, the two bars read as one band across both panes.
+      if (viewport === WIDE) expect(file.top).toBeCloseTo(plan.top, 0);
+    }
   } finally {
     await proj.cleanup();
   }

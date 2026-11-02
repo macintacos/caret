@@ -81,6 +81,57 @@ Open items first, then the log, newest first.
   on the user's verdict.
   - The working-directory path in a bed at the centre of the status bar.
   - The outline key's latch riding its travel as the column stands and folds.
+- **Calls left to the user from the 2026-11-02 drawer title bar:** both were built and are
+  waiting on the user's verdict.
+  - The close circle stays an 11px disc on no bed, rather than becoming a Close key in a
+    bed like the plan header's keys.
+  - As the drawer narrows, the esc hint ("esc to close") and then the kind tag ("Preview")
+    leave the bar.
+
+## 2026-11-02: the file drawer's title bar stands as tall as the plan header
+
+The user asked for the file drawer's title bar to be as tall as the plan header beside it,
+and allowed its contents to grow to suit the taller bar.
+
+- **Height:** one token, `--pane-header-h` in `ui/src/styles/layout.css`, sets three
+  heights: the plan header's, that of the box casting the plan header's foot shade
+  (`.pane-lip::before`), and that of the header the file drawer and the folder card share
+  (`.ref-header`). The plan header stays 2.85rem (45.6px). The drawer's bar grows from
+  29.25px to match.
+  - Docked right, the two bars share their top and bottom edges.
+  - Docked bottom, and on the folder card, nothing sits beside the bar. It keeps the same
+    height anyway.
+- **What grew:**
+  - The path, the bar's one emphasis, from `--text-2xs` to `--text-sm`, the size of the
+    plan header's crumbs.
+  - The kind tag ("Preview" or "Folder"), the line range and the esc hint ("esc to
+    close"), from `--text-2xs` to `--text-xs`, the size of the plan header's "/ to
+    search". The tag and the line range share one pocket height, 1.25rem.
+  - The gap between the bar's parts, to the plan header's 0.6rem, and its side padding, to
+    the plan header's 1.15rem. At that inset the close circle sits about as far in from
+    the pane's side as from its top.
+  - The folder card's refresh key, from 20px to the crumbs' 24px, with its glyph from 11px
+    to 13px. It now meets the 24px minimum target size without an invisible margin around
+    it.
+- **What stayed:**
+  - The close circle keeps its 11px size and its 25px target, because macOS keeps a
+    window's close, minimize and zoom buttons about 12px across at every title-bar height.
+  - The kind tag and the line range stay stamps rather than keys in a bed. Neither can be
+    pressed, and the kit keeps keys for what can be.
+- **Narrow widths:** at the drawer's narrowest, 240px, the old bar already squeezed the
+  path to nothing, and its esc hint ran 46px past the pane's edge. The larger type would
+  have pushed the hint 79px past it. The bar now gives way as it narrows:
+  1. The esc hint goes when the bar, less its side padding, is under 26rem (416px) wide. A
+     container query on the bar measures it.
+  2. The kind tag goes under 20rem (320px).
+
+  The line range stays, because it is the live region that announces each chunk of the
+  file as it loads. At 240px the path now keeps about 45px beside "lines 9–67 of 67". At a
+  480px window, docked bottom, every part still shows.
+- **Tests:** `test/e2e/file-drawer.e2e.ts` holds:
+  - both reference headers at the plan header's height, docked right and docked bottom;
+  - the drawer's top edge level with the plan header's when docked right;
+  - the bar at the drawer's narrowest, with nothing overflowing and the path in view.
 
 ## 2026-11-02: a filter clears from inside its field
 

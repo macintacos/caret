@@ -677,17 +677,21 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
    read as one family rather than two designs, so their shared header chrome
    lives here once. */
 .ref-header {
-  --ref-header-gap: 0.45rem;
+  --ref-header-gap: 0.6rem;
+  /* The kind tag's and the line range's pockets, one height so the two read as a pair. */
+  --ref-stamp-h: 1.25rem;
   /* Over its content, so the lip's shade lands on it; 2 clears the preview's sticky
      gutter. */
   position: relative;
   z-index: 2;
+  flex: none;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--ref-header-gap);
-  padding: 0.3rem 0.6rem;
+  height: var(--pane-header-h);
+  padding-inline: 1.15rem;
   font-family: var(--font-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
 }
 /* The header's lip, as Floating shells in the tactile kit describes. */
 .ref-header::after {
@@ -702,19 +706,25 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
    `path:line` reference. */
 .ref-header-end {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--ref-header-gap);
   margin-left: auto;
 }
 /* The kind label ("Preview", "Folder"), so the surface reads as a reference, not the
-   thing itself. It wears the tag recipe in the tactile kit. */
+   thing itself. It wears the tag recipe in the tactile kit, a step up to the header's
+   own size. */
 .ref-badge {
   flex: 0 0 auto;
-  /* The header is baseline-aligned; a tag has no baseline worth sharing. */
-  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  height: var(--ref-stamp-h);
+  padding-block: 0;
+  font-size: var(--text-xs);
 }
+/* At the plan header's crumbs' size, so the file reads as the pane's current place. */
 .ref-path {
   color: var(--ink);
+  font-size: var(--text-sm);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
