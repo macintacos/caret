@@ -286,6 +286,14 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
 [data-slot="command-input-wrapper"] [data-slot="input-group"]:focus-within {
   --tw-inset-ring-shadow: inset 0 0 0 1px var(--panel-edge), var(--field-wall);
 }
+/* Its clear × is a ghost control, whose glyph stays a step above the faint search glyph
+   so it reads as something to press. */
+[data-slot="command-input-wrapper"] button {
+  color: var(--ink-soft);
+}
+[data-slot="command-input-wrapper"] button:is(:hover, :focus-visible) {
+  color: var(--ink);
+}
 
 /* A switch is a latching key: a small rubber key in a well whose corners nest around it,
    2px out. It shows the keys' lift, foot and side at a nub's scale. On, the key slides

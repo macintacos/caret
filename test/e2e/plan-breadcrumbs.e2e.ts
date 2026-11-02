@@ -1218,6 +1218,20 @@ test("a query matching nothing says so instead of emptying the panel", async ({ 
   await expect(page.locator(CRUMB)).toHaveText(["Alpha"]);
 });
 
+test("the field's × clears the query, leaving the panel open with focus in the field", async ({
+  daemon,
+  page,
+}) => {
+  await openFilterOn(page, daemon, NESTED_PLAN);
+  await page.keyboard.type("zzz");
+  await expect(results(page)).toHaveCount(0);
+
+  await filterPanel(page).getByRole("button", { name: "Clear filter" }).click();
+  await expect(queryField(page)).toHaveValue("");
+  await expect(queryField(page)).toBeFocused();
+  await expect(results(page)).toHaveCount(6);
+});
+
 /** The contrast of a result's parent heading against the row's face. */
 function parentContrast(row: Locator): Promise<number> {
   return row.evaluate((el) => {

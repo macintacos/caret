@@ -299,6 +299,11 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   outline and the breadcrumb bar, can't wear the class, so one rule in `atoms.css` mirrors
   the recipe by appending `var(--field-wall)` to its rest cut. Read-only text that takes
   focus, such as the file preview's code region, lights its wall the same way.
+- **A filter field clears from inside.** While a Command's filter field holds text, a
+  space included, an × named "Clear filter" stands at its trailing edge. A press empties
+  the query and keeps focus in the field. The × is a 24px ghost control with an
+  `--ink-soft` glyph. Nothing overlaps it: the outline's match count stands just before
+  it. `command-input.svelte` draws it, so every Command filter has one.
 - **Modals draw no focus ring around themselves.** A modal takes focus on its own panel
   when it opens, so its keys work at once. It has no hover look either, and `base.css`
   leaves `[data-slot="dialog-content"]` and `[data-slot="alert-dialog-content"]` out of
@@ -629,7 +634,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 ### States
 
 - **Empty:** the waiting screen is caret's one brand moment; see
-  [`exceptions.md`](exceptions.md). Any other empty view is one plain sentence.
+  [`exceptions.md`](exceptions.md). Any other empty view is one plain sentence, where its
+  content would start: a filter that matches nothing says so under its field.
 - **Loading:** no indicator under about 1s. From about 2s, a labelled spinner, and the
   data animates in gently when it lands. Past about 10s or for many items, a count or
   percentage.

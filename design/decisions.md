@@ -82,6 +82,30 @@ Open items first, then the log, newest first.
   - The working-directory path in a bed at the centre of the status bar.
   - The outline key's latch riding its travel as the column stands and folds.
 
+## 2026-11-02: a filter clears from inside its field
+
+The user found no obvious way to empty the outline's filter. Its "Clear filter" button
+showed only once a query matched nothing, and it sat at the column's foot. They asked for
+the way other products do it: Trello, Apollo, Behance and Mural all put an × inside the
+field.
+
+- **The ×:** a shadcn Command filter field, the outline's and the breadcrumb bar's, shows
+  an × at its trailing edge whenever it holds text, a space included. A press empties the
+  query and leaves the filter open, with focus in the field. In the outline's column,
+  Escape still clears the query first.
+- **Its look:** a ghost control, flat at rest and washed with `--ink-wash` under the
+  pointer. A raised key would stand up out of the field, which is sunk into the surface.
+  Its glyph is `--ink-soft`, a step above the search glyph's `--ink-faint`, so it reads as
+  something to press, and it takes `--ink` on hover. It is 24px square and rounds at
+  `--radius` less 3px, so its corner nests in the field's.
+- **No motion:** it appears with the first character and leaves with the last, with no
+  fade. It shows on nearly every query, so a fade would play constantly. The match count
+  beside it already appears without one.
+- **The count:** the outline's match count stands just before the ×.
+- **The empty state:** "No headings match" keeps its line and loses its button. In the
+  column it now sits under the field, where the rows would start. It used to sit at the
+  column's foot, because the empty list still filled the column.
+
 ## 2026-11-02: search marks stand out, the outline key latches, the cwd sits in a bed
 
 The user asked for three pieces of the review screen to look designed and of a piece with

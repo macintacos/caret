@@ -391,6 +391,19 @@ test("the peek hides when the filter field loses focus", async ({ page }) => {
   await expect(openPeek(page)).toHaveCount(0);
 });
 
+test("clearing the filter from its × closes the peek", async ({ page }) => {
+  await openAt(page);
+  await awaitPlanReadyForKeys(page);
+  await page.keyboard.press("\\");
+  const column = page.locator(COLUMN);
+  await column.getByRole("combobox", { name: "Filter headings" }).fill("e");
+  await page.keyboard.press("ArrowDown");
+  await expect(openPeek(page)).toBeVisible();
+
+  await column.getByRole("button", { name: "Clear filter" }).click();
+  await expect(openPeek(page)).toHaveCount(0);
+});
+
 test("beside the float, the peek stands past the float's edge", async ({ page }) => {
   await page.setViewportSize({ width: 880, height: 900 });
   await openAt(page);

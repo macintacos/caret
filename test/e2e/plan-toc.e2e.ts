@@ -615,6 +615,113 @@ test("Escape steps out of the filter: the query, then the filter itself", async 
   expect(new URL(page.url()).searchParams.get("heading")).toBe(parked);
 });
 
+/** The field's clear control, the × at its trailing edge. */
+const clearKey = (scope: Locator) => scope.getByRole("button", { name: "Clear filter" });
+
+/** Open the outline's filter where `placement` puts it, parked on Setup, and hand back
+ * the outline's root. */
+async function openFilterIn(
+  page: Page,
+  daemon: Daemon,
+  placement: "column" | "float",
+): Promise<Locator> {
+  if (placement === "column") {
+    await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
+    return panel(page);
+  }
+  await page.setViewportSize({ width: 880, height: 900 });
+  await daemon.seed({ plan: BRANCHED_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+  await openFloat(page);
+  return page.locator(FLOAT);
+}
+
+for (const placement of ["column", "float"] as const) {
+  test(`the ${placement}'s field clears from its ×, staying open with focus in it`, async ({
+    daemon,
+    page,
+  }) => {
+    const outline = await openFilterIn(page, daemon, placement);
+    const query = outline.getByRole("combobox", { name: "Filter headings" });
+    await expect(clearKey(outline)).toHaveCount(0);
+
+    // Any text at all, even a space that filters nothing, can be cleared.
+    await query.fill(" ");
+    await expect(clearKey(outline)).toBeVisible();
+
+    await query.fill("notes");
+    await expect(outline.getByRole("option")).toHaveCount(2);
+    await clearKey(outline).click();
+
+    await expect(query).toHaveValue("");
+    await expect(query).toBeFocused();
+    await expect(outline.getByRole("option")).toHaveCount(6);
+    await expect(clearKey(outline)).toHaveCount(0);
+  });
+
+  test(`the ${placement}'s × sits in the field's trailing edge, clear of the text and the count`, async ({
+    daemon,
+    page,
+  }) => {
+    const outline = await openFilterIn(page, daemon, placement);
+    await outline.getByRole("combobox", { name: "Filter headings" }).fill("notes");
+    await expect(clearKey(outline)).toBeVisible();
+
+    const box = await outline.locator("[data-slot='input-group']").evaluate((group) => {
+      const rect = (el: Element | null) => {
+        if (el === null) throw new Error("missing part of the field");
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      };
+      const input = group.querySelector("input");
+      const textEnd =
+        rect(input).right - Number.parseFloat(getComputedStyle(input as Element).paddingRight);
+      return {
+        group: rect(group),
+        clear: rect(group.querySelector("button")),
+        count: rect(group.closest(".toc-head")?.querySelector(".toc-match-count") ?? null),
+        textEnd,
+      };
+    });
+
+    // A 24px target, inside the field, at its trailing edge and centred on its height.
+    expect(box.clear.right - box.clear.left).toBeGreaterThanOrEqual(24);
+    expect(box.clear.bottom - box.clear.top).toBeGreaterThanOrEqual(24);
+    expect(box.clear.right).toBeLessThanOrEqual(box.group.right);
+    expect(box.group.right - box.clear.right).toBeLessThanOrEqual(6);
+    expect(
+      Math.abs(box.clear.top + box.clear.bottom - (box.group.top + box.group.bottom)) / 2,
+    ).toBeLessThanOrEqual(1);
+    // The typed text ends before the count, and the count before the ×.
+    expect(box.textEnd).toBeLessThanOrEqual(box.count.left);
+    expect(box.count.right).toBeLessThanOrEqual(box.clear.left);
+  });
+}
+
+test("a query matching nothing says so, and the field's × is the one way back", async ({
+  daemon,
+  page,
+}) => {
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
+  await field(page).fill("nothing matches this");
+  await expect(panel(page).getByRole("status")).toHaveText("No headings match");
+
+  await expect(clearKey(panel(page))).toHaveCount(1);
+  await expect(clearKey(panel(page).locator("[data-slot='input-group']"))).toBeVisible();
+});
+
+test("the column says a query matched nothing right under its field", async ({ daemon, page }) => {
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
+  await field(page).fill("nothing matches this");
+  const status = panel(page).getByRole("status");
+  await expect(status).toHaveText("No headings match");
+
+  const fieldBox = await panel(page).locator("[data-slot='input-group']").boundingBox();
+  const statusBox = await status.boundingBox();
+  expect((statusBox?.y ?? 0) - ((fieldBox?.y ?? 0) + (fieldBox?.height ?? 0))).toBeLessThan(24);
+});
+
 test("the filter field is empty on every open", async ({ daemon, page }) => {
   // The filter always opens on the whole plan: a query that survived a close would show
   // a narrowed view of a plan the reviewer has since scrolled away from.

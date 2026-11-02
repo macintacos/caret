@@ -208,7 +208,6 @@
           ? "No headings in plan"
           : "No sections changed",
   );
-  const noMatch = $derived(searching && groups.length === 0 && listed.length > 0);
 
   // Opening the filter starts on the whole plan, looking at the heading being read, so
   // it is never a stale view of a plan that has since scrolled. The cue sounds from here
@@ -360,13 +359,6 @@
       closeFilter();
     }
     onJump(line);
-  }
-
-  // The no-match state's way back. The click took focus to the cap, so it goes back to
-  // the field the reviewer was typing in.
-  function clearFilter(): void {
-    query = "";
-    queryEl?.focus();
   }
 
   // A group's header text: its ancestor path, root-most first. Empty segments drop
@@ -622,18 +614,7 @@
          region the list empties in silence. Mounted unconditionally, with only its TEXT
          switched — a live region has to be idle in the DOM before the change it
          announces. -->
-    <div class="toc-empty-row">
-      <p class="toc-empty" role="status">{emptyMessage}</p>
-      <!-- Beside the live region rather than in it: a status announces text, and a
-           control inside one would be read out with it. -->
-      {#if noMatch}
-        <span class="tray">
-          <Button variant="secondary" size="sm" class="float-chip" onclick={clearFilter}>
-            Clear filter
-          </Button>
-        </span>
-      {/if}
-    </div>
+    <p class="toc-empty" role="status">{emptyMessage}</p>
   </Command.Root>
 </div>
 
@@ -733,6 +714,11 @@
     font-size: var(--text-2xs);
     color: var(--ink-faint);
     pointer-events: none;
+  }
+  /* The field's clear × takes the trailing edge, so the count steps in past it: the ×'s
+     1.5rem and its 0.25rem inset. */
+  .plan-toc :global(.toc-head:has([data-slot="input-group"] button) .toc-match-count) {
+    inset-inline-end: calc(4px + 0.6rem + 1.75rem);
   }
   /* Once rows have scrolled beneath it, the float's field band casts a shade over them.
      The list marks itself rather than going through state, so the list bits-ui rebuilds
@@ -849,6 +835,10 @@
   }
   .plan-toc[data-placement="column"] :global([data-slot="command-list"]) {
     max-height: none;
+  }
+  /* An empty list doesn't fill the column, so the line saying why stands under the field. */
+  .plan-toc[data-placement="column"] :global([data-slot="command-list"]:not(:has([data-slot="command-item"]))) {
+    flex-grow: 0;
   }
   .plan-toc[data-placement="float"] :global([data-slot="command-list"]) {
     max-height: min(23rem, 60vh);
@@ -1102,13 +1092,6 @@
   /* An empty list says why, at the quietest ink. The box is always in the markup so the
      live region is idle before it speaks, so the padding is what it wears only when it
      has something to say. */
-  .plan-toc :global(.toc-empty-row) {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding-inline: 0.45rem 0.5rem;
-  }
   .plan-toc :global(.toc-empty) {
     margin: 0;
     padding: 0;
@@ -1118,9 +1101,6 @@
     overflow-wrap: anywhere;
   }
   .plan-toc :global(.toc-empty:not(:empty)) {
-    padding: 0.55rem 0.25rem 0.55rem 0.5rem;
-  }
-  .plan-toc :global(.toc-empty-row .tray) {
-    margin-block: 0.25rem;
+    padding: 0.55rem 0.75rem 0.55rem 0.95rem;
   }
 </style>

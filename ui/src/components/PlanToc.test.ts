@@ -849,21 +849,6 @@ describe("PlanToc filter states", () => {
     await typeQuery("notes", flush, () => options().length === 3);
     expect(panel()?.querySelector(".toc-match-count")?.textContent?.trim()).toBe("3");
   });
-
-  test("offers to clear a query that matches nothing, beside the status rather than in it", async () => {
-    const { flush } = await openToc();
-    await typeQuery("nothing matches this", flush, () => options().length === 0);
-    const clear = [...(panel()?.querySelectorAll("button") ?? [])].find(
-      (b) => b.textContent?.trim() === "Clear filter",
-    );
-    if (clear === undefined) throw new Error("no Clear filter control");
-    expect(helper()?.contains(clear)).toBe(false);
-
-    clear.click();
-    await flushUntil(flush, () => options().length === 4);
-    expectUnfilteredOutline();
-    expect(field()?.value).toBe("");
-  });
 });
 
 // The latch follows the reading position. Moved by the plan scrolling under it, it snaps:
