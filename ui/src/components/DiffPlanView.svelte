@@ -3592,7 +3592,7 @@
     background-image: linear-gradient(var(--ink-wash), var(--ink-wash));
     color: var(--ink);
   }
-  .search-entry:is(:active, [data-key-pressed]) {
+  .search-entry:is(:active, :global([data-key-pressed])) {
     background-image: linear-gradient(var(--ink-wash), var(--ink-wash));
     box-shadow:
       var(--panel-recess),

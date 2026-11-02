@@ -185,6 +185,17 @@ test("the Search entry wears its / cap, and a click opens the find row with its 
   await expect(entry).toBeVisible();
 });
 
+// The press echo marks the entry while `/` plays its press, and the mark must dimple it as
+// a click does. Svelte drops a selector for an attribute only script sets unless it is global.
+test("the / key's press echo dimples the Search entry", async ({ daemon, page }) => {
+  await openPlanForKeys(page, daemon, PLAN);
+  const entry = searchEntry(page);
+  const shadow = () => entry.evaluate((el) => getComputedStyle(el).boxShadow);
+  const rest = await shadow();
+  await entry.evaluate((el) => el.setAttribute("data-key-pressed", ""));
+  await expect.poll(shadow).not.toBe(rest);
+});
+
 test("Enter on the Search entry opens the find row, as / does", async ({ daemon, page }) => {
   await openPlanForKeys(page, daemon, PLAN);
   const entry = searchEntry(page);
