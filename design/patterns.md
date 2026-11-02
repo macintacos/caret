@@ -91,10 +91,12 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   instead: a `--float-mid` float on `--paper-raised`, which opens on its filter. The
   outline key is one toggle named "Outline", in the column's head while the column stands
   and in the header while it is folded. It latches down with its corner light while the
-  outline is open, as a column or as a float, and stands up while it is closed. A press,
-  or ⇧ + `\`, opens or folds the outline. Comparing folds the column too, without changing
-  the reader's remembered choice. Its float then lists only the sections that changed,
-  each with its line count, or says "No sections changed".
+  outline is open, as a column or as a float, and stands up while it is closed. In the
+  column's head its bed is floored with `--paper`, as the plan header's floor is under its
+  bed there. On the body, a dark key latched down sits at or under the body's lightness,
+  so it reads as a hole. A press, or ⇧ + `\`, opens or folds the outline. Comparing folds
+  the column too, without changing the reader's remembered choice. Its float then lists
+  only the sections that changed, each with its line count, or says "No sections changed".
 - **The outline column takes the width the reader drags it to.** Its right edge is a
   splitter (see **Splitters** in the tactile kit). The column opens 15.5rem wide and
   narrows to 12rem. It widens to 30rem, but only while the plan beside it keeps its 800px
@@ -156,11 +158,13 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `--key-radius` (8px), whatever its Button `size`. A bed rounds at `--key-radius` plus
   `--well-pad`, 11px, so the two corners stay concentric. The row-wide scratch marker is a
   `button.tray` and keeps its tinted floor.
-- **The working-directory path lies in a bed with no key.** It sits centred at the
-  outline's foot as a `button.tray`, because it is metadata the reader copies rather than
-  a control they work. Under the pointer or keyboard focus, the bed takes `--ink-wash` and
-  the path inks up, as a ghost control does. A press adds the ghost control's dimple to
-  the bed's shading. The path shrinks to an ellipsis when it outruns the column.
+- **The working-directory path lies in a bed with no key.** It sits centred on the status
+  bar, between the version and the review's status, as a `button.tray`, because it is
+  metadata the reader copies rather than a control they work. Under the pointer or
+  keyboard focus, the bed takes `--ink-wash` and the path inks up, as a ghost control
+  does. A press adds the ghost control's dimple to the bed's shading. When the path
+  outruns the room between the bar's other segments, it shrinks to an ellipsis before they
+  give way.
 - **Nested corners.** Where a rounded shape rests near another's corner, the inner radius
   is the outer radius less the inset between them, so the gap round the corner matches the
   gap along the sides. The inset is the distance from the outer shape's edge to the inner

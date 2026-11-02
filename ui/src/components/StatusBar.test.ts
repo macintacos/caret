@@ -2,7 +2,7 @@ import "@ui/support/mount.ts";
 
 import { describe, expect, test } from "bun:test";
 
-import { render } from "@ui/support/mount.ts";
+import { capture, render } from "@ui/support/mount.ts";
 import StatusBar from "@/components/StatusBar.svelte";
 
 const base = {
@@ -18,7 +18,11 @@ const base = {
   onToggleComments: () => {},
   onOpenHelp: () => {},
   showShortcutHints: true,
+  cwd: "/tmp/p",
+  onCopyCwd: () => {},
 };
+
+const cwdButton = (root: ParentNode) => root.querySelector<HTMLButtonElement>("button.cwd");
 
 const keyboardButton = (root: ParentNode) =>
   root.querySelector<HTMLButtonElement>("button[aria-label='Keyboard shortcuts']");
@@ -56,5 +60,22 @@ describe("StatusBar", () => {
     expect(target.querySelector(".status-strip") === null).toBe(true);
     expect(target.querySelector(".version-badge") !== null).toBe(true);
     expect(keyboardButton(target) !== null).toBe(true);
+  });
+
+  // The working-directory path (EXC-807) shows abbreviated and copies the whole path on a
+  // click, with no hover tooltip (EXC-850).
+  test("clicking the working-directory path copies the full absolute path", () => {
+    const copied = capture<string>();
+    const deep = "/Users/dev/GitLocal/Play/caret";
+    const { target } = render(StatusBar, { ...base, cwd: deep, onCopyCwd: copied.cb });
+    expect(cwdButton(target)?.textContent?.trim()).toBe("…/Play/caret");
+    cwdButton(target)?.click();
+    expect(copied.last()).toBe(deep);
+  });
+
+  test("with no review there is no working-directory path", () => {
+    const { target } = render(StatusBar, { ...base, active: false, cwd: undefined });
+    // Boolean-ise the absence check — a bare toBeNull() on a stray node hangs bun.
+    expect(cwdButton(target) === null).toBe(true);
   });
 });

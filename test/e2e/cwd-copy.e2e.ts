@@ -1,5 +1,5 @@
-// Click-to-copy cwd path + the success alert (EXC-850). Clicking the path at the
-// outline's foot copies the FULL absolute path to the clipboard (the row only shows the abbreviated
+// Click-to-copy cwd path + the success alert (EXC-850). Clicking the path in the
+// status bar copies the FULL absolute path to the clipboard (the bar only shows the abbreviated
 // form) and raises a success toast bottom-right. Clipboard access + toast render +
 // stacking are real-browser behavior, so they are proven here rather than in the
 // happy-dom unit suite (per doc/agents/browser-testing.md); the queue's auto-dismiss
@@ -15,6 +15,10 @@ import { planSurface } from "@test/e2e/support/source-view.ts";
 // carries the whole absolute path — so the test proves the two genuinely differ.
 const CWD = "/Users/dev/GitLocal/Play/caret";
 
+/** The cwd control, in the status bar. */
+const cwdIn = (page: Page): Locator =>
+  page.locator("footer.status-bar").getByRole("button", { name: /^Copy path / });
+
 /** Seed with the deep cwd, grant clipboard permissions, load the plan, and return
  * the cwd control. */
 async function openCwdControl(page: Page, daemon: Daemon): Promise<Locator> {
@@ -22,7 +26,7 @@ async function openCwdControl(page: Page, daemon: Daemon): Promise<Locator> {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/");
   await planSurface(page);
-  return page.locator(".plan-outline button.cwd");
+  return cwdIn(page);
 }
 
 test("clicking the cwd path copies the absolute path and shows a success alert", async ({
@@ -57,41 +61,43 @@ test("success alerts stack and a dismiss removes one", async ({ daemon, page }) 
   await expect(alerts(page)).toHaveCount(1);
 });
 
-/** The cwd control's box, the box of the outline foot it sits in, and whether its path is
- * cut short. */
-const footBoxes = (cwd: Locator) =>
+/** The cwd control's box, its status bar's, the boxes of the bar's other two segments,
+ * and whether its path is cut short. */
+const barBoxes = (cwd: Locator) =>
   cwd.evaluate((el) => {
-    const foot = el.parentElement?.getBoundingClientRect();
-    const own = el.getBoundingClientRect();
+    const box = (node: Element | null | undefined) => {
+      const r = node?.getBoundingClientRect();
+      return { left: r?.left ?? 0, right: r?.right ?? 0 };
+    };
+    const bar = el.closest(".status-bar");
     return {
-      foot: { left: foot?.left ?? 0, right: foot?.right ?? 0 },
-      own: { left: own.left, right: own.right },
+      bar: box(bar),
+      own: box(el),
+      start: box(bar?.firstElementChild),
+      end: box(bar?.lastElementChild),
       truncated:
         (el.firstElementChild?.scrollWidth ?? 0) > (el.firstElementChild?.clientWidth ?? 0),
     };
   });
 
-test("the cwd path sits centred at the outline's foot", async ({ daemon, page }) => {
+test("the cwd path sits centred on the status bar", async ({ daemon, page }) => {
   const cwd = await openCwdControl(page, daemon);
-  const { foot, own } = await footBoxes(cwd);
-  const style = await cwd.evaluate((el) => getComputedStyle(el.parentElement as Element));
-  const padLeft = Number.parseFloat(style.paddingLeft);
-  const padRight = Number.parseFloat(style.paddingRight);
-  expect(own.left - (foot.left + padLeft)).toBeCloseTo(foot.right - padRight - own.right, 0);
+  const { bar, own } = await barBoxes(cwd);
+  // Within the pixel the bar's uneven side insets, which line up with the plan pane, leave.
+  expect(Math.abs((own.left + own.right) / 2 - (bar.left + bar.right) / 2)).toBeLessThanOrEqual(1);
 });
 
-test("a path longer than the column shortens to an ellipsis inside the foot", async ({
+test("a path longer than its room shortens to an ellipsis between the bar's other segments", async ({
   daemon,
   page,
 }) => {
   await daemon.seed({
-    cwd: "/Users/dev/GitLocal/Play/a-project-directory-name-far-wider-than-the-outline",
+    cwd: `/Users/dev/GitLocal/Play/${"a-project-directory-name-far-wider-than-the-room-".repeat(4)}`,
   });
   await page.goto("/");
   await planSurface(page);
-  const cwd = page.locator(".plan-outline button.cwd");
-  const { foot, own, truncated } = await footBoxes(cwd);
+  const { own, start, end, truncated } = await barBoxes(cwdIn(page));
   expect(truncated).toBe(true);
-  expect(own.left).toBeGreaterThanOrEqual(foot.left);
-  expect(own.right).toBeLessThanOrEqual(foot.right);
+  expect(own.left).toBeGreaterThanOrEqual(start.right);
+  expect(own.right).toBeLessThanOrEqual(end.left);
 });

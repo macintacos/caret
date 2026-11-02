@@ -69,7 +69,6 @@
   import { highlightChunk } from "$lib/diffview/highlight.ts";
   import { languageForPath } from "@core/plan/excerpt-language";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
-  import { shortCwd } from "$lib/cwd.ts";
   import { commentIndex } from "$lib/feedback.ts";
   import { createFolderMemory } from "$lib/folderTree.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
@@ -212,10 +211,6 @@
   interface Props {
     /** The review whose current plan version is rendered. */
     review: ClientReview;
-    /** Copy the review's working directory to the clipboard (EXC-850). App.svelte
-     * does the write + fires the success alert; the compare-row path calls this
-     * on click. */
-    onCopyCwd: (cwd: string) => void;
     /** The working-copy annotations to display over the source. */
     annotations: Annotation[];
     /** The single focused annotation id (drives expand + highlight), or null. */
@@ -272,7 +267,6 @@
 
   let {
     review,
-    onCopyCwd,
     annotations,
     focusedAnnotation,
     onEditAnnotation,
@@ -3312,21 +3306,9 @@
     onHide={() => setOutline("hidden")}
     open={columnShown && keyEntry !== "rest"}
     onExposeFilter={placement === "column" ? (open) => (openColumnFilter = open) : undefined}
-    foot={placement === "column" ? cwdKey : undefined}
     onPeek={runs("outlinePeek") ? (target) => (peekTarget = target) : undefined}
     peekStays={runs("outlinePeek") ? flipsView : undefined}
   />
-{/snippet}
-
-<!-- Working-directory path (EXC-807), at the outline column's foot. It shows the
-     abbreviated path and copies the full absolute path on click — no hover popup
-     (EXC-850). -->
-{#snippet cwdKey()}
-  <button
-    type="button"
-    class="cwd tray"
-    aria-label={`Copy path ${review.cwd} to the clipboard`}
-    onclick={() => onCopyCwd(review.cwd)}><span class="mono">{shortCwd(review.cwd)}</span></button>
 {/snippet}
 
 <!-- The outline as a float, dropped from the header's outline key under --w-narrow or
@@ -3604,44 +3586,6 @@
     box-shadow: var(--float-surface-mid);
     /* A row's key runs the list's 4px side padding in from this corner. */
     border-radius: calc(var(--key-radius) + 4px);
-  }
-
-  /* The working-directory path (EXC-807), centred at the outline's foot. A click copies
-     it, but it is metadata rather than a control, so it lies in a bed (.tray) with no
-     key: under the pointer the bed takes the ink wash a ghost control takes, and a press
-     leaves the same dimple. The path shrinks to an ellipsis when it outruns the column. */
-  .cwd {
-    flex: 0 1 auto;
-    min-width: 0;
-    margin-inline: auto;
-    appearance: none;
-    border: none;
-    height: var(--ctl-h);
-    padding: 0 0.7rem;
-    /* A neutral key's label (atoms.css --cap-label): plain --ink-soft falls just under
-       4.5:1 on the body in some palettes. */
-    color: color-mix(in lab, var(--ink-soft), var(--ink) 15%);
-    cursor: pointer;
-    transition:
-      background-color var(--dur-state) var(--ease-out),
-      color var(--dur-state) var(--ease-out),
-      box-shadow var(--dur-state) var(--ease-out);
-  }
-  .cwd > span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .cwd:is(:hover, :focus-visible) {
-    background-color: var(--ink-wash);
-    color: var(--ink);
-  }
-  .cwd:active {
-    background-color: var(--ink-wash);
-    box-shadow:
-      var(--bed-shade),
-      inset 0 1px var(--press-blur) var(--press-shade);
   }
 
   /* The plan and the file drawer (EXC-937) divide this surface between them: a

@@ -5,7 +5,7 @@ import type { ClientReview, PlanVersion } from "@core/lib/types";
 import { until } from "@test/support/poll.ts";
 import { expectViewRecreated } from "@ui/support/diffview.ts";
 import { logCapture } from "@ui/support/helpers.ts";
-import { capture, render } from "@ui/support/mount.ts";
+import { render } from "@ui/support/mount.ts";
 import { reactiveProps } from "@ui/support/props.svelte.ts";
 import DiffPlanView from "@/components/DiffPlanView.svelte";
 import {
@@ -21,7 +21,6 @@ import { shortcuts } from "$lib/shortcuts/index.ts";
 function props(over: Record<string, unknown> = {}) {
   return {
     review: reviewFixture(),
-    onCopyCwd: () => {},
     commenting: createSourceCommenting({ onCreate: () => {} }),
     annotations: [],
     focusedAnnotation: null,
@@ -243,30 +242,6 @@ describe("DiffPlanView outline", () => {
     await until(() => showKey(target)?.getAttribute("aria-pressed") === "true");
     expect(showKey(target)?.getAttribute("aria-pressed")).toBe("true");
     expect(localStorage.getItem("caret.planOutline")).toBeNull();
-  });
-
-  // The working-directory path (EXC-807) sits at the outline's foot. It is a
-  // click-to-copy button, with no hover tooltip (EXC-850).
-  test("shows the working-directory path at the outline's foot", () => {
-    const { target } = render(DiffPlanView, props({ review: reviewFixture() }));
-    const cwd = target.querySelector(".plan-outline .cwd");
-    expect(cwd).not.toBeNull();
-    expect(cwd!.textContent).toContain("/tmp/p");
-  });
-
-  test("clicking the working-directory path copies the full absolute path", () => {
-    // Deep enough that the display abbreviates (…/Play/caret) while the copy is
-    // the whole path — proving the two differ (EXC-850).
-    const copied = capture<string>();
-    const deep = "/Users/dev/GitLocal/Play/caret";
-    const { target } = render(
-      DiffPlanView,
-      props({ review: reviewFixture({ cwd: deep }), onCopyCwd: copied.cb }),
-    );
-    const cwd = target.querySelector<HTMLButtonElement>(".plan-outline button.cwd");
-    expect(cwd?.textContent?.trim()).toBe("…/Play/caret");
-    cwd?.click();
-    expect(copied.last()).toBe(deep);
   });
 });
 

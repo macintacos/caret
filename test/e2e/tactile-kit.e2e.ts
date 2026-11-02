@@ -14,6 +14,7 @@ import {
   revealGutterPlus,
   seedAndOpen,
 } from "@test/e2e/support/source-view.ts";
+import { bundledThemes } from "@test/support/theme.ts";
 
 /** The review page with one kept scratch, so the gate also reaches its marker's cap. */
 async function openWithScratchMarker(daemon: Daemon, page: Page): Promise<void> {
@@ -253,6 +254,43 @@ function settledFace(target: Locator): Promise<string> {
     await new Promise(requestAnimationFrame);
     await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {})));
     return getComputedStyle(el).backgroundColor;
+  });
+}
+
+/** The first opaque fill at or above `el`: the floor a key sees round itself. */
+function floorUnder(el: Locator): Promise<string> {
+  return el.evaluate((node) => {
+    for (let at: Element | null = node; at !== null; at = at.parentElement) {
+      const fill = getComputedStyle(at).backgroundColor;
+      if (!/^rgba\(.*, 0\)$|^transparent$/.test(fill)) return fill;
+    }
+    return getComputedStyle(document.body).backgroundColor;
+  });
+}
+
+// A latched key drops its side and cast shadow, so only its face against the floor round it
+// says where the key is. A dark key lifts toward ink, so that face must read lighter than
+// the floor, or the key reads as a hole with its hint cap standing in it.
+for (const theme of bundledThemes().filter((t) => t.scheme === "dark")) {
+  test(`the column's latched outline key reads lighter than the floor round it, ${theme.id}`, async ({
+    daemon,
+    page,
+  }) => {
+    await page.addInitScript((id) => {
+      localStorage.setItem("caret.theme.mode", "dark");
+      localStorage.setItem("caret.theme.dark", id);
+    }, theme.id);
+    await seedAndOpen(page, daemon);
+    const tray = page.locator("aside.plan-outline .header-tray");
+    const key = tray.getByRole("button", { name: "Outline", exact: true });
+    await expect(key).toHaveAttribute("aria-pressed", "true");
+    await page.mouse.move(0, 0);
+    const [face = [], floor = []] = await toLab(page, [
+      await settledFace(key),
+      await floorUnder(tray),
+    ]);
+    expect(face[0] ?? 0).toBeGreaterThan(floor[0] ?? 0);
+    expect(Math.hypot(...face.map((v, i) => v - (floor[i] ?? 0)))).toBeGreaterThanOrEqual(4.5);
   });
 }
 

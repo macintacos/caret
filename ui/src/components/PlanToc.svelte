@@ -32,7 +32,7 @@
   // query, and the command's selected row. The parent owns the heading set, the plan and
   // its comments, and the scroll tracking that moves `activeLine`.
   import type { PlanVersion } from "@core/lib/types";
-  import { type Snippet, tick, untrack } from "svelte";
+  import { tick, untrack } from "svelte";
 
   import { Button } from "$lib/components/ui/button/index.js";
   import * as Command from "$lib/components/ui/command/index.js";
@@ -93,8 +93,6 @@
     /** Hand the parent an action that opens the filter and focuses it, so `\` can
      * reach the column. */
     onExposeFilter?: (open: () => void) => void;
-    /** What sits at the column's foot. */
-    foot?: Snippet;
     /** Show a row's section beside it, or hide it with null. Omitted, nothing peeks. */
     onPeek?: (target: PeekTarget | null) => void;
     /** Whether a key keeps the peek open: one that changes how the plan is drawn, whose
@@ -116,7 +114,6 @@
     onHide,
     open = true,
     onExposeFilter,
-    foot,
     onPeek,
     peekStays,
   }: Props = $props();
@@ -638,9 +635,6 @@
       {/if}
     </div>
   </Command.Root>
-  {#if foot}
-    <div class="toc-foot">{@render foot()}</div>
-  {/if}
 </div>
 
 <style>
@@ -693,6 +687,11 @@
   .toc-title-row :global(.toc-title:is(:hover, :focus-visible)) {
     background: var(--ink-wash);
     color: var(--ink);
+  }
+  /* The outline key's bed is floored with the paper, as its bed in the plan header is.
+     On the body, a dark key latched down sits at or under the body and reads as a hole. */
+  .toc-title-row > .header-tray {
+    background-color: var(--paper);
   }
 
   .plan-toc :global(.toc-head) {
@@ -1123,13 +1122,5 @@
   }
   .plan-toc :global(.toc-empty-row .tray) {
     margin-block: 0.25rem;
-  }
-
-  .toc-foot {
-    flex: none;
-    display: flex;
-    min-width: 0;
-    --ctl-h: 1.75rem;
-    padding: 0.35rem 0.5rem 0.5rem 0.45rem;
   }
 </style>

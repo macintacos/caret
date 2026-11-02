@@ -79,7 +79,7 @@ Open items first, then the log, newest first.
   left this open; it was built that way and is waiting on the user's verdict.
 - **Calls left to the user from the 2026-11-02 polish:** both were built and are waiting
   on the user's verdict.
-  - The working-directory path in a bed at the outline's foot.
+  - The working-directory path in a bed at the centre of the status bar.
   - The outline key's latch riding its travel as the column stands and folds.
 
 ## 2026-11-02: search marks stand out, the outline key latches, the cwd sits in a bed
@@ -171,9 +171,19 @@ the rest of caret.
     110ms (the press echo). A fold from ⇧ + `\` drops that echo from the key, which would
     otherwise hold it down past the end of its travel.
   - Reduced motion snaps the latch with the slide.
-- **The working-directory path sits in a bed.** It is centred at the outline's foot, in a
-  bed with no key, a `button.tray`. Three variants were tried on the real app in light and
-  dark:
+  - In the column's head, the key's bed is floored with `--paper`, as the plan header's
+    floor is under the key's bed there. A latched key drops its side and cast shadow, so
+    only its face shows where it is. In every dark palette that face is at or under the
+    body's lightness, so on the body the key read as a hole. Its ⇧ + `\` hint cap stood in
+    it as if it were the key, which the user saw as the key looking misaligned.
+    `test/e2e/tactile-kit.e2e.ts` holds the face lighter than its floor in every dark
+    palette, by at least 4.5 CIE76.
+- **The working-directory path sits in a bed.** It is centred on the status bar, between
+  the version and the review's status, in a bed with no key, a `button.tray`. It shows
+  whenever a review is open, whether the outline is shown or not. It first sat at the
+  outline column's foot. The user moved it: "I meant like, the footer of the entire view,
+  on the same line as the version number, the keyboard helper button, etc - I want it
+  there in the middle". Three variants were tried on the real app in light and dark:
   - Bed, built: the `.tray` recipe, cut into the body like the header's beds. The user
     described it as "not a proper button, but just the bed".
   - Copy box: a text field's floor and `--panel-recess`. In light its white floor and edge
@@ -182,8 +192,8 @@ the rest of caret.
     it read as a tag.
 
   The bed takes `--ink-wash` under the pointer and keyboard focus, as a ghost control
-  does, and a press leaves the ghost control's dimple in it. The path still shrinks to an
-  ellipsis, at column widths from 12rem to 30rem.
+  does, and a press leaves the ghost control's dimple in it. When the path outruns the
+  room between the bar's other segments, it shrinks to an ellipsis before they give way.
 
 ## 2026-11-02: the outline column resizes from its edge
 

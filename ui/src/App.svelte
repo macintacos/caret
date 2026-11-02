@@ -846,7 +846,6 @@
       onExposeReveal={(r) => (revealLine = r)}
       onCompareChange={(r) => (compareRange = r)}
       {reviewContext}
-      {onCopyCwd}
       {showShortcutHints}
       {settingsRev}
     />
@@ -895,6 +894,8 @@
     onToggleComments={toggleComments}
     onOpenHelp={openHelp}
     {showShortcutHints}
+    cwd={active?.cwd}
+    {onCopyCwd}
   />
 </div>
 
