@@ -599,7 +599,7 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 | `build` — bare, `ui`, `bin`, `bundle`               | `scripts/tasks/build.ts`        | Bare is the umbrella; `mise run build bin` reaches a target.                      |
 | `test` — bare / `unit`, `e2e`, `bats`, `mod`        | `scripts/tasks/test.ts`         | Bare and `unit` are the same bun target; `e2e` is Playwright; `bats` is the shell suites under `scripts/`; `mod` is `claude plugin test mod`. The first two carry `--quiet`, `--verbose`, and `--json` ahead of their forwarded args; `bats` and `mod` carry `--json` alone. |
 | `smoke` — bare, `bin`, `bundle`                     | `scripts/tasks/smoke.ts`        | Bare smokes both artifacts.                                                       |
-| `assets`                                            | `scripts/tasks/assets.ts`       | Regenerates the README hero image. Needs ImageMagick on `PATH`.                   |
+| `assets`                                            | `scripts/tasks/assets.ts`       | Regenerates the README hero images, one per appearance.                           |
 | `lint`, `format`, `caret`                           | `scripts/tasks/lint.ts` et al.  | Passthroughs: operands and flags reach the underlying tool. Only `caret` forwards a bare `--help`. |
 | `setup`                                             | `scripts/tasks/setup.ts`        | The bootstrap's three steps, plus the e2e browsers (Chromium and WebKit).         |
 | `preflight`                                         | `scripts/preflight.ts`          | Real Commander options rather than passthrough: `--json`, `-v`, `--grep`, `--task`, `--full`. |
@@ -755,26 +755,39 @@ Emergency manual publish, when CI can't:
 
 ### Regenerating the README assets
 
-The hero image, `doc/assets/caret-review-ui.png`, comes out of `mise run assets`, so
-refreshing it after the UI moves is a task run rather than a hand-composed screenshot. It
-builds the UI, boots an isolated daemon on an ephemeral port, and drives the shipped
-`ui/dist` through the Playwright library.
+The README's hero is two screenshots of the review UI, one per appearance:
+`doc/assets/caret-review-ui-light.png` in caret-light and
+`doc/assets/caret-review-ui-dark.png` in caret-dark. The README shows them through a
+`<picture>` element, so a reader sees the one that matches their system appearance.
 
-It captures the plan view in four palettes — caret-dark, caret-light, dracula,
-catppuccin-latte — and composites them into bands cut along parallel seams, stroked in the
-live `--accent`. Two choices there are load-bearing rather than decorative. The palettes
-**alternate dark and light**, because four of one scheme sit within a few RGB points of
-each other, so adjacent bands merge and the seams vanish. And the seams run at **60°**,
-steep enough that every one enters the frame's top edge and leaves its bottom edge: a
-shallower cut exits through a side instead, which turns the outer bands into corner
-triangles and makes evenly spaced seams produce visibly uneven bands.
+Run `mise run assets` to regenerate both after the UI changes. The task builds the UI,
+boots an isolated daemon on an ephemeral port, and drives the shipped `ui/dist` through
+the Playwright library. Both shots stage the same frame:
 
-The image renders at **2× device pixels** so it stays crisp on a high-DPI display.
+- the demo plan, `scripts/tasks/dev/demo-plan.md`, in the source view;
+- two inline comments on it, on the lines named by `ANNOTATIONS` in
+  `scripts/tasks/assets.ts`;
+- the file the plan cites, `scripts/release/log.ts`, open in the file preview's drawer,
+  docked right;
+- the comment list that ⇧C opens, in the bottom right.
 
-It needs **ImageMagick** on `PATH` (`brew install imagemagick`). It isn't pinned in
-`mise.toml`: it has no `aqua:` entry, and the registry alternatives would put a
-multi-minute build in front of every fresh clone. The task names the formula when
-ImageMagick is missing.
+The preview reads its file from disk, so the task writes a 20-line stand-in for
+`scripts/release/log.ts`, defined as `PREVIEW_FILE` in `scripts/tasks/assets.ts`, into a
+one-file project in its temporary state directory. It then submits the demo plan to the
+daemon with that project as the review's working directory, so the daemon resolves the
+citation against it. caret itself has no `scripts/release/log.ts`. The browser never sees
+the project's directory. The task swaps it for `~/acme-web` in the review JSON the UI
+reads, so no contributor path, hostname, or temp directory reaches the images.
+
+The frame is 1440×900 CSS pixels at 2× device pixels, so the images stay crisp on a
+high-DPI display. The task pins the drawer at 560px wide, because at the drawer's default
+width the plan's 90-column lines run past the pane's edge. Keep `PREVIEW_FILE`'s lines
+short enough to fit that width. The task also marks the first-run onboarding modal and the
+one-time drag tip seen, and parks the pointer on the top bar, so no tip or hover shows.
+
+`test/scripts/assets.test.ts` checks that each comment's anchor line and the
+`PREVIEW_FILE` citation are still in the demo plan. Without it, an edit to the plan that
+strands one surfaces only when the task runs.
 
 ### Icons
 

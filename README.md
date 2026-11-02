@@ -13,7 +13,10 @@ Want to develop `caret` rather than use it? Start with [CONTRIBUTING.md](CONTRIB
 
 [Check out a short demo here!](https://youtu.be/zesv5AunUW4)
 
-![caret review UI with an inline annotation, stitched across four themes](doc/assets/caret-review-ui.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="doc/assets/caret-review-ui-dark.png">
+  <img src="doc/assets/caret-review-ui-light.png" alt="caret's review UI: a plan with two inline comments, the file it cites open in a preview, and the comment list open">
+</picture>
 
 ## Install
 
