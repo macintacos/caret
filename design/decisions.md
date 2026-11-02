@@ -88,6 +88,142 @@ Open items first, then the log, newest first.
   - As the drawer narrows, the esc hint ("esc to close") and then the kind tag ("Preview")
     leave the bar.
 
+## 2026-11-02: a filter query peeks at the row it selects
+
+Typing a query into the outline's filter selected the first match but opened no peek on
+it. The peek came only once the user moved to another row. They asked for it to "appear
+immediately (after a small delay) on the current selection".
+
+- **A query peeks at the row it selects.** Once you stop typing, the selected row peeks
+  after the same 350ms a row under the pointer or the keys waits. The filter selects the
+  first match, so that is the row that peeks.
+- **Each keystroke starts the wait again.** An edit closes an open peek, and the selected
+  row waits 350ms from that keystroke. An open peek follows the pointer and the keys to
+  the next row at once, but not the query: a peek that swapped its copy at every keystroke
+  would change before anyone could read it.
+- **A query that matches nothing shows no peek.** It selects no row, so only "No headings
+  match" shows under the field.
+- **Emptying the query closes the peek, and it stays closed.** The field's ×, Escape and
+  deleting the last character all empty it. The whole outline comes back with its first
+  row selected, a row you didn't pick. Backing out of a search never opens a peek. Moving
+  the pointer or the keys to a row and resting there opens it again.
+- **The query starts the wait itself.** bits-ui, the library under the outline's list,
+  selects the first match just after each edit. An edit that keeps the same first match
+  changes no selection, so a peek that waited for a selection change would never open. The
+  outline starts the wait on its own first match instead, which is the row bits-ui selects
+  because the list keeps the plan's order.
+
+## 2026-11-02: a clicked outline row goes down at once and stays down
+
+The user: "when I click on an item in the outline, it should immediately animate to its
+"depressed" button variant I think". A click now takes the row down under the press, and
+the latch the click sets holds it there through the jump. The row latched before lets go
+at the same click.
+
+- **Why it stood up:** the rules that raise the row under the cursor had a higher CSS
+  specificity than the press and the latch. That cursor is the pointer's hover while the
+  filter is closed, and the keyboard's selection while it is open. So a pressed row stayed
+  risen, and the row the click had latched stayed risen too, until the pointer left it or
+  the closing filter slid it away. The latch itself already moved at the click. In the
+  float, the selection's rise also hid the press the float holds on a picked row
+  (`data-key-pressed`). The rise rules in `PlanToc.svelte` now carry no more specificity
+  than the press and the latch, which follow them and win.
+- **A click:** the row goes down as a press does, on `--ease-out`, and the click latches
+  it where it stands. On pointer-up only its face changes: `--neutral-face-latched-hover`
+  while the pointer stays on it, then `--neutral-face-latched`. A press dragged off the
+  row still cancels, so the latch waits for pointer-up, as any button's action does.
+- **Enter:** a pick by keyboard latches the row at once, with no hold before it. In the
+  column, Enter closes the filter and the row goes from risen to latched. In the float,
+  the float marks the picked row pressed as it closes, so the row stays down while the
+  float leaves.
+- **A jump that lands elsewhere, or is interrupted:** unchanged. The latch holds the
+  picked heading until the plan reaches it, or for 480ms, twice the jump's 240ms travel.
+  Then it moves, with no motion, to the heading in the reading zone, as a scroll moves it.
+  The latch marks where the reader is, and a heading the plan could not bring to the
+  reading zone is not where the reader is.
+- **The latch's motion:** a latch goes down on `--ease-out` over `--dur-state`, as a press
+  does, so it no longer springs past where it stops. Only a key's return springs. A pick
+  still moves the latch with motion, and a scroll still moves it with none, because motion
+  confirms a change the reader made. Motion through a scroll reads as lag.
+- **Reduced motion:** no key travels, so the press and the latch show only as the row's
+  shading turning concave. The shading stays concave until the latch moves on.
+- `test/e2e/plan-toc.e2e.ts` holds:
+  - a row clicked in the column or the float never drawn above its resting position, from
+    the press until the jump lands;
+  - a row Enter picks in the column going down no further than where it stops.
+
+## 2026-11-02: the cwd path shows whole from `~`, and a copy confirms on the path
+
+The user asked for the status bar's working-directory path to start from `~` and be "the
+'real' path to the current working directory", in place of its last two segments. They
+asked for its middle to give way when the bar is too narrow, and for a copy to have "a
+nice little animation for it instead of just having the toast message".
+
+- **What it shows:** inside the home directory, the whole path from `~`, so
+  `/Users/dev/wt/caret/plan-header` reads `~/wt/caret/plan-header`. Outside it, the whole
+  absolute path. A cwd the coding agent already reports from `~`, such as the README
+  hero's `~/acme-web`, reads as given. A click still copies the whole absolute path, never
+  the `~` form.
+  - The daemon reports its user's home directory on `/api/health` as `home`. Until the
+    UI's health check returns, or from a daemon that predates the field, the path shows
+    absolute.
+- **The middle cut:** when the whole path outruns the room between the version and the
+  review's status, it gives up whole segments to one `…`. It cuts into a name only when
+  the leaf alone outruns the room, and then the leaf ends in an ellipsis.
+  - It keeps its start (`~`, or an absolute path's first directory) and its leaf. It gives
+    up the segment after the start first, so the leaf's nearest parents, usually the repo
+    and the worktree, stay longest: `~/…/caret/plan-header`, then `~/…/plan-header`.
+  - Widening the bar gives the segments back.
+  - While the path is cut, the bed fills the whole room and narrows smoothly with the
+    window. The text inside it drops one segment at a time. A path that fits sets the
+    bed's width, unless "Copied" is wider.
+  - CSS `text-overflow` was ruled out, because it cuts mid-name: an ellipsis in the middle
+    of a segment (`~/wt/ca…/plan-header`) shows a name that doesn't exist.
+- **The sides keep their width:** a long path took room from the version, which wrapped
+  onto two lines at its hyphen. The version and the review's status now never shrink below
+  their own width.
+- **The copy roll:** on a copy that lands, the path rolls up out of the bed, and "Copied",
+  with a check in `--ok`, rolls up into it from below, on `--dur-state` and `--ease-out`.
+  After 1.5s they roll back. The version badge's "Copied" holds for the same 1.5s. The bed
+  holds its width, so nothing beside it moves.
+  - Under reduced motion the swap is instant and "Copied" still holds for 1.5s, so the
+    confirmation stays readable without movement.
+  - A copy the clipboard refuses, in an insecure context or with permission denied,
+    confirms nothing, and a screen reader hears nothing. The toast confirmed every click,
+    even a refused one.
+- **No toast:** the confirmation sits where the reader is already looking, and the version
+  badge beside it confirms its own copy the same way. A toast in the far corner said it a
+  second time and stacked on repeated clicks. A status region still announces "Copied path
+  to clipboard" to a screen reader, as the toast did.
+
+## 2026-11-02: the README hero is one screenshot per appearance
+
+The user disliked the hero's four-theme stitch and asked for two screenshots, one in
+caret-light and one in caret-dark, with no composites. They also asked the hero to show
+more of the app: a file preview on the right, a second comment, and the comment list ⇧C
+opens. The README shows the pair through a `<picture>` element, so a reader sees the one
+that matches their system appearance. `mise run assets` captures both.
+
+- **Composition:** the plan in the source view fills the left, and the file it cites fills
+  the right in the preview docked there. The two shots differ only in theme.
+  - The first comment sits on the line citing `scripts/release/log.ts:9` and asks for
+    `quiet` to go into `createLogger`. The preview opens on that file with line 9,
+    `createLogger`, marked, so the eye runs from the comment to the code it is about.
+  - The second comment is the old hero's comment, on step 3 of the demo plan. One card
+    sits mid-plan and one near the foot, so they don't stack.
+  - The comment list stands in the bottom right over the space under the 20-line file, so
+    it covers no code.
+  - The outline column is folded, because the app folds it beside a drawer at this width.
+- **Frame:** 1440×900 CSS pixels at 2×, as before. The drawer is pinned at 560px, because
+  at its default width the plan's 90-column lines run past the pane's edge.
+  `scripts/tasks/assets.ts` keeps the previewed file's lines short enough to fit that
+  width.
+- **What stays out:** the first-run onboarding modal and the one-time drag tip are marked
+  seen, and the pointer rests in the top bar's empty middle, so no tip or hover shows.
+- **Privacy:** the status bar's cwd reads `~/acme-web`. The daemon reads the previewed
+  file from a real temporary project, and the task swaps that directory for `~/acme-web`
+  in the review JSON the UI reads.
+
 ## 2026-11-02: the find row closes from a Close key, and opening holds the plan still
 
 The user saw the right side of the view jump open and back as the find row opened. They

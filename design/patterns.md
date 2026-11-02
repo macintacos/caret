@@ -142,6 +142,9 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   0.5rem inside the plan pane, clear of an open file. Once open it follows the pointer and
   the keys to the next row at once. `p` flips it to the other view with the plan, or
   closes it if that view has not drawn the section within three frames.
+  - A filter query opens it the same way on the row the query selects, 350ms after the
+    last keystroke. A query that matches nothing opens none, and neither does emptying the
+    query.
   - It is a copy of the live view, so its type, colour, chips and code highlighting are
     the plan's own in every theme. It starts at the heading and ends on the section's last
     line of text. A heading with no text of its own shows its subsections too.
@@ -194,9 +197,18 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   metadata the reader copies rather than a control they work. It shows whenever a review
   is open, whether the outline is shown or not. Under the pointer or keyboard focus, the
   bed takes `--ink-wash` and the path inks up, as a ghost control does. A press adds the
-  ghost control's dimple to the bed's shading. When the path outruns the room between the
-  bar's other segments, the path shortens to an ellipsis, and the version and the review's
-  status keep their full width.
+  ghost control's dimple to the bed's shading.
+  - It shows the whole path: from `~` inside the home directory, absolute outside it, and
+    as given when the coding agent reports its cwd from `~` already. A click copies the
+    whole absolute path.
+  - When the path outruns the room between the bar's other segments, it gives up whole
+    middle segments to one `…`. It keeps its start and its leaf, and gives up the segment
+    after the start first. Only a leaf that alone outruns the room ends in an ellipsis.
+    The version and the review's status keep their full width.
+  - On a copy that lands, the path rolls up out of the bed, and "Copied", with a check in
+    `--ok`, rolls up into it from below, on `--dur-state` and `--ease-out`. After 1.5s
+    they roll back. Reduced motion swaps them with no movement and keeps the hold. A copy
+    the clipboard refuses confirms nothing. No toast: a status region announces the copy.
 - **Nested corners.** Where a rounded shape rests near another's corner, the inner radius
   is the outer radius less the inset between them, so the gap round the corner matches the
   gap along the sides. The inset is the distance from the outer shape's edge to the inner
@@ -377,9 +389,12 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   from its indent onward, and latches onto `--neutral-face-latched` while it is the
   section being read, an open exception to the accent rule
   ([`decisions.md`](decisions.md)). The cursor on it takes `--neutral-face-latched-hover`.
-  A key row's keyboard indicator is its hover look, so the row the keys move to looks
-  exactly like the row the pointer moves to. A chosen row under the highlight stays down
-  on the hover face, so the highlight reads on it too.
+  Its press and its latch override its rise, so a row clicked under the pointer goes down
+  at the press and stays down: the click latches it where it stands, and the row latched
+  before lets go. A latch goes down on `--ease-out`, as a press does. A key row's keyboard
+  indicator is its hover look, so the row the keys move to looks exactly like the row the
+  pointer moves to. A chosen row under the highlight stays down on the hover face, so the
+  highlight reads on it too.
 - **Setting groups.** Each Settings section's rows sit in a bed on `--group-floor` with
   `--bed-shade`, rounded at `--key-radius` plus `--well-pad` plus `--group-pad`, parted by
   space with no hairline. The nav's sections share one bed (`.tray` on `--group-floor`),
