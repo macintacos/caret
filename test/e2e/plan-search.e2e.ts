@@ -35,6 +35,7 @@ const pill = (page: Page) => page.getByRole("search");
 const field = (page: Page) => page.locator("input[aria-label='Search plan']");
 const searchEntry = (page: Page) =>
   page.locator(".plan-header").getByRole("button", { name: "Search", exact: true });
+const closeKey = (page: Page) => pill(page).getByRole("button", { name: "Close search" });
 
 // The pill's tabular "n / total" counter, parsed.
 async function counter(page: Page): Promise<{ current: number; total: number }> {
@@ -208,6 +209,54 @@ test("with Show Hints off, the Search entry is a magnifier and its word, and a c
   await entry.click();
   await expect(pill(page)).toBeVisible();
   await expect(field(page)).toBeFocused();
+
+  // The way out keeps its word with the hints gone.
+  await expect(closeKey(page)).toHaveText("Close");
+  await expect(closeKey(page).locator("[data-slot='kbd']")).toHaveCount(0);
+  await closeKey(page).click();
+  await expect(pill(page)).toHaveCount(0);
+});
+
+/** Wait out the find row's own animations. */
+const rowSettled = (page: Page) =>
+  page
+    .locator(".plan-header .plan-search")
+    .evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+
+test("Close stands where the Search entry stood, wears its Esc cap, and a click closes the row", async ({
+  daemon,
+  page,
+}) => {
+  await openPlanForKeys(page, daemon, PLAN);
+  await layoutStill(page);
+  const entry = (await searchEntry(page).boundingBox())!;
+  await searchEntry(page).click();
+  await expect(pill(page)).toBeVisible();
+  await rowSettled(page);
+
+  await expect(closeKey(page).locator("[data-slot='kbd']")).toHaveText(/^esc$/i);
+  const tray = (await page.locator(".plan-search .search-close-tray").boundingBox())!;
+  expect(Math.abs(tray.x + tray.width - (entry.x + entry.width))).toBeLessThan(1);
+  await closeKey(page).click();
+  await expect(pill(page)).toHaveCount(0);
+  await expect(searchEntry(page)).toBeVisible();
+});
+
+// The row starts past the slot's end, where focusing its field would scroll the plan's
+// body sideways to bring it into view.
+test("opening the find row never scrolls the plan sideways", async ({ daemon, page }) => {
+  await openPlanForKeys(page, daemon, PLAN);
+  await layoutStill(page);
+  await page.evaluate(() => {
+    const w = window as unknown as { __scrolls: number };
+    w.__scrolls = 0;
+    document.querySelector(".plan-body")?.addEventListener("scroll", () => w.__scrolls++);
+  });
+  await searchEntry(page).click();
+  await expect(field(page)).toBeFocused();
+  await rowSettled(page);
+  const scrolls = await page.evaluate(() => (window as unknown as { __scrolls: number }).__scrolls);
+  expect(scrolls).toBe(0);
 });
 
 interface Frame {

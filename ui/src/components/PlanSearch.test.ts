@@ -56,8 +56,8 @@ describe("PlanSearch", () => {
     const group = target.querySelector("[data-slot='input-group']");
     const addons = Array.from(target.querySelectorAll("[data-slot='input-group-addon']"));
     expect(addons.map((a) => a.textContent?.trim())).toEqual(["/", "1 / 3"]);
-    const tray = target.querySelector(".tray");
-    expect(tray?.querySelectorAll("button").length).toBe(3);
+    const tray = target.querySelector(".search-actions");
+    expect(tray?.querySelectorAll("button").length).toBe(2);
     expect(group?.contains(tray ?? null)).toBe(false);
   });
 
@@ -107,8 +107,8 @@ describe("PlanSearch", () => {
   test("the lip offers the keys that apply in each mode", () => {
     const captions = (props: Partial<typeof base> & { committed?: boolean }) =>
       lipHints(render(PlanSearch, { ...base, hints: true, ...props }).target).map(caption);
-    expect(captions({})).toEqual(["go to match", "close"]);
-    expect(captions({ matchCount: 0, currentIndex: -1 })).toEqual(["close"]);
+    expect(captions({})).toEqual(["go to match"]);
+    expect(captions({ matchCount: 0, currentIndex: -1 })).toEqual([]);
     expect(captions({ committed: true })).toEqual(["next", "previous", "edit"]);
   });
 
@@ -123,6 +123,19 @@ describe("PlanSearch", () => {
     const { target } = render(PlanSearch, { ...base, hints: false });
     expect(lipHints(target).length).toBe(0);
     expect(count(target)).toBe("1 / 3");
+  });
+
+  // Close stands as a key of its own, and Esc is its cap rather than a hint in the lip.
+  test("Close reads Close and wears its Esc cap while hints show, and loses only the cap with them off", () => {
+    const close = (hints: boolean) =>
+      step(render(PlanSearch, { ...base, hints }).target, "Close search");
+    const shown = close(true);
+    expect(shown?.getAttribute("aria-keyshortcuts")).toBe("Escape");
+    expect(shown?.querySelector("[data-slot='kbd']")?.textContent?.trim()).toBe("esc");
+    expect(caption(shown!)).toBe("Close");
+    const hidden = close(false);
+    expect(hidden?.querySelector("[data-slot='kbd']") != null).toBe(false);
+    expect(caption(hidden!)).toBe("Close");
   });
 
   test("the step and close buttons fire their callbacks", () => {

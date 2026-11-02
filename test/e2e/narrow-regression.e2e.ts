@@ -75,6 +75,7 @@ const FIND_ROW = [
   ".plan-search :is(.search-field, .search-stamp)",
   ".plan-search .search-actions",
   ".plan-search .search-lip",
+  ".plan-search .search-close-tray",
 ];
 
 // The room the query itself gets: the field's text box inside its padding, or the stamp's

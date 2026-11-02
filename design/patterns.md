@@ -77,13 +77,17 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   over the crumbs, between the outline key and the view keys, on the header's own floor.
   The crumbs keep their box under it, so their collapse holds still. The entry is the last
   thing in the crumbs' slot, which clips at its end, so the row slides out of the entry
-  from `translateX(100%)` over `--dur-pane`. Escape closes it, and closing slides it back
-  into the entry over `--dur-state` as the crumbs fade in. The crumbs hide at once when
-  the row opens. A fade-out there would leave a quick close reversing a half-done fade,
-  which cuts the fade back in short. The match count sits at the field's end, and the key
-  hints follow the step keys as text. As the header narrows, the field gives up width
-  first, until the key hints no longer fit beside it. Beside the longest hints, a
-  committed query's, that is about 8rem. Then the key hints go, and the field gives up the
+  from `translateX(100%)` over `--dur-pane`. Its field takes focus without scrolling the
+  plan. Otherwise focus would scroll the plan sideways, because the row's box starts past
+  the slot. A Close key ends the row, where the entry stood: an ×, the word "Close" and,
+  with Shortcut hints on, the `esc` cap. Close or Escape closes the row. Closing slides it
+  back into the entry over `--dur-state` as the crumbs fade in. The crumbs hide at once
+  when the row opens. A fade-out there would leave a quick close reversing a half-done
+  fade, which cuts the fade back in short. The match count sits at the field's end, and
+  the key hints follow the step keys as text. As the header narrows, the field gives up
+  width first, until the key hints and Close's word no longer fit beside it. Beside the
+  longest hints, a committed query's, and Close's word, that is about 8rem. Then the key
+  hints go, Close narrows to an × the size of the step keys, and the field gives up the
   rest, down to about five characters of query (3rem). Past that, the parts that read
   least go, in this order:
   1. The slash before the query.

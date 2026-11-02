@@ -3523,7 +3523,7 @@
   /* Where the find row would still squeeze its query with its slash and the count's
      spaces gone, the header's keys drop their hint caps while it is open. Measured with
      the outline key in the header and Versions without its word. */
-  @container plan-header (width < 30.6rem) {
+  @container plan-header (width < 31.3rem) {
     .plan-header.searching :global(.header-tray .kbd-sm) {
       display: none;
     }

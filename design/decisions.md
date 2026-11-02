@@ -88,6 +88,39 @@ Open items first, then the log, newest first.
   - As the drawer narrows, the esc hint ("esc to close") and then the kind tag ("Preview")
     leave the bar.
 
+## 2026-11-02: the find row closes from a Close key, and opening holds the plan still
+
+The user saw the right side of the view jump open and back as the find row opened. They
+also asked for the row's Esc hint to be a button, and, with Shortcut hints off, for a
+button reading "Close" where the row showed no way out.
+
+- **The jump:** the find row's field took focus while the row still sat past the crumbs'
+  slot, at `translateX(100%)`. The slot's `clip-path` clips only what paints, so the row's
+  box still reached past the slot. Focus scrolls the nearest scroll container to bring the
+  field into view. `.plan-body` (`overflow: hidden`) is one, so the whole plan slid 170px
+  left, then back as the row arrived. The field now takes focus with `preventScroll`, and
+  `plan-search.e2e.ts` fails if `.plan-body` scrolls at all while the row opens.
+- **Close:** one key replaces the row's × key and its Esc hint. It holds an ×, the word
+  "Close" and, with Shortcut hints on, the `esc` cap. With hints off, Close keeps its ×
+  and word and drops the cap, as the Search entry does.
+  - It stands at the end of the crumbs' slot, where the Search entry stood, so the control
+    that opened the row is the one that closes it. It is a key in a bed of its own, at the
+    height of Versions and Preview beside it.
+  - It carries `aria-keyshortcuts="Escape"`, so Escape on a committed search plays the
+    press echo on Close.
+  - The key hints after the step keys keep only the keys Close doesn't show: ↵ while
+    editing, and `n`, ⇧N and `/` once committed. With none to show, they are not drawn.
+- **Narrow widths:** Close with its word and cap takes about 5.4rem more than the × did,
+  so every threshold the row gives way at moved. They are the `@container` queries in
+  `PlanSearch.svelte`, and the header's cap rule in `DiffPlanView.svelte`. A change to
+  Close's width moves all four.
+  - Its word and cap go with the key hints, in a row under 30.4rem (was 25rem). That
+    leaves an × the size of the step keys, the × the row had before.
+  - The slash and the count's spaces now go under 16.6rem and 15.65rem (were 15.9rem and
+    14.95rem). The header keys' caps go under 31.3rem (was 30.6rem).
+  - At the narrowest window, 480px, the row with "No matches" has about 3px to spare.
+    `narrow-regression.e2e.ts` measures Close as part of the row.
+
 ## 2026-11-02: the file drawer's title bar stands as tall as the plan header
 
 The user asked for the file drawer's title bar to be as tall as the plan header beside it,

@@ -4,6 +4,7 @@
   // the cursor/commit behaviour, reaching them through these callbacks.
   import Icon from "@/components/Icon.svelte";
   import KbdCap from "@/components/KbdCap.svelte";
+  import { Button } from "$lib/components/ui/button/index.js";
   import * as InputGroup from "$lib/components/ui/input-group/index.js";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
@@ -68,10 +69,11 @@
 
   // The field exists only while editing, so whenever it mounts — the first `/` or a
   // reopen over a stamped query — it takes focus with its text selected, and typing
-  // replaces the prefilled last query, like browser find.
+  // replaces the prefilled last query, like browser find. Without scrolling: the row
+  // opens from past the slot's end, and the plan's body would scroll sideways to it.
   let field = $state<HTMLInputElement | null>(null);
   $effect(() => {
-    field?.focus();
+    field?.focus({ preventScroll: true });
     field?.select();
   });
 </script>
@@ -142,11 +144,8 @@
     >
       <Icon name="chevron-down" size={14} />
     </button>
-    <button type="button" class="search-close float-chip" aria-label="Close search" onclick={onclose}>
-      <Icon name="x" size={14} />
-    </button>
   </span>
-  {#if hints}
+  {#if hints && (committed || hasMatches)}
     <div class="search-lip">
       {#if committed}
         <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">n</Kbd>next</span>
@@ -156,13 +155,26 @@
         >
         <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">/</Kbd>edit</span>
       {:else}
-        {#if hasMatches}
-          <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">↵</Kbd>go to match</span>
-        {/if}
-        <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">Esc</Kbd>close</span>
+        <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">↵</Kbd>go to match</span>
       {/if}
     </div>
   {/if}
+  <span class="search-close-tray tray header-tray">
+    <Button
+      variant="secondary"
+      size="sm"
+      class="search-close float-chip"
+      aria-label="Close search"
+      aria-keyshortcuts="Escape"
+      onclick={onclose}
+    >
+      <Icon name="x" size={14} />
+      <span class="close-word">Close</span>
+      {#if hints}
+        <Kbd class="kbd-sm" aria-hidden="true">esc</Kbd>
+      {/if}
+    </Button>
+  </span>
 </div>
 
 <style>
@@ -201,8 +213,9 @@
 
   /* The field and the stamp share one geometry, so a commit sets the query in place
      rather than moving it. The field gives up width first, to about 8rem; then the hints
-     go (.search-lip), and the field gives up the rest, down to five characters of query
-     (--query-floor). The steps keep theirs, so Close always fits. */
+     go (.search-lip) and Close keeps only its ×, and the field gives up the rest, down to
+     five characters of query (--query-floor). The steps keep theirs, so Close always
+     fits. */
   .plan-search :global(.search-field),
   .search-stamp {
     flex: 0 1 25rem;
@@ -266,8 +279,7 @@
     flex: none;
     --tray-gap: 4px;
   }
-  .search-step,
-  .search-close {
+  .search-step {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -292,6 +304,13 @@
     transform: rotate(180deg);
   }
 
+  /* The way out, a key of the header's own at the slot's end, where the Search entry
+     stood. */
+  .search-close-tray {
+    flex: none;
+    margin-left: auto;
+  }
+
   /* The keys that apply now, as text after the steps. */
   .search-lip {
     flex: none;
@@ -308,16 +327,24 @@
     align-items: center;
     gap: 0.3rem;
   }
-  /* The room an 8rem field, the steps and the stamp's lip, its longest, take together. */
-  @container (width < 25rem) {
-    .search-lip {
+  /* The room an 8rem field, the steps, the stamp's lip, its longest, and Close with its
+     word and cap take together. Below it Close is an × of the steps' size. */
+  @container (width < 30.4rem) {
+    .search-lip,
+    .close-word,
+    .search-close-tray :global(.kbd-sm) {
       display: none;
+    }
+    .search-close-tray :global(.search-close) {
+      width: var(--search-cap);
+      height: var(--search-cap);
+      padding: 0;
     }
   }
   /* Past the query's floor, what reads least goes first: the slash, then the count's
      spaces and its end padding. Each threshold is the row at its floor with that part still
      in, beside its longest count, "No matches". */
-  @container (width < 15.9rem) {
+  @container (width < 16.6rem) {
     .plan-search :global(.search-field [data-align="inline-start"]),
     .search-stamp .search-slash {
       display: none;
@@ -326,7 +353,7 @@
       padding-inline-start: 0.375rem;
     }
   }
-  @container (width < 14.95rem) {
+  @container (width < 15.65rem) {
     .count-gap {
       display: none;
     }
