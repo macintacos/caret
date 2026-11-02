@@ -305,19 +305,20 @@ the rest of caret.
     110ms (the press echo). A fold from ⇧ + `\` drops that echo from the key, which would
     otherwise hold it down past the end of its travel.
   - Reduced motion snaps the latch with the slide.
-  - In the column's head, the key's bed is floored with `--paper`, as the plan header's
-    floor is under the key's bed there. A latched key drops its side and cast shadow, so
-    only its face shows where it is. In every dark palette that face is at or under the
-    body's lightness, so on the body the key read as a hole. Its ⇧ + `\` hint cap stood in
-    it as if it were the key, which the user saw as the key looking misaligned.
+  - The column's head floors the key's bed with `--paper`, matching the floor under the
+    key's bed in the plan header. A latched key drops its side and cast shadow, so only
+    its face shows where it is. In every dark palette that face is at or under the body's
+    lightness, so on the body the key read as a hole. Its ⇧ + `\` hint cap stood in the
+    hole as if it were the key. The user saw this as the key looking misaligned.
     `test/e2e/tactile-kit.e2e.ts` holds the face lighter than its floor in every dark
-    palette, by at least 4.5 CIE76.
+    palette, by a colour difference (ΔE, CIE76) of at least 4.5.
 - **The working-directory path sits in a bed.** It is centred on the status bar, between
   the version and the review's status, in a bed with no key, a `button.tray`. It shows
   whenever a review is open, whether the outline is shown or not. It first sat at the
-  outline column's foot. The user moved it: "I meant like, the footer of the entire view,
-  on the same line as the version number, the keyboard helper button, etc - I want it
-  there in the middle". Three variants were tried on the real app in light and dark:
+  outline column's foot. The user asked to move it: "I meant like, the footer of the
+  entire view, on the same line as the version number, the keyboard helper button, etc - I
+  want it there in the middle". Three variants were tried on the real app in light and
+  dark:
   - Bed, built: the `.tray` recipe, cut into the body like the header's beds. The user
     described it as "not a proper button, but just the bed".
   - Copy box: a text field's floor and `--panel-recess`. In light its white floor and edge
@@ -325,9 +326,10 @@ the rest of caret.
   - Pocket: a stamp's darker floor, as a pill. The kit stamps passive labels this way, and
     it read as a tag.
 
-  The bed takes `--ink-wash` under the pointer and keyboard focus, as a ghost control
-  does, and a press leaves the ghost control's dimple in it. When the path outruns the
-  room between the bar's other segments, it shrinks to an ellipsis before they give way.
+  The bed takes `--ink-wash` under the pointer and keyboard focus, and the path inks up,
+  as a ghost control does. A press leaves the ghost control's dimple in it. When the path
+  outruns the room between the bar's other segments, the path shortens to an ellipsis, and
+  the version and the review's status keep their full width.
 
 ## 2026-11-02: the outline column resizes from its edge
 
