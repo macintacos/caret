@@ -15,7 +15,7 @@ export interface TocHeading {
 }
 
 const ATX = /^\s*(#{1,6})\s+(.*)$/;
-export const FENCE = /^\s*(`{3,}|~{3,})/;
+const FENCE = /^\s*(`{3,}|~{3,})/;
 
 /**
  * Scans plan source for ATX headings outside fenced code blocks, in document

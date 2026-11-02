@@ -22,12 +22,6 @@
   import file from "@/icons/file.svg?raw";
   import folder from "@/icons/folder.svg?raw";
   import gitCompare from "@/icons/git-compare.svg?raw";
-  import heading1 from "@/icons/heading-1.svg?raw";
-  import heading2 from "@/icons/heading-2.svg?raw";
-  import heading3 from "@/icons/heading-3.svg?raw";
-  import heading4 from "@/icons/heading-4.svg?raw";
-  import heading5 from "@/icons/heading-5.svg?raw";
-  import heading6 from "@/icons/heading-6.svg?raw";
   import keyboard from "@/icons/keyboard.svg?raw";
   import loaderCircle from "@/icons/loader-circle.svg?raw";
   import messageSquare from "@/icons/message-square.svg?raw";
@@ -64,12 +58,6 @@
     file,
     folder,
     "git-compare": gitCompare,
-    "heading-1": heading1,
-    "heading-2": heading2,
-    "heading-3": heading3,
-    "heading-4": heading4,
-    "heading-5": heading5,
-    "heading-6": heading6,
     keyboard,
     "loader-circle": loaderCircle,
     "message-square": messageSquare,

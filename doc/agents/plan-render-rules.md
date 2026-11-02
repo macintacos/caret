@@ -332,7 +332,7 @@ The gates exist because `SourceView` hands `DiffPlanView` an `api` and its `host
 nothing clears them when `SourceView` unmounts. An effect, shortcut, or surface outside
 `SourceView`'s branch that reads them keeps acting on a detached shadow root unless it
 gates through `runsOn`. So a row covers each effect, shortcut `enabled` guard, and
-control-row or lane surface in `DiffPlanView` outside that branch. Anything inside the
+plan-header or lane surface in `DiffPlanView` outside that branch. Anything inside the
 branch unmounts with it and needs no gate.
 
 Adding `"preview"` to a row switches on the source implementation, which still reads the

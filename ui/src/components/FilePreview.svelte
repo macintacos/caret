@@ -397,7 +397,7 @@
     const region = codeEl;
     const framing = meta;
     if (region === null || framing === undefined || preview.kind !== "ready") return undefined;
-    // An unmeasured region — the lane mid-wipe, or a panel not yet laid out —
+    // An unmeasured region — a panel not yet laid out —
     // has no proximity to read and would size a chunk off a zero height.
     if (region.clientHeight === 0) return undefined;
     const { threshold } = step(region, preview.rows.length);
@@ -800,8 +800,7 @@
       opacity: 1;
     }
   }
-  /* A passive readout, so it is stamped into the header, as the Contents peek's
-     "Lines" fact is. */
+  /* A passive readout, so it is stamped into the header. */
   .fp-range {
     align-self: center;
     display: inline-flex;

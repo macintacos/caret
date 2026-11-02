@@ -1,13 +1,16 @@
 // Vim-style `/` search over the plan text (EXC-832). Match highlighting is painted
-// through the CSS Custom Highlight API, which can't run in happy-dom, and every action
-// is a REAL keystroke, so this lives here rather than in a unit (browser-testing.md).
+// through the CSS Custom Highlight API, which can't run in happy-dom, every action is a
+// REAL keystroke, and where the find row lands in the plan header and how it moves are a
+// laid-out box and the engine's own animations, so this lives here rather than in a unit
+// (browser-testing.md). The row's own render is ui/src/components/PlanSearch.test.ts.
 // Line numbers are read from the DOM (the plan is reflowed on ingest), never hardcoded.
 
 import type { Page } from "@playwright/test";
 
 import { cursor, expectCursorLine, readCursorLine } from "@test/e2e/support/cursor.ts";
-import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { openPlanForKeys } from "@test/e2e/support/source-view.ts";
+import { fileRefCount, makeProject } from "@test/e2e/support/file-refs.ts";
+import { expect, motionToken, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { openPlanForKeys, planSurface } from "@test/e2e/support/source-view.ts";
 
 const filler = (label: string) =>
   Array.from({ length: 8 }, (_, i) => `${label} filler line ${i + 1}.`).join("\n\n");
@@ -157,7 +160,7 @@ test("n resumes a closed search from the cursor, reopening the pill as a HUD", a
   await expect.poll(async () => (await highlightSizes(page)).current).toBe(1);
 });
 
-test("the '/ to search' hint shows with hints on, and / swaps it for the pill", async ({
+test("the '/ to search' hint shows with hints on, and / covers it with the pill", async ({
   daemon,
   page,
 }) => {
@@ -170,9 +173,10 @@ test("the '/ to search' hint shows with hints on, and / swaps it for the pill", 
   await expect(hint).toContainText("to search");
   await expect(pill(page)).toHaveCount(0);
 
+  // The row covers the hint along with the crumbs, which keep their boxes under it.
   await page.keyboard.press("/");
   await expect(pill(page)).toBeVisible();
-  await expect(hint).toHaveCount(0);
+  await expect(hint).toBeHidden();
   await page.keyboard.press("Escape");
   await expect(pill(page)).toHaveCount(0);
   await expect(hint).toBeVisible();
@@ -225,5 +229,104 @@ test("Esc dismisses from the field and from a committed search, clearing highlig
   await commitWidgetSearch(page);
   await expect(page.locator(".search-stamp")).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(pill(page)).toHaveCount(0);
+});
+
+// The find row stands over an open file the way the outline's float does: Escape closes
+// whichever was opened last.
+test("Esc closes the find row before the file beside the plan, and the next Esc the file", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/widget.ts": "export const widget = 1;\n" });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Widgets\n\nThe widget lives in `src/widget.ts`.\n",
+    });
+    await page.goto("/");
+    await planSurface(page);
+    await waitPastSafeModeGrace(page);
+    await expect.poll(() => fileRefCount(page)).toBe(1);
+    await page.locator("[data-file-ref]").first().click();
+    const drawer = page.locator("[data-file-drawer]");
+    await expect(drawer).toBeVisible();
+
+    await page.keyboard.press("/");
+    await page.keyboard.type("widget");
+    await page.keyboard.press("Escape");
+    await expect(pill(page)).toHaveCount(0);
+    await expect(drawer).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+// The find row drops over the crumbs inside the plan header: where it lands is a laid-out
+// box, and the crumbs keeping theirs under it is a computed visibility.
+test("the find row covers the crumbs in the plan header, and the crumbs keep their box", async ({
+  daemon,
+  page,
+}) => {
+  await openPlanForKeys(page, daemon, PLAN);
+  const crumbs = page.locator(".plan-header .plan-breadcrumbs");
+  await expect(crumbs).toBeVisible();
+  const before = await crumbs.boundingBox();
+
+  await page.keyboard.press("/");
+  const row = page.locator(".plan-header").getByRole("search");
+  await expect(row).toBeVisible();
+  // Measured where it lands, not mid-drop.
+  await row.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+  await expect(crumbs).toHaveCSS("visibility", "hidden");
+  expect(await crumbs.boundingBox()).toEqual(before);
+
+  // Inside the header, ending before the view keys, which stay.
+  const header = await page.locator(".plan-header").boundingBox();
+  const box = await row.boundingBox();
+  const versions = await page.getByRole("button", { name: /^Versions/ }).boundingBox();
+  expect(box!.y).toBeGreaterThanOrEqual(header!.y);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(header!.y + header!.height + 0.5);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(versions!.x);
+});
+
+test("closing tucks the find row up as the crumbs fade back in, on the state duration", async ({
+  daemon,
+  page,
+}) => {
+  await openPlanForKeys(page, daemon, PLAN);
+  await page.keyboard.press("/");
+  await expect(pill(page)).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  const motion = await page.evaluate(() =>
+    document.getAnimations().flatMap((a) => {
+      const target = (a.effect as KeyframeEffect | null)?.target;
+      if (!(target instanceof Element)) return [];
+      const what = target.matches(".plan-search")
+        ? "row"
+        : target.matches(".plan-breadcrumbs")
+          ? "crumbs"
+          : null;
+      if (what === null) return [];
+      const name =
+        a instanceof CSSAnimation ? a.animationName : (a as CSSTransition).transitionProperty;
+      return [{ what, name, ms: Number(a.effect?.getComputedTiming().duration) }];
+    }),
+  );
+  const stateMs = (await motionToken(page, "--dur-state")) * 1000;
+  expect(motion.find((m) => m.what === "row")).toEqual({
+    what: "row",
+    name: expect.stringMatching(/search-tuck$/),
+    ms: stateMs,
+  });
+  expect(motion.find((m) => m.what === "crumbs")).toEqual({
+    what: "crumbs",
+    name: "opacity",
+    ms: stateMs,
+  });
   await expect(pill(page)).toHaveCount(0);
 });

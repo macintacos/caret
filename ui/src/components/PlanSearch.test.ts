@@ -51,11 +51,11 @@ describe("PlanSearch", () => {
 
   // The caps stay out of the input group: an addon's click-to-focus handler would
   // otherwise pull focus into the field from a click between them.
-  test("the field leads with the / glyph, and the caps share a tray beside it", () => {
+  test("the field leads with the / glyph and ends with the count, and the caps share a tray beside it", () => {
     const { target } = render(PlanSearch, base);
     const group = target.querySelector("[data-slot='input-group']");
     const addons = Array.from(target.querySelectorAll("[data-slot='input-group-addon']"));
-    expect(addons.map((a) => a.textContent?.trim())).toEqual(["/"]);
+    expect(addons.map((a) => a.textContent?.trim())).toEqual(["/", "1 / 3"]);
     const tray = target.querySelector(".tray");
     expect(tray?.querySelectorAll("button").length).toBe(3);
     expect(group?.contains(tray ?? null)).toBe(false);
@@ -81,10 +81,10 @@ describe("PlanSearch", () => {
 
   // A committed search must not hold a focusable field: any focused input is an editing
   // context to the shortcut dispatcher, which would swallow the bare n / N.
-  test("a committed search stamps its query in place of the field", () => {
+  test("a committed search stamps its query, and the count, in place of the field", () => {
     const { target } = render(PlanSearch, { ...base, committed: true });
     expect(input(target) != null).toBe(false);
-    expect(target.querySelector(".search-stamp")?.textContent?.replace(/\s+/g, "")).toBe("/foo");
+    expect(target.querySelector(".search-stamp")?.textContent?.replace(/\s+/g, "")).toBe("/foo1/3");
   });
 
   test("reopening a committed search brings the field back focused, its query selected", () => {
@@ -119,7 +119,7 @@ describe("PlanSearch", () => {
     expect(hints.every((h) => h.getAttribute("aria-hidden") === "true")).toBe(true);
   });
 
-  test("with hints off the lip holds only the counter", () => {
+  test("with hints off the row shows the counter and no key hints", () => {
     const { target } = render(PlanSearch, { ...base, hints: false });
     expect(lipHints(target).length).toBe(0);
     expect(count(target)).toBe("1 / 3");

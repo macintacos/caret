@@ -8,7 +8,7 @@ import { previewToggle } from "@test/e2e/support/chrome.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
-/** The resolved backgrounds of the rows' host, the scroller and the pane, plus the
+/** The resolved backgrounds of the rows' host, the scroller and the pane's floor, plus the
  * resolved --paper, all in one rgb() form. */
 function floors(page: Page) {
   return page.evaluate(() => {
@@ -21,7 +21,7 @@ function floors(page: Page) {
     document.body.appendChild(probe);
     const paper = getComputedStyle(probe).backgroundColor;
     probe.remove();
-    return { rows: bg(".diffview"), scroller: bg(".diff-plan"), pane: bg(".plan-pane"), paper };
+    return { rows: bg(".diffview"), scroller: bg(".diff-plan"), pane: bg(".pane-floor"), paper };
   });
 }
 

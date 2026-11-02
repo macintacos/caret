@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The vim `/` search sheet (EXC-832), hung by SearchDock from the plan pane's top edge.
+  // The vim `/` search row (EXC-832), dropped over the crumbs in the plan pane's header.
   // It renders only the surface; DiffPlanView owns the search state, the highlight, and
   // the cursor/commit behaviour, reaching them through these callbacks.
   import Icon from "@/components/Icon.svelte";
@@ -16,14 +16,14 @@
     matchCount: number;
     /** 0-based index of the current (active) match, or -1 when there is none. */
     currentIndex: number;
-    /** Enter committed the query: it is stamped rather than editable, and the sheet
+    /** Enter committed the query: it is stamped rather than editable, and the row
      * holds no focusable field, so bare n / N keep reaching the global dispatcher.
      * `/` reopens editing by setting this false. */
     committed?: boolean;
-    /** Whether the sheet is tucking away; the parent keeps it mounted for the
+    /** Whether the row is tucking away; the parent keeps it mounted for the
      * animation's duration (planKeyboard owns that timer). */
     closing?: boolean;
-    /** Show the keys that apply now in the lip (the Show Hints setting). */
+    /** Show the keys that apply now after the steps (the Show Hints setting). */
     hints?: boolean;
     /** Commit the search (Enter): the parent moves the line cursor to the nearest
      * match and returns focus to the plan. */
@@ -54,7 +54,7 @@
   const noMatches = $derived(query !== "" && !hasMatches);
 
   // Field-mode keys: Enter commits, Escape closes. Handled here, not the global
-  // dispatcher (which suppresses bare keys while a field is focused), so the sheet
+  // dispatcher (which suppresses bare keys while a field is focused), so the row
   // owns its own field — the same local-handler idiom the breadcrumbs filter uses.
   function onKeydown(e: KeyboardEvent) {
     if (e.key === "Enter") {
@@ -76,11 +76,27 @@
   });
 </script>
 
+<!-- The count reads as browser find has it, at the query's end, so a changing count never
+     moves the steps. -->
+{#snippet counter()}
+  <span
+    class="search-count"
+    class:metric={hasMatches}
+    aria-live="polite"
+    aria-label={hasMatches ? `${current} of ${matchCount} matches` : undefined}
+  >
+    {#if hasMatches}{current}<span class="count-gap">{" "}</span>/<span class="count-gap"
+        >{" "}</span
+      >{matchCount}{:else if noMatches}No matches{/if}
+  </span>
+{/snippet}
+
 <div class="plan-search" class:closing role="search">
   {#if committed}
     <span class="search-stamp stamp">
       <span class="search-slash mono" aria-hidden="true">/</span>
       <span class="search-stamp-query">{query}</span>
+      {@render counter()}
     </span>
   {:else}
     <InputGroup.Root class="search-field field-well">
@@ -102,6 +118,7 @@
         spellcheck="false"
         onkeydown={onKeydown}
       />
+      <InputGroup.Addon align="inline-end">{@render counter()}</InputGroup.Addon>
     </InputGroup.Root>
   {/if}
   <span class="search-actions tray">
@@ -129,8 +146,8 @@
       <Icon name="x" size={14} />
     </button>
   </span>
-  <div class="search-lip">
-    {#if hints}
+  {#if hints}
+    <div class="search-lip">
       {#if committed}
         <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">n</Kbd>next</span>
         <span class="search-key" aria-hidden="true"
@@ -144,42 +161,28 @@
         {/if}
         <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">Esc</Kbd>close</span>
       {/if}
-    {/if}
-    <span
-      class="search-count"
-      class:metric={hasMatches}
-      aria-live="polite"
-      aria-label={hasMatches ? `${current} of ${matchCount} matches` : undefined}
-    >
-      {#if hasMatches}{current} / {matchCount}{:else if noMatches}No matches{/if}
-    </span>
-  </div>
+    </div>
+  {/if}
 </div>
 
 <style>
-  /* A sheet hanging from the plan pane's top edge: square where it tucks under the
-     edge (the pane's lip paints that edge across it), rounded at its foot. Its radii
-     nest: cap, tight bezel, then the sheet's pad. */
+  /* A row laid over the header's crumb slot (DiffPlanView), on the plan's own floor.
+     The slot clips it, so it drops from the pane's top edge and tucks back under it. */
   .plan-search {
+    --query-floor: 3rem;
     --search-cap: 24px;
-    --search-pad: 3px;
     --search-row: calc(var(--search-cap) + var(--well-top) + var(--well-foot));
     --search-inner-r: calc(var(--key-radius) + var(--well-pad));
-    --search-r: calc(var(--search-inner-r) + var(--search-pad));
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: var(--search-pad);
-    width: 21rem;
-    max-width: 100%;
-    padding: var(--search-pad) var(--search-pad) 0;
-    border-radius: 0 0 var(--search-r) var(--search-r);
-    background: var(--paper-raised);
-    box-shadow:
-      0 0 0 1px var(--rule),
-      var(--float-mid);
+    container-type: inline-size;
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    background: var(--plan-floor);
     animation: search-drop var(--dur-state) var(--ease-out);
   }
-  /* Closing tucks the sheet back under the edge while planKeyboard keeps it mounted;
+  /* Closing tucks the row back under the edge while planKeyboard keeps it mounted;
      `forwards` holds it there until the unmount. */
   .plan-search.closing {
     animation: search-tuck var(--dur-state) var(--ease-out) forwards;
@@ -195,22 +198,25 @@
     }
   }
 
-  /* The field and the stamp share one cell and one geometry, so a commit sets the
-     query in place rather than moving it. */
+  /* The field and the stamp share one geometry, so a commit sets the query in place
+     rather than moving it. The field gives up width first, to about 8rem; then the hints
+     go (.search-lip), and the field gives up the rest, down to five characters of query
+     (--query-floor). The steps keep theirs, so Close always fits. */
   .plan-search :global(.search-field),
   .search-stamp {
-    grid-area: 1 / 1;
-    min-width: 0;
+    flex: 0 1 25rem;
+    min-width: min-content;
     height: var(--search-row);
     border-radius: var(--search-inner-r);
-  }
-  .plan-search :global(.search-field) {
-    width: auto;
   }
   .plan-search :global(.search-field [data-slot="input-group-addon"]) {
     padding-block: 0;
   }
+  /* A set width rather than the input's 100%, so the field's min-content holds the query's
+     floor past the input's 6px side padding. */
   .plan-search :global(.search-input) {
+    flex: 1 0 auto;
+    width: calc(var(--query-floor) + 0.75rem);
     height: 100%;
     font-size: var(--text-sm);
     caret-color: var(--accent);
@@ -229,6 +235,8 @@
     white-space: nowrap;
   }
   .search-stamp-query {
+    flex: 1 0 auto;
+    width: var(--query-floor);
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -239,8 +247,22 @@
     user-select: none;
   }
 
+  /* --ink-soft rather than --ink-faint, which drops under 4.5:1 on the plan's floor in
+     several bundled palettes. */
+  .search-count {
+    flex: none;
+    margin-left: auto;
+    padding-right: 0.55rem;
+    font-size: var(--text-xs);
+    color: var(--ink-soft);
+    white-space: nowrap;
+  }
+  .search-stamp .search-count {
+    padding-right: 0;
+  }
+
   .search-actions {
-    grid-area: 1 / 2;
+    flex: none;
     --tray-gap: 4px;
   }
   .search-step,
@@ -269,29 +291,46 @@
     transform: rotate(180deg);
   }
 
-  /* The lip: the keys that apply now, and the counter. The counter sits here, below
-     the row, so a changing count never reflows the row. --ink-soft rather than
-     --ink-faint, which drops under 4.5:1 on --paper-raised in several bundled
-     palettes. */
+  /* The keys that apply now, as text after the steps. */
   .search-lip {
-    grid-column: 1 / -1;
+    flex: none;
     display: flex;
     align-items: center;
-    gap: 0.7rem;
-    height: 1.6rem;
-    padding-inline: 0.35rem 0.4rem;
+    gap: 0.8rem;
+    padding-inline: 0.15rem 0;
     font-size: var(--text-2xs);
     color: var(--ink-soft);
     white-space: nowrap;
-    overflow: hidden;
   }
   .search-key {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
   }
-  .search-count {
-    margin-left: auto;
-    font-size: var(--text-xs);
+  /* The room an 8rem field, the steps and the stamp's lip, its longest, take together. */
+  @container (width < 25rem) {
+    .search-lip {
+      display: none;
+    }
+  }
+  /* Past the query's floor, what reads least goes first: the slash, then the count's
+     spaces and its end padding. Each threshold is the row at its floor with that part still
+     in, beside its longest count, "No matches". */
+  @container (width < 15.9rem) {
+    .plan-search :global(.search-field [data-align="inline-start"]),
+    .search-stamp .search-slash {
+      display: none;
+    }
+    .search-stamp {
+      padding-inline-start: 0.375rem;
+    }
+  }
+  @container (width < 14.95rem) {
+    .count-gap {
+      display: none;
+    }
+    .search-count {
+      padding-right: 0;
+    }
   }
 </style>

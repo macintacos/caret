@@ -45,8 +45,12 @@
      side: it is a full-viewport directional sweep, not a surface arriving in place.
      --dur-travel times the plan's scroll TRAVEL, which crosses hundreds of pixels, so
      distance sets it rather than a change of state. Nothing that appears, fades, slides
-     or pops may borrow it; a second traveling animation is the bar. */
+     or pops may borrow it; a second traveling animation is the bar. --dur-pane times a
+     pane or column ENTERING (the outline column, the file drawer): a move that size at
+     --dur-state reads as a jump cut. Leaving stays on --dur-state, so exits run faster
+     than enters. */
   --dur-state: 160ms;
+  --dur-pane: 240ms;
   --dur-travel: 240ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   /* A rubber key's return from a press: it springs back past rest and settles. Only the

@@ -420,22 +420,41 @@ over flourish: functional one-shot transitions draw their duration/easing from t
 surface arriving or leaving, a control sliding between positions — takes `--dur-state` on
 `--ease-out`, the same in both directions
 ([`design/patterns.md`](../../design/patterns.md) § Motion holds the decision).
-`--dur-travel` is the one other duration, for a scroll crossing distance, and
-`motion.test.ts` pins the vocabulary as closed at those two. The portalled shadcn surfaces
-(dialogs, dropdown menus, tooltips, popovers) instead animate their enter/exit through
-`tw-animate-css` — the `animate-in`/`fade`/`zoom`/`slide` utilities the copied components
-ship with. Ambient/infinite animations (the safe-mode pulse, the EmptyState float, the
-theme wipe) are exempt from both and keep their own bespoke durations. The plan hand-off
-(`lib/planHandoff.ts`, EXC-1400) is the second view transition and is NOT exempt: every
-plan swap — a plan arriving, the next one after a decision, a switch, the queue draining —
-crossfades the whole window on the state tokens, the same timing a dialog spends. It is a
-transition rather than an animation beside the swap because the swap's render is
-synchronous and long: an animation started in the same frame spends its duration before
-the first frame paints, while the transition holds a still until the new window has
-rendered. That still freezes everything, so the hand-off first lets one-shot motion
-already in flight finish — a decided guard's exit, its confirmation sliding in. Its two
-arms are scoped under a class that module tags, because the theme wipe claims the bare
-`::view-transition-*(root)` pseudo-elements unconditionally.
+`--dur-pane` is one other duration, for a pane or column entering (it leaves on
+`--dur-state`), and `--dur-travel` the last, for a scroll crossing distance;
+`motion.test.ts` pins the vocabulary as closed at those three. The portalled shadcn
+surfaces (dialogs, dropdown menus, tooltips, popovers) instead animate their enter/exit
+through `tw-animate-css` — the `animate-in`/`fade`/`zoom`/`slide` utilities the copied
+components ship with. Ambient/infinite animations (the safe-mode pulse, the EmptyState
+float, the theme wipe) are exempt from both and keep their own bespoke durations. The plan
+hand-off (`lib/planHandoff.ts`, EXC-1400) is the second view transition, after the theme
+wipe, and is NOT exempt: every plan swap — a plan arriving, the next one after a decision,
+a switch, the queue draining — crossfades the whole window on the state tokens, the same
+timing a dialog spends. It is a transition rather than an animation beside the swap
+because the swap's render is synchronous and long: an animation started in the same frame
+spends its duration before the first frame paints, while the transition holds a still
+until the new window has rendered. That still freezes everything, so the hand-off first
+lets one-shot motion already in flight finish — a decided guard's exit, its confirmation
+sliding in. Its two arms are scoped under a class that module tags, because the theme wipe
+claims the bare `::view-transition-*(root)` pseudo-elements unconditionally. Compare's
+move (`lib/paneMove.ts`) is the third, scoped the same way under the root's
+`data-pane-move` tag. The outline and the file drawer move on the page itself
+(`lib/layoutSlide.ts`), not as a view transition. A part of that slide must move by
+`transform` alone. A `clip-path` or a width animates on the main thread, which the long
+frame that lays out the change holds back. The compositor's transforms run on meanwhile,
+so the two fall out of step. A surface whose two edges move apart, as the plan's floor
+does when the column stands, stretches as a layer of its own rather than clipping what it
+holds. Its `SlidePart` sets `stretches: "both"` to draw both edges from where they stood,
+as the floor's are in an outline toggle. `"start"` draws only the start edge from where it
+stood, and leaves the end edge with the part it sits inside, as in a file move, where the
+pane slides whole. Each move slides one list of parts (`outlineParts` and `fileParts` in
+`components/DiffPlanView.svelte`). A part one move slides belongs in the list of every
+move that can start while it is still sliding, the folding column included. Left out, a
+part keeps the transition it had, with its parent's new slide added on top. Or a class
+change reverses that transition, and the browser runs a reversed transition for less time
+than the slide. Either way the part falls out of step. In compare's view transition the
+same holds: a group whose box changes size animates on the main thread, so a part that
+only slides beside it waits until that group's old image has gone.
 
 **A property no stylesheet can drive takes a third route, and it is the narrowest one.**
 Where the thing being animated is a JS property rather than a style — `scrollTop`, or a
@@ -445,16 +464,16 @@ as a plain constant instead of read from the sheet, and every mirror is pinned b
 `FOLLOW_ANIM_MS` (`diffview/scroll.ts`) carry `--dur-travel` and `--dur-state` for the
 plan's two scrolls, and three exit windows carry `--dur-state` — `CLOSE_ANIM_MS` in
 `state/planKeyboard.svelte.ts` (PlanSearch's collapse), `CLOSE_ANIM_MS` in
-`components/DiffPlanView.svelte` (FileDrawer's close wipe), and the `exitMs` default in
-`state/alerts.ts` (AlertHost's `alert-out`). The three exit ones are pinned by scanning
-source text rather than by import, deliberately: none is exported, and an export minted
-only to be asserted on is a worse seam than the regex that avoids it. That is the same
-"name it once and test the coupling" rule § CSS-token discipline states for
-`REFERENCE_WIDTH_PX`; a mirror without the pin is a comment, not an invariant. A JS driver
-owes the reduced-motion preference directly too — the global CSS guard cannot reach it —
-which `scroll.ts`'s `prefersReducedMotion()` is. Reach for this route only when a
-stylesheet genuinely cannot express the animation; wanting a different curve is not
-enough.
+`components/DiffPlanView.svelte` (FileDrawer's slide out, and the outline column's as it
+folds), and the `exitMs` default in `state/alerts.ts` (AlertHost's `alert-out`). The three
+exit ones are pinned by scanning source text rather than by import, deliberately: none is
+exported, and an export minted only to be asserted on is a worse seam than the regex that
+avoids it. That is the same "name it once and test the coupling" rule § CSS-token
+discipline states for `REFERENCE_WIDTH_PX`; a mirror without the pin is a comment, not an
+invariant. A JS driver owes the reduced-motion preference directly too — the global CSS
+guard cannot reach it — which `scroll.ts`'s `prefersReducedMotion()` is. Reach for this
+route only when a stylesheet genuinely cannot express the animation; wanting a different
+curve is not enough.
 
 **Before minting a sixth, check whether you have a DOM handle — if you do, await the
 animation instead of mirroring its duration.** A mirror is a number kept equal to a token

@@ -117,20 +117,25 @@ describe("motion tokens in app.css", () => {
   const dur = (name: string): number =>
     toMs(root.match(new RegExp(`^\\s*--dur-${name}:\\s*([^;]+);`, "m"))?.[1] ?? "");
 
-  test("declares the state duration plus the travel exception", () => {
-    for (const name of ["state", "travel"]) {
+  test("declares the state duration plus the pane and travel exceptions", () => {
+    for (const name of ["pane", "state", "travel"]) {
       expect(dur(name)).toBeGreaterThan(0);
     }
   });
 
-  test("the vocabulary is closed — one duration for state, one for travel", () => {
-    // A third duration cannot be slipped in without arguing for itself in tokens.css
-    // first. Travel is the standing exception because it times distance, not a change of
-    // state. [\w-] rather than [a-z]: a token spelled the way most tokens in this sheet
-    // are (--dur-fade-out, --dur-state2) would slip past a letters-only class and leave
-    // this green with the vocabulary silently at three.
+  test("the vocabulary is closed — one duration for state, one for a pane entering, one for travel", () => {
+    // A fourth duration cannot be slipped in without arguing for itself in tokens.css
+    // first. Travel is a standing exception because it times distance, not a change of
+    // state; a pane entering is the other, because a column-sized move at --dur-state reads
+    // as a jump cut. [\w-] rather than [a-z]: a token spelled the way most tokens in this
+    // sheet are (--dur-fade-out, --dur-state2) would slip past a letters-only class and
+    // leave this green with the vocabulary silently at four.
     const names = [...root.matchAll(/^\s*--dur-([\w-]+):/gm)].map(([, name]) => name);
-    expect(names.sort()).toEqual(["state", "travel"]);
+    expect(names.sort()).toEqual(["pane", "state", "travel"]);
+  });
+
+  test("a pane enters slower than it leaves", () => {
+    expect(dur("pane")).toBeGreaterThan(dur("state"));
   });
 
   test("the plan's two JS scroll durations mirror their tokens", () => {
@@ -150,7 +155,7 @@ describe("motion tokens in app.css", () => {
     const exit = dur("state");
     expect(planKeyboard).toContain(`const CLOSE_ANIM_MS = ${exit};`); // PlanSearch's collapse
     expect(chromeSources["components/DiffPlanView.svelte"]).toContain(
-      `const CLOSE_ANIM_MS = ${exit};`, // FileDrawer's close wipe
+      `const CLOSE_ANIM_MS = ${exit};`, // FileDrawer's slide out, and the folding column's
     );
     expect(alertsState).toContain(`deps.exitMs ?? ${exit};`); // AlertHost's alert-out
   });
@@ -500,6 +505,175 @@ describe("the crossfade that hands the window back to the waiting room", () => {
       )?.[1] ?? "";
     expect(reducedMotionGuard).not.toBe("");
     expect(reducedMotionGuard).toMatch(/animation:\s*none\s*!important/);
+  });
+});
+
+describe("panes enter on --dur-pane and leave on --dur-state", () => {
+  const drawer = styleBlock(chromeSources["components/FileDrawer.svelte"] ?? "");
+  const rule = (selector: string): string =>
+    new RegExp(`(?:^|\\n)\\s*${selector.replace(/[.[\]()*]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(
+      drawer,
+    )?.[1] ?? "";
+
+  test("the file drawer slides in on --dur-pane and out on --dur-state", () => {
+    expect(read(rule("aside"), "transition")).toContain("var(--dur-pane)");
+    expect(read(rule("aside.fd-closing"), "transition-duration")).toBe("var(--dur-state)");
+  });
+
+  // Compare's move (lib/paneMove.ts) runs as one view transition under the root's
+  // `data-pane-move` tag. Read off the global sheet, where those arms live.
+  const arm = (selector: string): string =>
+    new RegExp(`${selector.replace(/[.[\]()*="]/g, "\\$&")}\\s*\\{([^}]*)\\}`).exec(appCss)?.[1] ??
+    "";
+
+  test("every part of a layout move runs on the state tokens", () => {
+    const groups = arm(":root[data-pane-move]::view-transition-group(*)");
+    expect(read(groups, "animation-duration")).toBe("var(--dur-state)");
+    expect(read(groups, "animation-timing-function")).toBe("var(--ease-out)");
+  });
+
+  test("the parts that move with an entering column take --dur-pane", () => {
+    const enter =
+      /:root\[data-pane-move~="enter"\]::view-transition-group\(plan-pane\)[^{]*\{([^}]*)\}/.exec(
+        appCss,
+      )?.[1];
+    expect(read(enter ?? "", "animation-duration")).toBe("var(--dur-pane)");
+  });
+
+  test("reduced motion stills every named part, not only the root", () => {
+    const guard =
+      /@media \(prefers-reduced-motion: reduce\) \{\s*([^{]*::view-transition[^{]*)\{/.exec(
+        appCss,
+      )?.[1] ?? "";
+    expect(guard).toContain("::view-transition-group(*)");
+    expect(guard).toContain("::view-transition-old(*)");
+    expect(guard).toContain("::view-transition-new(*)");
+  });
+});
+
+describe("compare never shows two images of one slot at once", () => {
+  // Every flat `selector { body }` rule in the sheet, comments trimmed off the selector.
+  const rules = [...appCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(
+    ([, selector = "", body = ""]) => ({
+      selector: selector.split("*/").pop() ?? "",
+      body,
+    }),
+  );
+  /** The keyframes a compare move plays on one image of a slot. */
+  const keyframesOf = (image: "old" | "new", slot: string): string =>
+    rules
+      .filter(
+        (r) =>
+          r.selector.includes("[data-pane-move") &&
+          r.selector.includes(`::view-transition-${image}(${slot})`),
+      )
+      .map((r) => read(r.body, "animation").split(/\s+/)[0] ?? "")
+      .findLast((name) => name !== "" && name !== "none") ?? "";
+  /** Each offset of a keyframes block, 0–100, paired with the opacity it sets there. */
+  const opacitySteps = (name: string): [number, string][] => {
+    const block = new RegExp(`@keyframes ${name}\\s*\\{([\\s\\S]*?)\\n\\}`).exec(appCss)?.[1] ?? "";
+    return [...block.matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(([, offsets = "", body = ""]) =>
+      offsets.split(",").map((offset): [number, string] => {
+        const o = offset.trim();
+        return [o === "from" ? 0 : o === "to" ? 100 : Number.parseFloat(o), read(body, "opacity")];
+      }),
+    );
+  };
+
+  for (const slot of ["plan-pane", "plan-crumbs", "compare-controls", "preview-key"]) {
+    test(`${slot}: the image leaving is gone before the one arriving shows`, () => {
+      const leaving = opacitySteps(keyframesOf("old", slot));
+      const arriving = opacitySteps(keyframesOf("new", slot));
+      const gone = Math.min(...leaving.filter(([, o]) => o === "0").map(([at]) => at));
+      const shows = Math.max(...arriving.filter(([, o]) => o === "0").map(([at]) => at));
+      expect(gone).toBeLessThanOrEqual(shows);
+    });
+  }
+
+  // Versions slides into the slot Preview leaves going into compare, and across the slot the
+  // compare controls leave coming out of it.
+  test("Versions slides only once the slot it moves into is clear, and what it leaves fills only once it has passed", () => {
+    const group =
+      rules.find(
+        (r) =>
+          r.selector.includes("::view-transition-group(versions-key)") &&
+          r.body.includes("animation-delay"),
+      )?.body ?? "";
+    const share = (prop: string): number =>
+      Number(/calc\(var\(--dur-state\) \* ([\d.]+)\)/.exec(read(group, prop))?.[1] ?? Number.NaN) *
+      100;
+    const starts = share("animation-delay");
+    const runs = share("animation-duration");
+    const goneBy = (name: string) =>
+      Math.min(
+        ...opacitySteps(name)
+          .filter(([, o]) => o === "0")
+          .map(([at]) => at),
+      );
+    expect(starts).toBeGreaterThanOrEqual(goneBy(keyframesOf("old", "preview-key")));
+    expect(starts).toBeGreaterThanOrEqual(goneBy(keyframesOf("old", "compare-controls")));
+    expect(starts + runs).toBeLessThanOrEqual(100);
+    const shows = (slot: string) =>
+      Math.max(
+        ...opacitySteps(keyframesOf("new", slot))
+          .filter(([, o]) => o === "0")
+          .map(([at]) => at),
+      );
+    expect(shows("preview-key")).toBeGreaterThanOrEqual(starts + runs / 2);
+    expect(shows("compare-controls")).toBeGreaterThanOrEqual(starts + runs / 2);
+  });
+
+  // The plan's box changes width as it moves, so it can trail the column, which only slides.
+  test("leaving compare, the column comes in only once the plan's old image has gone", () => {
+    const enter =
+      rules.find(
+        (r) =>
+          r.selector.includes('[data-pane-move~="enter"]::view-transition-new(plan-outline)') &&
+          r.body.includes("animation-delay"),
+      )?.body ?? "";
+    const starts =
+      Number(/calc\(var\(--dur-state\) \* ([\d.]+)\)/.exec(read(enter, "animation-delay"))?.[1]) *
+      100;
+    const gone = Math.min(
+      ...opacitySteps(keyframesOf("old", "plan-pane"))
+        .filter(([, o]) => o === "0")
+        .map(([at]) => at),
+    );
+    expect(starts).toBeGreaterThanOrEqual(gone);
+  });
+
+  test("Versions passes over Preview as it takes Preview's place", () => {
+    const zOf = (slot: string): number =>
+      Number.parseFloat(
+        read(
+          rules.find(
+            (r) =>
+              r.selector.includes(`::view-transition-group(${slot})`) && r.body.includes("z-index"),
+          )?.body ?? "",
+          "z-index",
+        ) || "0",
+      );
+    expect(zOf("versions-key")).toBeGreaterThan(zOf("preview-key"));
+  });
+});
+
+describe("the outline's filter and the compare float's stamps", () => {
+  const toc = styleBlock(chromeSources["components/PlanToc.svelte"] ?? "");
+  const keyframes = (name: string): string =>
+    new RegExp(`@keyframes ${name}\\s*\\{([\\s\\S]*?)\\n {2}\\}`).exec(toc)?.[1] ?? "";
+
+  test("the rows move by the field's own height, down as it opens and up as it closes", () => {
+    expect(keyframes("toc-rows-settle")).toContain("translateY(calc(-1 * var(--toc-head-h)))");
+    expect(keyframes("toc-rows-rise")).toContain("translateY(var(--toc-head-h))");
+  });
+
+  test("a stamp's beat and its arrival together stay within --dur-state", () => {
+    const decl = /\.toc-delta\)\s*\{[^}]*animation:\s*([^;]+);/.exec(toc)?.[1] ?? "";
+    const parts = [...decl.matchAll(/calc\(var\(--dur-state\) \* ([\d.]+)\)/g)].map((m) =>
+      Number(m[1]),
+    );
+    expect(parts).toHaveLength(2);
+    expect(parts.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(1);
   });
 });
 

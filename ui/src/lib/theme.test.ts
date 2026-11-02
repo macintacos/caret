@@ -522,6 +522,38 @@ describe("every theme", () => {
     }
   });
 
+  // The plan header sits on the plan's own floor, --paper over the preview and
+  // --paper-sunk over the source view and the compare diff. Its quiet text — the closed
+  // search hint, the find row's count and key hints — is --ink-soft there.
+  test("keeps the plan header's quiet text at AA on both of the plan's floors", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const floor of ["--paper", "--paper-sunk"] as const) {
+        expect(
+          contrast(theme.tokens["--ink-soft"], theme.tokens[floor]),
+          `${id} --ink-soft on ${floor}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  // The outline column lies on the window's body, where plain --ink-soft misses AA on the
+  // palest palettes. Its quiet text — the Outline key, the deeper levels, and while
+  // comparing the sections that did not change — takes a neutral key's label ink instead,
+  // --ink-soft stepped toward --ink (PlanToc.svelte).
+  test("keeps the outline's quiet text at AA on the body", () => {
+    const step = /--toc-quiet:\s*color-mix\(in lab, var\(--ink-soft\), var\(--ink\) (\d+)%\)/.exec(
+      readFileSync(join(import.meta.dir, "../components/PlanToc.svelte"), "utf8"),
+    )?.[1];
+    expect(step).toBeDefined();
+    for (const [id, theme] of themeEntries()) {
+      const quiet = banded(theme.tokens["--ink-soft"], theme.tokens["--ink"], Number(step) / 100);
+      expect(
+        contrast(quiet, derived("--body", theme)),
+        `${id} quiet outline ink on --body`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   // The file preview's close circle (EXC-1067) is a graphical object required to
   // understand the content in WCAG 1.4.11's own sense: it is a disc with its glyph
   // held back until hover, so its SHAPE and its fill are the whole control and 3:1
@@ -715,7 +747,8 @@ describe("every theme", () => {
     ["a latched row or toggle", "--neutral-face-latched", "--neutral-face-latched-hover"],
     ["a row in a menu, listbox or panel", "--paper-raised", "--neutral-face-hover"],
     ["a row in the settings nav", "--group-floor", "--neutral-face-hover"],
-    ["a crumb on the bar", "--body", "--crumb-face-hover"],
+    ["a crumb in the plan header, over the preview", "--paper", "--crumb-face-hover"],
+    ["a crumb in the plan header, over the source view", "--paper-sunk", "--crumb-face-hover"],
     ["an accent key or the gutter +", "--accent", "--accent-face-hover"],
     ["a danger key", "--danger-face", "--danger-face-hover"],
     ["the preview's close key", "--danger", "--danger-face-hover"],

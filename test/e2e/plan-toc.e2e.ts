@@ -1,14 +1,17 @@
-// The plan's table-of-contents popup (EXC-1095 built the surface, EXC-1096 gives it
-// this contract). The popup is a bits-ui Popover holding a Command: a filter field
-// over a listbox that shows TWO views of one heading model. With no query it is every
-// heading nested by level, the one being read marked. With a query it is the matches
+// The plan's outline (EXC-1095 built the surface, EXC-1096 gives it this contract). It is
+// a Command — a filter field over a listbox that shows TWO views of one heading model —
+// standing as a column beside the plan, or, where the window has no room for the column,
+// as a float dropped from the plan header's outline key. With no query the list is every
+// heading nested by level, the one being read latched. With a query it is the matches
 // only, gathered under one breadcrumb header per ancestor path and rendered flush left
-// (EXC-1103).
+// (EXC-1103). `\` opens the filter wherever the outline stands; Shift+`\` shows or hides
+// it.
 //
 // Everything asserted here needs a real browser, which is why it is a spec rather
 // than an extension of ui/src/components/PlanToc.test.ts (browser-testing.md). The
 // keyboard walk is bits-ui's roving selection driven by real keydown; Escape,
-// outside-click and focus restoration are the popover's own interaction semantics;
+// outside-click and focus restoration are the float's own interaction semantics, and
+// whether the column has room beside a file drawer is a laid-out width;
 // "the current heading is scrolled into view" is a scroll measurement against a real
 // box; the narration attributes are read back off the live DOM, where a screen reader
 // would find them; and a breadcrumb header naming its group is an aria-labelledby the
@@ -16,15 +19,14 @@
 // the query is browser work for a subtler reason: it crosses bits-ui's
 // `{#key search === ""}` boundary, which destroys and rebuilds the whole viewport.
 // The pure half — which groups exist and what sits in them, the marked row, the a11y
-// attributes' presence on a mounted popup — is that unit suite, and the vendored
+// attributes' presence on a mounted outline — is that unit suite, and the vendored
 // primitive's own viewport wiring is pinned in
 // ui/src/lib/shadcn-command-popover.test.ts.
 //
-// EXC-1097 adds the `\` key, and its specs sit here for the same reason: a bare
-// keydown has to travel the real global dispatcher past the real safe-mode grace to
-// reach a popup that is really portalled, and none of that exists under a mount. The
-// pure half is again the unit suite — that the reservation carries the key and that
-// PlanToc hands an open action up (keymap.test.ts, PlanToc.test.ts). Compare mode is
+// The `\` and Shift+`\` keys sit here for the same reason: a bare keydown has to travel
+// the real global dispatcher past the real safe-mode grace, and none of that exists under
+// a mount. The pure half is again the unit suite — that the reservations carry the keys
+// and that PlanToc hands its filter up (keymap.test.ts, PlanToc.test.ts). Compare mode is
 // a third thing still: what it needs is a review with TWO versions, which is daemon
 // state no prop can stand in for, so it is e2e on the axis browser-testing.md calls
 // the more interesting half.
@@ -54,11 +56,12 @@
 // delay/run lifecycle runs off an injected clock in ui/src/lib/keyRepeat.test.ts.
 //
 // Bare keys throughout, per the issue's constraint: a command modifier means the
-// reviewer is addressing the browser or the OS, not the popup. waitPastSafeModeGrace
+// reviewer is addressing the browser or the OS, not the outline. waitPastSafeModeGrace
 // (inside jumpToHeading) is mandatory before the first keystroke.
 
 import type { Locator, Page } from "@playwright/test";
 
+import { makeProject } from "@test/e2e/support/file-refs.ts";
 import { type Daemon, expect, motionToken, test } from "@test/e2e/support/fixtures.ts";
 import { clickBelowPanel, holdAndSettle, isWithinBox } from "@test/e2e/support/plan-nav.ts";
 import { jumpToHeading, planSurface } from "@test/e2e/support/source-view.ts";
@@ -172,14 +175,16 @@ const PUNCTUATED_PLAN = [
   "",
 ].join("\n\n");
 
-const TOC = ".plan-toc-panel";
+const TOC = ".plan-outline";
+const FLOAT = ".outline-float";
 /** The breadcrumbs bar's dropdown — the OTHER heading surface, addressed here only
  * to prove `\` and `b` do not reach the same one. Same selector plan-breadcrumbs
  * hoists as MENU. */
 const CRUMB_MENU = "[data-slot='dropdown-menu-content']";
 
-const trigger = (page: Page) => page.getByRole("button", { name: "Contents" });
-/** The popup itself. Every locator below is scoped through it, which is what lets them
+/** The header's outline key, present while the column is not shown. */
+const outlineKey = (page: Page) => page.getByRole("button", { name: "Show outline" });
+/** The outline column. Every locator below is scoped through it, which is what lets them
  * be role queries: the breadcrumbs bar publishes a filter field with the SAME accessible
  * name, and an unscoped query would collect both (browser-testing.md § Locators). */
 const panel = (page: Page) => page.locator(TOC);
@@ -205,28 +210,6 @@ const crumbs = (page: Page) => panel(page).locator("[data-command-group-heading]
  * about it through the field's aria-activedescendant, asserted in its own test below. */
 const walkedTo = (page: Page) => options(page).and(page.locator("[data-selected]"));
 
-/** Each row's heading-level marker by registry name, in document order (EXC-1105).
- * Addressed through `data-icon` — the handle Icon.svelte stamps with the glyph's name —
- * because this is browser-testing.md § Locators' no-accessible-target case twice over: the
- * marker is deliberately aria-hidden, so it is not in the tree a role query reads, and the
- * SVG is inlined verbatim, so nothing else in the DOM tells one glyph from another. `null`
- * for a row wearing none, so a missing marker reds as a value rather than throwing. */
-const markerNames = (page: Page): Promise<(string | null)[]> =>
-  options(page).evaluateAll((els) =>
-    els.map((el) => el.querySelector("[data-icon^='heading-']")?.getAttribute("data-icon") ?? null),
-  );
-
-/** Where each row's label starts, rounded to the pixel. Equal across rows at one indent —
- * a marker whose width varied with the level would push its label along with it. `null` for
- * a row with no label, on the same terms as `markerNames` above. */
-const labelLefts = (page: Page): Promise<(number | null)[]> =>
-  options(page).evaluateAll((els) =>
-    els.map((el) => {
-      const label = el.querySelector(".toc-label");
-      return label === null ? null : Math.round(label.getBoundingClientRect().x);
-    }),
-  );
-
 /** Each row's `--toc-depth`, in document order — the indent level its guides and
  * left padding are keyed on. */
 const rowDepths = (page: Page): Promise<string[]> =>
@@ -234,7 +217,7 @@ const rowDepths = (page: Page): Promise<string[]> =>
     els.map((el) => (el as HTMLElement).style.getPropertyValue("--toc-depth")),
   );
 
-/** Wait until nothing in the popup is still animating.
+/** Wait until nothing in the outline is still animating.
  *
  * A real promise on a real animation, not a sleep: `Animation.finished` settles when the
  * engine says the animation is done, so it costs nothing on a surface that has already
@@ -261,19 +244,11 @@ async function settled(page: Page): Promise<void> {
   });
 }
 
-/** Open the popup and wait for its rows — and then for its motion.
- *
- * The settle is EXC-1107's, and it is why every geometry spec below can keep reading
- * boxes. The panel enters under tw-animate-css's `zoom-in-95`, so until that finishes a
- * `getBoundingClientRect` is a *visual* box carrying the scale while `getComputedStyle`
- * is the *layout* box that is not — the two spaces `measureGuides` documents at length,
- * and the race EXC-1106 shipped a defect through. `toBeVisible()` resolves the moment the
- * panel paints, mid-zoom, and `evaluateAll` is not an action, so Playwright's own
- * not-animating check never applies. Waiting here closes the window for every caller at
- * once rather than per assertion. */
+/** Open the column's filter with `\` and wait for its rows — and then for its motion,
+ * so every geometry spec below reads settled boxes rather than ones caught mid-ramp. */
 async function openToc(page: Page): Promise<void> {
-  await trigger(page).click();
-  await expect(listbox(page)).toBeVisible();
+  await page.keyboard.press("\\");
+  await expect(field(page)).toBeFocused();
   await expect(options(page).first()).toBeVisible();
   await settled(page);
 }
@@ -299,7 +274,7 @@ async function readingAt(page: Page, heading: string): Promise<void> {
     .toBe(heading.toLowerCase().replaceAll(" ", "-"));
 }
 
-/** Seed `plan`, load it, park the reading position on `heading`, and open the popup —
+/** Seed `plan`, load it, park the reading position on `heading`, and open the filter —
  * the arrange nearly every spec in this file shares. */
 async function openTocAt(page: Page, daemon: Daemon, plan: string, heading: string): Promise<void> {
   await daemon.seed({ plan });
@@ -358,6 +333,8 @@ async function measureGuides(page: Page) {
 }
 
 test("opens on the heading being read, scrolled into view", async ({ daemon, page }) => {
+  // Short enough that the column's list cannot show every heading at once.
+  await page.setViewportSize({ width: 1440, height: 560 });
   // Whiskey, not the trailing Xray: the plan scrolls only a third of a viewport past its
   // end, which is not enough room to bring the FINAL heading up to the reading zone, so
   // a jump there clamps short and the tracked heading stays on the section above it.
@@ -596,57 +573,56 @@ test("pressing Enter on a walked-to row goes there and leaves focus in the plan"
   await expect(walkedTo(page)).toHaveText("Echo");
   await page.keyboard.press("Enter");
 
-  await expect(page.locator(TOC)).toHaveCount(0);
+  await expect(field(page)).toHaveCount(0);
   await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("echo");
 
-  // A pick hands the reviewer to the plan, so the popup's close skips its focus
-  // return — the trigger must not be left wearing a focus ring over a plan that has
-  // already moved. The body is where the plan's own window-level keys live.
-  await expect(trigger(page)).not.toBeFocused();
+  // A pick hands the reviewer to the plan, so the filter closes with focus out of the
+  // outline. The body is where the plan's own window-level keys live.
   await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
 });
 
-test("clicking a heading goes there and dismisses", async ({ daemon, page }) => {
-  await openTocAt(page, daemon, TALL_PLAN, "Alpha");
+test("clicking a heading in the column goes there, the filter closed", async ({ daemon, page }) => {
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Alpha");
   await options(page).filter({ hasText: "Hotel" }).click();
 
-  await expect(page.locator(TOC)).toHaveCount(0);
+  await expect(field(page)).toHaveCount(0);
   await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("hotel");
 });
 
-test("Escape dismisses and hands focus back to the trigger", async ({ daemon, page }) => {
-  // The other half of the focus split: a dismissal leaves the reviewer where they
-  // were, so the trigger takes focus back. Only a pick suppresses that.
-  await openTocAt(page, daemon, TALL_PLAN, "Delta");
+test("Escape steps out of the filter: the query, then the filter itself", async ({
+  daemon,
+  page,
+}) => {
+  // One step out at a time: the query clears, then the filter closes and focus leaves
+  // the outline, which stays on screen with nothing in it focused.
+  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   const parked = new URL(page.url()).searchParams.get("heading");
-  await page.keyboard.press("Escape");
+  await field(page).fill("notes");
+  await expect(options(page)).toHaveCount(2);
 
-  await expect(page.locator(TOC)).toHaveCount(0);
-  await expect(trigger(page)).toBeFocused();
-  // Walking and dismissing moved nothing: only a commit navigates.
+  await page.keyboard.press("Escape");
+  await expect(field(page)).toHaveValue("");
+  await expect(options(page)).toHaveCount(6);
+
+  await page.keyboard.press("Escape");
+  await expect(field(page)).toHaveCount(0);
+  await expect(listbox(page)).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
+  // Walking and leaving moved nothing: only a commit navigates.
   expect(new URL(page.url()).searchParams.get("heading")).toBe(parked);
 });
 
-test("clicking outside the popup dismisses it", async ({ daemon, page }) => {
-  await openTocAt(page, daemon, TALL_PLAN, "Delta");
-  // A real pointerdown on the plan, placed below the panel's own box rather than on a
-  // named element: the panel is anchored under its trigger at the top of the plan, so
-  // the first rows sit beneath it and a click there lands on the dismiss layer instead
-  // of outside it.
-  await clickBelowPanel(page, page.locator(TOC));
-
-  await expect(page.locator(TOC)).toHaveCount(0);
-});
-
 test("the filter field is empty on every open", async ({ daemon, page }) => {
-  // The popup always opens on the whole plan: a query that survived a close would show
+  // The filter always opens on the whole plan: a query that survived a close would show
   // a narrowed view of a plan the reviewer has since scrolled away from.
   await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await field(page).fill("notes");
   await expect(options(page)).toHaveCount(2);
 
-  await page.keyboard.press("Escape");
-  await expect(page.locator(TOC)).toHaveCount(0);
+  await field(page).blur();
+  await expect(field(page)).not.toBeFocused();
 
   await openToc(page);
   await expect(field(page)).toHaveValue("");
@@ -691,7 +667,7 @@ test("the field narrates the row the walk is on, and says so when nothing matche
   await expect(panel(page).getByRole("status")).toHaveText("No headings match");
 });
 
-test("\\ opens the popup on the heading being read (EXC-1097)", async ({ daemon, page }) => {
+test("\\ opens the outline's filter on the heading being read", async ({ daemon, page }) => {
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
   // readingAt parks the reading position AND waits past the safe-mode grace, which
@@ -700,11 +676,10 @@ test("\\ opens the popup on the heading being read (EXC-1097)", async ({ daemon,
 
   await page.keyboard.press("\\");
 
-  // Opened on the trigger's terms: the walk starts on the heading being read and
-  // that row is scrolled into the list's box, with focus in the field so the
-  // reviewer can type straight away. The SELECTION is the load-bearing assertion —
-  // aria-current is derived from the activeLine prop and would read "Golf" even on
-  // a popup that opened at the top of the list.
+  // The walk starts on the heading being read and that row is scrolled into the list's
+  // box, with focus in the field so the reviewer can type straight away. The SELECTION
+  // is the load-bearing assertion — aria-current is derived from the activeLine prop and
+  // would read "Golf" even on a filter that opened on the first row.
   await expect(listbox(page)).toBeVisible();
   await expect(walkedTo(page)).toHaveText("Golf");
   await expect
@@ -715,7 +690,7 @@ test("\\ opens the popup on the heading being read (EXC-1097)", async ({ daemon,
   await expect(field(page)).toBeFocused();
 });
 
-test("\\ and b reach different heading surfaces (EXC-1097)", async ({ daemon, page }) => {
+test("\\ and b reach different heading surfaces", async ({ daemon, page }) => {
   // Two keys, two surfaces: the property worth pinning is that neither one reaches
   // the other's.
   await daemon.seed({ plan: TALL_PLAN });
@@ -724,142 +699,121 @@ test("\\ and b reach different heading surfaces (EXC-1097)", async ({ daemon, pa
 
   await page.keyboard.press("b");
   await expect(page.locator(CRUMB_MENU)).toBeVisible();
-  await expect(panel(page)).toHaveCount(0);
+  await expect(field(page)).toHaveCount(0);
 
   await page.keyboard.press("Escape");
   await expect(page.locator(CRUMB_MENU)).toHaveCount(0);
 
   await page.keyboard.press("\\");
-  await expect(listbox(page)).toBeVisible();
+  await expect(field(page)).toBeFocused();
   await expect(page.locator(CRUMB_MENU)).toHaveCount(0);
 });
 
-// EXC-1105 gives every row a vendored lucide heading-N glyph saying what level it is. Three
-// of its claims are real-browser and nothing else. The marker's COLOUR reaches it through an
-// unlayered `:global` rule that has to beat the vendored command item's Tailwind
-// `data-selected:[&_svg]:text-accent-foreground`, and only a real cascade decides which wins.
-// The labels lining up is a laid-out box, which happy-dom does not produce. And that the
-// marker adds nothing to an option's NAME is a computation only a role engine performs — the
-// same reason EXC-1104's marked-name spec sits here. The pure half — which glyph each row
-// wears, and the clamp for a level outside 1–6 — is ui/src/components/PlanToc.test.ts.
-test("every row wears its heading level, in both of the popup's views", async ({
+// A pick is a deliberate jump: the column latches the picked heading at once and holds it
+// while the plan travels there, rather than stepping the latch through every heading the
+// travel passes.
+test("a pick latches its heading at once, not each heading the plan passes on the way", async ({
   daemon,
   page,
 }) => {
-  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
-  await expect(options(page)).toHaveCount(6);
-  // Read bare rather than polled, here and below: a marker renders in the same pass as the
-  // row that owns it, so once `toHaveCount` has settled there is nothing left to wait for.
-  expect(await markerNames(page)).toEqual([
-    "heading-1",
-    "heading-2",
-    "heading-3",
-    "heading-2",
-    "heading-3",
-    "heading-2",
-  ]);
-
-  // The view this exists for. "o" is chosen to survive at three DIFFERENT levels — a
-  // level-2 heading between two level-3 ones — because every filtered row is flush left, so
-  // rows at one indent carrying different markers is what makes the next two assertions say
-  // anything. A query matching one level would leave both of them true by accident.
-  await field(page).fill("o");
-  await expect(options(page)).toHaveText(["Setup notes", "Rollout", "Rollout notes"]);
-  expect(await rowDepths(page)).toEqual(["0", "0", "0"]);
-  expect(await markerNames(page)).toEqual(["heading-3", "heading-2", "heading-3"]);
-
-  // Three rows at one indent, three different glyphs, one left edge.
-  const lefts = await labelLefts(page);
-  expect(lefts).not.toContain(null);
-  expect(new Set(lefts).size).toBe(1);
-
-  // Asserted in the engine that actually computes a name. The query splits each label
-  // mid-word as well, so this carries EXC-1104's claim forward over the added marker rather
-  // than replacing it: a separator leaking in from either decoration would show up here.
-  await expect(options(page).first()).toHaveAccessibleName("Setup notes");
-  await expect(options(page).nth(1)).toHaveAccessibleName("Rollout");
-  await expect(options(page).nth(2)).toHaveAccessibleName("Rollout notes");
-});
-
-test("the level marker paints a dimmer rung of the ink ramp than the label", async ({
-  daemon,
-  page,
-}) => {
-  // Read off the element that is actually painted. The glyph strokes with `currentColor`
-  // resolved on the SVG, and the vendored command item declares
-  // `data-selected:[&_svg]:text-accent-foreground` — which the bridge resolves to the
-  // label's own --ink — on that same SVG. So the wrapper's `color` is NOT what a reader
-  // sees on the walked-to row: a rule placed on Icon.svelte's wrapper loses there while the
-  // wrapper keeps reporting the dimmed value, which is a green assertion over a bright
-  // glyph. The path's `stroke` cannot lie about it.
-  //
-  // Asserted against the ink-ramp TOKENS rather than by re-deriving a contrast ratio here.
-  // "Dimmer" then reduces to a property of the ramp, which theme.test.ts already pins
-  // across every palette — where a number measured in this one Playwright run, on this one
-  // palette, could not see a palette shipping a compressed ramp.
-  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
-  await expect(walkedTo(page)).toHaveCount(1);
-
-  const paint = await options(page).evaluateAll((els) => {
-    // Resolve a token to the same `rgb()` form getComputedStyle reports, by asking the
-    // engine rather than parsing: the tokens are hex and computed colours are not.
-    const resolve = (token: string): string => {
-      const probe = document.createElement("span");
-      probe.style.color = `var(${token})`;
-      document.body.append(probe);
-      const value = getComputedStyle(probe).color;
-      probe.remove();
-      return value;
-    };
-    const rows = els as HTMLElement[];
-    const resting = rows.find((r) => !r.hasAttribute("data-selected") && r.ariaCurrent === null);
-    const walked = rows.find((r) => r.hasAttribute("data-selected"));
-    if (resting === undefined || walked === undefined) throw new Error("no resting/walked row");
-    const marker = (row: HTMLElement) =>
-      getComputedStyle(row.querySelector("[data-icon^='heading-'] svg path")!).stroke;
-    const label = (row: HTMLElement) => getComputedStyle(row.querySelector(".toc-label")!).color;
-    const probe = document.body.appendChild(document.createElement("span"));
-    probe.style.color = "color-mix(in lab, var(--ink-soft), var(--ink) 15%)";
-    const keyLabelInk = getComputedStyle(probe).color;
-    probe.remove();
-    return {
-      inkSoft: resolve("--ink-soft"),
-      ink: resolve("--ink"),
-      keyLabelInk,
-      restingMarker: marker(resting),
-      restingLabel: label(resting),
-      walkedMarker: marker(walked),
-      walkedLabel: label(walked),
-    };
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Alpha");
+  await page.evaluate(() => {
+    const w = window as Window & { __latched?: string[] };
+    w.__latched = [];
+    const column = document.querySelector(".plan-outline");
+    if (column === null) return;
+    new MutationObserver(() => {
+      const label = column
+        .querySelector('[aria-current="location"] .toc-label')
+        ?.textContent?.trim();
+      if (label !== undefined && label !== w.__latched?.at(-1)) w.__latched?.push(label);
+    }).observe(column, { subtree: true, attributes: true, attributeFilter: ["aria-current"] });
   });
 
-  expect(paint.restingMarker).toBe(paint.inkSoft);
-  expect(paint.restingLabel).toBe(paint.ink);
-  expect(paint.restingMarker).not.toBe(paint.restingLabel);
-
-  // The row the keyboard is on, which is not a corner case: the popup seeds its selection
-  // to the heading being read on every open, and the filtered view always lands on the
-  // first match. The marker must not be dragged up to the label's ink with the row: on the
-  // risen face, where --ink-soft misses 3:1, it steps only to a neutral key's label ink.
-  expect(paint.walkedMarker).toBe(paint.keyLabelInk);
-  expect(paint.walkedLabel).toBe(paint.ink);
-  expect(paint.walkedMarker).not.toBe(paint.walkedLabel);
+  await options(page).filter({ hasText: "Mike" }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("mike");
+  const latched = await page.evaluate(
+    () => (window as Window & { __latched?: string[] }).__latched,
+  );
+  expect(latched).toEqual(["Mike"]);
 });
 
-test("compare mode drops both of the popup's entry points (EXC-1097)", async ({ daemon, page }) => {
-  // Compare mode tracks no heading, so a contents popup there would open on a stale
-  // plan. The trigger is dropped with the surface; the key has to be gated too, or
-  // it would summon a component that is no longer mounted.
-  await daemon.seedVersions(2, [`# Plan\n\n${filler("Plan")}\n`, TALL_PLAN]);
+// Comparing folds the column away, for the split diff needs the width and no reading
+// position is tracked there; the header's key drops the base version's changed sections
+// instead. Daemon state — two versions — so it is here.
+test("comparing folds the column into the header's key, whose float lists the changed sections", async ({
+  daemon,
+  page,
+}) => {
+  // Paragraphs of their own, so the daemon's reflow leaves the rest of each section
+  // alone. Bravo's run is what puts Whiskey's hunk below the fold: the diff folds every
+  // unchanged band, so with Whiskey's change alone there would be nothing to scroll.
+  const bravoRun = Array.from({ length: 40 }, (_, i) => `Bravo gained line ${i + 1}.`).join("\n\n");
+  const revised = TALL_PLAN.replace("## Charlie", `${bravoRun}\n\n## Charlie`).replace(
+    "## Xray",
+    "Whiskey gained a paragraph.\n\n## Xray",
+  );
+  await daemon.seedVersions(2, [TALL_PLAN, revised]);
   await page.goto("/");
-  await readingAt(page, "Golf");
-  await expect(trigger(page)).toBeVisible();
+  await readingAt(page, "Alpha");
+  const choice = () => page.evaluate(() => localStorage.getItem("caret.planOutline"));
+  const before = await choice();
 
-  await page.getByRole("button", { name: /^Versions/ }).click();
-  await expect(trigger(page)).toHaveCount(0);
-
-  await page.keyboard.press("\\");
+  const versions = page.getByRole("button", { name: /^Versions/ });
+  await versions.click();
   await expect(panel(page)).toHaveCount(0);
+  await openFloat(page);
+  const rows = page.locator(FLOAT).getByRole("option");
+  await expect(rows).toHaveText([/^Bravo/, /^Whiskey/]);
+  const whiskey = rows.filter({ hasText: "Whiskey" });
+  await expect(whiskey.locator(".toc-delta")).toHaveText(/^\+\d+$/);
+  await expect(whiskey).toHaveAccessibleDescription(/^\d+ lines? added$/);
+
+  const scroller = page.locator(".diff-plan");
+  const top = await scroller.evaluate((el) => el.scrollTop);
+  await whiskey.click();
+  await expect(page.locator(FLOAT)).toHaveCount(0);
+  await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(top);
+
+  // Shift+\ and \ drop the float too, and neither writes the reader's choice.
+  await page.keyboard.press("Shift+Backslash");
+  await expect(
+    page.locator(FLOAT).getByRole("combobox", { name: "Filter headings" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(outlineKey(page)).toBeFocused();
+  await page.keyboard.press("Backslash");
+  await expect(
+    page.locator(FLOAT).getByRole("combobox", { name: "Filter headings" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+
+  // Leaving compare stands the column again, as the reader left it.
+  await versions.click();
+  await expect(listbox(page)).toBeVisible();
+  expect(await choice()).toBe(before);
+});
+
+test("with nothing changed, the compare float is one quiet line that holds focus until Escape", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seedVersions(2, [TALL_PLAN, TALL_PLAN]);
+  await page.goto("/");
+  await readingAt(page, "Alpha");
+  await page.getByRole("button", { name: /^Versions/ }).click();
+  await expect(panel(page)).toHaveCount(0);
+
+  await page.keyboard.press("Shift+Backslash");
+  const float = page.locator(FLOAT);
+  await expect(float).toContainText("No sections changed");
+  await expect(float.getByRole("combobox")).toHaveCount(0);
+  await expect.poll(() => float.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(float).toHaveCount(0);
+  await expect(outlineKey(page)).toBeFocused();
 });
 
 test("the indent guides sit on the indent's own grid and join across rows", async ({
@@ -964,7 +918,7 @@ test("filtering drops the guides, headers and all", async ({ daemon, page }) => 
 type MotionLog = { type: string; name: string; elapsed: number }[];
 
 async function recordDismissal(page: Page, dismiss: () => Promise<void>): Promise<MotionLog> {
-  await panel(page).evaluate((el) => {
+  await page.locator(FLOAT).evaluate((el) => {
     const w = window as Window & { __tocMotion?: MotionLog };
     w.__tocMotion = [];
     const log = (event: Event): void => {
@@ -980,28 +934,45 @@ async function recordDismissal(page: Page, dismiss: () => Promise<void>): Promis
     el.addEventListener("animationend", log);
   });
   await dismiss();
-  await expect(panel(page)).toHaveCount(0);
+  await expect(page.locator(FLOAT)).toHaveCount(0);
   return page.evaluate(() => (window as Window & { __tocMotion?: MotionLog }).__tocMotion ?? []);
 }
 
-test("the panel arrives and leaves on the state duration", async ({ daemon, page }) => {
+/** Under --w-narrow, open the outline's float from the header's key and settle it. */
+async function openFloat(page: Page): Promise<void> {
+  await outlineKey(page).click();
+  await expect(
+    page.locator(FLOAT).getByRole("combobox", { name: "Filter headings" }),
+  ).toBeFocused();
+  await page.locator(FLOAT).evaluate(async (el) => {
+    await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {})));
+  });
+}
+
+test("the float arrives and leaves on the state duration", async ({ daemon, page }) => {
   // The vendored Popover.Content already animates through tw-animate-css, and that
   // machinery is not decoration: bits-ui's portal presence waits on the `animationend` its
   // `enter`/`exit` keyframes fire. So the refinement retimes those keyframes rather than
   // declaring a competing one, and what this spec pins is exactly that — the animation is
   // still tw-animate-css's, and only its timing is now caret's.
+  await page.setViewportSize({ width: 880, height: 900 });
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
   await readingAt(page, "Delta");
 
   const stateSeconds = await motionToken(page, "--dur-state");
 
-  await openToc(page);
-  const entering = await animationOf(panel(page));
+  await outlineKey(page).click();
+  const entering = await animationOf(page.locator(FLOAT));
   // Still the vendored keyframes — a caret-named animation here would mean the exit
   // bits-ui waits on had been replaced.
   expect(entering.name).toBe("enter");
   expect(Number.parseFloat(entering.duration)).toBeCloseTo(stateSeconds, 3);
+  // The computed `enter` is readable before the engine starts it, so let it run out, or
+  // its animationstart would land in the dismissal's log.
+  await page.locator(FLOAT).evaluate(async (el) => {
+    await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {})));
+  });
 
   const log = await recordDismissal(page, () => page.keyboard.press("Escape"));
   const started = log.find((e) => e.type === "animationstart");
@@ -1014,29 +985,29 @@ test("the panel arrives and leaves on the state duration", async ({ daemon, page
   expect(ended?.elapsed).toBeCloseTo(stateSeconds, 3);
 });
 
-test("every way out of the popup is animated, not cut", async ({ daemon, page }) => {
-  // Four ways out, and they are not four spellings of one: Escape, an outside click and the
-  // trigger are all the primitive's own dismissals — bits-ui runs onOpenChange from its own
-  // box setter for exactly those three — while a pick is caret's own `open = false` inside
-  // jump(). All four have to reach the same `data-state` flip, or one of them would drop
-  // the panel out of the DOM instantly.
+test("every way out of the float is animated, not cut", async ({ daemon, page }) => {
+  // Four ways out, and they are not four spellings of one: Escape and an outside click are
+  // the primitive's own dismissals, while a pick and the key are caret's own
+  // `floatOpen = false`. All four have to reach the same `data-state` flip, or one of
+  // them would drop the float out of the DOM instantly.
+  await page.setViewportSize({ width: 880, height: 900 });
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
   await readingAt(page, "Delta");
 
-  // Below the panel's own box, on the plan: the panel hangs off the control row, so a
-  // click on the first rows would land on the dismiss layer instead of outside it.
-  const outsideClick = () => clickBelowPanel(page, panel(page));
+  // Below the float's own box, on the plan: a click on the first rows would land on the
+  // dismiss layer instead of outside it.
+  const outsideClick = () => clickBelowPanel(page, page.locator(FLOAT));
 
   const paths: [string, () => Promise<void>][] = [
     ["Escape", () => page.keyboard.press("Escape")],
     ["an outside click", outsideClick],
-    ["picking a heading", () => options(page).first().click()],
-    ["the trigger", () => trigger(page).click()],
+    ["picking a heading", () => page.locator(FLOAT).getByRole("option").first().click()],
+    ["the key", () => outlineKey(page).click()],
   ];
 
   for (const [name, dismiss] of paths) {
-    await openToc(page);
+    await openFloat(page);
     const log = await recordDismissal(page, dismiss);
     // The path is the assertion's message rather than part of its value, so a failure
     // names it without the diff showing a matching half beside the mismatched one.
@@ -1104,9 +1075,6 @@ test("the outline carries its motion on the list, never on its rows", async ({ d
       (els) => els.filter((el) => getComputedStyle(el).animationName !== "none").length,
     ),
   ).toBe(0);
-
-  await page.keyboard.press("Escape");
-  await expect(panel(page)).toHaveCount(0);
 });
 
 /** The row ramps that really STARTED since the last arming, and which element each sat on.
@@ -1225,9 +1193,6 @@ test("typing fast queues no animation behind the reviewer", async ({ daemon, pag
   // here, which is exactly what this rules out. Measured empty 4/4 unthrottled and
   // 4/4 at 20x.
   expect(await tocMotion(page)).toEqual([]);
-
-  await page.keyboard.press("Escape");
-  await expect(panel(page)).toHaveCount(0);
 });
 
 test("reduced motion collapses the surface and leaves it fully usable", async ({
@@ -1278,18 +1243,13 @@ test("reduced motion collapses the surface and leaves it fully usable", async ({
   await page.keyboard.press("ArrowDown");
   await expect(walkedTo(page)).toHaveText("Rollout notes");
   await page.keyboard.press("Enter");
-  await expect(panel(page)).toHaveCount(0);
+  await expect(field(page)).toHaveCount(0);
   await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("rollout-notes");
 });
 
-// The peek beside the outline. Hover moving the selection is bits-ui's pointer selection
-// answering a real pointermove, the selected row's look is a computed style that only a
-// real cascade resolves, an option's description is something only the role engine computes,
-// and the narrow stack is layout. The peek's content for a given selection is the unit
-// suite's (PlanToc.test.ts).
-
-const peek = (page: Page) => panel(page).locator(".toc-peek");
-const peekTitle = (page: Page) => peek(page).locator(".toc-peek-title");
+// Hover moving the selection is bits-ui's pointer selection answering a real
+// pointermove, the selected row's look is a computed style that only a real cascade
+// resolves, and an option's description is something only the role engine computes.
 
 /** The selected row's key, the part of the row that rises, once its transitions finish:
  * its face, shadow, lift and any outline. */
@@ -1306,15 +1266,6 @@ const walkedKeyLook = (page: Page) =>
         outline: s.outlineStyle,
       };
     });
-
-test("hovering a row selects it, and the peek follows the pointer", async ({ daemon, page }) => {
-  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
-  await expect(peekTitle(page)).toHaveText("Setup");
-
-  await options(page).filter({ hasText: "Rollout notes" }).hover();
-  await expect(walkedTo(page)).toHaveText("Rollout notes");
-  await expect(peekTitle(page)).toHaveText("Rollout notes");
-});
 
 test("the row the keys select looks exactly as the row the pointer selects", async ({
   daemon,
@@ -1371,13 +1322,157 @@ test("an option is named by its heading and described by its comments and change
   await expect(setup).toHaveAccessibleDescription("1 comment, edited since v1");
 });
 
-test("a narrow window stacks the peek below the outline", async ({ daemon, page }) => {
-  await page.setViewportSize({ width: 560, height: 800 });
-  await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
+// Where the outline stands is a laid-out width: the column wants 15.5rem beside a plan that
+// still reads at 800px, and under --w-narrow there is no column at all.
+test("Shift+\\ hides the column and brings it back, focus riding the key that replaces it", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Delta");
+  await expect(listbox(page)).toBeVisible();
 
-  const list = await listbox(page).boundingBox();
-  const side = await peek(page).boundingBox();
-  const box = await panel(page).boundingBox();
-  expect(side?.y ?? 0).toBeGreaterThanOrEqual((list?.y ?? 0) + (list?.height ?? 0));
-  expect((box?.x ?? -1) >= 0 && (box?.x ?? 0) + (box?.width ?? 0) <= 560).toBe(true);
+  await page.keyboard.press("Shift+Backslash");
+  await expect(panel(page)).toHaveCount(0);
+  await expect(outlineKey(page)).toBeVisible();
+
+  // The column's own key hands focus to the header's as it leaves.
+  await outlineKey(page).click();
+  await expect(listbox(page)).toBeVisible();
+  const hide = panel(page).getByRole("button", { name: "Hide outline" });
+  await hide.focus();
+  await hide.press("Enter");
+  await expect(outlineKey(page)).toBeFocused();
+
+  // And a hidden outline stays hidden across a reload.
+  await page.reload();
+  await planSurface(page);
+  await expect(outlineKey(page)).toBeVisible();
+  await expect(panel(page)).toHaveCount(0);
 });
+
+test("under 960px the outline drops from the header's key, filter focused, and closes back onto it", async ({
+  daemon,
+  page,
+}) => {
+  await page.setViewportSize({ width: 880, height: 900 });
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Golf");
+  await expect(panel(page)).toHaveCount(0);
+
+  const float = page.locator(FLOAT);
+  await outlineKey(page).click();
+  await expect(outlineKey(page)).toHaveAttribute("aria-pressed", "true");
+  await expect(float.getByRole("combobox", { name: "Filter headings" })).toBeFocused();
+  await expect(float.getByRole("option").and(page.locator("[data-selected]"))).toHaveText("Golf");
+
+  await page.keyboard.press("Escape");
+  await expect(float).toHaveCount(0);
+  await expect(outlineKey(page)).toBeFocused();
+  await expect(outlineKey(page)).toHaveAttribute("aria-pressed", "false");
+
+  // `\` opens the float too, and a pick closes it into the plan.
+  await outlineKey(page).blur();
+  await page.keyboard.press("\\");
+  await expect(float.getByRole("combobox", { name: "Filter headings" })).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(float).toHaveCount(0);
+  await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("hotel");
+  await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
+});
+
+test("the column yields to a file drawer that would leave the plan under 800px", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": "export const cache = new Map();\n" });
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe cache lives in `src/cache.ts`.\n" });
+    // Wide enough for the column, the plan and a default 45% drawer side by side.
+    await page.setViewportSize({ width: 1920, height: 900 });
+    await page.goto("/");
+    await planSurface(page);
+    await page.locator("[data-file-ref]").first().click();
+    await expect(page.locator("[data-file-preview]")).toBeVisible();
+    await expect(listbox(page)).toBeVisible();
+
+    // Narrower, the same drawer would squeeze the plan, so the column yields to the key.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(panel(page)).toHaveCount(0);
+    await expect(outlineKey(page)).toHaveAttribute("aria-pressed", "false");
+    await openFloat(page);
+    await expect(page.locator(FLOAT).getByRole("option")).toHaveText(["Refs"]);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+// The float stands over the file drawer, so Escape closes it first, as the folder card
+// above the lane does.
+test("Escape closes the outline float before the file drawer it stands over", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": "export const cache = new Map();\n" });
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe cache lives in `src/cache.ts`.\n" });
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/");
+    await planSurface(page);
+    await page.locator("[data-file-ref]").first().click();
+    await expect(page.locator("[data-file-preview]")).toBeVisible();
+    await expect(panel(page)).toHaveCount(0);
+
+    await openFloat(page);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(FLOAT)).toHaveCount(0);
+    await expect(page.locator("[data-file-preview]")).toBeVisible();
+    await expect(outlineKey(page)).toBeFocused();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("widening past 960px with the float open hands focus to the column's Hide outline key", async ({
+  daemon,
+  page,
+}) => {
+  await page.setViewportSize({ width: 880, height: 900 });
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await openFloat(page);
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(listbox(page)).toBeVisible();
+  await expect(page.locator(FLOAT)).toHaveCount(0);
+  await expect(panel(page).getByRole("button", { name: "Hide outline" })).toBeFocused();
+});
+
+// The column's Hide outline key and the header's Show outline key replace each other in
+// place, so they stand one size, with the shortcut hints on and off.
+for (const hints of ["on", "off"]) {
+  test(`the outline's Hide and Show keys stand one size, hints ${hints}`, async ({
+    daemon,
+    page,
+  }) => {
+    await page.addInitScript((value) => localStorage.setItem("caret.shortcutHints", value), hints);
+    await daemon.seed({ plan: TALL_PLAN });
+    await page.goto("/");
+    await planSurface(page);
+
+    const hide = panel(page).getByRole("button", { name: "Hide outline" });
+    const hideBox = await hide.boundingBox();
+    await hide.click();
+    const showBox = await outlineKey(page).boundingBox();
+    expect(hideBox).not.toBeNull();
+    expect(showBox).not.toBeNull();
+    expect({ width: showBox!.width, height: showBox!.height }).toEqual({
+      width: hideBox!.width,
+      height: hideBox!.height,
+    });
+  });
+}

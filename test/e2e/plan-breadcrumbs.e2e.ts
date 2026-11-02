@@ -239,28 +239,22 @@ async function openThenStepOut(page: Page, atCrumb: string[], outOne: string[]):
   return menu;
 }
 
-test("the bar sits in the control row between the compare picker and the path", async ({
-  daemon,
-  page,
-}) => {
+test("the bar sits in the plan header, before the view keys", async ({ daemon, page }) => {
   await daemon.seed({ plan: NESTED_PLAN });
   await page.goto("/");
 
-  const bar = page.locator(`.control-row ${BAR}`);
+  const bar = page.locator(`.plan-header ${BAR}`);
   await expect(bar).toBeVisible();
   // A named nav landmark: the plan's heading navigation keeps a role in the a11y
   // tree now that the contents rail's own landmark is gone (EXC-949).
   await expect(bar).toHaveAttribute("aria-label", "Plan location");
 
-  // Left of the working-directory path, right of the compare picker.
-  const picker = await page.locator(".control-row .compare-picker").boundingBox();
+  // Left of the view keys, in the plan's pane.
   const crumbs = await bar.boundingBox();
-  const cwd = await page.locator(".control-row .cwd").boundingBox();
-  expect(picker).not.toBeNull();
+  const picker = await page.locator(".plan-header .compare-picker").boundingBox();
   expect(crumbs).not.toBeNull();
-  expect(cwd).not.toBeNull();
-  expect(picker!.x + picker!.width).toBeLessThanOrEqual(crumbs!.x);
-  expect(crumbs!.x + crumbs!.width).toBeLessThanOrEqual(cwd!.x);
+  expect(picker).not.toBeNull();
+  expect(crumbs!.x + crumbs!.width).toBeLessThanOrEqual(picker!.x);
 });
 
 test("the trail follows the heading being read as the plan scrolls", async ({ daemon, page }) => {
@@ -1275,14 +1269,17 @@ test("compare mode drops the bar, which tracks no heading there", async ({ daemo
   await page.getByRole("button", { name: /^Versions/ }).click();
   await expect(page.locator(BAR)).toHaveCount(0);
 
-  // With the bar gone the picker stretches again, which is what keeps its display
-  // toggles on the row's right edge — the half of the flex split the single-version
-  // specs above cannot see.
-  const controls = await page.locator(".control-row .controls").boundingBox();
-  const row = await page.locator(".control-row").boundingBox();
+  // With the bar gone the picker spans the header, which is what puts its pair at the
+  // header's left and its display toggles beside the view keys at the right — the half
+  // of the flex split the single-version specs above cannot see.
+  const pair = await page.locator(".plan-header .pair").boundingBox();
+  const controls = await page.locator(".plan-header .controls").boundingBox();
+  const versions = await page.getByRole("button", { name: /^Versions/ }).boundingBox();
+  expect(pair).not.toBeNull();
   expect(controls).not.toBeNull();
-  expect(row).not.toBeNull();
-  expect(row!.x + row!.width - (controls!.x + controls!.width)).toBeLessThan(40);
+  expect(versions).not.toBeNull();
+  expect(pair!.x + pair!.width).toBeLessThan(controls!.x);
+  expect(versions!.x - (controls!.x + controls!.width)).toBeLessThan(40);
 });
 
 // EXC-1123's exit pass. Every spec below needs a real engine for the reason plan-toc.e2e.ts
@@ -1600,9 +1597,9 @@ const fieldLook = (field: Locator) =>
     return { floor: style.backgroundColor, cut: style.boxShadow, cursor: style.caretColor };
   });
 
-// The bar's filter and the Contents panel filter the same headings, so a focused field
-// in either is cut and lit the same way.
-test("the filter field looks as the Contents filter's does under focus", async ({
+// The bar's filter and the outline's filter the same headings, so a focused field in
+// either is cut and lit the same way.
+test("the filter field looks as the outline's filter does under focus", async ({
   daemon,
   page,
 }) => {
@@ -1613,10 +1610,8 @@ test("the filter field looks as the Contents filter's does under focus", async (
   await page.keyboard.press("Escape");
   await expect(filterPanel(page)).toHaveCount(0);
   await expect(page.locator("[data-slot='dropdown-menu-content']")).toHaveCount(0);
-  await page.getByRole("button", { name: "Contents" }).click();
-  const contents = page
-    .locator(".plan-toc-panel")
-    .getByRole("combobox", { name: "Filter headings" });
+  await page.keyboard.press("\\");
+  const contents = page.locator(".plan-outline").getByRole("combobox", { name: "Filter headings" });
   await expect(contents).toBeFocused();
   expect(ours).toEqual(await fieldLook(contents));
 });

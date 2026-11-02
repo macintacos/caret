@@ -3,11 +3,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { withBlockedStorage } from "@ui/support/storage.ts";
 import {
+  PLAN_OUTLINE_KEY,
   PLAN_VIEW_KEY,
+  readPlanOutline,
   readPlanView,
   runsOn,
   SURFACE_BEHAVIORS,
   type SurfaceBehavior,
+  writePlanOutline,
   writePlanView,
 } from "$lib/planView.ts";
 
@@ -34,6 +37,19 @@ describe("plan view preference", () => {
   test("a written preview reads back", () => {
     writePlanView("preview");
     expect(readPlanView()).toBe("preview");
+  });
+});
+
+describe("plan outline preference", () => {
+  test("the outline is shown on an empty store and on an unrecognized value", () => {
+    expect(readPlanOutline()).toBe("shown");
+    localStorage.setItem(PLAN_OUTLINE_KEY, "garbage");
+    expect(readPlanOutline()).toBe("shown");
+  });
+
+  test("a hidden outline reads back hidden", () => {
+    writePlanOutline("hidden");
+    expect(readPlanOutline()).toBe("hidden");
   });
 });
 

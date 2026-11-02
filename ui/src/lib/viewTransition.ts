@@ -3,8 +3,10 @@
 // a browser-quirk gate lands in one place.
 
 /** The API, probed for without hard-typing it (it isn't in every TS DOM lib); of the
- * transition it returns, only `finished` is ever read. */
-type StartViewTransition = (update: () => void) => { finished?: Promise<unknown> } | undefined;
+ * transition it returns, only `ready` and `finished` are ever read. */
+type StartViewTransition = (
+  update: () => void,
+) => { ready?: Promise<unknown>; finished?: Promise<unknown> } | undefined;
 
 type MaybeViewTransitions = Document & { startViewTransition?: StartViewTransition };
 

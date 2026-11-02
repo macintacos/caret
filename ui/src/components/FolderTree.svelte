@@ -45,7 +45,6 @@
     cwdPath,
     type FolderCardMemory,
     type FolderMemory,
-    laneEdge,
     type Levels,
     refreshCard,
     treeKey,
@@ -193,12 +192,12 @@
    *
    * The dock is read as a total ternary rather than asserted: the attribute's
    * value comes from a typed prop one component away, so the fallback can never
-   * fire today, but nothing local would say so if that changed. The rect is put
-   * through `laneEdge` rather than used raw, because a lane opened FROM this card
-   * is measured while it is still wiping in.
+   * fire today, but nothing local would say so if that changed. The rect is taken
+   * less the lane's transform, because a lane opened FROM this card is measured
+   * while it is still sliding in.
    *
-   * A lane playing its CLOSING wipe is no lane, which is what the `:not()` buys.
-   * It stays mounted for the length of that wipe, so a row clicked inside that
+   * A lane sliding OUT is no lane, which is what the `:not()` buys. It stays
+   * mounted for the length of that slide, so a row clicked inside that
    * window would otherwise read a lane that is already leaving — and skip the
    * re-place on the very closed-to-open transition it exists to catch, since
    * reopening cancels the pending unmount and the lane comes straight back.
@@ -209,8 +208,12 @@
     );
     if (el === null) return undefined;
     const edge: DrawerEdge = el.dataset.fileDrawer === "right" ? "right" : "bottom";
-    const settled = Number.parseFloat(el.style.getPropertyValue("--fd-size"));
-    return laneEdge(edge, el.getBoundingClientRect(), settled);
+    const transform = getComputedStyle(el).transform;
+    const { m41: dx, m42: dy } = new DOMMatrixReadOnly(
+      transform === "" || transform === "none" ? undefined : transform,
+    );
+    const r = el.getBoundingClientRect();
+    return { edge, top: r.top - dy, left: r.left - dx };
   }
 
   /** Put the card at `box`, sized as it currently measures and inside the

@@ -147,7 +147,7 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
     0 1px 2px var(--rubber-cast-near),
     0 0 0 transparent;
 }
-/* Reduced motion keeps every key at its place, the Contents rows too, and changes only
+/* Reduced motion keeps every key at its place, the outline's rows too, and changes only
    its shading. */
 @media (prefers-reduced-motion: reduce) {
   :root {
@@ -190,9 +190,11 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
 
 /* A tray holding a submit runs a step under the Button's default size: at full size
    the amber cap and its keycap read heavier than the action. The bell and settings beside
-   it match, so the top bar's keys stand one height. */
+   it match, so the top bar's keys stand one height, and the plan header's view and
+   outline keys, with the outline column's Hide key, stand at it too. */
 .tray-submit :is(.cap, button.float-chip),
-.topbar .bell-slot :is(.cap, button.float-chip) {
+.topbar .bell-slot :is(.cap, button.float-chip),
+.header-tray :is(.cap, button.float-chip) {
   height: var(--cap-submit-h);
   font-size: var(--text-base);
 }
@@ -487,7 +489,7 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
 }
 
 /* A section or field label in sentence case: Request changes' and the guards' fields, the
-   shortcut groups, and the Contents panel's breadcrumb headers. Settings' section heading
+   shortcut groups, and the outline filter's breadcrumb headers. Settings' section heading
    (.settings-block-label) in type and ink, so every surface labels its parts alike. */
 .form-label {
   display: block;

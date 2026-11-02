@@ -129,55 +129,179 @@ describe("DiffPlanView rendering", () => {
   });
 });
 
-// The control row carries two heading-navigation surfaces, and they are covered in
-// different places — deliberately, because only one of them is unit-reachable.
+// The outline and the breadcrumbs are covered in different places — deliberately,
+// because only the outline is unit-reachable.
 //
-// EXC-946's breadcrumbs bar has no unit test here on purpose: it renders only once
-// a heading is in the reading zone, and that tracking is measured with
-// getBoundingClientRect, which happy-dom reports as all zeros. The bar's own trail
-// logic is unit-tested in PlanBreadcrumbs.test.ts; its mounting, scroll tracking,
-// and compare-mode absence are covered by test/e2e/plan-breadcrumbs.e2e.ts.
+// EXC-946's breadcrumbs render only once a heading is in the reading zone, and that
+// tracking is measured with getBoundingClientRect, which happy-dom reports as all zeros.
+// Their trail logic is unit-tested in PlanBreadcrumbs.test.ts; their mounting, scroll
+// tracking, and compare-mode absence are covered by test/e2e/plan-breadcrumbs.e2e.ts.
 //
-// EXC-1095's ToC popup has no such gate — it renders whenever the view is not
-// comparing, including with no active heading at all — so its mount and its
-// compare-mode absence are a plain conditional branch, and belong here. Its own
-// panel structure and ARIA are unit-tested in PlanToc.test.ts.
-describe("DiffPlanView contents popup", () => {
-  test("mounts the contents trigger in the control row", () => {
+// The outline has no such gate, so where it stands is a plain conditional branch and
+// belongs here. Its list's own structure and ARIA are unit-tested in PlanToc.test.ts; the
+// widths that fold it into a float are real-browser, in test/e2e/plan-toc.e2e.ts.
+describe("DiffPlanView outline", () => {
+  const runKey = (id: string) =>
+    shortcuts
+      .list()
+      .find((e) => e.id === id)
+      ?.run?.();
+  const column = (target: HTMLElement) => target.querySelector(".plan-outline");
+  const showKey = (target: HTMLElement) =>
+    target.querySelector<HTMLButtonElement>(".plan-header button[aria-label='Show outline']");
+  const hideKey = (target: HTMLElement) =>
+    target.querySelector<HTMLButtonElement>(".plan-outline button[aria-label='Hide outline']");
+
+  test("stands as a column beside the plan, with no outline key in the header", () => {
     const { target } = render(DiffPlanView, props());
-    const toc = target.querySelector<HTMLElement>(".control-row [data-slot='popover-trigger']");
-    expect(toc).not.toBeNull();
-    // Contains rather than equals: the trigger also holds the `\` keycap
-    // (EXC-1097), which this view renders because showShortcutHints defaults on.
-    // Whether that cap tracks the setting is PlanToc.test.ts's subject, not this
-    // one's — the claim here is only that the trigger mounts, labelled.
-    expect(toc?.textContent).toContain("Contents");
+    expect(column(target)?.querySelector("[role='listbox']") ?? null).not.toBeNull();
+    expect(showKey(target)).toBeNull();
   });
 
-  // Compare mode tracks no heading, so a contents popup there would open on a
-  // stale plan. Dropped on the same condition the breadcrumbs bar is.
-  test("drops the contents trigger in compare mode", async () => {
+  test("Hide outline moves the outline key into the header, and Show outline brings the column back", async () => {
+    const { target } = render(DiffPlanView, props());
+    hideKey(target)?.click();
+    await until(() => column(target) == null);
+    expect(column(target)).toBeNull();
+    expect(showKey(target)?.getAttribute("aria-keyshortcuts")).toBe("|");
+
+    showKey(target)?.click();
+    await until(() => column(target) != null);
+    expect(column(target)).not.toBeNull();
+    expect(showKey(target)).toBeNull();
+  });
+
+  // A hidden outline is a reading choice, kept like the source/preview one.
+  test("a hidden outline stays hidden on the next mount", async () => {
+    const first = render(DiffPlanView, props());
+    hideKey(first.target)?.click();
+    await until(() => column(first.target) == null);
+
+    const { target } = render(DiffPlanView, props());
+    expect(column(target)).toBeNull();
+    expect(showKey(target)).not.toBeNull();
+  });
+
+  test("Shift+\\ hides the column and shows it again", async () => {
+    const { target } = render(DiffPlanView, props());
+    await until(() => shortcuts.list().some((e) => e.id === "actions.toggleOutline"));
+    runKey("actions.toggleOutline");
+    await until(() => column(target) == null);
+    expect(column(target)).toBeNull();
+    runKey("actions.toggleOutline");
+    await until(() => column(target) != null);
+    expect(column(target)).not.toBeNull();
+  });
+
+  // Hiding the column from its own key would otherwise drop focus to the body.
+  test("focus moves to the header's outline key when the column hides under it", async () => {
+    const { target, flush } = render(DiffPlanView, props());
+    flush();
+    hideKey(target)?.focus();
+    hideKey(target)?.click();
+    await until(() => showKey(target) != null && document.activeElement === showKey(target));
+    expect(showKey(target) != null && document.activeElement === showKey(target)).toBe(true);
+  });
+
+  test("\\ opens the column's filter and focuses it", async () => {
+    const { target } = render(DiffPlanView, props());
+    await until(() => shortcuts.list().some((e) => e.id === "actions.contents"));
+    runKey("actions.contents");
+    const filter = () => column(target)?.querySelector("[data-slot='command-input']");
+    await until(() => filter() != null && document.activeElement === filter());
+    expect(filter() != null && document.activeElement === filter()).toBe(true);
+  });
+
+  // Comparing folds the column into the header's key: the split diff needs the width, and
+  // there is no reading position to track. The mode never writes the reader's choice.
+  test("folds into the header's key while comparing, and stands again after", async () => {
     const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
-    expect(target.querySelector(".control-row [data-slot='popover-trigger']")).not.toBeNull();
-    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
-    await until(() => target.querySelector(".control-row [data-slot='popover-trigger']") == null);
-    expect(target.querySelector(".control-row [data-slot='popover-trigger']")).toBeNull();
+    const versions = () => target.querySelector<HTMLButtonElement>(".compare-toggle");
+    versions()?.click();
+    await until(() => column(target) == null);
+    expect(showKey(target)).not.toBeNull();
+
+    versions()?.click();
+    await until(() => column(target) != null);
+    expect(showKey(target)).toBeNull();
+    expect(localStorage.getItem("caret.planOutline")).toBeNull();
+  });
+
+  test("Shift+\\ while comparing drops the float rather than hiding the column", async () => {
+    const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
+    target.querySelector<HTMLButtonElement>(".compare-toggle")?.click();
+    await until(() => showKey(target) != null);
+    runKey("actions.toggleOutline");
+    await until(() => showKey(target)?.getAttribute("aria-pressed") === "true");
+    expect(showKey(target)?.getAttribute("aria-pressed")).toBe("true");
+    expect(localStorage.getItem("caret.planOutline")).toBeNull();
+  });
+
+  // The working-directory path (EXC-807) sits at the outline's foot. It is a
+  // click-to-copy button, with no hover tooltip (EXC-850).
+  test("shows the working-directory path at the outline's foot", () => {
+    const { target } = render(DiffPlanView, props({ review: reviewFixture() }));
+    const cwd = target.querySelector(".plan-outline .cwd");
+    expect(cwd).not.toBeNull();
+    expect(cwd!.textContent).toContain("/tmp/p");
+  });
+
+  test("clicking the working-directory path copies the full absolute path", () => {
+    // Deep enough that the display abbreviates (…/Play/caret) while the copy is
+    // the whole path — proving the two differ (EXC-850).
+    const copied = capture<string>();
+    const deep = "/Users/dev/GitLocal/Play/caret";
+    const { target } = render(
+      DiffPlanView,
+      props({ review: reviewFixture({ cwd: deep }), onCopyCwd: copied.cb }),
+    );
+    const cwd = target.querySelector<HTMLButtonElement>(".plan-outline button.cwd");
+    expect(cwd?.textContent?.trim()).toBe("…/Play/caret");
+    cwd?.click();
+    expect(copied.last()).toBe(deep);
   });
 });
 
-describe("DiffPlanView control row", () => {
+describe("DiffPlanView plan header", () => {
+  // The header holds still while the plan scrolls under it.
+  test("sits in the plan pane, outside the plan's scroller", () => {
+    const { target } = render(DiffPlanView, props());
+    const header = target.querySelector(".plan-pane > .plan-header");
+    expect(header).not.toBeNull();
+    expect(target.querySelector(".diff-plan")?.contains(header ?? null)).toBe(false);
+  });
+
   // The plan's view keys are one group, so they share one well. The Versions toggle has
   // two markups, enabled and disabled-with-a-reason; both must sit in the shared tray.
   test.each([
     ["with nothing to compare", reviewFixture()],
     ["with versions to compare", multiVersionFixture(3)],
-  ])("Contents, Versions and Preview share one tray %s", (_, review) => {
+  ])("Versions and Preview share one tray %s", (_, review) => {
     const { target } = render(DiffPlanView, props({ review }));
-    const trays = ["[data-slot='popover-trigger']", ".compare-toggle", ".preview-toggle"].map(
-      (cap) => target.querySelector(`.control-row ${cap}`)?.closest(".tray") ?? null,
+    const trays = [".compare-toggle", ".preview-toggle"].map(
+      (cap) => target.querySelector(`.plan-header ${cap}`)?.closest(".tray") ?? null,
     );
     expect(trays.every((tray) => tray !== null)).toBe(true);
     expect(new Set(trays).size).toBe(1);
+  });
+
+  test("closed, with hints on, the header says / to search", () => {
+    const { target } = render(DiffPlanView, props());
+    expect(target.querySelector(".plan-header .search-hint")?.textContent).toContain("to search");
+  });
+
+  test("closed, with hints off, the header says nothing of search", () => {
+    const { target } = render(DiffPlanView, props({ showShortcutHints: false }));
+    expect(target.querySelector(".plan-header .search-hint")).toBeNull();
+  });
+
+  // The touch rule in atoms.css drops an aria-hidden element whose child is a keycap,
+  // caption and all: a key hint means nothing without keys.
+  test("the search hint is an aria-hidden key hint, so touch devices drop it", () => {
+    const { target } = render(DiffPlanView, props());
+    const hint = target.querySelector(".plan-header .search-hint");
+    expect(hint?.getAttribute("aria-hidden")).toBe("true");
+    expect(hint?.querySelector(":scope > [data-slot='kbd']") != null).toBe(true);
   });
 });
 
@@ -280,39 +404,6 @@ describe("DiffPlanView version compare", () => {
     expect(target.querySelector(".compare-picker")).not.toBeNull();
     // The mode is off by default, so the single-version source view shows.
     expect(target.querySelector(".pair")).toBeNull();
-  });
-
-  // The working-directory path sits in the compare row (EXC-807), right-aligned
-  // while not comparing and dropped once compare mode is on. It is a click-to-copy
-  // button, with no hover tooltip (EXC-850).
-  test("shows the working-directory path in the compare row when not comparing", () => {
-    const { target } = render(DiffPlanView, props({ review: reviewFixture() }));
-    const cwd = target.querySelector(".control-row .cwd");
-    expect(cwd).not.toBeNull();
-    expect(cwd!.textContent).toContain("/tmp/p");
-  });
-
-  test("clicking the working-directory path copies the full absolute path", () => {
-    // Deep enough that the display abbreviates (…/Play/caret) while the copy is
-    // the whole path — proving the two differ (EXC-850).
-    const copied = capture<string>();
-    const deep = "/Users/dev/GitLocal/Play/caret";
-    const { target } = render(
-      DiffPlanView,
-      props({ review: reviewFixture({ cwd: deep }), onCopyCwd: copied.cb }),
-    );
-    const cwd = target.querySelector<HTMLButtonElement>(".control-row button.cwd");
-    expect(cwd?.textContent?.trim()).toBe("…/Play/caret");
-    cwd?.click();
-    expect(copied.last()).toBe(deep);
-  });
-
-  test("hides the working-directory path in compare mode", async () => {
-    const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
-    expect(target.querySelector(".control-row .cwd")).not.toBeNull();
-    target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
-    await until(() => target.querySelector(".control-row .cwd") == null);
-    expect(target.querySelector(".control-row .cwd")).toBeNull();
   });
 
   test("entering compare mode renders a diff between the default version pair", async () => {
@@ -551,7 +642,7 @@ describe("DiffPlanView comment-span brackets", () => {
 });
 
 const toggle = (target: HTMLElement) =>
-  target.querySelector<HTMLButtonElement>(".control-row .preview-toggle");
+  target.querySelector<HTMLButtonElement>(".plan-header .preview-toggle");
 
 async function renderOnPreview(over = {}) {
   const mounted = render(DiffPlanView, props(over));
@@ -921,22 +1012,21 @@ describe("DiffPlanView plan view toggle", () => {
     expect(enabled("actions.togglePreview")).toBe(false);
   });
 
-  test("the preview keeps the search dock and its shortcut", async () => {
+  test("the preview keeps the search hint and its shortcut", async () => {
     const { target } = render(DiffPlanView, props());
-    await until(() => target.querySelector(".search-dock") != null);
+    await until(() => target.querySelector(".search-hint") != null);
     toggle(target)!.click();
     await until(() => target.querySelector(".plan-preview") != null);
-    expect(target.querySelector(".search-dock") != null).toBe(true);
+    expect(target.querySelector(".search-hint") != null).toBe(true);
     expect(enabled("actions.search")).toBe(true);
   });
 
-  test("the preview keeps the contents trigger and the heading shortcuts", async () => {
+  test("the preview keeps the outline and the heading shortcuts", async () => {
     const { target } = await renderOnPreview();
-    const shown = await until(
-      () => target.querySelector(".control-row [data-slot='popover-trigger']") != null,
-    );
+    const shown = await until(() => target.querySelector(".plan-outline") != null);
     expect(shown).toBe(true);
     expect(enabled("actions.contents")).toBe(true);
+    expect(enabled("actions.toggleOutline")).toBe(true);
     expect(enabled("actions.headingNav")).toBe(true);
   });
 

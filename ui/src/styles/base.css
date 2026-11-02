@@ -143,11 +143,217 @@ body {
   }
 }
 
+/* A part of a layout slide (lib/layoutSlide.ts), held for one style pass at the offset it
+   starts from, and the width where it stretches, with any slide it was in let go. Each part
+   declares its own transform transition, which runs once this lets go, and a stretching
+   part its left edge as its transform origin. The offsets and the duration are set on the
+   part alone, and registered as not inherited, so setting them on the plan restyles the
+   plan's box, not every row inside it. */
+@property --slide-x {
+  syntax: "*";
+  inherits: false;
+}
+@property --slide-y {
+  syntax: "*";
+  inherits: false;
+}
+@property --slide-dur {
+  syntax: "*";
+  inherits: false;
+}
+@property --slide-sx {
+  syntax: "*";
+  inherits: false;
+}
+@property --key-dx {
+  syntax: "*";
+  inherits: false;
+}
+@property --key-dy {
+  syntax: "*";
+  inherits: false;
+}
+[data-slide-from] {
+  transform: translate(var(--slide-x), var(--slide-y)) scaleX(var(--slide-sx, 1)) !important;
+  transition-property: none !important;
+}
+
+/* Compare's move (lib/paneMove.ts): entering or leaving compare swaps the plan and its
+   header's controls, and folds or stands the outline column, as one view transition. Each
+   component names its moving parts under the root's `data-pane-move` tag, so no other
+   transition picks them up. The column standing again takes --dur-pane, and the plan,
+   crumbs and outline key moving with it; everything else, the column folding included,
+   takes --dur-state. The column moves as the outline's own slide moves it. */
+:root[data-pane-move]::view-transition-old(root) {
+  animation: none;
+  opacity: 0;
+}
+:root[data-pane-move]::view-transition-new(root) {
+  animation: none;
+}
+:root[data-pane-move]::view-transition-group(*) {
+  animation-duration: var(--dur-state);
+  animation-timing-function: var(--ease-out);
+}
+:root[data-pane-move~="enter"]::view-transition-group(plan-pane),
+:root[data-pane-move~="enter"]::view-transition-group(plan-outline),
+:root[data-pane-move~="enter"]::view-transition-group(plan-crumbs),
+:root[data-pane-move~="enter"]::view-transition-group(outline-key) {
+  animation-duration: var(--dur-pane);
+}
+/* The parts stack in the order the old state painted them: the outline key sat in the
+   column, under the plan it travels onto, and Versions beside Preview, whose place it takes. */
+:root[data-pane-move]::view-transition-group(outline-key),
+:root[data-pane-move]::view-transition-group(versions-key) {
+  z-index: 1;
+}
+/* Versions, and the well its keys share, slide only once the slot Versions moves into is
+   clear: Preview's going into compare, the compare controls' coming out. */
+:root[data-pane-move]::view-transition-group(versions-key),
+:root[data-pane-move]::view-transition-old(versions-key),
+:root[data-pane-move]::view-transition-new(versions-key),
+:root[data-pane-move]::view-transition-group(view-keys) {
+  animation-delay: calc(var(--dur-state) * 0.4);
+  animation-duration: calc(var(--dur-state) * 0.6);
+}
+/* The plan and its crumbs change width as they move: drawn at their own size from their
+   left edge, cropped to the moving box, so the text slides rather than stretches. The view
+   keys' well, holding no text once its keys are named apart, stretches with its box. */
+:root[data-pane-move]::view-transition-old(plan-pane),
+:root[data-pane-move]::view-transition-new(plan-pane),
+:root[data-pane-move]::view-transition-old(plan-crumbs),
+:root[data-pane-move]::view-transition-new(plan-crumbs) {
+  height: 100%;
+  object-fit: none;
+  object-position: left top;
+}
+:root[data-pane-move]::view-transition-old(view-keys),
+:root[data-pane-move]::view-transition-new(view-keys) {
+  height: 100%;
+}
+/* The column slides off the window's edge as it folds, and back on as it stands. */
+:root[data-pane-move]::view-transition-old(plan-outline) {
+  animation: pane-out var(--dur-state) var(--ease-out) both;
+}
+:root[data-pane-move]::view-transition-new(plan-outline) {
+  animation: pane-in var(--dur-pane) var(--ease-out) both;
+}
+/* Standing again as compare ends, the column waits until the plan's old image has gone,
+   since the plan's box, changing width, can trail it, and arrives with the plan. */
+:root[data-pane-move~="enter"]::view-transition-new(plan-outline) {
+  animation-delay: calc(var(--dur-state) * 0.4);
+  animation-duration: calc(var(--dur-pane) - var(--dur-state) * 0.4);
+}
+@keyframes pane-out {
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes pane-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+/* Each slot that swaps fades through: what leaves is gone by 40% of the run, and what
+   arrives starts there, so no slot ever shows two images at once. The crumbs and the
+   compare controls do it on a short shared axis, forward into compare and back out of it.
+   Versions slides across the slots next to it only once they are clear, and what it leaves
+   fills only once it has passed: Preview shrinks away before Versions takes its place, and
+   grows back once Versions has made room. */
+/* The pane's own floor holds under its images, so the plan fades through its content
+   rather than through the window. */
+:root[data-pane-move]::view-transition-image-pair(plan-pane) {
+  border-radius: var(--pane-radius);
+  background: var(--paper-sunk);
+}
+:root[data-pane-move]:has(.plan-pane[data-surface="preview"])::view-transition-image-pair(plan-pane) {
+  background: var(--paper);
+}
+:root[data-pane-move]::view-transition-old(plan-pane) {
+  animation: swap-out var(--dur-state) var(--ease-out) both;
+}
+:root[data-pane-move]::view-transition-new(plan-pane) {
+  animation: swap-in var(--dur-state) var(--ease-out) both;
+}
+:root[data-pane-move~="exit"] {
+  --lead-nudge: -6px;
+}
+:root[data-pane-move~="enter"] {
+  --lead-nudge: 6px;
+}
+:root[data-pane-move]::view-transition-old(plan-crumbs),
+:root[data-pane-move]::view-transition-old(compare-controls) {
+  animation: lead-out var(--dur-state) var(--ease-out) both;
+}
+:root[data-pane-move]::view-transition-new(plan-crumbs),
+:root[data-pane-move]::view-transition-new(compare-controls) {
+  animation: lead-in var(--dur-state) var(--ease-out) both;
+}
+/* Going into compare, the controls come in where Versions slides out from, so they wait
+   until it has passed, as Preview does coming out. */
+:root[data-pane-move~="exit"]::view-transition-new(compare-controls) {
+  animation: lead-in-late var(--dur-state) var(--ease-out) both;
+}
+:root[data-pane-move]::view-transition-old(preview-key) {
+  animation: key-leave var(--dur-state) var(--ease-out) both;
+}
+:root[data-pane-move]::view-transition-new(preview-key) {
+  animation: key-arrive var(--dur-state) var(--ease-out) both;
+}
+@keyframes swap-out {
+  40%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes swap-in {
+  0%,
+  40% {
+    opacity: 0;
+  }
+}
+@keyframes lead-out {
+  40%,
+  100% {
+    opacity: 0;
+    transform: translateX(var(--lead-nudge));
+  }
+}
+@keyframes lead-in {
+  0%,
+  40% {
+    opacity: 0;
+    transform: translateX(calc(-1 * var(--lead-nudge)));
+  }
+}
+@keyframes lead-in-late {
+  0%,
+  70% {
+    opacity: 0;
+    transform: translateX(calc(-1 * var(--lead-nudge)));
+  }
+}
+@keyframes key-leave {
+  40%,
+  100% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+@keyframes key-arrive {
+  0%,
+  70% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
 /* !important rather than a selector list, so no scoped arm can out-specify the
    preference — the same reason the chrome guard above uses it. */
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
     animation: none !important;
   }
 }

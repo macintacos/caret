@@ -42,10 +42,13 @@ accent and danger keys' hover and press faces `--accent-face-hover`,
 `--accent-face-press`, `--danger-face-hover` and `--danger-face-press`, the switch's
 `--knob-face`, `--knob-face-hover`, `--knob-face-down`, `--knob-edge` and `--switch-on`,
 the meter's `--meter-off`, and the `--float-surface-low`, `-mid` and `-high` composites),
-is mixed in `ui/src/styles/derived.css`. In light, the top bar, control row and status bar
-re-cut `--well-floor` from `--body`, so a stamp's or a count chip's pocket stays visible
-on it. Focus has no token of its own, since it wears each control's hover faces.
-shadcn-svelte's token names map onto these roles in `ui/src/styles/shadcn-bridge.css`.
+is mixed in `ui/src/styles/derived.css`. In light, the top bar, the outline column and the
+status bar re-cut `--well-floor` from `--body`, so a stamp's or a count chip's pocket
+stays visible on it. The outline's quieter text takes `--toc-quiet`, local to
+`ui/src/components/PlanToc.svelte`: `--ink-soft` on the float's raised paper, stepped
+toward `--ink` on the body, where `--ink-soft` falls under 4.5:1 in some palettes. Focus
+has no token of its own, since it wears each control's hover faces. shadcn-svelte's token
+names map onto these roles in `ui/src/styles/shadcn-bridge.css`.
 
 ## Type, motion, radius, depth
 
@@ -55,9 +58,9 @@ All in `ui/src/styles/tokens.css`:
   font files ship; each stack falls back to the platform.
 - **Size:** the `--text-2xs` … `--text-xl` ramp, and the role-keyed `--leading-*` tokens.
   The reading base is the 15px on `<body>` in `ui/src/styles/base.css`.
-- **Motion:** `--dur-state` and `--ease-out` for every state transition, `--ease-spring`
-  for a key's return from a press, `--dur-travel` for the plan's scroll.
-  `ui/src/lib/motion.test.ts` pins the set.
+- **Motion:** `--dur-pane` for a pane or column entering, `--dur-state` and `--ease-out`
+  for every other state transition, `--ease-spring` for a key's return from a press,
+  `--dur-travel` for the plan's scroll. `ui/src/lib/motion.test.ts` pins the set.
 - **Radius:** `--radius` for fields and menu rows, `--radius-lg` for panels, `99px` for
   badges. The keypad has its own: `--key-radius` for keys, `--nub-radius` for keycaps and
   the switch's key, `--pad-radius` for a table's or a code block's pad, and
@@ -92,16 +95,19 @@ All in `ui/src/styles/tokens.css`:
     well, 16% dark and 8% light);
   - the floats (`--float-rim`, `--float-rim-ink`, `--float-low`, `--float-mid`,
     `--float-high`) and `--shadow-chip` for small hints;
-  - the plan's `--chip-stamped` and `--chip-raised`, `--panel-recess` for text fields,
-    copy boxes and the Contents peek, and `--field-wall`, the wall of a focused field's
-    cut that `--field-edge-focus` lights: the lower in dark, the upper in light.
+  - the plan's `--chip-stamped` and `--chip-raised`, `--panel-recess` for text fields and
+    copy boxes, and `--field-wall`, the wall of a focused field's cut that
+    `--field-edge-focus` lights: the lower in dark, the upper in light.
 
   `--checkbox-size`, a task box's side, lives in the `:host` of
   `ui/src/lib/diffview/coreStyles.ts`.
 
   `--shadow-card` still comes from the palette.
 - **Layout:** `--pane-gap` (6px), the inset around the plan pane, and `--status-bar-h`
-  (2.25rem), the status bar's height, are in `ui/src/styles/layout.css`.
+  (2.25rem), the status bar's height, are in `ui/src/styles/layout.css`. The outline
+  column's width is `OUTLINE_COLUMN_REM` in `ui/src/components/DiffPlanView.svelte`, and
+  the plan's reading width, which the column yields to a file to keep, is `MIN_READING_PX`
+  in `ui/src/lib/fileDrawer.ts`.
 
 ## Terminal
 

@@ -9,7 +9,9 @@ import {
   FILE_DRAWER_WIDTH_KEY,
   MIN_DRAWER_PX,
   MIN_PLAN_PX,
+  MIN_PLAN_WIDTH_PX,
   maxDrawerSize,
+  outlineFits,
   readDrawerSize,
   writeDrawerSize,
 } from "$lib/fileDrawer.ts";
@@ -18,35 +20,40 @@ afterEach(() => localStorage.clear());
 
 describe("clampDrawerSize", () => {
   test("passes a size that fits both bounds through unchanged", () => {
-    expect(clampDrawerSize(400, 1200)).toBe(400);
+    expect(clampDrawerSize(400, 1200, "right")).toBe(400);
   });
 
   test("raises a too-small size to MIN_DRAWER_PX", () => {
-    expect(clampDrawerSize(40, 1200)).toBe(MIN_DRAWER_PX);
+    expect(clampDrawerSize(40, 1200, "right")).toBe(MIN_DRAWER_PX);
   });
 
-  test("caps the size so the plan keeps MIN_PLAN_PX", () => {
-    expect(clampDrawerSize(1100, 1200)).toBe(1200 - MIN_PLAN_PX);
+  test("caps a right drawer so the plan keeps MIN_PLAN_WIDTH_PX", () => {
+    expect(clampDrawerSize(1100, 1200, "right")).toBe(1200 - MIN_PLAN_WIDTH_PX);
+  });
+
+  test("caps a bottom drawer so the plan keeps MIN_PLAN_PX", () => {
+    expect(clampDrawerSize(1100, 1200, "bottom")).toBe(1200 - MIN_PLAN_PX);
   });
 
   test("falls back to MIN_DRAWER_PX when the axis cannot hold both minimums", () => {
     // available - MIN_PLAN_PX is below MIN_DRAWER_PX here, so the two bounds
     // cross: the drawer keeps its floor rather than collapsing to nothing.
-    expect(clampDrawerSize(400, MIN_PLAN_PX + 10)).toBe(MIN_DRAWER_PX);
+    expect(clampDrawerSize(400, MIN_PLAN_PX + 10, "bottom")).toBe(MIN_DRAWER_PX);
   });
 });
 
 describe("maxDrawerSize", () => {
-  test("leaves the plan its minimum", () => {
-    expect(maxDrawerSize(1200)).toBe(1200 - MIN_PLAN_PX);
+  test("leaves the plan its minimum on the docking axis", () => {
+    expect(maxDrawerSize(1200, "right")).toBe(1200 - MIN_PLAN_WIDTH_PX);
+    expect(maxDrawerSize(1200, "bottom")).toBe(1200 - MIN_PLAN_PX);
   });
 
   test("never drops below the drawer's own floor", () => {
-    expect(maxDrawerSize(MIN_PLAN_PX + 10)).toBe(MIN_DRAWER_PX);
+    expect(maxDrawerSize(MIN_PLAN_WIDTH_PX + 10, "right")).toBe(MIN_DRAWER_PX);
   });
 
   test("is the bound clampDrawerSize enforces", () => {
-    expect(clampDrawerSize(99_999, 1200)).toBe(maxDrawerSize(1200));
+    expect(clampDrawerSize(99_999, 1200, "right")).toBe(maxDrawerSize(1200, "right"));
   });
 });
 
@@ -63,7 +70,7 @@ describe("drawerSizeFromPointer", () => {
 
   test("clamps a right drag past the plan's minimum", () => {
     expect(drawerSizeFromPointer("right", { clientX: 10, clientY: 400 }, outer, 1000)).toBe(
-      1000 - MIN_PLAN_PX,
+      1000 - MIN_PLAN_WIDTH_PX,
     );
   });
 
@@ -138,5 +145,19 @@ describe("drawer size persistence", () => {
     withBlockedStorage(() => {
       expect(() => writeDrawerSize("right", 420)).not.toThrow();
     });
+  });
+});
+
+// The outline column yields to an open drawer once the plan beside both would read under
+// 800px. A 248px column (15.5rem) and the default 45% drawer part ways at about 1,703px.
+describe("outlineFits", () => {
+  test("keeps the column while the plan reads at 800px or more beside the default drawer", () => {
+    expect(outlineFits(1710, 248, null)).toBe(true);
+    expect(outlineFits(1700, 248, null)).toBe(false);
+  });
+
+  test("measures a remembered drawer width rather than the default share", () => {
+    expect(outlineFits(1440, 248, 300)).toBe(true);
+    expect(outlineFits(1440, 248, 400)).toBe(false);
   });
 });

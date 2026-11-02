@@ -150,8 +150,9 @@ inside the menu gives a screen reader the field's label and then silence as its 
 narrow. The command-in-popover pair gives a real combobox whose `aria-activedescendant`
 names the row the selection is on, over a listbox of real options.
 
-`PlanBreadcrumbs.svelte` and `PlanToc.svelte` are both built this way, which is why the
-plan's two heading surfaces narrate identically.
+`PlanBreadcrumbs.svelte`'s filter and the outline's float (`PlanToc.svelte` in a Popover)
+are both built this way. The outline's column is the same Command without the popover, so
+the plan's heading surfaces narrate identically.
 
 ## Token-bridge discipline
 

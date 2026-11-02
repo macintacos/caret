@@ -5,6 +5,7 @@ import type { ComponentProps } from "svelte";
 
 import { capture, flushUntil, render } from "@ui/support/mount.ts";
 import { HEADINGS, releaseKey } from "@ui/support/plan-nav.ts";
+import { reactiveProps } from "@ui/support/props.svelte.ts";
 import PlanToc from "@/components/PlanToc.svelte";
 import type { CommentIndexEntry } from "$lib/feedback.ts";
 import type { TocHeading } from "$lib/toc.ts";
@@ -32,18 +33,22 @@ const SHALLOW: TocHeading[] = [
   { level: 2, text: "Rollout", line: 9 },
 ];
 
-function trigger(target: HTMLElement): HTMLButtonElement | null {
-  return target.querySelector<HTMLButtonElement>("[data-slot='popover-trigger']");
+/** The column head's Outline key, which opens the filter. */
+function filterKey(target: HTMLElement): HTMLButtonElement | null {
+  return target.querySelector<HTMLButtonElement>("button[aria-label='Filter outline']");
 }
 
-/** The `\` keycap the trigger wears when shortcut hints are on (EXC-1097). */
-function cap(target: HTMLElement): HTMLElement | null {
-  return target.querySelector<HTMLElement>("[data-slot='kbd']");
+function hideKey(target: HTMLElement): HTMLButtonElement | null {
+  return target.querySelector<HTMLButtonElement>("button[aria-label='Hide outline']");
 }
 
-/** The portalled panel. bits-ui teleports popover content to document.body. */
+/** The keycaps a key wears when shortcut hints are on. */
+function caps(key: HTMLElement | null): HTMLElement[] {
+  return [...(key?.querySelectorAll<HTMLElement>("[data-slot='kbd']") ?? [])];
+}
+
 function panel(): HTMLElement | null {
-  return document.body.querySelector<HTMLElement>("[data-slot='popover-content']");
+  return document.body.querySelector<HTMLElement>(".plan-toc");
 }
 
 function listbox(): HTMLElement | null {
@@ -104,22 +109,6 @@ function hits(el: HTMLElement): string[] {
   return [...el.querySelectorAll<HTMLElement>(".toc-hit")].map((s) => s.textContent ?? "");
 }
 
-/** The heading-level marker a row wears (EXC-1105). Queried on `data-icon` — the handle
- * Icon.svelte stamps with the glyph's registry name — because the marker is aria-hidden by
- * construction and publishes no role a role locator could find, and because the inlined SVG
- * is otherwise indistinguishable from any other glyph without matching path data. The
- * `heading-` prefix is what separates it from the vendored Command.Item's own check
- * indicator, which is an Icon too. */
-function levelGlyph(row: HTMLElement): HTMLElement | null {
-  return row.querySelector<HTMLElement>("[data-icon^='heading-']");
-}
-
-/** Each row's marker by registry name, in document order. `null` for a row wearing none,
- * so a missing marker reds as a value rather than throwing somewhere else. */
-function levelNames(): (string | null)[] {
-  return options().map((o) => levelGlyph(o)?.getAttribute("data-icon") ?? null);
-}
-
 /** The rows the roving selection is on. `aria-selected` rather than `data-selected`
  * because it is the half a screen reader reads; the two move together. */
 function selectedLabels(): string[] {
@@ -159,32 +148,26 @@ function pressArrow(flush: () => void, key: "ArrowUp" | "ArrowDown"): void {
   flush();
 }
 
-/** Open the popup and wait for its portalled content. The flush BEFORE the click
- * is load-bearing: render() leaves the mount's effects pending, and a click landing
- * on that unsettled graph flips the trigger's aria-expanded while bits-ui's portal
- * presence misses the transition entirely (the order PlanBreadcrumbs.test.ts uses). */
+/** Open the column's filter from its Outline key and wait for the field. The flush
+ * BEFORE the click is load-bearing: render() leaves the mount's effects pending. */
 async function open(target: HTMLElement, flush: () => void): Promise<void> {
   flush();
-  trigger(target)?.click();
-  await flushUntil(flush, () => listbox() !== null);
+  filterKey(target)?.click();
+  await flushUntil(flush, () => field() !== null);
 }
 
-/** Dismiss the popup before the test ends. Load-bearing rather than tidy: bits-ui's
- * portal presence waits for an `animationend` that never fires under happy-dom, so
- * content left open at unmount keeps its effects alive into the NEXT test file,
- * where they read deriveds whose owner is already destroyed and svelte warns
- * `derived_inert` — the effect half of the same leak ui/support/mount.ts purges the DOM
- * half of. Guarded, so it is a no-op in the test whose pick already closed it. */
-async function close(target: HTMLElement, flush: () => void): Promise<void> {
-  if (listbox() === null) return;
-  trigger(target)?.click();
-  await flushUntil(flush, () => listbox() === null);
+/** Press Escape in the filter field and settle. */
+function pressEscape(flush: () => void): void {
+  field()?.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+  );
+  flush();
 }
 
 type TocProps = ComponentProps<typeof PlanToc>;
 
-/** Mount PlanToc against the shared three-level fixture, closed. Every prop can
- * be overridden; the defaults are the shape most tests read against. */
+/** Mount the column against the shared three-level fixture, its filter closed. Every
+ * prop can be overridden; the defaults are the shape most tests read against. */
 function mountToc(props: Partial<TocProps> = {}): { target: HTMLElement; flush: () => void } {
   return render(PlanToc, {
     headings: HEADINGS,
@@ -193,11 +176,12 @@ function mountToc(props: Partial<TocProps> = {}): { target: HTMLElement; flush: 
     comments: [],
     previous: null,
     onJump: () => {},
+    placement: "column",
     ...props,
   });
 }
 
-/** Mount and open the popup via its trigger. */
+/** Mount the column and open its filter. */
 async function openToc(props: Partial<TocProps> = {}): Promise<{
   target: HTMLElement;
   flush: () => void;
@@ -207,18 +191,24 @@ async function openToc(props: Partial<TocProps> = {}): Promise<{
   return { target, flush };
 }
 
-/** Mount, open, and wait for the reading position to seed the roving selection —
+/** Mount, open the filter, and wait for the reading position to seed the roving selection —
  * the state every Tab/arrow-walk test starts from. */
 async function openTocSelected(props: Partial<TocProps> = {}): Promise<{
   target: HTMLElement;
   flush: () => void;
 }> {
   const { target, flush } = await openToc(props);
-  await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+  // The column's list was mounted before the filter opened, so bits-ui has already
+  // selected its first row; wait for the seed to move it to the row being read.
+  await flushUntil(flush, () =>
+    options().some(
+      (o) => o.hasAttribute("data-selected") && o.getAttribute("aria-current") === "location",
+    ),
+  );
   return { target, flush };
 }
 
-/** Mount with an `onExposeOpen` capture wired in, flushed so the exposed action
+/** Mount with an `onExposeFilter` capture wired in, flushed so the exposed action
  * is armed. */
 function renderExposedToc(props: Partial<TocProps> = {}): {
   target: HTMLElement;
@@ -226,7 +216,7 @@ function renderExposedToc(props: Partial<TocProps> = {}): {
   expose: ReturnType<typeof capture<() => void>>;
 } {
   const expose = capture<() => void>();
-  const { target, flush } = mountToc({ onExposeOpen: expose.cb, ...props });
+  const { target, flush } = mountToc({ onExposeFilter: expose.cb, ...props });
   flush();
   return { target, flush, expose };
 }
@@ -268,27 +258,34 @@ function expectUnfilteredOutline(): void {
 }
 
 describe("PlanToc surface", () => {
-  test("renders a trigger and nothing else until it is opened", () => {
-    const { target } = mountToc();
-    expect(trigger(target)?.textContent?.trim()).toBe("Contents");
-    expect(panel()).toBeNull();
+  // The column is the outline in view: its rows are there to read without a press, and
+  // the filter waits for `\`.
+  test("renders the labelled listbox at once, with the filter closed", () => {
+    const { flush } = mountToc();
+    flush();
+    expect(listbox()?.getAttribute("role")).toBe("listbox");
+    expect(listbox()?.getAttribute("aria-label")).toBe("Plan headings");
+    expect(options().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
+    expect(field()).toBeNull();
   });
 
-  // A popover anchored to its trigger, not a centered overlay: bits-ui's popover
-  // content is what carries the anchoring, so its slot is the contract.
-  test("opens a popover holding a labelled listbox", async () => {
-    const { target, flush } = await openToc();
-    expect(panel()).not.toBeNull();
-    expect(listbox()?.getAttribute("role")).toBe("listbox");
+  test("the float opens on its filter", () => {
+    const { flush } = mountToc({ placement: "float" });
+    flush();
+    expect(field()?.getAttribute("aria-label")).toBe("Filter headings");
+    expect(filterKey(document.body)).toBeNull();
+  });
+
+  test("opening the filter names the field", async () => {
+    await openToc();
     expect(listbox()?.getAttribute("aria-label")).toBe("Plan headings");
     // The field is named here rather than by the command's own label element,
     // which the vendored primitive leaves empty — so the name is worth pinning.
     expect(field()?.getAttribute("aria-label")).toBe("Filter headings");
-    await close(target, flush);
   });
 
   test("renders every heading in document order, indented by level", async () => {
-    const { target, flush } = await openToc();
+    await openToc();
     expectUnfilteredOutline();
     // One guide column per level between the plan's own root and the row (EXC-1106).
     // Read beside the indent it has to agree with, rather than in a test of its own.
@@ -300,7 +297,6 @@ describe("PlanToc surface", () => {
     ]);
     // Every heading is a destination while nothing is filtered.
     expect(options().length).toBe(4);
-    await close(target, flush);
   });
 
   // The guide count is the indent measured from the PLAN's root rather than from
@@ -309,20 +305,18 @@ describe("PlanToc surface", () => {
   // step in with nothing at zero — deliberate, and documented on the indent rule. A
   // guide drawn in that empty column would claim a parent the plan does not have.
   test("draws no guide for a root the plan does not have", async () => {
-    const { target, flush } = await openToc({ headings: SHALLOW, activeLine: null });
+    await openToc({ headings: SHALLOW, activeLine: null });
     expect(options().map(label)).toEqual(["Setup", "Prereqs", "Rollout"]);
     expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual(["1", "2", "1"]);
     expect(options().map((r) => r.style.getPropertyValue("--toc-guides"))).toEqual(["0", "1", "0"]);
-    await close(target, flush);
   });
 
   // Driven by the activeLine prop — the same value the breadcrumbs bar receives —
   // rather than by any scroll tracking of its own.
   test("marks the heading being read, and only that one", async () => {
-    const { target, flush } = await openToc();
+    await openToc();
     const marked = options().filter((r) => r.getAttribute("aria-current") === "location");
     expect(marked.map(label)).toEqual(["Details"]);
-    await close(target, flush);
   });
 
   // Opening scrolled to the current heading rests on seeding the command's value,
@@ -330,33 +324,30 @@ describe("PlanToc surface", () => {
   // it is an attribute, and it is the half a bits-ui bump could silently break
   // while leaving every other assertion here green.
   test("opens with the heading being read pre-selected", async () => {
-    const { target, flush } = await openTocSelected();
+    await openTocSelected();
     const chosen = options().filter((o) => o.getAttribute("aria-selected") === "true");
     expect(chosen.map(label)).toEqual(["Details"]);
-    await close(target, flush);
   });
 
   // EXC-1103: filtering collapses a match's ancestors into ONE header rather than
   // spending a row per ancestor per match.
   test("collapses a match's ancestors into a single breadcrumb header", async () => {
-    const { target, flush } = await openToc();
+    const { flush } = await openToc();
     await typeQuery("details", flush);
     expect(groupHeadings().map(label)).toEqual(["Overview › Approach"]);
     expect(options().map(label)).toEqual(["Details"]);
     // The listbox owns options and groups, and nothing else.
     expect(looseText()).toEqual([]);
-    await close(target, flush);
   });
 
   test("gathers two matching siblings under one shared header", async () => {
-    const { target, flush } = await openBranchedNotes();
+    await openBranchedNotes();
     // "Setup notes" and "Deploy notes" share the Rollout path, so one header
     // carries both; "Setup" holds the other. Groups, and the rows inside them,
     // in document order — no score reordering.
     expect(groupHeadings().map(label)).toEqual(["Plan › Setup", "Plan › Rollout"]);
     expect(options().map(label)).toEqual(["Setup notes", "Rollout notes", "Deploy notes"]);
     expect(groups().length).toBe(2);
-    await close(target, flush);
   });
 
   // A `# ` line with nothing after it is a real heading with empty text, so a
@@ -365,7 +356,7 @@ describe("PlanToc surface", () => {
   // disagree exactly here, and disagreeing leaves an unlabelled `role="group"` —
   // a level of structure naming nothing, which is what AC11 rules out.
   test("renders no header when every ancestor's text is empty", async () => {
-    const { target, flush } = await openToc({
+    const { flush } = await openToc({
       headings: [
         { level: 1, text: "", line: 1 },
         { level: 2, text: "Setup notes", line: 5 },
@@ -376,11 +367,10 @@ describe("PlanToc surface", () => {
     expect(options().map(label)).toEqual(["Setup notes"]);
     expect(groups()).toEqual([]);
     expect(groupHeadings()).toEqual([]);
-    await close(target, flush);
   });
 
   test("drops an empty ancestor from the breadcrumb rather than trailing a separator", async () => {
-    const { target, flush } = await openToc({
+    const { flush } = await openToc({
       headings: [
         { level: 1, text: "", line: 1 },
         { level: 2, text: "Setup", line: 5 },
@@ -390,28 +380,25 @@ describe("PlanToc surface", () => {
     });
     await typeQuery("notes", flush);
     expect(groupHeadings().map(label)).toEqual(["Setup"]);
-    await close(target, flush);
   });
 
   test("renders a top-level match with no header above it", async () => {
-    const { target, flush } = await openToc({ activeLine: 1 });
+    const { flush } = await openToc({ activeLine: 1 });
     await typeQuery("overview", flush);
     expect(options().map(label)).toEqual(["Overview"]);
     // No trail means no group at all, rather than an unlabelled one wrapping the row.
     expect(groupHeadings()).toEqual([]);
     expect(groups()).toEqual([]);
-    await close(target, flush);
   });
 
   test("renders every filtered match row flush left, whatever its heading level", async () => {
-    const { target, flush } = await openBranchedNotes();
+    await openBranchedNotes();
     // The header carries the hierarchy, so the rows no longer have to: a level-3
     // match sits at the same indent as a level-2 one.
     expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual(["0", "0", "0"]);
     // And no guides either (EXC-1106): the hierarchy is in the header, so a column
     // drawn beside a flush-left row would mark a nesting this view does not show.
     expect(options().map((r) => r.style.getPropertyValue("--toc-guides"))).toEqual(["0", "0", "0"]);
-    await close(target, flush);
   });
 
   // AC11, and the whole reason this is Command.Group rather than hand-rolled
@@ -419,7 +406,7 @@ describe("PlanToc surface", () => {
   // aria-hidden row (EXC-1096's shape, which this replaces) nor loose text a
   // listbox may not own.
   test("exposes each header as its group's label, not as an inert row", async () => {
-    const { target, flush } = await openToc();
+    const { flush } = await openToc();
     await typeQuery("details", flush);
 
     const group = groups()[0];
@@ -430,7 +417,6 @@ describe("PlanToc surface", () => {
     // primitive's item set, which is what keeps the walk on match rows alone.
     expect(named?.getAttribute("role")).toBeNull();
     expect(named?.getAttribute("data-slot")).not.toBe("command-item");
-    await close(target, flush);
   });
 
   // The header wears caret's shared section-label atom rather than a treatment of its
@@ -438,16 +424,15 @@ describe("PlanToc surface", () => {
   // vendored command-group.svelte, which a registry re-sync reverts silently
   // (doc/agents/shadcn-rules.md § Edits a re-sync will silently undo).
   test("dresses the header in the shared section-label atom", async () => {
-    const { target, flush } = await openToc();
+    const { flush } = await openToc();
     await typeQuery("details", flush);
     expect(groupHeadings()[0]?.classList.contains("form-label")).toBe(true);
-    await close(target, flush);
   });
 
   // The breadcrumb form is a search affordance only. Clearing the query puts the
   // nested tree back, with no group headers.
   test("returns to the nested tree when the query is cleared", async () => {
-    const { target, flush } = await openToc();
+    const { flush } = await openToc();
     await typeQuery("details", flush);
     expect(groupHeadings().length).toBe(1);
 
@@ -456,29 +441,26 @@ describe("PlanToc surface", () => {
     expectUnfilteredOutline();
     // Holds either side of the `{#key search === ""}` boundary, not just once.
     expect(looseText()).toEqual([]);
-    await close(target, flush);
   });
 
   test("shows helper text when the plan has no headings", async () => {
-    const { target, flush } = await openToc({ headings: [], activeLine: null });
+    await openToc({ headings: [], activeLine: null });
     expect(options().length).toBe(0);
     expect(helper()?.textContent?.trim()).toBe("No headings in plan");
     // A status message about the list, not a row in it.
     expect(listbox()?.contains(helper())).toBe(false);
-    await close(target, flush);
   });
 
   // A query that hits nothing is a different message from a plan that has no
   // headings, and only the second is a property of the plan.
   test("shows helper text when a query matches nothing", async () => {
-    const { target, flush } = await openToc();
+    const { flush } = await openToc();
     await typeQuery("nothing matches this", flush, () => options().length === 0);
     expect(options().length).toBe(0);
     expect(helper()?.textContent?.trim()).toBe("No headings match");
     // Narrowing to nothing is the one case aria-activedescendant cannot narrate —
     // there is no active option left to name — so the message says it out loud.
     expect(helper()?.getAttribute("role")).toBe("status");
-    await close(target, flush);
   });
 
   // EXC-1096's narration contract: the field names the row the roving walk is on, so
@@ -487,7 +469,7 @@ describe("PlanToc surface", () => {
   // dropdown, and it rests on the Viewport that command-list.svelte renders — see
   // ui/src/lib/shadcn-command-popover.test.ts for the primitive-level pin.
   test("the filter field narrates the row the selection is on", async () => {
-    const { target, flush } = await openToc();
+    const { flush } = await openToc();
     await flushUntil(flush, () => field()?.getAttribute("aria-activedescendant") != null);
 
     expect(field()?.getAttribute("role")).toBe("combobox");
@@ -498,17 +480,30 @@ describe("PlanToc surface", () => {
     const active = document.getElementById(field()?.getAttribute("aria-activedescendant") ?? "");
     expect(active?.getAttribute("role")).toBe("option");
     expect(active?.textContent?.trim()).toBe("Details");
-    await close(target, flush);
   });
 
-  // A pick hands the reviewer to the plan, so it reports the line AND leaves.
-  test("reports the picked heading's source line and dismisses", async () => {
+  // A pick hands the reviewer to the plan, so it reports the line and the filter closes.
+  test("a pick from the filter reports the heading's source line and closes the filter", async () => {
     const jump = capture<number>();
     const { flush } = await openToc({ activeLine: 1, onJump: jump.cb });
     options()[3]?.click();
-    await flushUntil(flush, () => listbox() === null);
+    await flushUntil(flush, () => field() === null);
     expect(jump.last()).toBe(20);
-    expect(listbox()).toBeNull();
+    expect(field()).toBeNull();
+  });
+
+  // Escape is one step out: the query, then the filter, which takes focus with it.
+  test("Escape clears the query, then closes the filter", async () => {
+    const { flush } = await openToc();
+    await typeQuery("details", flush, () => options().length === 1);
+    pressEscape(flush);
+    await flushUntil(flush, () => options().length === 4);
+    expect(field()?.value).toBe("");
+
+    pressEscape(flush);
+    await flushUntil(flush, () => field() === null);
+    expect(field()).toBeNull();
+    expect(options().length).toBe(4);
   });
 });
 
@@ -519,12 +514,11 @@ describe("PlanToc surface", () => {
 // two fills is a computed colour in a real browser, not a mount.
 describe("PlanToc match highlighting", () => {
   test("marks the characters the query matched inside the row's label", async () => {
-    const { target, flush } = await openToc();
+    const { flush } = await openToc();
     await typeQuery("det", flush, () => options().length === 1);
     const row = options()[0];
     if (row === undefined) throw new Error("no match row rendered");
     expect(hits(row)).toEqual(["Det"]);
-    await close(target, flush);
   });
 
   // AC6. The row's name comes from its contents, so whitespace leaked between the runs a
@@ -533,144 +527,56 @@ describe("PlanToc match highlighting", () => {
   // than on the row, because the vendored Command.Item pads its own check indicator with
   // whitespace this change neither adds nor can remove.
   test("adds no character to the label, so the row's accessible name is unchanged", async () => {
-    const { target, flush } = await openToc();
+    const { flush } = await openToc();
     await typeQuery("det", flush, () => options().length === 1);
     expect(options()[0]?.querySelector(".toc-label")?.textContent).toBe("Details");
-    await close(target, flush);
   });
 
   // AC7, and the reason one matcher can serve both views: the unfiltered view's query is
   // empty, so it renders through the same row snippet with nothing marked.
   test("marks nothing while the query is empty", async () => {
-    const { target, flush } = await openToc();
+    await openToc();
     expect(options().length).toBe(4);
     expect(options().flatMap(hits)).toEqual([]);
-    await close(target, flush);
   });
 
   // Clearing the query crosses bits-ui's `{#key search === ""}` boundary, which destroys
   // and rebuilds the whole viewport — so the marks going away is a claim about the
   // rebuilt view, not about the one that was marked.
   test("clears every mark when the query is cleared", async () => {
-    const { target, flush } = await openToc();
+    const { flush } = await openToc();
     await typeQuery("det", flush, () => options().length === 1);
     expect(options().flatMap(hits)).toEqual(["Det"]);
 
     await typeQuery("", flush, () => options().length === 4);
     expect(options().flatMap(hits)).toEqual([]);
-    await close(target, flush);
   });
 
   // A group is a set rather than a run, so a heading that both matches and encloses a
   // match appears TWICE — once as a row, once as text inside the header naming its
   // children's path. Only the row is marked; the header is wayfinding, not a result.
   test("leaves a breadcrumb header unmarked even when the query matches its text", async () => {
-    const { target, flush } = await openToc({ headings: BRANCHED, activeLine: null });
+    const { flush } = await openToc({ headings: BRANCHED, activeLine: null });
     await typeQuery("setup", flush, () => options().length === 2);
     expect(options().map(label)).toEqual(["Setup", "Setup notes"]);
     expect(groupHeadings().map(label)).toEqual(["Plan", "Plan › Setup"]);
     expect(options().flatMap(hits)).toEqual(["Setup", "Setup"]);
     expect(groupHeadings().flatMap(hits)).toEqual([]);
-    await close(target, flush);
   });
 
   // Splitting a label into several spans is precisely the edit that could drop a text
   // node where a listbox may not own one, so the structural guard is re-asserted with
   // highlighting on rather than assumed to still hold from the unfiltered case.
   test("keeps the listbox free of loose text while marks are rendered", async () => {
-    const { target, flush } = await openToc();
+    const { flush } = await openToc();
     await typeQuery("det", flush, () => options().length === 1);
     expect(looseText()).toEqual([]);
-    await close(target, flush);
   });
 });
 
-// EXC-1105: every row says what LEVEL its heading is, with a vendored lucide heading-N
-// glyph. The nested view already implies it in the indent; the filtered view passes
-// --toc-depth 0 for every row by design (EXC-1103), so there the marker is the only thing
-// carrying it. Which glyph a row wears, and that the marker stays out of the row's text and
-// out of the accessibility tree, are structural — the dimming and the alignment are painted
-// pixels and laid-out boxes, so they are pinned in test/e2e/plan-toc.e2e.ts instead.
-describe("PlanToc level markers", () => {
-  test("gives every row the glyph for its own heading level", async () => {
-    const { target, flush } = await openToc();
-    expect(options().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
-    expect(levelNames()).toEqual(["heading-1", "heading-2", "heading-3", "heading-2"]);
-    await close(target, flush);
-  });
-
-  // The view the issue exists for: the breadcrumb header carries the hierarchy and every row
-  // is flush left, so nothing but the marker says how deep a match sits. Asserted beside the
-  // depths to keep the two claims in one place — a marker that survived while the indent
-  // came back would not be evidence of anything.
-  test("keeps the glyph on every filtered row, where the indent no longer says it", async () => {
-    const { target, flush } = await openBranchedNotes();
-    expect(options().map(label)).toEqual(["Setup notes", "Rollout notes", "Deploy notes"]);
-    expect(options().map((r) => r.style.getPropertyValue("--toc-depth"))).toEqual(["0", "0", "0"]);
-    expect(levelNames()).toEqual(["heading-3", "heading-3", "heading-3"]);
-    await close(target, flush);
-  });
-
-  // Lucide ships six heading glyphs and the ATX extractor cannot produce a seventh, so this
-  // is a floor under a level arriving from a future caller rather than a case markdown
-  // reaches. What it rules out is asking Icon.svelte for a name the registry has no SVG for,
-  // which renders an empty box — hence the non-null assertions beside the names.
-  //
-  // NaN is the third fixture because it is the ONLY input that reaches the `??` fallback:
-  // every finite level leaves through the Math.min/Math.max pair, while NaN survives both
-  // and indexes the tuple out of range. Without it that branch goes unexercised and reads
-  // as dead code to the next person.
-  test("falls back to the nearest glyph for a level outside 1–6", async () => {
-    const { target, flush } = await openToc({
-      headings: [
-        { level: 0, text: "Below one", line: 1 },
-        { level: 9, text: "Past six", line: 5 },
-        { level: Number.NaN, text: "Not a number", line: 9 },
-      ],
-      activeLine: null,
-    });
-    expect(options().map(label)).toEqual(["Below one", "Past six", "Not a number"]);
-    expect(options().every((o) => levelGlyph(o) !== null)).toBe(true);
-    expect(levelNames()).toEqual(["heading-1", "heading-6", "heading-1"]);
-    await close(target, flush);
-  });
-
-  // AC7. A screen reader must not hear "heading 2" prepended to every row. Two independent
-  // halves, and the first is what actually carries it: `aria-hidden` takes the marker's
-  // whole subtree out of the name computation. The second is that it contributes no
-  // CHARACTER either — trimmed, because Icon.svelte inlines the vendored SVG verbatim and
-  // that file's own indentation lands as whitespace text nodes. Whitespace is the one thing
-  // that cannot rename an option (accessible names are whitespace-normalized, and the file's
-  // own `label` helper trims), so the claim worth pinning is that nothing else got in.
-  // Whether the name really computes to the heading alone is a role-engine question and is
-  // asserted in test/e2e/plan-toc.e2e.ts.
-  test("keeps the marker out of the accessibility tree and out of the row's text", async () => {
-    const { target, flush } = await openToc();
-    const row = options()[2];
-    if (row === undefined) throw new Error("no rows rendered");
-    expect(levelGlyph(row)?.getAttribute("aria-hidden")).toBe("true");
-    expect(levelGlyph(row)?.textContent?.trim()).toBe("");
-    expect(row.querySelector(".toc-label")?.textContent).toBe("Details");
-    expect(label(row)).toBe("Details");
-    await close(target, flush);
-  });
-
-  // No `looseText()` guard here, deliberately, and the reason generalises: that helper
-  // counts TEXT nodes sitting in the viewport, and the marker is an element — hoisting it
-  // clean out of its Command.Item leaves the guard green. Every test above queries the
-  // marker THROUGH its row, so an escape reds four of them; a fifth assertion that cannot
-  // fail for any edit this change could make would only look like coverage.
-});
-
-// The hook the motion pass hangs on (EXC-1107). The animation itself is CSS on a
-// portalled element and belongs to the browser suite; what belongs HERE is the one
-// thing a mount can answer — that the list really publishes which of its two views is
-// on screen, and that bits-ui's Command.List forwards the attribute to the DOM rather
-// than swallowing it. Every rule in the stylesheet keys on it, so a silently dropped
-// attribute would leave the whole pass inert with nothing else reding.
 describe("PlanToc view marker", () => {
   test("publishes which view the list is rendering", async () => {
-    const { target, flush } = await openToc({ headings: BRANCHED, activeLine: 5 });
+    const { flush } = await openToc({ headings: BRANCHED, activeLine: 5 });
     // Asserted here rather than only inside a poll condition: flushUntil gives up
     // silently after its tries, so a claim made only in the predicate passes vacuously.
     expect(listbox()?.getAttribute("data-toc-view")).toBe("outline");
@@ -684,8 +590,6 @@ describe("PlanToc view marker", () => {
     await typeQuery("", flush, () => options().length === BRANCHED.length);
     expect(options()).toHaveLength(BRANCHED.length);
     expect(listbox()?.getAttribute("data-toc-view")).toBe("outline");
-
-    await close(target, flush);
   });
 
   test("reads the trimmed query, so whitespace alone is still the outline", async () => {
@@ -693,7 +597,7 @@ describe("PlanToc view marker", () => {
     // and a whitespace-only query is where the two disagree. It must land on the view
     // that is actually rendered — the outline — or the filtered view's row animation
     // would fire over a list of several hundred outline rows.
-    const { target, flush } = await openToc({ headings: BRANCHED, activeLine: 5 });
+    const { flush } = await openToc({ headings: BRANCHED, activeLine: 5 });
     // Into the matches view FIRST, so the swing back to "outline" is what this test
     // observes. Going straight to whitespace from an empty field would leave the poll
     // predicate already true on entry and the assertion true before the keystroke —
@@ -704,64 +608,64 @@ describe("PlanToc view marker", () => {
     await typeQuery("   ", flush, () => options().length === BRANCHED.length);
     expect(options()).toHaveLength(BRANCHED.length);
     expect(listbox()?.getAttribute("data-toc-view")).toBe("outline");
-    await close(target, flush);
   });
 });
 
-// The popup's two entry points (EXC-1097): the trigger teaches its key, and the
-// key reaches the popup through a handle the component hands up. What a real
-// keydown does with that handle is e2e (test/e2e/plan-toc.e2e.ts); what belongs
-// here is the wiring either side of it.
+// The outline's keys: the column head teaches `\` and ⇧`\`, and `\` reaches the filter
+// through a handle the component hands up. What a real keydown does with that handle is
+// e2e (test/e2e/plan-toc.e2e.ts); what belongs here is the wiring either side of it.
 describe("PlanToc entry points", () => {
-  test("advertises the contents shortcut on the trigger", () => {
+  // Derived from the reservations rather than typed here, so the advertised hints
+  // cannot drift from the keys the dispatcher fires on.
+  test("the Outline key advertises \\ and the Hide outline key ⇧\\", () => {
     const { target } = mountToc();
-    // Derived from the reservation rather than typed here, so the advertised hint
-    // cannot drift from the key the dispatcher fires on.
-    expect(trigger(target)?.getAttribute("aria-keyshortcuts")).toBe("\\");
+    expect(filterKey(target)?.getAttribute("aria-keyshortcuts")).toBe("\\");
+    expect(hideKey(target)?.getAttribute("aria-keyshortcuts")).toBe("|");
   });
 
-  test("teaches the \\ key with a cap when shortcut hints are on", () => {
+  test("teaches both keys with caps when shortcut hints are on", () => {
     const { target } = mountToc({ showShortcutHints: true });
-    // aria-hidden, so the glyph never lands in the trigger's accessible name —
-    // the same split the compare toggle's `d` cap takes.
-    expect(cap(target)?.textContent?.trim()).toBe("\\");
-    expect(cap(target)?.getAttribute("aria-hidden")).toBe("true");
-    expect(trigger(target)?.textContent?.trim()).toContain("Contents");
-  });
-
-  test("hides the cap when shortcut hints are off", () => {
-    const { target } = mountToc();
-    expect(cap(target)).toBeNull();
-  });
-
-  test("hands up an open action that summons the popup", async () => {
-    const { target, flush, expose } = renderExposedToc();
-    const openAction = expose.last();
-    if (openAction === undefined) throw new Error("PlanToc never exposed its open action");
-    openAction();
-    await flushUntil(flush, () => listbox() !== null);
-    expect(panel()).not.toBeNull();
-    await close(target, flush);
-  });
-
-  // The key and the trigger have to open the SAME popup, and that is not free:
-  // bits-ui fires its onOpenChange from its own setter only (a trigger click,
-  // Escape, an outside click), so an open driven from outside the primitive
-  // receives none of the seeding the trigger path receives. Both tests below
-  // assert the seeded SELECTION and the cleared query rather than aria-current —
-  // that attribute is derived from the activeLine prop and reads the same whether
-  // the seeding ran or not, which is exactly how an unseeded open looks correct.
-  test("the exposed open seeds the heading being read, as the trigger does", async () => {
-    const { target, flush, expose } = renderExposedToc();
-    expose.last()?.();
-    await flushUntil(flush, () => listbox() !== null);
-    await flushUntil(flush, () => options().some((o) => o.hasAttribute("data-selected")));
+    // aria-hidden, so a glyph never lands in a key's accessible name.
+    expect(caps(filterKey(target)).map((c) => c.textContent?.trim())).toEqual(["\\"]);
+    const hide = caps(hideKey(target));
+    expect(hide.map((c) => c.textContent?.trim())).toEqual(["\\"]);
+    expect(hide[0]?.querySelector("[data-icon='arrow-big-up']")).not.toBeNull();
     expect(
-      options()
-        .filter((o) => o.getAttribute("aria-selected") === "true")
-        .map(label),
-    ).toEqual(["Details"]);
-    await close(target, flush);
+      [...caps(filterKey(target)), ...hide].every((c) => c.getAttribute("aria-hidden") === "true"),
+    ).toBe(true);
+  });
+
+  test("hides the caps when shortcut hints are off", () => {
+    const { target } = mountToc();
+    expect([...caps(filterKey(target)), ...caps(hideKey(target))]).toEqual([]);
+  });
+
+  test("the Hide outline key hides the column", () => {
+    let hidden = 0;
+    const { target } = mountToc({ onHide: () => hidden++ });
+    hideKey(target)?.click();
+    expect(hidden).toBe(1);
+  });
+
+  test("hands up an action that opens the filter and focuses it", async () => {
+    const { flush, expose } = renderExposedToc();
+    const openAction = expose.last();
+    if (openAction === undefined) throw new Error("PlanToc never exposed its filter action");
+    openAction();
+    await flushUntil(flush, () => document.activeElement === field() && field() !== null);
+    expect(document.activeElement).toBe(field());
+  });
+
+  // The key and the Outline key have to open the SAME filter. Both tests below assert
+  // the seeded SELECTION and the cleared query rather than aria-current — that attribute
+  // is derived from the activeLine prop and reads the same whether the seeding ran or
+  // not, which is exactly how an unseeded open looks correct.
+  test("the exposed open seeds the heading being read, as the Outline key does", async () => {
+    const { flush, expose } = renderExposedToc();
+    expose.last()?.();
+    await flushUntil(flush, () => field() !== null);
+    await flushUntil(flush, () => selectedLabels()[0] === "Details");
+    expect(selectedLabels()).toEqual(["Details"]);
   });
 
   test("the exposed open clears a query left by the previous session", async () => {
@@ -769,46 +673,44 @@ describe("PlanToc entry points", () => {
     await open(target, flush);
     await typeQuery("details", flush);
     expect(options().length).toBe(1);
-    await close(target, flush);
+    field()?.blur();
+    flush();
 
     expose.last()?.();
-    await flushUntil(flush, () => listbox() !== null);
+    await flushUntil(flush, () => field()?.value === "");
     expect(field()?.value).toBe("");
     await flushUntil(flush, () => options().length === 4);
     expect(options().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
-    await close(target, flush);
   });
 
   // Tab walks the list (EXC-1102). The primitive ignores Tab outright — its own
-  // keydown maps only the arrows and the vim chords — and the popover traps focus
-  // with a single tabbable inside, so before this the key did nothing at all.
+  // keydown maps only the arrows and the vim chords — so untouched the key would move
+  // focus out of the field and lose the walk.
   // These pin the walk itself; that the newly selected row is SCROLLED into view is
   // real-browser and lives in the e2e.
   test("Tab walks the selection to the next row", async () => {
-    const { target, flush } = await openTocSelected();
+    const { flush } = await openTocSelected();
     expect(selectedLabels()).toEqual(["Details"]);
 
     pressTab(flush);
     await flushUntil(flush, () => selectedLabels()[0] === "Verification");
     expect(selectedLabels()).toEqual(["Verification"]);
-    await close(target, flush);
   });
 
   test("Shift+Tab walks the selection to the previous row", async () => {
-    const { target, flush } = await openTocSelected();
+    const { flush } = await openTocSelected();
     expect(selectedLabels()).toEqual(["Details"]);
 
     pressTab(flush, { shift: true });
     await flushUntil(flush, () => selectedLabels()[0] === "Approach");
     expect(selectedLabels()).toEqual(["Approach"]);
-    await close(target, flush);
   });
 
   // The whole point of walking from the field rather than moving focus row to row:
   // `aria-activedescendant` on the field is what narrates the walk, and it only
   // does that while the field is the focused element (EXC-1096).
   test("the Tab walk leaves focus in the filter field", async () => {
-    const { target, flush } = await openTocSelected();
+    const { flush } = await openTocSelected();
 
     pressTab(flush);
     await flushUntil(flush, () => selectedLabels()[0] === "Verification");
@@ -817,17 +719,15 @@ describe("PlanToc entry points", () => {
     // below passing on its own — focus does not move when nothing moves it.
     expect(selectedLabels()).toEqual(["Verification"]);
     expect(document.activeElement).toBe(field());
-    await close(target, flush);
   });
 
-  // A Tab that reached the browser's default would move focus out of the field and,
-  // with one tabbable in the trap, straight back to it — losing the walk silently.
+  // A Tab that reached the browser's default would move focus out of the field,
+  // losing the walk silently.
   test("the Tab walk suppresses the browser's own tab move", async () => {
-    const { target, flush } = await openTocSelected();
+    const { flush } = await openTocSelected();
 
     const event = pressTab(flush);
     expect(event.defaultPrevented).toBe(true);
-    await close(target, flush);
   });
 
   // The command defaults `loop` OFF where menu content defaults it on (bits-ui
@@ -837,7 +737,7 @@ describe("PlanToc entry points", () => {
   // the Tab below — which is the point: Tab wrapping while the arrows stopped in
   // the same list would read as a bug.
   test("the Tab walk wraps at both ends of the list", async () => {
-    const { target, flush } = await openTocSelected();
+    const { flush } = await openTocSelected();
     expect(selectedLabels()).toEqual(["Details"]);
 
     // Forwards off the last row and back to the first.
@@ -851,14 +751,13 @@ describe("PlanToc entry points", () => {
     pressTab(flush, { shift: true });
     await flushUntil(flush, () => selectedLabels()[0] === "Verification");
     expect(selectedLabels()).toEqual(["Verification"]);
-    await close(target, flush);
   });
 
   // The arrows wrap on the same prop, which is the half of it that matters: `loop`
   // is set for the list, not for one key, and Tab wrapping while the arrows stopped
   // dead in the same list would read as a bug.
   test("the arrows wrap at both ends of the list", async () => {
-    const { target, flush } = await openTocSelected();
+    const { flush } = await openTocSelected();
     expect(selectedLabels()).toEqual(["Details"]);
 
     pressArrow(flush, "ArrowUp");
@@ -872,7 +771,6 @@ describe("PlanToc entry points", () => {
     pressArrow(flush, "ArrowDown");
     await flushUntil(flush, () => selectedLabels()[0] === "Overview");
     expect(selectedLabels()).toEqual(["Overview"]);
-    await close(target, flush);
   });
 
   // EXC-1122: while a key is held the OS keeps emitting keydowns, and preventDefault
@@ -880,7 +778,7 @@ describe("PlanToc entry points", () => {
   // hold-to-repeat timer, at two different rates, and every hold would double-step.
   // The repeat is dropped here; the timer owns the cadence.
   test("an OS repeat of a held Tab walks no further", async () => {
-    const { target, flush } = await openTocSelected();
+    const { flush } = await openTocSelected();
     expect(selectedLabels()).toEqual(["Details"]);
 
     // A press, then its repeat — the order a held key really arrives in. The OS
@@ -893,7 +791,6 @@ describe("PlanToc entry points", () => {
     // Still claimed while held, so the browser's own tab move stays suppressed for
     // as long as the key is down rather than only on its first press.
     expect(event.defaultPrevented).toBe(true);
-    await close(target, flush);
   });
 });
 
@@ -929,17 +826,9 @@ function row(text: string): HTMLElement {
   return found;
 }
 
-function peek(): HTMLElement | null {
-  return panel()?.querySelector<HTMLElement>(".toc-peek") ?? null;
-}
-
-function peekPart(name: string): string {
-  return peek()?.querySelector(`.toc-peek-${name}`)?.textContent?.trim() ?? "";
-}
-
 describe("PlanToc section notes", () => {
   test("describes a row's comments, unsent ones and change apart from its name", async () => {
-    const { target, flush } = await openToc({
+    await openToc({
       plan: PLAN,
       comments: [note(11, "Which frames?"), note(12, "Say how.", true)],
       previous: { version: 3, plan: PLAN.replace("Then decode them.", "Then parse them.") },
@@ -950,70 +839,19 @@ describe("PlanToc section notes", () => {
     // The stamps a sighted reviewer reads carry the same facts, so they stay out of the
     // name the option is announced by.
     expect(details.querySelector(".toc-meta")?.getAttribute("aria-hidden")).toBe("true");
-    await close(target, flush);
-  });
-});
-
-describe("PlanToc peek", () => {
-  test("shows where the selected heading sits, its range, its opening and its comments", async () => {
-    const { target, flush } = await openTocSelected({
-      plan: PLAN,
-      comments: [note(11, "Which frames?"), note(12, "Say how.", true)],
-    });
-    expect(peekPart("trail")).toBe("Overview › Approach");
-    expect(peekPart("title")).toBe("Details");
-    expect(peekPart("facts")).toContain("Lines 9–12");
-    expect(peekPart("facts")).toContain("1 unsent");
-    expect(peekPart("excerpt")).toBe("Read the frames first. Then decode them.");
-    const notes = [...(peek()?.querySelectorAll(".toc-peek-notes li") ?? [])];
-    expect(notes.map((li) => li.textContent?.replace(/\s+/g, " ").trim())).toEqual([
-      "L11 Which frames?",
-      "L12 Say how.",
-    ]);
-    await close(target, flush);
-  });
-
-  test("follows the selection as it walks", async () => {
-    const { target, flush } = await openTocSelected({ plan: PLAN });
-    pressTab(flush);
-    await flushUntil(flush, () => peekPart("title") === "Verification");
-    expect(peekPart("title")).toBe("Verification");
-    expect(peekPart("excerpt")).toBe("Run the suite.");
-    await close(target, flush);
-  });
-
-  test("counts the comments a section's subsections hold", async () => {
-    const { target, flush } = await openTocSelected({
-      activeLine: 5,
-      plan: PLAN,
-      comments: [note(11, "Which frames?"), note(12, "Say how.", true)],
-    });
-    expect(peekPart("title")).toBe("Approach");
-    expect(peekPart("trail")).toBe("Overview");
-    expect(peekPart("deeper")).toBe("2 more comments in subsections.");
-    await close(target, flush);
-  });
-
-  test("says nothing is selected when no heading matches", async () => {
-    const { target, flush } = await openToc({ plan: PLAN });
-    await typeQuery("nothing matches this", flush, () => options().length === 0);
-    await flushUntil(flush, () => peekPart("empty") !== "");
-    expect(peekPart("empty")).toBe("Nothing selected.");
-    await close(target, flush);
   });
 });
 
 describe("PlanToc filter states", () => {
   test("counts the rows a query leaves, and nothing while the query is empty", async () => {
-    const { target, flush } = await openToc({ headings: BRANCHED, activeLine: null });
+    const { flush } = await openToc({ headings: BRANCHED, activeLine: null });
     expect(panel()?.querySelector(".toc-match-count")?.textContent?.trim() ?? "").toBe("");
     await typeQuery("notes", flush, () => options().length === 3);
     expect(panel()?.querySelector(".toc-match-count")?.textContent?.trim()).toBe("3");
-    await close(target, flush);
   });
 
   test("offers to clear a query that matches nothing, beside the status rather than in it", async () => {
-    const { target, flush } = await openToc();
+    const { flush } = await openToc();
     await typeQuery("nothing matches this", flush, () => options().length === 0);
     const clear = [...(panel()?.querySelectorAll("button") ?? [])].find(
       (b) => b.textContent?.trim() === "Clear filter",
@@ -1025,6 +863,69 @@ describe("PlanToc filter states", () => {
     await flushUntil(flush, () => options().length === 4);
     expectUnfilteredOutline();
     expect(field()?.value).toBe("");
-    await close(target, flush);
+  });
+});
+
+// The latch follows the reading position. Moved by the plan scrolling under it, it snaps:
+// motion on a constant, scroll-driven change reads as lag. Moved by the reader's own jump,
+// it fades across.
+describe("PlanToc latch", () => {
+  const root = (target: HTMLElement) => target.querySelector(".plan-toc");
+  const column = (over: Partial<TocProps>) =>
+    reactiveProps({
+      headings: HEADINGS,
+      activeLine: 5,
+      plan: "",
+      comments: [],
+      previous: null,
+      onJump: () => {},
+      placement: "column" as const,
+      ...over,
+    });
+
+  test("snaps when the plan scrolls it to another heading", () => {
+    const p = column({});
+    const { target, flush } = render(PlanToc, p);
+    flush();
+    p.activeLine = 9;
+    flush();
+    expect(root(target)?.hasAttribute("data-latch-snap")).toBe(true);
+  });
+
+  test("fades across when the reader jumps to another heading", () => {
+    const p = column({ latchGlides: false });
+    const { target, flush } = render(PlanToc, p);
+    flush();
+    p.latchGlides = true;
+    p.activeLine = 9;
+    flush();
+    expect(root(target)?.hasAttribute("data-latch-snap")).toBe(false);
+  });
+});
+
+describe("PlanToc while comparing", () => {
+  const DELTAS = new Map([[5, { added: 8, removed: 0, line: 7, side: "after" as const }]]);
+
+  test("lists only the sections that changed, each with what it gained", () => {
+    const jump = capture<number>();
+    const { flush } = mountToc({ activeLine: null, deltas: DELTAS, onJump: jump.cb });
+    flush();
+    expect(options().map((o) => o.querySelector(".toc-label")?.textContent?.trim())).toEqual([
+      "Approach",
+    ]);
+    const approach = row("Approach");
+    expect(approach.querySelector(".toc-meta")?.textContent?.trim()).toBe("+8");
+    const described = document.getElementById(approach.getAttribute("aria-describedby") ?? "");
+    expect(described?.textContent?.trim()).toBe("8 lines added");
+    approach.click();
+    expect(jump.last()).toBe(5);
+  });
+
+  test("with no section changed, the float says so, with no field to filter", () => {
+    const { flush } = mountToc({ activeLine: null, deltas: new Map(), placement: "float" });
+    flush();
+    expect(options().length).toBe(0);
+    expect(helper()?.textContent?.trim()).toBe("No sections changed");
+    expect(field() === null).toBe(true);
   });
 });

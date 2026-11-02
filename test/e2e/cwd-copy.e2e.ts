@@ -1,5 +1,5 @@
-// Click-to-copy cwd path + the success alert (EXC-850). Clicking the compare-row path
-// copies the FULL absolute path to the clipboard (the row only shows the abbreviated
+// Click-to-copy cwd path + the success alert (EXC-850). Clicking the path at the
+// outline's foot copies the FULL absolute path to the clipboard (the row only shows the abbreviated
 // form) and raises a success toast bottom-right. Clipboard access + toast render +
 // stacking are real-browser behavior, so they are proven here rather than in the
 // happy-dom unit suite (per doc/agents/browser-testing.md); the queue's auto-dismiss
@@ -22,7 +22,7 @@ async function openCwdControl(page: Page, daemon: Daemon): Promise<Locator> {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/");
   await planSurface(page);
-  return page.locator(".control-row button.cwd");
+  return page.locator(".plan-outline button.cwd");
 }
 
 test("clicking the cwd path copies the absolute path and shows a success alert", async ({

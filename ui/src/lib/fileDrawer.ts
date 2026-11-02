@@ -14,6 +14,7 @@
 // view. registerPrefKey puts both keys in the `--fresh` reset set.
 
 import { registerPrefKey } from "$lib/definePref.ts";
+import { MIN_APP_WIDTH_PX } from "$lib/layout.ts";
 
 /** Which edge of the plan surface the drawer docks to. */
 export type DrawerEdge = "right" | "bottom";
@@ -22,6 +23,11 @@ export type DrawerEdge = "right" | "bottom";
  * MIN_PLAN_PX bounds the whole pane rather than the source column inside it. */
 export const MIN_DRAWER_PX = 240;
 export const MIN_PLAN_PX = 320;
+
+/** The pane a drawer docked right leaves: as wide as the narrowest window leaves it, less
+ * its two 6px --pane-gap margins (layout.css), so the plan header holds what it holds
+ * there. */
+export const MIN_PLAN_WIDTH_PX = MIN_APP_WIDTH_PX - 12;
 
 /** Opening size with nothing remembered: a share of the docking axis. */
 export const DEFAULT_DRAWER_SHARE = 0.45;
@@ -34,19 +40,36 @@ registerPrefKey(FILE_DRAWER_WIDTH_KEY);
 registerPrefKey(FILE_DRAWER_HEIGHT_KEY);
 
 /**
- * The largest drawer that still leaves the plan `MIN_PLAN_PX` of the `available`
- * docking axis — never below the drawer's own floor, so an axis too small to
- * hold both minimums yields a usable drawer rather than a collapsed one. Exported
- * because the resize handle reports it as `aria-valuemax`: one source for the
- * bound the clamp enforces and the bound assistive tech is told about.
+ * The largest drawer that still leaves the plan its minimum of the `available` docking
+ * axis — `MIN_PLAN_WIDTH_PX` beside a drawer docked right, `MIN_PLAN_PX` above one docked
+ * bottom — never below the drawer's own floor, so an axis too small to hold both minimums
+ * yields a usable drawer rather than a collapsed one. Exported because the resize handle
+ * reports it as `aria-valuemax`: one source for the bound the clamp enforces and the
+ * bound assistive tech is told about.
  */
-export function maxDrawerSize(available: number): number {
-  return Math.max(available - MIN_PLAN_PX, MIN_DRAWER_PX);
+export function maxDrawerSize(available: number, edge: DrawerEdge): number {
+  const plan = edge === "right" ? MIN_PLAN_WIDTH_PX : MIN_PLAN_PX;
+  return Math.max(available - plan, MIN_DRAWER_PX);
 }
 
 /** `size` bounded to a usable drawer that still leaves the plan its minimum. */
-export function clampDrawerSize(size: number, available: number): number {
-  return Math.min(Math.max(size, MIN_DRAWER_PX), maxDrawerSize(available));
+export function clampDrawerSize(size: number, available: number, edge: DrawerEdge): number {
+  return Math.min(Math.max(size, MIN_DRAWER_PX), maxDrawerSize(available, edge));
+}
+
+/** The narrowest the plan reads at beside the outline column and a right-hand drawer. */
+export const MIN_READING_PX = 800;
+
+/**
+ * Whether the outline column fits beside a drawer docked right: the plan keeps
+ * `MIN_READING_PX` once the `column` and the drawer it would leave room for have
+ * taken their share of the `available` width. `chosen` is the reader's remembered
+ * drawer width, or null for the default share.
+ */
+export function outlineFits(available: number, column: number, chosen: number | null): boolean {
+  const surface = available - column;
+  const drawer = clampDrawerSize(chosen ?? surface * DEFAULT_DRAWER_SHARE, surface, "right");
+  return surface - drawer >= MIN_READING_PX;
 }
 
 /**
@@ -62,8 +85,8 @@ export function drawerSizeFromPointer(
   available: number,
 ): number {
   return edge === "right"
-    ? clampDrawerSize(outer.right - pointer.clientX, available)
-    : clampDrawerSize(outer.bottom - pointer.clientY, available);
+    ? clampDrawerSize(outer.right - pointer.clientX, available, edge)
+    : clampDrawerSize(outer.bottom - pointer.clientY, available, edge);
 }
 
 function keyFor(edge: DrawerEdge): string {

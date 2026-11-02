@@ -257,6 +257,21 @@ describe("VersionComparePicker pair selection", () => {
     expect(base!.textContent).toContain("v3");
     expect(tgt!.textContent).toContain("v2");
   });
+
+  // The view keys close the row, so in the plan header the pair and its controls take
+  // the room the crumbs leave, and Versions stays at the header's right end.
+  test("leads with the pair and its controls, and ends with the view keys", () => {
+    const { target } = render(VersionComparePicker, baseProps);
+    const order = [...target.querySelectorAll(".compare-picker > *, .compare-cluster > *")].map(
+      (el) => el.className,
+    );
+    expect(order.map((c) => c.split(" ")[0])).toEqual([
+      "compare-cluster",
+      "pair",
+      "controls",
+      "tray",
+    ]);
+  });
 });
 
 describe("VersionComparePicker layout toggle", () => {

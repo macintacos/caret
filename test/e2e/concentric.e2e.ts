@@ -231,14 +231,16 @@ test("a Select's options nest in its listbox", async ({ daemon, page }) => {
   await expectConcentric(listbox, listbox.locator("[data-slot='select-item']").last(), "bl");
 });
 
-test("Contents: the filter nests in the panel's corner, and so does a top-level row's key as it scrolls past", async ({
+test("the outline's float: the filter nests in its corner, and so does a top-level row's key as it scrolls past", async ({
   daemon,
   page,
 }) => {
+  // Under --w-narrow the outline drops from the header's key as a float.
+  await page.setViewportSize({ width: 880, height: 900 });
   await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
-  await page.getByRole("button", { name: "Contents" }).click();
-  const panel = page.locator(".plan-toc-panel");
+  await page.getByRole("button", { name: "Show outline" }).click();
+  const panel = page.locator(".outline-float");
   await expect(panel).toBeVisible();
   await expectConcentric(panel, panel.locator("[data-slot='input-group']"), "tl");
   // The nearer wall is the side the key runs along; deeper rows step in from it.

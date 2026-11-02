@@ -32,7 +32,7 @@ rows, and the verbatim-file invariants, so a drifting set fails `bun test`.
   inlined, so without it nothing in the DOM tells one glyph from another: a caller that
   picks its icon at runtime could only be styled positionally and only be tested by
   matching path data. It is a `data-*` attribute rather than a class because production
-  code selects on it (`PlanToc.svelte`'s per-row heading marker) — the distinction
+  code selects on it (`SettingSelect.svelte`'s trigger chevron) — the distinction
   `browser-testing.md` § Locators draws.
 
 ## Adding an icon

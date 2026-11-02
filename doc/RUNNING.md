@@ -70,9 +70,9 @@ fails silently, with no error the page can catch. On macOS, check in order:
 caret plays a short synthesized cue at the moments worth hearing. News that arrives on its
 own: a plan arriving, being revised in place, or expiring; the daemon dropping or coming
 back; a verdict going out; a comment posted; a toast firing. Moments you cause while
-reading a plan: starting a comment, and discarding or dropping one; the contents popup or
-a breadcrumb menu opening; the search HUD opening, committing, stepping between matches,
-and closing; entering or leaving visual line-select; switching plans; comparing versions;
+reading a plan: starting a comment, and discarding or dropping one; the outline's filter
+or a breadcrumb menu opening; search opening, committing, stepping between matches, and
+closing; entering or leaving visual line-select; switching plans; comparing versions;
 showing or hiding the comments panel; the file preview opening or closing; Settings or the
 shortcuts help opening; a theme change; and copy-code. None is longer than a fraction of a
 second, and none is attached to scrolling, hovering, or pointer movement.
@@ -151,7 +151,7 @@ Caret shows a plan version in one of two views:
   row.
 - The **preview** renders the plan as a document: headings, lists, tables, and links as
   they would appear on a page. Code blocks are highlighted and keep the source view's copy
-  and wrap buttons. Cited files open, and the contents and breadcrumbs work there too. So
+  and wrap buttons. Cited files open, and the outline and breadcrumbs work there too. So
   do the keyboard cursor and its motions, stepping one wrapped line at a time; `V` selects
   whole wrapped lines, and `c` comments on the source lines the cursor or selection
   covers. `/` search works in the preview too, over the text as rendered: a phrase wrapped
@@ -178,6 +178,15 @@ heading you are reading in both.
 
 Compare mode always shows source, and hides the button. Leaving compare mode returns to
 the view you chose.
+
+The **outline** down the left of the plan lists its headings and marks the one you are
+reading. Click a heading to go to it. `\` filters the outline, and Shift+`\` hides or
+shows it. Your browser remembers a hidden outline. In a window under 960px wide, or when a
+file opened beside the plan would leave it too narrow to read, the outline folds into a
+button at the left of the plan's header, which opens it over the plan. While you compare
+versions, the outline folds into that button too, so the diff has the width. Opened, it
+lists only the sections that changed, each with its line count, and clicking one takes you
+to the change. Leaving compare brings the outline back to how it was before you compared.
 
 ## References caret recognizes
 

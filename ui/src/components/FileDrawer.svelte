@@ -26,9 +26,9 @@
     available: number;
     /** A resize the drawer is asking for, already clamped. */
     onResize: (px: number) => void;
-    /** Whether the lane is playing its closing wipe. The host keeps the drawer
-     * mounted for that beat and unmounts it when the wipe ends, so the pane
-     * slides shut with the excerpt still in it rather than vanishing. */
+    /** Whether the lane is closing: out of the layout, sliding past its edge. The
+     * host keeps the drawer mounted for that beat and unmounts it once it has gone,
+     * so the pane slides away with the excerpt still in it rather than vanishing. */
     closing?: boolean;
     /** The preview itself. */
     children: Snippet;
@@ -47,7 +47,7 @@
 
   /** The separator's upper bound, taken from the clamp's own bound so the range
    * assistive tech is told can't drift from the range actually enforced. */
-  const maxSize = $derived(maxDrawerSize(available));
+  const maxSize = $derived(maxDrawerSize(available, edge));
 
   function onPointerDown(e: PointerEvent & { currentTarget: HTMLElement }): void {
     const outer = root?.getBoundingClientRect();
@@ -89,7 +89,7 @@
     const step = e.key === grow ? KEY_STEP_PX : e.key === shrink ? -KEY_STEP_PX : 0;
     if (step === 0) return;
     e.preventDefault();
-    onResize(clampDrawerSize(size + step, available));
+    onResize(clampDrawerSize(size + step, available, edge));
   }
 </script>
 
@@ -98,11 +98,11 @@
      the edge rides the attribute's VALUE rather than only its presence (EXC-1129,
      and every `[data-file-drawer]` selector still matches); `--fd-size` is the
      lane's SETTLED size, which is what the card measures against while the lane is
-     still wiping open (EXC-1137); and the closing flag rides a data attribute
+     still sliding in (EXC-1137); and the closing flag rides a data attribute
      beside them rather than the `fd-closing` style class, so the card is reading a
      stated contract and not a CSS hook that could be renamed for style reasons. A
-     lane playing its closing wipe is a lane on its way out, and the card treats it
-     as no lane at all. -->
+     lane sliding out is a lane on its way out, and the card treats it as no lane at
+     all. -->
 <aside
   bind:this={root}
   data-file-drawer={edge}
@@ -151,13 +151,12 @@
     min-width: 0;
     padding: 0 0 1px var(--pane-gap);
     margin-bottom: -1px;
-    /* The open wipe: the lane grows from nothing while .diff-plan (flex: 1) gives
-       up the space. It animates on MOUNT because the drawer is unmounted when
-       closed, so there is no closed class to toggle. Re-docking swaps
-       animation-name below, which restarts the wipe — so an open drawer crossing
-       the breakpoint wipes in from its new edge rather than jumping there. The
-       global #app reduced-motion rule collapses all of it. */
-    animation: fd-open-right var(--dur-state) var(--ease-out);
+    /* The lane mounts at its full size, the plan giving up the room at once, and
+       slides in from the edge it docks to (lib/layoutSlide.ts sets where it starts
+       and on what duration). A pane entering takes --dur-pane; it leaves faster, on
+       --dur-state. A re-dock across the breakpoint snaps. The global #app
+       reduced-motion rule collapses all of it. */
+    transition: transform var(--slide-dur, var(--dur-pane)) var(--ease-out);
   }
   aside.fd-bottom {
     flex-direction: column;
@@ -165,58 +164,31 @@
     height: var(--fd-size);
     min-height: 0;
     padding: var(--pane-gap) 0 1px;
-    animation-name: fd-open-bottom;
-  }
-  @keyframes fd-open-right {
-    from {
-      width: 0;
-    }
-    to {
-      width: var(--fd-size);
-    }
-  }
-  @keyframes fd-open-bottom {
-    from {
-      height: 0;
-    }
-    to {
-      height: var(--fd-size);
-    }
   }
 
-  /* The close wipe: the same travel on the same dimension, run the other way, so
-     the pane reads as one object sliding shut rather than a second effect, on the
-     same --dur-state and --ease-out as the open.
-     `forwards` holds the collapsed frame until the host unmounts, so the lane
-     cannot flash back to full width in the gap. Higher specificity than the
-     rules above, so it wins for whichever edge is docked. */
+  /* Closing, the lane leaves the layout where it stands, so the plan takes its room
+     back in one pass, and slides out past its edge: the open run backwards, so the
+     pane reads as one object. Higher specificity than the rules above, so it wins for
+     whichever edge is docked. */
   aside.fd-closing {
-    animation: fd-close-right var(--dur-state) var(--ease-out) forwards;
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    margin-bottom: 0;
+    transform: translateX(100%);
+    transition-duration: var(--dur-state);
     /* The pane is leaving — its handle is no longer a thing to grab. */
     pointer-events: none;
   }
   aside.fd-bottom.fd-closing {
-    animation-name: fd-close-bottom;
-  }
-  @keyframes fd-close-right {
-    from {
-      width: var(--fd-size);
-    }
-    to {
-      width: 0;
-    }
-  }
-  @keyframes fd-close-bottom {
-    from {
-      height: var(--fd-size);
-    }
-    to {
-      height: 0;
-    }
+    top: auto;
+    left: 0;
+    transform: translateY(100%);
   }
 
-  /* The pane itself, pinned to the lane's full size on the docking axis so the wipe
-     clips the preview rather than squishing it through every frame of the open. */
+  /* The pane itself, pinned to the lane's full size on the docking axis, so a lane the
+     plan squeezes clips the preview rather than squishing it. */
   .fd-content {
     position: relative;
     display: flex;

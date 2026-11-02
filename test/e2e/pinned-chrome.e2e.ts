@@ -132,21 +132,18 @@ test("at wide width the navigator stays a right-docked card above the bar", asyn
   expect(navBox!.x).toBeGreaterThan(CARD_MAX_PX);
 });
 
-test("the plan pane's edges shade text under them: the top once scrolled, the bottom while plan lies below", async ({
+test("the plan pane's foot shades text under it while plan lies below", async ({
   daemon,
   page,
 }) => {
   await openPlan(page, daemon, TALL_PLAN);
   const pane = page.locator(".plan-pane");
   await expect(pane).toHaveAttribute("data-more-below");
-  await expect(pane).not.toHaveAttribute("data-scrolled");
 
   await wheelPlan(page, 400);
-  await expect(pane).toHaveAttribute("data-scrolled");
   await expect(pane).toHaveAttribute("data-more-below");
 
   await wheelPlan(page, 100_000);
-  await expect(pane).toHaveAttribute("data-scrolled");
   await expect(pane).not.toHaveAttribute("data-more-below");
 });
 
@@ -169,10 +166,10 @@ test("the daemon-replaced banner pushes the plan down, and the plan still ends a
   await expect(banner).toBeVisible({ timeout: 30_000 });
 
   const bannerBox = await banner.boundingBox();
-  const rowBox = await page.locator(".control-row").boundingBox();
+  const headerBox = await page.locator(".plan-header").boundingBox();
   const planBox = await page.locator(PLAN_SURFACE).boundingBox();
   const barBox = await page.getByRole("contentinfo", { name: "Status bar" }).boundingBox();
-  expect(bannerBox!.y + bannerBox!.height).toBeLessThanOrEqual(rowBox!.y + 1);
-  expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(planBox!.y + 1);
+  expect(bannerBox!.y + bannerBox!.height).toBeLessThanOrEqual(headerBox!.y + 1);
+  expect(headerBox!.y + headerBox!.height).toBeLessThanOrEqual(planBox!.y + 1);
   expect(planBox!.y + planBox!.height).toBeLessThanOrEqual(barBox!.y + 1);
 });

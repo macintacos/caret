@@ -205,13 +205,14 @@ test("a listbox option and the chosen option", async ({ daemon, page }) => {
   });
 });
 
-test("a Contents row and the one being read", async ({ daemon, page }) => {
+test("an outline row and the one being read", async ({ daemon, page }) => {
   await daemon.seed({ plan: TRAIL_PLAN });
   await page.goto("/");
   await planSurface(page);
   await jumpToHeading(page, "Bravo");
-  await page.getByRole("button", { name: "Contents" }).click();
-  const panel = page.locator(".plan-toc-panel");
+  await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("bravo");
+  await page.keyboard.press("\\");
+  const panel = page.locator(".plan-outline");
   const rows = panel.getByRole("option");
   await expect(rows.first()).toBeVisible();
   await expect(rows.and(panel.locator("[aria-current='location']"))).toHaveAttribute(

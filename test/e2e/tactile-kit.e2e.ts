@@ -141,22 +141,24 @@ function bedGaps(page: Page): Promise<{ bed: string; gaps: number[] }[]> {
     return [...document.querySelectorAll<HTMLElement>(".tray, [data-slot='toggle-group']")]
       .filter((bed) => bed.getClientRects().length > 0)
       .flatMap((bed) => {
-        const keys = [
+        // A latched or disabled key sits lower than a resting one, so only resting keys
+        // set the top and bottom gaps; every key sets the side gaps.
+        const all = [
           ...bed.querySelectorAll<HTMLElement>(
             "button.float-chip, .cap, [data-slot='toggle-group-item']",
           ),
-        ].filter(
-          (key) =>
-            key.getClientRects().length > 0 &&
-            !key.matches("[aria-pressed='true'], [data-state='on'], :disabled"),
+        ].filter((key) => key.getClientRects().length > 0);
+        const keys = all.filter(
+          (key) => !key.matches("[aria-pressed='true'], [data-state='on'], :disabled"),
         );
         if (keys.length === 0) return [];
         const b = bed.getBoundingClientRect();
         const boxes = keys.map((key) => key.getBoundingClientRect());
+        const sides = all.map((key) => key.getBoundingClientRect());
         const top = Math.min(...boxes.map((k) => k.top));
         const bottom = Math.max(...boxes.map((k) => k.bottom));
-        const left = Math.min(...boxes.map((k) => k.left));
-        const right = Math.max(...boxes.map((k) => k.right));
+        const left = Math.min(...sides.map((k) => k.left));
+        const right = Math.max(...sides.map((k) => k.right));
         return [
           {
             bed: bed.outerHTML.slice(0, 80),
@@ -263,7 +265,7 @@ async function expectCursorDarkens(page: Page, cursor: string, resting: string):
 
 // A latched face is tinted with the accent, darker than a plain hover face, so the cursor
 // steps the latched face rather than trading it for the hover face.
-test("on light paper the cursor darkens the Contents row being read", async ({ daemon, page }) => {
+test("on light paper the cursor darkens the outline row being read", async ({ daemon, page }) => {
   await page.emulateMedia({ colorScheme: "light" });
   const section = (name: string) =>
     [`## ${name}`, ...Array.from({ length: 30 }, (_, i) => `${name} line ${i + 1}.`)].join("\n\n");
@@ -271,8 +273,9 @@ test("on light paper the cursor darkens the Contents row being read", async ({ d
   await page.goto("/");
   await planSurface(page);
   await jumpToHeading(page, "Bravo");
-  await page.getByRole("button", { name: "Contents" }).click();
-  const read = page.locator(".plan-toc-panel [aria-current='location']");
+  await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("bravo");
+  await page.keyboard.press("\\");
+  const read = page.locator(".plan-outline [aria-current='location']");
   await expect(read).toHaveAttribute("data-selected", "");
   const cursor = await settledFace(read.locator(".toc-key"));
   await page.keyboard.press("ArrowDown");

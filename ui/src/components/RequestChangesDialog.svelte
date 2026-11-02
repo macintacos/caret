@@ -433,8 +433,8 @@
   .scratches .form-label :global(.icon) {
     color: color-mix(in lab, var(--attention), var(--stamp-word-toward) var(--stamp-word-mix));
   }
-  /* The count beside a section label, stamped into the sheet as the Contents panel's
-     counts are; an unsent count takes the comment stamp's tint. Global because the
+  /* The count beside a section label, stamped into the sheet as the outline's counts
+     are; an unsent count takes the comment stamp's tint. Global because the
      approve and reject guard (UnsentCommentsDialog) wears it too. */
   :global(.tally) {
     display: inline-flex;

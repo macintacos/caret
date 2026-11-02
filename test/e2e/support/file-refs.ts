@@ -37,18 +37,24 @@ export function fileRefCount(page: Page): Promise<number> {
 }
 
 /**
- * Resolve once the preview drawer's opening wipe has finished. The lane animates
- * its docking dimension from 0, so every rect inside it — and the coordinates a
- * drag is aimed at — keeps moving until the animation ends. Awaiting the
- * animation is exact and returns instantly once it is done, including under
- * reduced motion, where the global guard leaves nothing to wait for.
+ * Resolve once the preview drawer has slid into place, and the plan beside it with
+ * any outline column it folded. Until then every rect in the body, and the
+ * coordinates a drag is aimed at, keeps moving. Awaiting the slides is exact and
+ * returns instantly once they are done, including under reduced motion, where the
+ * global guard leaves nothing to wait for.
  */
 export async function settleDrawer(page: Page): Promise<void> {
   await page.locator("[data-file-drawer]").evaluate(async (el) => {
-    // A re-dock swaps animation-name mid-wipe, which cancels the running
-    // animation and rejects its `finished` with AbortError. Cancelled is settled
-    // for our purposes, so swallow it rather than failing the spec.
-    await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => undefined)));
+    const body = el.closest(".plan-body") ?? el;
+    // A slide another one interrupts is cancelled, which rejects its `finished` with
+    // AbortError. Cancelled is settled for our purposes, so swallow it rather than
+    // failing the spec.
+    await Promise.all(
+      body
+        .getAnimations({ subtree: true })
+        .filter((a) => a instanceof CSSTransition)
+        .map((a) => a.finished.catch(() => undefined)),
+    );
   });
 }
 

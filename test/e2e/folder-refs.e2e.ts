@@ -73,8 +73,8 @@ async function seedBothRefs(daemon: Daemon, page: Page, dir: string): Promise<vo
  * Open the excerpt lane, then the folder card, and leave both standing.
  *
  * `settleDrawer` before the second assertion is what makes this a claim rather
- * than a snapshot: a lane being evicted is still visible for the length of its
- * closing wipe, so asserting straight after the card opens would pass against the
+ * than a snapshot: a lane being evicted is still visible until it has slid
+ * out, so asserting straight after the card opens would pass against the
  * very behaviour these tests exist to forbid.
  */
 async function openBoth(page: Page): Promise<void> {
@@ -535,8 +535,8 @@ test("a directory reference opens the card beside an open preview", async ({ dae
 
     await page.locator('[data-file-ref="directory"]').click();
     await expect(page.locator(card)).toBeVisible();
-    // Settled before the lane is asserted: an evicted lane stays visible for the
-    // length of its closing wipe, so a bare check would pass against the old
+    // Settled before the lane is asserted: an evicted lane stays visible until it has
+    // slid out, so a bare check would pass against the old
     // behaviour. `openBoth` below carries the same guard for the tests that only
     // need the state, not the claim.
     await settleDrawer(page);

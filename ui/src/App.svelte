@@ -1078,26 +1078,22 @@
 
 <style>
   /* Pin the shell's direct children to their grid rows (layout.css declares
-     `auto auto auto 1fr auto`): TopBar, the optional banner, DiffPlanView's control
-     row, content, then the bottom status bar. Explicit placement keeps content on the
-     1fr row whether or not the banner or the control row is present — auto-placed,
-     the control row lands in the 1fr row under a banner and the plan drops below the
-     status bar. `:global` because these children render their own roots. */
+     `auto auto 1fr auto`): TopBar, the optional banner, content, then the bottom status
+     bar. Explicit placement keeps content on the 1fr row whether or not the banner is
+     present — auto-placed, content lands in the banner's row when it is absent and the
+     plan drops below the status bar. `:global` because these children render their own
+     roots. */
   .shell > :global(.topbar) {
     grid-row: 1;
   }
-  .shell > :global(.control-row) {
-    grid-row: 3;
-  }
-  .shell > :global(.diff-surface),
+  .shell > :global(.plan-body),
   .shell > :global(.empty) {
-    grid-row: 4;
+    grid-row: 3;
   }
   /* With no plan the content row is still a pane set into the body, so the window
      keeps its shape whether or not a plan is waiting. */
   .shell > :global(.empty) {
-    /* The gap the control row leaves above a plan's pane, which has none here. */
-    margin: 0.25rem var(--pane-gap) 0;
+    margin: 0 var(--pane-gap);
     border-radius: var(--pane-radius);
     background: var(--paper);
     box-shadow:
@@ -1105,19 +1101,18 @@
       var(--pane-lip);
   }
   .shell > :global(.status-bar) {
-    grid-row: 5;
+    grid-row: 4;
   }
 
   /* The hand-off's arrival, covering the content row OUT OF FLOW. The grid placement
      gives this absolutely-positioned child its containing block (.shell is positioned
      for exactly this, layout.css) and the inset stretches it to that area. Declared
      after both content branches, so it paints over them with no z-index of its own.
-     It covers the pane only, so an arriving plan's `.control-row` swaps at once above
-     it.
+     It covers the content row only, so the top bar stays continuous above it.
 
      Both ends of the placement are spelled out because out of flow they have to be: an
      `auto` grid line on an absolutely-positioned child resolves to the grid container's
-     PADDING EDGE rather than "span 1", so a bare `grid-row: 4` would run the curtain
+     PADDING EDGE rather than "span 1", so a bare `grid-row: 3` would run the curtain
      over the status bar too — the bar stays continuous through the curtain's hand-off,
      unlike the drain route's crossfade, which washes the whole viewport, bar included.
 
@@ -1129,7 +1124,7 @@
      for the rest of the session. */
   .arrival {
     position: absolute;
-    grid-row: 4 / 5;
+    grid-row: 3 / 4;
     grid-column: 1 / 2;
     inset: 0 var(--pane-gap);
     border-radius: var(--pane-radius);
@@ -1148,7 +1143,7 @@
   }
 
   /* Alert.Root's card default re-shaped into a full-width strip on the window's body,
-     between the top bar and the plan's controls. It consumes grid row 2 and pushes the
+     between the top bar and the plan. It consumes grid row 2 and pushes the
      content down rather than overlaying it, so it can't be mistaken for a transient
      toast. :global because the class rides the Alert child component; the overrides win
      because this scoped CSS is unlayered and Tailwind's utilities are layered. */

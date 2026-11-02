@@ -31,36 +31,67 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   the modal is for, such as "Keyboard shortcuts".
 - **A dialog labels its fields and sections in sentence case** (`.form-label`), at
   `--text-sm`, weight 600, `--ink-soft`, as Settings heads its sections. "(optional)"
-  follows the label at body weight. The shortcut groups and the Contents panel's
+  follows the label at body weight. The shortcut groups and the outline filter's
   breadcrumb headers wear it too. No label or stamp is styled in capitals; only a key's
   legend (the letters on a shortcut keycap, such as `ESC`) is, because it mirrors the key.
   `ui/src/lib/sentence-case.test.ts` fails on a new label styled in capitals.
 - **Read-only text inside a dialog**, such as the compiled preview and the context lines,
   sits in a cut on `--group-floor`.
-- **The window is a body, and the plan is a pane set into it.** Every control is cut into
-  the body (`--body`), and chrome never paints a bar face or a rule. The body is grained
-  rubber, lit faintly from above over the chrome (`--chrome-light`). The pane is a screen
-  set into it, inset `--pane-gap` with `--pane-radius` corners. Its recess,
-  `--pane-recess`, is a soft inset shade that reaches down from the top edge, with a 1px
-  contact edge and no outer layer, and the body's lit edge round it is `--pane-lip`. Each
-  view fills the pane with one floor. In the source view and the version compare, where
-  the diff library draws the plan, the room past the rows takes the rows' `--paper-sunk`.
-  The preview stays on `--paper`. The pane's edges shade the text under them with
-  `--pane-shade`: the top once the plan has scrolled (`data-scrolled` on `.plan-pane`),
-  the bottom while more lies below (`data-more-below`). The file drawer is a second pane
-  beside the plan, and the gap between them is the resize handle. It shades its edges as
-  the plan pane does: its foot while more of the file lies below, and the gutter's edge
-  while the code is scrolled sideways under it. Its gutter draws no rule. The empty screen
-  is the same pane, and the daemon banner sits on the body. Text cut into the body is
-  `--ink-soft` at its faintest, because `--ink-faint` falls under 4.5:1 there in several
-  palettes.
-- **A sheet hangs from a pane's top edge.** It tucks under the pane's lip (`--pane-lip`,
-  z-index 5 over the sheet's 4), so it carries no `--float-rim` and paints no top shade.
-  It is square at the top, and its foot rounds at
-  `calc(var(--key-radius) + var(--well-pad) + 3px)`, 14px: the bed's 11px plus the sheet's
-  own 3px pad round it. That matches the plan pane's corner, and its contents nest. It
-  wears `--paper-raised` with a `--rule` ring on `--float-mid`, and drops in from
-  `translateY(-100%)` over `--dur-state`. The plan search is the only sheet.
+- **The window is a body, and the plan is a pane set into it.** Every control outside the
+  plan pane is cut into the body (`--body`), and chrome never paints a bar face or a rule.
+  The outline column is cut into the body too, with no surface of its own: its rows lie as
+  keys on the rubber. The body is grained rubber, lit faintly from above over the chrome
+  (`--chrome-light`). The pane is a screen set into it, inset `--pane-gap` with
+  `--pane-radius` corners. Its recess, `--pane-recess`, is a soft inset shade that reaches
+  down from the top edge, with a 1px contact edge and no outer layer, and the body's lit
+  edge round it is `--pane-lip`. Each view fills the pane with one floor, `--plan-floor`.
+  In the source view and the version compare, where the diff library draws the plan, the
+  room past the rows takes the rows' `--paper-sunk`. The preview stays on `--paper`. The
+  pane's foot shades the text under it with `--pane-shade` while more lies below
+  (`data-more-below`). The file drawer is a second pane beside the plan, and the gap
+  between them is the resize handle. It shades its edges as the plan pane does: its foot
+  while more of the file lies below, and the gutter's edge while the code is scrolled
+  sideways under it. Its gutter draws no rule. The empty screen is the same pane, and the
+  daemon banner sits on the body. Text cut into the body is `--ink-soft` at its faintest,
+  because `--ink-faint` falls under 4.5:1 there in several palettes.
+- **The plan header holds its keys on the plan's floor.** It is stuck to the pane's top
+  edge above the scroller, on `--plan-floor`, and casts a foot shade in `--pane-shade`
+  over the plan that scrolls under it. While comparing, Base → Target and the diff toggles
+  take the crumbs' place, and Versions stays latched at the header's end. As the header
+  narrows, the view keys keep their place, and the rest gives way in this order:
+  1. Versions' word. Its glyph, count and cap stay, and so does its accessible name.
+  2. The Base and Target words. Each picker keeps its accessible name, "Base version" or
+     "Target version".
+  3. The Bars, +/− and Both toggles. Settings holds the same choice.
+
+  Steps 2 and 3 come sooner while the Split/Unified toggle is shown, because it needs the
+  room. Every step is measured on the header's own width, not the window's. A file drawer
+  docked right leaves the pane no narrower than the 468px the narrowest window (480px)
+  leaves it, so the steps hold beside a wide drawer too.
+- **Search swaps into the plan header.** On `/` the find row drops from the pane's top
+  edge over the crumbs, between the outline key and the view keys, on the header's own
+  floor. The crumbs keep their box under it, so their collapse holds still. The row drops
+  in from `translateY(-100%)` over `--dur-state`. Escape closes it, and closing lifts it
+  back as the crumbs fade in. The crumbs hide at once when the row opens. A fade-out there
+  would leave a quick close reversing a half-done fade, which cuts the fade back in short.
+  The match count sits at the field's end, and the key hints follow the step keys as text.
+  Closed, with Shortcut hints on, "/ to search" sits in the header before the view keys.
+  As the header narrows, the field gives up width first, until the key hints no longer fit
+  beside it. Beside the longest hints, a committed query's, that is about 8rem. Then the
+  key hints go, and the field gives up the rest, down to about five characters of query
+  (3rem). Past that, the parts that read least go, in this order:
+  1. The slash before the query.
+  2. The spaces in the match count, so "1 / 35" reads "1/35".
+  3. The header keys' hint caps, while the row is open, if the header is still too tight.
+
+  The step keys and Close always keep their room.
+- **The outline is a column, or a float.** The column stands left of the plan pane while
+  the window has room for it. Under 960px wide, or once it yields to a file the plan could
+  not keep its 800px reading column beside, the header's outline key drops it as a float
+  instead: a `--float-mid` float on `--paper-raised`, which opens on its filter. Comparing
+  folds the column too, without changing the reader's remembered choice. Its float then
+  lists only the sections that changed, each with its line count, or says "No sections
+  changed".
 - One emphasis per view. The amber accent is used verbatim, never lightened, and only for
   the wordmark, the primary action, and the text cursor. Everything else steps down
   through `--ink-soft` and `--ink-faint`.
@@ -107,7 +138,7 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
     corner plus the bar's 0.6rem padding, 20.6px;
   - the comment composer rounds at `--composer-radius`: its tray's corner plus
     `--composer-inset`, its padding;
-  - a menu, the Select listbox, and the Contents and heading-filter panels round at
+  - a menu, the Select listbox, the outline's float and the heading-filter panel round at
     `--key-radius` plus the inset round their rows. Their filter field's inset is the
     panel's radius less `--radius`;
   - the Discard confirm bubble pads its action tray evenly and rounds at the tray's corner
@@ -179,7 +210,7 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
     moves the same distance. On a risen face only `--ink` holds AA, so quieter text there
     steps up to `--ink`. A glyph there needs only 3:1, so it steps to a neutral key's
     label ink and stays a rung under the text.
-  - The cursor on a latched face, such as the Contents row being read or the latched
+  - The cursor on a latched face, such as the outline row being read or the latched
     compare toggle, takes `--neutral-face-latched-hover`. In light that is the latched
     face stepped toward black, because the plain hover face is lighter than it there.
   - A control that shows only under the pointer, such as the gutter "+", stays while it
@@ -191,10 +222,14 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   inferred from the cap it holds. It is smaller than the rest of the kit: caps of
   `--cap-submit-h` (28px) with `--text-base` labels, where the other caps are 32px, and
   every cap in it shrinks with it. The top bar's bell and settings keys match it, so every
-  key in the top bar is the same height. The submit trays are Approve in the top bar,
-  Comment and Save in the composer, Send for revision, the guard confirms (Approve with
-  comments, Reject anyway) and the confirm bubble's Discard. Enable notifications is not a
-  submit and keeps the full size.
+  key in the top bar is the same height. The plan header's view and outline keys stand at
+  that height too, though they submit nothing. So does the outline column's Hide outline
+  key: hiding the column puts the header's Show outline key in its place, and one height
+  keeps the key from changing size as they swap. Their trays, marked `.header-tray`, join
+  the same rule in `atoms.css`. The submit trays are Approve in the top bar, Comment and
+  Save in the composer, Send for revision, the guard confirms (Approve with comments,
+  Reject anyway) and the confirm bubble's Discard. Enable notifications is not a submit
+  and keeps the full size.
 - **Stamps.** Passive labels (`.stamp`, counts, the comment states, the file preview's
   line-range readout, the waiting screen's hint, the build tag's "Copied") sit in a
   pocket. Unlike a bed, a pocket has a darker floor (`--well-floor`) and its own shade and
@@ -210,9 +245,9 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - **Text fields draw no focus ring.** A focused `.field-well` lights one wall of its cut
   with `--field-wall`, `--field-edge-focus` on the lower wall in dark and the upper wall
   in light, and the amber text cursor shows the rest. A Command's filter field, in the
-  Contents panel and the breadcrumb bar, can't wear the class, so one rule in `atoms.css`
-  mirrors the recipe by appending `var(--field-wall)` to its rest cut. Read-only text that
-  takes focus, such as the file preview's code region, lights its wall the same way.
+  outline and the breadcrumb bar, can't wear the class, so one rule in `atoms.css` mirrors
+  the recipe by appending `var(--field-wall)` to its rest cut. Read-only text that takes
+  focus, such as the file preview's code region, lights its wall the same way.
 - **Modals draw no focus ring around themselves.** A modal takes focus on its own panel
   when it opens, so its keys work at once. It has no hover look either, and `base.css`
   leaves `[data-slot="dialog-content"]` and `[data-slot="alert-dialog-content"]` out of
@@ -232,11 +267,14 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
     sub-trigger stays risen while its submenu is open; command rows opt in at the call
     site, because `PlanToc` draws its own key inside the item;
   - the Settings nav, the theme list, the version picker, the breadcrumb menu, whose
-    headings on the trail latch (the crumbs in the bar borrow only the risen state, on
-    `--crumb-face-hover`, and never latch; the current crumb is marked by weight), the
-    comment navigator and the cwd path. In light the crumb's face is the white face the
-    bar's keys rest on. In dark it steps further toward `--ink` than the hover face,
-    because some palettes lift the bar close to the hover face;
+    headings on the trail latch (the crumbs in the plan header borrow only the risen
+    state, on `--crumb-face-hover`, and never latch; the current crumb is marked by
+    weight), the comment navigator and the cwd path. The crumbs lie on the plan's own
+    floor, `--paper` over the preview and `--paper-sunk` over the source view. In light
+    their face steps toward black from the raised paper, because a key's white face is the
+    plan's own paper there and would not read as risen. In dark it steps further toward
+    `--ink` than the hover face, as far as Catppuccin Frappé's `--ink` keeps 4.5:1 on it.
+    `theme.test.ts` holds the step to 4.5 ΔE on both floors in every palette;
   - the folder tree, a shadow-DOM list that wears the `--key-row-*` tokens directly, with
     a `:focus-visible` row risen and the chosen row latched. It keys on `:focus-visible`
     rather than the library's `data-item-focused`, so a pointer click never raises the
@@ -246,7 +284,7 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   In a menu or listbox the highlight is the only cursor, so a row rises on
   `data-highlighted` and never on hover. In a bits-ui listbox (a Select),
   `[data-selected]` means the chosen option, so the chosen row is named by `data-active`
-  and latched, never risen. The Contents row is the one key row outside the atom. It wears
+  and latched, never risen. The outline row is the one key row outside the atom. It wears
   the `--key-row-*` rise and press, so it stands as low as every other key row. It rises
   from its indent onward, and latches onto `--neutral-face-latched` while it is the
   section being read, an open exception to the accent rule
@@ -304,14 +342,14 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - **Unsent everywhere.** Every surface marks an unsent comment with the word "unsent", the
   `message-square-more` glyph in the comment stamps' word ink, and the tinted well. The
   word is never "draft". Size picks the tint: a row or a list takes `--unsent-floor`, and
-  a pill-sized count, such as the Contents panel's, takes the stamp's `--stamp-floor`. An
-  unsent section's label leads with the glyph in the word ink, and its text stays
-  `--ink-soft`. In Request changes, a committed row is a paper card, the saved comment's
-  low float, resting in a recessed tray, and an unsent row is a tinted well on the panel.
-  The Approve and Reject guards list each kind in its own group: committed comments in a
-  recessed group with hairline rows, unsent ones in a tinted well. The comment navigator
-  rests an unsent row as the tinted well with the glyph and "unsent", and a hovered or
-  current one becomes a key like any other row.
+  a pill-sized count, such as the outline's, takes the stamp's `--stamp-floor`. An unsent
+  section's label leads with the glyph in the word ink, and its text stays `--ink-soft`.
+  In Request changes, a committed row is a paper card, the saved comment's low float,
+  resting in a recessed tray, and an unsent row is a tinted well on the panel. The Approve
+  and Reject guards list each kind in its own group: committed comments in a recessed
+  group with hairline rows, unsent ones in a tinted well. The comment navigator rests an
+  unsent row as the tinted well with the glyph and "unsent", and a hovered or current one
+  becomes a key like any other row.
 - **Ink on a tint.** Text and icons on the unsent tint use `--ink-soft` or stronger, never
   `--ink-faint`, which falls below 4.5:1 there (2.80 to 4.33:1). Disclosure chevrons
   follow the same rule.
@@ -352,6 +390,35 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `cubic-bezier(0.22, 1, 0.36, 1)` (`--dur-state`, `--ease-out`): hover and focus tints,
   surfaces entering and leaving, and controls sliding between positions. The curve covers
   most of the distance at once, then brakes hard.
+- A pane or column entering, the outline column or the file drawer, is the one exception.
+  It takes 240 ms (`--dur-pane`), because a move that size reads as a jump cut at 160 ms.
+  It leaves on 160 ms (`--dur-state`), so it leaves faster than it enters.
+- The outline column and the file drawer move on the page itself
+  (`ui/src/lib/layoutSlide.ts`). The change applies at once, so the plan is laid out where
+  it ends on the first frame. Each part that moved then slides from where it stood on a
+  transform transition, so a second toggle reverses it mid-flight. A click during the
+  slide lands on whatever is under it. Opening a file slides the drawer in and a column it
+  folds out, in one frame; closing one slides the drawer out as the column stands again. A
+  part slides on `--dur-pane` when it enters or moves with an entering column, and on
+  `--dur-state` otherwise.
+- An outline toggle moves only the plan's left edge. The plan's floor stretches from the
+  column's edge, its text and crumbs slide with that edge, and the view keys and the
+  search hint hold still. Every part moves by transform alone, so no part waits on a frame
+  the main thread is still drawing.
+- Compare runs as one view transition, because its content swaps as it moves
+  (`ui/src/lib/paneMove.ts`, timed in `ui/src/styles/base.css`). Every part moves within
+  that one transition, on `--dur-state`; the column standing again, and the parts that
+  move with it, take `--dur-pane`. Each slot, a place in the header or the plan where one
+  thing replaces another, fades through: what leaves is gone by 40% of the run, and what
+  arrives starts there, so no slot shows two images at once. The Versions key slides only
+  once the slot it moves into is clear, and what it leaves fills only once it has passed.
+  Leaving compare, the column waits until the plan's old image has gone, and arrives with
+  the plan.
+- Motion confirms a change the reader made. The outline's latched row fades across when
+  the reader jumps to a heading, and moves with no motion while the plan scrolls under it,
+  because motion on a change that runs through a scroll reads as lag. What comes and goes
+  with the window's width changes with no motion too, because motion during a resize drag
+  jitters.
 - A key's return from a press is the one spring: it travels back over `--dur-state` on
   `--ease-spring`, past rest and back. The press itself, and every shading and colour
   change, stays on `--ease-out`.

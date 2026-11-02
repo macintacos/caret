@@ -104,7 +104,7 @@ describe("FileDrawer resize handle", () => {
     expect(el.getAttribute("aria-valuenow")).toBe("420");
     expect(el.getAttribute("aria-valuemin")).toBe(String(MIN_DRAWER_PX));
     // The bound reported is the bound enforced — both come from maxDrawerSize.
-    expect(el.getAttribute("aria-valuemax")).toBe(String(maxDrawerSize(1200)));
+    expect(el.getAttribute("aria-valuemax")).toBe(String(maxDrawerSize(1200, "right")));
     // A bare number announces as "420"; the unit belongs in valuetext.
     expect(el.getAttribute("aria-valuetext")).toBe("420 pixels");
   });
@@ -143,7 +143,7 @@ describe("FileDrawer keyboard resize", () => {
   });
 
   test("a step is clamped rather than squeezing the plan past its minimum", () => {
-    const max = maxDrawerSize(1200);
+    const max = maxDrawerSize(1200, "right");
     expect(pressOn({ edge: "right", size: max, available: 1200 }, "ArrowLeft")).toBe(max);
   });
 

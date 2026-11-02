@@ -37,8 +37,7 @@
      does the novelty job and needs a fill rather than just ink. */
   --attention-wash: color-mix(in lab, var(--attention) 18%, transparent);
 
-  /* A recessed code panel's ground, under Settings' copyable text and the Contents
-     peek's excerpt. */
+  /* A recessed code panel's ground, under Settings' copyable text. */
   --code-panel: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
 
   /* The tactile surfaces (their geometry is in styles/tokens.css), in their dark
@@ -59,8 +58,8 @@
   /* A press sinks at least as deep as the hover it comes from. Dark presses down to the
      latched face; light's hover is already the darker, so a press keeps it. */
   --neutral-face-press: var(--neutral-face-down);
-  /* A crumb lies flat on the bar's --body, which some palettes lift near the hover face, so
-     it steps further: as far as Catppuccin Frappé's --ink keeps 4.5:1 on it. */
+  /* A crumb lies flat on the plan header, over the plan's own floor, and steps further than
+     the hover face: as far as Catppuccin Frappé's --ink keeps 4.5:1 on it. */
   --crumb-face-hover: color-mix(in lab, var(--paper), var(--ink) 30%);
 
   /* The material the window is made of: every chrome control is cut into it and the plan
@@ -156,8 +155,9 @@
   --neutral-face-press: var(--neutral-face-hover);
   /* The hover face is lighter than a latched face, so the cursor steps the latched face. */
   --neutral-face-latched-hover: color-mix(in lab, var(--neutral-face-latched), black 6%);
-  /* That step lands on the grey bar's own shade, so a crumb rises to a key's white face. */
-  --crumb-face-hover: var(--neutral-face);
+  /* A key's white face is the plan's own paper in light, so a crumb steps toward black
+     instead, far enough to read off the source view's sunk paper too. */
+  --crumb-face-hover: color-mix(in lab, var(--paper-raised), black 15%);
   --accent-face-hover: color-mix(in lab, var(--accent), black 10%);
   --accent-face-press: var(--accent-face-hover);
   /* Dawnfox's --danger is too light for a light label at AA. */
@@ -177,7 +177,8 @@
   --switch-on: color-mix(in lab, var(--well-floor), var(--accent) 18%);
 }
 /* Light chrome is the grey body rather than the raised paper, so a stamp's or a count
-   chip's pocket there re-cuts off the body; modals and menus keep the paper's. */
-[data-theme="light"] :is(.topbar, .control-row, .status-bar) {
+   chip's pocket there, the outline column's included, re-cuts off the body; modals and
+   menus keep the paper's. */
+[data-theme="light"] :is(.topbar, .plan-outline, .status-bar) {
   --well-floor: color-mix(in lab, var(--body), var(--ink) 7%);
 }

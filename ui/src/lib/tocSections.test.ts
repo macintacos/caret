@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { CommentIndexEntry } from "$lib/feedback.ts";
 import { extractHeadings } from "$lib/toc.ts";
-import { describeSection, tocSections } from "$lib/tocSections.ts";
+import { describeSection, sectionDeltas, tocSections } from "$lib/tocSections.ts";
 
 // Line numbers matter to every assertion here, so the plan is spelled one line per
 // array entry with its 1-based number alongside.
@@ -45,49 +45,12 @@ function section(line: number, comments: CommentIndexEntry[] = [], previous: str
   return found;
 }
 
-describe("tocSections ranges", () => {
-  test("a section runs to its last non-blank line before the next heading at its level or above", () => {
-    expect(section(5).end).toBe(12);
-    expect(section(10).end).toBe(12);
-  });
-
-  test("the outermost section runs to the plan's last non-blank line", () => {
-    expect(section(1).end).toBe(16);
-    expect(section(14).end).toBe(16);
-  });
-});
-
-describe("tocSections excerpt", () => {
-  test("is the section's own opening lines as plain text, up to its first subsection", () => {
-    expect(section(5).excerpt).toBe("Read frames from the socket. Drop malformed ones.");
-    expect(section(1).excerpt).toBe("The whole plan, in brief.");
-  });
-
-  test("skips fenced code, which is not prose", () => {
-    const plan = "# Plan\n\n```ts\nconst x = 1;\n```\n\nAfter the fence.\n";
-    const sections = tocSections(extractHeadings(plan), plan, [], null);
-    expect(sections.get(1)?.excerpt).toBe("After the fence.");
-  });
-
-  test("is empty for a heading with no prose of its own", () => {
-    const plan = "# Plan\n## Child\n\nBody.\n";
-    expect(tocSections(extractHeadings(plan), plan, [], null).get(1)?.excerpt).toBe("");
-  });
-});
-
 describe("tocSections comments", () => {
   test("buckets each comment into the section whose own lines hold it", () => {
     const comments = [comment(7, "intake"), comment(12, "decode"), comment(16, "retention")];
     expect(section(5, comments).comments.map((c) => c.text)).toEqual(["intake"]);
     expect(section(10, comments).comments.map((c) => c.text)).toEqual(["decode"]);
     expect(section(14, comments).comments.map((c) => c.text)).toEqual(["retention"]);
-  });
-
-  test("counts the comments in a section's subsections apart from its own", () => {
-    const comments = [comment(7, "intake"), comment(12, "decode", true)];
-    expect(section(5, comments).deeper).toBe(1);
-    expect(section(1, comments).deeper).toBe(2);
-    expect(section(10, comments).deeper).toBe(0);
   });
 
   test("keeps drafts beside comments, flagged as drafts", () => {
@@ -145,5 +108,55 @@ describe("describeSection", () => {
 
   test("uses the singular for one comment", () => {
     expect(describeSection(section(5, [comment(7, "a")]), null)).toBe("1 comment");
+  });
+});
+
+// Compare mode: what each of the base version's sections gained or lost against the
+// target version, and the line the outline jumps to. The base is PLAN; each target below
+// is PLAN with one kind of change.
+describe("sectionDeltas", () => {
+  const without = (...drop: number[]) =>
+    PLAN.split("\n")
+      .filter((_, i) => !drop.includes(i + 1))
+      .join("\n");
+
+  test("counts the lines a section gained, and jumps to the first of them", () => {
+    // The target lacks lines 7 and 8, so Intake gained both in the base.
+    const deltas = sectionDeltas(HEADINGS, PLAN, without(7, 8));
+    expect([...deltas.entries()]).toEqual([[5, { added: 2, removed: 0, line: 7, side: "after" }]]);
+  });
+
+  test("counts an edited line as one gained and one lost", () => {
+    const target = PLAN.replace("Keep a week.", "Keep a day.");
+    expect(sectionDeltas(HEADINGS, PLAN, target).get(14)).toEqual({
+      added: 1,
+      removed: 1,
+      line: 16,
+      side: "after",
+    });
+  });
+
+  test("jumps a section that only lost lines to the first lost line in the target", () => {
+    const target = PLAN.replace("Parse each frame.", "Parse each frame.\nLog the bad ones.");
+    expect(sectionDeltas(HEADINGS, PLAN, target).get(10)).toEqual({
+      added: 0,
+      removed: 1,
+      line: 13,
+      side: "before",
+    });
+  });
+
+  test("counts a section the target lacks as wholly gained, its heading included", () => {
+    // Retention (lines 14–17) is absent from the target.
+    expect(sectionDeltas(HEADINGS, PLAN, without(14, 15, 16, 17)).get(14)).toEqual({
+      added: 4,
+      removed: 0,
+      line: 14,
+      side: "after",
+    });
+  });
+
+  test("leaves out every section whose own lines match", () => {
+    expect(sectionDeltas(HEADINGS, PLAN, PLAN).size).toBe(0);
   });
 });
