@@ -268,25 +268,33 @@ describe("DiffPlanView plan header", () => {
     expect(new Set(trays).size).toBe(1);
   });
 
-  test("closed, with hints on, the header says / to search", () => {
+  test("with hints on, the header's Search entry wears the cap of its shortcut", () => {
     const { target } = render(DiffPlanView, props());
-    expect(target.querySelector(".plan-header .search-hint")?.textContent).toContain("to search");
+    const entry = searchEntry(target);
+    expect(entry?.getAttribute("aria-keyshortcuts")).toBe("/");
+    expect(entry?.querySelector("[data-slot='kbd']")?.textContent).toBe("/");
   });
 
-  test("closed, with hints off, the header says nothing of search", () => {
+  test("with hints off, the Search entry keeps its magnifier and drops only the cap", () => {
     const { target } = render(DiffPlanView, props({ showShortcutHints: false }));
-    expect(target.querySelector(".plan-header .search-hint")).toBeNull();
+    const entry = searchEntry(target);
+    expect(entry?.querySelector("[data-icon='search']") != null).toBe(true);
+    expect(entry?.querySelector("[data-slot='kbd']") != null).toBe(false);
   });
 
   // The touch rule in atoms.css drops an aria-hidden element whose child is a keycap,
-  // caption and all: a key hint means nothing without keys.
-  test("the search hint is an aria-hidden key hint, so touch devices drop it", () => {
+  // caption and all: a key hint means nothing without keys, but the entry is a control.
+  test("a touch device keeps the Search entry and drops its cap", () => {
     const { target } = render(DiffPlanView, props());
-    const hint = target.querySelector(".plan-header .search-hint");
-    expect(hint?.getAttribute("aria-hidden")).toBe("true");
-    expect(hint?.querySelector(":scope > [data-slot='kbd']") != null).toBe(true);
+    const entry = searchEntry(target);
+    expect(entry?.hasAttribute("aria-hidden")).toBe(false);
+    expect(entry?.querySelector("[data-slot='kbd']")?.getAttribute("aria-hidden")).toBe("true");
   });
 });
+
+/** The plan header's Search entry, which opens the find row as `/` does. */
+const searchEntry = (target: Element) =>
+  target.querySelector<HTMLButtonElement>(".plan-header button[aria-label='Search']");
 
 /** Mount the view with a composer open on line 2 seeded with `text`, over a
  * controller whose injected sound dep records what the view asks it to play. The
@@ -995,12 +1003,12 @@ describe("DiffPlanView plan view toggle", () => {
     expect(enabled("actions.togglePreview")).toBe(false);
   });
 
-  test("the preview keeps the search hint and its shortcut", async () => {
+  test("the preview keeps the Search entry and its shortcut", async () => {
     const { target } = render(DiffPlanView, props());
-    await until(() => target.querySelector(".search-hint") != null);
+    await until(() => searchEntry(target) != null);
     toggle(target)!.click();
     await until(() => target.querySelector(".plan-preview") != null);
-    expect(target.querySelector(".search-hint") != null).toBe(true);
+    expect(searchEntry(target) != null).toBe(true);
     expect(enabled("actions.search")).toBe(true);
   });
 

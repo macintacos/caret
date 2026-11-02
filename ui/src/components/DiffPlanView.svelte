@@ -1077,7 +1077,7 @@
   ];
   // The column's edge moves only the plan's left edge, so the pane holds still: its floor
   // and recess stretch from that edge, and the plan's text, the crumbs and the find row
-  // slide with it, inside a crumb slot that clips them at its own end. The search hint and
+  // slide with it, inside a crumb slot that clips them at its own end. The Search entry and
   // the view keys stay where they are. Only transforms move, so nothing waits on a frame.
   const outlineParts: SlidePart[] = [
     ...columnParts,
@@ -1088,7 +1088,7 @@
     part(() => scrollEl),
     part(() => crumbSlotEl?.querySelector<HTMLElement>(".plan-breadcrumbs")),
     part(() => crumbSlotEl?.querySelector<HTMLElement>(".plan-search")),
-    part(() => crumbSlotEl?.querySelector<HTMLElement>(".search-hint")),
+    part(() => crumbSlotEl?.querySelector<HTMLElement>(".search-entry")),
     part(() => paneEl?.querySelector<HTMLElement>(".compare-picker")),
     { ...part(() => lipEl), stretches: "both" },
   ];
@@ -1879,7 +1879,6 @@
     openComposer: openRange,
     focusField: focusSearchField,
     blur: () => (document.activeElement as HTMLElement | null)?.blur(),
-    hintsShown: () => showShortcutHints,
     sound: sound.play,
   });
 
@@ -2827,9 +2826,10 @@
         </span>
       {/if}
       {#if !showDiff}
-        <!-- The crumbs, and the find row that drops over them. The slot clips, so the row
-             drops from the pane's top edge; the crumbs keep their box under it, so their
-             collapse measure holds still, and fade back in as it lifts. -->
+        <!-- The crumbs, the Search entry at the slot's end, and the find row that slides
+             open from it over them. The slot clips at its end, so the row comes out of the
+             entry; the crumbs keep their box under it, so their collapse measure holds
+             still, and fade back in as it tucks away. -->
         <div
           class="crumb-slot"
           bind:this={crumbSlotEl}
@@ -2850,9 +2850,20 @@
             />
           {/if}
           {#if runs("search")}
-            {#if showShortcutHints}
-              <span class="search-hint" aria-hidden="true"><Kbd class="kbd-sm">/</Kbd>to search</span>
-            {/if}
+            <!-- Named apart from its word, which a tight header drops. -->
+            <button
+              type="button"
+              class="search-entry"
+              aria-label="Search"
+              aria-keyshortcuts={ariaKeyshortcutsFor("actions.search")}
+              onclick={() => keyboard.openSearch()}
+            >
+              <Icon name="search" size={14} />
+              <span class="search-word">Search</span>
+              {#if showShortcutHints}
+                <Kbd class="kbd-sm" aria-hidden="true">/</Kbd>
+              {/if}
+            </button>
             {#if keyboardStore.searchOpen}
               <PlanSearch
                 hints={showShortcutHints}
@@ -3518,8 +3529,8 @@
     }
   }
 
-  /* The crumbs' slot, and the stage the find row drops onto: the clip is what makes the
-     row drop from the pane's top edge. */
+  /* The crumbs' slot, and the stage the find row slides across: the clip at its end is
+     what makes the row come out of the Search entry. */
   .crumb-slot {
     position: relative;
     flex: 1 1 auto;
@@ -3532,15 +3543,9 @@
   /* The breadcrumbs (EXC-946) GROW into the slot rather than sizing to their trail
      (EXC-957), which their own collapse depends on: sized to content, giving a level up
      would shrink the bar, which would free room, which would bring the level back.
-     Covered by the find row they and the search hint keep their boxes, so that measure
-     holds still, and they fade back in as it lifts. Only uncovering fades: the row drops
-     over them, and a fade out that a quick close reversed would cut the fade back in
-     short. */
-  .crumb-slot:not([data-covered]) .search-hint {
-    transition:
-      opacity var(--dur-state) var(--ease-out),
-      transform var(--slide-dur, var(--dur-state)) var(--ease-out);
-  }
+     Covered by the find row they keep their box, so that measure holds still, and they
+     fade back in as it tucks away. Only uncovering fades: the row covers them at once,
+     and a fade out that a quick close reversed would cut the fade back in short. */
   .crumb-slot:not([data-covered]) :global(.plan-breadcrumbs) {
     transition:
       opacity var(--dur-state) var(--ease-out),
@@ -3550,27 +3555,60 @@
     flex: 1 1 auto;
     min-width: 0;
   }
-  .crumb-slot[data-covered] :global(.plan-breadcrumbs),
-  .crumb-slot[data-covered] .search-hint {
+  .crumb-slot[data-covered] :global(.plan-breadcrumbs) {
     visibility: hidden;
     opacity: 0;
   }
-  /* The closed search, set into the header before the view keys, on the plan's floor so
-     crumbs sliding in as the column folds pass under it. --ink-soft rather than
-     --ink-faint, which falls under 4.5:1 on the plan's floor in several palettes. */
-  .search-hint {
+  /* The way into search, at the slot's end before the view keys: a closed field the find
+     row slides open from and tucks back into. It lies in a field's shallow cut rather than
+     standing as a key, so the crumbs and the view keys keep the header's weight. Its
+     hover, focus and press are a ghost control's. A ring of the plan's floor hides the
+     crumbs that pass under it as the column folds. */
+  .search-entry {
+    --entry-ring: 0 0 0 0.2rem var(--plan-floor);
     position: relative;
     flex: none;
     margin-left: auto;
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    padding-inline: 0.2rem 0.35rem;
-    background: var(--plan-floor);
+    height: var(--ctl-h);
+    padding-inline: 0.55rem;
+    border: none;
+    border-radius: calc(var(--key-radius) + var(--well-pad));
+    background-color: var(--field-floor);
+    box-shadow: var(--panel-recess), var(--entry-ring);
     color: var(--ink-soft);
     font-size: var(--text-xs);
     white-space: nowrap;
     user-select: none;
+    transition:
+      background-color var(--dur-state) var(--ease-out),
+      color var(--dur-state) var(--ease-out),
+      box-shadow var(--dur-state) var(--ease-out),
+      transform var(--slide-dur, var(--dur-state)) var(--ease-out);
+  }
+  .search-entry:is(:hover, :focus-visible) {
+    background-image: linear-gradient(var(--ink-wash), var(--ink-wash));
+    color: var(--ink);
+  }
+  .search-entry:is(:active, [data-key-pressed]) {
+    background-image: linear-gradient(var(--ink-wash), var(--ink-wash));
+    box-shadow:
+      var(--panel-recess),
+      inset 0 1px var(--press-blur) var(--press-shade),
+      var(--entry-ring);
+  }
+  /* The row slides over the entry, so it stays until the row has covered it. */
+  .crumb-slot[data-covered] .search-entry {
+    visibility: hidden;
+    transition: visibility var(--dur-pane) step-end;
+  }
+  /* Its word goes where Versions' word does: keep in step with VersionComparePicker. */
+  @container plan-header (width < 37.45rem) {
+    .search-word {
+      display: none;
+    }
   }
 
   /* The outline's float: the column's list on a raised panel, dropped from the

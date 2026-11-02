@@ -420,7 +420,7 @@ over flourish: functional one-shot transitions draw their duration/easing from t
 surface arriving or leaving, a control sliding between positions — takes `--dur-state` on
 `--ease-out`, the same in both directions
 ([`design/patterns.md`](../../design/patterns.md) § Motion holds the decision).
-`--dur-pane` is one other duration, for a pane or column entering (it leaves on
+`--dur-pane` is another duration, for a pane, column or PlanSearch entering (it leaves on
 `--dur-state`), and `--dur-travel` the last, for a scroll crossing distance;
 `motion.test.ts` pins the vocabulary as closed at those three. The portalled shadcn
 surfaces (dialogs, dropdown menus, tooltips, popovers) instead animate their enter/exit

@@ -348,27 +348,27 @@ test("a column stood by Space on the header's key brings its key in held down", 
   expect(Math.min(...sinks)).toBeGreaterThan(pressed - 0.1);
 });
 
-test("Versions and the search hint hold their place while the outline folds and stands", async ({
+test("Versions and the Search entry hold their place while the outline folds and stands", async ({
   daemon,
   page,
 }) => {
   await daemon.seedVersions(2, [PLAN, REVISED]);
   await open(page);
-  await expect(page.locator(".search-hint")).toBeVisible();
+  await expect(page.locator(".search-entry")).toBeVisible();
 
   for (const settled of [outlineKey, hideKey]) {
     await layoutStill(page);
-    // Where Versions and the hint stand each frame, and whether anything slid meanwhile.
+    // Where Versions and the entry stand each frame, and whether anything slid meanwhile.
     await versions(page).evaluate((el) => {
       const w = window as unknown as { __xs: number[][]; __slid: boolean; __sampling: boolean };
-      const hint = document.querySelector(".search-hint");
+      const entry = document.querySelector(".search-entry");
       w.__xs = [];
       w.__slid = false;
       w.__sampling = true;
       const sample = () => {
         w.__xs.push([
           el.getBoundingClientRect().left,
-          hint?.getBoundingClientRect().left ?? Number.NaN,
+          entry?.getBoundingClientRect().left ?? Number.NaN,
         ]);
         w.__slid ||= document.getAnimations().some((a) => a instanceof CSSTransition);
         if (w.__sampling) requestAnimationFrame(sample);
@@ -384,7 +384,7 @@ test("Versions and the search hint hold their place while the outline folds and 
       return { xs: w.__xs, slid: w.__slid };
     });
     expect(slid).toBe(true);
-    for (const [i, part] of ["Versions", "the search hint"].entries()) {
+    for (const [i, part] of ["Versions", "the Search entry"].entries()) {
       const at = xs.map((x) => x[i] ?? Number.NaN);
       expect(Math.max(...at) - Math.min(...at), part).toBeLessThan(0.5);
     }
@@ -628,7 +628,7 @@ test("a file opened as the outline stands takes the plan's floor on from where i
   }
 });
 
-test("the search hint keeps its place beside Versions as the outline folds while a file closes", async ({
+test("the Search entry keeps its place beside Versions as the outline folds while a file closes", async ({
   daemon,
   page,
 }) => {
@@ -643,14 +643,14 @@ test("the search hint keeps its place beside Versions as the outline folds while
     await layoutStill(page);
 
     // The outline folds 80ms after the click that closes the file. Each frame: how far
-    // Versions stands from the hint.
+    // Versions stands from the entry.
     await versions(page).evaluate((versions) => {
       const w = window as unknown as { __gaps: number[]; __midSlide: boolean; __sampling: boolean };
-      const hint = document.querySelector(".search-hint") as HTMLElement;
+      const entry = document.querySelector(".search-entry") as HTMLElement;
       w.__gaps = [];
       w.__sampling = true;
       const sample = () => {
-        w.__gaps.push(versions.getBoundingClientRect().left - hint.getBoundingClientRect().left);
+        w.__gaps.push(versions.getBoundingClientRect().left - entry.getBoundingClientRect().left);
         if (w.__sampling) requestAnimationFrame(sample);
       };
       const fold = () => {

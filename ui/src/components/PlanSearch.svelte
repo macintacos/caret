@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The vim `/` search row (EXC-832), dropped over the crumbs in the plan pane's header.
+  // The vim `/` search row (EXC-832), slid open over the crumbs in the plan pane's header.
   // It renders only the surface; DiffPlanView owns the search state, the highlight, and
   // the cursor/commit behaviour, reaching them through these callbacks.
   import Icon from "@/components/Icon.svelte";
@@ -167,7 +167,8 @@
 
 <style>
   /* A row laid over the header's crumb slot (DiffPlanView), on the plan's own floor.
-     The slot clips it, so it drops from the pane's top edge and tucks back under it. */
+     The slot clips it at its end, where the Search entry sits, so it slides open out of
+     the entry and tucks back into it. */
   .plan-search {
     --query-floor: 3rem;
     --search-cap: 24px;
@@ -180,21 +181,21 @@
     align-items: center;
     gap: 0.55rem;
     background: var(--plan-floor);
-    animation: search-drop var(--dur-state) var(--ease-out);
+    animation: search-open var(--dur-pane) var(--ease-out);
   }
-  /* Closing tucks the row back under the edge while planKeyboard keeps it mounted;
+  /* Closing tucks the row back into the entry while planKeyboard keeps it mounted;
      `forwards` holds it there until the unmount. */
   .plan-search.closing {
     animation: search-tuck var(--dur-state) var(--ease-out) forwards;
   }
-  @keyframes search-drop {
+  @keyframes search-open {
     from {
-      transform: translateY(-100%);
+      transform: translateX(100%);
     }
   }
   @keyframes search-tuck {
     to {
-      transform: translateY(-100%);
+      transform: translateX(100%);
     }
   }
 

@@ -59,7 +59,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   over the plan that scrolls under it. While comparing, Base → Target and the diff toggles
   take the crumbs' place, and Versions stays latched at the header's end. As the header
   narrows, the view keys keep their place, and the rest gives way in this order:
-  1. Versions' word. Its glyph, count and cap stay, and so does its accessible name.
+  1. Versions' word and the Search entry's word. Versions' glyph, count and cap stay, the
+     entry's magnifier and cap stay, and both keep their accessible names.
   2. The Base and Target words. Each picker keeps its accessible name, "Base version" or
      "Target version".
   3. The Bars, +/− and Both toggles. Settings holds the same choice.
@@ -68,18 +69,23 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   room. Every step is measured on the header's own width, not the window's. A file drawer
   docked right leaves the pane no narrower than the 468px the narrowest window (480px)
   leaves it, so the steps hold beside a wide drawer too.
-- **Search swaps into the plan header.** On `/` the find row drops from the pane's top
-  edge over the crumbs, between the outline key and the view keys, on the header's own
-  floor. The crumbs keep their box under it, so their collapse holds still. The row drops
-  in from `translateY(-100%)` over `--dur-state`. Escape closes it, and closing lifts it
-  back as the crumbs fade in. The crumbs hide at once when the row opens. A fade-out there
-  would leave a quick close reversing a half-done fade, which cuts the fade back in short.
-  The match count sits at the field's end, and the key hints follow the step keys as text.
-  Closed, with Shortcut hints on, "/ to search" sits in the header before the view keys.
-  As the header narrows, the field gives up width first, until the key hints no longer fit
-  beside it. Beside the longest hints, a committed query's, that is about 8rem. Then the
-  key hints go, and the field gives up the rest, down to about five characters of query
-  (3rem). Past that, the parts that read least go, in this order:
+- **Search swaps into the plan header.** Closed, a Search entry sits at the end of the
+  crumbs, before the view keys: a magnifier, the word "Search" and, with Shortcut hints
+  on, the `/` cap. It lies in a text field's cut rather than standing as a key, so it
+  never outweighs the view keys. It hovers, takes focus and presses as a ghost control
+  does, and a touch device drops only its cap. A click, Enter or `/` opens the find row
+  over the crumbs, between the outline key and the view keys, on the header's own floor.
+  The crumbs keep their box under it, so their collapse holds still. The entry is the last
+  thing in the crumbs' slot, which clips at its end, so the row slides out of the entry
+  from `translateX(100%)` over `--dur-pane`. Escape closes it, and closing slides it back
+  into the entry over `--dur-state` as the crumbs fade in. The crumbs hide at once when
+  the row opens. A fade-out there would leave a quick close reversing a half-done fade,
+  which cuts the fade back in short. The match count sits at the field's end, and the key
+  hints follow the step keys as text. As the header narrows, the field gives up width
+  first, until the key hints no longer fit beside it. Beside the longest hints, a
+  committed query's, that is about 8rem. Then the key hints go, and the field gives up the
+  rest, down to about five characters of query (3rem). Past that, the parts that read
+  least go, in this order:
   1. The slash before the query.
   2. The spaces in the match count, so "1 / 35" reads "1/35".
   3. The header keys' hint caps, while the row is open, if the header is still too tight.
@@ -465,9 +471,10 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `cubic-bezier(0.22, 1, 0.36, 1)` (`--dur-state`, `--ease-out`): hover and focus tints,
   surfaces entering and leaving, and controls sliding between positions. The curve covers
   most of the distance at once, then brakes hard.
-- A pane or column entering, the outline column or the file drawer, is the one exception.
-  It takes 240 ms (`--dur-pane`), because a move that size reads as a jump cut at 160 ms.
-  It leaves on 160 ms (`--dur-state`), so it leaves faster than it enters.
+- Two moves are the exception: a pane or column entering, the outline column or the file
+  drawer, and the find row sliding open across the plan header. Each takes 240 ms
+  (`--dur-pane`), because a move that size reads as a jump cut at 160 ms. Each leaves on
+  160 ms (`--dur-state`), so it leaves faster than it enters.
 - The outline column and the file drawer move on the page itself
   (`ui/src/lib/layoutSlide.ts`). The change applies at once, so the plan is laid out where
   it ends on the first frame. Each part that moved then slides from where it stood on a
@@ -478,8 +485,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `--dur-state` otherwise.
 - An outline toggle moves only the plan's left edge. The plan's floor stretches from the
   column's edge, its text and crumbs slide with that edge, and the view keys and the
-  search hint hold still. Every part moves by transform alone, so no part waits on a frame
-  the main thread is still drawing.
+  Search entry hold still. Every part moves by transform alone, so no part waits on a
+  frame the main thread is still drawing.
 - Compare runs as one view transition, because its content swaps as it moves
   (`ui/src/lib/paneMove.ts`, timed in `ui/src/styles/base.css`). Every part moves within
   that one transition, on `--dur-state`; the column standing again, and the parts that

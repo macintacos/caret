@@ -806,6 +806,18 @@ describe("every theme", () => {
       }
     }
   });
+  // The plan header's Search entry lies in a text field's cut, and its hover is the ghost
+  // controls': the field's floor under --ink-wash, a tint of ink the browser composites.
+  test("moves the Search entry's washed hover a findable step off its field's floor", () => {
+    for (const [id, theme] of themeEntries()) {
+      const pct = Number(/(\d+)%/.exec(schemeDecls(theme.scheme)["--ink-wash"] ?? "")?.[1]);
+      const floor = derived("--field-floor", theme);
+      expect(
+        deltaE(floor, banded(floor, theme.tokens["--ink"], pct / 100)),
+        id,
+      ).toBeGreaterThanOrEqual(FOUND);
+    }
+  });
   // On light paper a hover face darkens, so a step past what FOUND needs reads as a stain
   // rather than a key rising under the finger. Each light recipe is held at its tightest
   // palette; the neutral one's is a chosen key under the cursor.
@@ -926,6 +938,15 @@ describe("every theme", () => {
       const word = banded(tokens["--attention"]!, toward(recipe.inkToward), recipe.ink);
       expect(contrast(word, floor), `${id} word`).toBeGreaterThanOrEqual(4.5);
       expect(contrast(tokens["--ink-soft"]!, floor), `${id} text`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // The plan header's Search entry and the find field's match count are --ink-soft on a
+  // text field's floor.
+  test("keeps quiet text at AA on a text field's floor", () => {
+    for (const [id, theme] of themeEntries()) {
+      const floor = derived("--field-floor", theme);
+      expect(contrast(theme.tokens["--ink-soft"], floor), id).toBeGreaterThanOrEqual(4.5);
     }
   });
 

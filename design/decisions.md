@@ -125,6 +125,46 @@ centres on the box. The shading moved where the eye took the edges.
   `--bed-shade` and renders the same pixels as before. `unsent-marker.e2e.ts` reads the
   edges off a screenshot in every dark palette.
 
+## 2026-11-02: search opens from a Search entry in the plan header
+
+The user asked for a way into search by the pointer. The "/ to search" hint looked like a
+control but did nothing, and with Shortcut hints off the header offered no way in at all.
+They also asked for the find row to "transform + slide open" from that place rather than
+drop from the pane's top edge, kept simple and polished.
+
+- **The entry:** a button named "Search" in the hint's place, at the end of the crumbs and
+  before the view keys. It holds a magnifier, the word "Search" and, with Shortcut hints
+  on, the `/` cap at its end. With hints off, only the cap goes. A click or Enter opens
+  the find row as `/` does, with focus in its field. It carries the shortcut in
+  `aria-keyshortcuts`, as the other header keys do.
+  - It lies in a text field's shallow cut (`--field-floor` and `--panel-recess`) rather
+    than standing as a key. A fourth key would weigh as much as Outline, Versions and
+    Preview, and the crumbs are the header's main content. A search button shaped as a
+    field is also the common pattern on the web (Whop, Evernote, Gusto), and the cut is
+    the material of the find row's own field.
+  - Under the pointer or keyboard focus, it takes `--ink-wash` and its label steps to
+    `--ink`, as a ghost control does. A press, or the press echo of the `/` key, leaves
+    the ghost's dimple. `theme.test.ts` holds the wash 4.5 ΔE off the field's floor, and
+    the `--ink-soft` label at 4.5:1 on it, in every palette.
+  - A touch device keeps the entry and drops only its cap, which is a key hint.
+  - Its word goes with Versions' word in a header under 37.45rem. The magnifier, the cap
+    and its accessible name stay.
+- **The motion:** the find row slides sideways out of the entry, and tucks back into it.
+  - The entry is the last thing in the crumbs' slot, which clips at its end. The row
+    starts past that edge (`translateX(100%)`) and slides left to its place, over the
+    entry and then the crumbs. It moves by transform alone, so the compositor runs it.
+  - It opens on `--dur-pane` (240ms), because a slide across the header is as long a move
+    as a pane's, and reads as a jump cut at 160ms. It closes on `--dur-state`, sliding
+    back into the entry as the crumbs fade in.
+  - The entry stays under the arriving row and hides once the row has covered it. Closing
+    gives it back at once, under the leaving row.
+  - Closing now plays with hints off too. Before, hints off removed the row at once,
+    because there was no hint for it to tuck into.
+  - Under reduced motion, the global switch drops the slide, so the row appears and goes.
+- **The swap stays:** opening still lays the row over the crumbs, as the 2026-11-01 entry
+  chose with its Swap option. At rest the entry resembles the resting field of its Inset
+  option, which it passed over, but the entry never widens in place.
+
 ## 2026-11-02: search marks stand out, the outline key latches, the cwd sits in a bed
 
 The user asked for three pieces of the review screen to look designed and of a piece with
