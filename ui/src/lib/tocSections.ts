@@ -2,6 +2,7 @@
 // comments inside it, whether it changed since the previous version, and, while comparing,
 // what it gained and lost against the other version. Pure and DOM-free like `toc.ts`.
 
+import { lineCountOf } from "$lib/diffview/lineCursor.ts";
 import type { DiffSide } from "$lib/diffview/types.ts";
 import type { CommentIndexEntry } from "$lib/feedback.ts";
 import { extractHeadings, type TocHeading } from "$lib/toc.ts";
@@ -108,12 +109,34 @@ export function describeSection(section: TocSection, since: number | null): stri
     .join(", ");
 }
 
+/** The 1-based, inclusive lines of the section `line`'s heading opens, or null when no
+ * heading sits on `line`. A heading with no text of its own takes its subsections too, up
+ * to the next heading of its level or higher. `lines` are the plan's. */
+export function sectionLines(
+  headings: TocHeading[],
+  line: number,
+  lines: readonly string[],
+): { from: number; to: number } | null {
+  const index = headings.findIndex((h) => h.line === line);
+  if (index === -1) return null;
+  const lineCount = lineCountOf(lines);
+  const ownEnd = ownEndOf(headings, index, lineCount);
+  const bare = lines.slice(line, ownEnd).every((text) => text.trim() === "");
+  return { from: line, to: bare ? subtreeEndOf(headings, index, lineCount) : ownEnd };
+}
+
 export function plural(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
 function ownEndOf(headings: TocHeading[], index: number, lineCount: number): number {
   return (headings[index + 1]?.line ?? lineCount + 1) - 1;
+}
+
+function subtreeEndOf(headings: TocHeading[], index: number, lineCount: number): number {
+  const level = headings[index]?.level ?? 0;
+  const next = headings.slice(index + 1).find((h) => h.level <= level);
+  return (next?.line ?? lineCount + 1) - 1;
 }
 
 function anchored(comments: CommentIndexEntry[], lo: number, hi: number): CommentIndexEntry[] {

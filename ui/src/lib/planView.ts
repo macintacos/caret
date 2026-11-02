@@ -52,6 +52,7 @@ export const SURFACE_BEHAVIORS = {
   lineComments: ["source"], // drag readout, gutter drag, drag hint chip, hover re-fire
   textComments: ["source", "preview"], // a click or text selection on the plan opens the composer
   headingTracking: ["source", "preview"], // top-visible heading, ?heading= mirror, ToC, breadcrumbs, b and \
+  outlinePeek: ["source", "preview"], // the outline row's peek, copied from the live view
 } as const satisfies Record<string, readonly PlanSurface[]>;
 
 export type SurfaceBehavior = keyof typeof SURFACE_BEHAVIORS;

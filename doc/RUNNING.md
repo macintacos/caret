@@ -193,6 +193,21 @@ folds into that button too, so the diff has the width. Opened, it lists only the
 that changed, each with its line count, and clicking one takes you to the change. Leaving
 compare brings the outline back to how it was before you compared.
 
+Rest the pointer on a heading in the outline, or move to one with the arrow keys in the
+outline's filter, and a peek of its section opens beside the outline. The peek shows the
+section as the plan's view draws it, source or Preview, cut short with a fade where the
+section runs on. A heading with nothing under it but subheadings shows its subheadings'
+sections. Once open, the peek follows the pointer or the arrow keys from heading to
+heading. Pressing `p` flips it to the other view along with the plan; if that view has not
+drawn the section yet, the peek closes. The peek closes when:
+
+- the pointer leaves the outline, or the outline loses focus;
+- you turn the mouse wheel, or click;
+- you press a key other than the arrows, Tab, Home, End or `p`;
+- you change the filter or pick a heading.
+
+There is no peek while you compare versions.
+
 ## References caret recognizes
 
 Caret picks filenames out of two places: the plan you are reading, where they become

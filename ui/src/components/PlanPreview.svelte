@@ -41,6 +41,8 @@
     onCommentDrag?: (anchor: TextPoint | null) => void;
     /** Shift is held: the pointer selects text, so it shows the text cursor. */
     selectText?: boolean;
+    /** The code blocks have taken their highlight, which lands after the text. */
+    onHighlight?: () => void;
   }
   let {
     html,
@@ -54,6 +56,7 @@
     onTextComment,
     onCommentDrag,
     selectText = false,
+    onHighlight,
   }: Props = $props();
 
   $effect(() => {
@@ -85,6 +88,8 @@
       tokenize: (code, language) => highlightTokens(code, language, theme),
       nextTask: () => new Promise((resolve) => setTimeout(resolve, 0)),
       signal: controller.signal,
+    }).then(() => {
+      if (!controller.signal.aborted) onHighlight?.();
     });
     return () => controller.abort();
   });

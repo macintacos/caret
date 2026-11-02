@@ -45,6 +45,7 @@
     headingTree,
   } from "$lib/headingTrail.ts";
   import { createKeyRepeat, walkCommandList } from "$lib/keyRepeat.ts";
+  import { createPeekIntent, type PeekTarget } from "$lib/outlinePeek.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import { sound } from "$lib/sound.ts";
   import { headingMatcher, type TocHeading } from "$lib/toc.ts";
@@ -92,6 +93,11 @@
     onExposeFilter?: (open: () => void) => void;
     /** What sits at the column's foot. */
     foot?: Snippet;
+    /** Show a row's section beside it, or hide it with null. Omitted, nothing peeks. */
+    onPeek?: (target: PeekTarget | null) => void;
+    /** Whether a key keeps the peek open: one that changes how the plan is drawn, whose
+     * new copy the host swaps in. Any other key but a walk closes it. */
+    peekStays?: (e: KeyboardEvent) => boolean;
   }
 
   let {
@@ -108,6 +114,8 @@
     onHide,
     onExposeFilter,
     foot,
+    onPeek,
+    peekStays,
   }: Props = $props();
 
   const uid = $props.id();
@@ -145,6 +153,7 @@
   // the cadence (EXC-1122). The claim itself is walkCommandList's, shared with the
   // breadcrumbs bar's filter panel — the same primitive over the same kind of field.
   function onWalkKeydown(e: KeyboardEvent): void {
+    walked = WALK_KEYS.has(e.key);
     walkCommandList(e, queryEl, repeat);
   }
 
@@ -250,6 +259,82 @@
     );
   });
 
+  // The peek (outlinePeek.ts): resting on a row opens it, then it follows the pointer and
+  // the keys from row to row. A walk key marks the selection change it causes, so the peek
+  // follows the keys' highlight and not the selection bits-ui moves under the pointer.
+  const WALK_KEYS = new Set(["ArrowDown", "ArrowUp", "Tab", "Home", "End"]);
+  const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
+  let walked = false;
+  let peekLine: number | null = null;
+  const peek = createPeekIntent({
+    onChange(line) {
+      peekLine = line;
+      onPeek?.(line === null ? null : peekTarget(line));
+    },
+  });
+
+  function peekTarget(line: number): PeekTarget | null {
+    const row = rootEl?.querySelector<HTMLElement>(`[data-slot="command-item"][data-value="${line}"]`);
+    return row == null || rootEl == null ? null : { line, row, outline: rootEl };
+  }
+
+  // A hover preview means nothing to touch.
+  function peekAt(e: PointerEvent): void {
+    if (e.pointerType === "touch" || !(e.target instanceof Element)) return;
+    const value = e.target.closest("[data-slot='command-item']")?.getAttribute("data-value");
+    walked = false;
+    if (value != null) peek.reach(Number(value));
+  }
+
+  $effect(() => {
+    const value = selected;
+    untrack(() => {
+      if (!walked) return;
+      walked = false;
+      if (value !== "") peek.reach(Number(value));
+    });
+  });
+
+  // A query re-forms the list under the peek.
+  $effect(() => {
+    void query;
+    untrack(() => peek.hide());
+  });
+
+  // The reader turning elsewhere closes it: a wheel, a press, a resize, or any key but a
+  // walk or one that `peekStays` keeps, Escape included, since a key that does something
+  // else changes what the peek would show. The list or the plan moving on its own, keeping
+  // a row in view or the reader's place across a flip, does not: the peek moves with its
+  // row.
+  $effect(() => {
+    const onScroll = (e: Event) => {
+      const inList = e.target instanceof Node && rootEl?.contains(e.target);
+      if (inList && peekLine !== null) onPeek?.(peekTarget(peekLine));
+    };
+    const onKeydown = (e: KeyboardEvent) => {
+      if (!WALK_KEYS.has(e.key) && !MODIFIER_KEYS.has(e.key) && !peekStays?.(e)) peek.hide();
+    };
+    const hide = () => peek.hide();
+    const listen = { capture: true, passive: true };
+    document.addEventListener("scroll", onScroll, listen);
+    document.addEventListener("keydown", onKeydown, { capture: true });
+    document.addEventListener("wheel", hide, listen);
+    document.addEventListener("pointerdown", hide, listen);
+    window.addEventListener("resize", hide);
+    return () => {
+      document.removeEventListener("scroll", onScroll, listen);
+      document.removeEventListener("keydown", onKeydown, { capture: true });
+      document.removeEventListener("wheel", hide, listen);
+      document.removeEventListener("pointerdown", hide, listen);
+      window.removeEventListener("resize", hide);
+      peek.hide();
+    };
+  });
+
+  function onFocusOut(e: FocusEvent): void {
+    if (!(e.relatedTarget instanceof Node && rootEl?.contains(e.relatedTarget))) peek.hide();
+  }
+
   // Escape is one step out: a query clears, then the filter closes and focus leaves the
   // outline, which stays on screen with nothing in it focused. The float's host closes
   // the float on Escape instead.
@@ -268,6 +353,7 @@
   // rather than leaving it ringed on a field they are done with; `\` brings it back.
   function jump(line: number): void {
     repeat.stop();
+    peek.hide();
     if (placement === "float") pressedLine = line;
     else if (filtering) {
       queryEl?.blur();
@@ -414,6 +500,7 @@
   data-filtering={filtering ? "" : undefined}
   data-latch-snap={latchSnap ? "" : undefined}
   data-filter-closed={filterClosed ? "" : undefined}
+  onfocusout={onFocusOut}
 >
   {#if placement === "column"}
     <div class="toc-title-row">
@@ -486,6 +573,8 @@
       aria-label="Plan headings"
       data-toc-view={searching ? "matches" : "outline"}
       onscroll={(e) => e.currentTarget.toggleAttribute("data-scrolled", e.currentTarget.scrollTop > 0)}
+      onpointermove={peekAt}
+      onpointerleave={() => peek.hide()}
     >
       {#if searching}
         <!-- Each ancestor path collapses to one Command.Group, whose heading IS

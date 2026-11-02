@@ -95,6 +95,8 @@
   import {
     ariaKeyshortcutsFor,
     bind,
+    CANONICAL_KEYMAP,
+    chordMatches,
     defaultIsEditingContext,
     shortcuts,
   } from "$lib/shortcuts/index.ts";
@@ -126,7 +128,9 @@
     outlineWidth,
     outlineWidthPref,
   } from "$lib/outlineColumn.ts";
-  import { sectionDeltas } from "$lib/tocSections.ts";
+  import { sectionDeltas, sectionLines } from "$lib/tocSections.ts";
+  import type { PeekTarget } from "$lib/outlinePeek.ts";
+  import { previewSnippet, sourceSnippet } from "$lib/peekSnippet.ts";
   import {
     followBox,
     lineAtReadingZone,
@@ -181,6 +185,7 @@
   import PlanBreadcrumbs from "@/components/PlanBreadcrumbs.svelte";
   import PlanToc from "@/components/PlanToc.svelte";
   import Splitter from "@/components/Splitter.svelte";
+  import OutlinePeek from "@/components/OutlinePeek.svelte";
   import Icon from "@/components/Icon.svelte";
   import KbdCap from "@/components/KbdCap.svelte";
   import CodeBlockChrome from "@/components/CodeBlockChrome.svelte";
@@ -1872,6 +1877,38 @@
   }
 
   const planLineCount = $derived(lineCountOf(linkLayer.text.split("\n")));
+
+  // The outline's peek: a section copied from the live view the first time a row shows it,
+  // and kept until what the view draws could have changed. Each such change makes a new
+  // `peekSnippet`, which an open peek copies again from. A section the view has yet to
+  // draw is not kept, so the next ask copies it afresh.
+  let peekTarget = $state<PeekTarget | null>(null);
+  let previewHighlightRev = $state(0);
+  const peekSnippet = $derived.by(() => {
+    void [surface, contentKey, themeId, reflowedBlocks, previewLayoutRev, previewHighlightRev];
+    const copies = new Map<number, HTMLElement>();
+    return (line: number): HTMLElement | null => {
+      const copy = copies.get(line) ?? copySection(line);
+      if (copy !== null) copies.set(line, copy);
+      return copy;
+    };
+  });
+  // The view flip keeps an open peek, which swaps in the other view's copy.
+  const FLIP_CHORDS =
+    CANONICAL_KEYMAP.find((entry) => entry.id === "actions.togglePreview")?.keys ?? [];
+  function flipsView(e: KeyboardEvent): boolean {
+    return (
+      !showDiff &&
+      !defaultIsEditingContext() &&
+      FLIP_CHORDS.some((chord) => chordMatches(chord, e))
+    );
+  }
+  function copySection(line: number): HTMLElement | null {
+    const lines = sectionLines(headings, line, linkLayer.text.split("\n"));
+    if (lines === null || !runs("outlinePeek")) return null;
+    if (surface === "preview") return previewEl ? previewSnippet(previewEl, lines) : null;
+    return host ? sourceSnippet(host, lines) : null;
+  }
   const previewCursor = createPreviewCursor(keyboardStore, {
     lines: () => linkLayer.text.split("\n"),
     headingLines: () => headings.map((h) => h.line),
@@ -2948,6 +2985,7 @@
           {themeId}
           {reflowedBlocks}
           bind:root={previewEl}
+          onHighlight={() => previewHighlightRev++}
           fileRefs={previewRefs}
           onFileRefClick={openFileRef}
           rowAt={previewRowAt}
@@ -3245,6 +3283,8 @@
     onHide={() => setOutline("hidden")}
     onExposeFilter={placement === "column" ? (open) => (openColumnFilter = open) : undefined}
     foot={placement === "column" ? cwdKey : undefined}
+    onPeek={runs("outlinePeek") ? (target) => (peekTarget = target) : undefined}
+    peekStays={runs("outlinePeek") ? flipsView : undefined}
   />
 {/snippet}
 
@@ -3291,6 +3331,15 @@
       {@render outlineList("float")}
     </Popover.Content>
   </Popover.Root>
+{/if}
+
+{#if runs("outlinePeek")}
+  <OutlinePeek
+    target={peekTarget}
+    snippet={peekSnippet}
+    view={planView}
+    bounds={paneEl}
+  />
 {/if}
 
 <!-- The folder-reference tree (EXC-918). A viewport-fixed card rather than a lane

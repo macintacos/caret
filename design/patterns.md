@@ -101,6 +101,36 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   drawer, a drag stops where the column would yield, and a double-click returns the
   opening width or, where that would yield, the widest width that fits. The browser
   remembers the width.
+- **An outline row peeks at its section.** Resting on a row for 350ms, by the pointer or
+  by the keys, opens a peek past the outline's right edge, level with the row and kept
+  0.5rem inside the plan pane, clear of an open file. Once open it follows the pointer and
+  the keys to the next row at once. `p` flips it to the other view with the plan, or
+  closes it if that view has not drawn the section within three frames.
+  - It is a copy of the live view, so its type, colour, chips and code highlighting are
+    the plan's own in every theme. It starts at the heading and ends on the section's last
+    line of text. A heading with no text of its own shows its subsections too.
+  - It floats at the menus' height, `--float-mid`, on a face of the view's floor:
+    `--paper-sunk` under source and `--paper` under Preview. It is rounded at
+    `--radius-lg`, with no arrow and no label. It is up to 36rem wide, and shows nowhere
+    with less than 18rem of room.
+  - Its 1px ring, `--peek-edge`, is `--ink-faint` stepped a quarter toward `--ink-soft`,
+    so it holds at least 3:1 against its face and the plan beneath in every bundled
+    palette.
+  - Preview's text wraps to the peek. Source lines keep their length and fade at the
+    peek's right edge. A section taller than 16rem is cut there and fades over its last
+    3rem; one that fits ends on its text, unfaded. It measures again when its copy grows.
+  - It closes on the reader's own input: the pointer leaving the list, the list losing
+    focus, a wheel, a pointer press, a resize, a row picked, the query changing, or a key
+    other than a walk key (the arrows, Tab, Home and End) or `p`, Escape included. A list
+    scroll carries it with its row, and the plan keeping its place across a flip leaves it
+    open.
+  - It is `inert`: it takes no pointer and no focus, and screen readers skip it. It
+    repeats text the plan holds a jump away, and the row's own name and description
+    already say where that jump goes.
+  - It arrives with a fade and a 0.375rem slide from the row's side on `--dur-state`, and
+    leaves on half that. Moving between rows it jumps, with no re-entry. Under reduced
+    motion it shows and hides with no movement.
+  - While you compare versions, there is no peek.
 - One emphasis per view. The amber accent is used verbatim, never lightened, and only for
   the wordmark, the primary action, and the text cursor. Everything else steps down
   through `--ink-soft` and `--ink-faint`.

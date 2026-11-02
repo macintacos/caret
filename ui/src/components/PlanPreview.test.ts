@@ -90,6 +90,22 @@ describe("PlanPreview", () => {
     expect(colours(code).size).toBeGreaterThan(1);
   });
 
+  test("reports once its code blocks have taken their highlight", async () => {
+    const plan = renderPlanMarkdown("```ts\nconst x: number = 1;\n```\n");
+    let highlighted = false;
+    const { target, flush } = render(PlanPreview, {
+      html: plan.html,
+      codeLanguages: plan.codeLanguages,
+      themeId: "caret-dark",
+      onHighlight: () => {
+        highlighted = codeOf(target).children.length > 0;
+      },
+    });
+    flush();
+
+    expect(await until(() => highlighted)).toBe(true);
+  });
+
   test("leaves an unknown-language block and a bare block as one text node", async () => {
     const plan = renderPlanMarkdown(
       "```nosuchlang\nconst x = 1;\n```\n\n```\nconst y = 2;\n```\n\n```ts\nconst z = 3;\n```\n",

@@ -124,6 +124,93 @@ with the rest of caret". This replaces the fixed 15.5rem width from 2026-11-01.
   16.7ms even there.
 - **Not built:** the window splitter's optional Home, End and Enter keys.
 
+## 2026-11-02: an outline row peeks at its section
+
+The user asked for "a little hover preview window to the right of the selection that shows
+you a snippet of what is in that section if you were to navigate to it", shown on hover
+and while walking the outline by keyboard, and looking "accurate to the current view
+type".
+
+- **The peek is a copy of the live view, not a second render.** The source view draws
+  every row and Preview every block, with no virtualizing, so the section is already in
+  the DOM, themed and highlighted. Copying its rows or blocks matches the plan exactly in
+  every theme for the cost of a clone. Rendering the slice again would need a second
+  diff-library instance and caret's whole layer pipeline for source, would restart the
+  line numbers, and would leave Preview's code plain until its highlight pass ran.
+  - The source copy stands in a shadow root that adopts the live root's sheets and theme.
+    It leaves out comment rows, whose cards live outside the shadow root, and the rows'
+    hover, cursor and selection.
+  - The Preview copy keeps the live root's class, so its scoped rules reach the copy, and
+    its text wraps to the peek. The room the preview holds open for comments closes.
+  - Images are the plan's own `<img>` elements, copied, so they come from the browser's
+    cache rather than standing in as placeholders. One that fails to load hides, as it
+    does in the plan.
+- **A heading with no text of its own shows its subsections.** Under `## Phase 1` sitting
+  straight above `### Step 1.1`, the peek runs on to the next heading of its level or
+  higher. Cut at the next heading of any level, it would show only the row's own name. 145
+  of 836 headings across the user's 93 saved plans have this shape.
+- **One dwell opens it, then it follows at once.** 350ms on a row, by the pointer or by
+  the keys, opens it, so a quick walk to a known heading never flashes one. Once open, the
+  next row's peek replaces it with no dwell and no re-entry.
+- **It closes when the reader turns elsewhere.** That is the pointer leaving the list, the
+  list losing focus, a row picked, the query changing, a wheel, a pointer press or a
+  resize. It also closes on any key but a walk key (the arrows, Tab, Home and End) or `p`,
+  Escape included. Escape still clears the query, closes the filter or closes the float as
+  it would, so the peek never adds a step to backing out.
+- **The list or the plan moving on its own leaves it open.** A list scroll carries the
+  peek with its row, as when the list keeps a walked row in view. The plan keeping the
+  reader's place across a flip between source and Preview does not close it. Closing on
+  every scroll had cancelled the dwell whenever a hovered row scrolled itself into view.
+- **`p` keeps it open on the other view.** The user asked for a peek "accurate to the
+  current view type", and the flip is when that shows. The peek swaps in the new view's
+  copy once that view has drawn the section, and closes if that takes more than three
+  frames. On the 1,062-line rendering fixture the copy was there on the first frame, both
+  ways.
+- **It sits where the eye already is.** It stands past the outline's right edge, measured
+  live so a resized column carries it, level with the row. It stays 0.5rem inside the plan
+  pane, so it never covers the top bar, the status bar or an open file. It measures itself
+  again whenever its copy grows, as when an image in it loads. So it keeps inside the
+  pane, and fades where the grown section is cut. When the outline is folded into its
+  float, the peek stands past the float's edge.
+- **It is a float on the view's floor.** The shadow is the menus' height, `--float-mid`,
+  so it reads as something over the plan. The face is the plan view's own floor, the
+  background the plan's text sits on, so the copy reads as the plan it came from. There is
+  no arrow and no label; the heading it starts on names it.
+- **Its edge holds 3:1 against its face and against the plan.** The peek lays plan text
+  over plan text, so the edge is the one cue between the two. The menus' `--rule` ring
+  measured 1.19:1 in dark, and the plan's lines seemed to run on into the copy.
+  - The ring is `--ink-faint` stepped a quarter toward `--ink-soft`, which holds at least
+    3.33:1 against both floors in every bundled palette. `--ink-faint` alone falls to
+    2.99:1 on catppuccin-latte's source floor.
+  - A thin raised frame around a floor-coloured well was the other option.
+    `--paper-raised` stands only 1.03 to 1.07:1 from the floors, so the frame still needed
+    the same ring, and the frame and the ring read as a double border.
+- **Size:** up to 36rem by 16rem, about eleven source lines or a heading and seven lines
+  of Preview, at the plan's own type size. Under 18rem of room it does not show. At 480px
+  wide the float leaves too little room, so there is no peek there.
+- **Accessibility:** the peek is `inert`, so it takes no focus, no pointer and no screen
+  reader's attention, and Tab never lands on a link in the copy. It repeats text one jump
+  away, and the row already names the heading and describes its comments and changes. A
+  description of the snippet on every walk step would read whole paragraphs to a screen
+  reader at each arrow press.
+- **While you compare versions, there is no peek.** Compare draws a diff of two versions,
+  not one plan's sections, so the `outlinePeek` row in `SURFACE_BEHAVIORS` covers source
+  and Preview only.
+- **Measured** on the 1,062-line rendering fixture (`scripts/tasks/dev/fake-plan.md`) at
+  1440px in headless Chromium, one test worker: hovering, opening, and walking 20 rows by
+  pointer and by keys gave no long animation frame (a frame over 50ms) and no gap between
+  frames over 16.8ms, in both views. Under four parallel test workers, single frames of 50
+  to 80ms showed at the hover and the open. One worker never showed them, so they are
+  likely the machine's load rather than the peek's work. With the peek measuring itself
+  again on every resize, the same run gave the same result, and the peek opened 353 to
+  357ms after the pointer's first move on a row.
+- **Not built:**
+  - Comments in the peek. Their cards are live components slotted from outside the shadow
+    root, and the peek shows the plan's text.
+  - A peek on touch, where nothing hovers.
+  - Scrolling inside the peek. It takes no pointer, so it never steals a hover or a click
+    from the plan beneath it.
+
 ## 2026-11-01: the layout moves as one, and panes enter slower than they leave
 
 The user asked for "nice animations when transitioning between various states", naming the

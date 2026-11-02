@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { CommentIndexEntry } from "$lib/feedback.ts";
 import { extractHeadings } from "$lib/toc.ts";
-import { describeSection, sectionDeltas, tocSections } from "$lib/tocSections.ts";
+import { describeSection, sectionDeltas, sectionLines, tocSections } from "$lib/tocSections.ts";
 
 // Line numbers matter to every assertion here, so the plan is spelled one line per
 // array entry with its 1-based number alongside.
@@ -158,5 +158,38 @@ describe("sectionDeltas", () => {
 
   test("leaves out every section whose own lines match", () => {
     expect(sectionDeltas(HEADINGS, PLAN, PLAN).size).toBe(0);
+  });
+});
+
+describe("sectionLines", () => {
+  const LINES = PLAN.split("\n");
+
+  test("runs from the heading to the line before the next heading of any level", () => {
+    expect(sectionLines(HEADINGS, 5, LINES)).toEqual({ from: 5, to: 9 });
+    expect(sectionLines(HEADINGS, 10, LINES)).toEqual({ from: 10, to: 13 });
+  });
+
+  test("runs the last heading's section to the plan's last line, not a trailing newline's", () => {
+    expect(sectionLines(HEADINGS, 14, LINES)).toEqual({ from: 14, to: 16 });
+  });
+
+  test("runs a heading with no text of its own through its subsections", () => {
+    const plan = [
+      "## Phase 1", //       1
+      "", //                 2
+      "### Step 1.1", //     3
+      "", //                 4
+      "Do the first.", //    5
+      "", //                 6
+      "### Step 1.2", //     7
+      "Do the second.", //   8
+      "## Phase 2", //       9
+      "Wrap up.", //        10
+    ];
+    expect(sectionLines(extractHeadings(plan.join("\n")), 1, plan)).toEqual({ from: 1, to: 8 });
+  });
+
+  test("is null for a line no heading sits on", () => {
+    expect(sectionLines(HEADINGS, 7, LINES)).toBeNull();
   });
 });
