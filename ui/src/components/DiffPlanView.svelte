@@ -3492,6 +3492,10 @@
     min-width: 0;
     padding-inline: 1.15rem 0.5rem;
   }
+  /* The outline key stands as far in from the pane's side as Preview does from the other. */
+  .plan-header:has(> .header-tray) {
+    padding-left: 0.5rem;
+  }
   /* The parts a layout move (lib/paneMove.ts) moves apart from the window, named only for
      its transition so no other one picks them up. */
   :global(:root[data-pane-move]) .plan-outline {

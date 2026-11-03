@@ -120,9 +120,10 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   not keep its 800px reading column beside, the header's outline key drops it as a float
   instead: a `--float-mid` float on `--paper-raised`, which opens on its filter. The
   outline key is one toggle named "Outline", in the column's head while the column stands
-  and in the header while it is folded. It latches down with its corner light while the
-  outline is open, as a column or as a float, and stands up while it is closed. The
-  column's head floors its bed with `--paper`, matching the floor under its bed in the
+  and in the header while it is folded. In the header, its bed stands as far in from the
+  pane's left edge as Preview's does from the right. It latches down with its corner light
+  while the outline is open, as a column or as a float, and stands up while it is closed.
+  The column's head floors its bed with `--paper`, matching the floor under its bed in the
   plan header, because on the body a dark key latched down sits at or under the body's
   lightness and reads as a hole. A press, or ⇧ + `\`, opens or folds the outline.
   Comparing folds the column too, without changing the reader's remembered choice. Its

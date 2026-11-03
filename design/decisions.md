@@ -88,6 +88,18 @@ Open items first, then the log, newest first.
   - As the drawer narrows, the esc hint ("esc to close") and then the kind tag ("Preview")
     leave the bar.
 
+## 2026-11-02: the header's outline key stands as far in as Preview
+
+With the outline folded, the plan header's outline key now stands 8px in from the pane's
+left edge, as Preview does from the right. Before, it stood 18px in, and the user found it
+awkwardly far in beside Preview.
+
+- **The two ends match.** While the header holds the outline key, its left padding drops
+  from 1.15rem (18px) to 0.5rem (8px), the same as its right padding.
+- **The crumbs keep their inset while the column stands.** The outline key then sits in
+  the column's head, not the header, so the header's left padding stays 1.15rem and the
+  crumbs start where they did.
+
 ## 2026-11-02: a filter query peeks at the row it selects
 
 Typing a query into the outline's filter selected the first match but opened no peek on

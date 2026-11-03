@@ -1546,6 +1546,33 @@ test("Shift+\\ hides the column and brings it back, focus riding the key that re
   await expect(panel(page)).toHaveCount(0);
 });
 
+test("the header's outline key stands as far in from the pane's left as Preview does from its right", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect(listbox(page)).toBeVisible();
+  await page.keyboard.press("Shift+Backslash");
+  await expect(panel(page)).toHaveCount(0);
+
+  const insetGap = () =>
+    page.evaluate(() => {
+      const pane = document.querySelector(".plan-pane")?.getBoundingClientRect();
+      const outline = document
+        .querySelector(".plan-header > .header-tray")
+        ?.getBoundingClientRect();
+      const preview = document
+        .querySelector(".plan-header .preview-toggle")
+        ?.closest(".tray")
+        ?.getBoundingClientRect();
+      if (!pane || !outline || !preview) return null;
+      return Math.abs(outline.left - pane.left - (pane.right - preview.right));
+    });
+  await expect.poll(insetGap).toBeLessThan(0.5);
+});
+
 test("under 960px the outline drops from the header's key, filter focused, and closes back onto it", async ({
   daemon,
   page,
