@@ -135,6 +135,34 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   same key across. A press, or ⇧ + `\`, opens or folds the outline. Comparing folds the
   column too, without changing the reader's remembered choice. Its float then lists only
   the sections that changed, each with its line count, or says "No sections changed".
+- **The outline column's head is its filter field and its outline key.** The field always
+  shows, at the head's start, and the key stands at its end. The field is a closed field
+  cut into the column's bed (`--field-floor` under `--panel-recess`), as the plan header's
+  Search entry is. It stands at the key's 1.75rem height and rounds at `--key-radius`. It
+  stands 0.45rem in from the bed's wall, as the rows do, and 0.45rem from the key, so the
+  two nest alike in the bed's top corners.
+  - The field's end shows the `\` cap, with Shortcut hints on, whenever the field is
+    unfocused. Focused, it shows nothing while empty and the × while it holds a query.
+    Unfocused with a query, the cap stands just before the ×. The column's field shows no
+    match count, because the rows beneath show the matches.
+  - A click, Tab or `\` focuses the field. From it, the arrows walk the keyboard's
+    selection through the rows. Focus on an empty field starts the walk on the heading
+    being read. `\` also plays the outline's sound cue. On a query the field holds, it
+    selects the query, so typing replaces it. Escape clears a query, then hands focus back
+    to the plan. A pick empties the field and hands focus back too.
+  - The field stands in the page's Tab order, so Tab focuses it like any other stop, and
+    the next Tab moves on to the key. Tab walks the rows only once the reader engages the
+    field: with `\`, a click into it, or any key pressed in it but Tab, Escape or a
+    modifier alone, such as a typed character or an arrow.
+  - As the column narrows, the field's magnifier goes, so a focused query keeps about five
+    characters. It hides when the room left for the field is under 8rem, whatever the
+    window's width.
+  - When the column folds, the field slides away with it, and only the key travels to the
+    header.
+
+  `PlanToc.test.ts` and `plan-toc.e2e.ts` hold the field's cap, focus and Tab.
+  `outline-resize.e2e.ts` holds the head as one row down to the column's narrowest.
+  `concentric.e2e.ts` holds the field's corner nested in the bed's.
 - **The outline column takes the width the reader drags it to.** Its right edge is a
   splitter (see **Splitters** in the tactile kit). The column opens 15.5rem wide and
   narrows to 12rem. It widens to 30rem, but only while the plan beside it keeps its 800px
@@ -203,8 +231,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   rounds at `--key-radius` (8px), whatever its Button `size`. A bed rounds at
   `--key-radius` plus `--well-pad`, 11px, so the two corners stay concentric. The row-wide
   scratch marker is a `button.tray` and keeps its tinted floor.
-- **The outline's bed.** The outline column lies in one large bed, its head and filter
-  included. Unlike a control's bed, it has a floor of its own, as a setting group does:
+- **The outline's bed.** The outline column lies in one large bed, its head included.
+  Unlike a control's bed, it has a floor of its own, as a setting group does:
   `--bed-floor`, the body a step toward the plan pane's floor, darker in dark and lighter
   in light. The floor is grained as the body is, and the bed shades as any bed does
   (`--bed-shade`). Its rows lie as keys on that floor.
@@ -212,8 +240,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
     window's left edge, as the pane is from its right.
   - The 0.5rem between the bed and the pane, below the column's head, is the column's
     splitter, and nothing else.
-  - Its rows and its filter stand 0.45rem in from its walls, and it rounds at
-    `--key-radius` plus that inset. The head's outline key ends where the rows do.
+  - Its rows, its filter field and the head's outline key stand 0.45rem in from its walls,
+    and it rounds at `--key-radius` plus that inset.
   - `theme.test.ts` holds a row's hover face 4.5 ΔE off the floor, and the outline's quiet
     text at 4.5:1 on it, in every palette.
 - **A bar's bed.** The plan header and the file drawer's title bar each lie in one bed the
@@ -398,8 +426,9 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - **A filter field clears from inside.** While a Command's filter field holds text, a
   space included, an × named "Clear filter" stands at its trailing edge. A press empties
   the query and keeps focus in the field. The × is a 24px ghost control with an
-  `--ink-soft` glyph. Nothing overlaps it: the outline's match count stands just before
-  it. `command-input.svelte` draws it, so every Command filter has one.
+  `--ink-soft` glyph. Nothing overlaps it: the outline float's match count, and the
+  column's `\` cap while its field is unfocused, stand just before it.
+  `command-input.svelte` draws it, so every Command filter has one.
 - **Modals draw no focus ring around themselves.** A modal takes focus on its own panel
   when it opens, so its keys work at once. It has no hover look either, and `base.css`
   leaves `[data-slot="dialog-content"]` and `[data-slot="alert-dialog-content"]` out of

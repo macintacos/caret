@@ -574,30 +574,26 @@ test("pressing Enter on a walked-to row goes there and leaves focus in the plan"
   await expect(walkedTo(page)).toHaveText("Echo");
   await page.keyboard.press("Enter");
 
-  await expect(field(page)).toHaveCount(0);
+  await expect(field(page)).not.toBeFocused();
   await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("echo");
 
-  // A pick hands the reviewer to the plan, so the filter closes with focus out of the
-  // outline. The body is where the plan's own window-level keys live.
+  // A pick hands the reviewer to the plan, so focus leaves the outline's field. The body
+  // is where the plan's own window-level keys live.
   await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
 });
 
-test("clicking a heading in the column goes there, the filter closed", async ({ daemon, page }) => {
+test("clicking a heading in the column goes there", async ({ daemon, page }) => {
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
   await readingAt(page, "Alpha");
   await options(page).filter({ hasText: "Hotel" }).click();
 
-  await expect(field(page)).toHaveCount(0);
   await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("hotel");
 });
 
-test("Escape steps out of the filter: the query, then the filter itself", async ({
-  daemon,
-  page,
-}) => {
-  // One step out at a time: the query clears, then the filter closes and focus leaves
-  // the outline, which stays on screen with nothing in it focused.
+test("Escape steps out of the filter: the query, then focus", async ({ daemon, page }) => {
+  // One step out at a time: the query clears, then focus leaves the outline, which stays
+  // on screen, its field empty, with nothing in it focused.
   await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   const parked = new URL(page.url()).searchParams.get("heading");
   await field(page).fill("notes");
@@ -608,7 +604,8 @@ test("Escape steps out of the filter: the query, then the filter itself", async 
   await expect(options(page)).toHaveCount(6);
 
   await page.keyboard.press("Escape");
-  await expect(field(page)).toHaveCount(0);
+  await expect(field(page)).not.toBeFocused();
+  await expect(field(page)).toBeVisible();
   await expect(listbox(page)).toBeVisible();
   await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
   // Walking and leaving moved nothing: only a commit navigates.
@@ -660,15 +657,23 @@ for (const placement of ["column", "float"] as const) {
     await expect(clearKey(outline)).toHaveCount(0);
   });
 
-  test(`the ${placement}'s × sits in the field's trailing edge, clear of the text and the count`, async ({
+  // Beside the × the float counts the matches, and the column, once its field lets go of
+  // focus, shows the `\` cap.
+  const beside = placement === "float" ? "count" : "cap";
+  test(`the ${placement}'s × sits in the field's trailing edge, clear of the text and the ${beside}`, async ({
     daemon,
     page,
   }) => {
+    await page.addInitScript(() => localStorage.setItem("caret.shortcutHints", "on"));
     const outline = await openFilterIn(page, daemon, placement);
-    await outline.getByRole("combobox", { name: "Filter headings" }).fill("notes");
+    const query = outline.getByRole("combobox", { name: "Filter headings" });
+    await query.fill("notes");
     await expect(clearKey(outline)).toBeVisible();
+    if (placement === "column") await query.blur();
+    const neighbour = placement === "float" ? ".toc-match-count" : ".toc-field-cap";
+    await expect(outline.locator(neighbour)).toBeVisible();
 
-    const box = await outline.locator("[data-slot='input-group']").evaluate((group) => {
+    const box = await outline.locator("[data-slot='input-group']").evaluate((group, selector) => {
       const rect = (el: Element | null) => {
         if (el === null) throw new Error("missing part of the field");
         const r = el.getBoundingClientRect();
@@ -680,10 +685,10 @@ for (const placement of ["column", "float"] as const) {
       return {
         group: rect(group),
         clear: rect(group.querySelector("button")),
-        count: rect(group.closest(".toc-head")?.querySelector(".toc-match-count") ?? null),
+        beside: rect(group.closest(".toc-head")?.querySelector(selector) ?? null),
         textEnd,
       };
-    });
+    }, neighbour);
 
     // A 24px target, inside the field, at its trailing edge and centred on its height.
     expect(box.clear.right - box.clear.left).toBeGreaterThanOrEqual(24);
@@ -693,9 +698,9 @@ for (const placement of ["column", "float"] as const) {
     expect(
       Math.abs(box.clear.top + box.clear.bottom - (box.group.top + box.group.bottom)) / 2,
     ).toBeLessThanOrEqual(1);
-    // The typed text ends before the count, and the count before the ×.
-    expect(box.textEnd).toBeLessThanOrEqual(box.count.left);
-    expect(box.count.right).toBeLessThanOrEqual(box.clear.left);
+    // The typed text ends before the count or the cap, and that before the ×.
+    expect(box.textEnd).toBeLessThanOrEqual(box.beside.left);
+    expect(box.beside.right).toBeLessThanOrEqual(box.clear.left);
   });
 }
 
@@ -722,9 +727,10 @@ test("the column says a query matched nothing right under its field", async ({ d
   expect((statusBox?.y ?? 0) - ((fieldBox?.y ?? 0) + (fieldBox?.height ?? 0))).toBeLessThan(24);
 });
 
-test("the filter field is empty on every open", async ({ daemon, page }) => {
-  // The filter always opens on the whole plan: a query that survived a close would show
-  // a narrowed view of a plan the reviewer has since scrolled away from.
+test("\\ comes back to the query the field holds, selected, so typing replaces it", async ({
+  daemon,
+  page,
+}) => {
   await openTocAt(page, daemon, BRANCHED_PLAN, "Setup");
   await field(page).fill("notes");
   await expect(options(page)).toHaveCount(2);
@@ -732,10 +738,13 @@ test("the filter field is empty on every open", async ({ daemon, page }) => {
   await field(page).blur();
   await expect(field(page)).not.toBeFocused();
 
-  await openToc(page);
-  await expect(field(page)).toHaveValue("");
-  // And the whole tree is back, not the narrowed one.
-  await expect(options(page)).toHaveCount(6);
+  await page.keyboard.press("\\");
+  await expect(field(page)).toBeFocused();
+  await expect(field(page)).toHaveValue("notes");
+  await expect(options(page)).toHaveCount(2);
+
+  await page.keyboard.type("rollout");
+  await expect(field(page)).toHaveValue("rollout");
 });
 
 test("the field narrates the row the walk is on, and says so when nothing matches", async ({
@@ -798,6 +807,31 @@ test("\\ opens the outline's filter on the heading being read", async ({ daemon,
   await expect(field(page)).toBeFocused();
 });
 
+// The field stands in the page's Tab order, before the outline key as it stands, so tabbing
+// through the window stops there like at any other stop and moves on. Engaged with `\`, the
+// field keeps Tab for the walk.
+test("Tab moves on from the column's field, and walks the rows once \\ engages it", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: BRANCHED_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Setup");
+
+  const key = panel(page).getByRole("button", { name: "Outline", exact: true });
+  await key.focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect(field(page)).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(key).toBeFocused();
+
+  await page.keyboard.press("\\");
+  await expect(walkedTo(page)).toHaveText("Setup");
+  await page.keyboard.press("Tab");
+  await expect(walkedTo(page)).toHaveText("Setup notes");
+  await expect(field(page)).toBeFocused();
+});
+
 test("\\ and b reach different heading surfaces", async ({ daemon, page }) => {
   // Two keys, two surfaces: the property worth pinning is that neither one reaches
   // the other's.
@@ -807,7 +841,7 @@ test("\\ and b reach different heading surfaces", async ({ daemon, page }) => {
 
   await page.keyboard.press("b");
   await expect(page.locator(CRUMB_MENU)).toBeVisible();
-  await expect(field(page)).toHaveCount(0);
+  await expect(field(page)).not.toBeFocused();
 
   await page.keyboard.press("Escape");
   await expect(page.locator(CRUMB_MENU)).toHaveCount(0);
@@ -1437,7 +1471,7 @@ test("reduced motion collapses the surface and leaves it fully usable", async ({
   await page.keyboard.press("ArrowDown");
   await expect(walkedTo(page)).toHaveText("Rollout notes");
   await page.keyboard.press("Enter");
-  await expect(field(page)).toHaveCount(0);
+  await expect(field(page)).toHaveValue("");
   await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("rollout-notes");
 });
 

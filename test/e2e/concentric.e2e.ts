@@ -263,12 +263,13 @@ test("the plan header's bed nests in the pane's top corners, and its end keys in
   await expectConcentric(bed, pane.locator(".preview-toggle"), "tr");
 });
 
-test("the outline column's bed: a top-level row's key nests in its corner", async ({
+test("the outline column's bed: its filter field and a top-level row's key nest in its corner", async ({
   daemon,
   page,
 }) => {
   await seedAndOpen(page, daemon);
   const bed = page.locator(".plan-outline .plan-toc");
+  await expectConcentric(bed, bed.locator("[data-slot='input-group']"), "tl");
   await expectConcentric(bed, bed.locator("[data-level='1'] .toc-key").first(), "tl");
 });
 

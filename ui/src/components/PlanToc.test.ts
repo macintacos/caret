@@ -33,18 +33,18 @@ const SHALLOW: TocHeading[] = [
   { level: 2, text: "Rollout", line: 9 },
 ];
 
-/** The column head's Outline key, which opens the filter. */
-function filterKey(target: HTMLElement): HTMLButtonElement | null {
-  return target.querySelector<HTMLButtonElement>("button[aria-label='Filter outline']");
-}
-
 function hideKey(target: HTMLElement): HTMLButtonElement | null {
   return target.querySelector<HTMLButtonElement>("button[aria-label='Outline']");
 }
 
-/** The keycaps a key wears when shortcut hints are on. */
+/** The keycaps a key, or the field's head, wears when shortcut hints are on. */
 function caps(key: HTMLElement | null): HTMLElement[] {
   return [...(key?.querySelectorAll<HTMLElement>("[data-slot='kbd']") ?? [])];
+}
+
+/** The filter field's head: the field, its match count and its cap. */
+function fieldHead(): HTMLElement | null {
+  return field()?.closest<HTMLElement>(".toc-head") ?? null;
 }
 
 function panel(): HTMLElement | null {
@@ -148,12 +148,13 @@ function pressArrow(flush: () => void, key: "ArrowUp" | "ArrowDown"): void {
   flush();
 }
 
-/** Open the column's filter from its Outline key and wait for the field. The flush
+/** Click into the column's filter field: the press, then the focus it brings. The flush
  * BEFORE the click is load-bearing: render() leaves the mount's effects pending. */
-async function open(target: HTMLElement, flush: () => void): Promise<void> {
+function open(flush: () => void): void {
   flush();
-  filterKey(target)?.click();
-  await flushUntil(flush, () => field() !== null);
+  field()?.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+  field()?.focus();
+  flush();
 }
 
 /** Press Escape in the filter field and settle. */
@@ -166,7 +167,7 @@ function pressEscape(flush: () => void): void {
 
 type TocProps = ComponentProps<typeof PlanToc>;
 
-/** Mount the column against the shared three-level fixture, its filter closed. Every
+/** Mount the column against the shared three-level fixture, its field unfocused. Every
  * prop can be overridden; the defaults are the shape most tests read against. */
 function mountToc(props: Partial<TocProps> = {}): { target: HTMLElement; flush: () => void } {
   return render(PlanToc, {
@@ -181,25 +182,25 @@ function mountToc(props: Partial<TocProps> = {}): { target: HTMLElement; flush: 
   });
 }
 
-/** Mount the column and open its filter. */
+/** Mount the column and focus its filter field. */
 async function openToc(props: Partial<TocProps> = {}): Promise<{
   target: HTMLElement;
   flush: () => void;
 }> {
   const { target, flush } = mountToc(props);
-  await open(target, flush);
+  open(flush);
   return { target, flush };
 }
 
-/** Mount, open the filter, and wait for the reading position to seed the roving selection —
+/** Mount, focus the field, and wait for the reading position to seed the roving selection —
  * the state every Tab/arrow-walk test starts from. */
 async function openTocSelected(props: Partial<TocProps> = {}): Promise<{
   target: HTMLElement;
   flush: () => void;
 }> {
   const { target, flush } = await openToc(props);
-  // The column's list was mounted before the filter opened, so bits-ui has already
-  // selected its first row; wait for the seed to move it to the row being read.
+  // bits-ui selects the list's first row as it mounts; wait for the focus's seed to move
+  // the selection to the row being read.
   await flushUntil(flush, () =>
     options().some(
       (o) => o.hasAttribute("data-selected") && o.getAttribute("aria-current") === "location",
@@ -259,29 +260,42 @@ function expectUnfilteredOutline(): void {
 
 describe("PlanToc surface", () => {
   // The column is the outline in view: its rows are there to read without a press, and
-  // the filter waits for `\`.
-  test("renders the labelled listbox at once, with the filter closed", () => {
+  // its filter field stands in its head, waiting for a click or `\`.
+  test("renders the labelled listbox and its named filter field at once", () => {
     const { flush } = mountToc();
     flush();
     expect(listbox()?.getAttribute("role")).toBe("listbox");
     expect(listbox()?.getAttribute("aria-label")).toBe("Plan headings");
     expect(options().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
-    expect(field()).toBeNull();
+    // The field is named here rather than by the command's own label element,
+    // which the vendored primitive leaves empty — so the name is worth pinning.
+    expect(field()?.getAttribute("aria-label")).toBe("Filter headings");
+    expect(document.activeElement === field()).toBe(false);
   });
 
   test("the float opens on its filter", () => {
     const { flush } = mountToc({ placement: "float" });
     flush();
     expect(field()?.getAttribute("aria-label")).toBe("Filter headings");
-    expect(filterKey(document.body)).toBeNull();
   });
 
-  test("opening the filter names the field", async () => {
-    await openToc();
-    expect(listbox()?.getAttribute("aria-label")).toBe("Plan headings");
-    // The field is named here rather than by the command's own label element,
-    // which the vendored primitive leaves empty — so the name is worth pinning.
-    expect(field()?.getAttribute("aria-label")).toBe("Filter headings");
+  // A click into the field lands the walk where the reviewer already is, as `\` does.
+  test("focusing the field starts the walk on the heading being read", async () => {
+    const p = reactiveProps({
+      headings: HEADINGS,
+      activeLine: 5,
+      plan: "",
+      comments: [],
+      previous: null,
+      onJump: () => {},
+      placement: "column" as const,
+    });
+    const { flush } = render(PlanToc, p);
+    flush();
+    p.activeLine = 9;
+    open(flush);
+    await flushUntil(flush, () => selectedLabels()[0] === "Details");
+    expect(selectedLabels()).toEqual(["Details"]);
   });
 
   test("renders every heading in document order, indented by level", async () => {
@@ -482,27 +496,31 @@ describe("PlanToc surface", () => {
     expect(active?.textContent?.trim()).toBe("Details");
   });
 
-  // A pick hands the reviewer to the plan, so it reports the line and the filter closes.
-  test("a pick from the filter reports the heading's source line and closes the filter", async () => {
+  // A pick hands the reviewer to the plan: it reports the line, and the field empties and
+  // lets go of focus.
+  test("a pick from the filter reports the heading's source line and empties the field", async () => {
     const jump = capture<number>();
     const { flush } = await openToc({ activeLine: 1, onJump: jump.cb });
-    options()[3]?.click();
-    await flushUntil(flush, () => field() === null);
+    await typeQuery("verification", flush, () => options().length === 1);
+    options()[0]?.click();
+    await flushUntil(flush, () => options().length === 4);
     expect(jump.last()).toBe(20);
-    expect(field()).toBeNull();
+    expect(field()?.value).toBe("");
+    expect(document.activeElement === field()).toBe(false);
   });
 
-  // Escape is one step out: the query, then the filter, which takes focus with it.
-  test("Escape clears the query, then closes the filter", async () => {
+  // Escape is one step out: the query, then focus, which goes back to the plan.
+  test("Escape clears the query, then lets go of the field", async () => {
     const { flush } = await openToc();
     await typeQuery("details", flush, () => options().length === 1);
     pressEscape(flush);
     await flushUntil(flush, () => options().length === 4);
     expect(field()?.value).toBe("");
+    expect(document.activeElement === field()).toBe(true);
 
     pressEscape(flush);
-    await flushUntil(flush, () => field() === null);
-    expect(field()).toBeNull();
+    expect(document.activeElement === field()).toBe(false);
+    expect(field()?.getAttribute("aria-label")).toBe("Filter headings");
     expect(options().length).toBe(4);
   });
 });
@@ -617,27 +635,47 @@ describe("PlanToc view marker", () => {
 describe("PlanToc entry points", () => {
   // Derived from the reservations rather than typed here, so the advertised hints
   // cannot drift from the keys the dispatcher fires on.
-  test("the filter key advertises \\ and the outline key ⇧\\", () => {
-    const { target } = mountToc();
-    expect(filterKey(target)?.getAttribute("aria-keyshortcuts")).toBe("\\");
+  test("the filter field advertises \\ and the outline key ⇧\\", () => {
+    const { target, flush } = mountToc();
+    flush();
+    expect(field()?.getAttribute("aria-keyshortcuts")).toBe("\\");
     expect(hideKey(target)?.getAttribute("aria-keyshortcuts")).toBe("|");
   });
 
   test("teaches both keys with caps when shortcut hints are on", () => {
-    const { target } = mountToc({ showShortcutHints: true });
-    // aria-hidden, so a glyph never lands in a key's accessible name.
-    expect(caps(filterKey(target)).map((c) => c.textContent?.trim())).toEqual(["\\"]);
+    const { target, flush } = mountToc({ showShortcutHints: true });
+    flush();
+    // aria-hidden, so a glyph never lands in the field's or the key's accessible name.
+    expect(caps(fieldHead()).map((c) => c.textContent?.trim())).toEqual(["\\"]);
     const hide = caps(hideKey(target));
     expect(hide.map((c) => c.textContent?.trim())).toEqual(["\\"]);
     expect(hide[0]?.querySelector("[data-icon='arrow-big-up']")).not.toBeNull();
     expect(
-      [...caps(filterKey(target)), ...hide].every((c) => c.getAttribute("aria-hidden") === "true"),
+      [...caps(fieldHead()), ...hide].every((c) => c.getAttribute("aria-hidden") === "true"),
     ).toBe(true);
   });
 
   test("hides the caps when shortcut hints are off", () => {
-    const { target } = mountToc();
-    expect([...caps(filterKey(target)), ...caps(hideKey(target))]).toEqual([]);
+    const { target, flush } = mountToc();
+    flush();
+    expect([...caps(fieldHead()), ...caps(hideKey(target))]).toEqual([]);
+  });
+
+  // The cap says how to reach the field from elsewhere, whatever it holds. In the field it
+  // has nothing to teach.
+  test("the field's cap stands while the field is unfocused, empty or holding a query", async () => {
+    const { flush } = mountToc({ showShortcutHints: true });
+    flush();
+    expect(caps(fieldHead()).length).toBe(1);
+
+    open(flush);
+    expect(caps(fieldHead()).length).toBe(0);
+
+    await typeQuery("details", flush, () => options().length === 1);
+    expect(caps(fieldHead()).length).toBe(0);
+    field()?.blur();
+    flush();
+    expect(caps(fieldHead()).length).toBe(1);
   });
 
   test("the outline key hides the column", () => {
@@ -647,7 +685,7 @@ describe("PlanToc entry points", () => {
     expect(hidden).toBe(1);
   });
 
-  test("hands up an action that opens the filter and focuses it", async () => {
+  test("hands up an action that focuses the filter", async () => {
     const { flush, expose } = renderExposedToc();
     const openAction = expose.last();
     if (openAction === undefined) throw new Error("PlanToc never exposed its filter action");
@@ -656,11 +694,11 @@ describe("PlanToc entry points", () => {
     expect(document.activeElement).toBe(field());
   });
 
-  // The key and the Outline key have to open the SAME filter. Both tests below assert
-  // the seeded SELECTION and the cleared query rather than aria-current — that attribute
-  // is derived from the activeLine prop and reads the same whether the seeding ran or
-  // not, which is exactly how an unseeded open looks correct.
-  test("the exposed open seeds the heading being read, as the Outline key does", async () => {
+  // `\` and a click into the field have to start the SAME walk. The test below asserts
+  // the seeded SELECTION rather than aria-current — that attribute is derived from the
+  // activeLine prop and reads the same whether the seeding ran or not, which is exactly
+  // how an unseeded open looks correct.
+  test("the exposed open seeds the heading being read, as a click into the field does", async () => {
     const { flush, expose } = renderExposedToc();
     expose.last()?.();
     await flushUntil(flush, () => field() !== null);
@@ -668,19 +706,21 @@ describe("PlanToc entry points", () => {
     expect(selectedLabels()).toEqual(["Details"]);
   });
 
-  test("the exposed open clears a query left by the previous session", async () => {
-    const { target, flush, expose } = renderExposedToc();
-    await open(target, flush);
+  // The field's `\` cap stands beside a held query, promising `\` comes back to it. Selected,
+  // the query goes as soon as the reader types; the × still empties it.
+  test("the exposed open comes back to a held query, selected", async () => {
+    const { flush, expose } = renderExposedToc();
+    open(flush);
     await typeQuery("details", flush);
-    expect(options().length).toBe(1);
     field()?.blur();
     flush();
 
     expose.last()?.();
-    await flushUntil(flush, () => field()?.value === "");
-    expect(field()?.value).toBe("");
-    await flushUntil(flush, () => options().length === 4);
-    expect(options().map(label)).toEqual(["Overview", "Approach", "Details", "Verification"]);
+    await flushUntil(flush, () => document.activeElement === field());
+    const el = field();
+    expect(el?.value).toBe("details");
+    expect([el?.selectionStart, el?.selectionEnd]).toEqual([0, "details".length]);
+    expect(options().map(label)).toEqual(["Details"]);
   });
 
   // Tab walks the list (EXC-1102). The primitive ignores Tab outright — its own
@@ -728,6 +768,19 @@ describe("PlanToc entry points", () => {
 
     const event = pressTab(flush);
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  // The field stands in the page's Tab order, so a Tab that only passes through it must
+  // move on rather than start a walk it would take Escape to leave.
+  test("Tab moves on from the field until the reader engages it", async () => {
+    const { flush } = mountToc();
+    flush();
+    field()?.focus();
+    flush();
+    expect(pressTab(flush).defaultPrevented).toBe(false);
+
+    pressArrow(flush, "ArrowDown");
+    expect(pressTab(flush).defaultPrevented).toBe(true);
   });
 
   // The command defaults `loop` OFF where menu content defaults it on (bits-ui
@@ -843,8 +896,8 @@ describe("PlanToc section notes", () => {
 });
 
 describe("PlanToc filter states", () => {
-  test("counts the rows a query leaves, and nothing while the query is empty", async () => {
-    const { flush } = await openToc({ headings: BRANCHED, activeLine: null });
+  test("the float counts the rows a query leaves, and nothing while the query is empty", async () => {
+    const { flush } = await openToc({ headings: BRANCHED, activeLine: null, placement: "float" });
     expect(panel()?.querySelector(".toc-match-count")?.textContent?.trim() ?? "").toBe("");
     await typeQuery("notes", flush, () => options().length === 3);
     expect(panel()?.querySelector(".toc-match-count")?.textContent?.trim()).toBe("3");

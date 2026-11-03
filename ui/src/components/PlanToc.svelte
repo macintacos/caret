@@ -6,8 +6,8 @@
   //
   // It stands in one of two places, which DiffPlanView picks: a column cut into the
   // window's body left of the plan, or a float dropped from the plan header's outline key
-  // where the column has no room. The column opens its filter on `\`; the float always
-  // shows it, focused.
+  // where the column has no room. The column's filter field stands in its head beside the
+  // outline key, and `\` focuses it; the float opens on its field, focused.
   //
   // Built on `command`, which buys both halves of the listbox contract (EXC-1096):
   // structurally the field is a legal sibling of the list and the rows are real options a
@@ -28,9 +28,9 @@
   // group's `aria-labelledby` target, so the ancestor path reaches a screen reader as the
   // group's name.
   //
-  // Presentational: the only state is the outline's own — whether the filter is open, the
-  // query, and the command's selected row. The parent owns the heading set, the plan and
-  // its comments, and the scroll tracking that moves `activeLine`.
+  // Presentational: the only state is the outline's own — the query, whether its field
+  // holds focus, and the command's selected row. The parent owns the heading set, the plan
+  // and its comments, and the scroll tracking that moves `activeLine`.
   import type { PlanVersion } from "@core/lib/types";
   import { tick, untrack } from "svelte";
 
@@ -90,8 +90,8 @@
     onHide?: () => void;
     /** Whether the column stands open, which latches its outline key. */
     open?: boolean;
-    /** Hand the parent an action that opens the filter and focuses it, so `\` can
-     * reach the column. */
+    /** Hand the parent an action that focuses the filter and selects its query, so `\`
+     * can reach the column. */
     onExposeFilter?: (open: () => void) => void;
     /** Show a row's section beside it, or hide it with null. Omitted, nothing peeks. */
     onPeek?: (target: PeekTarget | null) => void;
@@ -119,13 +119,12 @@
   }: Props = $props();
 
   const uid = $props.id();
-  // The float exists only to filter, so it opens with the field; the column shows it
-  // on `\` or its Outline key.
-  let filtering = $state(untrack(() => placement === "float"));
-  // The column's filter just closed, so its rows rise back into the field's room.
-  let filterClosed = $state(false);
   let query = $state("");
   let queryEl = $state<HTMLInputElement | null>(null);
+  let fieldFocused = $state(false);
+  // The keys walk the rows from the field, so the row they select rises only while it
+  // holds focus; otherwise the pointer's row does. The float's field holds it while open.
+  const walking = $derived(placement === "float" || fieldFocused);
 
   // The row Enter picked in the float, which plays the key's press while the float
   // leaves.
@@ -152,14 +151,21 @@
   // Tab walks the list instead of leaving it (EXC-1102), and the arrows join it for
   // the cadence (EXC-1122). The claim itself is walkCommandList's, shared with the
   // breadcrumbs bar's filter panel — the same primitive over the same kind of field.
+  // The column's field stands in the page's Tab order, so Tab walks only once the reader
+  // engages the field: `\`, a click, or a key pressed in it. Until then Tab moves on, or
+  // the field would hold every Tab until Escape.
+  let fieldEngaged = false;
+  const PASSING_KEYS = new Set(["Tab", "Shift", "Control", "Alt", "Meta", "Escape"]);
   function onWalkKeydown(e: KeyboardEvent): void {
+    if (e.key === "Tab" && placement === "column" && !fieldEngaged) return;
     walked = WALK_KEYS.has(e.key);
     walkCommandList(e, queryEl, repeat);
   }
 
-  // The command's own selected row, seeded to the heading being read whenever the filter
-  // opens, so the walk starts where the reviewer already is. Rows are keyed on the source
-  // line rather than on their text, so two identically titled sections stay distinct.
+  // The command's own selected row, seeded to the heading being read whenever the empty
+  // field takes focus, so the walk starts where the reviewer already is. Rows are keyed on
+  // the source line rather than on their text, so two identically titled sections stay
+  // distinct.
   // It starts there too: bits-ui selects the first row of a command mounted with no
   // value, and that pending selection would land after a later seed.
   let selected = $state(untrack(() => (activeLine === null ? "" : String(activeLine))));
@@ -209,34 +215,36 @@
           : "No sections changed",
   );
 
-  // Opening the filter starts on the whole plan, looking at the heading being read, so
-  // it is never a stale view of a plan that has since scrolled. The cue sounds from here
-  // so the `\` key and a click cannot drift onto different sounds.
+  // `\` on an empty field, and the float's open, start the walk on the heading being read,
+  // so it never starts from a heading the plan has since scrolled away from.
   function seed(): void {
-    query = "";
     selected = activeLine === null ? "" : String(activeLine);
     pressedLine = null;
     sound.play("contentsOpen");
   }
 
-  // The float's field is focused by its host as it opens; the column's mounts with
-  // this call, so it takes focus once it is in the DOM.
-  // The field takes room at the list's top, so the heading being read is brought back
-  // into view under it.
-  async function openFilter(): Promise<void> {
-    seed();
-    filtering = true;
-    filterClosed = false;
+  // The float's field is focused by its host as it opens. A held query comes back
+  // selected, so typing replaces it; an empty field starts on the heading being read.
+  async function focusFilter(): Promise<void> {
+    const held = query !== "";
+    if (held) sound.play("contentsOpen");
+    else seed();
+    fieldEngaged = true;
     await tick();
     queryEl?.focus();
-    rootEl?.querySelector('[aria-current="location"]')?.scrollIntoView({ block: "nearest" });
+    if (held) queryEl?.select();
+    else rootEl?.querySelector('[aria-current="location"]')?.scrollIntoView({ block: "nearest" });
   }
 
-  function closeFilter(): void {
+  function onFieldFocus(): void {
+    fieldFocused = true;
+    if (query === "") selected = activeLine === null ? "" : String(activeLine);
+  }
+
+  function onFieldBlur(): void {
+    fieldFocused = false;
+    fieldEngaged = false;
     repeat.stop();
-    query = "";
-    filtering = untrack(() => placement === "float");
-    filterClosed = !filtering;
   }
 
   // The float mounts on every open, so its mount is its open.
@@ -245,7 +253,7 @@
   });
 
   $effect(() => {
-    untrack(() => onExposeFilter)?.(openFilter);
+    untrack(() => onExposeFilter)?.(focusFilter);
   });
 
   // The column stands for the whole review, so it keeps the heading being read in view
@@ -340,29 +348,26 @@
     if (!(e.relatedTarget instanceof Node && rootEl?.contains(e.relatedTarget))) peek.hide();
   }
 
-  // Escape is one step out: a query clears, then the filter closes and focus leaves the
-  // outline, which stays on screen with nothing in it focused. The float's host closes
-  // the float on Escape instead.
+  // Escape is one step out: a query clears, then focus leaves the outline for the plan.
+  // The float's host closes the float on Escape instead.
   function onFieldKeydown(e: KeyboardEvent): void {
+    if (!PASSING_KEYS.has(e.key)) fieldEngaged = true;
     if (placement !== "column" || e.key !== "Escape") return;
     e.preventDefault();
-    if (searching) {
-      query = "";
-      return;
-    }
-    queryEl?.blur();
-    closeFilter();
+    if (query !== "") query = "";
+    else queryEl?.blur();
   }
 
-  // Take the reviewer to a heading. A pick from the filter drops focus into the plan
-  // rather than leaving it ringed on a field they are done with; `\` brings it back.
+  // Take the reviewer to a heading. A pick from the column empties the field and drops
+  // focus into the plan rather than leaving it on a field they are done with; `\` brings
+  // it back.
   function jump(line: number): void {
     repeat.stop();
     peek.hide();
     if (placement === "float") pressedLine = line;
-    else if (filtering) {
+    else {
       queryEl?.blur();
-      closeFilter();
+      query = "";
     }
     onJump(line);
   }
@@ -495,45 +500,10 @@
   class="plan-toc"
   bind:this={rootEl}
   data-placement={placement}
-  data-filtering={filtering ? "" : undefined}
+  data-walking={walking ? "" : undefined}
   data-latch-snap={latchSnap ? "" : undefined}
-  data-filter-closed={filterClosed ? "" : undefined}
   onfocusout={onFocusOut}
 >
-  {#if placement === "column"}
-    <div class="toc-title-row">
-      <!-- Its name keeps the visible word and says what a press does: it opens the
-           filter, as `\` does. -->
-      <Button
-        variant="ghost"
-        size="sm"
-        class="toc-title"
-        aria-label="Filter outline"
-        aria-keyshortcuts={ariaKeyshortcutsFor("actions.contents")}
-        onclick={openFilter}
-      >
-        Outline
-        {#if showShortcutHints}<Kbd class="kbd-sm" aria-hidden="true">\</Kbd>{/if}
-      </Button>
-      <!-- Sized as the header's outline key, which takes its place. -->
-      <span class="tray header-tray">
-        <Button
-          variant="secondary"
-          size={showShortcutHints ? "sm" : "icon-sm"}
-          class="float-chip"
-          aria-label="Outline"
-          aria-pressed={open}
-          aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleOutline")}
-          onclick={onHide}
-        >
-          <Icon name="panel-left" size={14} />
-          {#if showShortcutHints}
-            <Kbd class="kbd-sm" aria-hidden="true"><KbdCap key="shift" /><KbdCap key={"\\"} /></Kbd>
-          {/if}
-        </Button>
-      </span>
-    </div>
-  {/if}
   <!-- shouldFilter={false} is load-bearing, in two separate ways. The command ships a
        fuzzy filter that also RE-SORTS rows by score, which would fight the grouping above
        and shuffle document order — and it scores a row against its VALUE, which here is a
@@ -548,18 +518,27 @@
        a bug. -->
   <Command.Root shouldFilter={false} loop bind:value={selected} onkeydown={onWalkKeydown}>
     <!-- With no rows there is nothing to filter, so the empty line stands alone. -->
-    {#if filtering && listed.length > 0}
+    {#if listed.length > 0}
       <div class="toc-head">
         <Command.Input
           bind:ref={queryEl}
           bind:value={query}
           placeholder="Filter headings…"
           aria-label="Filter headings"
+          aria-keyshortcuts={ariaKeyshortcutsFor("actions.contents")}
           onkeydown={onFieldKeydown}
+          onpointerdown={() => (fieldEngaged = true)}
+          onfocus={onFieldFocus}
+          onblur={onFieldBlur}
         />
-        <!-- aria-hidden: the field's active descendant and the status line already narrate
-             what the query left. -->
-        <span class="toc-match-count metric" aria-hidden="true">{searching ? shown.length : ""}</span>
+        <!-- The column's end holds the × and the `\` cap, and the rows beneath show what the
+             query left, so only the float counts them. aria-hidden: the field's active
+             descendant and the status line already narrate it. -->
+        {#if placement === "float"}
+          <span class="toc-match-count metric" aria-hidden="true">{searching ? shown.length : ""}</span>
+        {:else if showShortcutHints && !fieldFocused}
+          <Kbd class="kbd-sm toc-field-cap" aria-hidden="true">\</Kbd>
+        {/if}
       </div>
     {/if}
     <!-- Which of the two views the list is rendering, published so the motion rules
@@ -622,6 +601,27 @@
          announces. -->
     <p class="toc-empty" role="status">{emptyMessage}</p>
   </Command.Root>
+  {#if placement === "column"}
+    <div class="toc-title-row">
+      <!-- Sized as the header's outline key, which takes its place. -->
+      <span class="tray header-tray">
+        <Button
+          variant="secondary"
+          size={showShortcutHints ? "sm" : "icon-sm"}
+          class="float-chip"
+          aria-label="Outline"
+          aria-pressed={open}
+          aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleOutline")}
+          onclick={onHide}
+        >
+          <Icon name="panel-left" size={14} />
+          {#if showShortcutHints}
+            <Kbd class="kbd-sm" aria-hidden="true"><KbdCap key="shift" /><KbdCap key={"\\"} /></Kbd>
+          {/if}
+        </Button>
+      </span>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -662,27 +662,35 @@
     background: transparent;
   }
 
-  /* The column's head: the Outline key that opens the filter, and the key that hides
-     the column, whose face ends where the rows' do. */
+  /* The column's head is one row: the filter field, then the outline key. The command's
+     own box steps aside so the two share it, because the key stays outside the command,
+     whose keydown picks a row on Enter and walks the rows on Tab. */
+  .plan-toc[data-placement="column"] {
+    display: grid;
+    grid-template: var(--pane-header-h) minmax(0, 1fr) auto / minmax(0, 1fr) auto;
+  }
+  /* An empty list's line stands under the head, not at the column's foot. */
+  .plan-toc[data-placement="column"]:has(:global(.toc-empty:not(:empty))) {
+    grid-template-rows: var(--pane-header-h) auto 1fr;
+  }
+  .plan-toc[data-placement="column"] :global([data-slot="command"]) {
+    display: contents;
+  }
+  .plan-toc[data-placement="column"] :global(.toc-head) {
+    grid-area: 1 / 1;
+    align-self: center;
+  }
+  .plan-toc[data-placement="column"] :global([data-slot="command-list"]) {
+    grid-area: 2 / 1 / 3 / -1;
+  }
+  .plan-toc[data-placement="column"] :global(.toc-empty) {
+    grid-area: 3 / 1 / 4 / -1;
+  }
   .toc-title-row {
-    flex: none;
+    grid-area: 1 / 2;
     display: flex;
     align-items: center;
-    gap: 0.45rem;
-    height: var(--pane-header-h);
-    padding-inline: 0.95rem calc(var(--toc-inset) - var(--well-pad));
-  }
-  .toc-title-row :global(.toc-title) {
-    margin-inline-end: auto;
-    padding-inline: 0.45rem;
-    gap: 0.4rem;
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--toc-quiet);
-  }
-  .toc-title-row :global(.toc-title:is(:hover, :focus-visible)) {
-    background: var(--ink-wash);
-    color: var(--ink);
+    padding-inline: calc(var(--toc-inset) - var(--well-pad));
   }
   .plan-toc :global(.toc-head) {
     position: relative;
@@ -693,13 +701,29 @@
   .plan-toc[data-placement="float"] :global(.toc-head) {
     background: var(--paper-raised);
   }
-  /* The field's corner nests in the float's: the float's radius less the field's. The
-     column has no corner, so its field sits in the rows' own inset. */
+  /* The field's corner nests in the float's: the float's radius less the field's. */
   .plan-toc[data-placement="float"] :global([data-slot="command-input-wrapper"]) {
     padding: calc(var(--key-radius) + 4px - var(--radius));
   }
+  /* The column's field stands --toc-inset in from the bed's wall, at the key's height and
+     corner, so the two nest alike in the bed's top corners. The vendored group pins its
+     height with `h-8!`, which only a max-height can lower; its corner, and its ×'s, ride
+     --radius. */
   .plan-toc[data-placement="column"] :global([data-slot="command-input-wrapper"]) {
-    padding: 0.35rem var(--toc-inset) 0.2rem;
+    --radius: var(--key-radius);
+    padding: 0 0 0 var(--toc-inset);
+  }
+  .plan-toc[data-placement="column"] :global([data-slot="command-input-wrapper"] [data-slot="input-group"]) {
+    max-height: 1.75rem;
+  }
+  .plan-toc[data-placement="column"] :global([data-slot="command-input"]) {
+    height: 100%;
+    padding-inline-end: 0.375rem;
+    font-size: var(--text-sm);
+    text-overflow: ellipsis;
+  }
+  .plan-toc[data-placement="column"] :global(.toc-head:has(.toc-field-cap) [data-slot="command-input"]) {
+    padding-inline-end: 1.5rem;
   }
   .plan-toc :global([data-slot="command-input-wrapper"] [data-slot="input-group-addon"]) {
     opacity: 1;
@@ -728,6 +752,32 @@
      1.5rem and its 0.25rem inset. */
   .plan-toc :global(.toc-head:has([data-slot="input-group"] button) .toc-match-count) {
     inset-inline-end: calc(4px + 0.6rem + 1.75rem);
+  }
+  /* The `\` cap at the field's end, stepping in past the × while the field holds a query.
+     A click on it lands in the field. */
+  .plan-toc :global(.toc-field-cap) {
+    position: absolute;
+    top: 50%;
+    inset-inline-end: 0.5rem;
+    translate: 0 -50%;
+    pointer-events: none;
+  }
+  .plan-toc :global(.toc-head:has([data-slot="input-group"] button) .toc-field-cap) {
+    inset-inline-end: calc(0.5rem + 1.75rem);
+  }
+  /* As the column narrows, the field's magnifier goes, so a query keeps about five
+     characters. Measured on the field's own width, which the outline key's hint caps
+     narrow too. */
+  .plan-toc[data-placement="column"] :global(.toc-head) {
+    container: toc-field / inline-size;
+  }
+  @container toc-field (width < 8rem) {
+    .plan-toc :global([data-slot="input-group-addon"][data-align="inline-start"]) {
+      display: none;
+    }
+    .plan-toc :global(.toc-head [data-slot="command-input"]) {
+      padding-inline-start: 0.6rem;
+    }
   }
   /* Once rows have scrolled beneath it, the float's field band casts a shade over them.
      The list marks itself rather than going through state, so the list bits-ui rebuilds
@@ -759,42 +809,6 @@
   }
   .plan-toc :global([data-toc-view="outline"] [data-slot="command-viewport"]) {
     animation: toc-list-in var(--dur-state) var(--ease-out);
-  }
-
-  /* The column's filter: on `\` the field drops in at the column's head and the rows settle
-     under it by its height; closing, the rows rise back into its room. --toc-head-h is the
-     field's height: its 2rem group (command-input.svelte's h-8) and the 0.35rem and
-     0.2rem the column pads it with. */
-  .plan-toc[data-placement="column"] {
-    --toc-head-h: 2.55rem;
-  }
-  .plan-toc[data-placement="column"] :global(.toc-head) {
-    animation: toc-head-drop var(--dur-state) var(--ease-out);
-  }
-  .plan-toc[data-placement="column"][data-filtering] :global([data-slot="command-list"]) {
-    animation: toc-rows-settle var(--dur-state) var(--ease-out);
-  }
-  .plan-toc[data-placement="column"][data-filter-closed] :global([data-slot="command-list"]) {
-    animation: toc-rows-rise var(--dur-state) var(--ease-out);
-  }
-  /* The field shows once the rows have cleared most of its room, so its words never sit on
-     a row's. */
-  @keyframes toc-head-drop {
-    0%,
-    30% {
-      opacity: 0;
-      transform: translateY(-0.5rem);
-    }
-  }
-  @keyframes toc-rows-settle {
-    from {
-      transform: translateY(calc(-1 * var(--toc-head-h)));
-    }
-  }
-  @keyframes toc-rows-rise {
-    from {
-      transform: translateY(var(--toc-head-h));
-    }
   }
 
   /* While comparing, the float's stamps arrive a beat after its list: the list lands, then
@@ -844,10 +858,6 @@
   .plan-toc[data-placement="column"] :global([data-slot="command-list"]) {
     max-height: none;
     padding: 0.15rem var(--toc-inset) 0.75rem;
-  }
-  /* An empty list doesn't fill the column, so the line saying why stands under the field. */
-  .plan-toc[data-placement="column"] :global([data-slot="command-list"]:not(:has([data-slot="command-item"]))) {
-    flex-grow: 0;
   }
   .plan-toc[data-placement="float"] :global([data-slot="command-list"]) {
     max-height: min(23rem, 60vh);
@@ -920,8 +930,8 @@
   }
 
   /* The key: a row's key, flat on the bed at rest. It rises under the pointer and,
-     while the filter is open, on the selection the keys move, so the keyboard's row
-     looks exactly as the pointer's. With the filter closed bits-ui still holds a
+     while the keys walk from the field, on the selection they move, so the keyboard's row
+     looks exactly as the pointer's. With the field unfocused bits-ui still holds a
      selection (it seeds the first row), so the column rises on hover alone. The heading
      being read is latched down, as the compare toggle is when it is on. A row is no
      `.key-row`, whose states key on the row itself rather than on the command item around
@@ -980,8 +990,8 @@
   }
   /* `:where()` holds the rise to the latch's and the press's weight, so the rules below win
      on order and the row under the pointer still goes down. */
-  .plan-toc:where([data-filtering]) :global([data-slot="command-item"][data-selected] .toc-key),
-  .plan-toc:where(:not([data-filtering])) :global([data-slot="command-item"]:hover .toc-key) {
+  .plan-toc:where([data-walking]) :global([data-slot="command-item"][data-selected] .toc-key),
+  .plan-toc:where(:not([data-walking])) :global([data-slot="command-item"]:hover .toc-key) {
     --key-face: var(--neutral-face-hover);
     --key-image: var(--grain);
     --key-shadow: var(--toc-key-up);
@@ -999,8 +1009,8 @@
     color: var(--ink);
     transition-timing-function: var(--ease-out);
   }
-  .plan-toc[data-filtering] :global([data-slot="command-item"][aria-current="location"][data-selected] .toc-key),
-  .plan-toc:not([data-filtering]) :global([data-slot="command-item"][aria-current="location"]:hover .toc-key) {
+  .plan-toc[data-walking] :global([data-slot="command-item"][aria-current="location"][data-selected] .toc-key),
+  .plan-toc:not([data-walking]) :global([data-slot="command-item"][aria-current="location"]:hover .toc-key) {
     --key-face: var(--neutral-face-latched-hover);
   }
   .plan-toc :global([data-slot="command-item"]:is(:active, [data-key-pressed]) .toc-key) {

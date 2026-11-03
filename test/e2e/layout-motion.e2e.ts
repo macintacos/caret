@@ -755,42 +755,6 @@ test("focus holds through compare: on Versions when it is pressed, and on whiche
   await expect(hideKey(page)).toBeFocused();
 });
 
-test("the column's filter drops in on --dur-state, the rows settling under it and rising as it closes", async ({
-  daemon,
-  page,
-}) => {
-  await daemon.seed({ plan: PLAN });
-  await open(page);
-  const { state } = await tokens(page);
-  const motion = (selector: string) =>
-    page.locator(selector).evaluate((el) => {
-      const style = getComputedStyle(el);
-      return {
-        name: style.animationName,
-        duration: Number.parseFloat(style.animationDuration) * 1000,
-      };
-    });
-  const list = ".plan-outline [data-slot='command-list']";
-
-  await page.keyboard.press("Backslash");
-  await expect(page.locator(".plan-outline .toc-head")).toBeVisible();
-  expect(await motion(".plan-outline .toc-head")).toEqual({
-    name: expect.stringContaining("toc-head-drop"),
-    duration: state,
-  });
-  expect(await motion(list)).toEqual({
-    name: expect.stringContaining("toc-rows-settle"),
-    duration: state,
-  });
-
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".plan-outline .toc-head")).toHaveCount(0);
-  expect(await motion(list)).toEqual({
-    name: expect.stringContaining("toc-rows-rise"),
-    duration: state,
-  });
-});
-
 test("the compare float's stamps arrive within --dur-state of its list", async ({
   daemon,
   page,

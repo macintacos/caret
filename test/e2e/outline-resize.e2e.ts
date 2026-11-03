@@ -263,6 +263,78 @@ test("a drag stops at the column's bounds, which the separator reports", async (
   expect(await widthOf(page.locator(".plan-pane"))).toBeGreaterThanOrEqual(800 - 6);
 });
 
+/** The column's head: its bed, its filter field and the cap at the field's end, and the
+ * outline key's face. */
+function measureHead(page: Page) {
+  return column(page)
+    .locator(".plan-toc")
+    .evaluate((bed) => {
+      const box = (el: Element | null) => {
+        if (el === null) throw new Error("a part of the column's head is missing");
+        const { left, right, top, bottom } = el.getBoundingClientRect();
+        return { left, right, top, bottom, radius: getComputedStyle(el).borderTopLeftRadius };
+      };
+      return {
+        bed: box(bed),
+        field: box(bed.querySelector("[data-slot='input-group']")),
+        cap: box(bed.querySelector(".toc-field-cap")),
+        key: box(bed.querySelector("button[aria-label='Outline']")),
+      };
+    });
+}
+
+// The head is one row however narrow the column: the field and the key side by side,
+// the field at the key's height and corner, its cap inside its end, nothing past the bed.
+test("the column's head holds its filter field beside its outline key, down to the narrowest", async ({
+  daemon,
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem("caret.shortcutHints", "on"));
+  await daemon.seed({ plan: PLAN });
+  await open(page);
+
+  for (const dx of [0, -400]) {
+    await dragEdge(page, dx);
+    if (dx !== 0) {
+      const min = Number(await edge(page).getAttribute("aria-valuemin"));
+      await expect.poll(() => widthOf(column(page))).toBeCloseTo(min, 0);
+    }
+    const { bed, field, cap, key } = await measureHead(page);
+    expect(field.bottom - field.top).toBeCloseTo(key.bottom - key.top, 0);
+    expect(Math.abs(field.top + field.bottom - (key.top + key.bottom)) / 2).toBeLessThanOrEqual(1);
+    expect(field.radius).toBe(key.radius);
+    expect(field.left).toBeGreaterThan(bed.left);
+    expect(field.right).toBeLessThan(key.left);
+    expect(key.right).toBeLessThan(bed.right);
+    expect(cap.left).toBeGreaterThan(field.left);
+    expect(cap.right).toBeLessThan(field.right);
+    expect(field.right - field.left).toBeGreaterThanOrEqual(96);
+  }
+
+  // At the narrowest, beside the × and the key's caps, a query keeps about five characters.
+  const query = column(page).getByRole("combobox", { name: "Filter headings" });
+  await query.fill("alpha");
+  await expect(column(page).getByRole("button", { name: "Clear filter" })).toBeVisible();
+  const room = await query.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return el.clientWidth - Number.parseFloat(s.paddingLeft) - Number.parseFloat(s.paddingRight);
+  });
+  expect(room).toBeGreaterThanOrEqual(40);
+
+  // Let go of, the field shows its cap beside the ×, both inside it and past the query.
+  await query.blur();
+  const after = await measureHead(page);
+  const clear = await column(page)
+    .getByRole("button", { name: "Clear filter" })
+    .evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
+  const textEnd = await query.evaluate(
+    (el) => el.getBoundingClientRect().right - Number.parseFloat(getComputedStyle(el).paddingRight),
+  );
+  expect(after.cap.left).toBeGreaterThanOrEqual(textEnd);
+  expect(after.cap.right).toBeLessThanOrEqual(clear.left);
+  expect(clear.right).toBeLessThanOrEqual(after.field.right);
+});
+
 test("the arrow keys step the focused edge", async ({ daemon, page }) => {
   await daemon.seed({ plan: PLAN });
   await open(page);

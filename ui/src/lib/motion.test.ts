@@ -657,15 +657,8 @@ describe("compare never shows two images of one slot at once", () => {
   });
 });
 
-describe("the outline's filter and the compare float's stamps", () => {
+describe("the compare float's stamps", () => {
   const toc = styleBlock(chromeSources["components/PlanToc.svelte"] ?? "");
-  const keyframes = (name: string): string =>
-    new RegExp(`@keyframes ${name}\\s*\\{([\\s\\S]*?)\\n {2}\\}`).exec(toc)?.[1] ?? "";
-
-  test("the rows move by the field's own height, down as it opens and up as it closes", () => {
-    expect(keyframes("toc-rows-settle")).toContain("translateY(calc(-1 * var(--toc-head-h)))");
-    expect(keyframes("toc-rows-rise")).toContain("translateY(var(--toc-head-h))");
-  });
 
   test("a stamp's beat and its arrival together stay within --dur-state", () => {
     const decl = /\.toc-delta\)\s*\{[^}]*animation:\s*([^;]+);/.exec(toc)?.[1] ?? "";

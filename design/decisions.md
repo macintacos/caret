@@ -107,6 +107,89 @@ Open items first, then the log, newest first.
   - `--toc-quiet` still steps `--ink-soft` 15% toward `--ink`. On the bed's floor plain
     `--ink-soft` holds 4.5:1 without it, at 4.96:1 at its lowest (Catppuccin Latte).
   - In light palettes the peek's rim stands under 4.5 ΔE from the floors it sits between.
+- **Calls left to the user from the 2026-11-02 outline head:** three were built and are
+  waiting on the user's verdict. The user decided a fourth: `\` focuses the field and
+  selects a query it holds, so typing replaces the query, and the × still empties it.
+  - The column's field shows no match count. The float keeps its count.
+  - As the column narrows, the field's magnifier goes.
+  - Tab stops at the field and moves on to the outline key until the reader engages the
+    field with `\`, a click or a key pressed in it.
+
+## 2026-11-02: the outline's filter field stands in the column's head
+
+The user asked for the "Outline `\`" title in the column's head to go. In its place, the
+"Filter headings…" field should always show, inline with the outline key. The `\` cap
+should move to the field's end and go while the field has focus.
+
+- **The head is one row: the filter field, then the outline key.** The title key and its
+  cap are gone. The field always shows, so it no longer drops in below the head, and the
+  rows no longer settle under it or rise as it closes. Its accessible name stays "Filter
+  headings", and it carries `aria-keyshortcuts` for `\`.
+- **The field is a closed field cut into the bed**, as the plan header's Search entry is:
+  `--field-floor` under `--panel-recess`.
+  - It stands at the outline key's height, 1.75rem, and rounds at `--key-radius`.
+  - It stands 0.45rem in from the bed's wall, as the rows do, and 0.45rem from the key.
+    The field and the key therefore nest alike in the bed's top corners.
+  - Its text drops from `--text-md` to the rows' `--text-sm`.
+- **The field's end, as the user set it:**
+  - empty and unfocused: the `\` cap;
+  - empty and focused: nothing, so the placeholder and the amber text cursor show;
+  - holding a query and focused: the ×;
+  - holding a query and unfocused: the `\` cap, then the ×.
+
+  The cap follows Shortcut hints, as every cap does. With them off, an empty unfocused
+  field shows nothing at its end, and a field holding a query shows only the ×. The ×
+  keeps the trailing edge, as it does in every filter field, so the cap stands just before
+  it.
+- **The column's field shows no match count.** Beside the × and the cap it would crowd the
+  query at the column's opening width, not only at its narrowest. The rows beneath show
+  the matches, and "No headings match" says when none are left. The float keeps its count.
+- **The field takes focus instead of opening:**
+  - Focus on the empty field, from a click or Tab, starts the walk on the heading being
+    read, as `\` does. The walk is the keyboard's selection moving through the rows, which
+    the arrows drive from the field, and Tab too once the reader engages the field.
+  - The field stands in the page's Tab order, so Tab focuses it like any other stop, and
+    the next Tab moves on to the outline key. Tab walks the rows only once the reader
+    engages the field: with `\`, a click into it, or any key pressed in it but Tab, Escape
+    or a modifier alone, such as a typed character or an arrow. Otherwise every Tab
+    through the page would walk the rows instead of moving on, until Escape.
+  - `\` focuses the field and plays the outline's sound cue. On an empty field it starts
+    the walk on the heading being read. On a query the field holds, it selects the query,
+    so typing replaces it. The × still empties it. The user decided this: the `\` cap
+    beside a held query promises that `\` returns focus to that query.
+  - Escape clears a query, then hands focus back to the plan. A pick empties the field and
+    hands focus back too.
+  - The rows rise under the keys' selection only while the field holds focus. Otherwise
+    the row under the pointer rises.
+- **The field's magnifier goes as the column narrows.** At the column's narrowest, 12rem,
+  beside the outline key's shortcut caps, the field is about 6rem wide. The magnifier
+  hides when the room left for the field is under 8rem, whatever the window's width, so a
+  query keeps about five characters beside the × while the field holds focus. With
+  Shortcut hints off, the outline key drops its caps and is narrower, so the magnifier
+  stays at every width. Unfocused, the field's `\` cap takes the room of about two
+  characters, so about three stay readable before the ellipsis.
+- **The key stays outside the filter's command.** bits-ui's command handles Enter and the
+  arrows on its own root, so a key inside it would pick a row on Enter. The column lays
+  its head out as a grid and sets the command's own box aside (`display: contents`).
+- **The fold:** the field stays in the column as it slides away, and only the outline key
+  travels to the header. The key itself is unchanged.
+- **The float:** unchanged. It opens on its field, focused, so the cap would never show
+  there. Its field carries `aria-keyshortcuts` for `\` too, because `\` opens it.
+- **Tests:**
+  - `PlanToc.test.ts` holds the field shown and named at mount, its cap while it is
+    unfocused, empty or holding a query, focus seeding the walk, Tab moving on until the
+    reader engages the field, Escape's two steps, a pick emptying the field, and `\`
+    selecting a query the field holds.
+  - `plan-toc.e2e.ts` holds Tab moving on from the field to the key, and Tab walking the
+    rows once `\` engages the field. It holds `\` coming back to a held query, so typing
+    replaces it. It also holds the column's cap, and the float's count, standing between
+    the query and the ×.
+  - `outline-resize.e2e.ts` holds the head as one row at the opening width and at the
+    narrowest. The field stands at the key's height and corner, and the cap stands inside
+    the field. At the narrowest, a focused query keeps about five characters, and an
+    unfocused one keeps its cap and × inside the field.
+  - `concentric.e2e.ts` holds the field's corner nested in the bed's.
+  - The motion tests for the field's drop-in were removed with the drop-in.
 
 ## 2026-11-02: the plan header lies in one long bed, between mockups A and B
 
