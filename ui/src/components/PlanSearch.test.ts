@@ -51,13 +51,13 @@ describe("PlanSearch", () => {
 
   // The caps stay out of the input group: an addon's click-to-focus handler would
   // otherwise pull focus into the field from a click between them.
-  test("the field leads with the / glyph, and the caps share a tray beside it", () => {
+  test("the field leads with the / glyph and ends with the count, and the caps share a tray beside it", () => {
     const { target } = render(PlanSearch, base);
     const group = target.querySelector("[data-slot='input-group']");
     const addons = Array.from(target.querySelectorAll("[data-slot='input-group-addon']"));
-    expect(addons.map((a) => a.textContent?.trim())).toEqual(["/"]);
-    const tray = target.querySelector(".tray");
-    expect(tray?.querySelectorAll("button").length).toBe(3);
+    expect(addons.map((a) => a.textContent?.trim())).toEqual(["/", "1 / 3"]);
+    const tray = target.querySelector(".search-actions");
+    expect(tray?.querySelectorAll("button").length).toBe(2);
     expect(group?.contains(tray ?? null)).toBe(false);
   });
 
@@ -81,10 +81,10 @@ describe("PlanSearch", () => {
 
   // A committed search must not hold a focusable field: any focused input is an editing
   // context to the shortcut dispatcher, which would swallow the bare n / N.
-  test("a committed search stamps its query in place of the field", () => {
+  test("a committed search stamps its query, and the count, in place of the field", () => {
     const { target } = render(PlanSearch, { ...base, committed: true });
     expect(input(target) != null).toBe(false);
-    expect(target.querySelector(".search-stamp")?.textContent?.replace(/\s+/g, "")).toBe("/foo");
+    expect(target.querySelector(".search-stamp")?.textContent?.replace(/\s+/g, "")).toBe("/foo1/3");
   });
 
   test("reopening a committed search brings the field back focused, its query selected", () => {
@@ -107,8 +107,8 @@ describe("PlanSearch", () => {
   test("the lip offers the keys that apply in each mode", () => {
     const captions = (props: Partial<typeof base> & { committed?: boolean }) =>
       lipHints(render(PlanSearch, { ...base, hints: true, ...props }).target).map(caption);
-    expect(captions({})).toEqual(["go to match", "close"]);
-    expect(captions({ matchCount: 0, currentIndex: -1 })).toEqual(["close"]);
+    expect(captions({})).toEqual(["go to match"]);
+    expect(captions({ matchCount: 0, currentIndex: -1 })).toEqual([]);
     expect(captions({ committed: true })).toEqual(["next", "previous", "edit"]);
   });
 
@@ -119,10 +119,23 @@ describe("PlanSearch", () => {
     expect(hints.every((h) => h.getAttribute("aria-hidden") === "true")).toBe(true);
   });
 
-  test("with hints off the lip holds only the counter", () => {
+  test("with hints off the row shows the counter and no key hints", () => {
     const { target } = render(PlanSearch, { ...base, hints: false });
     expect(lipHints(target).length).toBe(0);
     expect(count(target)).toBe("1 / 3");
+  });
+
+  // Close stands as a key of its own, and Esc is its cap rather than a hint in the lip.
+  test("Close reads Close and wears its Esc cap while hints show, and loses only the cap with them off", () => {
+    const close = (hints: boolean) =>
+      step(render(PlanSearch, { ...base, hints }).target, "Close search");
+    const shown = close(true);
+    expect(shown?.getAttribute("aria-keyshortcuts")).toBe("Escape");
+    expect(shown?.querySelector("[data-slot='kbd']")?.textContent?.trim()).toBe("esc");
+    expect(caption(shown!)).toBe("Close");
+    const hidden = close(false);
+    expect(hidden?.querySelector("[data-slot='kbd']") != null).toBe(false);
+    expect(caption(hidden!)).toBe("Close");
   });
 
   test("the step and close buttons fire their callbacks", () => {

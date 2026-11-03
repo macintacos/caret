@@ -45,7 +45,6 @@
     cwdPath,
     type FolderCardMemory,
     type FolderMemory,
-    laneEdge,
     type Levels,
     refreshCard,
     treeKey,
@@ -193,12 +192,12 @@
    *
    * The dock is read as a total ternary rather than asserted: the attribute's
    * value comes from a typed prop one component away, so the fallback can never
-   * fire today, but nothing local would say so if that changed. The rect is put
-   * through `laneEdge` rather than used raw, because a lane opened FROM this card
-   * is measured while it is still wiping in.
+   * fire today, but nothing local would say so if that changed. The rect is taken
+   * less the lane's transform, because a lane opened FROM this card is measured
+   * while it is still sliding in.
    *
-   * A lane playing its CLOSING wipe is no lane, which is what the `:not()` buys.
-   * It stays mounted for the length of that wipe, so a row clicked inside that
+   * A lane sliding OUT is no lane, which is what the `:not()` buys. It stays
+   * mounted for the length of that slide, so a row clicked inside that
    * window would otherwise read a lane that is already leaving — and skip the
    * re-place on the very closed-to-open transition it exists to catch, since
    * reopening cancels the pending unmount and the lane comes straight back.
@@ -209,8 +208,12 @@
     );
     if (el === null) return undefined;
     const edge: DrawerEdge = el.dataset.fileDrawer === "right" ? "right" : "bottom";
-    const settled = Number.parseFloat(el.style.getPropertyValue("--fd-size"));
-    return laneEdge(edge, el.getBoundingClientRect(), settled);
+    const transform = getComputedStyle(el).transform;
+    const { m41: dx, m42: dy } = new DOMMatrixReadOnly(
+      transform === "" || transform === "none" ? undefined : transform,
+    );
+    const r = el.getBoundingClientRect();
+    return { edge, top: r.top - dy, left: r.left - dx };
   }
 
   /** Put the card at `box`, sized as it currently measures and inside the
@@ -678,9 +681,9 @@
           onclick={refresh}
         >
           {#if refreshing}
-            <Spinner size={11} aria-hidden="true" />
+            <Spinner size={13} aria-hidden="true" />
           {:else}
-            <Icon name="refresh-cw" size={11} />
+            <Icon name="refresh-cw" size={13} />
           {/if}
         </button>
       {/if}
@@ -748,21 +751,21 @@
   /* A key lying flat in the header (.key-row): a bare glyph at rest that rises as a
      key under the pointer and sinks when pressed. It takes no tint of its own —
      this is not a way out of the card — so it sits in --ink-soft and comes up to
-     full ink under the pointer or the keyboard's focus. Its face is 20px, so the
-     invisible target round it shrinks to keep 24px. */
+     full ink under the pointer or the keyboard's focus. Its face is the plan
+     header's crumbs' 24px, so it needs no invisible target round it. */
   .ft-refresh {
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 1.5rem;
+    height: 1.5rem;
     color: var(--ink-soft);
   }
   .ft-refresh::after {
-    inset: -2px;
+    inset: 0;
   }
   .ft-refresh:hover,
   .ft-refresh:focus-visible {
     color: var(--ink);
   }
-  /* The vendored 24px glyph carries stroke-width 2, which at 11px renders under
+  /* The vendored 24px glyph carries stroke-width 2, which at 13px renders near
      one device pixel and smudges rather than reading as a pair of arrows. */
   .ft-refresh :global(svg) {
     stroke-width: 2.5;

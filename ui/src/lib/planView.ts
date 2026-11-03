@@ -1,8 +1,8 @@
 // The plan view's surfaces and where each source-view behavior runs: the reader's
-// remembered source/preview choice, and SURFACE_BEHAVIORS, the one declaration of which
-// surfaces each behavior runs on.
+// remembered source/preview and outline choices, and SURFACE_BEHAVIORS, the one
+// declaration of which surfaces each behavior runs on.
 //
-// The choice is a pure display pref with no security surface, so it lives in localStorage;
+// Each choice is a pure display pref with no security surface, so it lives in localStorage;
 // definePref registers the key for the `--fresh` reset and degrades a blocked store.
 
 import { definePref } from "$lib/definePref.ts";
@@ -24,6 +24,20 @@ export const readPlanView = pref.read;
 /** Persist the chosen view; a storage failure is swallowed. */
 export const writePlanView = pref.write;
 
+/** Whether the reader keeps the outline column out beside the plan. */
+export type PlanOutline = "shown" | "hidden";
+
+/** localStorage key holding the remembered outline choice. */
+export const PLAN_OUTLINE_KEY = "caret.planOutline";
+
+const outlinePref = definePref<PlanOutline>(PLAN_OUTLINE_KEY, ["shown", "hidden"], "shown");
+
+/** Read the remembered outline choice, defaulting to "shown". */
+export const readPlanOutline = outlinePref.read;
+
+/** Persist the outline choice; a storage failure is swallowed. */
+export const writePlanOutline = outlinePref.write;
+
 /** The surfaces each source-view behavior runs on — the only place that is declared.
  * Running a behavior on another surface means adding the surface to its row; see
  * doc/agents/plan-render-rules.md § Surfaces for what that does and does not switch on. */
@@ -38,6 +52,7 @@ export const SURFACE_BEHAVIORS = {
   lineComments: ["source"], // drag readout, gutter drag, drag hint chip, hover re-fire
   textComments: ["source", "preview"], // a click or text selection on the plan opens the composer
   headingTracking: ["source", "preview"], // top-visible heading, ?heading= mirror, ToC, breadcrumbs, b and \
+  outlinePeek: ["source", "preview"], // the outline row's peek, copied from the live view
 } as const satisfies Record<string, readonly PlanSurface[]>;
 
 export type SurfaceBehavior = keyof typeof SURFACE_BEHAVIORS;

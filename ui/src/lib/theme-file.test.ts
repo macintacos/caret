@@ -46,6 +46,7 @@ describe("buildFileTheme", () => {
       ["--rule-strong", hues.ruleHue],
       ["--accent-wash", hues.washHue],
       ["--mark", hues.markHue],
+      ["--mark-match", hues.markHue],
       ["--mark-active", hues.markHue],
       ["--chip-bold", hues.chipBoldHue],
       ["--chip-italic", hues.chipItalicHue],

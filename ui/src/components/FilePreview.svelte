@@ -397,7 +397,7 @@
     const region = codeEl;
     const framing = meta;
     if (region === null || framing === undefined || preview.kind !== "ready") return undefined;
-    // An unmeasured region — the lane mid-wipe, or a panel not yet laid out —
+    // An unmeasured region — a panel not yet laid out —
     // has no proximity to read and would size a chunk off a zero height.
     if (region.clientHeight === 0) return undefined;
     const { threshold } = step(region, preview.rows.length);
@@ -608,6 +608,7 @@
 
 <div class="file-preview" data-file-preview data-more-below={moreBelow || undefined}>
   <div class="fp-header ref-header">
+    <span class="header-bed" aria-hidden="true"></span>
     <button
       type="button"
       class="fp-close ref-icon-btn"
@@ -800,13 +801,27 @@
       opacity: 1;
     }
   }
-  /* A passive readout, so it is stamped into the header, as the Contents peek's
-     "Lines" fact is. */
+  /* As the lane narrows, the header gives way so the path keeps some room: first the esc
+     hint, since the circle and Escape still close, then the kind tag. The line range
+     stays, being the live region a landing chunk speaks through. */
+  .fp-header {
+    container: fp-header / inline-size;
+  }
+  @container fp-header (width < 26rem) {
+    .fp-hint {
+      display: none;
+    }
+  }
+  @container fp-header (width < 20rem) {
+    .fp-badge {
+      display: none;
+    }
+  }
+  /* A passive readout, so it is stamped into the header. */
   .fp-range {
-    align-self: center;
     display: inline-flex;
     align-items: center;
-    height: 1.15rem;
+    height: var(--ref-stamp-h);
     padding: 0 0.45rem;
     border-radius: 99px;
     line-height: 1;
@@ -822,7 +837,7 @@
      source view's own grid — the same font stack, --text-base size,
      --leading-normal rhythm, and tabular figures the .diffview bridge sets
      (app.css) — so an excerpt looks like a window onto the plan, not a smaller
-     sibling. The header stays at the --text-2xs label size. */
+     sibling. */
   .fp-code {
     flex: 1;
     min-height: 0;

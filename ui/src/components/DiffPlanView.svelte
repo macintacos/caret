@@ -1,7 +1,7 @@
 <script lang="ts">
   // Source-view plan surface: renders the active plan version's stored text as
   // line-numbered markdown source through the diffview SourceView wrapper, with the
-  // heading-navigation surfaces in the control row and a line gutter for creating
+  // outline beside it, the breadcrumbs in its header, and a line gutter for creating
   // comments. Clicking the gutter `+` opens an inline composer at the selected line
   // or range, and submitting creates a line-anchored {startLine, endLine} annotation
   // in the autosave working copy. Saved comments and the open composer render inline
@@ -13,7 +13,7 @@
   // the contentKey is unchanged, so scroll survives the 2s poll re-delivering the
   // same version.
   //
-  // A toggle in the control row swaps the source view for a plan preview of the same text
+  // A toggle in the plan header swaps the source view for a plan preview of the same text
   // rendered as HTML (PlanPreview), remembered per browser. The source view's own
   // behaviors — gutter, cursor, search, heading tracking, reference and code chrome —
   // run only on the surfaces planView.ts's SURFACE_BEHAVIORS lists for them.
@@ -27,7 +27,7 @@
   // docked panel instead, revealing their line on the side
   // they belong to for the two rendered versions and listing non-interactively for
   // anything in between.
-  import { tick, untrack } from "svelte";
+  import { flushSync, tick, untrack } from "svelte";
   import SourceView from "$lib/diffview/SourceView.svelte";
   import SourceDiffView from "$lib/diffview/SourceDiffView.svelte";
   import {
@@ -65,21 +65,24 @@
     refHintToken,
     syncRefHints,
   } from "$lib/diffview/refHint.ts";
-  import { resolveFileRefs } from "$lib/api.ts";
+  import { getFileExcerpt, resolveFileRefs } from "$lib/api.ts";
+  import { highlightChunk } from "$lib/diffview/highlight.ts";
+  import { languageForPath } from "@core/plan/excerpt-language";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
-  import { shortCwd } from "$lib/cwd.ts";
   import { commentIndex } from "$lib/feedback.ts";
   import { createFolderMemory } from "$lib/folderTree.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
+  import * as Popover from "$lib/components/ui/popover/index.js";
   import { buildLinkLayer } from "$lib/diffview/links.ts";
   import { readDiffStyle, writeDiffStyle } from "$lib/diffStylePref.ts";
   import { readPreviewFontSize } from "$lib/previewFontSizePref.ts";
   import { readDiffIndicators, writeDiffIndicators } from "$lib/diffIndicatorsPref.ts";
+  import { appearance } from "@/state/appearance.svelte.ts";
   import { type CompareStore, createCompare } from "@/state/compare.svelte.ts";
   import { createPlanKeyboard, type PlanKeyboardStore } from "@/state/planKeyboard.svelte.ts";
   import { setHeadingSlug, takeHeadingSlug } from "@/state/headingLink.ts";
   import VersionComparePicker from "@/components/VersionComparePicker.svelte";
-  import SearchDock from "@/components/SearchDock.svelte";
+  import PlanSearch from "@/components/PlanSearch.svelte";
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
   import type {
     DiffSide,
@@ -91,6 +94,8 @@
   import {
     ariaKeyshortcutsFor,
     bind,
+    CANONICAL_KEYMAP,
+    chordMatches,
     defaultIsEditingContext,
     shortcuts,
   } from "$lib/shortcuts/index.ts";
@@ -106,19 +111,32 @@
   } from "$lib/previewSearch.ts";
   import { activeHeadingLine, extractHeadings, lineForSlug, slugForLine } from "$lib/toc.ts";
   import { NARROW_WIDTH_PX } from "$lib/layout.ts";
+  import { slideLayout, type SlidePart } from "$lib/layoutSlide.ts";
+  import { createPaneMove } from "$lib/paneMove.ts";
   import {
     clampDrawerSize,
     DEFAULT_DRAWER_SHARE,
     type DrawerEdge,
+    outlineFits,
     readDrawerSize,
     writeDrawerSize,
   } from "$lib/fileDrawer.ts";
+  import {
+    outlineBounds,
+    outlineReset,
+    outlineWidth,
+    outlineWidthPref,
+  } from "$lib/outlineColumn.ts";
+  import { sectionDeltas, sectionLines } from "$lib/tocSections.ts";
+  import type { PeekTarget } from "$lib/outlinePeek.ts";
+  import { previewSnippet, sourceSnippet } from "$lib/peekSnippet.ts";
   import {
     followBox,
     lineAtReadingZone,
     REVEAL_MARGIN_BOTTOM,
     revealScrollDelta,
     rowForLine,
+    SCROLL_ANIM_MS,
     scrollRowIntoView,
   } from "$lib/diffview/scroll.ts";
   import { createPreviewCursor, type PreviewCursorStore } from "@/state/previewCursor.ts";
@@ -165,6 +183,10 @@
   import LegacyAnnotationList from "@/components/LegacyAnnotationList.svelte";
   import PlanBreadcrumbs from "@/components/PlanBreadcrumbs.svelte";
   import PlanToc from "@/components/PlanToc.svelte";
+  import Splitter from "@/components/Splitter.svelte";
+  import OutlinePeek from "@/components/OutlinePeek.svelte";
+  import Icon from "@/components/Icon.svelte";
+  import KbdCap from "@/components/KbdCap.svelte";
   import CodeBlockChrome from "@/components/CodeBlockChrome.svelte";
   import RefHintBadge from "@/components/RefHintBadge.svelte";
   import FileDrawer from "@/components/FileDrawer.svelte";
@@ -175,21 +197,20 @@
   import { memoLast } from "$lib/memoLast.ts";
   import { renderPlanMarkdown, type SourceSpan } from "$lib/planMarkdown.ts";
   import {
+    type PlanOutline,
     type PlanSurface,
     type PlanView,
+    readPlanOutline,
     readPlanView,
     runsOn,
     type SurfaceBehavior,
+    writePlanOutline,
     writePlanView,
   } from "$lib/planView.ts";
 
   interface Props {
     /** The review whose current plan version is rendered. */
     review: ClientReview;
-    /** Copy the review's working directory to the clipboard (EXC-850). App.svelte
-     * does the write + fires the success alert; the compare-row path calls this
-     * on click. */
-    onCopyCwd: (cwd: string) => void;
     /** The working-copy annotations to display over the source. */
     annotations: Annotation[];
     /** The single focused annotation id (drives expand + highlight), or null. */
@@ -246,7 +267,6 @@
 
   let {
     review,
-    onCopyCwd,
     annotations,
     focusedAnnotation,
     onEditAnnotation,
@@ -675,6 +695,44 @@
     };
   });
 
+  // The plan's files, highlighted ahead while the reader reads: the opening of the first
+  // file in each language, so a file's first open doesn't stall its slide compiling the
+  // grammar rules its lines reach. Real source, because a grammar compiles a rule only
+  // when a line reaches it, and a sample never reaches what a real file does.
+  $effect(() => {
+    const firsts = new Map<string, string>();
+    for (const [path, kind] of resolvedKinds) {
+      const language = languageForPath(path);
+      if (kind === "file" && language !== "text" && !firsts.has(language)) firsts.set(language, path);
+    }
+    if (firsts.size === 0) return;
+    const review = reviewId;
+    let cancelled = false;
+    const warm = async () => {
+      for (const path of firsts.values()) {
+        if (cancelled) return;
+        try {
+          const excerpt = await getFileExcerpt(review, path);
+          await highlightChunk(excerpt.lines.join("\n"), excerpt.language, appearance.themeId);
+        } catch {
+          // A file that won't read ahead highlights when it opens.
+        }
+      }
+    };
+    if (typeof requestIdleCallback === "function") {
+      const idle = requestIdleCallback(() => void warm(), { timeout: 2000 });
+      return () => {
+        cancelled = true;
+        cancelIdleCallback(idle);
+      };
+    }
+    const timer = setTimeout(() => void warm(), 1000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  });
+
   // The active reference spans: candidates confirmed real, each carrying what the
   // daemon said it is. The kind is attached to a COPY of the span rather than
   // written onto the memoized candidate — that map is keyed on the plan text and
@@ -717,13 +775,13 @@
   type OpenFile = { path: string; line?: number; endLine?: number; token?: HTMLElement };
   let filePreview = $state<OpenFile | undefined>();
 
-  // Dismissal plays the lane's wipe in reverse before the drawer leaves, so the
-  // pane slides shut with the excerpt still in it instead of blinking out. The
-  // drawer stays mounted for that beat and `drawerClosing` puts it in its closing
-  // state; the timer then drops it. Must match FileDrawer's fd-close-* duration
-  // (--dur-state = 160ms, pinned by motion.test.ts) — a timer rather than animationend
-  // because happy-dom fires no animation events, so the unit env would strand the
-  // drawer forever.
+  // Dismissal slides the lane out past its edge before the drawer leaves, so the
+  // pane goes with the excerpt still in it instead of blinking out. The drawer
+  // stays mounted for that beat and `drawerClosing` puts it in its closing state,
+  // out of the layout; the timer then drops it. Must match the closing lane's
+  // duration (--dur-state = 160ms, pinned by motion.test.ts), as must the folding
+  // column's below — a timer rather than transitionend because happy-dom fires no
+  // transition events, so the unit env would strand the drawer forever.
   const CLOSE_ANIM_MS = 160;
   let drawerClosing = $state(false);
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -734,24 +792,28 @@
     drawerClosing = false;
   }
 
-  /** Start the closing wipe, dropping the drawer once it has played. */
+  /** Slide the lane out, dropping the drawer once it has gone. A column the drawer
+   * folded stands again in the same frame, as the plan takes the lane's room back. */
   function dismissFilePreview(): void {
     if (filePreview === undefined || drawerClosing) return;
-    drawerClosing = true;
     // Below the early return, so a redundant dismiss stays silent.
     sound.play("filePreviewClose");
+    slide(fileParts, () => (drawerClosing = true));
     closeTimer = setTimeout(() => {
       filePreview = undefined;
       cancelDrawerClose();
     }, CLOSE_ANIM_MS);
   }
 
+  /** Slide the lane in, a column it folds sliding out with it. Reopening mid-close
+   * drops the pending unmount, so the lane slides back on the same instance rather
+   * than being torn out from under it. */
   function openFilePreview(next: OpenFile): void {
-    // Reopening mid-collapse: drop the pending unmount so the lane wipes back
-    // open on the same instance rather than being torn out from under it.
-    cancelDrawerClose();
     sound.play("filePreviewOpen");
-    filePreview = next;
+    slide(fileParts, () => {
+      cancelDrawerClose();
+      filePreview = next;
+    });
   }
 
   // The directory reference whose tree is open (EXC-918), plus the clicked
@@ -876,9 +938,11 @@
   // window, where `stopPropagation` says nothing to a sibling — so one press would
   // close both. Precedence is therefore state rather than a listener race: the card
   // is stacked above the lane, so while one is open the lane simply does not listen.
-  // Closing it re-runs this effect, and the next Escape reaches the lane.
+  // Closing it re-runs this effect, and the next Escape reaches the lane. The outline's
+  // float and the find row stand over the lane the same way.
   $effect(() => {
-    if (!runs("fileReferences") || filePreview === undefined || folderTree !== undefined) return;
+    if (!runs("fileReferences") || filePreview === undefined) return;
+    if (folderTree !== undefined || floatOpen || keyboardStore.searchOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || drawerClosing) return;
       dismissFilePreview();
@@ -898,7 +962,7 @@
   // The whole surface the plan and the drawer divide between them. The reveal
   // effect measures THIS rather than .diff-plan: the surface's height never
   // changes, so the geometry is the same whether the effect runs before, during,
-  // or after the lane's opening wipe. Its size is *bound* (a ResizeObserver under
+  // or after the lane's opening slide. Its size is *bound* (a ResizeObserver under
   // the hood) rather than measured, so the clamp below tracks any window resize —
   // including one that never crosses the breakpoint, which would otherwise leave
   // the plan pane squeezed past its minimum with nothing to re-clamp it. No
@@ -916,11 +980,288 @@
     bottom: readDrawerSize("bottom"),
   });
   const drawerSize = $derived(
-    clampDrawerSize(chosenSize[drawerEdge] ?? drawerAxis * DEFAULT_DRAWER_SHARE, drawerAxis),
+    clampDrawerSize(
+      chosenSize[drawerEdge] ?? drawerAxis * DEFAULT_DRAWER_SHARE,
+      drawerAxis,
+      drawerEdge,
+    ),
   );
-  function setDrawerSize(px: number): void {
+  function setDrawerSize(px: number | null): void {
     chosenSize[drawerEdge] = px;
     writeDrawerSize(drawerEdge, px);
+  }
+
+  // The outline stands as a column beside the plan while the reader keeps it out and
+  // the window has room for it: not under --w-narrow, and not where a file drawer docked
+  // right would leave the plan under its reading width. Comparing folds it too, as a mode
+  // that leaves the reader's choice alone: the split diff needs the width, and no reading
+  // position is tracked there. Otherwise it drops from the header's outline key as a
+  // float, which while comparing lists the sections that changed.
+  let outline = $state<PlanOutline>(readPlanOutline());
+  let floatOpen = $state(false);
+  let bodyWidth = $state(0);
+  const outlineRuns = $derived(runs("headingTracking") || showDiff);
+  // A closing lane has left the layout, so the column stands again as it goes.
+  const drawerRight = $derived(
+    runs("fileReferences") && filePreview !== undefined && !drawerClosing && drawerEdge === "right",
+  );
+  // The column stands at the width the reader chose, within the room the body leaves, and
+  // yields to a file at that width. A drag beside a file stops where it would yield.
+  let columnChosen = $state(outlineWidthPref.read());
+  const columnWidth = $derived(outlineWidth(columnChosen, bodyWidth, remPx()));
+  const columnBounds = $derived(
+    outlineBounds(bodyWidth, remPx(), drawerRight ? { chosen: chosenSize.right } : undefined),
+  );
+  const columnRoom = $derived(
+    !narrow && (!drawerRight || outlineFits(bodyWidth, columnWidth, chosenSize.right)),
+  );
+  const columnStands = $derived(columnRoom && !showDiff);
+  const columnShown = $derived(outlineRuns && outline === "shown" && columnStands);
+
+  // The column yields in the same update that opens the drawer, but the bound surface
+  // width catches up a frame later, so the drawer would open sized for the narrower
+  // surface and then grow under a card already placed against it. Read it now.
+  $effect(() => {
+    void columnShown;
+    if (surfaceEl !== undefined) surfaceWidth = surfaceEl.clientWidth;
+  });
+
+  // The column is sized in rem, so a larger default font widens it with the text.
+  function remPx(): number {
+    const root = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+    return Number.isFinite(root) ? root : 16;
+  }
+
+  function setColumnWidth(px: number | null): void {
+    columnChosen = px;
+    outlineWidthPref.write(px);
+  }
+
+  // The layout's live moves (lib/layoutSlide.ts): the column standing or folding, and a
+  // file docking beside the plan or leaving it. A folding column stays mounted out of the
+  // layout while it slides away, `columnLeaving`, and its key travels in its well to the
+  // header's outline key, which waits unseen until the column has gone, letting go of its
+  // latch on the way. A standing column's key latches as it travels in, so it mounts at
+  // rest for the style pass the slide starts from, `keyEntry` "rest", then latches on
+  // the slide's clock, "latching"; a click's key is down already, and mounts latched.
+  let columnLeaving = $state(false);
+  let keyEntry = $state<"rest" | "latching" | null>(null);
+  let leaveTimer: ReturnType<typeof setTimeout> | undefined;
+  let bodyEl = $state<HTMLElement | undefined>();
+  let paneEl = $state<HTMLElement | undefined>();
+  let floorEl = $state<HTMLElement | undefined>();
+  let lipEl = $state<HTMLElement | undefined>();
+  let bedEl = $state<HTMLElement | undefined>();
+  let crumbSlotEl = $state<HTMLElement | undefined>();
+  let headerWellEl = $state<HTMLElement | undefined>();
+  const COLUMN_KEY = ".toc-title-row .header-tray";
+  const lane = (open: boolean) =>
+    surfaceEl?.querySelector<HTMLElement>(
+      open ? "[data-file-drawer]:not([data-file-drawer-closing])" : "[data-file-drawer]",
+    );
+  const part = (el: () => HTMLElement | null | undefined): SlidePart => ({
+    before: el,
+    after: el,
+  });
+  // A folding column is a part too, so one caught standing folds from where it got to in
+  // step with the slide: a transition turned back runs shorter than the slide.
+  const columnParts: SlidePart[] = [
+    {
+      before: () => outlineEl,
+      after: () => outlineEl,
+      enter: { from: (box) => ({ x: -box.width, y: 0 }), duration: "var(--dur-pane)" },
+    },
+    {
+      before: () => outlineEl?.querySelector<HTMLElement>(COLUMN_KEY) ?? headerWellEl,
+      after: () => outlineEl?.querySelector<HTMLElement>(COLUMN_KEY),
+    },
+  ];
+  // The column's edge moves only the plan's left edge, so the pane holds still: its floor,
+  // recess and header bed stretch from that edge, and the plan's text, the crumbs and the
+  // find row slide with it, inside a crumb slot that clips them at its own end. The Search
+  // entry and the view keys stay where they are. Only transforms move, so nothing waits on
+  // a frame.
+  const outlineParts: SlidePart[] = [
+    ...columnParts,
+    // Held only, so a move it interrupts ends where this one starts, and what it holds
+    // slides from wherever that move had got it to.
+    { before: () => null, after: () => paneEl },
+    { ...part(() => floorEl), stretches: "both" },
+    { ...part(() => bedEl), stretches: "both" },
+    part(() => scrollEl),
+    part(() => crumbSlotEl?.querySelector<HTMLElement>(".plan-breadcrumbs")),
+    part(() => crumbSlotEl?.querySelector<HTMLElement>(".plan-search")),
+    part(() => crumbSlotEl?.querySelector<HTMLElement>(".search-entry")),
+    part(() => paneEl?.querySelector<HTMLElement>(".compare-picker")),
+    { ...part(() => lipEl), stretches: "both" },
+  ];
+  // A file moves both of the plan's edges, the lane covering the right one, so the pane
+  // slides whole, the crumbs and the find row inside it from where they stood. The floor,
+  // the recess, the header bed and the plan's text start their left edge from wherever an
+  // outline move had got it to; their right edge is the pane's.
+  const fileParts: SlidePart[] = [
+    ...columnParts,
+    part(() => paneEl),
+    { ...part(() => floorEl), stretches: "start" },
+    { ...part(() => lipEl), stretches: "start" },
+    { ...part(() => bedEl), stretches: "start" },
+    part(() => scrollEl),
+    part(() => crumbSlotEl?.querySelector<HTMLElement>(".plan-breadcrumbs")),
+    part(() => crumbSlotEl?.querySelector<HTMLElement>(".plan-search")),
+    {
+      before: () => lane(false),
+      after: () => lane(true),
+      enter: {
+        from: (box) => (drawerEdge === "right" ? { x: box.width, y: 0 } : { x: 0, y: box.height }),
+        duration: "var(--dur-pane)",
+      },
+    },
+  ];
+
+  /** Apply a layout change at once, and slide `parts` from where they stood. */
+  function slide(parts: SlidePart[], change: () => void): void {
+    const stood = columnShown;
+    slideLayout(
+      parts,
+      (sliding) => {
+        change();
+        // In the same flush as the change, so the folding column is never unmounted.
+        if (sliding && stood && !columnShown) leaveColumn();
+        if (sliding && !stood && columnShown && !outlineKeyClicked) keyEntry = "rest";
+        flushSync();
+      },
+      {
+        duration: () => (columnShown && !stood ? "var(--dur-pane)" : "var(--dur-state)"),
+        measured: aimLeavingKey,
+      },
+    );
+    if (keyEntry === null) return;
+    keyEntry = "latching";
+    flushSync();
+    // The latch starts in this style pass, on the arriving key's timing, which it keeps.
+    void outlineEl?.getBoundingClientRect();
+    keyEntry = null;
+    flushSync();
+  }
+
+  function leaveColumn(): void {
+    clearTimeout(leaveTimer);
+    columnLeaving = true;
+    // Its latch lets go as it travels, which a shortcut's press echo would hold down.
+    outlineEl?.querySelector(`${COLUMN_KEY} > [data-key-pressed]`)?.removeAttribute("data-key-pressed");
+    leaveTimer = setTimeout(() => (columnLeaving = false), CLOSE_ANIM_MS);
+  }
+
+  function dropLeavingColumn(): void {
+    clearTimeout(leaveTimer);
+    columnLeaving = false;
+  }
+  $effect(() => () => clearTimeout(leaveTimer));
+
+  /** Aim the folding column's key at the header's key: the offset its well ends at, in
+   * the column slid a column's width off. Read off the layout, transform-free, so a fold
+   * that reverses a standing column mid-slide aims true. */
+  function aimLeavingKey(): void {
+    const well = outlineEl?.querySelector<HTMLElement>(COLUMN_KEY);
+    if (!columnLeaving || columnShown || !outlineEl || !well || !headerWellEl || !bodyEl) return;
+    let x = 0;
+    let y = 0;
+    for (let el: Element | null = well; el instanceof HTMLElement && el !== bodyEl; el = el.offsetParent) {
+      x += el.offsetLeft;
+      y += el.offsetTop;
+    }
+    const body = bodyEl.getBoundingClientRect();
+    const to = headerWellEl.getBoundingClientRect();
+    well.style.setProperty("--key-dx", `${to.left - body.left - x + outlineEl.offsetWidth}px`);
+    well.style.setProperty("--key-dy", `${to.top - body.top - y}px`);
+  }
+
+  function setOutline(next: PlanOutline): void {
+    slide(outlineParts, () => {
+      outline = next;
+      writePlanOutline(next);
+    });
+  }
+
+  // Compare swaps the plan's content as well as moving it, so it runs as one view
+  // transition (lib/paneMove.ts), the column folding or standing inside it.
+  const movePanes = createPaneMove();
+
+  function setComparing(next: boolean): void {
+    movePanes(next ? "exit" : "enter", () => {
+      dropLeavingColumn();
+      compare.setComparing(next);
+    });
+  }
+
+  // Shift+\ and the header's key: the column where it has room, the float elsewhere.
+  function toggleOutline(): void {
+    if (columnStands) setOutline(outline === "shown" ? "hidden" : "shown");
+    else floatOpen = !floatOpen;
+  }
+
+  // A press from the pointer or from Space holds the header's key down until its click
+  // lands, so the column it stands brings its key in latched; Enter's click shows no
+  // press. `:active` has lifted by the time the click lands, and Space's click, like
+  // Enter's, carries no `detail`, so the key notes a held Space itself.
+  let outlineKeyClicked = false;
+  let outlineKeySpace = false;
+  function clickOutlineKey(event: MouseEvent): void {
+    outlineKeyClicked = event.detail > 0 || outlineKeySpace;
+    outlineKeySpace = false;
+    toggleOutline();
+    outlineKeyClicked = false;
+  }
+
+  // `\` lands in the outline's filter wherever the outline stands.
+  function filterOutline(): void {
+    if (columnShown) openColumnFilter?.();
+    else floatOpen = true;
+  }
+
+  // Handed up by the column, which owns its filter.
+  let openColumnFilter: (() => void) | undefined;
+  let outlineEl = $state<HTMLElement | undefined>();
+  let outlineKey = $state<HTMLButtonElement | null>(null);
+  let floatEl = $state<HTMLElement | null>(null);
+  // A pick from the float hands the reviewer to the plan rather than back to the key.
+  let floatPicked = false;
+
+  // A float has nothing to float over once the column stands.
+  $effect(() => {
+    if (columnShown) floatOpen = false;
+  });
+
+  // The column and the header's outline key replace each other, so whichever one held
+  // focus hands it to the other as it leaves — the column yielding to a file included.
+  // The float leaves with the key.
+  $effect.pre(() => {
+    const shown = columnShown;
+    const leaving = untrack(() => (shown ? [outlineKey, floatEl] : [outlineEl]));
+    if (!leaving.some((el) => el?.contains(document.activeElement))) return;
+    void tick().then(() =>
+      (shown
+        ? outlineEl?.querySelector<HTMLButtonElement>(`${COLUMN_KEY} > button`)
+        : outlineKey
+      )?.focus(),
+    );
+  });
+
+  // The outline's pick: a heading in the plan, or while comparing, the section's first
+  // change on whichever side holds it.
+  function jumpFromOutline(line: number): void {
+    if (!showDiff) {
+      pickHeading(line);
+      return;
+    }
+    const delta = outlineDeltas?.get(line);
+    if (delta !== undefined) revealLine(delta.line, delta.side);
+  }
+
+  function pickFromFloat(line: number): void {
+    floatPicked = true;
+    floatOpen = false;
+    jumpFromOutline(line);
   }
 
   // Scroll the clicked filename clear of the drawer. Only the bottom dock can
@@ -930,8 +1271,9 @@
   // by the same amount, and the EXC-772 scroll-past-the-end room means even a
   // reference on the plan's last line has somewhere to go. `drawerSize` is read
   // untracked so dragging the handle resizes the lane without also scrolling the
-  // plan on every frame. `behavior: "auto"` because the lane is already
-  // animating, and a competing smooth scroll reads as two motions.
+  // plan on every frame. The scroll is instant because the lane is already
+  // animating, and a competing smooth scroll reads as two motions. The lane takes its
+  // room in the layout pass that docks it, so one write has all the room it needs.
   $effect(() => {
     const token = filePreview?.token;
     const edge = drawerEdge;
@@ -948,11 +1290,17 @@
       viewBottom: surface.bottom - inset,
       margin: REVEAL_MARGIN_BOTTOM,
     });
-    if (delta !== 0) scroller.scrollBy({ top: delta, behavior: "auto" });
+    if (delta !== 0) scroller.scrollTop += delta;
   });
 
   const baseText = $derived(compare.planFor(review.versions, compareStore.baseVersion));
   const targetText = $derived(compare.planFor(review.versions, compareStore.targetVersion));
+  // While comparing, the outline lists the base version's headings and marks what each
+  // section changed against the target.
+  const compareHeadings = $derived(showDiff ? extractHeadings(baseText) : []);
+  const outlineDeltas = $derived(
+    showDiff ? sectionDeltas(compareHeadings, baseText, targetText) : null,
+  );
 
   // Headings scanned from the formatted source (fence-aware). Line numbers index
   // the stored plan text, which matches the view's per-line data-line, so a jump
@@ -1362,6 +1710,7 @@
   // Scrolling never lands here — the trail re-roots on the scroll observer, and
   // only a pick calls onJump — so reading around leaves the cursor untouched.
   function pickHeading(line: number): void {
+    latchHeading(line);
     keyboardStore.cursorLine = line;
     if (surface !== "preview") {
       api?.scrollToLine(line);
@@ -1464,6 +1813,23 @@
   // the scroll container's topmost rendered line so the breadcrumbs bar reports
   // the section being read.
   let activeLine = $state<number | null>(null);
+  // A deliberate jump (an outline pick, a crumb, a heading key) latches its heading at once
+  // and holds it while the plan travels there, so the outline's latch moves once rather
+  // than stepping through every heading the travel passes. A heading the travel cannot
+  // bring to the reading zone lets go after twice the travel's duration, which leaves room
+  // for a travel that starts a few frames after the jump.
+  let latchJump = $state<number | null>(null);
+  let latchTimer: ReturnType<typeof setTimeout> | undefined;
+  const latchedLine = $derived(latchJump ?? activeLine);
+  function latchHeading(line: number | null): void {
+    clearTimeout(latchTimer);
+    latchJump = line;
+    latchTimer = setTimeout(() => (latchJump = null), 2 * SCROLL_ANIM_MS);
+  }
+  $effect(() => {
+    if (latchJump !== null && activeLine === latchJump) latchJump = null;
+  });
+  $effect(() => () => clearTimeout(latchTimer));
   // The scroll container (the .diff-plan element), used by the heading tracking to
   // read the topmost visible line.
   let scrollEl = $state<HTMLElement | undefined>();
@@ -1473,11 +1839,6 @@
   // `b` inert there is the binding's own headingTracking guard; the closure would
   // no-op anyway, since it reads a `barEl` the unmount set back to null.
   let openHeadingNav: (() => void) | undefined;
-  // Opens the contents popup, handed over by PlanToc the same way (EXC-1097). Its
-  // closure only sets the popup's own `open` flag, so the stale-closure question the
-  // bar's comment answers does not arise here; `\` is inert on compare for the one
-  // reason that matters — the binding's headingTracking guard.
-  let openToc: (() => void) | undefined;
 
   // The plan's keyboard surface (EXC-875): the vim line cursor (EXC-788), visual
   // line-select (EXC-790), and the `/` full-text search HUD (EXC-832) in one
@@ -1522,7 +1883,6 @@
     openComposer: openRange,
     focusField: focusSearchField,
     blur: () => (document.activeElement as HTMLElement | null)?.blur(),
-    hintsShown: () => showShortcutHints,
     sound: sound.play,
   });
 
@@ -1541,6 +1901,38 @@
   }
 
   const planLineCount = $derived(lineCountOf(linkLayer.text.split("\n")));
+
+  // The outline's peek: a section copied from the live view the first time a row shows it,
+  // and kept until what the view draws could have changed. Each such change makes a new
+  // `peekSnippet`, which an open peek copies again from. A section the view has yet to
+  // draw is not kept, so the next ask copies it afresh.
+  let peekTarget = $state<PeekTarget | null>(null);
+  let previewHighlightRev = $state(0);
+  const peekSnippet = $derived.by(() => {
+    void [surface, contentKey, themeId, reflowedBlocks, previewLayoutRev, previewHighlightRev];
+    const copies = new Map<number, HTMLElement>();
+    return (line: number): HTMLElement | null => {
+      const copy = copies.get(line) ?? copySection(line);
+      if (copy !== null) copies.set(line, copy);
+      return copy;
+    };
+  });
+  // The view flip keeps an open peek, which swaps in the other view's copy.
+  const FLIP_CHORDS =
+    CANONICAL_KEYMAP.find((entry) => entry.id === "actions.togglePreview")?.keys ?? [];
+  function flipsView(e: KeyboardEvent): boolean {
+    return (
+      !showDiff &&
+      !defaultIsEditingContext() &&
+      FLIP_CHORDS.some((chord) => chordMatches(chord, e))
+    );
+  }
+  function copySection(line: number): HTMLElement | null {
+    const lines = sectionLines(headings, line, linkLayer.text.split("\n"));
+    if (lines === null || !runs("outlinePeek")) return null;
+    if (surface === "preview") return previewEl ? previewSnippet(previewEl, lines) : null;
+    return host ? sourceSnippet(host, lines) : null;
+  }
   const previewCursor = createPreviewCursor(keyboardStore, {
     lines: () => linkLayer.text.split("\n"),
     headingLines: () => headings.map((h) => h.line),
@@ -1964,10 +2356,10 @@
     };
   });
 
-  // Which pane edges have text under them, for the lip's shades. Its own listener, as the
-  // heading tracking above doesn't run on compare. Rows paint after mount without resizing
-  // the scroller, so its children are observed too, afresh for each surface and content.
-  let paneScrolled = $state(false);
+  // Whether text lies below the pane's foot, for the lip's bottom shade. Its own listener,
+  // as the heading tracking above doesn't run on compare. Rows paint after mount without
+  // resizing the scroller, so its children are observed too, afresh for each surface and
+  // content.
   let paneMoreBelow = $state(false);
   $effect(() => {
     const el = scrollEl;
@@ -1976,7 +2368,6 @@
     void contentKey;
     void diffContentKey;
     const update = () => {
-      paneScrolled = el.scrollTop > 2;
       paneMoreBelow = el.scrollTop + el.clientHeight < el.scrollHeight - 2;
     };
     const resize = new ResizeObserver(update);
@@ -2047,7 +2438,12 @@
       offs.push(
         shortcuts.register(
           bind(id, {
-            run: () => move(motion),
+            run: () => {
+              move(motion);
+              if (motion === "nextHeading" || motion === "prevHeading") {
+                latchHeading(keyboardStore.cursorLine);
+              }
+            },
             enabled: () => !defaultIsEditingContext(),
           }),
         ),
@@ -2127,7 +2523,7 @@
     offs.push(
       shortcuts.register(
         bind("actions.toggleDiff", {
-          run: () => compare.setComparing(!compareStore.comparing),
+          run: () => setComparing(!compareStore.comparing),
           enabled: () => canCompare,
         }),
       ),
@@ -2173,12 +2569,11 @@
         }),
       ),
     );
-    // The two heading surfaces, one key each: `b` opens the breadcrumbs bar's
-    // trailing crumb (EXC-947), `\` the contents popup (EXC-1097). Both are gated
-    // on the same headingTracking row those surfaces render behind, so neither
-    // fires elsewhere. The optional calls cover a first render off that row, where
-    // the template below never creates either surface, so neither has handed an
-    // open action back yet.
+    // The heading surfaces' keys: `b` opens the breadcrumbs bar's trailing crumb
+    // (EXC-947), gated on the headingTracking row the bar renders behind; `\` opens the
+    // outline's filter and Shift+\ shows or hides the outline, wherever the outline
+    // stands. The optional call covers a first render off the headingTracking row, where
+    // the bar has not handed an open action back yet.
     offs.push(
       shortcuts.register(
         bind("actions.headingNav", {
@@ -2188,8 +2583,11 @@
       ),
     );
     offs.push(
+      shortcuts.register(bind("actions.contents", { run: filterOutline, enabled: () => outlineRuns })),
+    );
+    offs.push(
       shortcuts.register(
-        bind("actions.contents", { run: () => openToc?.(), enabled: () => runs("headingTracking") }),
+        bind("actions.toggleOutline", { run: toggleOutline, enabled: () => outlineRuns }),
       ),
     );
     return () => {
@@ -2356,122 +2754,177 @@
   ]);
 </script>
 
-<!-- Control row above the surface. The version-compare picker is always shown; its
-     toggle disables itself when there are no other versions to compare (EXC-664).
-     Contents and the Preview toggle share its tray; the heading breadcrumbs and the
-     working-directory path each earn their place conditionally beside it. -->
-<div class="control-row" class:comparing={compareStore.comparing}>
-  <VersionComparePicker
-    versions={review.versions}
-    comparing={compareStore.comparing}
-    {canCompare}
-    baseVersion={compareStore.baseVersion}
-    targetVersion={compareStore.targetVersion}
-    diffStyle={compareStore.diffStyle}
-    diffIndicators={compareStore.diffIndicators}
-    layoutLocked={narrow}
-    {showShortcutHints}
-    onSetComparing={compare.setComparing}
-    onSelectBase={compare.setBase}
-    onSelectTarget={compare.setTarget}
-    onSetDiffStyle={compare.setDiffStyle}
-    onSetDiffIndicators={compare.setDiffIndicators}
-  >
-    {#snippet leading()}
-      <!-- The plan's table of contents (EXC-1095): every heading at once, the
-           see-the-whole-shape surface the breadcrumbs bar beside it is not. It reads
-           the SAME headings and activeLine that bar does, so neither tracks a scroll
-           of its own, and it is gated on the same headingTracking row — elsewhere no
-           heading is tracked, so a contents popup there would open on a stale plan. -->
-      {#if runs("headingTracking")}
-        <PlanToc
-          {headings}
-          {activeLine}
-          {showShortcutHints}
-          plan={review.currentPlan}
-          previous={review.versions.at(-2) ?? null}
-          comments={commentIndex(annotations, scratches)}
-          onJump={pickHeading}
-          onExposeOpen={(open) => (openToc = open)}
-        />
-      {/if}
-    {/snippet}
-    {#snippet trailing()}
-      <!-- The source / preview switch. Outside any branch on planView, so it keeps
-           focus across a flip. -->
-      {#if !showDiff}
-        <Button
-          variant="secondary"
-          size="sm"
-          class="preview-toggle float-chip"
-          aria-pressed={planView === "preview"}
-          aria-keyshortcuts={ariaKeyshortcutsFor("actions.togglePreview")}
-          onclick={togglePlanView}
-        >
-          Preview
-          {#if showShortcutHints}
-            <Kbd class="kbd-sm" aria-hidden="true">p</Kbd>
-          {/if}
-        </Button>
-      {/if}
-    {/snippet}
-  </VersionComparePicker>
-  <!-- Heading breadcrumbs (EXC-946): where in the plan the reviewer is, and the
-       menus to move sideways or deeper — the drill-down surface beside the ToC's
-       whole-shape one. It rides the activeLine the scroll observer below tracks
-       and jumps through `pickHeading`. Off the headingTracking row no heading is
-       tracked (and `?heading=` clears), so the bar is dropped there rather than
-       left showing a stale trail. -->
-  {#if runs("headingTracking")}
-    <PlanBreadcrumbs
-      {headings}
-      {activeLine}
-      {showShortcutHints}
-      onJump={pickHeading}
-      onExposeOpen={(open) => (openHeadingNav = open)}
-    />
+<!-- The plan's body row: the outline column, when it stands, then the surface the plan
+     and the file drawer divide between them. -->
+<div
+  class="plan-body"
+  class:column-leaving={columnLeaving && !columnShown}
+  bind:this={bodyEl}
+  bind:clientWidth={bodyWidth}
+>
+  {#if columnShown || columnLeaving}
+    <aside
+      class="plan-outline"
+      class:leaving={!columnShown}
+      class:key-arriving={keyEntry !== null}
+      inert={!columnShown}
+      aria-label="Outline"
+      style:width="{columnWidth}px"
+      bind:this={outlineEl}
+    >
+      {@render outlineList("column")}
+      <Splitter
+        label="Resize outline"
+        grows="right"
+        size={columnWidth}
+        min={columnBounds.min}
+        max={columnBounds.max}
+        onResize={setColumnWidth}
+        onReset={() => setColumnWidth(outlineReset(columnBounds.max, remPx()))}
+      />
+    </aside>
   {/if}
-  {#if !compareStore.comparing}
-    <!-- Working-directory path (EXC-807). The row shows the abbreviated path and
-         copies the full absolute path on click — no hover popup (EXC-850).
-         Right-aligned by its own margin-left, and dropped in compare mode so the
-         picker's display toggles reclaim the right edge. -->
-    <button
-      type="button"
-      class="cwd mono key-row"
-      aria-label={`Copy path ${review.cwd} to the clipboard`}
-      onclick={() => onCopyCwd(review.cwd)}>{shortCwd(review.cwd)}</button>
-  {/if}
-</div>
-
 <div
   class="diff-surface"
   class:dock-bottom={drawerEdge === "bottom"}
+  class:beside-outline={columnShown}
   bind:this={surfaceEl}
   bind:clientWidth={surfaceWidth}
   bind:clientHeight={surfaceHeight}
 >
   <div
     class="plan-pane"
+    bind:this={paneEl}
     data-surface={surface}
-    data-scrolled={paneScrolled || undefined}
     data-more-below={paneMoreBelow || undefined}
   >
-    {#if runs("search")}
-      <SearchDock
-        open={keyboardStore.searchOpen}
-        hints={showShortcutHints}
-        bind:query={keyboardStore.searchQuery}
-        matchCount={searchMatches.length}
-        currentIndex={keyboardStore.searchIndex}
-        committed={keyboardStore.searchCommitted}
-        closing={keyboardStore.searchClosing}
-        oncommit={() => keyboard.commitSearch()}
-        onnext={() => keyboard.stepSearch(1)}
-        onprev={() => keyboard.stepSearch(-1)}
-        onclose={() => keyboard.closeSearch()}
-      />
-    {/if}
+    <span class="pane-floor" aria-hidden="true" bind:this={floorEl}></span>
+    <!-- The plan's header, stuck to the pane's top edge above the scroller: the outline
+         key while the column is not shown, the crumb slot, then the view keys, all in one
+         bed. While comparing, the compare controls take the crumbs' place. -->
+    <div
+      class="plan-header"
+      class:comparing={showDiff}
+      class:searching={keyboardStore.searchOpen}
+    >
+      <span class="header-bed" aria-hidden="true" bind:this={bedEl}></span>
+      {#if outlineRuns && !columnShown}
+        <span class="tray header-tray" bind:this={headerWellEl}>
+          <!-- Its name holds whatever the state, as ARIA's toggle pattern asks; pressed
+               while the outline floats out. -->
+          <Button
+            variant="secondary"
+            size={showShortcutHints ? "sm" : "icon-sm"}
+            class="outline-key float-chip"
+            bind:ref={outlineKey}
+            aria-label="Outline"
+            aria-pressed={floatOpen}
+            aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleOutline")}
+            onkeydown={(e: KeyboardEvent) => (outlineKeySpace = e.key === " ")}
+            onclick={clickOutlineKey}
+          >
+            <Icon name="panel-left" size={14} />
+            {#if showShortcutHints}
+              <Kbd class="kbd-sm" aria-hidden="true"><KbdCap key="shift" /><KbdCap key={"\\"} /></Kbd>
+            {/if}
+          </Button>
+        </span>
+      {/if}
+      {#if !showDiff}
+        <!-- The crumbs, the Search entry at the slot's end, and the find row that slides
+             open from it over them. The slot clips at its end, so the row comes out of the
+             entry; the crumbs keep their box under it, so their collapse measure holds
+             still, and fade back in as it tucks away. -->
+        <div
+          class="crumb-slot"
+          bind:this={crumbSlotEl}
+          data-covered={keyboardStore.searchOpen && !keyboardStore.searchClosing ? "" : undefined}
+        >
+          <!-- Heading breadcrumbs (EXC-946): where in the plan the reviewer is, and the
+               menus to move sideways or deeper. It rides the activeLine the scroll
+               observer below tracks and jumps through `pickHeading`. Off the
+               headingTracking row no heading is tracked (and `?heading=` clears), so the
+               bar is dropped there rather than left showing a stale trail. -->
+          {#if runs("headingTracking")}
+            <PlanBreadcrumbs
+              {headings}
+              {activeLine}
+              {showShortcutHints}
+              onJump={pickHeading}
+              onExposeOpen={(open) => (openHeadingNav = open)}
+            />
+          {/if}
+          {#if runs("search")}
+            <!-- Named apart from its word, which a tight header drops. -->
+            <button
+              type="button"
+              class="search-entry"
+              aria-label="Search"
+              aria-keyshortcuts={ariaKeyshortcutsFor("actions.search")}
+              onclick={() => keyboard.openSearch()}
+            >
+              <Icon name="search" size={14} />
+              <span class="search-word">Search</span>
+              {#if showShortcutHints}
+                <Kbd class="kbd-sm" aria-hidden="true">/</Kbd>
+              {/if}
+            </button>
+            {#if keyboardStore.searchOpen}
+              <PlanSearch
+                hints={showShortcutHints}
+                bind:query={keyboardStore.searchQuery}
+                matchCount={searchMatches.length}
+                currentIndex={keyboardStore.searchIndex}
+                committed={keyboardStore.searchCommitted}
+                closing={keyboardStore.searchClosing}
+                oncommit={() => keyboard.commitSearch()}
+                onnext={() => keyboard.stepSearch(1)}
+                onprev={() => keyboard.stepSearch(-1)}
+                onclose={() => keyboard.closeSearch()}
+              />
+            {/if}
+          {/if}
+        </div>
+      {/if}
+      <!-- The plan's view keys. The version-compare picker is always shown; its toggle
+           disables itself when there are no other versions to compare (EXC-664). -->
+      <VersionComparePicker
+        versions={review.versions}
+        comparing={compareStore.comparing}
+        {canCompare}
+        baseVersion={compareStore.baseVersion}
+        targetVersion={compareStore.targetVersion}
+        diffStyle={compareStore.diffStyle}
+        diffIndicators={compareStore.diffIndicators}
+        layoutLocked={narrow}
+        {showShortcutHints}
+        onSetComparing={setComparing}
+        onSelectBase={compare.setBase}
+        onSelectTarget={compare.setTarget}
+        onSetDiffStyle={compare.setDiffStyle}
+        onSetDiffIndicators={compare.setDiffIndicators}
+      >
+        {#snippet trailing()}
+          <!-- The source / preview switch. Outside any branch on planView, so it keeps
+               focus across a flip. -->
+          {#if !showDiff}
+            <Button
+              variant="secondary"
+              size="sm"
+              class="preview-toggle float-chip"
+              aria-pressed={planView === "preview"}
+              aria-keyshortcuts={ariaKeyshortcutsFor("actions.togglePreview")}
+              onclick={togglePlanView}
+            >
+              Preview
+              {#if showShortcutHints}
+                <Kbd class="kbd-sm" aria-hidden="true">p</Kbd>
+              {/if}
+            </Button>
+          {/if}
+        {/snippet}
+      </VersionComparePicker>
+    </div>
     <!-- The gutter composer is the source view only. The compare diff
          is a clean surface with no gutter and no inline annotations; the compared
          versions' comments read in the docked panel instead (EXC-872). -->
@@ -2571,6 +3024,7 @@
           {themeId}
           {reflowedBlocks}
           bind:root={previewEl}
+          onHighlight={() => previewHighlightRev++}
           fileRefs={previewRefs}
           onFileRefClick={openFileRef}
           rowAt={previewRowAt}
@@ -2817,11 +3271,11 @@
         <LegacyAnnotationList annotations={legacyAnnotations} />
       {/if}
     </div>
-    <span class="pane-lip" aria-hidden="true"></span>
+    <span class="pane-lip" aria-hidden="true" bind:this={lipEl}></span>
   </div>
   <!-- The filename-reference preview (EXC-687, docked since EXC-937): a lane
        beside the plan holding the referenced file's excerpt. It takes layout
-       space rather than covering the plan, and wipes in from whichever edge it
+       space rather than covering the plan, and slides in from whichever edge it
        docked to. Only appears for references the daemon resolved to a real file,
        and only on the fileReferences surfaces. -->
   {#if runs("fileReferences") && filePreview}
@@ -2832,6 +3286,7 @@
       size={drawerSize}
       available={drawerAxis}
       onResize={setDrawerSize}
+      onReset={() => setDrawerSize(null)}
       closing={drawerClosing}
     >
       {#snippet children()}
@@ -2847,6 +3302,73 @@
     </FileDrawer>
   {/if}
 </div>
+</div>
+
+<!-- The outline itself, in either place it stands. Off compare it reads the plan and its
+     comments and latches the heading being read; while comparing it reads the base
+     version and marks each section's change against the target. -->
+{#snippet outlineList(placement: "column" | "float")}
+  <PlanToc
+    {placement}
+    headings={showDiff ? compareHeadings : headings}
+    activeLine={showDiff ? null : latchedLine}
+    latchGlides={latchJump !== null}
+    plan={showDiff ? baseText : review.currentPlan}
+    previous={review.versions.at(-2) ?? null}
+    comments={commentIndex(annotations, scratches)}
+    deltas={outlineDeltas}
+    {showShortcutHints}
+    onJump={placement === "float" ? pickFromFloat : jumpFromOutline}
+    onHide={() => setOutline("hidden")}
+    open={columnShown && keyEntry !== "rest"}
+    onExposeFilter={placement === "column" ? (open) => (openColumnFilter = open) : undefined}
+    onPeek={runs("outlinePeek") ? (target) => (peekTarget = target) : undefined}
+    peekStays={runs("outlinePeek") ? flipsView : undefined}
+  />
+{/snippet}
+
+<!-- The outline as a float, dropped from the header's outline key under --w-narrow or
+     once the column has yielded to a file. It opens on its filter; Escape or a click
+     outside closes it back onto the key, and a pick closes it into the plan. -->
+{#if outlineRuns && !columnShown}
+  <Popover.Root bind:open={floatOpen}>
+    <Popover.Content
+      class="outline-float"
+      customAnchor={outlineKey}
+      side="bottom"
+      align="start"
+      sideOffset={18}
+      alignOffset={-9}
+      bind:ref={floatEl}
+      onOpenAutoFocus={(e) => {
+        const field = floatEl?.querySelector<HTMLInputElement>("[data-slot='command-input']");
+        if (field == null) return;
+        e.preventDefault();
+        field.focus();
+      }}
+      onCloseAutoFocus={(e) => {
+        e.preventDefault();
+        if (floatPicked) floatPicked = false;
+        else outlineKey?.focus();
+      }}
+      onInteractOutside={(e) => {
+        // The key toggles the float itself; letting this close it first would reopen it.
+        if (e.target instanceof Node && outlineKey?.contains(e.target)) e.preventDefault();
+      }}
+    >
+      {@render outlineList("float")}
+    </Popover.Content>
+  </Popover.Root>
+{/if}
+
+{#if runs("outlinePeek")}
+  <OutlinePeek
+    target={peekTarget}
+    snippet={peekSnippet}
+    view={planView}
+    bounds={paneEl}
+  />
+{/if}
 
 <!-- The folder-reference tree (EXC-918). A viewport-fixed card rather than a lane
      in the surface above, so it sits outside that flex row entirely; gated on the
@@ -2879,104 +3401,247 @@
     opacity: 0;
     pointer-events: none;
   }
-  /* The row of plan controls above the surface, cut straight into the window's body
-     like the top bar, so it has no face or rule of its own: the plan view's tray sits
-     at the left, and (in compare mode) the layout / indicator toggles are pushed to
-     the right edge. The horizontal inset is the app's shared --bar-inset, the same
-     the TopBar and the shell use. */
-  .control-row {
+  /* The body row under the top bar: the outline column, when it stands, beside the
+     surface. As a .shell grid item it would floor at its content's intrinsic width, so
+     min-width: 0 lets it shrink inside the app's MIN_APP_WIDTH_PX floor. It holds a folding
+     column as it leaves, and clips the parts of a layout slide (lib/layoutSlide.ts) that
+     start past its edges. Hidden, not clip: Chromium lazy-loads an image in the plan only
+     within reach of a scroll container's edge, and a clip ancestor cuts that reach off. */
+  .plan-body {
+    position: relative;
     display: flex;
-    align-items: center;
-    gap: 0.85rem;
-    /* Trimmed by the beds' pad; the top bar's own bottom padding spaces the two
-       rows, and the 2px below keep the beds' lip off the pane's edge. */
-    padding: 0 var(--bar-inset) calc(0.5rem - var(--well-foot) + 2px);
-    /* The shared control height every child in the row sizes to. */
-    --ctl-h: 1.75rem;
-    /* As a .shell grid item this row defaults to min-width:auto, which floors it
-       at its content's intrinsic width — so a long .cwd would push the whole app
-       past the MIN_APP_WIDTH_PX (480) floor instead of ellipsising. min-width:0
-       lets the row shrink so the .cwd's own overflow:ellipsis takes over — the
-       same automatic-minimum footgun the topbar's min-width:0 fix addressed
-       (EXC-810/EXC-814).
-       That is also the row's whole answer at narrow widths, and it settles what
-       the LEADING contents chip does there (EXC-1097). The chip cannot ellipsise —
-       the shadcn Button base is shrink-0 whitespace-nowrap — so it holds its width
-       and the two members with min-width:0 give theirs back first. Measured rather
-       than assumed: at the 480 floor with the `\` keycap showing, neither the row nor
-       the body overflows, the breadcrumbs bar having collapsed to its ellipsis by
-       then — so the cap is never dropped at narrow. What KEEPS that true is
-       test/e2e/narrow-regression.e2e.ts, whose breakpoint sweep asserts no surface
-       overflows the viewport down to MIN_APP_WIDTH_PX with the cap present. */
     min-width: 0;
+    min-height: 0;
+    overflow: hidden;
   }
 
-  /* In compare mode the picker owns the bar: it spans the row so the "Versions"
-     toggle sits at the left and its display toggles (margin-left: auto) reach the
-     right edge. Reading a single version it sizes to its toggle instead, so the
-     breadcrumbs sit directly beside that toggle rather than being shoved to the
-     right edge by a stretched picker. The modifier tracks
-     `compareStore.comparing` — the same flag the .controls cluster renders on. */
-  .control-row :global(.compare-picker) {
-    flex: 0 1 auto;
+  /* The outline column: a bed cut into the body (PlanToc.svelte draws it), level with the
+     plan pane and inset from the window's edge as the pane is. The 1px at its foot is the
+     room the pane keeps for its lip. */
+  .plan-outline {
+    position: relative;
+    z-index: 1;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 0 0.5rem 1px var(--pane-gap);
   }
-  .control-row.comparing :global(.compare-picker) {
-    flex: 1;
+  /* The column's edge covers only the gap between its bed and the plan pane, its end
+     padding, below the column's head, so it takes no click meant for a row, the head's
+     keys or the plan, and its grip never rises beside the head's outline key. */
+  .plan-outline > :global(.splitter) {
+    inset: var(--pane-header-h) 0 0 auto;
+    width: 0.5rem;
   }
-  /* The heading breadcrumbs (EXC-946) take the row's middle and give it back
-     first: min-width: 0 lets the bar shrink so its crumbs ellipsise, keeping the
-     row inside the app's MIN_APP_WIDTH_PX floor the same way .cwd does below.
-     It GROWS into that middle rather than sizing to its trail (EXC-957), which
-     the bar's own collapse depends on: sized to content, giving a level up would
-     shrink the bar, which would free room, which would bring the level back.
-     Nothing moves on screen — the crumbs stay left-aligned inside the wider box, and
-     the free space the bar absorbs leaves .cwd on the same right edge either way. */
-  .control-row :global(.plan-breadcrumbs) {
+  /* The parts of a layout slide (lib/layoutSlide.ts), each sliding home from the offset it
+     is let go at. The column stacks over the plan, so its key shows as it travels across. */
+  .plan-outline,
+  .plan-outline :global(.toc-title-row .header-tray),
+  .plan-pane,
+  .diff-plan,
+  .header-bed,
+  .crumb-slot :global(:is(.plan-breadcrumbs, .plan-search)),
+  .plan-header :global(.compare-picker) {
+    transition: transform var(--slide-dur, var(--dur-state)) var(--ease-out);
+  }
+  .header-bed {
+    transform-origin: left;
+  }
+  /* The slot clips what slides in it at its end, so the crumbs and the find row never run
+     over the view keys. Open to its left, where they slide in from as the column stands. */
+  .crumb-slot {
+    clip-path: inset(0 0 0 -100vw);
+  }
+  /* While the column leaves, the plan's text slides on from past the pane's right edge,
+     which clips it there. The 2px above and below keep the floor's lip. */
+  .plan-body.column-leaving .plan-pane {
+    clip-path: inset(-2px 0 -2px -100vw round 0 var(--pane-radius) var(--pane-radius) 0);
+  }
+  /* Folding, the column leaves the layout where it stands, so the plan takes its room in
+     one pass, and slides off the window's edge. Its key travels on to the header's, which
+     waits unseen until the column has gone. */
+  .plan-outline.leaving {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    transform: translateX(-100%);
+    transition-duration: var(--dur-state);
+  }
+  .plan-outline.leaving :global(.toc-title-row .header-tray) {
+    transform: translate(var(--key-dx, 0px), var(--key-dy, 0px));
+    transition-duration: var(--dur-state);
+  }
+  /* The key's latch rides its travel: it latches on --dur-pane as the column stands, and
+     lets go on --dur-state as it folds, on the travel's curve rather than a press's
+     spring. */
+  .plan-outline:is(.key-arriving, .leaving) :global(.toc-title-row .header-tray > button) {
+    transition-timing-function: var(--ease-out);
+  }
+  .plan-outline.key-arriving :global(.toc-title-row .header-tray > button) {
+    transition-duration: var(--dur-pane);
+  }
+  .plan-body.column-leaving .plan-header > .header-tray {
+    opacity: 0;
+  }
+
+  /* The plan's header, stuck to the pane's top edge above the scroller, in one bed
+     (atoms.css). Its keys stand at the top bar's height, and its end keys' pads, with its
+     own, put them as far inside the bed's walls as the bed is inside the pane. */
+  .plan-header {
+    --ctl-h: 1.75rem;
+    container: plan-header / inline-size;
+    position: relative;
+    z-index: 5;
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    height: var(--pane-header-h);
+    min-width: 0;
+    padding-inline: 1.15rem var(--well-pad);
+  }
+  .plan-header:has(> .header-tray) {
+    padding-left: var(--well-pad);
+  }
+  /* The parts a layout move (lib/paneMove.ts) moves apart from the window, named only for
+     its transition so no other one picks them up. */
+  :global(:root[data-pane-move]) .plan-outline {
+    view-transition-name: plan-outline;
+  }
+  :global(:root[data-pane-move]) .plan-pane {
+    view-transition-name: plan-pane;
+  }
+  :global(:root[data-pane-move]) .crumb-slot {
+    view-transition-name: plan-crumbs;
+  }
+  :global(:root[data-pane-move]) .plan-header > .header-tray {
+    view-transition-name: outline-key;
+  }
+  :global(:root[data-pane-move]) .header-bed {
+    view-transition-name: header-bed;
+  }
+  :global(:root[data-pane-move]) .plan-header :global(.preview-toggle) {
+    view-transition-name: preview-key;
+  }
+
+  /* The view keys close the header. While comparing, the compare controls span the
+     room the crumbs leave. */
+  .plan-header :global(.compare-picker) {
+    flex: none;
+    margin-left: auto;
+  }
+  .plan-header.comparing :global(.compare-picker) {
     flex: 1 1 auto;
     min-width: 0;
   }
-  /* The working-directory path (EXC-807). It pins itself to the row's right edge
-     with margin-left: auto rather than relying on a stretched neighbour: the picker
-     stretches only in compare mode, and the breadcrumbs beside it are absent on a
-     heading-less plan. It shrinks to an ellipsis on narrow widths. A click copies it, so
-     it is a key lying flat in the row (.key-row): it rises under the pointer and goes
-     down when pressed. */
-  .cwd {
-    flex: 0 1 auto;
-    margin-left: auto;
-    min-width: 0;
-    /* Button reset; .mono owns the family, so only the size is inherited here. The key
-       row paints the face. */
-    appearance: none;
-    border: none;
-    padding: 0 0.5rem;
-    line-height: var(--ctl-h);
-    font-size: inherit;
-    /* A neutral key's label (atoms.css --cap-label): plain --ink-soft falls just under
-       4.5:1 on the body in some palettes. */
-    color: color-mix(in lab, var(--ink-soft), var(--ink) 15%);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    cursor: pointer;
-    /* Returning to plan review (leaving compare mode) re-mounts the path, so it
-       reveals with the same quick slide-in the compare controls use when entering
-       (VersionComparePicker's compare-reveal, EXC-808), and the switch reads
-       symmetric in both directions. The global #app reduced-motion guard zeroes it. */
-    animation: cwd-reveal var(--dur-state) var(--ease-out);
+  /* Where the find row would still squeeze its query with its slash and the count's
+     spaces gone, the header's keys drop their hint caps while it is open. Measured with
+     the outline key in the header and Versions without its word. */
+  @container plan-header (width < 31.3rem) {
+    .plan-header.searching :global(.header-tray .kbd-sm) {
+      display: none;
+    }
   }
-  .cwd:is(:hover, :focus-visible) {
+
+  /* The crumbs' slot, and the stage the find row slides across: the clip at its end is
+     what makes the row come out of the Search entry. */
+  .crumb-slot {
+    position: relative;
+    flex: 1 1 auto;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+  /* The breadcrumbs (EXC-946) GROW into the slot rather than sizing to their trail
+     (EXC-957), which their own collapse depends on: sized to content, giving a level up
+     would shrink the bar, which would free room, which would bring the level back.
+     Covered by the find row they keep their box, so that measure holds still, and they
+     fade back in as it tucks away. Only uncovering fades: the row covers them at once,
+     and a fade out that a quick close reversed would cut the fade back in short. */
+  .crumb-slot:not([data-covered]) :global(.plan-breadcrumbs) {
+    transition:
+      opacity var(--dur-state) var(--ease-out),
+      transform var(--slide-dur, var(--dur-state)) var(--ease-out);
+  }
+  .crumb-slot :global(.plan-breadcrumbs) {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .crumb-slot[data-covered] :global(.plan-breadcrumbs) {
+    visibility: hidden;
+    opacity: 0;
+  }
+  /* The way into search, at the slot's end before the view keys: a closed field the find
+     row slides open from and tucks back into. It lies in a field's shallow cut rather than
+     standing as a key, so the crumbs and the view keys keep the header's weight. Its
+     hover, focus and press are a ghost control's. A ring of the bed's floor hides the
+     crumbs that pass under it as the column folds. */
+  .search-entry {
+    --entry-ring: 0 0 0 0.2rem var(--header-bed-floor);
+    position: relative;
+    flex: none;
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    height: var(--ctl-h);
+    padding-inline: 0.55rem;
+    border: none;
+    border-radius: calc(var(--key-radius) + var(--well-pad));
+    background-color: var(--field-floor);
+    box-shadow: var(--panel-recess), var(--entry-ring);
+    color: var(--ink-soft);
+    font-size: var(--text-xs);
+    white-space: nowrap;
+    user-select: none;
+    transition:
+      background-color var(--dur-state) var(--ease-out),
+      color var(--dur-state) var(--ease-out),
+      box-shadow var(--dur-state) var(--ease-out),
+      transform var(--slide-dur, var(--dur-state)) var(--ease-out),
+      visibility var(--dur-state) step-end;
+  }
+  .search-entry:is(:hover, :focus-visible) {
+    background-image: linear-gradient(var(--ink-wash), var(--ink-wash));
     color: var(--ink);
   }
-  @keyframes cwd-reveal {
-    from {
-      opacity: 0;
-      transform: translateX(-4px);
+  .search-entry:is(:active, :global([data-key-pressed])) {
+    background-image: linear-gradient(var(--ink-wash), var(--ink-wash));
+    box-shadow:
+      var(--panel-recess),
+      inset 0 1px var(--press-blur) var(--press-shade),
+      var(--entry-ring);
+  }
+  /* Nothing in the row stands over the entry, and the floor band leaves its rim showing,
+     so it goes the moment the row opens and returns only once the row has tucked into it
+     (the base rule's step-end over the tuck's --dur-state). */
+  .crumb-slot[data-covered] .search-entry {
+    visibility: hidden;
+    transition-property: none;
+  }
+  /* Its word goes where Versions' word does: keep in step with VersionComparePicker. */
+  @container plan-header (width < 37.45rem) {
+    .search-word {
+      display: none;
     }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
+  }
+
+  /* The outline's float: the column's list on a raised panel, dropped from the
+     header's outline key. Unlayered, so it takes over the vendored popover's box. */
+  :global(.outline-float) {
+    z-index: 40;
+    width: min(20rem, calc(100vw - 1rem));
+    max-height: 27rem;
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+    background: var(--paper-raised);
+    box-shadow: var(--float-surface-mid);
+    /* A row's key runs the list's 4px side padding in from this corner. */
+    border-radius: calc(var(--key-radius) + 4px);
   }
 
   /* The plan and the file drawer (EXC-937) divide this surface between them: a
@@ -2984,44 +3649,57 @@
      drawer open the plan pane is the only child and takes the whole thing. Both are
      panes set into the window's body, inset from its sides. */
   .diff-surface {
-    display: flex;
-    min-height: 0;
-    margin-inline: var(--pane-gap);
-    /* Room under the clip for the panes' lip. */
-    padding-bottom: 1px;
-    overflow: hidden;
-  }
-  .diff-surface.dock-bottom {
-    flex-direction: column;
-  }
-
-  /* Everything that is the plan: the source view fills this pane and scrolls on
-     its own, with the search dock floating over it. `display: flex` plus
-     .diff-plan's `flex: 1` is what makes the source view fill it. The pane carries
-     the positioning context rather than .diff-surface, so the dock anchors to the
-     plan's own corner instead of the drawer's. */
-  .plan-pane {
-    position: relative;
     flex: 1 1 auto;
     display: flex;
     min-width: 0;
     min-height: 0;
+    position: relative;
+    margin-inline: var(--pane-gap);
+    /* Room for the panes' lip. */
+    padding-bottom: 1px;
+  }
+  .diff-surface.dock-bottom {
+    flex-direction: column;
+  }
+  .diff-surface.beside-outline {
+    margin-inline-start: 0;
+  }
+
+  /* Everything that is the plan: its header, then the source view, which fills the rest
+     and scrolls on its own. `display: flex` plus .diff-plan's `flex: 1` is what makes
+     the source view fill it. It paints nothing itself: its floor and recess are layers of
+     their own, which an outline move stretches to the plan's moving edge. */
+  .plan-pane {
+    position: relative;
+    isolation: isolate;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
     border-radius: var(--pane-radius);
-    overflow: hidden;
     --plan-floor: var(--paper);
-    background: var(--plan-floor);
-    box-shadow: var(--pane-lip);
+    --header-bed-floor: color-mix(in lab, var(--plan-floor), var(--bed-floor) var(--header-bed-mix));
   }
   /* Where the diff library draws the plan, the room past its rows takes the rows' floor,
      so the pane reads as one surface. Keep in step with --diffs-bg (styles/diffview.css). */
   .plan-pane:not([data-surface='preview']) {
     --plan-floor: var(--paper-sunk);
   }
-  /* The recess, on its own layer over the plan and over SearchDock (z-index 4), which
-     tucks under the pane's top edge. An idle shade stays an inset layer so it fades
-     rather than snaps. */
+  /* The plan's floor, under everything in the pane, with the body's lit edge below it. */
+  .pane-floor {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--plan-floor);
+    box-shadow: var(--pane-lip);
+    transform-origin: left;
+    transition: transform var(--slide-dur, var(--dur-state)) var(--ease-out);
+  }
+  /* The recess, on its own layer over the plan and its header, and the shade at the pane's
+     foot. An idle shade stays an inset layer so it fades rather than snaps. */
   .pane-lip {
-    --top-shade: inset 0 0 0 0 transparent;
     --bottom-shade: inset 0 0 0 0 transparent;
     position: absolute;
     inset: 0;
@@ -3029,13 +3707,12 @@
     border-radius: inherit;
     pointer-events: none;
     box-shadow:
-      var(--top-shade),
       var(--bottom-shade),
       var(--pane-recess);
-    transition: box-shadow var(--dur-state) var(--ease-out);
-  }
-  .plan-pane[data-scrolled] .pane-lip {
-    --top-shade: inset 0 7px 8px -7px var(--pane-shade);
+    transform-origin: left;
+    transition:
+      box-shadow var(--dur-state) var(--ease-out),
+      transform var(--slide-dur, var(--dur-state)) var(--ease-out);
   }
   .plan-pane[data-more-below] .pane-lip {
     --bottom-shade: inset 0 -7px 8px -7px var(--pane-shade);
@@ -3051,6 +3728,8 @@
     min-width: 0;
     min-height: 0;
     overflow: auto;
+    /* The pane doesn't clip, so the scroller rounds the plan's foot itself. */
+    border-radius: 0 0 var(--pane-radius) var(--pane-radius);
     background: var(--plan-floor);
     /* What the preview multiplies each --text-* step by: the base font size the settings
        set over --text-base, 13.12px at the 16px root. Here rather than on the preview, so

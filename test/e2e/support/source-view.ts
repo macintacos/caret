@@ -579,7 +579,7 @@ export async function jumpToHeading(page: Page, heading: string): Promise<void> 
   await currentCrumb(page).click();
   await expect(page.locator("[data-slot='dropdown-menu-content']")).toBeVisible();
   await page.keyboard.press("/");
-  await page.locator("input[aria-label='Filter headings']").fill(heading);
+  await page.locator(".plan-crumb-filter input[aria-label='Filter headings']").fill(heading);
   await page.keyboard.press("Enter");
   await expect(page.locator("[data-slot='dropdown-menu-content']")).toHaveCount(0);
   await expect(page.locator(".plan-crumb-filter")).toHaveCount(0);

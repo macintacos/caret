@@ -8,10 +8,11 @@
 
 import { type Dirent, readFileSync, type Stats } from "node:fs";
 import { readdir, realpath, stat } from "node:fs/promises";
-import { extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { EXCERPT_RADIUS, hasKnownFileExtension } from "@/config/constants.ts";
 import type { FileExcerpt, FileRefKind } from "@/lib/types.ts";
+import { languageForPath } from "@/plan/excerpt-language.ts";
 
 // EXCERPT_RADIUS lives in @/config/constants.ts because the browser reads it too
 // — this module imports node:fs, so the UI cannot.
@@ -40,61 +41,6 @@ const MAX_SCAN_ENTRIES = 5000;
  * (`@/plan/directory.ts`). One set so the walk's refusal and the listing's
  * marker can't drift apart. */
 export const SKIP_DIRS = new Set(["node_modules", "dist", "build", "coverage", "out"]);
-
-// Extension → shiki grammar name. Only the common source/config kinds are
-// mapped; anything else previews as plain "text" (still readable, just uncolored).
-export const EXT_LANGUAGE: Readonly<Record<string, string>> = {
-  ".ts": "typescript",
-  ".mts": "typescript",
-  ".cts": "typescript",
-  ".tsx": "tsx",
-  ".js": "javascript",
-  ".mjs": "javascript",
-  ".cjs": "javascript",
-  ".jsx": "jsx",
-  ".svelte": "svelte",
-  ".vue": "vue",
-  ".json": "json",
-  ".jsonc": "jsonc",
-  ".css": "css",
-  ".scss": "scss",
-  ".less": "less",
-  ".html": "html",
-  ".htm": "html",
-  ".xml": "xml",
-  ".svg": "xml",
-  ".md": "markdown",
-  ".mdx": "mdx",
-  ".py": "python",
-  ".rb": "ruby",
-  ".rs": "rust",
-  ".go": "go",
-  ".java": "java",
-  ".kt": "kotlin",
-  ".c": "c",
-  ".h": "c",
-  ".cc": "cpp",
-  ".cpp": "cpp",
-  ".hpp": "cpp",
-  ".sh": "shellscript",
-  ".bash": "shellscript",
-  ".zsh": "shellscript",
-  ".toml": "toml",
-  ".yaml": "yaml",
-  ".yml": "yaml",
-  ".ini": "ini",
-  ".sql": "sql",
-  ".graphql": "graphql",
-  ".gql": "graphql",
-  ".php": "php",
-  ".swift": "swift",
-  ".dart": "dart",
-  ".lua": "lua",
-};
-
-function languageForPath(path: string): string {
-  return EXT_LANGUAGE[extname(path).toLowerCase()] ?? "text";
-}
 
 /** `path`'s canonical form, or null when it can't be resolved. */
 export function safeRealpath(path: string): Promise<string | null> {

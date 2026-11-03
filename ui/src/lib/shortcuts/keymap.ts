@@ -176,13 +176,21 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   // EXC-947: opens the heading breadcrumbs bar's trailing crumb — the level being read —
   // so the trail is reachable without the mouse.
   { id: "actions.headingNav", keys: [{ key: "b" }], group: "actions", label: "Open breadcrumbs" },
-  // EXC-1097: opens the plan's table-of-contents popup. `\` has already been rebound twice
-  // (EXC-830's docked rail, then EXC-949's breadcrumbs alias), so a third move costs
-  // reviewers a third relearn.
-  // Unlike `b`, this key only OPENS: the popup puts focus in a text field, so the
-  // dispatcher's editing-context guard suppresses bare keys while it is up and a second
-  // `\` types a backslash into the filter. Both labels read "Open …" for that reason.
-  { id: "actions.contents", keys: [{ key: "\\" }], group: "actions", label: "Open contents" },
+  // Moves focus into the outline's filter, opening the outline as a float where its
+  // column is not shown. `\` has already been rebound three times (EXC-830's docked
+  // rail, EXC-949's breadcrumbs alias, EXC-1097's contents popup), so it stays with the
+  // outline. It only OPENS: the filter is a text field, so the dispatcher's
+  // editing-context guard suppresses bare keys while it has focus and a second `\`
+  // types a backslash into it.
+  { id: "actions.contents", keys: [{ key: "\\" }], group: "actions", label: "Filter outline" },
+  // Shows or hides the outline. Shift+\ arrives as `|` on a US layout, so `|` is the key
+  // matched and the one aria-keyshortcuts names; the caps show the keys pressed.
+  {
+    id: "actions.toggleOutline",
+    keys: [{ key: "|", cap: ["shift", "\\"] }],
+    group: "actions",
+    label: "Show or hide outline",
+  },
   // Settings
   ...SETTINGS_SHORTCUTS,
   // Help

@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
-#MISE description="Regenerate the README hero image (the four-theme stitch)"
+#MISE description="Regenerate the README hero images (one per appearance)"
 #MISE raw_args=true
 # Fresh-clone guard (scripts/bootstrap.sh); `|| exit 1` is its caller contract.
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/bootstrap.sh" || exit 1
 # raw_args hands every argument (including a bare --help) straight to the CLI, so
 # `mise run assets --help` shows the CLI's real help instead of mise's task help.
-# Thin forwarder: the stitch — which boots an isolated daemon and drives Chromium
+# Thin forwarder: the capture — which boots an isolated daemon and drives Chromium
 # through the Playwright library — lives in the caret tasks CLI
-# (scripts/tasks/cli.ts). ImageMagick is a host tool it resolves from PATH; it is
-# deliberately not pinned in mise.toml.
+# (scripts/tasks/cli.ts).
 exec bun scripts/tasks/cli.ts assets "$@"

@@ -413,8 +413,8 @@ test("routes a click to the excerpt preview or the folder tree, by kind", async 
     // …and the directory opens the tree BESIDE it (EXC-1129). The two reference
     // surfaces are peers: following a plan that cites a folder and the files under
     // it never costs the reader whichever surface they were already using. Settled
-    // before the second assertion — an evicted lane is still visible for the
-    // length of its closing wipe, which would pass against the old behaviour.
+    // before the second assertion — an evicted lane is still visible until it
+    // has slid out, which would pass against the old behaviour.
     await page.locator(".diffview").getByText("src/lib/", { exact: true }).click();
     await expect(page.locator("[data-folder-tree]")).toBeVisible();
     await settleDrawer(page);
@@ -905,7 +905,7 @@ test("clicking the close circle dismisses the open preview", async ({ daemon, pa
   // route out of a lane a reader opened with the mouse. Here rather than in the
   // component unit — which already pins that the button calls `onClose` — because
   // what this covers is the rest of the route: FilePreview's callback reaching
-  // DiffPlanView's dismissal, and the lane surviving its --dur-state closing wipe
+  // DiffPlanView's dismissal, and the lane surviving its --dur-state slide out
   // before it unmounts. Neither exists on a component mounted alone.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
@@ -939,7 +939,7 @@ test("the preview fills its lane and pages inside itself", async ({ daemon, page
       proj.dir,
       "# Refs\n\nOpen `src/big.ts` to see it.\n",
     );
-    // Measure at the lane's settled size, not part-way through its opening wipe.
+    // Measure where the lane settles, not part-way through its opening slide.
     await settleDrawer(page);
 
     // The whole 60-line opening window is loaded, not a handful of lines. How

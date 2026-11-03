@@ -1,8 +1,8 @@
 // The shared shape every theme file's palette is mapped through (EXC-752): name the
-// thirteen colors a palette actually decides, and the thirteen that are always derived
-// (the two rules, the accent wash, the two marks, the orphan mark, the six chip tints,
-// the shadow) come out consistent for every theme instead of being re-typed once per
-// palette.
+// thirteen colors a palette actually decides, and the sixteen that are always derived
+// (the two rules, the accent wash, the three marks and the text on the search's two, the
+// orphan mark, the six chip tints, the shadow) come out consistent for every theme
+// instead of being re-typed once per palette.
 //
 // The alpha suffixes and the two shadows are caret-dark's and caret-light's own
 // values, so a vendor theme's hairlines and highlight marks sit at exactly the
@@ -83,10 +83,43 @@ const SHADOW: Record<Scheme, string> = {
 // asymmetry caret-light already has, where a tint over a bright surface needs less
 // alpha to read than one over a dark surface. `chip` sits below the selection wash
 // on purpose: one wash marks one row, while a paragraph can carry a dozen chips.
-const ALPHA: Record<Scheme, { wash: string; mark: string; markActive: string; chip: string }> = {
-  dark: { wash: "29", mark: "2e", markActive: "57", chip: "24" },
-  light: { wash: "1f", mark: "24", markActive: "47", chip: "1c" },
+// `match`, every `/` search hit, sits a step over `mark`, which a comment span wears.
+const ALPHA: Record<Scheme, { wash: string; mark: string; match: string; chip: string }> = {
+  dark: { wash: "29", mark: "2e", match: "5c", chip: "24" },
+  light: { wash: "1f", mark: "24", match: "5c", chip: "1c" },
 };
+
+const channels = (hex: string) => [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
+
+function luminance(hex: string): number {
+  const [r = 0, g = 0, b = 0] = channels(hex).map((c) => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrast(a: string, b: string): number {
+  const [hi = 0, lo = 0] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** `hue` laid over `ground` at `alpha` (0–1), as the browser composites it. */
+function over(hue: string, alpha: number, ground: string): string {
+  const g = channels(ground);
+  const mixed = channels(hue).map((c, i) => Math.round(c * alpha + (g[i] ?? 0) * (1 - alpha)));
+  return `#${mixed.map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** `ink`, stepped toward white if it is lighter than `ground` or black if darker, only as
+ * far as it takes for `holds` to pass. */
+function legibleInk(ink: string, ground: string, holds: (text: string) => boolean): string {
+  const extreme = luminance(ink) > luminance(ground) ? "#ffffff" : "#000000";
+  let step = 0;
+  const stepped = () => over(extreme, step / 20, ink);
+  while (step < 20 && !holds(stepped())) step++;
+  return stepped();
+}
 
 /** Expand a palette's decided colors into caret's full token set. */
 export function paletteTokens(input: PaletteInput): Record<ColorToken, string> {
@@ -94,6 +127,51 @@ export function paletteTokens(input: PaletteInput): Record<ColorToken, string> {
   const ruleHue = input.ruleHue ?? input.ink;
   const washHue = input.washHue ?? input.accent;
   const markHue = input.markHue ?? washHue;
+  const chipHues = {
+    bold: input.chipBoldHue ?? input.ink,
+    italic: input.chipItalicHue ?? input.inkSoft,
+    code: input.chipCodeHue ?? input.neutral,
+    link: input.chipLinkHue ?? input.accentBright,
+    ref: input.chipRefHue ?? input.ok,
+  };
+  // The source view sets a match on either paper or a code or table card's floor, under up
+  // to 9% `--ink` of the cursor's or the pointer's band and any chip, or on a table header's
+  // pad, lit toward its top. The card floor, `--body` and `--pad-top` follow derived.css,
+  // mixed here in sRGB rather than lab.
+  const dark = input.scheme === "dark";
+  const body = dark ? over(input.ink, 0.07, input.raised) : over(input.ink, 0.05, input.sunk);
+  const cardFloor = dark ? over("#000000", 0.25, input.sunk) : over(input.ink, 0.03, input.sunk);
+  const headPad = dark ? over(input.ink, 0.07, body) : over(input.raised, 0.6, body);
+  const matchGrounds = [input.paper, input.sunk, cardFloor]
+    .flatMap((floor) => [floor, over(input.ink, 0.09, floor)])
+    .flatMap((ground) => [
+      ground,
+      ...Object.values(chipHues).map((hue) =>
+        over(hue, Number.parseInt(alpha.chip, 16) / 255, ground),
+      ),
+    ])
+    .concat(body, headPad)
+    .map((ground) => over(markHue, Number.parseInt(alpha.match, 16) / 255, ground));
+  // The preview lays its bands over the current match and its text alike: a held
+  // selection's wash, then up to 9% `--ink` of the cursor's or the pointer's band.
+  const underBands = (color: string) =>
+    [color, over(washHue, Number.parseInt(alpha.wash, 16) / 255, color)].flatMap((c) => [
+      c,
+      over(input.ink, 0.09, c),
+    ]);
+  const onActive = (text: string, mark: string) => {
+    const marks = underBands(mark);
+    return Math.min(...underBands(text).map((t, i) => contrast(t, marks[i] ?? mark)));
+  };
+  const activeInk = [input.ink, input.paper, input.raised, input.sunk].reduce((a, b) =>
+    onActive(b, markHue) > onActive(a, markHue) ? b : a,
+  );
+  // Where not even white or black text holds under the bands, the mark steps away from it.
+  const activeMark = legibleInk(
+    markHue,
+    activeInk,
+    (mark) => onActive(luminance(activeInk) > luminance(mark) ? "#ffffff" : "#000000", mark) >= 4.5,
+  );
   return {
     "--paper": input.paper,
     "--paper-raised": input.raised,
@@ -108,7 +186,18 @@ export function paletteTokens(input: PaletteInput): Record<ColorToken, string> {
     "--accent-wash": `${washHue}${alpha.wash}`,
     "--accent-ink": input.accentInk,
     "--mark": `${markHue}${alpha.mark}`,
-    "--mark-active": `${markHue}${alpha.markActive}`,
+    // The `/` search: every match a wash a step over `--mark`, and the current one the
+    // mark itself, opaque, so it leads whatever band it lands on.
+    "--mark-match": `${markHue}${alpha.match}`,
+    "--mark-match-ink": legibleInk(input.ink, input.paper, (text) =>
+      matchGrounds.every((ground) => contrast(text, ground) >= 4.5),
+    ),
+    "--mark-active": activeMark,
+    "--mark-active-ink": legibleInk(
+      activeInk,
+      activeMark,
+      (text) => onActive(text, activeMark) >= 4.5,
+    ),
     "--mark-orphan": `${input.neutral}29`,
     // Of the five below only two carry hue — `accentBright` for a link and `ok` for
     // a resolved reference — which is what keeps a paragraph holding several of them
@@ -119,11 +208,11 @@ export function paletteTokens(input: PaletteInput): Record<ColorToken, string> {
     // slant and the mono family (EXC-867), not by tint — in most palettes bold and
     // italic composite within a 1.05 contrast ratio. theme.test.ts pins the separations
     // and carries the full account.
-    "--chip-bold": `${input.chipBoldHue ?? input.ink}${alpha.chip}`,
-    "--chip-italic": `${input.chipItalicHue ?? input.inkSoft}${alpha.chip}`,
-    "--chip-code": `${input.chipCodeHue ?? input.neutral}${alpha.chip}`,
-    "--chip-link": `${input.chipLinkHue ?? input.accentBright}${alpha.chip}`,
-    "--chip-ref": `${input.chipRefHue ?? input.ok}${alpha.chip}`,
+    "--chip-bold": `${chipHues.bold}${alpha.chip}`,
+    "--chip-italic": `${chipHues.italic}${alpha.chip}`,
+    "--chip-code": `${chipHues.code}${alpha.chip}`,
+    "--chip-link": `${chipHues.link}${alpha.chip}`,
+    "--chip-ref": `${chipHues.ref}${alpha.chip}`,
     // A skill chip and a path chip share a sentence in the feedback editors
     // (EXC-1186), so this has to separate from `--chip-ref` the way a link does, and
     // `attention` is what is left. Its closeness to `accentBright` costs a link and a

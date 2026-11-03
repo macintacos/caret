@@ -99,8 +99,8 @@ the first consumer whose row renders something richer. Forward it when that land
 ### Edits a re-sync will silently undo
 
 Because the revert above is wholesale, anything caret **added** to a vendored component
-survives only if someone notices it went missing. Three such edits are worth naming here,
-since losing any of them breaks accessibility rather than looks:
+survives only if someone notices it went missing. Four such edits are worth naming here,
+since losing any of them breaks behaviour or accessibility rather than looks:
 
 **`command-list.svelte` renders a `Command.Viewport` that the registry source does not**
 (EXC-1096). bits-ui derives the command input's `aria-controls` **and** its
@@ -130,6 +130,13 @@ which strip faces and shadows. `test/structure/shadcn-outline.test.ts` reds on a
 ring utility a re-sync brings back, and the forced-colors spec in
 `test/e2e/settings.e2e.ts` guards the outline.
 
+**`command-input.svelte` draws a clear × the registry source does not.** While the field
+holds text, an × named "Clear filter" stands at its trailing edge, and a press empties the
+field and keeps focus in it. The outline's filter and the breadcrumb bar's both get it
+from here. The × specs in `test/e2e/plan-toc.e2e.ts` and
+`test/e2e/plan-breadcrumbs.e2e.ts` fail if a re-sync drops it. Put it back before you
+commit an overwrite of that file.
+
 **That is the policy, not a one-off.** When the registry source is wrong on accessibility,
 patch the vendored file and leave a test that reds if a re-sync drops the patch — the pair
 is what makes the edit survivable. Don't work around an upstream defect at the call site
@@ -150,8 +157,9 @@ inside the menu gives a screen reader the field's label and then silence as its 
 narrow. The command-in-popover pair gives a real combobox whose `aria-activedescendant`
 names the row the selection is on, over a listbox of real options.
 
-`PlanBreadcrumbs.svelte` and `PlanToc.svelte` are both built this way, which is why the
-plan's two heading surfaces narrate identically.
+`PlanBreadcrumbs.svelte`'s filter and the outline's float (`PlanToc.svelte` in a Popover)
+are both built this way. The outline's column is the same Command without the popover, so
+the plan's heading surfaces narrate identically.
 
 ## Token-bridge discipline
 

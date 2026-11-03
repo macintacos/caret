@@ -50,9 +50,8 @@
      * gated on the app's shortcut-hints setting like the other hints. Defaults
      * false (the hint is opt-in via the parent). */
     showShortcutHints?: boolean;
-    /** Caps that share the Versions toggle's tray, before and after it: the plan's
-     * view keys are one group, so they sit in one well. */
-    leading?: Snippet;
+    /** Caps that share the Versions toggle's tray, after it: the plan's view keys are
+     * one group, so they sit in one well. */
     trailing?: Snippet;
     onSetComparing: (comparing: boolean) => void;
     onSelectBase: (version: number) => void;
@@ -71,7 +70,6 @@
     diffIndicators,
     layoutLocked = false,
     showShortcutHints = false,
-    leading,
     trailing,
     onSetComparing,
     onSelectBase,
@@ -159,12 +157,64 @@
      (aria-hidden via Icon.svelte), so the accessible name is this text alone —
      extended with the version count when there is one (EXC-804). -->
 {#snippet compareLabel()}
-  <Icon name="git-compare" size={14} />Versions
+  <Icon name="git-compare" size={14} /><span class="compare-word">Versions</span>
 {/snippet}
 
 <div class="compare-picker">
-  <span class="tray">
-    {@render leading?.()}
+  {#if comparing}
+    <div class="compare-cluster" class:locked={layoutLocked}>
+      <div class="pair">
+        <div class="field">
+          <span class="lbl">Base</span>
+          {@render versionPicker("Base version", baseVersion, (v) => onSelectBase(v))}
+        </div>
+
+        <span class="arrow" aria-hidden="true">→</span>
+
+        <div class="field">
+          <span class="lbl">Target</span>
+          {@render versionPicker("Target version", targetVersion, (v) => onSelectTarget(v))}
+        </div>
+      </div>
+
+      <div class="controls">
+        <!-- The layout choice is only offered when the parent isn't forcing unified.
+             Below --w-narrow split can't fit, so the toggle is removed rather than
+             left as a dead control (EXC-811). -->
+        {#if !layoutLocked}
+          <ToggleGroup.Root
+            type="single"
+            size="sm"
+            aria-label="Diff layout"
+            bind:value={
+              () => diffStyle, (v) => { if (v) onSetDiffStyle(v as DiffStyle); }
+            }
+          >
+            <ToggleGroup.Item value="split">Split</ToggleGroup.Item>
+            <ToggleGroup.Item value="unified">Unified</ToggleGroup.Item>
+          </ToggleGroup.Root>
+        {/if}
+
+        <!-- The gutter markers inherit caret's ok/danger hue through the diffview
+             bridge, so this chooses the affordance, not the color. -->
+        <ToggleGroup.Root
+          type="single"
+          size="sm"
+          class="indicators"
+          aria-label="Diff indicators"
+          bind:value={
+            () => diffIndicators, (v) => { if (v) onSetDiffIndicators(v as DiffIndicators); }
+          }
+        >
+          <ToggleGroup.Item value="bars">Bars</ToggleGroup.Item>
+          <ToggleGroup.Item value="classic">+/−</ToggleGroup.Item>
+          <ToggleGroup.Item value="both">Both</ToggleGroup.Item>
+        </ToggleGroup.Root>
+      </div>
+    </div>
+  {/if}
+
+  <span class="tray header-tray">
     {#if canCompare}
       <Button
         variant="secondary"
@@ -211,6 +261,7 @@
                   class="compare-toggle float-chip"
                   disabled
                   aria-pressed={false}
+                  aria-label="Versions"
                 >
                   {@render compareLabel()}
                 </Button>
@@ -223,56 +274,6 @@
     {/if}
     {@render trailing?.()}
   </span>
-
-  {#if comparing}
-    <div class="pair">
-      <div class="field">
-        <span class="lbl">Base</span>
-        {@render versionPicker("Base version", baseVersion, (v) => onSelectBase(v))}
-      </div>
-
-      <span class="arrow" aria-hidden="true">→</span>
-
-      <div class="field">
-        <span class="lbl">Target</span>
-        {@render versionPicker("Target version", targetVersion, (v) => onSelectTarget(v))}
-      </div>
-    </div>
-
-    <div class="controls">
-      <!-- The layout choice is only offered when the parent isn't forcing unified.
-           Below --w-narrow split can't fit, so the toggle is removed rather than
-           left as a dead control (EXC-811). -->
-      {#if !layoutLocked}
-        <ToggleGroup.Root
-          type="single"
-          size="sm"
-          aria-label="Diff layout"
-          bind:value={
-            () => diffStyle, (v) => { if (v) onSetDiffStyle(v as DiffStyle); }
-          }
-        >
-          <ToggleGroup.Item value="split">Split</ToggleGroup.Item>
-          <ToggleGroup.Item value="unified">Unified</ToggleGroup.Item>
-        </ToggleGroup.Root>
-      {/if}
-
-      <!-- The gutter markers inherit caret's ok/danger hue through the diffview
-           bridge, so this chooses the affordance, not the color. -->
-      <ToggleGroup.Root
-        type="single"
-        size="sm"
-        aria-label="Diff indicators"
-        bind:value={
-          () => diffIndicators, (v) => { if (v) onSetDiffIndicators(v as DiffIndicators); }
-        }
-      >
-        <ToggleGroup.Item value="bars">Bars</ToggleGroup.Item>
-        <ToggleGroup.Item value="classic">+/−</ToggleGroup.Item>
-        <ToggleGroup.Item value="both">Both</ToggleGroup.Item>
-      </ToggleGroup.Root>
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -284,11 +285,6 @@
     --ctl-h: 1.75rem;
     display: flex;
     align-items: center;
-    /* Wrap only when the row genuinely overflows: a no-op at wide widths (so the
-       one-line bar and its toggles are unchanged), but at the narrow floor the
-       pickers + marker toggle drop to a second line instead of overflowing the
-       surface (EXC-811). */
-    flex-wrap: wrap;
     gap: 0.85rem;
     min-height: var(--ctl-h);
     font-size: var(--text-base);
@@ -312,6 +308,52 @@
   }
   .compare-toggle-wrap {
     display: inline-flex;
+  }
+  /* In a tight plan header the word goes; the glyph, the count and the `d` cap stay, and
+     the toggle keeps its name through aria-label. The header's width, not the window's, so
+     a wide file drawer counts too. Measured while comparing, so the word goes before the
+     pair's. */
+  @container plan-header (width < 37.45rem) {
+    .compare-word {
+      display: none;
+    }
+  }
+
+  /* While comparing, the pair and its display options span the room the view keys leave,
+     and give way to it rather than push the view keys out: first the pair's words, each
+     picker keeping its name, then the indicator toggles, whose choice Settings holds too.
+     The steps come sooner while the layout toggle is offered. Measured with the cluster's
+     own content, so they hold whatever the hints and the outline key take. */
+  .compare-cluster {
+    container: compare-cluster / inline-size;
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+  }
+  .header-tray {
+    flex: none;
+  }
+  @container compare-cluster (width < 31rem) {
+    .compare-cluster:not(.locked) .lbl {
+      display: none;
+    }
+  }
+  @container compare-cluster (width < 26.5rem) {
+    .compare-cluster:not(.locked) :global(.indicators) {
+      display: none;
+    }
+  }
+  @container compare-cluster (width < 23rem) {
+    .lbl {
+      display: none;
+    }
+  }
+  @container compare-cluster (width < 18.5rem) {
+    .compare-cluster :global(.indicators) {
+      display: none;
+    }
   }
 
   .pair {
@@ -418,20 +460,12 @@
     font-size: var(--text-sm);
   }
 
-  /* Entering compare mode reveals both clusters together with a quick slide-in
-     (EXC-664); the global #app reduced-motion rule neutralizes the movement. */
-  .pair,
-  .controls {
-    animation: compare-reveal var(--dur-state) var(--ease-out);
+  /* Parts of the header's layout move (lib/paneMove.ts) into and out of compare: the
+     controls fade through with the crumbs, and Versions slides into Preview's place. */
+  :global(:root[data-pane-move]) .compare-cluster {
+    view-transition-name: compare-controls;
   }
-  @keyframes compare-reveal {
-    from {
-      opacity: 0;
-      transform: translateX(-4px);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
+  :global(:root[data-pane-move]) .header-tray :global(.compare-toggle) {
+    view-transition-name: versions-key;
   }
 </style>

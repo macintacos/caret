@@ -79,9 +79,6 @@ export interface PlanKeyboardDeps {
   focusField(): void;
   /** Blur the active element, returning focus to the plan. */
   blur(): void;
-  /** Whether the collapse chip is shown (Show Hints): true animates the close, false
-   * tears the pill down at once (there is no chip to collapse into). */
-  hintsShown(): boolean;
   /** Schedule the deferred close teardown; defaults to setTimeout. */
   setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
   /** Cancel a scheduled teardown; defaults to clearTimeout. */
@@ -113,8 +110,8 @@ export interface PlanKeyboard {
   clearSelectionOrCursor(): void;
   /** `/`: open the pill prefilled with the last committed query and focus the field. */
   openSearch(): void;
-  /** Esc / ✕: blur and dismiss the pill — immediately with hints off, or after the
-   * collapse animation with hints on. Clearing the query clears the highlights. */
+  /** Esc / ✕: blur at once, and dismiss the pill after its collapse animation.
+   * Clearing the query clears the highlights. */
   closeSearch(): void;
   /** Enter: remember the query, land the cursor on the nearest match, keep the pill as a
    * HUD, and blur so bare n/N/Esc fire globally. No matches → nothing to commit. */
@@ -189,9 +186,8 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
   }
 
   // Dismiss the pill. Blur now so focus returns to the plan and the cursor/highlights stay
-  // where they landed. With hints on there's a "/ to search" chip to collapse back into,
-  // so keep the pill mounted for one --dur-state playing its collapse animation, then reset;
-  // with hints off there's no chip, so reset immediately.
+  // where they landed, and keep the pill mounted for one --dur-state while it slides back
+  // into the header's Search entry, then reset.
   function closeSearch(): void {
     // Sounds at the dismissal rather than at the deferred teardown, so the Esc chain and
     // the pill's ✕ inherit it by routing through. Silent while already collapsing: the
@@ -199,10 +195,6 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     // same dismissal rather than another one.
     if (!store.searchClosing) deps.sound?.("searchClosed");
     deps.blur();
-    if (!deps.hintsShown()) {
-      resetSearch();
-      return;
-    }
     if (closeTimer !== undefined) clearTimer(closeTimer);
     store.searchClosing = true;
     closeTimer = setTimer(resetSearch, CLOSE_ANIM_MS);

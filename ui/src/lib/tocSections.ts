@@ -1,29 +1,23 @@
-// What the Contents panel knows about each heading's section beyond the heading itself:
-// where it ends, how it opens, the comments inside it, and whether it changed since the
-// previous version. Pure and DOM-free like `toc.ts`.
+// What the outline knows about each heading's section beyond the heading itself: the
+// comments inside it, whether it changed since the previous version, and, while comparing,
+// what it gained and lost against the other version. Pure and DOM-free like `toc.ts`.
 
+import { lineCountOf } from "$lib/diffview/lineCursor.ts";
+import type { DiffSide } from "$lib/diffview/types.ts";
 import type { CommentIndexEntry } from "$lib/feedback.ts";
-import { extractHeadings, FENCE, type TocHeading } from "$lib/toc.ts";
+import { extractHeadings, type TocHeading } from "$lib/toc.ts";
 
 /** How a section differs from the same heading's section in the previous version. */
 export type SectionChange = "edited" | "new";
 
-/** One heading's section. "Own" lines run from the heading to the line before the next
- * heading of any level; the section's full extent also covers its subsections. */
+/** One heading's section: its "own" lines, from the heading to the line before the next
+ * heading of any level. */
 export interface TocSection {
-  /** The section's last non-blank source line, its subsections included. */
-  end: number;
-  /** The first lines of its own prose as one run of plain text; empty when it has none. */
-  excerpt: string;
   /** The comments and drafts anchored in its own lines, in line order. */
   comments: CommentIndexEntry[];
-  /** How many comments and drafts its subsections hold. */
-  deeper: number;
   /** Null when its own text is unchanged, or when there is no previous version. */
   change: SectionChange | null;
 }
-
-const EXCERPT_LINES = 3;
 
 /** Every heading's section, keyed on the heading's source line. `comments` must anchor to
  * `plan`'s lines; `previousPlan` is null when the plan has no earlier version. */
@@ -42,17 +36,57 @@ export function tocSections(
   const sections = new Map<number, TocSection>();
   for (const [index, heading] of headings.entries()) {
     const ownEnd = ownEndOf(headings, index, lines.length);
-    const stop = stopOf(headings, index, lines.length);
     const key = ours.keys[index] ?? "";
     sections.set(heading.line, {
-      end: lastNonBlank(lines, heading.line, stop),
-      excerpt: excerpt(lines.slice(heading.line, ownEnd)),
       comments: anchored(comments, heading.line, ownEnd),
-      deeper: anchored(comments, ownEnd + 1, stop).length,
       change: before === null ? null : changeOf(before.texts.get(key), ours.texts.get(key)),
     });
   }
   return sections;
+}
+
+/** What a base section gained and lost against the target version, and where its
+ * first change sits: the first gained line on the base ("after") side, or, for a
+ * section that only lost lines, the first lost line on the target ("before") side. */
+export interface SectionDelta {
+  added: number;
+  removed: number;
+  line: number;
+  side: DiffSide;
+}
+
+/** Every base section whose own lines differ from its counterpart in `target`, keyed on
+ * the heading's source line in `base`. A section the target lacks counts as wholly
+ * gained. Lines pair as a multiset, so a line moved within its section counts as no
+ * change. */
+export function sectionDeltas(
+  headings: TocHeading[],
+  base: string,
+  target: string,
+): Map<number, SectionDelta> {
+  const baseLines = base.split("\n");
+  const targetLines = target.split("\n");
+  const theirs = new Map(
+    ownRanges(extractHeadings(target), targetLines.length).map((r) => [r.key, r] as const),
+  );
+  const ours = ownRanges(headings, baseLines.length);
+  const deltas = new Map<number, SectionDelta>();
+  for (const [index, heading] of headings.entries()) {
+    const mine = ours[index];
+    if (mine === undefined) continue;
+    const other = theirs.get(mine.key);
+    const gained = unmatched(baseLines, mine, other === undefined ? [] : slice(targetLines, other));
+    const lost = other === undefined ? [] : unmatched(targetLines, other, slice(baseLines, mine));
+    const first = gained[0] ?? lost[0];
+    if (first === undefined) continue;
+    deltas.set(heading.line, {
+      added: gained.length,
+      removed: lost.length,
+      line: first,
+      side: gained.length > 0 ? "after" : "before",
+    });
+  }
+  return deltas;
 }
 
 /** The section's committed comments and unsent drafts, counted apart. */
@@ -75,6 +109,22 @@ export function describeSection(section: TocSection, since: number | null): stri
     .join(", ");
 }
 
+/** The 1-based, inclusive lines of the section `line`'s heading opens, or null when no
+ * heading sits on `line`. A heading with no text of its own takes its subsections too, up
+ * to the next heading of its level or higher. `lines` are the plan's. */
+export function sectionLines(
+  headings: TocHeading[],
+  line: number,
+  lines: readonly string[],
+): { from: number; to: number } | null {
+  const index = headings.findIndex((h) => h.line === line);
+  if (index === -1) return null;
+  const lineCount = lineCountOf(lines);
+  const ownEnd = ownEndOf(headings, index, lineCount);
+  const bare = lines.slice(line, ownEnd).every((text) => text.trim() === "");
+  return { from: line, to: bare ? subtreeEndOf(headings, index, lineCount) : ownEnd };
+}
+
 export function plural(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
@@ -83,10 +133,10 @@ function ownEndOf(headings: TocHeading[], index: number, lineCount: number): num
   return (headings[index + 1]?.line ?? lineCount + 1) - 1;
 }
 
-// The last line before the next heading at this one's level or above.
-function stopOf(headings: TocHeading[], index: number, lineCount: number): number {
+function subtreeEndOf(headings: TocHeading[], index: number, lineCount: number): number {
   const level = headings[index]?.level ?? 0;
-  return (headings.slice(index + 1).find((h) => h.level <= level)?.line ?? lineCount + 1) - 1;
+  const next = headings.slice(index + 1).find((h) => h.level <= level);
+  return (next?.line ?? lineCount + 1) - 1;
 }
 
 function anchored(comments: CommentIndexEntry[], lo: number, hi: number): CommentIndexEntry[] {
@@ -98,20 +148,60 @@ function changeOf(previous: string | undefined, current: string | undefined): Se
   return previous === current ? null : "edited";
 }
 
-// Each heading's own text, keyed on its title plus how many same-titled headings precede
-// it, so two sections both called "Notes" pair with their counterparts in order.
+// A section's own lines, its heading included, as 1-based inclusive bounds.
+interface OwnRange {
+  key: string;
+  from: number;
+  to: number;
+}
+
+function ownRanges(headings: TocHeading[], lineCount: number): OwnRange[] {
+  const keys = sectionKeys(headings);
+  return headings.map((heading, index) => ({
+    key: keys[index] ?? "",
+    from: heading.line,
+    to: ownEndOf(headings, index, lineCount),
+  }));
+}
+
+function slice(lines: string[], range: OwnRange): string[] {
+  return lines.slice(range.from - 1, range.to);
+}
+
+// The 1-based numbers of the range's lines that `others` has no copy left to pair with.
+function unmatched(lines: string[], range: OwnRange, others: string[]): number[] {
+  const left = new Map<string, number>();
+  for (const line of others) left.set(line, (left.get(line) ?? 0) + 1);
+  const missing: number[] = [];
+  for (let n = range.from; n <= range.to; n++) {
+    const line = lines[n - 1] ?? "";
+    const count = left.get(line) ?? 0;
+    if (count > 0) left.set(line, count - 1);
+    else missing.push(n);
+  }
+  return missing;
+}
+
+// Each heading's key: its title plus how many same-titled headings precede it, so two
+// sections both called "Notes" pair with their counterparts in order.
+function sectionKeys(headings: TocHeading[]): string[] {
+  const seen = new Map<string, number>();
+  return headings.map((heading) => {
+    const nth = seen.get(heading.text) ?? 0;
+    seen.set(heading.text, nth + 1);
+    return `${nth}:${heading.text}`;
+  });
+}
+
+// Each heading's own text, keyed by sectionKeys.
 function ownTexts(
   headings: TocHeading[],
   lines: string[],
 ): { keys: string[]; texts: Map<string, string> } {
-  const seen = new Map<string, number>();
-  const keys: string[] = [];
+  const keys = sectionKeys(headings);
   const texts = new Map<string, string>();
   for (const [index, heading] of headings.entries()) {
-    const nth = seen.get(heading.text) ?? 0;
-    seen.set(heading.text, nth + 1);
-    const key = `${nth}:${heading.text}`;
-    keys.push(key);
+    const key = keys[index] ?? "";
     texts.set(
       key,
       lines
@@ -121,28 +211,4 @@ function ownTexts(
     );
   }
   return { keys, texts };
-}
-
-function lastNonBlank(lines: string[], from: number, to: number): number {
-  for (let n = to; n > from; n--) if ((lines[n - 1] ?? "").trim() !== "") return n;
-  return from;
-}
-
-function excerpt(own: string[]): string {
-  const prose: string[] = [];
-  let fenced = false;
-  for (const line of own) {
-    if (FENCE.test(line)) {
-      fenced = !fenced;
-      continue;
-    }
-    const text = line.trim();
-    if (fenced || text === "") continue;
-    prose.push(text);
-    if (prose.length === EXCERPT_LINES) break;
-  }
-  return prose
-    .join(" ")
-    .replace(/\*\*|__|`/g, "")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
 }

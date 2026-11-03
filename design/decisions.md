@@ -10,7 +10,7 @@ Open items first, then the log, newest first.
 - **`--ink-faint` on raised surfaces:** falls under the 4.5:1 text contrast floor in
   several bundled third-party palettes. On `--paper-raised` it measures 4.45 in Catppuccin
   Mocha, 3.49 in Catppuccin Latte, 3.26 in GitHub dark, 3.45 in GitHub light and 3.59 in
-  Dracula; in Dracula the Contents peek's small text is 3.99 and its match count 4.46.
+  Dracula; in Dracula the outline filter's match count is 4.46 on the float.
   `theme.test.ts` holds only caret's two palettes to the floor. CommentNavigator's
   `.nav-hints` is unchecked. The 2026-10-31 pass moved the dialogs and the settings panes
   off it, apart from the search field's glyph and key hint, which are non-text. The file
@@ -24,7 +24,7 @@ Open items first, then the log, newest first.
   way.
 - **Amber on a latched state:** the crumb menu's current row, the navigator's current
   rail, the version check and the folder tree's selected row no longer spend amber. These
-  remain: the Contents row being read takes `--neutral-face-latched`, and a switch that is
+  remain: the outline row being read takes `--neutral-face-latched`, and a switch that is
   on takes `--switch-on`. Both are amber tints on a state. They follow the version compare
   toggle, whose face latches onto `--neutral-face-latched` while it compares. They break
   the accent rule in
@@ -33,9 +33,9 @@ Open items first, then the log, newest first.
   Settings, the switch's tint is also a second amber emphasis beside the primary action. A
   latched key's corner light is the accent itself, also outside that list.
 - **Search-only flat disabled cap:** the amber text cursor now covers every field, but the
-  flat disabled cap is still local to the search sheet. The sheet's disabled step lies
-  flat on the well's floor with no side, where every other disabled cap keeps its face and
-  a 1px side.
+  flat disabled cap is still local to the find row. The row's disabled step lies flat on
+  the well's floor with no side, where every other disabled cap keeps its face and a 1px
+  side.
 - **Hue-only marks under 3:1 in some light palettes:** `--ok` and `--attention` as LED and
   bell colours measure 2.96:1 (`--ok`, Catppuccin Latte, settings panel), 2.05:1
   (`--attention`, Dawnfox, settings panel) and 2.32:1 (`--ok`, Latte, code panel). Each
@@ -49,7 +49,7 @@ Open items first, then the log, newest first.
   as its tightest pair, the cursor on a chosen row, needs to clear the 4.5 ΔE floor. The
   weakest light steps are that pair in Catppuccin Latte, 4.7, and Dawnfox's amber key,
   4.8. The weakest dark steps are in Catppuccin Frappé: 4.7 for a crumb on the bar, where
-  `--ink` is at 4.53:1, 5.3 for the cursor on the Contents row being read, and 6.4 for a
+  `--ink` is at 4.53:1, 5.3 for the cursor on the outline row being read, and 6.4 for a
   menu row. `theme.test.ts` holds every hover step to 4.5 in every palette.
 - **Focus fails WCAG 2.4.13 Focus Appearance (AAA):** that criterion asks for a focus
   indicator whose pixels change by at least 3:1 in contrast, over an area at least as
@@ -59,9 +59,1044 @@ Open items first, then the log, newest first.
   reads as disabled and dark's `--ink` labels fall under AA. "Focus looks like hover"
   (2026-10-31) and "A light hover lifts, and the last corners and labels" (2026-11-01)
   rule both out.
+- **Splitter targets under 24px:** both splitters fail WCAG 2.2's 2.5.8 and 2.5.7, and the
+  user decides the remedy.
+  - **2.5.8, target size:** the outline column's edge is 0.5rem (8px) wide and the file
+    drawer's 6px, under the 24px floor. The spacing exception doesn't apply, because a
+    24px circle centred on either edge overlaps the outline's rows or the plan. A wider
+    edge would take their clicks, so widening it is not the fix.
+  - **2.5.7, dragging movements:** neither edge offers a single-pointer alternative to the
+    drag. The arrow keys reach every size, but both criteria count pointer input only.
+  - **The conforming route:** an equivalent pointer control at least 24px across meets
+    both criteria and takes no click from the panes. One example is a Narrower, Default
+    and Wider stepper for the outline's width in Settings, with another for the drawer's.
+    It adds UI the user hasn't asked for, so it waits on their decision.
 - **Calls left to the user from the 2026-10-31 pass:** the one left was built and is
   waiting on the user's verdict.
   - `--ink-faint` line numbers in the file preview's gutter, 3.10:1 on Dawnfox's paper.
+- **Call left to the user from the 2026-11-01 outline build:** a hidden outline stays
+  hidden across reloads. The browser remembers it, as it remembers Preview. The handoff
+  left this open; it was built that way and is waiting on the user's verdict.
+- **Calls left to the user from the 2026-11-02 polish:** both were built and are waiting
+  on the user's verdict.
+  - The working-directory path in a bed at the centre of the status bar.
+  - The outline key's latch riding its travel as the column stands and folds.
+- **Calls left to the user from the 2026-11-02 drawer title bar:** both were built and are
+  waiting on the user's verdict.
+  - The close circle stays an 11px disc with no tray of its own, rather than becoming a
+    Close key like the plan header's keys.
+  - As the drawer narrows, the esc hint ("esc to close") and then the kind tag ("Preview")
+    leave the bar.
+- **Calls left to the user from the 2026-11-02 header bed:** all four were built and are
+  waiting on the user's verdict.
+  - The bed's floor at 50% of the way to `--bed-floor`. A third of the way would stand a
+    resting key at least 4.0 ΔE off it over the source view in the Catppuccin darks, where
+    50% gives 2.9. It would also stand the floor nearer the screen's: 1.9 ΔE off it in
+    caret-dark, where 50% gives 3.2.
+  - In the Catppuccin darks, a chosen key on a bar's bed stands about 4 ΔE lighter than
+    its resting neighbours, because only its face rises off the floor.
+  - On the outline column's floor, the latched outline key stands at least 2.8 ΔE lighter
+    than the floor in the Catppuccin darks, and no more than 3.0. `tactile-kit.e2e.ts`
+    holds it to 2.3 ΔE there, a just noticeable step, and to 4.5 on the header's floor.
+    Reaching 4.5 on the column would take a hover that darkens a latched key.
+  - The folder card's bar lies in no bed and keeps its lip.
+- **Calls left to the user from the 2026-11-02 outline texture:** all three were built and
+  are waiting on the user's verdict.
+  - Every other key row, in the menus, the Settings nav, the comment navigator and the
+    folder tree, keeps the domed gradient the outline row dropped.
+  - `--toc-quiet` still steps `--ink-soft` 15% toward `--ink`. On the bed's floor plain
+    `--ink-soft` holds 4.5:1 without it, at 4.96:1 at its lowest (Catppuccin Latte).
+  - In light palettes the peek's rim stands under 4.5 ΔE from the floors it sits between.
+- **Calls left to the user from the 2026-11-02 outline head:** three were built and are
+  waiting on the user's verdict. The user decided a fourth: `\` focuses the field and
+  selects a query it holds, so typing replaces the query, and the × still empties it.
+  - The column's field shows no match count. The float keeps its count.
+  - As the column narrows, the field's magnifier goes.
+  - Tab stops at the field and moves on to the outline key until the reader engages the
+    field with `\`, a click or a key pressed in it.
+
+## 2026-11-03: the find row's Close key stands beside the step keys
+
+The user asked for Close to sit closer to the search controls, right of the ▲ ▼ step keys,
+rather than alone at the row's far end.
+
+- **Close's place:** Close now follows the step keys at the row's usual gap between parts,
+  at every width, with its word and cap or as an × only. Nothing pushes it to the row's
+  end, so the row ends wherever its last part does. The row still paints the bed's floor
+  across the whole slot, so the empty end reads as the bed, not a gap.
+- **The key hints:** they follow Close. They name the steps' keys, but placing them
+  between the steps and Close would have parted Close from the steps, which the user asked
+  not to do.
+- **The slide:** the row still slides out of the Search entry's place from
+  `translateX(100%)` and tucks back into it. Close no longer lands where the entry stood;
+  it travels in with the field and the steps.
+- **The entry under the row:** it used to stay painted under the arriving row until the
+  slide ended, and returned as soon as the row began to close. Close's key covered it
+  then. With Close moved, the entry's rounded edge showed above and below the row's floor,
+  in both themes. The entry now hides the moment the row opens and reappears only once the
+  row has tucked away.
+- **Narrow widths:** the parts keep their widths and only their order changed, so the
+  `@container` thresholds in `PlanSearch.svelte` stand. `narrow-regression.e2e.ts` checks
+  Close sits beside the steps across its sweep.
+- **What this replaces:** two points of the 2026-11-02 entry on the Search entry: Close's
+  place at the end of the crumbs' slot, and "the entry stays under the arriving row".
+
+## 2026-11-02: the outline's filter field stands in the column's head
+
+The user asked for the "Outline `\`" title in the column's head to go. In its place, the
+"Filter headings…" field should always show, inline with the outline key. The `\` cap
+should move to the field's end and go while the field has focus.
+
+- **The head is one row: the filter field, then the outline key.** The title key and its
+  cap are gone. The field always shows, so it no longer drops in below the head, and the
+  rows no longer settle under it or rise as it closes. Its accessible name stays "Filter
+  headings", and it carries `aria-keyshortcuts` for `\`.
+- **The field is a closed field cut into the bed**, as the plan header's Search entry is:
+  `--field-floor` under `--panel-recess`.
+  - It stands at the outline key's height, 1.75rem, and rounds at `--key-radius`.
+  - It stands 0.45rem in from the bed's wall, as the rows do, and 0.45rem from the key.
+    The field and the key therefore nest alike in the bed's top corners.
+  - Its text drops from `--text-md` to the rows' `--text-sm`.
+- **The field's end, as the user set it:**
+  - empty and unfocused: the `\` cap;
+  - empty and focused: nothing, so the placeholder and the amber text cursor show;
+  - holding a query and focused: the ×;
+  - holding a query and unfocused: the `\` cap, then the ×.
+
+  The cap follows Shortcut hints, as every cap does. With them off, an empty unfocused
+  field shows nothing at its end, and a field holding a query shows only the ×. The ×
+  keeps the trailing edge, as it does in every filter field, so the cap stands just before
+  it.
+- **The column's field shows no match count.** Beside the × and the cap it would crowd the
+  query at the column's opening width, not only at its narrowest. The rows beneath show
+  the matches, and "No headings match" says when none are left. The float keeps its count.
+- **The field takes focus instead of opening:**
+  - Focus on the empty field, from a click or Tab, starts the walk on the heading being
+    read, as `\` does. The walk is the keyboard's selection moving through the rows, which
+    the arrows drive from the field, and Tab too once the reader engages the field.
+  - The field stands in the page's Tab order, so Tab focuses it like any other stop, and
+    the next Tab moves on to the outline key. Tab walks the rows only once the reader
+    engages the field: with `\`, a click into it, or any key pressed in it but Tab, Escape
+    or a modifier alone, such as a typed character or an arrow. Otherwise every Tab
+    through the page would walk the rows instead of moving on, until Escape.
+  - `\` focuses the field and plays the outline's sound cue. On an empty field it starts
+    the walk on the heading being read. On a query the field holds, it selects the query,
+    so typing replaces it. The × still empties it. The user decided this: the `\` cap
+    beside a held query promises that `\` returns focus to that query.
+  - Escape clears a query, then hands focus back to the plan. A pick empties the field and
+    hands focus back too.
+  - The rows rise under the keys' selection only while the field holds focus. Otherwise
+    the row under the pointer rises.
+- **The field's magnifier goes as the column narrows.** At the column's narrowest, 12rem,
+  beside the outline key's shortcut caps, the field is about 6rem wide. The magnifier
+  hides when the room left for the field is under 8rem, whatever the window's width, so a
+  query keeps about five characters beside the × while the field holds focus. With
+  Shortcut hints off, the outline key drops its caps and is narrower, so the magnifier
+  stays at every width. Unfocused, the field's `\` cap takes the room of about two
+  characters, so about three stay readable before the ellipsis.
+- **The key stays outside the filter's command.** bits-ui's command handles Enter and the
+  arrows on its own root, so a key inside it would pick a row on Enter. The column lays
+  its head out as a grid and sets the command's own box aside (`display: contents`).
+- **The fold:** the field stays in the column as it slides away, and only the outline key
+  travels to the header. The key itself is unchanged.
+- **The float:** unchanged. It opens on its field, focused, so the cap would never show
+  there. Its field carries `aria-keyshortcuts` for `\` too, because `\` opens it.
+- **Tests:**
+  - `PlanToc.test.ts` holds the field shown and named at mount, its cap while it is
+    unfocused, empty or holding a query, focus seeding the walk, Tab moving on until the
+    reader engages the field, Escape's two steps, a pick emptying the field, and `\`
+    selecting a query the field holds.
+  - `plan-toc.e2e.ts` holds Tab moving on from the field to the key, and Tab walking the
+    rows once `\` engages the field. It holds `\` coming back to a held query, so typing
+    replaces it. It also holds the column's cap, and the float's count, standing between
+    the query and the ×.
+  - `outline-resize.e2e.ts` holds the head as one row at the opening width and at the
+    narrowest. The field stands at the key's height and corner, and the cap stands inside
+    the field. At the narrowest, a focused query keeps about five characters, and an
+    unfocused one keeps its cap and × inside the field.
+  - `concentric.e2e.ts` holds the field's corner nested in the bed's.
+  - The motion tests for the field's drop-in were removed with the drop-in.
+
+## 2026-11-02: the plan header lies in one long bed, between mockups A and B
+
+The user wanted the plan header's separate beds replaced by one bed the length of the bar.
+Three variants were mocked up in the real app
+([the mockups](https://claude.ai/artifact/JseNn6y5EkEckAmyozPAp6)). Of the first two the
+user said: "I feel like somewhere between A and B is the sweet spot". Of the outline key
+in the column's head they said: "I like the show / hide outline button as its implemented
+in C, without the 'bed' for it when the outline is open".
+
+- **The pick: a floored bed between A and B.**
+  - A ("Trough") was a floorless bed, the `.tray` recipe, the bar's length. It nearly
+    vanished on light paper.
+  - B ("Floored bed") floored it with the outline's grained `--bed-floor`. In light
+    palettes its floor sat 1–3 ΔE from the screen's. In the Catppuccin darks a resting key
+    sat 0.8–1.8 ΔE from it.
+  - The floor is now the pane's own floor stepped toward `--bed-floor` by
+    `--header-bed-mix`, one percentage in `tokens.css`. Three strengths were rendered in
+    caret-dark and caret-light, at rest and with Preview latched: a third, a half and two
+    thirds of the way to B. By eye they differ little in caret's own palettes, and none
+    read plainly better, so the middle one, 50%, was taken. The measured gap between them
+    shows in the Catppuccin darks, under "Calls left to the user".
+  - At 50% over the source view, a resting key stands 2.9–3.3 ΔE off the floor in the
+    Catppuccin darks. In light palettes the floor stands 0.4–1.5 ΔE from the screen's, so
+    the bed reads by its shading, as A did.
+- **Geometry, as in A and B.** The bed stands `--well-pad` in from the pane's top and
+  sides and rounds at 11px, so the end keys (8px), the bed and the pane (14px) nest.
+  Through `--pane-header-h`, the header drops from 2.85rem to 2.6rem. The outline column's
+  head now reads that token too, so the two stand the same height. The header's foot shade
+  goes, because the bed's walls mark the edge.
+- **The keys stand on the floor with no bed of their own.**
+  - That covers the outline key, Versions and Preview, the Base and Target pickers, the
+    find row's steps and Close, and the segmented controls, which keep their 3px gang.
+    Each tray keeps its pads, so the gap round a key holds.
+  - Search stays a closed field cut into the floor, as in B. The ring round it that hides
+    the crumbs passing under it takes the bed's floor.
+  - The find row paints the bed's floor clear of the bed's shading. With no floor of its
+    own, the crumbs and the Search entry showed through it as it tucked away.
+- **The drawer's title bar** lies in a bed the same way, stepped from the drawer's
+  `--paper` and level with the plan header's bed. Its close circle stays as it was. The
+  folder card's bar lies in no bed and keeps its lip.
+- **The column's head key drops its tray, as in C.** It stands on the column's floor as
+  the header's key stands on the bar's, so the fold carries one look across.
+  - The tray was floored with `--paper` because a dark latched key on the body read as a
+    hole. On `--bed-floor` the down face sits under the floor in five dark palettes, down
+    to 5.0 ΔE under it in Duskfox.
+  - A dark key latched on either bed now takes `--neutral-face-bed-down`: the hover face
+    mixed 62% of the way to `--bed-floor`. It stands lighter than the column's floor in
+    every dark palette, by at least 2.8 ΔE (the Catppuccin darks), and at least 6.2 ΔE off
+    the header's floor. The hover face stays at least 4.5 ΔE above it.
+  - Catppuccin Frappé sets the 62%. Any nearer the hover face, and the hover would step
+    less than 4.5 ΔE. Raising the hover face instead would take Frappé's `--ink` under
+    4.5:1 on it, and it holds only 4.90:1 now.
+  - Weighed: stepping every face of a key on a bed off its floor rather than the paper. On
+    the column's floor that put a resting key's label under AA in three palettes, and
+    `--ink` under AA on a hover face stepped off the floor in Frappé and Macchiato.
+- **Motion.** The bed slides with the outline and the file drawer, stretching from the
+  plan's moving edge as the floor does. In compare's view transition it is its own part
+  and stretches with its box, so both its ends stay round. The view keys' well, which no
+  longer draws anything, left the transition.
+- **Thresholds:** the header's container steps (37.45rem and 31.3rem) and the find row's
+  were re-measured, and hold. A container query reads its container's content box, and the
+  parts inside that box kept their widths. The header's own padding shrank from 8px to
+  `--well-pad` (3px) at each end, so at a given pane width its content box is 10px wider,
+  and each step comes at a pane 10px narrower.
+- **Tests:**
+  - `concentric.e2e.ts` holds the bed in the pane's corners and the end keys in the bed's.
+  - `plan-toc.e2e.ts` holds the header as tall as the column's head, and the outline key's
+    mirror of Preview, now measured on the keys.
+  - `file-drawer.e2e.ts` holds the two beds level.
+  - `tactile-kit.e2e.ts` holds that no tray on either bed draws a cut, and the latched
+    faces above.
+  - `theme.test.ts` holds the latched face's hover step and AA, and the header's quiet
+    text and crumb hover against the bed's floor over both of the plan's floors.
+
+## 2026-11-02: the outline lies in a bed, its rows are flat rubber, and the peek is a pad
+
+The user didn't like the outline's gradients and asked for "textures that might be a
+little nicer". They asked for three things. The whole outline should sit "in a large
+'bed'", so it looks less bland. Its row faces, under hover and on a selected heading,
+should look less "fake". The peek should follow the rest of the aesthetic instead of
+reading "flat" with a "flat" border. Two or three variants of each were tried in the real
+app, in caret-dark and caret-light, with a row at rest, under hover, keyboard-selected and
+latched.
+
+- **The column lies in one large bed.** It is cut into the body beside the plan pane,
+  level with the pane top and bottom, and holds the column's head, filter and rows.
+  - Its floor, `--bed-floor`, is the body a step toward the pane's floor: 14% toward black
+    in dark, and halfway to the raised paper in light. It is grained like the body and
+    shades as any bed does (`--bed-shade`).
+  - The 0.5rem between the bed and the pane is the splitter. The rows, the filter and the
+    head's outline key end 0.45rem inside the bed. The bed starts `--pane-gap`, the inset
+    round the pane, from the window's left edge.
+  - On the bare body, a row's hover face stepped less than the 4.5 ΔE that keyboard focus
+    needs in five palettes, down to 2.3 ΔE in GitHub light. On the bed's floor it steps at
+    least 5.4 ΔE (Catppuccin Latte), above the 4.5 ΔE `theme.test.ts` now holds it to. The
+    same test holds the outline's quiet ink at 4.5:1 on the floor.
+  - Weighed:
+    - A bed with no floor, the `.tray` recipe at the column's size. It read as a shade
+      round the column, and stayed bland, most of all in light.
+    - A bed round the list alone, on Settings' `--group-floor`. In dark that floor sits
+      close to the pane's, and in light it is a cool white beside the warm body.
+    - A second screen, `--pane-recess` on `--paper-sunk`. The outline read as a second
+      plan and competed with it.
+- **Row faces are flat grained rubber.** The key row's gradient, a lit band over its top
+  third and a dark foot over its lower half, read as painted on a row 15rem wide.
+  - The outline row keeps the key row's rise, sink, side and cast shadow, and drops the
+    gradient. Inset shadows that follow its corners light its top edge (`--rubber-gloss`)
+    and shade its foot (`--rubber-foot`).
+  - Latched or pressed, it shades under its top edge (`--rubber-press`) and lights its
+    lower wall (`--scoop-lip`), as a bed does.
+  - The grain stays the body's `--grain`.
+  - Weighed:
+    - The same gradient with its stops in pixels at the edges. It was flatter, but still
+      read as a painted band.
+    - The flat face with a grain about twice as strong. It read as more textured, but it
+      would part the rows' rubber from the body's and the keys'.
+- **The peek is a raised rubber pad**, as a code block is. Its rim, `--code-bezel` wide in
+  `--body` and lit along its top, holds the copy in a scoop of the view's floor. It stands
+  on `--pad-stand`, floats at `--float-mid` with the menus' `--rule` ring, and rounds at
+  `--pad-radius`.
+  - This replaces the 3:1 `--peek-edge` ring chosen when the peek was built ("an outline
+    row peeks at its section", below). The rim, not a hairline, now parts the copy from
+    the plan.
+  - In every dark palette, the rim stands at least 4.5 ΔE off both the copy's floor and
+    the plan across 3px or more, which `outline-peek.e2e.ts` holds. In light the rim
+    stands as little as 2.9 ΔE from the source floor (Catppuccin Latte), and the pad's
+    side, ring and shadow carry its edge.
+  - The peek stands where it did, 0.5rem inside the plan pane. Its left edge, on the
+    outline's side, takes whichever is further right: 0.5rem past the outline's edge, or
+    0.5rem inside the pane. The outline's edge is now the bed's, 0.5rem short of the pane,
+    so the first would set the peek on the pane's edge and the second decides.
+  - Weighed:
+    - A float of the menus' `--paper-raised` round the copy in a field's cut. In dark it
+      read as a dark box in a thin frame, still flat.
+    - The menus' float composite with a scoop and no rim. In dark its edge almost vanished
+      against the plan.
+- **The float and the filtered outline:** the float keeps its `--paper-raised` panel and
+  takes the flat row faces. The filter opens inside the column's bed.
+- **Tests:**
+  - `concentric.e2e.ts` holds the bed's corner at a row's corner plus the inset.
+  - `outline-resize.e2e.ts` holds the bed level with the pane, with the splitter filling
+    the gap between them.
+  - `theme.test.ts` and `outline-peek.e2e.ts` hold the steps above.
+
+## 2026-11-02: the header's outline key stands as far in as Preview
+
+With the outline folded, the plan header's outline key now stands 8px in from the pane's
+left edge, as Preview does from the right. Before, it stood 18px in, and the user found it
+awkwardly far in beside Preview.
+
+- **The two ends match.** While the header holds the outline key, its left padding drops
+  from 1.15rem (18px) to 0.5rem (8px), the same as its right padding.
+- **The crumbs keep their inset while the column stands.** The outline key then sits in
+  the column's head, not the header, so the header's left padding stays 1.15rem and the
+  crumbs start where they did.
+
+## 2026-11-02: a filter query peeks at the row it selects
+
+Typing a query into the outline's filter selected the first match but opened no peek on
+it. The peek came only once the user moved to another row. They asked for it to "appear
+immediately (after a small delay) on the current selection".
+
+- **A query peeks at the row it selects.** Once you stop typing, the selected row peeks
+  after the same 350ms a row under the pointer or the keys waits. The filter selects the
+  first match, so that is the row that peeks.
+- **Each keystroke starts the wait again.** An edit closes an open peek, and the selected
+  row waits 350ms from that keystroke. An open peek follows the pointer and the keys to
+  the next row at once, but not the query: a peek that swapped its copy at every keystroke
+  would change before anyone could read it.
+- **A query that matches nothing shows no peek.** It selects no row, so only "No headings
+  match" shows under the field.
+- **Emptying the query closes the peek, and it stays closed.** The field's ×, Escape and
+  deleting the last character all empty it. The whole outline comes back with its first
+  row selected, a row you didn't pick. Backing out of a search never opens a peek. Moving
+  the pointer or the keys to a row and resting there opens it again.
+- **The query starts the wait itself.** bits-ui, the library under the outline's list,
+  selects the first match just after each edit. An edit that keeps the same first match
+  changes no selection, so a peek that waited for a selection change would never open. The
+  outline starts the wait on its own first match instead, which is the row bits-ui selects
+  because the list keeps the plan's order.
+
+## 2026-11-02: a clicked outline row goes down at once and stays down
+
+The user: "when I click on an item in the outline, it should immediately animate to its
+"depressed" button variant I think". A click now takes the row down under the press, and
+the latch the click sets holds it there through the jump. The row latched before lets go
+at the same click.
+
+- **Why it stood up:** the rules that raise the row under the cursor had a higher CSS
+  specificity than the press and the latch. That cursor is the pointer's hover while the
+  filter is closed, and the keyboard's selection while it is open. So a pressed row stayed
+  risen, and the row the click had latched stayed risen too, until the pointer left it or
+  the closing filter slid it away. The latch itself already moved at the click. In the
+  float, the selection's rise also hid the press the float holds on a picked row
+  (`data-key-pressed`). The rise rules in `PlanToc.svelte` now carry no more specificity
+  than the press and the latch, which follow them and win.
+- **A click:** the row goes down as a press does, on `--ease-out`, and the click latches
+  it where it stands. On pointer-up only its face changes: `--neutral-face-latched-hover`
+  while the pointer stays on it, then `--neutral-face-latched`. A press dragged off the
+  row still cancels, so the latch waits for pointer-up, as any button's action does.
+- **Enter:** a pick by keyboard latches the row at once, with no hold before it. In the
+  column, Enter closes the filter and the row goes from risen to latched. In the float,
+  the float marks the picked row pressed as it closes, so the row stays down while the
+  float leaves.
+- **A jump that lands elsewhere, or is interrupted:** unchanged. The latch holds the
+  picked heading until the plan reaches it, or for 480ms, twice the jump's 240ms travel.
+  Then it moves, with no motion, to the heading in the reading zone, as a scroll moves it.
+  The latch marks where the reader is, and a heading the plan could not bring to the
+  reading zone is not where the reader is.
+- **The latch's motion:** a latch goes down on `--ease-out` over `--dur-state`, as a press
+  does, so it no longer springs past where it stops. Only a key's return springs. A pick
+  still moves the latch with motion, and a scroll still moves it with none, because motion
+  confirms a change the reader made. Motion through a scroll reads as lag.
+- **Reduced motion:** no key travels, so the press and the latch show only as the row's
+  shading turning concave. The shading stays concave until the latch moves on.
+- `test/e2e/plan-toc.e2e.ts` holds:
+  - a row clicked in the column or the float never drawn above its resting position, from
+    the press until the jump lands;
+  - a row Enter picks in the column going down no further than where it stops.
+
+## 2026-11-02: the cwd path shows whole from `~`, and a copy confirms on the path
+
+The user asked for the status bar's working-directory path to start from `~` and be "the
+'real' path to the current working directory", in place of its last two segments. They
+asked for its middle to give way when the bar is too narrow, and for a copy to have "a
+nice little animation for it instead of just having the toast message".
+
+- **What it shows:** inside the home directory, the whole path from `~`, so
+  `/Users/dev/wt/caret/plan-header` reads `~/wt/caret/plan-header`. Outside it, the whole
+  absolute path. A cwd the coding agent already reports from `~`, such as the README
+  hero's `~/acme-web`, reads as given. A click still copies the whole absolute path, never
+  the `~` form.
+  - The daemon reports its user's home directory on `/api/health` as `home`. Until the
+    UI's health check returns, or from a daemon that predates the field, the path shows
+    absolute.
+- **The middle cut:** when the whole path outruns the room between the version and the
+  review's status, it gives up whole segments to one `…`. It cuts into a name only when
+  the leaf alone outruns the room, and then the leaf ends in an ellipsis.
+  - It keeps its start (`~`, or an absolute path's first directory) and its leaf. It gives
+    up the segment after the start first, so the leaf's nearest parents, usually the repo
+    and the worktree, stay longest: `~/…/caret/plan-header`, then `~/…/plan-header`.
+  - Widening the bar gives the segments back.
+  - While the path is cut, the bed fills the whole room and narrows smoothly with the
+    window. The text inside it drops one segment at a time. A path that fits sets the
+    bed's width, unless "Copied" is wider.
+  - CSS `text-overflow` was ruled out, because it cuts mid-name: an ellipsis in the middle
+    of a segment (`~/wt/ca…/plan-header`) shows a name that doesn't exist.
+- **The sides keep their width:** a long path took room from the version, which wrapped
+  onto two lines at its hyphen. The version and the review's status now never shrink below
+  their own width.
+- **The copy roll:** on a copy that lands, the path rolls up out of the bed, and "Copied",
+  with a check in `--ok`, rolls up into it from below, on `--dur-state` and `--ease-out`.
+  After 1.5s they roll back. The version badge's "Copied" holds for the same 1.5s. The bed
+  holds its width, so nothing beside it moves.
+  - Under reduced motion the swap is instant and "Copied" still holds for 1.5s, so the
+    confirmation stays readable without movement.
+  - A copy the clipboard refuses, in an insecure context or with permission denied,
+    confirms nothing, and a screen reader hears nothing. The toast confirmed every click,
+    even a refused one.
+- **No toast:** the confirmation sits where the reader is already looking, and the version
+  badge beside it confirms its own copy the same way. A toast in the far corner said it a
+  second time and stacked on repeated clicks. A status region still announces "Copied path
+  to clipboard" to a screen reader, as the toast did.
+
+## 2026-11-02: the README hero is one screenshot per appearance
+
+The user disliked the hero's four-theme stitch and asked for two screenshots, one in
+caret-light and one in caret-dark, with no composites. They also asked the hero to show
+more of the app: a file preview on the right, a second comment, and the comment list ⇧C
+opens. The README shows the pair through a `<picture>` element, so a reader sees the one
+that matches their system appearance. `mise run assets` captures both.
+
+- **Composition:** the plan in the source view fills the left, and the file it cites fills
+  the right in the preview docked there. The two shots differ only in theme.
+  - The first comment sits on the line citing `scripts/release/log.ts:9` and asks for
+    `quiet` to go into `createLogger`. The preview opens on that file with line 9,
+    `createLogger`, marked, so the eye runs from the comment to the code it is about.
+  - The second comment is the old hero's comment, on step 3 of the demo plan. One card
+    sits mid-plan and one near the foot, so they don't stack.
+  - The comment list stands in the bottom right over the space under the 20-line file, so
+    it covers no code.
+  - The outline column is folded, because the app folds it beside a drawer at this width.
+- **Frame:** 1440×900 CSS pixels at 2×, as before. The drawer is pinned at 560px, because
+  at its default width the plan's 90-column lines run past the pane's edge.
+  `scripts/tasks/assets.ts` keeps the previewed file's lines short enough to fit that
+  width.
+- **What stays out:** the first-run onboarding modal and the one-time drag tip are marked
+  seen, and the pointer rests in the top bar's empty middle, so no tip or hover shows.
+- **Privacy:** the status bar's cwd reads `~/acme-web`. The daemon reads the previewed
+  file from a real temporary project, and the task swaps that directory for `~/acme-web`
+  in the review JSON the UI reads.
+
+## 2026-11-02: the find row closes from a Close key, and opening holds the plan still
+
+The user saw the right side of the view jump open and back as the find row opened. They
+also asked for the row's Esc hint to be a button, and, with Shortcut hints off, for a
+button reading "Close" where the row showed no way out.
+
+- **The jump:** the find row's field took focus while the row still sat past the crumbs'
+  slot, at `translateX(100%)`. The slot's `clip-path` clips only what paints, so the row's
+  box still reached past the slot. Focus scrolls the nearest scroll container to bring the
+  field into view. `.plan-body` (`overflow: hidden`) is one, so the whole plan slid 170px
+  left, then back as the row arrived. The field now takes focus with `preventScroll`, and
+  `plan-search.e2e.ts` fails if `.plan-body` scrolls at all while the row opens.
+- **Close:** one key replaces the row's × key and its Esc hint. It holds an ×, the word
+  "Close" and, with Shortcut hints on, the `esc` cap. With hints off, Close keeps its ×
+  and word and drops the cap, as the Search entry does.
+  - It stands at the end of the crumbs' slot, where the Search entry stood, so the control
+    that opened the row is the one that closes it. It is a key in a bed of its own, at the
+    height of Versions and Preview beside it.
+  - It carries `aria-keyshortcuts="Escape"`, so Escape on a committed search plays the
+    press echo on Close.
+  - The key hints after the step keys keep only the keys Close doesn't show: ↵ while
+    editing, and `n`, ⇧N and `/` once committed. With none to show, they are not drawn.
+- **Narrow widths:** Close with its word and cap takes about 5.4rem more than the × did,
+  so every threshold the row gives way at moved. They are the `@container` queries in
+  `PlanSearch.svelte`, and the header's cap rule in `DiffPlanView.svelte`. A change to
+  Close's width moves all four.
+  - Its word and cap go with the key hints, in a row under 30.4rem (was 25rem). That
+    leaves an × the size of the step keys, the × the row had before.
+  - The slash and the count's spaces now go under 16.6rem and 15.65rem (were 15.9rem and
+    14.95rem). The header keys' caps go under 31.3rem (was 30.6rem).
+  - At the narrowest window, 480px, the row with "No matches" has about 3px to spare.
+    `narrow-regression.e2e.ts` measures Close as part of the row.
+
+## 2026-11-02: the file drawer's title bar stands as tall as the plan header
+
+The user asked for the file drawer's title bar to be as tall as the plan header beside it,
+and allowed its contents to grow to suit the taller bar.
+
+- **Height:** one token, `--pane-header-h` in `ui/src/styles/layout.css`, sets three
+  heights: the plan header's, that of the box casting the plan header's foot shade
+  (`.pane-lip::before`), and that of the header the file drawer and the folder card share
+  (`.ref-header`). The plan header stays 2.85rem (45.6px). The drawer's bar grows from
+  29.25px to match.
+  - Docked right, the two bars share their top and bottom edges.
+  - Docked bottom, and on the folder card, nothing sits beside the bar. It keeps the same
+    height anyway.
+- **What grew:**
+  - The path, the bar's one emphasis, from `--text-2xs` to `--text-sm`, the size of the
+    plan header's crumbs.
+  - The kind tag ("Preview" or "Folder"), the line range and the esc hint ("esc to
+    close"), from `--text-2xs` to `--text-xs`, the size of the plan header's "/ to
+    search". The tag and the line range share one pocket height, 1.25rem.
+  - The gap between the bar's parts, to the plan header's 0.6rem, and its side padding, to
+    the plan header's 1.15rem. At that inset the close circle sits about as far in from
+    the pane's side as from its top.
+  - The folder card's refresh key, from 20px to the crumbs' 24px, with its glyph from 11px
+    to 13px. It now meets the 24px minimum target size without an invisible margin around
+    it.
+- **What stayed:**
+  - The close circle keeps its 11px size and its 25px target, because macOS keeps a
+    window's close, minimize and zoom buttons about 12px across at every title-bar height.
+  - The kind tag and the line range stay stamps rather than keys in a bed. Neither can be
+    pressed, and the kit keeps keys for what can be.
+- **Narrow widths:** at the drawer's narrowest, 240px, the old bar already squeezed the
+  path to nothing, and its esc hint ran 46px past the pane's edge. The larger type would
+  have pushed the hint 79px past it. The bar now gives way as it narrows:
+  1. The esc hint goes when the bar, less its side padding, is under 26rem (416px) wide. A
+     container query on the bar measures it.
+  2. The kind tag goes under 20rem (320px).
+
+  The line range stays, because it is the live region that announces each chunk of the
+  file as it loads. At 240px the path now keeps about 45px beside "lines 9–67 of 67". At a
+  480px window, docked bottom, every part still shows.
+- **Tests:** `test/e2e/file-drawer.e2e.ts` holds:
+  - both reference headers at the plan header's height, docked right and docked bottom;
+  - the drawer's top edge level with the plan header's when docked right;
+  - the bar at the drawer's narrowest, with nothing overflowing and the path in view.
+
+## 2026-11-02: a filter clears from inside its field
+
+The user found no obvious way to empty the outline's filter. Its "Clear filter" button
+showed only once a query matched nothing, and it sat at the column's foot. They asked for
+the way other products do it: Trello, Apollo, Behance and Mural all put an × inside the
+field.
+
+- **The ×:** a shadcn Command filter field, the outline's and the breadcrumb bar's, shows
+  an × at its trailing edge whenever it holds text, a space included. A press empties the
+  query and leaves the filter open, with focus in the field. In the outline's column,
+  Escape still clears the query first.
+- **Its look:** a ghost control, flat at rest and washed with `--ink-wash` under the
+  pointer. A raised key would stand up out of the field, which is sunk into the surface.
+  Its glyph is `--ink-soft`, a step above the search glyph's `--ink-faint`, so it reads as
+  something to press, and it takes `--ink` on hover. It is 24px square and rounds at
+  `--radius` less 3px, so its corner nests in the field's.
+- **No motion:** it appears with the first character and leaves with the last, with no
+  fade. It shows on nearly every query, so a fade would play constantly. The match count
+  beside it already appears without one.
+- **The count:** the outline's match count stands just before the ×.
+- **The empty state:** "No headings match" keeps its line and loses its button. In the
+  column it now sits under the field, where the rows would start. It used to sit at the
+  column's foot, because the empty list still filled the column.
+
+## 2026-11-02: the unsent row reads centred on dark paper
+
+The user said the unsent row looked off-centre in dark mode and right in light. Its
+content was centred to the pixel: the Resume key stands 3px off both edges, and the label
+centres on the box. The shading moved where the eye took the edges.
+
+- **Cause:** the row's tinted floor is lighter than dark paper. The bed's shade,
+  `--bed-shade`, darkens the floor's top 2 to 2.5px to the paper's own lightness, so they
+  merge into the paper and the top edge read inside the box. The bed's lit lip drew an
+  edge 1.5px below the box. The row read 2px lower than its content, and the Resume key
+  seemed to touch its top. The gap was widest on paper near black: caret dark and GitHub
+  dark, and, in the preview, Catppuccin Mocha and Duskfox. On light paper the floor is the
+  darker of the two, so the same shade makes the top edge sharper instead.
+- **Change:** in dark the row takes `--unsent-shade`, the bed's shade with its top shadow
+  at 0.4 alpha rather than 0.95 and no lip. The visible row now centres within 0.25px of
+  its box in every dark palette, in the source view and the preview. Light keeps
+  `--bed-shade` and renders the same pixels as before. `unsent-marker.e2e.ts` reads the
+  edges off a screenshot in every dark palette.
+
+## 2026-11-02: search opens from a Search entry in the plan header
+
+The user asked for a way into search by the pointer. The "/ to search" hint looked like a
+control but did nothing, and with Shortcut hints off the header offered no way in at all.
+They also asked for the find row to "transform + slide open" from that place rather than
+drop from the pane's top edge, kept simple and polished.
+
+- **The entry:** a button named "Search" in the hint's place, at the end of the crumbs and
+  before the view keys. It holds a magnifier, the word "Search" and, with Shortcut hints
+  on, the `/` cap at its end. With hints off, only the cap goes. A click or Enter opens
+  the find row as `/` does, with focus in its field. It carries the shortcut in
+  `aria-keyshortcuts`, as the other header keys do.
+  - It lies in a text field's shallow cut (`--field-floor` and `--panel-recess`) rather
+    than standing as a key. A fourth key would weigh as much as Outline, Versions and
+    Preview, and the crumbs are the header's main content. A search button shaped as a
+    field is also the common pattern on the web (Whop, Evernote, Gusto), and the cut is
+    the material of the find row's own field.
+  - Under the pointer or keyboard focus, it takes `--ink-wash` and its label steps to
+    `--ink`, as a ghost control does. A press, or the press echo of the `/` key, leaves
+    the ghost's dimple. `theme.test.ts` holds the wash 4.5 ΔE off the field's floor, and
+    the `--ink-soft` label at 4.5:1 on it, in every palette.
+  - A touch device keeps the entry and drops only its cap, which is a key hint.
+  - Its word goes with Versions' word in a header under 37.45rem. The magnifier, the cap
+    and its accessible name stay.
+- **The motion:** the find row slides sideways out of the entry, and tucks back into it.
+  - The entry is the last thing in the crumbs' slot, which clips at its end. The row
+    starts past that edge (`translateX(100%)`) and slides left to its place, over the
+    entry and then the crumbs. It moves by transform alone, so the compositor runs it.
+  - It opens on `--dur-pane` (240ms), because a slide across the header is as long a move
+    as a pane's, and reads as a jump cut at 160ms. It closes on `--dur-state`, sliding
+    back into the entry as the crumbs fade in.
+  - The entry stays under the arriving row and hides once the row has covered it. Closing
+    gives it back at once, under the leaving row.
+  - Closing now plays with hints off too. Before, hints off removed the row at once,
+    because there was no hint for it to tuck into.
+  - Under reduced motion, the global switch drops the slide, so the row appears and goes.
+- **The swap stays:** opening still lays the row over the crumbs, as the 2026-11-01 entry
+  chose with its Swap option. At rest the entry resembles the resting field of its Inset
+  option, which it passed over, but the entry never widens in place.
+
+## 2026-11-02: search marks stand out, the outline key latches, the cwd sits in a bed
+
+The user asked for three pieces of the review screen to look designed and of a piece with
+the rest of caret.
+
+- **Search marks.** The current match of a `/` search had to be the most obvious thing on
+  the page in every theme, and the other matches clearly marked, a step below it.
+  - The current match is the mark itself, opaque (`--mark-active`). Its text is whichever
+    of `--ink`, `--paper`, `--paper-raised` and `--paper-sunk` reads most strongly on it
+    (`--mark-active-ink`). The preview draws its bands over the text, so they tint the
+    mark and its text alike: a held selection's `--accent-wash`, then up to 9% `--ink`
+    from the cursor's or the pointer's band. `V`, then `/`, extends a selection to a
+    match, so the current match can sit under both. Where not even white or black text
+    would reach 4.5:1 under the bands, the mark first steps away from its text, only as
+    far as it needs: Catppuccin Latte's and GitHub light's marks are mixed 10% toward
+    black. Then, where the bands would take the text under 4.5:1, the text steps toward
+    white if it is lighter than the mark, or black if darker, until it reaches 4.5:1.
+    Catppuccin Frappé and Latte, Dawnfox and Dracula step their text.
+    `ui/src/lib/theme.test.ts` holds the text to 4.5:1 under both bands in every palette.
+    Before, the current match was a 34% (dark) or 28% (light) wash of the mark, with the
+    line's own syntax colour as its text.
+  - Every other match is a 36% wash of the mark (`--mark-match`), a step over the 18%
+    (dark) or 14% (light) `--mark` a comment span wears. Its text is `--ink`
+    (`--mark-match-ink`). The source view sets that text on the wash over two kinds of
+    ground:
+    - paper, or a code or table card's floor, under the cursor's or the pointer's band and
+      any inline chip;
+    - a table header's pad, the raised `--body` fill under the header row, lit toward its
+      top edge by `--pad-top`.
+
+    Where a palette's `--ink` falls under 4.5:1 on any of them, the text steps toward
+    white in dark or black in light, only as far as 4.5:1 needs. caret's own palettes and
+    both GitHub palettes keep their `--ink`. Before, every other match wore `--mark`.
+  - A chip inside a table header is left out of those grounds, because on the pad's lit
+    top under a chip no text colour reaches 4.5:1 in five dark palettes. Where a header's
+    text sits, below that top, a match on a header's code chip measures 4.52:1 (Catppuccin
+    Frappé) or more.
+  - Both marks set their own text colour, over a syntax, heading or quote colour. An
+    italic run's last glyph can slant past the mark's box, and the part outside keeps the
+    mark's text colour, so on the paper beside the mark it can vanish. `::highlight()`
+    takes no padding to widen the box, so this is accepted.
+  - Measured as painted on a plain line, across the eleven bundled palettes and both
+    views, as CIE76 colour differences (ΔE):
+
+    | Pair | Before | After |
+    | --- | --- | --- |
+    | Other match against its line | 8.0 (Dawnfox) to 20.6 (caret dark) | 20.6 (Dawnfox) to 40.3 (Catppuccin Latte) |
+    | Current match against its line | 15.1 (Dawnfox) to 35.3 (caret dark) | 52.6 (Dawnfox) to 103.1 (Catppuccin Latte) |
+    | Current match against the others | 9.7 (caret light) to 20.2 (GitHub dark) | 35.1 (Dawnfox) to 64.1 (Catppuccin Latte) |
+
+    Text contrast was read from screenshot pixels: the pixel inside a glyph furthest from
+    the mark's colour, against the mark. At 1x, antialiasing blends a thin stem with the
+    mark, so that read comes out low; the 4.5:1 minimum is therefore checked at 2x. The
+    lowest text contrast rose from 2.9:1 (Catppuccin Frappé, read at 1x, so if anything
+    lower than the true value) to 4.8:1 (Catppuccin Frappé, an other match on a table
+    header, read at 2x). Under a held selection, the current match's text reads 4.6:1
+    (Catppuccin Latte) or more. Before, it read 3.9:1 to 4.4:1 there in five palettes.
+  - `test/e2e/search-marks.e2e.ts` holds, in every bundled palette and in both views:
+    - an other match at least 18 ΔE off its line, and at least 1.5 times as far off it as
+      a comment span's `--mark` on that line, which measures 1.86 (GitHub dark) to 2.62
+      (GitHub light) times;
+    - the current match at least 45 ΔE off its line and 30 ΔE off the others;
+    - the text inside every match at 4.5:1, a code chip under the cursor's band and a
+      table header among them;
+    - in the preview, the current match's text at 4.5:1 under a held selection.
+  - On a comment span, a selection, the cursor's and the pointer's bands, a heading, a
+    code block and a quote, an other match stays at least 17.9 ΔE off what it sits on
+    (Dawnfox, on a comment span). The current match stays at least 44.1 ΔE off it
+    (Catppuccin Frappé, on a selected line). A thematic break (`---`) draws a rule in
+    place of its dashes, which it paints transparent. A match on it keeps them
+    transparent, so the mark shows as a plain band.
+  - Not built: an underline on the other matches, because a link already underlines. A
+    wash weakened per palette until its `--ink` held 4.5:1, because Catppuccin Latte's
+    would have fallen under the old `--mark`.
+- **The outline key latches.** The column's key and the header's are one toggle named
+  "Outline", which supersedes the "Hide outline" and "Show outline" names of 2026-11-01. A
+  press, or ⇧ + `\`, opens or folds the outline. The key latches down with its corner
+  light while the outline is open, as the Preview key does, and stands up while it is
+  closed.
+  - The latch rides the key's travel. As the column stands, the key latches on
+    `--dur-pane`; as it folds, the key lets go on `--dur-state`. Both run on `--ease-out`
+    from the slide's first frame, not on the spring a key's return takes.
+  - A click stands the column with the header's key already pressed down, so the column's
+    key comes in latched. ⇧ + `\` stands it with the key up, so the key latches on the
+    way.
+  - A shortcut plays its press on the control it stands for, holding the key down for
+    110ms (the press echo). A fold from ⇧ + `\` drops that echo from the key, which would
+    otherwise hold it down past the end of its travel.
+  - Reduced motion snaps the latch with the slide.
+  - The column's head floors the key's bed with `--paper`, matching the floor under the
+    key's bed in the plan header. A latched key drops its side and cast shadow, so only
+    its face shows where it is. In every dark palette that face is at or under the body's
+    lightness, so on the body the key read as a hole. Its ⇧ + `\` hint cap stood in the
+    hole as if it were the key. The user saw this as the key looking misaligned.
+    `test/e2e/tactile-kit.e2e.ts` holds the face lighter than its floor in every dark
+    palette, by a colour difference (ΔE, CIE76) of at least 4.5.
+- **The working-directory path sits in a bed.** It is centred on the status bar, between
+  the version and the review's status, in a bed with no key, a `button.tray`. It shows
+  whenever a review is open, whether the outline is shown or not. It first sat at the
+  outline column's foot. The user asked to move it: "I meant like, the footer of the
+  entire view, on the same line as the version number, the keyboard helper button, etc - I
+  want it there in the middle". Three variants were tried on the real app in light and
+  dark:
+  - Bed, built: the `.tray` recipe, cut into the body like the header's beds. The user
+    described it as "not a proper button, but just the bed".
+  - Copy box: a text field's floor and `--panel-recess`. In light its white floor and edge
+    read as a field to type in.
+  - Pocket: a stamp's darker floor, as a pill. The kit stamps passive labels this way, and
+    it read as a tag.
+
+  The bed takes `--ink-wash` under the pointer and keyboard focus, and the path inks up,
+  as a ghost control does. A press leaves the ghost control's dimple in it. When the path
+  outruns the room between the bar's other segments, the path shortens to an ellipsis, and
+  the version and the review's status keep their full width.
+
+## 2026-11-02: the outline column resizes from its edge
+
+The user asked to make the outline column resizable, "polished and intuitive, cohesive
+with the rest of caret". This replaces the fixed 15.5rem width from 2026-11-01.
+
+- **Bounds:** the column opens at 15.5rem, narrows to 12rem and widens to 30rem.
+  - At 12rem an H5 row, four steps in, still holds a few words a line.
+  - At 30rem a label's line reaches about 75 characters, the longest measure that reads
+    well.
+  - It widens only while the plan beside it keeps `MIN_READING_PX`, its 800px reading
+    column. A window too narrow for that still lets the column stand at 15.5rem, so no
+    window gives it less room than before.
+  - A width the window can't hold shrinks with the window, and comes back as the window
+    widens.
+- **Beside a file:** the column yields, folding into the header's float, at the width the
+  reader chose. A narrowed column stays beside a file that the opening width would yield
+  to, and a widened one yields sooner. No gesture on the edge drops the column to a float.
+  A drag beside a file stops where the column would yield. A double-click there returns
+  the opening width if it fits beside the file, and otherwise the widest width that does.
+  The browser remembers the width the double-click set, so the column keeps it once the
+  file closes.
+- **One splitter for both edges:** the file drawer's edge moved onto the same
+  `Splitter.svelte`, so the two edges look and behave alike. Its 2px `--ink-faint` seam
+  gave way to the grip. A full-height rule read as a hard line, which the chrome never
+  draws. A double-click on the drawer's edge returns it to its opening share, 45% of the
+  surface, and forgets the dragged size.
+- **The grip:** it is the switch's key, at a key's 2rem height. It rises in the gap under
+  the pointer and goes down while held. It follows the pointer along the edge, and stays
+  where it was grabbed during a drag. It takes the key's rest face, `--knob-face`, rather
+  than its hover face, because the hover face measures 2.94:1 on Catppuccin Frappé's body.
+  A mouse drag leaves the edge focused, so the arrow keys can fine-tune it, but that focus
+  doesn't raise the grip: only focus from the keyboard does. Otherwise every drag would
+  leave a lit grip standing in the gap.
+- **The edge covers only the gap:** the 0.5rem (8px) the outline's rows leave before the
+  plan pane. The outline's list hides its scrollbar, so the edge overlaps no scrollbar.
+  The edge starts below the column's head, because the head's outline key reaches 2.4px
+  into the gap. When the edge ran the column's full height, it took a press on the key's
+  rim, and its grip rose over the key.
+- **No transform or throttle on the drag:** the drag needs neither, because it already
+  holds the display's frame rate. The column resizes live, and the plan lays out again
+  each frame. Measured with bare `requestAnimationFrame` timestamps and the Long Animation
+  Frames API at 1440px in headless Chromium on `scripts/tasks/dev/fake-plan.md`, a drag
+  holds 16.7ms frames, the display's rate, in both views. The page's first gesture pays
+  one 100 to 130ms frame, which is caret's sound unlocking audio on the window's first
+  `pointerdown`, whatever the gesture. Under a 4x CPU throttle the source view drops to 33
+  to 50ms frames during a drag, and a window resize to 67 to 83ms. The preview holds
+  16.7ms even there.
+- **Not built:** the window splitter's optional Home, End and Enter keys.
+
+## 2026-11-02: an outline row peeks at its section
+
+The user asked for "a little hover preview window to the right of the selection that shows
+you a snippet of what is in that section if you were to navigate to it", shown on hover
+and while walking the outline by keyboard, and looking "accurate to the current view
+type".
+
+- **The peek is a copy of the live view, not a second render.** The source view draws
+  every row and Preview every block, with no virtualizing, so the section is already in
+  the DOM, themed and highlighted. Copying its rows or blocks matches the plan exactly in
+  every theme for the cost of a clone. Rendering the slice again would need a second
+  diff-library instance and caret's whole layer pipeline for source, would restart the
+  line numbers, and would leave Preview's code plain until its highlight pass ran.
+  - The source copy stands in a shadow root that adopts the live root's sheets and theme.
+    It leaves out comment rows, whose cards live outside the shadow root, and the rows'
+    hover, cursor and selection.
+  - The Preview copy keeps the live root's class, so its scoped rules reach the copy, and
+    its text wraps to the peek. The room the preview holds open for comments closes.
+  - Images are the plan's own `<img>` elements, copied, so they come from the browser's
+    cache rather than standing in as placeholders. One that fails to load hides, as it
+    does in the plan.
+  - Neither copy shows the search's marks. The search marks its matches with ranges over
+    the live text, which a copy doesn't carry.
+- **A heading with no text of its own shows its subsections.** Under `## Phase 1` sitting
+  straight above `### Step 1.1`, the peek runs on to the next heading of its level or
+  higher. Cut at the next heading of any level, it would show only the row's own name. 145
+  of 836 headings across the user's 93 saved plans have this shape.
+- **One dwell opens it, then it follows at once.** 350ms on a row, by the pointer or by
+  the keys, opens it, so a quick walk to a known heading never flashes one. Once open, the
+  next row's peek replaces it with no dwell and no re-entry.
+- **It closes when the reader turns elsewhere.** That is the pointer leaving the list, the
+  list losing focus, a row picked, the query changing, a wheel, a pointer press or a
+  resize. It also closes on any key but a walk key (the arrows, Tab, Home and End) or `p`,
+  Escape included. Escape still clears the query, closes the filter or closes the float as
+  it would, so the peek never adds a step to backing out.
+- **The list or the plan moving on its own leaves it open.** A list scroll carries the
+  peek with its row, as when the list keeps a walked row in view. The plan keeping the
+  reader's place across a flip between source and Preview does not close it. Closing on
+  every scroll had cancelled the dwell whenever a hovered row scrolled itself into view.
+- **`p` keeps it open on the other view.** The user asked for a peek "accurate to the
+  current view type", and the flip is when that shows. The peek swaps in the new view's
+  copy once that view has drawn the section, and closes if that takes more than three
+  frames. On the 1,062-line rendering fixture the copy was there on the first frame, both
+  ways.
+- **A theme change closes it.** The plan draws the section again in the new theme, which
+  takes longer than the three frames the peek waits for: about 80ms in source and 95ms in
+  Preview. So the peek closes rather than keep the old theme's copy.
+- **It sits where the eye already is.** It stands past the outline's right edge, measured
+  live so a resized column carries it, level with the row. It stays 0.5rem inside the plan
+  pane, so it never covers the top bar, the status bar or an open file. It measures itself
+  again whenever its copy grows, as when an image in it loads. So it keeps inside the
+  pane, and fades where the grown section is cut. When the outline is folded into its
+  float, the peek stands past the float's edge.
+- **It is a float on the view's floor.** The shadow is the menus' height, `--float-mid`,
+  so it reads as something over the plan. The face is the plan view's own floor, the
+  background the plan's text sits on, so the copy reads as the plan it came from. There is
+  no arrow and no label; the heading it starts on names it.
+- **Its edge holds 3:1 against its face and against the plan.** The peek lays plan text
+  over plan text, so the edge is the one cue between the two. The menus' `--rule` ring
+  measured 1.19:1 in dark, and the plan's lines seemed to run on into the copy.
+  - The ring is `--ink-faint` stepped a quarter toward `--ink-soft`, which holds at least
+    3.33:1 against both floors in every bundled palette. `--ink-faint` alone falls to
+    2.99:1 on catppuccin-latte's source floor.
+  - A thin raised frame around a floor-coloured well was the other option.
+    `--paper-raised` stands only 1.03 to 1.07:1 from the floors, so the frame still needed
+    the same ring, and the frame and the ring read as a double border.
+- **Size:** up to 36rem by 16rem, about eleven source lines or a heading and seven lines
+  of Preview, at the plan's own type size. Under 18rem of room it does not show. At 480px
+  wide the float leaves too little room, so there is no peek there.
+- **Accessibility:** the peek is `inert`, so it takes no focus, no pointer and no screen
+  reader's attention, and Tab never lands on a link in the copy. It repeats text one jump
+  away, and the row already names the heading and describes its comments and changes. A
+  description of the snippet on every walk step would read whole paragraphs to a screen
+  reader at each arrow press.
+- **While you compare versions, there is no peek.** Compare draws a diff of two versions,
+  not one plan's sections, so the `outlinePeek` row in `SURFACE_BEHAVIORS` covers source
+  and Preview only.
+- **Measured** on the 1,062-line rendering fixture (`scripts/tasks/dev/fake-plan.md`) at
+  1440px in headless Chromium, one test worker: hovering, opening, and walking 20 rows by
+  pointer and by keys gave no long animation frame (a frame over 50ms) and no gap between
+  frames over 16.8ms, in both views. Under four parallel test workers, single frames of 50
+  to 80ms showed at the hover and the open. One worker never showed them, so they are
+  likely the machine's load rather than the peek's work. With the peek measuring itself
+  again on every resize, the same run gave the same result, and the peek opened 353 to
+  357ms after the pointer's first move on a row.
+- **Not built:**
+  - Comments in the peek. Their cards are live components slotted from outside the shadow
+    root, and the peek shows the plan's text.
+  - A peek on touch, where nothing hovers.
+  - Scrolling inside the peek. It takes no pointer, so it never steals a hover or a click
+    from the plan beneath it.
+
+## 2026-11-01: the layout moves as one, and panes enter slower than they leave
+
+The user asked for "nice animations when transitioning between various states", naming the
+outline sidebar opening and closing, Preview hiding as compare opens, and Versions "doing
+a nice little slide animation to take the preview button's place".
+
+- **Panes enter on 240ms and leave on 160ms.** The outline column and the file drawer
+  enter on `--dur-pane` and leave on `--dur-state`. At 160ms a 248px column moves about
+  1.5px per millisecond, which reads as a jump cut. Material 3 puts container moves in its
+  250 to 400ms tier and pairs an exit at about 0.6 of its enter. Every other change stays
+  at 160ms.
+- **The outline and the file drawer move on the page itself.** A change applies at once,
+  so the plan is laid out where it ends in one pass, on the first frame. Each part that
+  moved is then drawn back where it stood and slides home on a CSS transform transition.
+  - Folding, the column leaves the layout and slides off the window's edge. Its Hide
+    outline key travels to where the header's Show outline key will stand.
+  - Folding or standing, the column shifts only the plan's left edge, and the plan pane
+    itself holds still, so the view keys and the search hint against its right edge stay
+    where they are. The pane's floor (its background) and recess (the inset shade at its
+    edges) are layers of their own that stretch from the column's edge. Only what that
+    edge carries slides: the plan's text, the crumbs and the find row.
+  - Every part moves by transform alone, which the compositor (the browser's thread that
+    moves layers already painted) runs. An animated clip runs on the main thread, which
+    the long frame that lays out the change holds back. A clip on the crumbs' slot fell
+    behind the slide that way and cut the search hint mid-word.
+  - Opening a file, the drawer comes in at its full width and slides in from its edge, and
+    a column it folds slides out in the same frame.
+  - Closing one, the drawer leaves the layout where it stands and slides out. A column it
+    folded stands again in the same frame.
+  - A move that catches another mid-slide takes every part on from where it has got to,
+    the folding column included. Left to its own CSS transition, a column turned back
+    mid-flight ran for less time than the slide. It outran the plan's floor and opened a
+    band of the window's background up to 195px wide between them. A file opening or
+    closing slides the pane whole, so the floor's left edge carries on from where an
+    outline toggle left it, and its right edge goes with the pane.
+  - The slide starts about as soon as an instant change would paint. On a real two-version
+    plan at 1440px in Chromium, an outline toggle's first moving frame lands 39 to 59ms
+    after the key. The same change under reduced motion paints in 38 to 44ms. One or two
+    frames of 25 to 42ms follow as the moved parts first draw, and reduced motion shows
+    them too. After them, frames come 8 to 17ms apart.
+- **Compare runs as one view transition,** because its content swaps as it moves, and the
+  snapshot is what lets the old view fade through to the new. The plan, the header's
+  controls and the column folding or standing all move on one clock, and the column moves
+  as the outline's own slide moves it.
+  - Each slot, a place where one thing replaces another, fades through: what leaves is
+    gone by 40% of the run, and what arrives starts there, so no slot shows two images at
+    once. The plan pane's own background holds under its images while they fade.
+  - Standing again as compare ends, the column waits until the plan's old image has gone,
+    then arrives with the plan. The plan's box changes width as it moves, so the main
+    thread animates it and it trails the column, which only slides. Without the wait, the
+    column's labels came in over the fading diff.
+  - While the transition runs, a click lands on nothing: for 237ms entering compare, and
+    410ms leaving it.
+  - Leaving compare, the update itself takes about 100ms inside the transition, behind the
+    old image. The new layout's first paint lands after the transition is ready, so the
+    animations start over on the frame after it, and the motion plays whole rather than
+    losing its start to that frame.
+- **Compare's controls take turns.** Entering compare, the crumbs fade out as they slide
+  6px toward the header's start, and Preview shrinks away. Only then does Versions slide
+  into Preview's place, and the Base → Target controls fade in from 6px the other side
+  once Versions has passed. Leaving, the controls fade out first, Versions slides back
+  across their place, and Preview grows back once Versions has gone by.
+- **A jump moves the latch once.** The latch is the outline row marked as the one being
+  read. An outline pick, a crumb or a heading key latches its heading at once and holds it
+  while the plan travels there, fading across in 160ms. The plan scrolling under the
+  outline moves the latch with no motion.
+- **A file's first open is coloured ahead.** Once the plan's file references resolve,
+  caret reads the opening of the first file the plan cites in each language and highlights
+  it while the reader reads. The highlighter compiles each rule of a language's grammar
+  the first time a line reaches it. An earlier build warmed each grammar on a short
+  hand-written sample, which left most of what a real Svelte component reaches uncompiled,
+  so Svelte stayed slow on this plan. A Svelte file's first open now has no frame past
+  34ms after the drawer's first frame, against one of 50 to 59ms after the sample and 165
+  to 209ms with nothing warmed.
+  - The cost moves to just after load, while nothing animates: one task of about 80 to
+    90ms, about 0.8s after the page loads. It is the Svelte grammar loading and
+    highlighting its first lines. Those run back to back once the grammar's code arrives,
+    so a pause between reading the file and highlighting it leaves that task whole. A key
+    pressed in that window waits for it.
+- **Not built:**
+  - View transitions for the outline and the drawer. Measured the same way, the snapshot
+    held the first moving frame back 160 to 200ms after the key, and it took the pointer
+    for 250 to 400ms, so a click in that window was lost. A second toggle snapped the
+    column shut rather than reversing it.
+  - A latch that glides between rows. The latched face is the row's own sunk key, and a
+    separate indicator would part the key from its row for a glide that only near jumps
+    would show.
+
+## 2026-11-01: the outline joins the screen, and search swaps into the plan's header
+
+Chosen through side-by-side previews, over two rounds. The user asked to "put the table of
+contents into the plan view itself (I guess on the left-hand side)" and to keep it in
+view, because "most people are visual and I bet don't even use the contents button". The
+breadcrumbs stay and keep their behaviour, "'sticky' to the top of the plan view". The kit
+stays: "I'm not looking for like, radical redesigns or anything; just optimizing layout".
+
+- **Layout:** "Plan header", chosen over One bar (Versions and Preview beside the plan's
+  name in the top bar, the outline as a column on the pane's sunken floor) and Three panes
+  (the outline as a pane of its own, the view keys in the status bar). The user, of Plan
+  header, which the previews labelled C: "I kinda like C if I'm honest." The control row
+  goes:
+  - The outline is a 15.5rem column cut into the body left of the plan pane. Its rows lie
+    as keys on the rubber, and the cwd path sits at its foot.
+  - The plan pane gains a header stuck to its top edge, with the breadcrumbs on the left
+    and Versions and Preview on the right.
+- **Contents:** the outline replaces the Contents popover, which supersedes "Peek" from
+  2026-10-30. `\` moves focus into the outline and opens a filter at its top. The peek's
+  facts become quiet row marks: the comment and draft count, and a dot on a section that
+  changed since the last version.
+- **Outline rows:** a label wraps to two lines, then truncates. Rows draw no H-level
+  glyph; the indent alone shows the level.
+- **Outline keys:** Lucide's `panel-left`, already vendored, with no word. The user: "The
+  'outline' button doesn't need to say 'Outline' — it can just be an icon in the button."
+  - At the column's head it is a plain button named "Hide outline".
+  - With the column closed, the header leads with a toggle named "Show outline", pressed
+    while the outline is out.
+  - Neither name changes with the state, as ARIA's toggle pattern asks.
+- **⇧ + `\` toggles the outline:** the cap shows the shift glyph then `\`, as Reject's ⇧R
+  does, not a `|` glyph. The user asked for "'<shift>\' instead, where `<shift>` is the
+  icon we use on other 'shift' keys".
+- **A file open:** the column yields entirely whenever the plan would drop below its 800px
+  reading column beside the file drawer, below about 1,710px at the drawer's default 45%.
+  The header's outline key brings the outline back over the plan.
+- **Under 960px:** the drawer docks below, as today. The outline drops from the header's
+  latched outline key as a panel, with its filter focused.
+- **Compare:** the header shows Base → Target and the diff toggles where the crumbs were.
+  Versions is latched and Preview is gone. The outline folds away. The user's reason:
+  compare tracks no reading position, and the split diff needs the width.
+  - Entering compare slides the column out. It is a mode, so it never changes the reader's
+    remembered outline choice, and leaving compare brings the column back as that choice
+    has it.
+  - The header leads with the outline key, as it does whenever the column is folded. `\`
+    and ⇧ + `\` open the float.
+  - The float lists only the sections that changed, each with a line count such as +8. A
+    pick jumps to the section's hunk. With nothing changed, it says "No sections changed".
+- **Narrow widths:** the build made these calls, and the user has not chosen them. The
+  plan header gives way in steps, where the compare picker used to wrap to a second line.
+  - **Versions' word:** it goes once the plan header is tight, before the compare controls
+    give anything up. The header's own width decides, so a wide file drawer counts as much
+    as a narrow window.
+  - **The compare controls:** the Base and Target words go first, then the Bars, +/− and
+    Both toggles. Settings holds the same choice as those toggles.
+  - **The find row's key hints:** they go once the field is down to about 8rem.
+  - **The query's floor:** the field keeps room for about five characters of query (3rem).
+    Past that, the slash goes, then the match count's spaces, then, if the header is still
+    too tight, its keys' hint caps while the row is open.
+  - **The drawer's floor:** a file drawer docked right stops widening where the plan pane
+    would drop below 468px, the width the narrowest window (480px) leaves it. The header
+    then holds there whatever it holds at that window.
+- **Search:** "Swap", chosen over Inset (a field resting in the header that widens on `/`)
+  and Shelf (a find row under the header, across the pane). This supersedes "Sheet" from
+  2026-10-30 and the hanging "/ to search" tab. The user had found the sheet "kinda just
+  floating around" and "a bit amateurish", and picked Swap: "it feels more elegant."
+  - On `/` the find row drops from the pane's top edge over the crumbs. It sits between
+    the outline key and the view keys, which stay.
+  - The match count sits at the field's end, and the key hints follow the step keys as
+    text.
+  - Closing lifts the row as the crumbs fade back in.
+  - Closed, with Shortcut hints on, "/ to search" sits in the header before the view keys.
+  - The cost is the trail. While search is open the crumbs are hidden, so the outline's
+    latched row is the only "you are here" while `n` jumps between sections. The agents
+    recommended Shelf for that reason.
+- **Re-measured once built:** two steps moved to keep the floors on the new grounds.
+  - The outline's quieter text (its title, and levels 4 to 6) takes `--toc-quiet`. On the
+    float's raised paper that is `--ink-soft`. On the body it steps toward `--ink`,
+    because `--ink-soft` measures 4.38:1 on Catppuccin Latte's body. `theme.test.ts` holds
+    the stepped ink to 4.5:1 on the body in every palette.
+  - In light, a crumb's risen face steps toward black from the raised paper. The face it
+    took before, a key's white face, sat too close to the plan's own floor to read as
+    risen. `theme.test.ts` holds it to 4.5 ΔE on both of the plan's floors, `--paper` and
+    `--paper-sunk`, in every palette.
 
 ## 2026-11-01: every modal rounds as Settings does
 

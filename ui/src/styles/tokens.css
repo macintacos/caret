@@ -45,8 +45,12 @@
      side: it is a full-viewport directional sweep, not a surface arriving in place.
      --dur-travel times the plan's scroll TRAVEL, which crosses hundreds of pixels, so
      distance sets it rather than a change of state. Nothing that appears, fades, slides
-     or pops may borrow it; a second traveling animation is the bar. */
+     or pops may borrow it; a second traveling animation is the bar. --dur-pane times a
+     pane or column ENTERING (the outline column, the file drawer): a move that size at
+     --dur-state reads as a jump cut. Leaving stays on --dur-state, so exits run faster
+     than enters. */
   --dur-state: 160ms;
+  --dur-pane: 240ms;
   --dur-travel: 240ms;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   /* A rubber key's return from a press: it springs back past rest and settles. Only the
@@ -109,6 +113,9 @@
   --well-top: calc(var(--well-pad) + var(--key-rise));
   --well-foot: calc(var(--well-pad) + var(--key-side) - var(--key-rise));
   --tray-gap: 5px;
+  /* How far a pane's header bed floors itself toward --bed-floor from the pane's own
+     floor: 0% would be a floorless cut in the screen, 100% the outline column's floor. */
+  --header-bed-mix: 50%;
   --cap-submit-h: 1.75rem;
   --press-blur: 2px;
   /* How far a modal rises as it arrives. */
@@ -184,6 +191,13 @@
   /* An unsent comment's marker tints a whole row, not a pill, so it takes less than a
      stamp, and light paper shows the hue at half. theme.test.ts holds it at AA too. */
   --unsent-floor: 16%;
+  /* That floor stands lighter than dark paper, where the bed's full shade sinks the row's
+     top edge into the paper and its lip adds an edge below, so the row reads lower than
+     the content centred in it. It takes the bed's shade at under half, with no lip. */
+  --unsent-shade:
+    inset 0 3px 5px -2px rgb(0 0 0 / 0.4),
+    inset 0 -1.5px 1px rgb(255 255 255 / 0.06),
+    0 -1px 0 rgb(0 0 0 / 0.4);
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='.33 .33 .33 0 0 .33 .33 .33 0 0 .33 .33 .33 0 0 0 0 0 0 0.12'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='2' intercept='-.5'/%3E%3CfeFuncG type='linear' slope='2' intercept='-.5'/%3E%3CfeFuncB type='linear' slope='2' intercept='-.5'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23g%29'/%3E%3C/svg%3E");
   --float-rim-ink: rgb(255 255 255 / 0.07);
   --float-rim: inset 0 1px 0 var(--float-rim-ink);
@@ -272,6 +286,7 @@
   --stamp-word-toward: black;
   --stamp-word-mix: 50%;
   --unsent-floor: 8%;
+  --unsent-shade: var(--bed-shade);
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='g' color-interpolation-filters='sRGB'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='.33 .33 .33 0 0 .33 .33 .33 0 0 .33 .33 .33 0 0 0 0 0 0 0.2'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='2' intercept='-.5'/%3E%3CfeFuncG type='linear' slope='2' intercept='-.5'/%3E%3CfeFuncB type='linear' slope='2' intercept='-.5'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url%28%23g%29'/%3E%3C/svg%3E");
   --float-rim-ink: rgb(255 255 255 / 0.8);
   --float-rim: inset 0 1px 0 var(--float-rim-ink);

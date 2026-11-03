@@ -1735,9 +1735,9 @@ describe("the preview's copies of the link, code and reference chips (EXC-2021)"
 });
 
 describe("the plan-search highlights (EXC-832, rehued EXC-905)", () => {
-  const allMatches = overrideDecls.match(/::highlight\(caret-search\)\s*\{[^}]*\}/)?.[0] ?? "";
+  const allMatches = overrideDecls.match(/^\s*::highlight\(caret-search\)\s*\{[^}]*\}/m)?.[0] ?? "";
   const currentMatch =
-    overrideDecls.match(/::highlight\(caret-search-current\)\s*\{[^}]*\}/)?.[0] ?? "";
+    overrideDecls.match(/^\s*::highlight\(caret-search-current\)\s*\{[^}]*\}/m)?.[0] ?? "";
 
   // Both extractions fall back to "" on a regex miss, and `not.toContain` passes
   // vacuously over an empty string — so pin non-emptiness before asserting absence.
@@ -1746,11 +1746,11 @@ describe("the plan-search highlights (EXC-832, rehued EXC-905)", () => {
     expect(currentMatch).not.toBe("");
   });
 
-  test("every match rides --mark, the content-highlight token", () => {
-    expect(allMatches).toMatch(/background-color:\s*var\(--mark\)/);
+  test("every match rides --mark-match, a step over a comment span's --mark", () => {
+    expect(allMatches).toMatch(/background-color:\s*var\(--mark-match\)/);
   });
 
-  test("the current match rides --mark-active, the same vocabulary a step up", () => {
+  test("the current match rides --mark-active, the same vocabulary at full strength", () => {
     expect(currentMatch).toMatch(/background-color:\s*var\(--mark-active\)/);
   });
 

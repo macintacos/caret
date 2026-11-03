@@ -192,6 +192,17 @@ function lab50ToHex([L, A, B]: Lab): string {
     .join("")}`;
 }
 
+/** The plan header bed's floor over the plan's `floor`: that floor stepped toward
+ * --bed-floor by --header-bed-mix (styles/tokens.css), mixed in lab as the sheet mixes it. */
+function headerBedFloor(
+  floor: "--paper" | "--paper-sunk",
+  theme: (typeof THEMES)[BuiltinThemeId],
+): string {
+  const pct = Number(/--header-bed-mix:\s*(\d+)%/.exec(readAppCss())?.[1]) / 100;
+  const [p, q] = [hexToLab50(theme.tokens[floor]), hexToLab50(derived("--bed-floor", theme))];
+  return lab50ToHex(p.map((v, i) => v * (1 - pct) + q[i]! * pct) as Lab);
+}
+
 /** A colour as the sheet derives it for a theme's scheme: a palette token, or a
  * derived-tier color-mix(in lab, A, B N%) whose inputs are palette tokens, black or other
  * derived tokens, resolved through each other. Mixed in lab and rounded once, as the browser
@@ -350,7 +361,10 @@ describe("THEMES", () => {
       "--accent-wash": "#f2842f29",
       "--accent-ink": "#0a0806",
       "--mark": "#ffa64d2e",
-      "--mark-active": "#ffa64d57",
+      "--mark-match": "#ffa64d5c",
+      "--mark-match-ink": "#f7f2ea",
+      "--mark-active": "#ffa64d",
+      "--mark-active-ink": "#0a0806",
       "--mark-orphan": "#9a8c7e29",
       "--chip-bold": "#f7f2ea24",
       "--chip-italic": "#bcb0a124",
@@ -380,7 +394,10 @@ describe("THEMES", () => {
       "--accent-wash": "#e07a2e1f",
       "--accent-ink": "#fff6ec",
       "--mark": "#e8882e24",
-      "--mark-active": "#e8882e47",
+      "--mark-match": "#e8882e5c",
+      "--mark-match-ink": "#191310",
+      "--mark-active": "#e8882e",
+      "--mark-active-ink": "#191310",
       "--mark-orphan": "#7a6f6329",
       "--chip-bold": "#1913101c",
       "--chip-italic": "#544b431c",
@@ -463,6 +480,42 @@ describe("every theme", () => {
     }
   });
 
+  // The preview lays its bands over the text: a held selection's `--accent-wash`, then the
+  // cursor's or the pointer's, up to 9% of `--ink`. The current match can sit under both.
+  test("holds the current search match's text to 4.5:1 under the preview's bands", () => {
+    for (const [id, theme] of themeEntries()) {
+      const { "--mark-active": mark, "--mark-active-ink": ink, "--ink": band } = theme.tokens;
+      for (const wash of [undefined, theme.tokens["--accent-wash"]]) {
+        for (const pct of [0, 0.09]) {
+          const under = (color: string) => banded(wash ? over(wash, color) : color, band, pct);
+          expect(
+            contrast(under(ink), under(mark)),
+            `${id} ${wash ? "selected, " : ""}${pct}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  });
+
+  // The source view sets a match's text over the match's wash on either paper or a code or
+  // table card's floor, under up to 9% `--ink` of the cursor's or the pointer's band and any
+  // chip, or on a table header's lit pad, strongest at its top.
+  test("holds every other search match's text to 4.5:1 on each ground the source view sets it on", () => {
+    const CHIPS = ["--chip-bold", "--chip-italic", "--chip-code", "--chip-link", "--chip-ref"];
+    for (const [id, theme] of themeEntries()) {
+      const tokens = theme.tokens as Record<string, string>;
+      const rows = [tokens["--paper"]!, tokens["--paper-sunk"]!, derived("--table-floor", theme)]
+        .flatMap((floor) => [floor, banded(floor, tokens["--ink"]!, 0.09)])
+        .flatMap((row) => [row, ...CHIPS.map((chip) => over(tokens[chip]!, row))]);
+      for (const ground of [...rows, derived("--body", theme), derived("--pad-top", theme)]) {
+        expect(
+          contrast(tokens["--mark-match-ink"]!, over(tokens["--mark-match"]!, ground)),
+          `${id} on ${ground}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
   test("covers caret-dark's full token set", () => {
     const reference = Object.keys(THEMES["caret-dark"].tokens).sort();
     for (const [id, theme] of themeEntries()) {
@@ -519,6 +572,39 @@ describe("every theme", () => {
           `${id} --ink-faint on ${surface}`,
         ).toBeGreaterThan(3);
       }
+    }
+  });
+
+  // The plan header lies in a bed whose floor is the plan's own, --paper over the preview
+  // and --paper-sunk over the source view and the compare diff, stepped toward --bed-floor.
+  // Its quiet text — the closed search hint, the find row's count and key hints — is
+  // --ink-soft there.
+  test("keeps the plan header's quiet text at AA on its bed's floor over both of the plan's", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const floor of ["--paper", "--paper-sunk"] as const) {
+        expect(
+          contrast(theme.tokens["--ink-soft"], headerBedFloor(floor, theme)),
+          `${id} --ink-soft on the bed over ${floor}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  // The outline column lies in a bed on the window's body, floored with --bed-floor. Its
+  // quiet text — the Outline key, the deeper levels, and while comparing the sections that
+  // did not change — takes a neutral key's label ink, --ink-soft stepped toward --ink
+  // (PlanToc.svelte).
+  test("keeps the outline's quiet text at AA on its bed's floor", () => {
+    const step = /--toc-quiet:\s*color-mix\(in lab, var\(--ink-soft\), var\(--ink\) (\d+)%\)/.exec(
+      readFileSync(join(import.meta.dir, "../components/PlanToc.svelte"), "utf8"),
+    )?.[1];
+    expect(step).toBeDefined();
+    for (const [id, theme] of themeEntries()) {
+      const quiet = banded(theme.tokens["--ink-soft"], theme.tokens["--ink"], Number(step) / 100);
+      expect(
+        contrast(quiet, derived("--bed-floor", theme)),
+        `${id} quiet outline ink on --bed-floor`,
+      ).toBeGreaterThanOrEqual(4.5);
     }
   });
 
@@ -692,6 +778,7 @@ describe("every theme", () => {
       for (const face of [
         "--neutral-face-hover",
         "--neutral-face-down",
+        "--neutral-face-bed-down",
         "--crumb-face-hover",
         "--neutral-face-latched-hover",
       ]) {
@@ -712,10 +799,11 @@ describe("every theme", () => {
   const HOVER_STEPS: [string, string, string][] = [
     ["a neutral key or segment", "--neutral-face", "--neutral-face-hover"],
     ["a chosen key, segment or row", "--neutral-face-down", "--neutral-face-hover"],
+    ["a chosen key or segment on a floored bed", "--neutral-face-bed-down", "--neutral-face-hover"],
     ["a latched row or toggle", "--neutral-face-latched", "--neutral-face-latched-hover"],
     ["a row in a menu, listbox or panel", "--paper-raised", "--neutral-face-hover"],
     ["a row in the settings nav", "--group-floor", "--neutral-face-hover"],
-    ["a crumb on the bar", "--body", "--crumb-face-hover"],
+    ["a row in the outline column's bed", "--bed-floor", "--neutral-face-hover"],
     ["an accent key or the gutter +", "--accent", "--accent-face-hover"],
     ["a danger key", "--danger-face", "--danger-face-hover"],
     ["the preview's close key", "--danger", "--danger-face-hover"],
@@ -729,6 +817,40 @@ describe("every theme", () => {
           `${id} ${what}`,
         ).toBeGreaterThanOrEqual(FOUND);
       }
+    }
+  });
+  test("moves a crumb's hover face a findable step off the plan header's bed", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const floor of ["--paper", "--paper-sunk"] as const) {
+        expect(
+          deltaE(headerBedFloor(floor, theme), derived("--crumb-face-hover", theme)),
+          `${id} a crumb over ${floor}`,
+        ).toBeGreaterThanOrEqual(FOUND);
+      }
+    }
+  });
+  // A key standing on a floored bed (the plan header's, the outline column's head) has no
+  // floor of its own round it. A dark key lifts toward ink, so a chosen one must read lighter
+  // than the brightest of those floors, --bed-floor, or it reads as a hole.
+  test("keeps a dark key chosen on a floored bed lighter than the bed's floor", () => {
+    for (const [id, theme] of themeEntries().filter(([, t]) => t.scheme === "dark")) {
+      const [face, floor] = [
+        derived("--neutral-face-bed-down", theme),
+        derived("--bed-floor", theme),
+      ];
+      expect(lab(face)[0], id).toBeGreaterThan(lab(floor)[0]);
+    }
+  });
+  // The plan header's Search entry lies in a text field's cut, and its hover is the ghost
+  // controls': the field's floor under --ink-wash, a tint of ink the browser composites.
+  test("moves the Search entry's washed hover a findable step off its field's floor", () => {
+    for (const [id, theme] of themeEntries()) {
+      const pct = Number(/(\d+)%/.exec(schemeDecls(theme.scheme)["--ink-wash"] ?? "")?.[1]);
+      const floor = derived("--field-floor", theme);
+      expect(
+        deltaE(floor, banded(floor, theme.tokens["--ink"], pct / 100)),
+        id,
+      ).toBeGreaterThanOrEqual(FOUND);
     }
   });
   // On light paper a hover face darkens, so a step past what FOUND needs reads as a stain
@@ -854,6 +976,15 @@ describe("every theme", () => {
     }
   });
 
+  // The plan header's Search entry and the find field's match count are --ink-soft on a
+  // text field's floor.
+  test("keeps quiet text at AA on a text field's floor", () => {
+    for (const [id, theme] of themeEntries()) {
+      const floor = derived("--field-floor", theme);
+      expect(contrast(theme.tokens["--ink-soft"], floor), id).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   // Settings recesses each section's rows into a group on --group-floor, so every row's
   // description sits on it.
   test("keeps a settings row's description at AA on its group", () => {
@@ -886,6 +1017,19 @@ describe("every theme", () => {
       }
       if (theme.scheme === "light") {
         expect(contrast(mark, face), `${id} edge on face`).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  // A splitter's grip (Splitter.svelte) is the switch's knob standing in the bare body
+  // between two panes, risen under the pointer and pressed while held, so it has to stand
+  // off the body in both states.
+  test("keeps a splitter's grip above the non-text floor on the body, risen and held", () => {
+    for (const [id, theme] of themeEntries()) {
+      const body = derived("--body", theme);
+      for (const face of ["--knob-face", "--knob-face-down"]) {
+        const mark = theme.scheme === "dark" ? derived(face, theme) : derived("--knob-edge", theme);
+        expect(contrast(mark, body), `${id} ${face}`).toBeGreaterThanOrEqual(3);
       }
     }
   });

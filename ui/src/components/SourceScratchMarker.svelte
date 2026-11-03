@@ -35,6 +35,7 @@
     margin: 0.4rem 0 0.55rem;
     border: none;
     background: color-mix(in lab, var(--well-floor), var(--attention) var(--unsent-floor));
+    box-shadow: var(--unsent-shade);
     font: inherit;
     text-align: left;
     cursor: pointer;

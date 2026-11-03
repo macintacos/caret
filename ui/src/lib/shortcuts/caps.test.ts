@@ -15,8 +15,12 @@ describe("kbd caps", () => {
     expect(kbdCap("j")).toEqual({ text: "j" });
   });
 
-  test("isKbdKey accepts letters and shift, rejects glyph strings", () => {
-    for (const known of ["shift", "a", "Z", "c", "C"]) {
+  test("a backslash renders as its own glyph", () => {
+    expect(kbdCap("\\")).toEqual({ text: "\\" });
+  });
+
+  test("isKbdKey accepts letters, the backslash and shift, rejects other glyph strings", () => {
+    for (const known of ["shift", "a", "Z", "c", "C", "\\"]) {
       expect(isKbdKey(known)).toBe(true);
     }
     for (const glyph of ["⇧", "⌘", "Esc", "↵", "/", "]"]) {

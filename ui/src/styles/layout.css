@@ -26,12 +26,16 @@
      keep the small-screen inset. */
   --confirm-dialog-width: 40rem;
   /* Horizontal inset shared by every full-width bar that stacks at the top of the
-     app — the TopBar, the compare/breadcrumbs control row, and the daemon banner
-     between them — so their left and right edges line up as one column. */
+     app — the TopBar and the daemon banner under it — and the outline column's left
+     edge, so they line up as one column. */
   --bar-inset: clamp(0.5rem, 1vw, 0.85rem);
   /* How far the plan pane, and the file drawer beside it, sit in from the window's
      sides. App.svelte's arrival curtain takes the same inset. */
   --pane-gap: 6px;
+  /* A pane's header bar: the plan header, the outline column's head, and the reference
+     surfaces' (the file drawer, the folder card), so they stand level beside each other
+     and the outline key travels level between the column's head and the plan header. */
+  --pane-header-h: 2.6rem;
 }
 
 /* ----- App shell: plan + annotation-gutter grid ----- */
@@ -54,10 +58,10 @@
      than to the viewport — which is how App.svelte's `.arrival` curtain (EXC-894) covers
      the content row without becoming a grid item. */
   position: relative;
-  /* Rows: TopBar | optional daemon-replaced banner | the plan's control row | content |
-     bottom status bar (EXC-787). The banner and control rows collapse to 0 when absent;
-     content keeps the 1fr regardless (App.svelte pins each child to its row). */
-  grid-template-rows: auto auto auto 1fr auto;
+  /* Rows: TopBar | optional daemon-replaced banner | content | bottom status bar
+     (EXC-787). The banner row collapses to 0 when absent; content keeps the 1fr
+     regardless (App.svelte pins each child to its row). */
+  grid-template-rows: auto auto 1fr auto;
   height: 100%;
   /* The window is one body: the chrome's controls are cut into it and the plan is a
      pane set into it, so no bar paints a face of its own. It is grained rubber, lit

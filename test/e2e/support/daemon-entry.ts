@@ -139,6 +139,9 @@ const server = createServer({
   // needs either route stubs its own.
   buildId: "e2e-build",
   commit: "e2ecommit0000000",
+  // A synthetic home, so the status bar writes a cwd under it from `~` the same on every
+  // machine (cwd-copy.e2e.ts seeds paths under it).
+  home: "/Users/dev",
   // Real, unlike its synthetic neighbours: this is the one place a browser
   // exercises the conditional-GET path, and a literal would prove only that the
   // header plumbing works. Nothing asserts the value, so the digest tracking

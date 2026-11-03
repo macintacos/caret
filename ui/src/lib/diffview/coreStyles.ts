@@ -960,13 +960,8 @@ const CARET_OVERRIDES = `
      A gentler fade than the eye would choose is the price of quoted prose staying
      readable in every palette.
 
-     A search highlight inside a quote fades with the line, since ::highlight() paints
-     over these same tokens and no selector can lift a highlight out of an ancestor's
-     opacity group. That is accepted rather than compensated: the fade is the LINE
-     reading quieter, and a mark on a quieter line being quieter with it is the same
-     statement, where the selection band above is row chrome about the reviewer's own
-     action and has to stay constant. Both marks keep their full alpha relative to the
-     ink they sit on either way. */
+     A search highlight does not fade with the line: Chromium paints a match on a quoted
+     line at the strength it paints one on any other. */
   [data-content] [data-line][data-quote-depth] > :not([data-md-quote]) {
     opacity: var(--markdown-quote-opacity, ${QUOTE_SUBDUE});
   }
@@ -1024,10 +1019,11 @@ const CARET_OVERRIDES = `
      rule survives those states deliberately: the band is a background-color and this is a
      background-image over it, the same standing the bars take.
 
-     A vim-search hit landing on a rule row paints ::highlight(caret-search)'s band with no
-     glyph inside it, since that highlight sets background-color alone and the text under it
-     is transparent. Accepted rather than compensated: the mark still shows the reviewer
-     which row matched, which is what a hit on a row of punctuation can usefully say. */
+     A vim-search hit landing on a rule row paints its mark with no glyph inside it: the
+     row keeps its text transparent under both search highlights, which otherwise set a
+     text color of their own. Accepted rather than compensated: the mark still shows the
+     reviewer which row matched, which is what a hit on a row of punctuation can usefully
+     say. */
   [data-content] [data-line][data-md-rule] {
     background-image: linear-gradient(var(--ink-soft), var(--ink-soft));
     background-repeat: no-repeat;
@@ -1039,7 +1035,9 @@ const CARET_OVERRIDES = `
      spans shows no glyph either — the library's own [data-line] span color rule is what
      makes the second selector necessary once they exist. */
   [data-content] [data-line][data-md-rule],
-  [data-content] [data-line][data-md-rule] > * {
+  [data-content] [data-line][data-md-rule] > *,
+  [data-content] :is([data-line][data-md-rule], [data-line][data-md-rule] > *)::highlight(caret-search),
+  [data-content] :is([data-line][data-md-rule], [data-line][data-md-rule] > *)::highlight(caret-search-current) {
     color: transparent;
   }
 
@@ -2059,16 +2057,18 @@ const CARET_OVERRIDES = `
      here, in the override sheet adopted into the same shadow root the highlighted
      ranges live in, because ::highlight() resolves against the tree scope of the
      text it paints (not the document). A search hit is a marked region of the
-     document, so the pair reads caret's content-highlight vocabulary — --mark for
-     every match, --mark-active for the current one. That is the two-step the
-     recipe's ALPHA.mark / ALPHA.markActive exists to produce, and it leaves the
-     syntax colors legible under both washes rather than replacing them. Not the accent,
-     which belongs to selection — a different job (EXC-905). */
+     document, so the pair reads caret's content-highlight vocabulary: --mark-match, a
+     step over the --mark a comment span wears, for every match, and the opaque
+     --mark-active for the current one, which hides any band under it. Each sets its own
+     text color, because a syntax or heading color can fall under 4.5:1 on the mark. Not
+     the accent, which belongs to selection — a different job (EXC-905). */
   ::highlight(caret-search) {
-    background-color: var(--mark);
+    background-color: var(--mark-match);
+    color: var(--mark-match-ink);
   }
   ::highlight(caret-search-current) {
     background-color: var(--mark-active);
+    color: var(--mark-active-ink);
   }
 `;
 

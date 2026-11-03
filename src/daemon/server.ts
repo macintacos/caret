@@ -226,6 +226,10 @@ export interface CreateServerOptions {
   /** The active harness's post-upgrade instruction, published in /api/health.
    * Omitted drops the field from the body. */
   restartHint?: string;
+  /** The daemon user's home directory, published in /api/health so the UI can write a
+   * path under it from `~`. Identifying, like `stateDir`: never logged. Omitted drops
+   * the field from the body. */
+  home?: string;
   /** Called after a landed POST /api/config patch whose `updates.check` is `true`
    * (EXC-1210). A user action is exactly what the 24h throttle's constraint permits a
    * call for, so runDaemon wires it to the same check boot runs — without it, a reviewer
@@ -300,6 +304,7 @@ interface ResolvedOptions {
   updateChanges: (() => Promise<UpdateChanges | null>) | undefined;
   releaseNotes: ((since: string) => Promise<ReleaseNote[] | null>) | undefined;
   restartHint: string | undefined;
+  home: string | undefined;
   onUpdatesEnabled: (() => void) | undefined;
   onDecisionAwaited: ((id: string) => void) | undefined;
   markPaneRead: (pane: CmuxPane) => void;
@@ -342,6 +347,7 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     updateChanges: opts.updateChanges,
     releaseNotes: opts.releaseNotes,
     restartHint: opts.restartHint,
+    home: opts.home,
     onUpdatesEnabled: opts.onUpdatesEnabled,
     onDecisionAwaited: opts.onDecisionAwaited,
     markPaneRead: opts.markPaneRead ?? ((pane) => clearCmuxMark(pane, { log: opts.log })),
@@ -512,6 +518,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // OpenCode's single-variant approve). Absent when the daemon declares none.
       ...(source ? { source } : {}),
       ...(cfg.restartHint ? { restartHint: cfg.restartHint } : {}),
+      ...(cfg.home ? { home: cfg.home } : {}),
     };
     return Response.json(body);
   }

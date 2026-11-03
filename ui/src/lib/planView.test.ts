@@ -3,11 +3,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { withBlockedStorage } from "@ui/support/storage.ts";
 import {
+  PLAN_OUTLINE_KEY,
   PLAN_VIEW_KEY,
+  readPlanOutline,
   readPlanView,
   runsOn,
   SURFACE_BEHAVIORS,
   type SurfaceBehavior,
+  writePlanOutline,
   writePlanView,
 } from "$lib/planView.ts";
 
@@ -37,6 +40,19 @@ describe("plan view preference", () => {
   });
 });
 
+describe("plan outline preference", () => {
+  test("the outline is shown on an empty store and on an unrecognized value", () => {
+    expect(readPlanOutline()).toBe("shown");
+    localStorage.setItem(PLAN_OUTLINE_KEY, "garbage");
+    expect(readPlanOutline()).toBe("shown");
+  });
+
+  test("a hidden outline reads back hidden", () => {
+    writePlanOutline("hidden");
+    expect(readPlanOutline()).toBe("hidden");
+  });
+});
+
 describe("runsOn", () => {
   test("every behavior runs on the source view", () => {
     expect(BEHAVIORS.every((b) => runsOn(b, "source"))).toBe(true);
@@ -46,7 +62,7 @@ describe("runsOn", () => {
     expect(BEHAVIORS.some((b) => runsOn(b, "compare"))).toBe(false);
   });
 
-  test("codeChrome, fileReferences, search, keyboardCursor, keyboardComments, commentThreads, textComments and headingTracking run on the preview", () => {
+  test("codeChrome, fileReferences, search, keyboardCursor, keyboardComments, commentThreads, textComments, headingTracking and outlinePeek run on the preview", () => {
     expect(BEHAVIORS.filter((b) => runsOn(b, "preview"))).toEqual([
       "codeChrome",
       "fileReferences",
@@ -56,6 +72,7 @@ describe("runsOn", () => {
       "commentThreads",
       "textComments",
       "headingTracking",
+      "outlinePeek",
     ]);
   });
 

@@ -69,7 +69,7 @@ async function seedCacheDrawer(
 }
 
 /** Open the preview for the first resolved reference in the plan, and wait out
- * the lane's opening wipe so every rect below is measured at its settled size. */
+ * the lane's opening slide so every rect below is measured where it settles. */
 async function openPreview(page: Page): Promise<void> {
   await planSurface(page);
   await expect.poll(() => fileRefCount(page)).toBeGreaterThan(0);
@@ -103,27 +103,56 @@ function drawerRemovals(page: Page): Promise<number> {
   return page.evaluate(() => (window as unknown as { __drawerRemovals: number }).__drawerRemovals);
 }
 
-/** Arm a log of every `animationstart` firing on the lane itself — the
- * closing wipe's animation-name, captured live since the class it fires on
- * is gone once the wipe has played out. */
-async function armLaneWipeLog(page: Page): Promise<void> {
+interface LaneSlide {
+  closing: boolean;
+  /** The translate the slide starts and ends at, in px. */
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+  size: { width: number; height: number };
+}
+
+/** Arm a log of every transform transition that starts on the lane, read live at
+ * `transitionrun` since a transition leaves the element's list once it ends. */
+async function armLaneSlideLog(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const w = window as unknown as { __wipes: string[] };
-    w.__wipes = [];
+    const w = window as unknown as { __laneSlides: LaneSlide[] };
+    w.__laneSlides = [];
     window.addEventListener(
-      "animationstart",
+      "transitionrun",
       (e) => {
-        const t = e.target as Element | null;
-        if (t?.hasAttribute("data-file-drawer")) w.__wipes.push(e.animationName);
+        const lane = e.target as HTMLElement | null;
+        if (e.propertyName !== "transform" || !lane?.hasAttribute("data-file-drawer")) return;
+        const slide = lane
+          .getAnimations()
+          .find((a) => a instanceof CSSTransition && a.transitionProperty === "transform");
+        const frames = slide?.effect instanceof KeyframeEffect ? slide.effect.getKeyframes() : [];
+        // A keyframe's transform may hold percentages of the lane's own size, so it is
+        // resolved on a probe the lane's size.
+        const shift = (frame: Keyframe | undefined) => {
+          const probe = document.createElement("div");
+          probe.style.cssText = `position:fixed;width:${lane.offsetWidth}px;height:${lane.offsetHeight}px`;
+          probe.style.transform = String(frame?.transform ?? "none");
+          document.body.append(probe);
+          const resolved = getComputedStyle(probe).transform;
+          probe.remove();
+          const m = new DOMMatrixReadOnly(resolved === "none" ? undefined : resolved);
+          return { x: m.m41, y: m.m42 };
+        };
+        w.__laneSlides.push({
+          closing: lane.hasAttribute("data-file-drawer-closing"),
+          from: shift(frames[0]),
+          to: shift(frames.at(-1)),
+          size: { width: lane.offsetWidth, height: lane.offsetHeight },
+        });
       },
       { capture: true },
     );
   });
 }
 
-/** Read `armLaneWipeLog`'s log. */
-function laneWipes(page: Page): Promise<string[]> {
-  return page.evaluate(() => (window as unknown as { __wipes: string[] }).__wipes);
+/** Read `armLaneSlideLog`'s log. */
+function laneSlides(page: Page): Promise<LaneSlide[]> {
+  return page.evaluate(() => (window as unknown as { __laneSlides: LaneSlide[] }).__laneSlides);
 }
 
 test("at a wide width the drawer docks right, taking space rather than covering the plan", async ({
@@ -132,6 +161,10 @@ test("at a wide width the drawer docks right, taking space rather than covering 
 }) => {
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
+    // At this width the outline column yields to the drawer and so widens the surface
+    // (plan-toc.e2e.ts covers that). Hidden, it leaves the plan and the drawer alone in
+    // the surface.
+    await page.addInitScript(() => localStorage.setItem("caret.planOutline", "hidden"));
     await seedCacheDrawer(daemon, page, proj.dir, WIDE);
 
     const before = await laneGeometry(page);
@@ -167,82 +200,32 @@ test("at a wide width the drawer docks right, taking space rather than covering 
 
 /** One `animationstart` observation, carrying the keyframes of the animation
  * that fired it — captured at that instant because they are unreadable after. */
-interface Wipe {
-  name: string;
-  onLane: boolean;
-  keyframes: Record<string, unknown>[];
-}
-
-test("the lane wipes in from the edge it docks to", async ({ daemon, page }) => {
-  // The open is an animation on the docking dimension, so the plan reflows every
-  // frame instead of the drawer appearing at full size. Recorded through
-  // animationstart rather than read off computed style: an animation-name
-  // pointing at deleted keyframes still computes, but never fires.
+test("the lane slides in from the edge it docks to", async ({ daemon, page }) => {
+  // The lane mounts at its full size, the plan giving up the room at once, and only its
+  // transform moves: it starts its own size past the edge it docks to.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nEdit `src/cache.ts` to fix it.\n" });
 
-    for (const [viewport, dimension] of [
-      [WIDE, "width"],
-      [NARROW, "height"],
+    for (const [viewport, axis] of [
+      [WIDE, "x"],
+      [NARROW, "y"],
     ] as const) {
       await page.setViewportSize(viewport);
       await page.goto("/");
       await planSurface(page);
       await expect.poll(() => fileRefCount(page)).toBe(1);
-
-      // The keyframes are read HERE, inside the listener, not from a later
-      // getAnimations() call: the wipe runs for --dur-state (160ms) and then
-      // leaves the element's animation list empty forever, so any read that
-      // costs a round-trip is racing a window it loses on a loaded host.
-      // animationstart is the one instant the animation is guaranteed live.
-      await page.evaluate(() => {
-        const w = window as unknown as { __wipes: Wipe[] };
-        w.__wipes = [];
-        window.addEventListener(
-          "animationstart",
-          (e) => {
-            const t = e.target as Element | null;
-            w.__wipes.push({
-              name: e.animationName,
-              onLane: t?.hasAttribute("data-file-drawer") ?? false,
-              keyframes: (t?.getAnimations() ?? []).flatMap((a) =>
-                a.effect instanceof KeyframeEffect ? a.effect.getKeyframes() : [],
-              ),
-            });
-          },
-          { capture: true },
-        );
-      });
+      await armLaneSlideLog(page);
 
       await page.locator("[data-file-ref]").first().click();
       await expect(page.locator("[data-file-drawer]")).toBeVisible();
+      await expect.poll(async () => (await laneSlides(page)).length).toBeGreaterThan(0);
 
-      // Svelte scopes keyframe names, so match the declared name rather than
-      // pinning the hash it compiles to.
-      const wipeName = dimension === "width" ? "fd-open-right" : "fd-open-bottom";
-      await expect
-        .poll(() =>
-          page.evaluate(
-            (name) =>
-              (window as unknown as { __wipes: Wipe[] }).__wipes
-                .filter((wipe) => wipe.onLane)
-                .some((wipe) => wipe.name.includes(name)),
-            wipeName,
-          ),
-        )
-        .toBe(true);
-
-      // …and it really moves that dimension: the keyframes start the lane at 0.
-      const from = await page.evaluate(
-        ([name, dim]) =>
-          (window as unknown as { __wipes: Wipe[] }).__wipes
-            .filter((wipe) => wipe.onLane && wipe.name.includes(name))
-            .flatMap((wipe) => wipe.keyframes)
-            .map((k) => (k as Record<string, unknown>)[dim]),
-        [wipeName, dimension] as [string, string],
-      );
-      expect(from).toContain("0px");
+      const [slide] = await laneSlides(page);
+      const size = axis === "x" ? slide?.size.width : slide?.size.height;
+      expect(slide?.closing).toBe(false);
+      expect(slide?.from[axis]).toBeCloseTo(size ?? -1, 0);
+      expect(slide?.to[axis]).toBe(0);
     }
   } finally {
     await proj.cleanup();
@@ -326,8 +309,7 @@ test("dragging the handle resizes the lane, and each edge remembers its own size
     const bottomBefore = (await laneGeometry(page))?.drawer?.height ?? 0;
     expect(bottomBefore).toBeGreaterThan(0);
 
-    // Re-docking swaps the lane's animation-name, which re-triggers the wipe, so
-    // settle again before measuring or aiming a drag at the handle.
+    // Settle before measuring or aiming a drag at the handle.
     await page.setViewportSize(WIDE);
     await expect(page.getByRole("separator", { name: "Resize file preview" })).toHaveAttribute(
       "aria-orientation",
@@ -375,6 +357,73 @@ test("dragging the handle resizes the lane, and each edge remembers its own size
     await expect
       .poll(async () => (await laneGeometry(page))?.drawer?.height ?? 0)
       .toBeCloseTo(bottomBefore, 0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("dragged to its narrowest, the lane's title bar keeps the path in view and overflows nothing", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await seedCacheDrawer(daemon, page, proj.dir, WIDE);
+    await openPreview(page);
+
+    // Past the window's edge, so the lane stops at its minimum.
+    const handle = page.getByRole("separator", { name: "Resize file preview" });
+    const box = await handle.boundingBox();
+    expect(box).not.toBeNull();
+    const y = (box?.y ?? 0) + (box?.height ?? 0) / 2;
+    await page.mouse.move((box?.x ?? 0) + (box?.width ?? 0) / 2, y);
+    await page.mouse.down();
+    await page.mouse.move(WIDE.width - 1, y, { steps: 8 });
+    await page.mouse.up();
+    const min = Number(await handle.getAttribute("aria-valuemin"));
+    await expect
+      .poll(async () => (await laneGeometry(page))?.drawer?.width ?? 0)
+      .toBeCloseTo(min, 0);
+
+    const header = await page.locator("[data-file-preview] .ref-header").evaluate((el) => ({
+      overflow: el.scrollWidth - el.clientWidth,
+      path: (el.querySelector(".ref-path") as HTMLElement).getBoundingClientRect().width,
+    }));
+    expect(header.overflow).toBeLessThanOrEqual(0);
+    expect(header.path).toBeGreaterThan(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a double-click on the handle returns the lane to the size it opened at, and forgets the dragged one", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await page.addInitScript(() => localStorage.setItem("caret.planOutline", "hidden"));
+    await seedCacheDrawer(daemon, page, proj.dir, WIDE);
+    await openPreview(page);
+    const opening = (await laneGeometry(page))?.drawer?.width ?? 0;
+    expect(opening).toBeGreaterThan(0);
+
+    const handle = page.getByRole("separator", { name: "Resize file preview" });
+    await handle.focus();
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await expect
+      .poll(async () => (await laneGeometry(page))?.drawer?.width ?? 0)
+      .toBeGreaterThan(opening + 40);
+    expect(await page.evaluate(() => localStorage.getItem("caret.fileDrawer.width"))).not.toBe(
+      null,
+    );
+
+    await handle.dblclick();
+    await expect
+      .poll(async () => (await laneGeometry(page))?.drawer?.width ?? 0)
+      .toBeCloseTo(opening, 0);
+    expect(await page.evaluate(() => localStorage.getItem("caret.fileDrawer.width"))).toBe(null);
   } finally {
     await proj.cleanup();
   }
@@ -496,29 +545,30 @@ test("no surface overflows the viewport at any breakpoint with the drawer open",
   }
 });
 
-test("the lane wipes out again when the preview is dismissed", async ({ daemon, page }) => {
-  // The close is the open run backwards on the same dimension, so the pane reads
-  // as one object sliding shut. It matters that the drawer stays mounted while
-  // it plays — a lane that unmounted first would blink out with no motion at all
-  // — so this watches the collapse start, checks the excerpt is still in the
-  // lane at that moment, and only then expects it gone.
+test("the lane slides out when the preview is dismissed, the plan taking its room at once", async ({
+  daemon,
+  page,
+}) => {
+  // The close is the open run backwards, so the pane reads as one object. The lane
+  // leaves the layout where it stands, so the plan has its room back from the first
+  // frame, and stays mounted while it slides — a lane that unmounted first would blink
+  // out with no motion at all.
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
     await seedCacheDrawer(daemon, page, proj.dir, WIDE);
     await openPreview(page);
 
-    await armLaneWipeLog(page);
+    await armLaneSlideLog(page);
 
     // Dismiss through the header's close circle — the pointer's route out; an
     // outside click closes nothing (EXC-1067).
     await page.getByRole("button", { name: "Close preview" }).click();
 
-    // The collapse starts on the lane, and the excerpt is still inside it.
-    await expect
-      .poll(async () => (await laneWipes(page)).some((n) => n.includes("fd-close-right")))
-      .toBe(true);
+    await expect.poll(async () => (await laneSlides(page)).some((s) => s.closing)).toBe(true);
+    const [slide] = (await laneSlides(page)).filter((s) => s.closing);
+    expect(slide?.to.x).toBeCloseTo(slide?.size.width ?? -1, 0);
 
-    // …and once it has played, the lane is gone and the plan has the room back.
+    // …and once it has gone, the lane is out of the page and the plan has the room.
     await expect(page.locator("[data-file-drawer]")).toHaveCount(0);
     const after = await laneGeometry(page);
     expect(after?.pane.width ?? 0).toBeCloseTo(after?.surface.width ?? -1, 0);
@@ -650,9 +700,68 @@ test("at a narrow width the card is placed clear of the bottom-docked lane", asy
   }
 });
 
+/** Viewport rects of the plan header and the two reference surfaces' headers. */
+function headerRects(page: Page): Promise<{
+  plan: DOMRect;
+  file: DOMRect;
+  folder: DOMRect;
+}> {
+  return page.evaluate(() => {
+    const rect = (sel: string) =>
+      (document.querySelector(sel) as Element).getBoundingClientRect().toJSON() as DOMRect;
+    return {
+      plan: rect(".plan-header"),
+      file: rect("[data-file-preview] .ref-header"),
+      folder: rect("[data-folder-tree] .ref-header"),
+    };
+  });
+}
+
+test("the reference headers stand as tall as the plan header, level with it beside the plan", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject(COEXIST);
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: COEXIST_PLAN });
+    for (const viewport of [WIDE, NARROW]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+      await openLaneThenCard(page);
+
+      const { plan, file, folder } = await headerRects(page);
+      expect(file.height).toBeCloseTo(plan.height, 0);
+      expect(folder.height).toBeCloseTo(plan.height, 0);
+      // Docked right, the two bars read as one band across both panes.
+      if (viewport === WIDE) expect(file.top).toBeCloseTo(plan.top, 0);
+    }
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("beside the plan, the lane's title bar lies in a bed level with the plan header's", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await seedCacheDrawer(daemon, page, proj.dir, WIDE);
+    await openPreview(page);
+    const beds = [".plan-header > .header-bed", "[data-file-preview] .ref-header > .header-bed"];
+    for (const sel of beds) await expect(page.locator(sel)).toBeVisible();
+    const [plan, file] = await Promise.all(beds.map((sel) => page.locator(sel).boundingBox()));
+    if (!plan || !file) throw new Error("a title bar's bed has no box");
+    expect(file.y).toBeCloseTo(plan.y, 0);
+    expect(file.height).toBeCloseTo(plan.height, 0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 // EXC-1137: the one exception to placement-once. A file row opened from the card
 // is the reader asking for the lane, so the card steps out of the box it just
-// created rather than sitting under it. The lane is measured mid-wipe here — it
+// created rather than sitting under it. The lane is measured mid-slide here — it
 // is opening as the card re-places — which is why the card reads its settled
 // edge rather than its rect.
 test("a lane opened from a file row pushes the card clear of it", async ({ daemon, page }) => {
@@ -668,9 +777,9 @@ test("a lane opened from a file row pushes the card clear of it", async ({ daemo
     await page.locator('[data-folder-tree] [data-item-path="other.ts"]').click();
     await expect(page.locator("[data-file-preview] .fp-path")).toHaveText("src/other.ts");
     // `.fp-path` paints the PROP, so it resolves in the lane's loading state, a
-    // few ms into the wipe — every rect below would be read off a lane still a
-    // sliver of its settled width. The app measures mid-wipe on purpose (that is
-    // what `laneEdge` is for); the assertion must not.
+    // few ms into the slide — every rect below would be read off a lane still
+    // short of where it settles. The app measures mid-slide on purpose (that is
+    // why the card takes the lane less its transform); the assertion must not.
     await expectCardPushedClear(page, before, "right");
   } finally {
     await proj.cleanup();
@@ -742,11 +851,11 @@ test("a lane the reader opened from the plan leaves the card where it is", async
   }
 });
 
-test("a row clicked during the lane's closing wipe still pushes the card clear", async ({
+test("a row clicked while the lane slides out still pushes the card clear", async ({
   daemon,
   page,
 }) => {
-  // The lane stays mounted for the length of its closing wipe, so "is a lane
+  // The lane stays mounted for the length of its slide out, so "is a lane
   // open?" asked inside that window has two answers: an element is there, and it
   // is leaving. This click re-opens it — cancelling the pending unmount, so the
   // lane comes straight back at full size — which makes it the closed-to-open
@@ -765,7 +874,7 @@ test("a row clicked during the lane's closing wipe still pushes the card clear",
     await settleDrawer(page);
     const before = await cardRect(page);
 
-    // Dismiss, and click a row without waiting out the wipe. Both clicks and the check
+    // Dismiss, and click a row without waiting out the slide. Both clicks and the check
     // between them run in ONE page task, because the window they have to land in is
     // 160ms of wall clock — DiffPlanView holds the lane with a `CLOSE_ANIM_MS` timer —
     // and a driver round trip is not something this test can afford to spend inside it.
@@ -799,9 +908,9 @@ test("a row clicked during the lane's closing wipe still pushes the card clear",
       (el as HTMLElement).click();
       return closing;
     });
-    // Recorded rather than asserted against the live DOM: the lane really was mid-wipe
-    // when the row was clicked, which is the premise the rest of this test rests on.
-    expect(sawClosing, "the lane was mid-wipe when the row was clicked").toBe(true);
+    // Recorded rather than asserted against the live DOM: the lane really was sliding
+    // out when the row was clicked, which is the premise the rest of this test rests on.
+    expect(sawClosing, "the lane was sliding out when the row was clicked").toBe(true);
     await expect(page.locator("[data-file-preview] .fp-path")).toHaveText("src/other.ts");
     await expectCardPushedClear(page, before, "right");
   } finally {
@@ -809,13 +918,16 @@ test("a row clicked during the lane's closing wipe still pushes the card clear",
   }
 });
 
-test("Escape plays the same closing wipe", async ({ daemon, page }) => {
+test("Escape slides the lane out the same way, down past the bottom edge", async ({
+  daemon,
+  page,
+}) => {
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
     await seedCacheDrawer(daemon, page, proj.dir, NARROW);
     await openPreview(page);
 
-    await armLaneWipeLog(page);
+    await armLaneSlideLog(page);
 
     // Safe mode swallows keystrokes for a beat after the view gains focus, so
     // retry the press until the lane actually starts leaving.
@@ -824,10 +936,42 @@ test("Escape plays the same closing wipe", async ({ daemon, page }) => {
       await expect(page.locator("[data-file-drawer]")).toHaveCount(0, { timeout: 500 });
     }).toPass();
 
-    // The bottom dock collapses on its own dimension, not the right one's.
-    const wipes = await laneWipes(page);
-    expect(wipes.some((n) => n.includes("fd-close-bottom"))).toBe(true);
-    expect(wipes.some((n) => n.includes("fd-close-right"))).toBe(false);
+    // The bottom dock leaves along its own axis, not the right one's.
+    const [slide] = (await laneSlides(page)).filter((s) => s.closing);
+    expect(slide?.to.y).toBeCloseTo(slide?.size.height ?? -1, 0);
+    expect(slide?.to.x).toBe(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+// A file's first open in a language compiles every grammar rule its lines reach, a stall
+// mid-slide unless that language was warmed on real source while the reader read.
+test("the first file the plan cites in each language is read ahead of any open", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({
+    "src/a.ts": "export const a = 1;\n",
+    "src/b.ts": "export const b = 2;\n",
+    "ui/C.svelte": '<script lang="ts">\n  let c = $state(3);\n</script>\n',
+  });
+  try {
+    const read: string[] = [];
+    page.on("request", (r) => {
+      const url = new URL(r.url());
+      if (url.pathname.endsWith("/file")) read.push(url.searchParams.get("path") ?? "");
+    });
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nSee `src/a.ts`, then `ui/C.svelte`, then `src/b.ts`.\n",
+    });
+    await page.goto("/");
+    await planSurface(page);
+    await expect.poll(() => fileRefCount(page)).toBe(3);
+
+    await expect.poll(() => read).toEqual(expect.arrayContaining(["src/a.ts", "ui/C.svelte"]));
+    await expect(page.locator("[data-file-preview]")).toHaveCount(0);
   } finally {
     await proj.cleanup();
   }

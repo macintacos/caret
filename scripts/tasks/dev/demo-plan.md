@@ -12,9 +12,10 @@ you why, so quiet mode still lets it through.
 
 ## Approach
 
-Thread a `quiet` boolean from the CLI arg parser down to the logger, and gate the
-step-by-step lines behind it. The logger already separates `info` from `warn` and `error`,
-so the flag only has to change what `info` does — no call site has to learn about it.
+Thread a `quiet` boolean from the CLI arg parser down to the logger in
+`scripts/release/log.ts:9`, and gate the step-by-step lines behind it. The logger already
+separates `info` from `warn` and `error`, so the flag only has to change what `info` does
+— no call site has to learn about it.
 
 The summary line stays unconditional. It is the reason the script gets run at all, and a
 mode that hid it would be a mode nobody reaches for.

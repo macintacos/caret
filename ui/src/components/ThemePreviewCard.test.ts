@@ -99,18 +99,18 @@ describe("ThemePreviewCard samples the palette beyond the accent", () => {
   });
 
   // The mark vocabulary is a quarter of the palette's hue jobs (EXC-905). Two
-  // segments, not one: --mark-active only means anything beside a plain --mark, so
+  // segments, not one: --mark-active only means anything beside a --mark-match, so
   // the pair is what advertises the two-step.
-  test("shows a marked run and the current match (pulling in --mark / --mark-active)", () => {
+  test("shows a marked run and the current match (pulling in --mark-match / --mark-active)", () => {
     const { flush } = render(ThemePreviewCard, baseProps);
     flush();
     expect((root()?.querySelectorAll("[data-tp-mark]").length ?? 0) >= 2).toBe(true);
   });
 
-  for (const token of ["--mark", "--mark-active"]) {
+  for (const token of ["--mark-match", "--mark-active"]) {
     test(`paints an element in ${token}`, () => {
       const source = readFileSync(join(import.meta.dir, "ThemePreviewCard.svelte"), "utf8");
-      // The negative lookahead keeps --mark from matching --mark-active.
+      // The negative lookahead keeps one token from matching a longer one.
       expect(new RegExp(`var\\(\\s*${token}(?![\\w-])`).test(source)).toBe(true);
     });
   }

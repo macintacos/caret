@@ -105,7 +105,10 @@ export type ColorToken =
   | "--accent-wash"
   | "--accent-ink"
   | "--mark"
+  | "--mark-match"
+  | "--mark-match-ink"
   | "--mark-active"
+  | "--mark-active-ink"
   | "--mark-orphan"
   // The six inline chip tints (EXC-858, EXC-1186): the wash behind a rendered
   // markdown span. They tint CONTENT, which is what separates them from

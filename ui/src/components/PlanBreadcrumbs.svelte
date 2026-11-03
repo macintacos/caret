@@ -563,11 +563,11 @@
   //
   // The width the trail is measured against is the BAR's, less the keycap that
   // rides past it — not the list's own, which is exactly as wide as whatever the
-  // trail currently shows. The bar takes the control row's middle (`flex: 1` in
-  // DiffPlanView), so while the row has free space its width is fixed by the row
+  // trail currently shows. The bar takes the plan header's crumb slot (`flex: 1` in
+  // DiffPlanView), so while the header has free space its width is fixed by the slot
   // rather than by its content.
   //
-  // Once the row over-fills, the bar shrinks in proportion to its content, so
+  // Once the header over-fills, the bar shrinks in proportion to its content, so
   // giving up a level DOES widen the room left and can bring one back. That
   // settles rather than oscillating because every step of the loop is monotone:
   // visibleDepths keeps more levels as `avail` grows, the bar's share grows with
@@ -584,7 +584,7 @@
     // A level on its way out is still in the list for --dur-state, so it is skipped here:
     // visibleDepths reads this array BY INDEX as the depth, and a ghost would leave it one
     // longer than the trail it is meant to describe. What the skip does NOT fix is `avail`
-    // below — the bar is flex: 1 in the control row, so on an over-full row its width
+    // below — the bar is flex: 1 in the plan header, so on an over-full header its width
     // still follows the ghost's content for those 160ms and a level can be kept that will
     // not fit. That settles on the resize pass the ghost's own removal triggers, one flash
     // later. The separator probe needs no skip: querySelector takes the FIRST one, which is

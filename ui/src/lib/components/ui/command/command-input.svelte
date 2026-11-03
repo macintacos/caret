@@ -35,5 +35,22 @@
 		<InputGroup.Addon class="opacity-50">
 			<Icon name="search" size={16} />
 		</InputGroup.Addon>
+		<!-- caret's own: clears the query from inside the field. The mousedown is cancelled
+		     so focus never leaves the field for the button. -->
+		{#if value !== ""}
+			<InputGroup.Addon align="inline-end">
+				<InputGroup.Button
+					size="icon-xs"
+					aria-label="Clear filter"
+					onmousedown={(e) => e.preventDefault()}
+					onclick={() => {
+						value = "";
+						ref?.focus();
+					}}
+				>
+					<Icon name="x" size={14} />
+				</InputGroup.Button>
+			</InputGroup.Addon>
+		{/if}
 	</InputGroup.Root>
 </div>

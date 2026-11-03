@@ -5,8 +5,9 @@
 renderer `ui/src/lib/planMarkdown.ts`, its source-line map `ui/src/lib/planSourceMap.ts`,
 its code-block highlight pass `ui/src/lib/previewCode.ts`, its reference-tagging pass
 `ui/src/lib/previewRefs.ts`, its comment slots `ui/src/lib/previewComments.ts`, its search
-`ui/src/lib/previewSearch.ts`, its mount `ui/src/components/PlanPreview.svelte`, and the
-source/preview surface table `ui/src/lib/planView.ts`.*
+`ui/src/lib/previewSearch.ts`, its mount `ui/src/components/PlanPreview.svelte`, the
+source/preview surface table `ui/src/lib/planView.ts`, and the outline peek's copy of
+either surface `ui/src/lib/peekSnippet.ts`.*
 
 The **source view** renders a plan as **line-numbered markdown source**. Every decoration
 the reviewer sees is drawn over the characters they would copy. Everything up to § The
@@ -332,7 +333,7 @@ The gates exist because `SourceView` hands `DiffPlanView` an `api` and its `host
 nothing clears them when `SourceView` unmounts. An effect, shortcut, or surface outside
 `SourceView`'s branch that reads them keeps acting on a detached shadow root unless it
 gates through `runsOn`. So a row covers each effect, shortcut `enabled` guard, and
-control-row or lane surface in `DiffPlanView` outside that branch. Anything inside the
+plan-header or lane surface in `DiffPlanView` outside that branch. Anything inside the
 branch unmounts with it and needs no gate.
 
 Adding `"preview"` to a row switches on the source implementation, which still reads the
@@ -507,6 +508,51 @@ The preview renders a version once. `memoLast` returns the last result for the s
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same
 version every tick; without the memo each tick would re-lex and re-sanitize the whole
 plan.
+
+`outlinePeek` copies the live render rather than rendering again. `peekSnippet.ts` takes a
+section's lines from `sectionLines` (`tocSections.ts`) and copies what the surface already
+drew, so the peek matches the plan in every theme. A heading with no text of its own takes
+its subsections, up to the next heading of its level or higher. The copy holds only
+because neither surface virtualizes: the source view is the library's `File`, never
+`VirtualizedFile`, and the preview mounts every block.
+
+- If the source view ever draws only some rows, `sourceSnippet` returns null unless the
+  section's rows run unbroken through its last line. The peek then shows nothing, never a
+  section cut short.
+- `test/e2e/outline-peek.e2e.ts` pins that the source view draws every row of the plan, so
+  a library bump that starts virtualizing fails there first.
+- **Source.** The copy takes `[data-gutter]` and `[data-content]` children index for
+  index, from the heading's row through the section's last line of text, so a code or
+  table card (`[data-code-card]`, `[data-table-card]`) is copied whole. It leaves out
+  comment rows (`[data-line-annotation]`), whose comment cards are slotted from the light
+  DOM, and strips the rows' transient state: `data-hovered`, `data-selected-line` and
+  `data-caret-cursor`. When you add a row-state attribute, add it to that list
+  (`ROW_STATE`). Each card and each column is re-spanned over the grid rows it keeps, so
+  the gutter stays level with its rows. The copy stands in a shadow root that adopts the
+  live root's sheets and clones its theme `<style>`.
+- **Preview.** The copy takes the blocks whose source span meets the section, inside a
+  shallow copy of the root, so the root's scoped rules reach them. It closes the comment
+  slots' gaps (`[data-preview-gap]`), carries `--preview-scale` from the live root, and
+  sets `indeterminate` on each `[/]` task box, which no clone carries.
+- **Both.** A clone keeps no event listener, so each copied `<img>` gets the live views'
+  handler that hides an image when it fails to load. Neither copy shows the search's
+  marks. Those are CSS Custom Highlight ranges on the live nodes, and a clone doesn't
+  carry them.
+
+`DiffPlanView` keeps one copy per heading in a `peekSnippet` function. It makes a new
+function whenever any of these change: the surface, the version, the theme, the
+soft-wrapped code blocks (`reflowedBlocks`), `previewLayoutRev`, or Preview's code
+highlight (`PlanPreview`'s `onHighlight`). An open peek copies again from each new
+function, so it follows a flip and the highlight landing after the text. If the view has
+not drawn the section within three frames, the peek closes. A theme change closes it,
+because the view takes longer than that to draw the section in the new theme. A section
+the surface has not drawn yet is not kept, so the next ask copies it afresh. `OutlinePeek`
+lets go of its copy once it has faded out, so the page holds each surface once, and no
+locator matches a closed peek.
+
+The copy reads `host` from `DiffPlanView` rather than from inside `SourceView`'s branch,
+so its `SURFACE_BEHAVIORS` row is what keeps it off `host` in compare. There `host` still
+names the source view that compare unmounted.
 
 ### Keeping the place across a flip
 

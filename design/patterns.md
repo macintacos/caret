@@ -31,36 +31,187 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   the modal is for, such as "Keyboard shortcuts".
 - **A dialog labels its fields and sections in sentence case** (`.form-label`), at
   `--text-sm`, weight 600, `--ink-soft`, as Settings heads its sections. "(optional)"
-  follows the label at body weight. The shortcut groups and the Contents panel's
+  follows the label at body weight. The shortcut groups and the outline filter's
   breadcrumb headers wear it too. No label or stamp is styled in capitals; only a key's
   legend (the letters on a shortcut keycap, such as `ESC`) is, because it mirrors the key.
   `ui/src/lib/sentence-case.test.ts` fails on a new label styled in capitals.
 - **Read-only text inside a dialog**, such as the compiled preview and the context lines,
   sits in a cut on `--group-floor`.
-- **The window is a body, and the plan is a pane set into it.** Every control is cut into
-  the body (`--body`), and chrome never paints a bar face or a rule. The body is grained
-  rubber, lit faintly from above over the chrome (`--chrome-light`). The pane is a screen
-  set into it, inset `--pane-gap` with `--pane-radius` corners. Its recess,
-  `--pane-recess`, is a soft inset shade that reaches down from the top edge, with a 1px
-  contact edge and no outer layer, and the body's lit edge round it is `--pane-lip`. Each
-  view fills the pane with one floor. In the source view and the version compare, where
-  the diff library draws the plan, the room past the rows takes the rows' `--paper-sunk`.
-  The preview stays on `--paper`. The pane's edges shade the text under them with
-  `--pane-shade`: the top once the plan has scrolled (`data-scrolled` on `.plan-pane`),
-  the bottom while more lies below (`data-more-below`). The file drawer is a second pane
-  beside the plan, and the gap between them is the resize handle. It shades its edges as
-  the plan pane does: its foot while more of the file lies below, and the gutter's edge
-  while the code is scrolled sideways under it. Its gutter draws no rule. The empty screen
-  is the same pane, and the daemon banner sits on the body. Text cut into the body is
+- **The window is a body, and the plan is a pane set into it.** Every control outside the
+  plan pane is cut into the body (`--body`), and chrome never paints a bar face or a rule.
+  The outline column lies in one large bed cut into the body, beside the pane (see
+  **The outline's bed** in the tactile kit). The body is grained rubber, lit faintly from
+  above over the chrome (`--chrome-light`). The pane is a screen set into it, inset
+  `--pane-gap` with `--pane-radius` corners. Its recess, `--pane-recess`, is a soft inset
+  shade that reaches down from the top edge, with a 1px contact edge and no outer layer,
+  and the body's lit edge round it is `--pane-lip`. Each view fills the pane with one
+  floor, `--plan-floor`. In the source view and the version compare, where the diff
+  library draws the plan, the room past the rows takes the rows' `--paper-sunk`. The
+  preview stays on `--paper`. The pane's foot shades the text under it with `--pane-shade`
+  while more lies below (`data-more-below`). The file drawer is a second pane beside the
+  plan, and the gap between them is the resize handle. It shades its edges as the plan
+  pane does: its foot while more of the file lies below, and the gutter's edge while the
+  code is scrolled sideways under it. Its gutter draws no rule. The empty screen is the
+  same pane, and the daemon banner sits on the body. Text cut into the body is
   `--ink-soft` at its faintest, because `--ink-faint` falls under 4.5:1 there in several
   palettes.
-- **A sheet hangs from a pane's top edge.** It tucks under the pane's lip (`--pane-lip`,
-  z-index 5 over the sheet's 4), so it carries no `--float-rim` and paints no top shade.
-  It is square at the top, and its foot rounds at
-  `calc(var(--key-radius) + var(--well-pad) + 3px)`, 14px: the bed's 11px plus the sheet's
-  own 3px pad round it. That matches the plan pane's corner, and its contents nest. It
-  wears `--paper-raised` with a `--rule` ring on `--float-mid`, and drops in from
-  `translateY(-100%)` over `--dur-state`. The plan search is the only sheet.
+- **The plan header lies in one bed the length of the bar.** It is stuck to the pane's top
+  edge above the scroller, as tall as the outline column's head (`--pane-header-h`). Its
+  keys stand on the bed's floor (see **A bar's bed** in the tactile kit). The bed's walls
+  mark the plan's top edge, so the header casts no foot shade. While comparing, Base →
+  Target and the diff toggles take the crumbs' place, and Versions stays latched at the
+  header's end. As the header narrows, the view keys keep their place, and the rest gives
+  way in this order:
+  1. Versions' word and the Search entry's word. Versions' glyph, count and cap stay, the
+     entry's magnifier and cap stay, and both keep their accessible names.
+  2. The Base and Target words. Each picker keeps its accessible name, "Base version" or
+     "Target version".
+  3. The Bars, +/− and Both toggles. Settings holds the same choice.
+
+  Steps 2 and 3 come sooner while the Split/Unified toggle is shown, because it needs the
+  room. Every step is measured on the header's own width, not the window's. A file drawer
+  docked right leaves the pane no narrower than the 468px the narrowest window (480px)
+  leaves it, so the steps hold beside a wide drawer too.
+- **Search swaps into the plan header.** Closed, a Search entry sits at the end of the
+  crumbs, before the view keys: a magnifier, the word "Search" and, with Shortcut hints
+  on, the `/` cap. It lies in a text field's cut rather than standing as a key, so it
+  never outweighs the view keys. It hovers, takes focus and presses as a ghost control
+  does, and a touch device drops only its cap. A click, Enter or `/` opens the find row
+  over the crumbs, between the outline key and the view keys, on the bed's floor. The row
+  paints that floor clear of the bed's shading, so the crumbs stay covered as it tucks
+  away. The crumbs keep their box under it, so their collapse holds still. The entry is
+  the last thing in the crumbs' slot, which clips at its end, so the row slides out of the
+  entry from `translateX(100%)` over `--dur-pane`. Its field takes focus without scrolling
+  the plan. Otherwise focus would scroll the plan sideways, because the row's box starts
+  past the slot. The row runs: the field with its match count, the ▲ ▼ step keys, Close,
+  then the key hints. Close is an ×, the word "Close" and, with Shortcut hints on, the
+  `esc` cap. Close or Escape closes the row. Closing slides it back to the entry's place
+  over `--dur-state` as the crumbs fade in. The entry hides the moment the row opens and
+  reappears once the row has tucked in, because no part of the row covers the entry and
+  its rounded edge would show above and below the row's floor. The crumbs hide at once
+  when the row opens. A fade-out there would leave a quick close reversing a half-done
+  fade, which cuts the fade back in short. The match count sits at the field's end, and
+  the key hints are text. As the header narrows, the field gives up width first, until the
+  key hints and Close's word no longer fit beside it. Beside the longest hints, a
+  committed query's, and Close's word, that is about 8rem. Then the key hints go, Close
+  narrows to an × the size of the step keys, and the field gives up the rest, down to
+  about five characters of query (3rem). Past that, the parts that read least go, in this
+  order:
+  1. The slash before the query.
+  2. The spaces in the match count, so "1 / 35" reads "1/35".
+  3. The header keys' hint caps, while the row is open, if the header is still too tight.
+
+  The step keys and Close always keep their room.
+- **The file drawer's title bar stands level with the plan header.** Both bars are
+  `--pane-header-h` tall, and with the drawer docked right their top and bottom edges line
+  up across the two panes. The drawer's bar lies in a bed as the plan header's does, its
+  floor stepped from the drawer's `--paper`, and the two beds line up too. The folder
+  card's bar is the same height, because the two reference surfaces share one header,
+  `.ref-header` in `atoms.css`. The card's bar lies in no bed and keeps its lip.
+  - The bar holds the close circle, the kind tag ("Preview" or "Folder"), the path, the
+    line range and the esc hint. The circle is its only key. Like the gutter "+", it wears
+    the recipe for a key on no bed: it stands straight on the bed's floor, with no tray of
+    its own. The tag and the line range can't be pressed, so they stay stamps, in pockets
+    of one height.
+  - The path is the bar's one emphasis: mono at the plan header crumbs' `--text-sm`,
+    weight 600, in `--ink`. Everything else is at `--text-xs`, the size of "/ to search".
+    The folder card's refresh key lies flat at the crumbs' 24px.
+  - As the drawer narrows, the bar gives way so the path keeps some room. First the esc
+    hint goes, because the circle and Escape still close the drawer. Then the kind tag
+    goes. The line range stays, because it is the live region that announces each chunk of
+    the file as it loads.
+
+  `test/e2e/file-drawer.e2e.ts` holds:
+  - both bars at the plan header's height;
+  - the drawer's top edge level with the plan header's when docked right, and its bed
+    level with the plan header's bed;
+  - the bar at the drawer's narrowest, with nothing overflowing and the path in view.
+- **The outline is a column, or a float.** The column stands left of the plan pane while
+  the window has room for it. Under 960px wide, or once it yields to a file the plan could
+  not keep its 800px reading column beside, the header's outline key drops it as a float
+  instead: a `--float-mid` float on `--paper-raised`, which opens on its filter. The
+  outline key is one toggle named "Outline", in the column's head while the column stands
+  and in the header while it is folded. In the header, it stands as far in from the pane's
+  left edge as Preview does from the right. It latches down with its corner light while
+  the outline is open, as a column or as a float, and stands up while it is closed. In
+  both places it stands on a bed's floor with no bed of its own, so the fold carries the
+  same key across. A press, or ⇧ + `\`, opens or folds the outline. Comparing folds the
+  column too, without changing the reader's remembered choice. Its float then lists only
+  the sections that changed, each with its line count, or says "No sections changed".
+- **The outline column's head is its filter field and its outline key.** The field always
+  shows, at the head's start, and the key stands at its end. The field is a closed field
+  cut into the column's bed (`--field-floor` under `--panel-recess`), as the plan header's
+  Search entry is. It stands at the key's 1.75rem height and rounds at `--key-radius`. It
+  stands 0.45rem in from the bed's wall, as the rows do, and 0.45rem from the key, so the
+  two nest alike in the bed's top corners.
+  - The field's end shows the `\` cap, with Shortcut hints on, whenever the field is
+    unfocused. Focused, it shows nothing while empty and the × while it holds a query.
+    Unfocused with a query, the cap stands just before the ×. The column's field shows no
+    match count, because the rows beneath show the matches.
+  - A click, Tab or `\` focuses the field. From it, the arrows walk the keyboard's
+    selection through the rows. Focus on an empty field starts the walk on the heading
+    being read. `\` also plays the outline's sound cue. On a query the field holds, it
+    selects the query, so typing replaces it. Escape clears a query, then hands focus back
+    to the plan. A pick empties the field and hands focus back too.
+  - The field stands in the page's Tab order, so Tab focuses it like any other stop, and
+    the next Tab moves on to the key. Tab walks the rows only once the reader engages the
+    field: with `\`, a click into it, or any key pressed in it but Tab, Escape or a
+    modifier alone, such as a typed character or an arrow.
+  - As the column narrows, the field's magnifier goes, so a focused query keeps about five
+    characters. It hides when the room left for the field is under 8rem, whatever the
+    window's width.
+  - When the column folds, the field slides away with it, and only the key travels to the
+    header.
+
+  `PlanToc.test.ts` and `plan-toc.e2e.ts` hold the field's cap, focus and Tab.
+  `outline-resize.e2e.ts` holds the head as one row down to the column's narrowest.
+  `concentric.e2e.ts` holds the field's corner nested in the bed's.
+- **The outline column takes the width the reader drags it to.** Its right edge is a
+  splitter (see **Splitters** in the tactile kit). The column opens 15.5rem wide and
+  narrows to 12rem. It widens to 30rem, but only while the plan beside it keeps its 800px
+  reading column. Even a narrow window lets it stand at 15.5rem. The column yields at the
+  width the reader chose, so a narrowed column stands beside a file that the opening width
+  would yield to. No gesture on the edge drops the column to a float. Beside a file
+  drawer, a drag stops where the column would yield, and a double-click returns the
+  opening width or, where that would yield, the widest width that fits. The browser
+  remembers the width.
+- **An outline row peeks at its section.** Resting on a row for 350ms, by the pointer or
+  by the keys, opens a peek past the outline's right edge, level with the row and kept
+  0.5rem inside the plan pane, clear of an open file. Once open it follows the pointer and
+  the keys to the next row at once. `p` flips it to the other view with the plan, or
+  closes it if that view has not drawn the section within three frames.
+  - A filter query opens it the same way on the row the query selects, 350ms after the
+    last keystroke. A query that matches nothing opens none, and neither does emptying the
+    query.
+  - It is a copy of the live view, so its type, colour, chips and code highlighting are
+    the plan's own in every theme. It starts at the heading and ends on the section's last
+    line of text. A heading with no text of its own shows its subsections too.
+  - It is a raised rubber pad, as a code block is. A rim of `--body`, `--code-bezel` wide
+    and lit along its top by `--rubber-gloss` and `--pad-top`, holds the copy. The copy
+    lies in a scoop (`--scoop-top`, `--scoop-foot`) on the view's floor: `--paper-sunk`
+    under source and `--paper` under Preview. The pad stands on `--pad-stand` and floats
+    at the menus' height, `--float-mid`, with their `--rule` ring. It rounds at
+    `--pad-radius`, with no arrow and no label. It is up to 36rem wide, and shows nowhere
+    with less than 18rem of room.
+  - The rim parts the copy from the plan beneath it. In every dark palette it reads at
+    least 4.5 ΔE (CIE76 colour difference) off both the copy's floor and the plan across
+    3px or more, which `outline-peek.e2e.ts` holds. In light palettes the rim stands
+    closer to the floors, and the pad's side, its ring and its shadow carry the edge.
+  - Preview's text wraps to the peek. Source lines keep their length and fade at the
+    peek's right edge. A section taller than 16rem is cut there and fades over its last
+    3rem; one that fits ends on its text, unfaded. It measures again when its copy grows.
+  - It closes on the reader's own input: the pointer leaving the list, the list losing
+    focus, a wheel, a pointer press, a resize, a row picked, the query changing, or a key
+    other than a walk key (the arrows, Tab, Home and End) or `p`, Escape included. A list
+    scroll carries it with its row, and the plan keeping its place across a flip leaves it
+    open.
+  - It is `inert`: it takes no pointer and no focus, and screen readers skip it. It
+    repeats text the plan holds a jump away, and the row's own name and description
+    already say where that jump goes.
+  - It arrives with a fade and a 0.375rem slide from the row's side on `--dur-state`, and
+    leaves on half that. Moving between rows it jumps, with no re-entry. Under reduced
+    motion it shows and hides with no movement.
+  - While you compare versions, there is no peek.
 - One emphasis per view. The amber accent is used verbatim, never lightened, and only for
   the wordmark, the primary action, and the text cursor. Everything else steps down
   through `--ink-soft` and `--ink-faint`.
@@ -72,17 +223,74 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 
 - **Beds.** A control sits in a bed: a shallow cut in the chrome's own rubber. The code
   calls a bed `.tray`, and its pad tokens keep the `--well-` prefix; `--well-floor` and
-  `--well-shade` belong to a stamp's pocket, not a bed. A bed has no floor of its own. Its
-  shading (`--bed-shade`) darkens just under its top edge and lights the cut's lower wall
-  and the lip below it. The keys cast their shadow onto the same material they stand on. A
-  group of controls shares one bed, and a lone control gets its own, with `--tray-gap`
-  (5px) between keys. Every bed shows the same 3px gap (`--well-pad`) round the key's
-  visible face and side. Its top pad (`--well-top`) adds the key's rise, and its foot
-  (`--well-foot`) adds the key's side less the rise, so the gap stays even. A bar holding
-  beds trims its own padding by the same amounts to keep its height. Every cap rounds at
-  `--key-radius` (8px), whatever its Button `size`. A bed rounds at `--key-radius` plus
-  `--well-pad`, 11px, so the two corners stay concentric. The row-wide scratch marker is a
-  `button.tray` and keeps its tinted floor.
+  `--well-shade` belong to a stamp's pocket, not a bed. A control's bed has no floor of
+  its own. Its shading (`--bed-shade`) darkens just under its top edge and lights the
+  cut's lower wall and the lip below it. The keys cast their shadow onto the same material
+  they stand on. A group of controls shares one bed, and a lone control gets its own, with
+  `--tray-gap` (5px) between keys. Every bed shows the same 3px gap (`--well-pad`) round
+  the key's visible face and side. Its top pad (`--well-top`) adds the key's rise, and its
+  foot (`--well-foot`) adds the key's side less the rise, so the gap stays even. A bar
+  holding beds trims its own padding by the same amounts to keep its height. Every cap
+  rounds at `--key-radius` (8px), whatever its Button `size`. A bed rounds at
+  `--key-radius` plus `--well-pad`, 11px, so the two corners stay concentric. The row-wide
+  scratch marker is a `button.tray` and keeps its tinted floor.
+- **The outline's bed.** The outline column lies in one large bed, its head included.
+  Unlike a control's bed, it has a floor of its own, as a setting group does:
+  `--bed-floor`, the body a step toward the plan pane's floor, darker in dark and lighter
+  in light. The floor is grained as the body is, and the bed shades as any bed does
+  (`--bed-shade`). Its rows lie as keys on that floor.
+  - It stands level with the plan pane, top and bottom, and inset `--pane-gap` from the
+    window's left edge, as the pane is from its right.
+  - The 0.5rem between the bed and the pane, below the column's head, is the column's
+    splitter, and nothing else.
+  - Its rows, its filter field and the head's outline key stand 0.45rem in from its walls,
+    and it rounds at `--key-radius` plus that inset.
+  - `theme.test.ts` holds a row's hover face 4.5 ΔE off the floor, and the outline's quiet
+    text at 4.5:1 on it, in every palette.
+- **A bar's bed.** The plan header and the file drawer's title bar each lie in one bed the
+  length of the bar (`.header-bed` in `atoms.css`). Like the outline's bed, it has a floor
+  of its own: the pane's floor stepped toward `--bed-floor` by `--header-bed-mix`,
+  grained, and shaded with `--bed-shade`. Its pane mixes that floor as
+  `--header-bed-floor`.
+  - It stands `--well-pad` in from the pane's top and sides and rounds at `--key-radius`
+    plus that pad, 11px. The bar's end keys (8px), the bed and the pane (14px) nest.
+  - Its keys stand on its floor as the outline's rows stand on theirs, with no bed of
+    their own: the outline key, Versions and Preview, the Base and Target pickers, the
+    find row's steps and Close, and the segmented controls, which keep their 3px gang.
+    Each tray keeps its pads, so the gap round a key still shows. The Search entry stays a
+    field's cut in the floor.
+  - The outline column's head key stands the same way on the column's floor.
+  - A dark key latched on either bed takes `--neutral-face-bed-down`. The down face steps
+    from the paper and sits at or under a floor this light, so it reads as a hole. The bed
+    face rises toward the hover face as far as keeps the hover face 4.5 ΔE above it.
+    Catppuccin Frappé sets that limit, at 62% of the way from the hover face to
+    `--bed-floor`. On the column's floor, the lightest of the beds, the face stands at
+    least 2.8 ΔE lighter than the floor in the Catppuccin darks, and more elsewhere. In
+    light palettes a latched key keeps `--neutral-face-down`, a step darker than the
+    floor, as a latched key is everywhere in light.
+  - In light palettes the floor stands 0.4–1.5 ΔE from the screen's, so the bed reads by
+    its shading.
+  - `concentric.e2e.ts` holds the nesting. `tactile-kit.e2e.ts` holds that no tray on
+    either bed draws a cut, and that in every dark palette a latched key reads lighter
+    than the floor round it. `theme.test.ts` holds the latched face's hover step, and the
+    header's quiet text and crumb hover against the bed's floor.
+- **The working-directory path lies in a bed with no key.** It sits centred on the status
+  bar, between the version and the review's status, as a `button.tray`, because it is
+  metadata the reader copies rather than a control they work. It shows whenever a review
+  is open, whether the outline is shown or not. Under the pointer or keyboard focus, the
+  bed takes `--ink-wash` and the path inks up, as a ghost control does. A press adds the
+  ghost control's dimple to the bed's shading.
+  - It shows the whole path: from `~` inside the home directory, absolute outside it, and
+    as given when the coding agent reports its cwd from `~` already. A click copies the
+    whole absolute path.
+  - When the path outruns the room between the bar's other segments, it gives up whole
+    middle segments to one `…`. It keeps its start and its leaf, and gives up the segment
+    after the start first. Only a leaf that alone outruns the room ends in an ellipsis.
+    The version and the review's status keep their full width.
+  - On a copy that lands, the path rolls up out of the bed, and "Copied", with a check in
+    `--ok`, rolls up into it from below, on `--dur-state` and `--ease-out`. After 1.5s
+    they roll back. Reduced motion swaps them with no movement and keeps the hold. A copy
+    the clipboard refuses confirms nothing. No toast: a status region announces the copy.
 - **Nested corners.** Where a rounded shape rests near another's corner, the inner radius
   is the outer radius less the inset between them, so the gap round the corner matches the
   gap along the sides. The inset is the distance from the outer shape's edge to the inner
@@ -107,7 +315,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
     corner plus the bar's 0.6rem padding, 20.6px;
   - the comment composer rounds at `--composer-radius`: its tray's corner plus
     `--composer-inset`, its padding;
-  - a menu, the Select listbox, and the Contents and heading-filter panels round at
+  - the plan header's bed nests in the pane's top corners, and its end keys in the bed's;
+  - a menu, the Select listbox, the outline's float and the heading-filter panel round at
     `--key-radius` plus the inset round their rows. Their filter field's inset is the
     panel's radius less `--radius`;
   - the Discard confirm bubble pads its action tray evenly and rounds at the tray's corner
@@ -179,7 +388,7 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
     moves the same distance. On a risen face only `--ink` holds AA, so quieter text there
     steps up to `--ink`. A glyph there needs only 3:1, so it steps to a neutral key's
     label ink and stays a rung under the text.
-  - The cursor on a latched face, such as the Contents row being read or the latched
+  - The cursor on a latched face, such as the outline row being read or the latched
     compare toggle, takes `--neutral-face-latched-hover`. In light that is the latched
     face stepped toward black, because the plain hover face is lighter than it there.
   - A control that shows only under the pointer, such as the gutter "+", stays while it
@@ -191,10 +400,14 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   inferred from the cap it holds. It is smaller than the rest of the kit: caps of
   `--cap-submit-h` (28px) with `--text-base` labels, where the other caps are 32px, and
   every cap in it shrinks with it. The top bar's bell and settings keys match it, so every
-  key in the top bar is the same height. The submit trays are Approve in the top bar,
-  Comment and Save in the composer, Send for revision, the guard confirms (Approve with
-  comments, Reject anyway) and the confirm bubble's Discard. Enable notifications is not a
-  submit and keeps the full size.
+  key in the top bar is the same height. The plan header's view and outline keys stand at
+  that height too, though they submit nothing. So does the outline column's own outline
+  key: hiding the column puts the header's outline key in its place, and one height keeps
+  the key from changing size as they swap. Their trays, marked `.header-tray`, join the
+  same rule in `atoms.css`. The submit trays are Approve in the top bar, Comment and Save
+  in the composer, Send for revision, the guard confirms (Approve with comments, Reject
+  anyway) and the confirm bubble's Discard. Enable notifications is not a submit and keeps
+  the full size.
 - **Stamps.** Passive labels (`.stamp`, counts, the comment states, the file preview's
   line-range readout, the waiting screen's hint, the build tag's "Copied") sit in a
   pocket. Unlike a bed, a pocket has a darker floor (`--well-floor`) and its own shade and
@@ -210,9 +423,15 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - **Text fields draw no focus ring.** A focused `.field-well` lights one wall of its cut
   with `--field-wall`, `--field-edge-focus` on the lower wall in dark and the upper wall
   in light, and the amber text cursor shows the rest. A Command's filter field, in the
-  Contents panel and the breadcrumb bar, can't wear the class, so one rule in `atoms.css`
-  mirrors the recipe by appending `var(--field-wall)` to its rest cut. Read-only text that
-  takes focus, such as the file preview's code region, lights its wall the same way.
+  outline and the breadcrumb bar, can't wear the class, so one rule in `atoms.css` mirrors
+  the recipe by appending `var(--field-wall)` to its rest cut. Read-only text that takes
+  focus, such as the file preview's code region, lights its wall the same way.
+- **A filter field clears from inside.** While a Command's filter field holds text, a
+  space included, an × named "Clear filter" stands at its trailing edge. A press empties
+  the query and keeps focus in the field. The × is a 24px ghost control with an
+  `--ink-soft` glyph. Nothing overlaps it: the outline float's match count, and the
+  column's `\` cap while its field is unfocused, stand just before it.
+  `command-input.svelte` draws it, so every Command filter has one.
 - **Modals draw no focus ring around themselves.** A modal takes focus on its own panel
   when it opens, so its keys work at once. It has no hover look either, and `base.css`
   leaves `[data-slot="dialog-content"]` and `[data-slot="alert-dialog-content"]` out of
@@ -232,11 +451,15 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
     sub-trigger stays risen while its submenu is open; command rows opt in at the call
     site, because `PlanToc` draws its own key inside the item;
   - the Settings nav, the theme list, the version picker, the breadcrumb menu, whose
-    headings on the trail latch (the crumbs in the bar borrow only the risen state, on
-    `--crumb-face-hover`, and never latch; the current crumb is marked by weight), the
-    comment navigator and the cwd path. In light the crumb's face is the white face the
-    bar's keys rest on. In dark it steps further toward `--ink` than the hover face,
-    because some palettes lift the bar close to the hover face;
+    headings on the trail latch (the crumbs in the plan header borrow only the risen
+    state, on `--crumb-face-hover`, and never latch; the current crumb is marked by
+    weight), and the comment navigator. The crumbs lie on the plan header's bed, whose
+    floor steps from `--paper` over the preview and `--paper-sunk` over the source view.
+    In light their face steps toward black from the raised paper, because a key's white
+    face is the plan's own paper there and would not read as risen. In dark it steps
+    further toward `--ink` than the hover face, as far as Catppuccin Frappé's `--ink`
+    keeps 4.5:1 on it. `theme.test.ts` holds the step to 4.5 ΔE on both floors in every
+    palette;
   - the folder tree, a shadow-DOM list that wears the `--key-row-*` tokens directly, with
     a `:focus-visible` row risen and the chosen row latched. It keys on `:focus-visible`
     rather than the library's `data-item-focused`, so a pointer click never raises the
@@ -246,14 +469,21 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   In a menu or listbox the highlight is the only cursor, so a row rises on
   `data-highlighted` and never on hover. In a bits-ui listbox (a Select),
   `[data-selected]` means the chosen option, so the chosen row is named by `data-active`
-  and latched, never risen. The Contents row is the one key row outside the atom. It wears
-  the `--key-row-*` rise and press, so it stands as low as every other key row. It rises
-  from its indent onward, and latches onto `--neutral-face-latched` while it is the
-  section being read, an open exception to the accent rule
-  ([`decisions.md`](decisions.md)). The cursor on it takes `--neutral-face-latched-hover`.
-  A key row's keyboard indicator is its hover look, so the row the keys move to looks
-  exactly like the row the pointer moves to. A chosen row under the highlight stays down
-  on the hover face, so the highlight reads on it too.
+  and latched, never risen. The outline row is the one key row outside the atom. It rises
+  and sinks as far as every other key row (`--key-rise`, `--key-sink`), but its face is
+  its own: flat grained rubber with no gradient. On a key that wide, the key row's domed
+  gradient reads as painted on. Inset shadows that follow its corners light its top edge
+  (`--rubber-gloss`) and shade its foot (`--rubber-foot`). Latched or pressed, it sinks as
+  a bed does, shaded under its top edge (`--rubber-press`) and lit along its lower wall
+  (`--scoop-lip`). It rises from its indent onward, and latches onto
+  `--neutral-face-latched` while it is the section being read, an open exception to the
+  accent rule ([`decisions.md`](decisions.md)). The cursor on it takes
+  `--neutral-face-latched-hover`. Its press and its latch override its rise, so a row
+  clicked under the pointer goes down at the press and stays down: the click latches it
+  where it stands, and the row latched before lets go. A latch goes down on `--ease-out`,
+  as a press does. A key row's keyboard indicator is its hover look, so the row the keys
+  move to looks exactly like the row the pointer moves to. A chosen row under the
+  highlight stays down on the hover face, so the highlight reads on it too.
 - **Setting groups.** Each Settings section's rows sit in a bed on `--group-floor` with
   `--bed-shade`, rounded at `--key-radius` plus `--well-pad` plus `--group-pad`, parted by
   space with no hairline. The nav's sections share one bed (`.tray` on `--group-floor`),
@@ -272,6 +502,20 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `--meter-off` and no knob; the meter is the target, and focus lights its pips as hover
   does. The switch's key nests 2px inside its well, so the well rounds at `--nub-radius`
   plus 2px.
+- **Splitters.** A pane's resizable edge is ARIA's window splitter pattern, a focusable
+  `role="separator"` whose value the arrow keys change
+  (`ui/src/components/Splitter.svelte`). The file drawer's edge and the outline column's
+  are the two. It lies over the bare gap between two panes and nothing else, so it never
+  takes a click meant for either. The outline column's edge is the gap between its bed and
+  the plan pane, and starts below the column's head. At rest the gap is all that shows.
+  Under the pointer or keyboard focus, a grip rises in the gap where the pointer is: the
+  switch's key, light in both schemes, 6px wide and a key's 2rem tall. Held, the grip goes
+  down as a pressed key does, its side folding away and its shading turning concave.
+  `theme.test.ts` holds it to 3:1 on the body, risen and held. A mouse drag leaves the
+  edge focused, but only focus from the keyboard raises the grip, so it fades once the
+  pointer leaves. The arrow keys step the edge 24px. A double-click returns the pane to
+  its opening size: 15.5rem for the column, and 45% of the surface for the drawer. Beside
+  a file, the column stops at the widest width that fits, if that is less.
 - **The copy and wrap tray.** `CodeChromeTray` is the one copy and wrap tray, and its host
   places it: `CodeBlockChrome` in the plan, the block corner in Settings, and
   `UpgradeCommand`, which sets its tooltip (`copyTooltip`) to "Copy command" in place of
@@ -298,20 +542,25 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `message-square-more` glyph and the word "Unsent" in the comment stamps' word ink, the
   kept text in `--ink-soft`, and a neutral Resume cap. The row hovers and presses that
   cap. It does so through the `button.tray:hover > .cap` and
-  `button.tray:is(:active, [data-key-pressed]) > .cap` rules in `atoms.css`.
-  `theme.test.ts` holds the word and the text to 4.5:1 on the tinted floor in every
-  palette, and `tactile-kit.e2e.ts` seeds an unsent comment to cover the marker's cap.
+  `button.tray:is(:active, [data-key-pressed]) > .cap` rules in `atoms.css`. On dark paper
+  the tinted floor is lighter than the paper. The bed's full shade would hide the row's
+  top edge, and its lip would add an edge below, so the row would read lower than its
+  centred content. The row's bed takes `--unsent-shade` instead: in dark, a weaker shade
+  with no lip, and in light, `--bed-shade`. `theme.test.ts` holds the word and the text to
+  4.5:1 on the tinted floor in every palette, `tactile-kit.e2e.ts` seeds an unsent comment
+  to cover the marker's cap, and `unsent-marker.e2e.ts` reads the row's edges off a
+  screenshot in every dark palette.
 - **Unsent everywhere.** Every surface marks an unsent comment with the word "unsent", the
   `message-square-more` glyph in the comment stamps' word ink, and the tinted well. The
   word is never "draft". Size picks the tint: a row or a list takes `--unsent-floor`, and
-  a pill-sized count, such as the Contents panel's, takes the stamp's `--stamp-floor`. An
-  unsent section's label leads with the glyph in the word ink, and its text stays
-  `--ink-soft`. In Request changes, a committed row is a paper card, the saved comment's
-  low float, resting in a recessed tray, and an unsent row is a tinted well on the panel.
-  The Approve and Reject guards list each kind in its own group: committed comments in a
-  recessed group with hairline rows, unsent ones in a tinted well. The comment navigator
-  rests an unsent row as the tinted well with the glyph and "unsent", and a hovered or
-  current one becomes a key like any other row.
+  a pill-sized count, such as the outline's, takes the stamp's `--stamp-floor`. An unsent
+  section's label leads with the glyph in the word ink, and its text stays `--ink-soft`.
+  In Request changes, a committed row is a paper card, the saved comment's low float,
+  resting in a recessed tray, and an unsent row is a tinted well on the panel. The Approve
+  and Reject guards list each kind in its own group: committed comments in a recessed
+  group with hairline rows, unsent ones in a tinted well. The comment navigator rests an
+  unsent row as the tinted well with the glyph and "unsent", and a hovered or current one
+  becomes a key like any other row.
 - **Ink on a tint.** Text and icons on the unsent tint use `--ink-soft` or stronger, never
   `--ink-faint`, which falls below 4.5:1 there (2.80 to 4.33:1). Disclosure chevrons
   follow the same rule.
@@ -352,6 +601,43 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `cubic-bezier(0.22, 1, 0.36, 1)` (`--dur-state`, `--ease-out`): hover and focus tints,
   surfaces entering and leaving, and controls sliding between positions. The curve covers
   most of the distance at once, then brakes hard.
+- Two moves are the exception: a pane or column entering, the outline column or the file
+  drawer, and the find row sliding open across the plan header. Each takes 240 ms
+  (`--dur-pane`), because a move that size reads as a jump cut at 160 ms. Each leaves on
+  160 ms (`--dur-state`), so it leaves faster than it enters.
+- The outline column and the file drawer move on the page itself
+  (`ui/src/lib/layoutSlide.ts`). The change applies at once, so the plan is laid out where
+  it ends on the first frame. Each part that moved then slides from where it stood on a
+  transform transition, so a second toggle reverses it mid-flight. A click during the
+  slide lands on whatever is under it. Opening a file slides the drawer in and a column it
+  folds out, in one frame; closing one slides the drawer out as the column stands again. A
+  part slides on `--dur-pane` when it enters or moves with an entering column, and on
+  `--dur-state` otherwise.
+- An outline toggle moves only the plan's left edge. The plan's floor and the header's bed
+  stretch from the column's edge, its text and crumbs slide with that edge, and the view
+  keys and the Search entry hold still. Every part moves by transform alone, so no part
+  waits on a frame the main thread is still drawing.
+- Compare runs as one view transition, because its content swaps as it moves
+  (`ui/src/lib/paneMove.ts`, timed in `ui/src/styles/base.css`). Every part moves within
+  that one transition, on `--dur-state`; the column standing again, and the parts that
+  move with it, take `--dur-pane`. Each slot, a place in the header or the plan where one
+  thing replaces another, fades through: what leaves is gone by 40% of the run, and what
+  arrives starts there, so no slot shows two images at once. The header's bed stretches
+  with its box, so both its ends stay round. The Versions key slides only once the slot it
+  moves into is clear, and what it leaves fills only once it has passed. Leaving compare,
+  the column waits until the plan's old image has gone, and arrives with the plan.
+- Motion confirms a change the reader made. The outline's latched row fades across when
+  the reader jumps to a heading, and moves with no motion while the plan scrolls under it,
+  because motion on a change that runs through a scroll reads as lag. What comes and goes
+  with the window's width changes with no motion too, because motion during a resize drag
+  jitters. A pane a splitter resizes changes with no motion too, because the plan lays out
+  again under the pointer every frame.
+- The outline key's latch rides its travel between the column's head and the header. The
+  key latches on `--dur-pane` as the column stands, and lets go on `--dur-state` as it
+  folds, both on `--ease-out` and from the slide's first frame. A click stands the column
+  with the key already down, so it comes in latched; ⇧ + `\` stands it with the key up, so
+  it latches on the way. A shortcut holds the key it stands for down for 110ms, its press
+  echo; the fold drops that echo, so the key rises while it travels.
 - A key's return from a press is the one spring: it travels back over `--dur-state` on
   `--ease-spring`, past rest and back. The press itself, and every shading and colour
   change, stays on `--ease-out`.
@@ -364,6 +650,24 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 
 ### Plan surface
 
+- **The current search match is the strongest mark on the page.** Both views share its
+  pair of marks.
+  - The current match is the mark itself, opaque (`--mark-active`). Its text is whichever
+    of `--ink`, `--paper`, `--paper-raised` and `--paper-sunk` reads most strongly on it
+    (`--mark-active-ink`). The preview draws a held selection's band, and the cursor's or
+    the pointer's, over the text. Where they would take that text under 4.5:1, it steps
+    toward white or black. Where not even white or black would hold, the mark steps away
+    from its text before the text steps.
+  - Every other match is a wash of the mark (`--mark-match`) a step over the `--mark` a
+    comment span wears. Its text is `--ink` (`--mark-match-ink`), stepped toward white in
+    dark or black in light where the palette needs it to hold 4.5:1 on the wash. That
+    holds on a chip, a code or table card's floor and a table header too, but not on a
+    chip inside a table header, where no text colour reaches 4.5:1 in five dark palettes.
+  - A thematic break (`---`) paints its dashes transparent under a match too, so the mark
+    shows as a plain band.
+  - `test/e2e/search-marks.e2e.ts` holds both marks' distance from their lines and from
+    each other, an other match's lead over a comment span's `--mark`, and their text's
+    contrast, in every palette and both views.
 - Hover and drag highlights in the preview cover full visual lines, never part of a line.
   The file preview's cited band follows the same rule, through the gutter and across the
   whole scroll width.
@@ -472,7 +776,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 ### States
 
 - **Empty:** the waiting screen is caret's one brand moment; see
-  [`exceptions.md`](exceptions.md). Any other empty view is one plain sentence.
+  [`exceptions.md`](exceptions.md). Any other empty view is one plain sentence, where its
+  content would start: a filter that matches nothing says so under its field.
 - **Loading:** no indicator under about 1s. From about 2s, a labelled spinner, and the
   data animates in gently when it lands. Past about 10s or for many items, a count or
   percentage.

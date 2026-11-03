@@ -125,9 +125,9 @@ installation (`~/.codex/hooks.json` / `config.toml [hooks]` behind
 Some modules are imported by **both** runtimes — the compiled bun binary and the browser
 UI bundle (the UI reaches them through the `@core/*` alias: `src/lib/types.ts`,
 `config/constants.ts`, `redact/core.ts`, `ui/log-bridge.ts`, `lib/semver.ts`,
-`plan/reviewer-notes.ts`). Every such module is **pure TS with zero node imports** — the
-node-free property is per-module, so a browser-safe file can sit in a domain directory
-beside node-only siblings.
+`plan/reviewer-notes.ts`, `plan/excerpt-language.ts`). Every such module is
+**pure TS with zero node imports** — the node-free property is per-module, so a
+browser-safe file can sit in a domain directory beside node-only siblings.
 
 The reason is the browser bundle: a `node:*` import in a `@core`-shared module either
 breaks the Vite build (node builtins have no browser equivalent) or drags the daemon's

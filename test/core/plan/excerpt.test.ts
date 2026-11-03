@@ -18,12 +18,12 @@ import { writeTreeFile } from "@test/support/fs-tree.ts";
 import { EXCERPT_RADIUS, hasKnownFileExtension } from "@/config/constants.ts";
 import {
   EXCERPT_HEAD_LINES,
-  EXT_LANGUAGE,
   isFileTooLargeToPreview,
   MAX_EXCERPT_BYTES,
   readFileExcerpt,
   resolveInCwd,
 } from "@/plan/excerpt.ts";
+import { EXT_LANGUAGE } from "@/plan/excerpt-language.ts";
 
 // excerpt.ts resolves a plan's filename reference to a real file *inside the
 // review's cwd* (the daemon's source of truth is the review record, never the

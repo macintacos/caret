@@ -37,8 +37,7 @@
      does the novelty job and needs a fill rather than just ink. */
   --attention-wash: color-mix(in lab, var(--attention) 18%, transparent);
 
-  /* A recessed code panel's ground, under Settings' copyable text and the Contents
-     peek's excerpt. */
+  /* A recessed code panel's ground, under Settings' copyable text. */
   --code-panel: color-mix(in lab, var(--paper-sunk), var(--ink) 6%);
 
   /* The tactile surfaces (their geometry is in styles/tokens.css), in their dark
@@ -59,14 +58,23 @@
   /* A press sinks at least as deep as the hover it comes from. Dark presses down to the
      latched face; light's hover is already the darker, so a press keeps it. */
   --neutral-face-press: var(--neutral-face-down);
-  /* A crumb lies flat on the bar's --body, which some palettes lift near the hover face, so
-     it steps further: as far as Catppuccin Frappé's --ink keeps 4.5:1 on it. */
+  /* The latched face of a key standing on a floored bed (the plan header's, the outline
+     column's head), where no floor of the key's own lies under it. The down face sits at or
+     under a floor this light and reads as a hole, so it rises toward the hover face, as far
+     as still leaves the hover a findable step above it: Catppuccin Frappé binds. */
+  --neutral-face-bed-down: color-mix(in lab, var(--neutral-face-hover), var(--bed-floor) 62%);
+  /* A crumb lies flat on the plan header, over the plan's own floor, and steps further than
+     the hover face: as far as Catppuccin Frappé's --ink keeps 4.5:1 on it. */
   --crumb-face-hover: color-mix(in lab, var(--paper), var(--ink) 30%);
 
   /* The material the window is made of: every chrome control is cut into it and the plan
      pane is set into it. Dark lifts it off the raised paper, which sits too close to the
      pane's sunk floor for the pane to read as set in. */
   --body: color-mix(in lab, var(--paper-raised), var(--ink) 7%);
+  /* The floor of the outline column's bed: the body a step toward the plan pane's floor,
+     which is darker than the body in dark and lighter in light. Far enough that a row's
+     hover face reads off it by FOUND (theme.test.ts). */
+  --bed-floor: color-mix(in lab, var(--body), black 14%);
 
   /* A table is a raised pad of --body with its rows in a scoop on its face. The scoop's
      floor steps below the plan, and its row hairline is that floor stepped toward ink. The
@@ -154,10 +162,13 @@
   --neutral-face-hover: color-mix(in lab, var(--paper-raised), black 10%);
   --neutral-face-down: color-mix(in lab, var(--paper-raised), black 5%);
   --neutral-face-press: var(--neutral-face-hover);
+  /* A light key's faces stand on the raised paper, above any bed's floor. */
+  --neutral-face-bed-down: var(--neutral-face-down);
   /* The hover face is lighter than a latched face, so the cursor steps the latched face. */
   --neutral-face-latched-hover: color-mix(in lab, var(--neutral-face-latched), black 6%);
-  /* That step lands on the grey bar's own shade, so a crumb rises to a key's white face. */
-  --crumb-face-hover: var(--neutral-face);
+  /* A key's white face is the plan's own paper in light, so a crumb steps toward black
+     instead, far enough to read off the source view's sunk paper too. */
+  --crumb-face-hover: color-mix(in lab, var(--paper-raised), black 15%);
   --accent-face-hover: color-mix(in lab, var(--accent), black 10%);
   --accent-face-press: var(--accent-face-hover);
   /* Dawnfox's --danger is too light for a light label at AA. */
@@ -165,6 +176,7 @@
   --danger-face-hover: color-mix(in lab, var(--danger), black 18%);
   --danger-face-press: var(--danger-face-hover);
   --body: color-mix(in lab, var(--paper-sunk), var(--ink) 5%);
+  --bed-floor: color-mix(in lab, var(--body), var(--paper-raised) 50%);
   --table-floor: color-mix(in lab, var(--paper-sunk), var(--ink) 3%);
   --pad-top: color-mix(in lab, var(--body), var(--paper-raised) 60%);
   --pad-side: color-mix(in lab, var(--body), black 13%);
@@ -177,7 +189,8 @@
   --switch-on: color-mix(in lab, var(--well-floor), var(--accent) 18%);
 }
 /* Light chrome is the grey body rather than the raised paper, so a stamp's or a count
-   chip's pocket there re-cuts off the body; modals and menus keep the paper's. */
-[data-theme="light"] :is(.topbar, .control-row, .status-bar) {
+   chip's pocket there, the outline column's included, re-cuts off the body; modals and
+   menus keep the paper's. */
+[data-theme="light"] :is(.topbar, .plan-outline, .status-bar) {
   --well-floor: color-mix(in lab, var(--body), var(--ink) 7%);
 }

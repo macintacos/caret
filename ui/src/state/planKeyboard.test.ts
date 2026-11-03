@@ -25,7 +25,7 @@ function makeStore(over: Partial<PlanKeyboardStore> = {}): PlanKeyboardStore {
   };
 }
 
-/** Fake deps around a mutable text/reading/hints control surface, capturing the
+/** Fake deps around a mutable text/reading control surface, capturing the
  * effects (follow and jump lines, focus/blur counts) and the scheduled close timers
  * so a test can fire them by hand — no real DOM, no real setTimeout. */
 function build(
@@ -33,7 +33,6 @@ function build(
   over: {
     text?: string;
     reading?: number | null;
-    hints?: boolean;
     headings?: number[];
     halfPage?: number;
     matchesFor?: (query: string) => SearchMatch[];
@@ -41,7 +40,6 @@ function build(
 ) {
   let text = over.text ?? "";
   let reading: number | null = over.reading ?? null;
-  let hints = over.hints ?? true;
   const headings = over.headings ?? [];
   const halfPage = over.halfPage ?? 5;
   const followed: number[] = [];
@@ -77,7 +75,6 @@ function build(
     blur: () => {
       blurred += 1;
     },
-    hintsShown: () => hints,
     setTimer: (fn) => {
       const handle = nextHandle++;
       scheduled.push({ fn, handle });
@@ -105,9 +102,6 @@ function build(
     },
     setReading: (l: number | null) => {
       reading = l;
-    },
-    setHints: (on: boolean) => {
-      hints = on;
     },
     /** Fire (and drain) the scheduled close callbacks, as the collapse timeout would. */
     runTimers: () => {
@@ -167,7 +161,7 @@ describe("openSearch", () => {
   test("cancels a pending close when reopening mid-collapse", () => {
     store.searchOpen = true;
     const h = build(store, { text: PLAN });
-    h.keyboard.closeSearch(); // hints on → defers, marks closing
+    h.keyboard.closeSearch(); // defers, marks closing
     expect(store.searchClosing).toBe(true);
     expect(h.pendingTimers()).toBe(1);
     h.keyboard.openSearch();
@@ -299,23 +293,12 @@ describe("stepSearch", () => {
 });
 
 describe("closeSearch", () => {
-  test("resets immediately when the collapse chip is not shown", () => {
+  test("blurs at once and defers the reset through the collapse animation", () => {
     store.searchOpen = true;
     store.searchQuery = "alpha";
-    store.searchIndex = 1;
-    const h = build(store, { text: PLAN, hints: false });
+    const h = build(store, { text: PLAN });
     h.keyboard.closeSearch();
     expect(h.blurCount()).toBe(1);
-    expectSearchReset();
-    expect(store.searchClosing).toBe(false);
-    expect(h.pendingTimers()).toBe(0);
-  });
-
-  test("defers teardown through the collapse animation when the chip is shown", () => {
-    store.searchOpen = true;
-    store.searchQuery = "alpha";
-    const h = build(store, { text: PLAN, hints: true });
-    h.keyboard.closeSearch();
     expect(store.searchClosing).toBe(true);
     expect(store.searchOpen).toBe(true);
     expect(h.pendingTimers()).toBe(1);
@@ -329,8 +312,9 @@ describe("closeSearch", () => {
     store.searchOpen = true;
     store.searchQuery = "alpha";
     store.lastQuery = "alpha";
-    const h = build(store, { text: PLAN, hints: false });
+    const h = build(store, { text: PLAN });
     h.keyboard.closeSearch();
+    h.runTimers();
     expect(store.searchQuery).toBe("");
     expect(store.lastQuery).toBe("alpha");
   });
@@ -340,7 +324,7 @@ describe("cancelClose", () => {
   test("cancels a pending close without resetting the search", () => {
     store.searchOpen = true;
     store.searchQuery = "alpha";
-    const h = build(store, { text: PLAN, hints: true });
+    const h = build(store, { text: PLAN });
     h.keyboard.closeSearch();
     h.keyboard.cancelClose();
     expect(store.searchClosing).toBe(false);
@@ -517,8 +501,9 @@ describe("clearSelectionOrCursor", () => {
   test("closes the search HUD first, leaving any visual selection intact", () => {
     store.searchOpen = true;
     store.visualAnchor = 3;
-    const h = build(store, { text: CURSOR_PLAN, hints: false });
+    const h = build(store, { text: CURSOR_PLAN });
     h.keyboard.clearSelectionOrCursor();
+    h.runTimers();
     expect(store.searchOpen).toBe(false);
     expect(store.visualAnchor).toBe(3); // search took priority; the selection survives
   });
@@ -571,7 +556,7 @@ describe("sound events (EXC-1126)", () => {
   test("closeSearch sounds at once, not when the deferred teardown fires", () => {
     store.searchOpen = true;
     store.searchQuery = "alpha";
-    const h = build(store, { text: PLAN, hints: true });
+    const h = build(store, { text: PLAN });
     h.keyboard.closeSearch();
     expect(h.sounds).toEqual(["searchClosed"]);
     h.runTimers();
@@ -584,7 +569,7 @@ describe("sound events (EXC-1126)", () => {
   test("a second Esc inside the collapse window does not re-sound the dismissal", () => {
     store.searchOpen = true;
     store.searchQuery = "alpha";
-    const h = build(store, { text: PLAN, hints: true });
+    const h = build(store, { text: PLAN });
     h.keyboard.clearSelectionOrCursor();
     h.keyboard.clearSelectionOrCursor();
     expect(h.sounds).toEqual(["searchClosed"]);
@@ -637,7 +622,7 @@ describe("sound events (EXC-1126)", () => {
   test("Esc over an open search takes the close branch's cue", () => {
     store.searchOpen = true;
     store.visualAnchor = 3;
-    const h = build(store, { text: PLAN, hints: false });
+    const h = build(store, { text: PLAN });
     h.keyboard.clearSelectionOrCursor();
     expect(h.sounds).toEqual(["searchClosed"]);
   });

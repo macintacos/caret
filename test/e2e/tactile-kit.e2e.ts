@@ -14,6 +14,7 @@ import {
   revealGutterPlus,
   seedAndOpen,
 } from "@test/e2e/support/source-view.ts";
+import { bundledThemes } from "@test/support/theme.ts";
 
 /** The review page with one kept scratch, so the gate also reaches its marker's cap. */
 async function openWithScratchMarker(daemon: Daemon, page: Page): Promise<void> {
@@ -141,22 +142,24 @@ function bedGaps(page: Page): Promise<{ bed: string; gaps: number[] }[]> {
     return [...document.querySelectorAll<HTMLElement>(".tray, [data-slot='toggle-group']")]
       .filter((bed) => bed.getClientRects().length > 0)
       .flatMap((bed) => {
-        const keys = [
+        // A latched or disabled key sits lower than a resting one, so only resting keys
+        // set the top and bottom gaps; every key sets the side gaps.
+        const all = [
           ...bed.querySelectorAll<HTMLElement>(
             "button.float-chip, .cap, [data-slot='toggle-group-item']",
           ),
-        ].filter(
-          (key) =>
-            key.getClientRects().length > 0 &&
-            !key.matches("[aria-pressed='true'], [data-state='on'], :disabled"),
+        ].filter((key) => key.getClientRects().length > 0);
+        const keys = all.filter(
+          (key) => !key.matches("[aria-pressed='true'], [data-state='on'], :disabled"),
         );
         if (keys.length === 0) return [];
         const b = bed.getBoundingClientRect();
         const boxes = keys.map((key) => key.getBoundingClientRect());
+        const sides = all.map((key) => key.getBoundingClientRect());
         const top = Math.min(...boxes.map((k) => k.top));
         const bottom = Math.max(...boxes.map((k) => k.bottom));
-        const left = Math.min(...boxes.map((k) => k.left));
-        const right = Math.max(...boxes.map((k) => k.right));
+        const left = Math.min(...sides.map((k) => k.left));
+        const right = Math.max(...sides.map((k) => k.right));
         return [
           {
             bed: bed.outerHTML.slice(0, 80),
@@ -254,6 +257,101 @@ function settledFace(target: Locator): Promise<string> {
   });
 }
 
+/** The first opaque fill at or above `el`: the floor a key sees round itself. */
+function floorUnder(el: Locator): Promise<string> {
+  return el.evaluate((node) => {
+    for (let at: Element | null = node; at !== null; at = at.parentElement) {
+      const fill = getComputedStyle(at).backgroundColor;
+      if (!/^rgba\(.*, 0\)$|^transparent$/.test(fill)) return fill;
+    }
+    return getComputedStyle(document.body).backgroundColor;
+  });
+}
+
+// The plan header and the outline column's head are each one bed with a floor of its own,
+// and their keys stand on that floor rather than in beds of their own.
+test("the keys in the plan header and the column's head stand on their bed's floor, in no cut of their own", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seedVersions(2, ["# Plan\n\nFirst.\n", "# Plan\n\nSecond.\n"]);
+  await page.goto("/");
+  await planSurface(page);
+  const cuts = () =>
+    page.evaluate(() =>
+      [
+        ...document.querySelectorAll(
+          ':is(.plan-header, .toc-title-row) :is(.tray, [data-slot="toggle-group"])',
+        ),
+      ]
+        .filter((el) => el.getClientRects().length > 0)
+        .flatMap((el) => {
+          const s = getComputedStyle(el);
+          const flat = s.boxShadow === "none" && s.backgroundImage === "none";
+          return flat && /^rgba\(.*, 0\)$/.test(s.backgroundColor)
+            ? []
+            : [el.outerHTML.slice(0, 80)];
+        }),
+    );
+  await expect(page.locator(".toc-title-row .header-tray")).toBeVisible();
+  expect(await cuts()).toEqual([]);
+  await page.keyboard.press("d");
+  await expect(page.locator(".plan-header .pair")).toBeVisible();
+  expect(await cuts()).toEqual([]);
+});
+
+// A latched key drops its side and cast shadow, so only its face against the floor round it
+// says where the key is. A dark key lifts toward ink, so that face must read lighter than
+// the floor, or the key reads as a hole with its hint cap standing in it. The outline
+// column's floor is the lightest bed's, and there the face rises only a just noticeable step:
+// any higher and the hover face, held to FOUND above it and to AA for --ink, has no room.
+// On the plan header's floor it clears FOUND.
+const NOTICEABLE = 2.3;
+for (const theme of bundledThemes().filter((t) => t.scheme === "dark")) {
+  test(`a latched key reads lighter than the bed's floor round it, ${theme.id}`, async ({
+    daemon,
+    page,
+  }) => {
+    await page.addInitScript((id) => {
+      localStorage.setItem("caret.theme.mode", "dark");
+      localStorage.setItem("caret.theme.dark", id);
+    }, theme.id);
+    await daemon.seedVersions(2, ["# Plan\n\nFirst.\n", "# Plan\n\nSecond.\n"]);
+    await page.goto("/");
+    await planSurface(page);
+    await page.mouse.move(0, 0);
+    const step = async (key: Locator, floor: string) => {
+      const [face = [], under = []] = await toLab(page, [await settledFace(key), floor]);
+      return {
+        lighter: (face[0] ?? 0) > (under[0] ?? 0),
+        de: Math.hypot(...face.map((v, i) => v - (under[i] ?? 0))),
+      };
+    };
+
+    const tray = page.locator("aside.plan-outline .header-tray");
+    const columnKey = tray.getByRole("button", { name: "Outline", exact: true });
+    await expect(columnKey).toHaveAttribute("aria-pressed", "true");
+    const onColumn = await step(columnKey, await floorUnder(tray));
+    expect(onColumn.lighter).toBe(true);
+    expect(onColumn.de).toBeGreaterThanOrEqual(NOTICEABLE);
+
+    // Comparing, a chosen segment stands on the header's floor over the diff's.
+    await page.keyboard.press("d");
+    const chosen = page
+      .locator('.plan-header [data-slot="toggle-group-item"][data-state="on"]')
+      .first();
+    await expect(chosen).toBeVisible();
+    const bed = page.locator(".plan-header > .header-bed");
+    await expect(bed).toBeVisible();
+    const onHeader = await step(
+      chosen,
+      await bed.evaluate((el) => getComputedStyle(el).backgroundColor),
+    );
+    expect(onHeader.lighter).toBe(true);
+    expect(onHeader.de).toBeGreaterThanOrEqual(4.5);
+  });
+}
+
 /** Light paper's cursor darkens the face it lands on, by theme.test.ts's FOUND. */
 async function expectCursorDarkens(page: Page, cursor: string, resting: string): Promise<void> {
   const [cursorLab = [], restLab = []] = await toLab(page, [cursor, resting]);
@@ -263,7 +361,7 @@ async function expectCursorDarkens(page: Page, cursor: string, resting: string):
 
 // A latched face is tinted with the accent, darker than a plain hover face, so the cursor
 // steps the latched face rather than trading it for the hover face.
-test("on light paper the cursor darkens the Contents row being read", async ({ daemon, page }) => {
+test("on light paper the cursor darkens the outline row being read", async ({ daemon, page }) => {
   await page.emulateMedia({ colorScheme: "light" });
   const section = (name: string) =>
     [`## ${name}`, ...Array.from({ length: 30 }, (_, i) => `${name} line ${i + 1}.`)].join("\n\n");
@@ -271,8 +369,9 @@ test("on light paper the cursor darkens the Contents row being read", async ({ d
   await page.goto("/");
   await planSurface(page);
   await jumpToHeading(page, "Bravo");
-  await page.getByRole("button", { name: "Contents" }).click();
-  const read = page.locator(".plan-toc-panel [aria-current='location']");
+  await expect.poll(() => new URL(page.url()).searchParams.get("heading")).toBe("bravo");
+  await page.keyboard.press("\\");
+  const read = page.locator(".plan-outline [aria-current='location']");
   await expect(read).toHaveAttribute("data-selected", "");
   const cursor = await settledFace(read.locator(".toc-key"));
   await page.keyboard.press("ArrowDown");
@@ -362,7 +461,8 @@ test("a key row pressed under the pointer goes down from where it rose", async (
   page,
 }) => {
   await seedAndOpen(page, daemon);
-  const keyRow = page.getByRole("button", { name: /^Copy path / });
+  const settings = await openSettings(page);
+  const keyRow = settings.locator(".settings-nav .key-row:not([aria-current])").first();
   const lift = () =>
     keyRow.evaluate((el) => Number.parseFloat(getComputedStyle(el).translate.split(" ")[1] ?? "0"));
   await keyRow.hover();

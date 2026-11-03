@@ -458,6 +458,9 @@ export interface HealthIdentity {
   /** What to do after upgrading, in the words of the harness that spawned this daemon.
    * Absent on a resident daemon, whose adapter is only a default. */
   restartHint?: string;
+  /** The daemon user's home directory, so the UI can write a path under it from `~`.
+   * Identifying, like `stateDir`: never logged. */
+  home?: string;
   /** True when the daemon stays up until told to stop rather than idle-exiting
    * (EXC-1164), so a peer knows which handoff protocol to speak. Three states:
    * `true` resident, `false` resident-aware but idle-exiting, absent means the

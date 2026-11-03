@@ -91,13 +91,25 @@ describe("CANONICAL_KEYMAP", () => {
     expect(ariaKeyshortcutsFor("actions.reject")).toBe("Shift+R");
   });
 
-  test("reserves \\ for the contents popup, rendered as a \\ cap (EXC-1097)", () => {
+  test("reserves \\ for the outline's filter, rendered as a \\ cap", () => {
     const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.contents");
     if (!entry) throw new Error("actions.contents missing");
     expect(entry.group).toBe("actions");
     expect(specSignature(entry.keys)).toBe("\\");
     expect(keyCaps(entry.keys)).toEqual([["\\"]]);
     expect(ariaKeyshortcutsFor("actions.contents")).toBe("\\");
+  });
+
+  // Shift+\ arrives as `|` on a US layout, and `|` is the key the dispatcher matches and
+  // the DOM key value aria-keyshortcuts names, as `?` is for help. The caps show the keys
+  // pressed: shift, then \.
+  test("reserves Shift+\\ to toggle the outline, rendered as shift + \\ caps", () => {
+    const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.toggleOutline");
+    if (!entry) throw new Error("actions.toggleOutline missing");
+    expect(entry.group).toBe("actions");
+    expect(specSignature(entry.keys)).toBe("|");
+    expect(keyCaps(entry.keys)).toEqual([["shift", "\\"]]);
+    expect(ariaKeyshortcutsFor("actions.toggleOutline")).toBe("|");
   });
 
   test("reserves b for the heading breadcrumbs in the Actions group, rendered as a B cap", () => {

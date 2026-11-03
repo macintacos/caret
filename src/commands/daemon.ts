@@ -7,6 +7,7 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 
 import { selectAdapter } from "@/adapters/index.ts";
 import { warnInvalidEnvVars } from "@/commands/boot.ts";
@@ -335,6 +336,7 @@ export async function runDaemon(opts: {
       // Only a harness-spawned daemon knows which harness the user runs; a resident
       // daemon's adapter (the service, `caret serve`) is a default.
       restartHint: resident ? undefined : adapter.restartHint,
+      home: homedir(),
       log,
     });
   } catch (e) {

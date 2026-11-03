@@ -33,6 +33,33 @@
   box-shadow: var(--bed-shade);
 }
 
+/* The one bed a pane's header bar lies in, the bar's length: the plan header's, the file
+   drawer's title bar's. It stands --well-pad in from the pane's top and sides and rounds
+   at a key's radius plus that, so the bar's end keys nest in it as it nests in the pane.
+   Its floor, --header-bed-floor, is the pane's own floor stepped toward the outline
+   column's, so the pane sets it. */
+.header-bed {
+  position: absolute;
+  inset: var(--well-pad);
+  z-index: -1;
+  border-radius: calc(var(--key-radius) + var(--well-pad));
+  background-color: var(--header-bed-floor);
+  background-image: var(--grain);
+  background-size: 128px;
+  background-blend-mode: soft-light;
+  box-shadow: var(--bed-shade);
+  pointer-events: none;
+}
+/* A key on a floored bed, a bar's or the outline column's head, stands on that floor with
+   no bed of its own: its tray keeps only its pads, so the gap round the key still shows. */
+:is(.plan-header, .toc-title-row) :is(.tray, [data-slot="toggle-group"]) {
+  background: none;
+  box-shadow: none;
+}
+:is(.plan-header, .toc-title-row) :is(button.float-chip, [data-slot="toggle-group-item"]) {
+  --cap-face-down: var(--neutral-face-bed-down);
+}
+
 
 /* The rubber key. .float-chip IS the neutral key: every neutral control wears it by
    that name, and the amber primary wears .cap-accent, which the vendored Button's
@@ -147,7 +174,7 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
     0 1px 2px var(--rubber-cast-near),
     0 0 0 transparent;
 }
-/* Reduced motion keeps every key at its place, the Contents rows too, and changes only
+/* Reduced motion keeps every key at its place, the outline's rows too, and changes only
    its shading. */
 @media (prefers-reduced-motion: reduce) {
   :root {
@@ -190,9 +217,11 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
 
 /* A tray holding a submit runs a step under the Button's default size: at full size
    the amber cap and its keycap read heavier than the action. The bell and settings beside
-   it match, so the top bar's keys stand one height. */
+   it match, so the top bar's keys stand one height, and the plan header's view and
+   outline keys, with the column's outline key, stand at it too. */
 .tray-submit :is(.cap, button.float-chip),
-.topbar .bell-slot :is(.cap, button.float-chip) {
+.topbar .bell-slot :is(.cap, button.float-chip),
+.header-tray :is(.cap, button.float-chip) {
   height: var(--cap-submit-h);
   font-size: var(--text-base);
 }
@@ -283,6 +312,14 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
 }
 [data-slot="command-input-wrapper"] [data-slot="input-group"]:focus-within {
   --tw-inset-ring-shadow: inset 0 0 0 1px var(--panel-edge), var(--field-wall);
+}
+/* Its clear × is a ghost control, whose glyph stays a step above the faint search glyph
+   so it reads as something to press. */
+[data-slot="command-input-wrapper"] button {
+  color: var(--ink-soft);
+}
+[data-slot="command-input-wrapper"] button:is(:hover, :focus-visible) {
+  color: var(--ink);
 }
 
 /* A switch is a latching key: a small rubber key in a well whose corners nest around it,
@@ -487,7 +524,7 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
 }
 
 /* A section or field label in sentence case: Request changes' and the guards' fields, the
-   shortcut groups, and the Contents panel's breadcrumb headers. Settings' section heading
+   shortcut groups, and the outline filter's breadcrumb headers. Settings' section heading
    (.settings-block-label) in type and ink, so every surface labels its parts alike. */
 .form-label {
   display: block;
@@ -667,20 +704,25 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
    read as one family rather than two designs, so their shared header chrome
    lives here once. */
 .ref-header {
-  --ref-header-gap: 0.45rem;
+  --ref-header-gap: 0.6rem;
+  /* The kind tag's and the line range's pockets, one height so the two read as a pair. */
+  --ref-stamp-h: 1.25rem;
   /* Over its content, so the lip's shade lands on it; 2 clears the preview's sticky
      gutter. */
   position: relative;
   z-index: 2;
+  flex: none;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--ref-header-gap);
-  padding: 0.3rem 0.6rem;
+  height: var(--pane-header-h);
+  padding-inline: 1.15rem;
   font-family: var(--font-mono);
-  font-size: var(--text-2xs);
+  font-size: var(--text-xs);
 }
-/* The header's lip, as Floating shells in the tactile kit describes. */
-.ref-header::after {
+/* The header's lip, as Floating shells in the tactile kit describes. A header lying in a
+   bed has the bed's walls for an edge instead. */
+.ref-header:not(:has(> .header-bed))::after {
   content: "";
   position: absolute;
   inset: 100% 0 auto;
@@ -692,19 +734,25 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
    `path:line` reference. */
 .ref-header-end {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--ref-header-gap);
   margin-left: auto;
 }
 /* The kind label ("Preview", "Folder"), so the surface reads as a reference, not the
-   thing itself. It wears the tag recipe in the tactile kit. */
+   thing itself. It wears the tag recipe in the tactile kit, a step up to the header's
+   own size. */
 .ref-badge {
   flex: 0 0 auto;
-  /* The header is baseline-aligned; a tag has no baseline worth sharing. */
-  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  height: var(--ref-stamp-h);
+  padding-block: 0;
+  font-size: var(--text-xs);
 }
+/* At the plan header's crumbs' size, so the file reads as the pane's current place. */
 .ref-path {
   color: var(--ink);
+  font-size: var(--text-sm);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;

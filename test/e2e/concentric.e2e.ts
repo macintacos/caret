@@ -231,18 +231,46 @@ test("a Select's options nest in its listbox", async ({ daemon, page }) => {
   await expectConcentric(listbox, listbox.locator("[data-slot='select-item']").last(), "bl");
 });
 
-test("Contents: the filter nests in the panel's corner, and so does a top-level row's key as it scrolls past", async ({
+test("the outline's float: the filter nests in its corner, and so does a top-level row's key as it scrolls past", async ({
   daemon,
   page,
 }) => {
+  // Under --w-narrow the outline drops from the header's key as a float.
+  await page.setViewportSize({ width: 880, height: 900 });
   await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
-  await page.getByRole("button", { name: "Contents" }).click();
-  const panel = page.locator(".plan-toc-panel");
+  await page.locator(".plan-header").getByRole("button", { name: "Outline", exact: true }).click();
+  const panel = page.locator(".outline-float");
   await expect(panel).toBeVisible();
   await expectConcentric(panel, panel.locator("[data-slot='input-group']"), "tl");
   // The nearer wall is the side the key runs along; deeper rows step in from it.
   await expectConcentric(panel, panel.locator("[data-level='1'] .toc-key").first(), "bl");
+});
+
+test("the plan header's bed nests in the pane's top corners, and its end keys in the bed's", async ({
+  daemon,
+  page,
+}) => {
+  // Under --w-narrow the header holds the outline key, with no column folding to wait on.
+  await page.setViewportSize({ width: 880, height: 900 });
+  await seedAndOpen(page, daemon);
+  const pane = page.locator(".plan-pane");
+  const bed = pane.locator(".plan-header > .header-bed");
+  await expect(bed).toBeVisible();
+  await expectConcentric(pane, bed, "tl");
+  await expectConcentric(pane, bed, "tr");
+  await expectConcentric(bed, pane.getByRole("button", { name: "Outline", exact: true }), "tl");
+  await expectConcentric(bed, pane.locator(".preview-toggle"), "tr");
+});
+
+test("the outline column's bed: its filter field and a top-level row's key nest in its corner", async ({
+  daemon,
+  page,
+}) => {
+  await seedAndOpen(page, daemon);
+  const bed = page.locator(".plan-outline .plan-toc");
+  await expectConcentric(bed, bed.locator("[data-slot='input-group']"), "tl");
+  await expectConcentric(bed, bed.locator("[data-level='1'] .toc-key").first(), "tl");
 });
 
 test("a saved comment's header controls nest in its corners", async ({ daemon, page }) => {

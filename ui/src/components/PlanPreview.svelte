@@ -41,6 +41,8 @@
     onCommentDrag?: (anchor: TextPoint | null) => void;
     /** Shift is held: the pointer selects text, so it shows the text cursor. */
     selectText?: boolean;
+    /** The code blocks have taken their highlight, which lands after the text. */
+    onHighlight?: () => void;
   }
   let {
     html,
@@ -54,6 +56,7 @@
     onTextComment,
     onCommentDrag,
     selectText = false,
+    onHighlight,
   }: Props = $props();
 
   $effect(() => {
@@ -85,6 +88,8 @@
       tokenize: (code, language) => highlightTokens(code, language, theme),
       nextTask: () => new Promise((resolve) => setTimeout(resolve, 0)),
       signal: controller.signal,
+    }).then(() => {
+      if (!controller.signal.aborted) onHighlight?.();
     });
     return () => controller.abort();
   });
@@ -249,10 +254,12 @@
     background-color: var(--mark);
   }
   :global(::highlight(caret-preview-search)) {
-    background-color: var(--mark);
+    background-color: var(--mark-match);
+    color: var(--mark-match-ink);
   }
   :global(::highlight(caret-preview-search-current)) {
     background-color: var(--mark-active);
+    color: var(--mark-active-ink);
   }
 
   /* In the preview's own em, so every line wraps at the same word at any zoom, text size,

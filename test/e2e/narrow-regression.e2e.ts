@@ -12,8 +12,11 @@
 // already derives its viewport from — so this spec tracks the real breakpoints
 // instead of hardcoding regime literals.
 
+import type { Page } from "@playwright/test";
+
 import { currentCrumb } from "@test/e2e/support/chrome.ts";
-import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { makeProject } from "@test/e2e/support/file-refs.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 import { MIN_APP_WIDTH_PX, NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "@ui/src/lib/layout.ts";
 
@@ -42,15 +45,203 @@ test("no surface overflows the viewport horizontally across the breakpoint sweep
   }
 });
 
+// How far a run of parts that should stand side by side inside `bounds` crowds it: the
+// most any part runs into the one before it, or the run past the bounds' edges. A part
+// that is not on screen, such as a dropped hint lip, is skipped. The pane and the crumb
+// slot clip, so a crowded header never reaches the document's scrollWidth.
+const crowding = (page: Page, bounds: string, parts: string[]) =>
+  page.evaluate(
+    ({ bounds, parts }) => {
+      const edge = document.querySelector(bounds)?.getBoundingClientRect();
+      if (edge === undefined) return Number.NaN;
+      let worst = 0;
+      let reached = edge.left;
+      for (const part of parts) {
+        const el = document.querySelector(part);
+        if (el === null || !el.checkVisibility()) continue;
+        const box = el.getBoundingClientRect();
+        worst = Math.max(worst, reached - box.left);
+        reached = box.right;
+      }
+      return Math.max(worst, reached - edge.right);
+    },
+    { bounds, parts },
+  );
+
+const HEADER = ".plan-header";
+const OUTLINE_TRAY = ".plan-header > .header-tray";
+const VIEW_TRAY = ".compare-picker > .header-tray";
+const FIND_ROW = [
+  ".plan-search :is(.search-field, .search-stamp)",
+  ".plan-search .search-actions",
+  ".plan-search .search-lip",
+  ".plan-search .search-close-tray",
+];
+
+// The room the query itself gets: the field's text box inside its padding, or the stamp's
+// query. Five characters is about 3rem; the pixel off it is rounding.
+const QUERY_FLOOR_PX = 47;
+const queryRoom = (page: Page) =>
+  page.evaluate(() => {
+    const input = document.querySelector<HTMLElement>(".plan-search .search-input");
+    if (input !== null) {
+      const style = getComputedStyle(input);
+      return (
+        input.clientWidth -
+        Number.parseFloat(style.paddingLeft) -
+        Number.parseFloat(style.paddingRight)
+      );
+    }
+    const query = document.querySelector(".plan-search .search-stamp-query");
+    return query?.getBoundingClientRect().width ?? 0;
+  });
+
+// How far Close's tray stands off the steps' end, past the row's own gap.
+const closeOffset = (page: Page) =>
+  page.locator(".plan-search").evaluate((row) => {
+    const steps = row.querySelector(".search-actions")!.getBoundingClientRect();
+    const close = row.querySelector(".search-close-tray")!.getBoundingClientRect();
+    return Math.abs(close.left - steps.right - Number.parseFloat(getComputedStyle(row).columnGap));
+  });
+
+const besideSteps = (page: Page, message: string) =>
+  expect.poll(() => closeOffset(page), { message }).toBeLessThan(1);
+
+const fits = (page: Page, bounds: string, parts: string[], message: string) =>
+  expect.poll(() => crowding(page, bounds, parts), { message }).toBeLessThanOrEqual(1);
+
+// Opens the find row over the crumbs, as the field and then as the committed stamp, and
+// holds each to the header it sits in: nothing crowds, the query keeps five characters,
+// and Close stays in reach beside the steps. Closes it again.
+async function findRowFits(page: Page, where: string): Promise<void> {
+  await page.keyboard.press("/");
+  await page.keyboard.type("revised step");
+  await expect(page.getByRole("search")).toBeVisible();
+  await fits(page, ".crumb-slot", FIND_ROW, `the find row crowds its slot ${where}`);
+  await besideSteps(page, `Close leaves the steps ${where}`);
+  await fits(page, HEADER, [OUTLINE_TRAY, ".crumb-slot", VIEW_TRAY], `the header crowds ${where}`);
+  await expect
+    .poll(() => queryRoom(page), { message: `the field squeezes its query ${where}` })
+    .toBeGreaterThanOrEqual(QUERY_FLOOR_PX);
+  // Committed, the query is a stamp and the lip names the stepping keys instead.
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".plan-search .search-stamp")).toBeVisible();
+  await fits(page, ".crumb-slot", FIND_ROW, `the stamped find row crowds its slot ${where}`);
+  await besideSteps(page, `Close leaves the stamp's steps ${where}`);
+  await expect
+    .poll(() => queryRoom(page), { message: `the stamp squeezes its query ${where}` })
+    .toBeGreaterThanOrEqual(QUERY_FLOOR_PX);
+  // A query that matches nothing has the longest count.
+  await page.keyboard.press("/");
+  await page.keyboard.type("qqzx");
+  await expect(page.getByRole("textbox", { name: "Search plan" })).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
+  await fits(page, ".crumb-slot", FIND_ROW, `the unmatched find row crowds its slot ${where}`);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("search")).toHaveCount(0);
+}
+
+// The plan header holds the most at once while a search is open over the crumbs, and
+// while comparing, when the pair and its controls take the crumbs' place. Each is swept
+// with the outline column out where the window has room for it (960px) and folded into
+// the header's key below that. Hints are on, so every key carries its cap.
+test("the find row and the compare controls fit the plan header across the sweep", async ({
+  daemon,
+  page,
+}) => {
+  const id = await daemon.seed();
+  await daemon.addVersion(id, "# Plan\n\n## Setup\n\nA revised step.\n");
+  await page.goto("/");
+  await planSurface(page);
+  await waitPastSafeModeGrace(page);
+
+  const overflow = () =>
+    page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  for (const width of [NARROW_WIDTH_PX, TIGHT_WIDTH_PX, MIN_APP_WIDTH_PX]) {
+    await page.setViewportSize({ width, height: 900 });
+    await findRowFits(page, `at ${width}px`);
+    await expect
+      .poll(overflow, { message: `the header overflows the ${width}px viewport` })
+      .toBeLessThanOrEqual(1);
+
+    await page.keyboard.press("d");
+    await expect(page.locator(".plan-header .pair")).toBeVisible();
+    await expect
+      .poll(overflow, { message: `the compare controls overflow the ${width}px viewport` })
+      .toBeLessThanOrEqual(1);
+    await fits(
+      page,
+      HEADER,
+      [OUTLINE_TRAY, ".compare-picker .pair", ".compare-picker .controls", VIEW_TRAY],
+      `the compare header crowds at ${width}px`,
+    );
+    // The latched Versions key is the pointer's way back out.
+    await page.getByRole("button", { name: /^Versions/ }).click();
+    await expect(page.locator(".plan-header .pair")).toHaveCount(0);
+  }
+});
+
+const FILE_PLAN = "# Refs\n\n## Cache\n\nA revised step keeps the cache in `src/cache.ts`.\n";
+
+async function openFile(page: Page): Promise<void> {
+  await planSurface(page);
+  await waitPastSafeModeGrace(page);
+  await page.locator("[data-file-ref]").first().click();
+  await expect(page.locator("[data-file-preview]")).toBeVisible();
+}
+
+// A 960px window is the narrowest that docks a file beside the plan, at the drawer's
+// opening share.
+test("the find row keeps its query beside a file at 960px", async ({ daemon, page }) => {
+  const proj = await makeProject({ "src/cache.ts": "export const cache = new Map();\n" });
+  try {
+    await daemon.seed({ cwd: proj.dir, plan: FILE_PLAN });
+    await page.setViewportSize({ width: NARROW_WIDTH_PX, height: 900 });
+    await page.goto("/");
+    await openFile(page);
+    await findRowFits(page, "beside a file at 960px");
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+// A drawer dragged as wide as it goes leaves the plan pane no narrower than the narrowest
+// window does, so the header holds all it holds there.
+for (const hints of ["on", "off"]) {
+  test(`a wide file drawer leaves the plan header its room, hints ${hints}`, async ({
+    daemon,
+    page,
+  }) => {
+    const proj = await makeProject({ "src/cache.ts": "export const cache = new Map();\n" });
+    try {
+      await page.addInitScript((value) => {
+        localStorage.setItem("caret.shortcutHints", value);
+        localStorage.setItem("caret.fileDrawer.width", "1400");
+      }, hints);
+      await daemon.seed({ cwd: proj.dir, plan: FILE_PLAN });
+      await page.setViewportSize({ width: 1440, height: 900 });
+      await page.goto("/");
+      await openFile(page);
+      await fits(page, HEADER, [OUTLINE_TRAY, ".crumb-slot", VIEW_TRAY], "the header crowds");
+      await expect(page.locator(".plan-header .plan-breadcrumbs")).toBeVisible();
+      await findRowFits(page, "beside a wide file");
+    } finally {
+      await proj.cleanup();
+    }
+  });
+}
+
 test("heading navigation stays reachable at a narrow width", async ({ daemon, page }) => {
   await daemon.seed();
   await page.setViewportSize({ width: TIGHT_WIDTH_PX, height: 900 });
   await page.goto("/");
   await planSurface(page);
 
-  // The breadcrumbs bar took over from the contents rail (EXC-949), and it is the
-  // row's first control to give up space as the window tightens — so the narrow
-  // regime is exactly where it could be squeezed out of reach. plan-breadcrumbs.e2e.ts
+  // The breadcrumbs are the plan header's first control to give up space as the window
+  // tightens — so the narrow regime is exactly where they could be squeezed out of
+  // reach. plan-breadcrumbs.e2e.ts
   // owns the bar's own behaviour; here we only guard that it survives the squeeze
   // with its menu still openable.
   const crumb = currentCrumb(page);

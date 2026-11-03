@@ -333,9 +333,7 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
 
   program
     .command("assets")
-    .description(
-      "Regenerate the README hero image: the plan view in four themes, stitched diagonally",
-    )
+    .description("Regenerate the README hero images: the review UI in caret-light and caret-dark")
     .action(async () => {
       await actions.assets();
     });

@@ -1,11 +1,11 @@
 // The typed keyboard-cap schema: the closed set of keys a Kbd cap may name, and
 // the single, exhaustive conversion from a key to how it renders. A named key
 // draws a shared glyph/icon (today only "shift" → the global arrow-big-up icon);
-// every other key is an alphabet letter that renders as its own text. The union
-// IS the schema — <KbdCap> accepts only a KbdKey, so the shift icon is reachable
-// ONLY by passing the literal "shift", and kbdCap()'s assertNever tail turns a
-// new named key into a compile error until it is given a rendering. Node-free:
-// it maps keys to render descriptors and owns no DOM.
+// every other key is an alphabet letter or a glyph key that renders as its own
+// text. The union IS the schema — <KbdCap> accepts only a KbdKey, so the shift
+// icon is reachable ONLY by passing the literal "shift", and kbdCap()'s
+// assertNever tail turns a new named key into a compile error until it is given a
+// rendering. Node-free: it maps keys to render descriptors and owns no DOM.
 
 import type { IconName } from "$lib/icons.ts";
 
@@ -46,8 +46,14 @@ type Letter = Lower | Uppercase<Lower>;
  * draws the global shift icon; add more here as they earn one. */
 type NamedKey = "shift";
 
-/** The schema a typed Kbd cap must satisfy: an alphabet letter, or a named key. */
-export type KbdKey = Letter | NamedKey;
+/** A punctuation key a cap draws as its own text, listed as a chord with shift
+ * names it (⇧\ toggles the outline). */
+const GLYPHS = ["\\"] as const;
+type GlyphKey = (typeof GLYPHS)[number];
+
+/** The schema a typed Kbd cap must satisfy: an alphabet letter, a glyph key, or a
+ * named key. */
+export type KbdKey = Letter | GlyphKey | NamedKey;
 
 /** How a cap renders: a shared icon for a named key (with its accessible label),
  * else the key's own glyph text. */
@@ -57,6 +63,7 @@ const NAMED_KEYS: ReadonlySet<string> = new Set<NamedKey>(["shift"]);
 const KEYS: ReadonlySet<string> = new Set<string>([
   ...ALPHABET,
   ...ALPHABET.map((c) => c.toUpperCase()),
+  ...GLYPHS,
   ...NAMED_KEYS,
 ]);
 
@@ -75,8 +82,9 @@ function isNamed(key: KbdKey): key is NamedKey {
 }
 
 /** The one conversion from a key to its rendering, exhaustive over KbdKey: a
- * letter renders as its own text; each named key resolves in the switch, whose
- * assertNever tail fails to compile the moment a NamedKey lacks a case. */
+ * letter or a glyph key renders as its own text; each named key resolves in the
+ * switch, whose assertNever tail fails to compile the moment a NamedKey lacks a
+ * case. */
 export function kbdCap(key: KbdKey): CapRender {
   if (!isNamed(key)) return { text: key };
   switch (key) {

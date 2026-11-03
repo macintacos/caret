@@ -244,6 +244,13 @@ for (const colorScheme of ["light", "dark"] as const) {
     // Default pair is current (v2) vs previous (v1): v1's "alpha" line is the
     // deletion side, v2's "omega" line the addition side.
     await expect(page.getByText("omega", { exact: false })).toBeVisible();
+    // The library paints word-level emphasis in a later pass than the lines' text, so
+    // wait for the spans themselves before the one-shot read below.
+    for (const side of ["change-addition", "change-deletion"]) {
+      await expect(
+        page.locator(`.diffview [data-line-type=${side}] [data-diff-span]`).first(),
+      ).toBeAttached();
+    }
 
     const probes = await page.evaluate(() => {
       const sh = document.querySelector(".diffview")?.shadowRoot;
@@ -316,6 +323,8 @@ for (const colorScheme of ["light", "dark"] as const) {
   }) => {
     await page.emulateMedia({ colorScheme });
     await openCollapsedContextCompare(page, daemon);
+    // The band can land after the changed lines' text; wait for it before reading.
+    await expect(page.locator(".diffview [data-separator=line-info]").first()).toBeAttached();
 
     const probe = await page.evaluate(() => {
       const sh = document.querySelector(".diffview")?.shadowRoot;

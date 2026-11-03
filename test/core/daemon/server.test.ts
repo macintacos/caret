@@ -506,6 +506,18 @@ test("GET /api/health omits restartHint when none is wired", async () => {
   expect("restartHint" in body).toBe(false);
 });
 
+test("GET /api/health publishes a wired home directory", async () => {
+  await boot({ home: "/Users/dev" });
+  const body = (await (await fetch(`${base}/api/health`)).json()) as Record<string, unknown>;
+  expect(body.home).toBe("/Users/dev");
+});
+
+test("GET /api/health omits home when none is wired", async () => {
+  await boot();
+  const body = (await (await fetch(`${base}/api/health`)).json()) as Record<string, unknown>;
+  expect("home" in body).toBe(false);
+});
+
 test("the lock file records stateDir and instanceId", async () => {
   const lockPath = join(dir, "daemon.lock");
   await boot({ lockPath, stateDir: "/x/caret", instanceId: "inst123" });

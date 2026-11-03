@@ -24,28 +24,38 @@ it. User theme files follow
 | Accent | `--accent`; `--accent-bright` for link and text hovers, `--accent-ink` for text on the accent, `--accent-wash` for tints |
 | Destructive | `--danger` |
 | Status | `--ok`, `--danger`, and `--attention` for novelty (new, unread) |
-| Highlight bands | `--mark`, `--mark-active`, `--mark-orphan` |
+| Highlight bands | `--mark`, `--mark-orphan`; the search's `--mark-match` and `--mark-active`, and their text, `--mark-match-ink` and `--mark-active-ink` |
 | Inline chips in the plan | `--chip-bold`, `--chip-italic`, `--chip-code`, `--chip-link`, `--chip-ref`, `--chip-skill` |
 | Syntax and markdown colours | the `syntax` and `markdown` blocks of each theme file |
 
 The derived tier, colours a palette implies rather than sets (`--chip`, `--chip-hover`,
-`--ink-wash`, `--attention-wash`, `--code-panel`, the window's `--body`, a table's
-`--table-floor`, `--table-floor-rule` and `--table-head-ink`, a raised pad's lit band
-`--pad-top` and side `--pad-side`, and the tactile kit's `--well-floor`, `--field-floor`,
-`--group-floor` (the settings beds and nav, the modal footer shelf, and a dialog's
-read-only cuts), `--field-edge-focus` (a focused field's lit wall, `--ink-faint`), the
-`--neutral-face` steps (with `--neutral-face-press`, the face a press takes, and
-`--neutral-face-latched-hover`, the face the cursor gives a latched one), a crumb's risen
-face `--crumb-face-hover`, the key row's `--key-row-up`, `--key-row-up-image`,
-`--key-row-down` and `--key-row-down-image`, the danger key's face `--danger-face`, the
-accent and danger keys' hover and press faces `--accent-face-hover`,
-`--accent-face-press`, `--danger-face-hover` and `--danger-face-press`, the switch's
-`--knob-face`, `--knob-face-hover`, `--knob-face-down`, `--knob-edge` and `--switch-on`,
-the meter's `--meter-off`, and the `--float-surface-low`, `-mid` and `-high` composites),
-is mixed in `ui/src/styles/derived.css`. In light, the top bar, control row and status bar
+`--ink-wash`, `--attention-wash`, `--code-panel`, the window's `--body` and the outline
+column's bed floor `--bed-floor`, a table's `--table-floor`, `--table-floor-rule` and
+`--table-head-ink`, a raised pad's lit band `--pad-top` and side `--pad-side`, and the
+tactile kit's `--well-floor`, `--field-floor`, `--group-floor` (the settings beds and nav,
+the modal footer shelf, and a dialog's read-only cuts), `--field-edge-focus` (a focused
+field's lit wall, `--ink-faint`), the `--neutral-face` steps (with `--neutral-face-press`,
+the face a press takes, `--neutral-face-latched-hover`, the face the cursor gives a
+latched one, and `--neutral-face-bed-down`, the face a latched key takes on a floored bed
+in dark palettes), a crumb's risen face `--crumb-face-hover`, the key row's
+`--key-row-up`, `--key-row-up-image`, `--key-row-down` and `--key-row-down-image`, the
+danger key's face `--danger-face`, the accent and danger keys' hover and press faces
+`--accent-face-hover`, `--accent-face-press`, `--danger-face-hover` and
+`--danger-face-press`, the switch's `--knob-face`, `--knob-face-hover`,
+`--knob-face-down`, `--knob-edge` and `--switch-on`, the meter's `--meter-off`, and the
+`--float-surface-low`, `-mid` and `-high` composites), is mixed in
+`ui/src/styles/derived.css`. In light, the top bar, the outline column and the status bar
 re-cut `--well-floor` from `--body`, so a stamp's or a count chip's pocket stays visible
-on it. Focus has no token of its own, since it wears each control's hover faces.
-shadcn-svelte's token names map onto these roles in `ui/src/styles/shadcn-bridge.css`.
+on it. The outline's quieter text takes `--toc-quiet`, local to
+`ui/src/components/PlanToc.svelte`: `--ink-soft` on the float's raised paper, and stepped
+toward `--ink` in the column's bed. The row faces' shadows, `--toc-key-up` and
+`--toc-key-down`, are local to the same file and built from the `--rubber-*` set below,
+with `--scoop-lip`. A bar's bed floor, `--header-bed-floor`, is mixed by the pane that
+holds the bar, from that pane's floor: the plan pane in
+`ui/src/components/DiffPlanView.svelte` and the file drawer in
+`ui/src/components/FileDrawer.svelte`. Focus has no token of its own, since it wears each
+control's hover faces. shadcn-svelte's token names map onto these roles in
+`ui/src/styles/shadcn-bridge.css`.
 
 ## Type, motion, radius, depth
 
@@ -55,9 +65,9 @@ All in `ui/src/styles/tokens.css`:
   font files ship; each stack falls back to the platform.
 - **Size:** the `--text-2xs` … `--text-xl` ramp, and the role-keyed `--leading-*` tokens.
   The reading base is the 15px on `<body>` in `ui/src/styles/base.css`.
-- **Motion:** `--dur-state` and `--ease-out` for every state transition, `--ease-spring`
-  for a key's return from a press, `--dur-travel` for the plan's scroll.
-  `ui/src/lib/motion.test.ts` pins the set.
+- **Motion:** `--dur-pane` for a pane or column entering, `--dur-state` and `--ease-out`
+  for every other state transition, `--ease-spring` for a key's return from a press,
+  `--dur-travel` for the plan's scroll. `ui/src/lib/motion.test.ts` pins the set.
 - **Radius:** `--radius` for fields and menu rows, `--radius-lg` for panels, `99px` for
   badges. The keypad has its own: `--key-radius` for keys, `--nub-radius` for keycaps and
   the switch's key, `--pad-radius` for a table's or a code block's pad, and
@@ -67,8 +77,9 @@ All in `ui/src/styles/tokens.css`:
   corner plus `--composer-inset`, its padding.
 - **Depth:** the tactile geometry is hand-written here, its alphas keyed per scheme:
   - the beds: `--well-pad` (the gap round a key), `--well-top` and `--well-foot` (the pads
-    above and below a key, which take its rise and side), `--tray-gap`, and `--bed-shade`;
-    a stamp's pocket: `--well-shade` and `--well-lip`;
+    above and below a key, which take its rise and side), `--tray-gap`, `--bed-shade`, and
+    `--header-bed-mix` (how far a bar's bed floors itself from its pane's floor toward
+    `--bed-floor`); a stamp's pocket: `--well-shade` and `--well-lip`;
   - the keys: `--key-side` (the depth of a key's rubber side, which its rise, press and
     cast shadow scale from), `--key-rise` (how far a resting key stands above its place)
     and `--key-sink` (how far below it a press takes the key), the last two 0 under
@@ -88,20 +99,26 @@ All in `ui/src/styles/tokens.css`:
     spend too; a code block's `--code-bezel` (its pad's rim, which the copy and wrap tray
     steps in by); and the pressed-in label shadow `--label-pressed`;
   - the sockets (`--socket-shade`, `--count-shade`), the comment stamp's `--stamp-*`
-    strengths, and `--unsent-floor` (the share of `--attention` in an unsent comment's
-    well, 16% dark and 8% light);
+    strengths, `--unsent-floor` (the share of `--attention` in an unsent comment's well,
+    16% dark and 8% light), and `--unsent-shade` (the unsent row's bed shade: in dark, a
+    weaker shade with no lip; in light, `--bed-shade`);
   - the floats (`--float-rim`, `--float-rim-ink`, `--float-low`, `--float-mid`,
     `--float-high`) and `--shadow-chip` for small hints;
-  - the plan's `--chip-stamped` and `--chip-raised`, `--panel-recess` for text fields,
-    copy boxes and the Contents peek, and `--field-wall`, the wall of a focused field's
-    cut that `--field-edge-focus` lights: the lower in dark, the upper in light.
+  - the plan's `--chip-stamped` and `--chip-raised`, `--panel-recess` for text fields and
+    copy boxes, and `--field-wall`, the wall of a focused field's cut that
+    `--field-edge-focus` lights: the lower in dark, the upper in light.
 
   `--checkbox-size`, a task box's side, lives in the `:host` of
   `ui/src/lib/diffview/coreStyles.ts`.
 
   `--shadow-card` still comes from the palette.
 - **Layout:** `--pane-gap` (6px), the inset around the plan pane, and `--status-bar-h`
-  (2.25rem), the status bar's height, are in `ui/src/styles/layout.css`.
+  (2.25rem), the status bar's height, are in `ui/src/styles/layout.css`. So is
+  `--pane-header-h` (2.6rem), which sets the plan header's height, and the outline
+  column's head and the file drawer's and folder card's title bars to match. The outline
+  column's opening, narrowest and widest widths are `OUTLINE_REM` in
+  `ui/src/lib/outlineColumn.ts`. The plan's reading width is `MIN_READING_PX` in
+  `ui/src/lib/fileDrawer.ts`. The column stops widening, and yields to a file, to keep it.
 
 ## Terminal
 

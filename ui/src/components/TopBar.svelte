@@ -290,13 +290,13 @@
 
 <style>
   /* Cut straight into the window's body, so it has no face or rule of its own, and
-     the plan's control row below reads as the same surface. */
+     the outline beside the plan reads as the same surface. */
   .topbar {
     display: flex;
     align-items: center;
     gap: 1rem;
     /* Trimmed by the beds' pad. The shorter bottom spaces the trays from the
-       control row's, which has no top padding of its own. */
+       plan pane's top edge. */
     padding: calc(0.7rem - var(--well-top)) var(--bar-inset) calc(0.4rem - var(--well-foot));
     position: relative;
     z-index: 30;
