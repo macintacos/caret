@@ -24,7 +24,7 @@
     /** Whether the row is tucking away; the parent keeps it mounted for the
      * animation's duration (planKeyboard owns that timer). */
     closing?: boolean;
-    /** Show the keys that apply now after the steps (the Show Hints setting). */
+    /** Show the keys that apply now after Close (the Show Hints setting). */
     hints?: boolean;
     /** Commit the search (Enter): the parent moves the line cursor to the nearest
      * match and returns focus to the plan. */
@@ -145,20 +145,6 @@
       <Icon name="chevron-down" size={14} />
     </button>
   </span>
-  {#if hints && (committed || hasMatches)}
-    <div class="search-lip">
-      {#if committed}
-        <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">n</Kbd>next</span>
-        <span class="search-key" aria-hidden="true"
-          ><Kbd class="kbd-sm"><KbdCap key="shift" /><KbdCap key="N" /></Kbd
-          >previous</span
-        >
-        <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">/</Kbd>edit</span>
-      {:else}
-        <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">↵</Kbd>go to match</span>
-      {/if}
-    </div>
-  {/if}
   <span class="search-close-tray tray header-tray">
     <Button
       variant="secondary"
@@ -175,6 +161,20 @@
       {/if}
     </Button>
   </span>
+  {#if hints && (committed || hasMatches)}
+    <div class="search-lip">
+      {#if committed}
+        <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">n</Kbd>next</span>
+        <span class="search-key" aria-hidden="true"
+          ><Kbd class="kbd-sm"><KbdCap key="shift" /><KbdCap key="N" /></Kbd
+          >previous</span
+        >
+        <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">/</Kbd>edit</span>
+      {:else}
+        <span class="search-key" aria-hidden="true"><Kbd class="kbd-sm">↵</Kbd>go to match</span>
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -306,14 +306,12 @@
     transform: rotate(180deg);
   }
 
-  /* The way out, a key of the header's own at the slot's end, where the Search entry
-     stood. */
+  /* The way out, a key of the header's own, right after the steps. */
   .search-close-tray {
     flex: none;
-    margin-left: auto;
   }
 
-  /* The keys that apply now, as text after the steps. */
+  /* The keys that apply now, as text after Close. */
   .search-lip {
     flex: none;
     display: flex;

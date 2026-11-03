@@ -234,23 +234,55 @@ const rowSettled = (page: Page) =>
     .locator(".plan-header .plan-search")
     .evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
 
-test("Close stands where the Search entry stood, wears its Esc cap, and a click closes the row", async ({
+/** The gap between Close's tray and the ▼ step's tray, and the row's own gap. */
+const closeGap = (page: Page) =>
+  page.locator(".plan-header .plan-search").evaluate((row) => {
+    const steps = row.querySelector(".search-actions")!.getBoundingClientRect();
+    const close = row.querySelector(".search-close-tray")!.getBoundingClientRect();
+    return {
+      gap: close.left - steps.right,
+      rowGap: Number.parseFloat(getComputedStyle(row).columnGap),
+    };
+  });
+
+test("Close stands right of the steps, wears its Esc cap, and a click closes the row", async ({
   daemon,
   page,
 }) => {
   await openPlanForKeys(page, daemon, PLAN);
   await layoutStill(page);
-  const entry = (await searchEntry(page).boundingBox())!;
   await searchEntry(page).click();
   await expect(pill(page)).toBeVisible();
   await rowSettled(page);
 
   await expect(closeKey(page).locator("[data-slot='kbd']")).toHaveText(/^esc$/i);
-  const tray = (await page.locator(".plan-search .search-close-tray").boundingBox())!;
-  expect(Math.abs(tray.x + tray.width - (entry.x + entry.width))).toBeLessThan(1);
+  const { gap, rowGap } = await closeGap(page);
+  expect(Math.abs(gap - rowGap)).toBeLessThan(1);
   await closeKey(page).click();
   await expect(pill(page)).toHaveCount(0);
   await expect(searchEntry(page)).toBeVisible();
+});
+
+const entryVisibility = (page: Page) =>
+  page.locator(".plan-header .search-entry").evaluate((el) => getComputedStyle(el).visibility);
+
+// Nothing stands over the entry's spot once Close sits beside the steps, so the entry
+// must not paint at all while the row is out, and only return once the row is back in it.
+test("the Search entry is unpainted from the row's first frame until it has tucked away", async ({
+  daemon,
+  page,
+}) => {
+  await openPlanForKeys(page, daemon, PLAN);
+  await layoutStill(page);
+  await searchEntry(page).click();
+  await expect(pill(page)).toBeVisible();
+  expect(await entryVisibility(page)).toBe("hidden");
+
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".plan-search.closing")).toHaveCount(1);
+  expect(await entryVisibility(page)).toBe("hidden");
+  await expect(pill(page)).toHaveCount(0);
+  await expect.poll(() => entryVisibility(page)).toBe("visible");
 });
 
 // The row starts past the slot's end, where focusing its field would scroll the plan's

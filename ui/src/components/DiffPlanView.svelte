@@ -3601,7 +3601,8 @@
       background-color var(--dur-state) var(--ease-out),
       color var(--dur-state) var(--ease-out),
       box-shadow var(--dur-state) var(--ease-out),
-      transform var(--slide-dur, var(--dur-state)) var(--ease-out);
+      transform var(--slide-dur, var(--dur-state)) var(--ease-out),
+      visibility var(--dur-state) step-end;
   }
   .search-entry:is(:hover, :focus-visible) {
     background-image: linear-gradient(var(--ink-wash), var(--ink-wash));
@@ -3614,10 +3615,12 @@
       inset 0 1px var(--press-blur) var(--press-shade),
       var(--entry-ring);
   }
-  /* The row slides over the entry, so it stays until the row has covered it. */
+  /* Nothing in the row stands over the entry, and the floor band leaves its rim showing,
+     so it goes the moment the row opens and returns only once the row has tucked into it
+     (the base rule's step-end over the tuck's --dur-state). */
   .crumb-slot[data-covered] .search-entry {
     visibility: hidden;
-    transition: visibility var(--dur-pane) step-end;
+    transition-property: none;
   }
   /* Its word goes where Versions' word does: keep in step with VersionComparePicker. */
   @container plan-header (width < 37.45rem) {

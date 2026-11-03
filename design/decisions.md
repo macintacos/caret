@@ -115,6 +115,32 @@ Open items first, then the log, newest first.
   - Tab stops at the field and moves on to the outline key until the reader engages the
     field with `\`, a click or a key pressed in it.
 
+## 2026-11-03: the find row's Close key stands beside the step keys
+
+The user asked for Close to sit closer to the search controls, right of the ▲ ▼ step keys,
+rather than alone at the row's far end.
+
+- **Close's place:** Close now follows the step keys at the row's usual gap between parts,
+  at every width, with its word and cap or as an × only. Nothing pushes it to the row's
+  end, so the row ends wherever its last part does. The row still paints the bed's floor
+  across the whole slot, so the empty end reads as the bed, not a gap.
+- **The key hints:** they follow Close. They name the steps' keys, but placing them
+  between the steps and Close would have parted Close from the steps, which the user asked
+  not to do.
+- **The slide:** the row still slides out of the Search entry's place from
+  `translateX(100%)` and tucks back into it. Close no longer lands where the entry stood;
+  it travels in with the field and the steps.
+- **The entry under the row:** it used to stay painted under the arriving row until the
+  slide ended, and returned as soon as the row began to close. Close's key covered it
+  then. With Close moved, the entry's rounded edge showed above and below the row's floor,
+  in both themes. The entry now hides the moment the row opens and reappears only once the
+  row has tucked away.
+- **Narrow widths:** the parts keep their widths and only their order changed, so the
+  `@container` thresholds in `PlanSearch.svelte` stand. `narrow-regression.e2e.ts` checks
+  Close sits beside the steps across its sweep.
+- **What this replaces:** two points of the 2026-11-02 entry on the Search entry: Close's
+  place at the end of the crumbs' slot, and "the entry stays under the arriving row".
+
 ## 2026-11-02: the outline's filter field stands in the column's head
 
 The user asked for the "Outline `\`" title in the column's head to go. In its place, the

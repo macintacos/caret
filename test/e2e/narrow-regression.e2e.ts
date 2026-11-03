@@ -96,17 +96,29 @@ const queryRoom = (page: Page) =>
     return query?.getBoundingClientRect().width ?? 0;
   });
 
+// How far Close's tray stands off the steps' end, past the row's own gap.
+const closeOffset = (page: Page) =>
+  page.locator(".plan-search").evaluate((row) => {
+    const steps = row.querySelector(".search-actions")!.getBoundingClientRect();
+    const close = row.querySelector(".search-close-tray")!.getBoundingClientRect();
+    return Math.abs(close.left - steps.right - Number.parseFloat(getComputedStyle(row).columnGap));
+  });
+
+const besideSteps = (page: Page, message: string) =>
+  expect.poll(() => closeOffset(page), { message }).toBeLessThan(1);
+
 const fits = (page: Page, bounds: string, parts: string[], message: string) =>
   expect.poll(() => crowding(page, bounds, parts), { message }).toBeLessThanOrEqual(1);
 
 // Opens the find row over the crumbs, as the field and then as the committed stamp, and
 // holds each to the header it sits in: nothing crowds, the query keeps five characters,
-// and Close stays in reach. Closes it again.
+// and Close stays in reach beside the steps. Closes it again.
 async function findRowFits(page: Page, where: string): Promise<void> {
   await page.keyboard.press("/");
   await page.keyboard.type("revised step");
   await expect(page.getByRole("search")).toBeVisible();
   await fits(page, ".crumb-slot", FIND_ROW, `the find row crowds its slot ${where}`);
+  await besideSteps(page, `Close leaves the steps ${where}`);
   await fits(page, HEADER, [OUTLINE_TRAY, ".crumb-slot", VIEW_TRAY], `the header crowds ${where}`);
   await expect
     .poll(() => queryRoom(page), { message: `the field squeezes its query ${where}` })
@@ -115,6 +127,7 @@ async function findRowFits(page: Page, where: string): Promise<void> {
   await page.keyboard.press("Enter");
   await expect(page.locator(".plan-search .search-stamp")).toBeVisible();
   await fits(page, ".crumb-slot", FIND_ROW, `the stamped find row crowds its slot ${where}`);
+  await besideSteps(page, `Close leaves the stamp's steps ${where}`);
   await expect
     .poll(() => queryRoom(page), { message: `the stamp squeezes its query ${where}` })
     .toBeGreaterThanOrEqual(QUERY_FLOOR_PX);
