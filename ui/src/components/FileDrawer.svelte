@@ -126,6 +126,7 @@
     border-radius: var(--pane-radius);
     background: var(--paper);
     box-shadow: var(--pane-lip);
+    --header-bed-floor: color-mix(in lab, var(--paper), var(--bed-floor) var(--header-bed-mix));
   }
   /* Docked below, the lip's 1px of padding is on the docking axis too. */
   .fd-bottom .fd-content {

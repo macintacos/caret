@@ -740,6 +740,25 @@ test("the reference headers stand as tall as the plan header, level with it besi
   }
 });
 
+test("beside the plan, the lane's title bar lies in a bed level with the plan header's", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await seedCacheDrawer(daemon, page, proj.dir, WIDE);
+    await openPreview(page);
+    const beds = [".plan-header > .header-bed", "[data-file-preview] .ref-header > .header-bed"];
+    for (const sel of beds) await expect(page.locator(sel)).toBeVisible();
+    const [plan, file] = await Promise.all(beds.map((sel) => page.locator(sel).boundingBox()));
+    if (!plan || !file) throw new Error("a title bar's bed has no box");
+    expect(file.y).toBeCloseTo(plan.y, 0);
+    expect(file.height).toBeCloseTo(plan.height, 0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 // EXC-1137: the one exception to placement-once. A file row opened from the card
 // is the reader asking for the lane, so the card steps out of the box it just
 // created rather than sitting under it. The lane is measured mid-slide here — it

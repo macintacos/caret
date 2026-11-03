@@ -858,9 +858,13 @@ test("Escape and an outside click leave the reader exactly where they were", asy
   await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   const parked = await parkedAt(page);
   const menu = page.locator(MENU);
+  // bits-ui focuses an opened menu a frame after mounting it. A `j` sent before then
+  // lands on the crumb and moves the plan's line cursor, whose scrolloff moves the reader.
+  const menuHoldsFocus = page.locator(`${MENU}:focus-within`);
 
   // Two levels deep, then Escape.
   await page.locator(CRUMB).first().click();
+  await expect(menuHoldsFocus).toHaveCount(1);
   await page.keyboard.press("j");
   await page.keyboard.press("l");
   await expect(page.locator(SUBMENU).first()).toBeVisible();
@@ -871,6 +875,7 @@ test("Escape and an outside click leave the reader exactly where they were", asy
 
   // Two levels deep again, then a click outside the bar.
   await page.locator(CRUMB).first().click();
+  await expect(menuHoldsFocus).toHaveCount(1);
   await page.keyboard.press("j");
   await page.keyboard.press("l");
   await expect(page.locator(SUBMENU).first()).toBeVisible();

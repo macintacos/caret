@@ -1560,17 +1560,30 @@ test("the header's outline key stands as far in from the pane's left as Preview 
   const insetGap = () =>
     page.evaluate(() => {
       const pane = document.querySelector(".plan-pane")?.getBoundingClientRect();
-      const outline = document
-        .querySelector(".plan-header > .header-tray")
-        ?.getBoundingClientRect();
+      const outline = document.querySelector(".plan-header .outline-key")?.getBoundingClientRect();
       const preview = document
         .querySelector(".plan-header .preview-toggle")
-        ?.closest(".tray")
         ?.getBoundingClientRect();
       if (!pane || !outline || !preview) return null;
       return Math.abs(outline.left - pane.left - (pane.right - preview.right));
     });
   await expect.poll(insetGap).toBeLessThan(0.5);
+});
+
+test("the plan header stands as tall as the outline column's head, level with it, so the outline key travels level", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await planSurface(page);
+  await expect(listbox(page)).toBeVisible();
+  const [head, header] = await Promise.all(
+    [".toc-title-row", ".plan-header"].map((sel) => page.locator(sel).boundingBox()),
+  );
+  if (!head || !header) throw new Error("the column's head or the header has no box");
+  expect(header.height).toBeCloseTo(head.height, 0);
+  expect(header.y).toBeCloseTo(head.y, 0);
 });
 
 test("under 960px the outline drops from the header's key, filter focused, and closes back onto it", async ({

@@ -247,6 +247,22 @@ test("the outline's float: the filter nests in its corner, and so does a top-lev
   await expectConcentric(panel, panel.locator("[data-level='1'] .toc-key").first(), "bl");
 });
 
+test("the plan header's bed nests in the pane's top corners, and its end keys in the bed's", async ({
+  daemon,
+  page,
+}) => {
+  // Under --w-narrow the header holds the outline key, with no column folding to wait on.
+  await page.setViewportSize({ width: 880, height: 900 });
+  await seedAndOpen(page, daemon);
+  const pane = page.locator(".plan-pane");
+  const bed = pane.locator(".plan-header > .header-bed");
+  await expect(bed).toBeVisible();
+  await expectConcentric(pane, bed, "tl");
+  await expectConcentric(pane, bed, "tr");
+  await expectConcentric(bed, pane.getByRole("button", { name: "Outline", exact: true }), "tl");
+  await expectConcentric(bed, pane.locator(".preview-toggle"), "tr");
+});
+
 test("the outline column's bed: a top-level row's key nests in its corner", async ({
   daemon,
   page,

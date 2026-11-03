@@ -461,13 +461,9 @@
   }
 
   /* Parts of the header's layout move (lib/paneMove.ts) into and out of compare: the
-     controls fade through with the crumbs, Versions slides into Preview's place, and the
-     well they stand in narrows under them. */
+     controls fade through with the crumbs, and Versions slides into Preview's place. */
   :global(:root[data-pane-move]) .compare-cluster {
     view-transition-name: compare-controls;
-  }
-  :global(:root[data-pane-move]) .header-tray {
-    view-transition-name: view-keys;
   }
   :global(:root[data-pane-move]) .header-tray :global(.compare-toggle) {
     view-transition-name: versions-key;

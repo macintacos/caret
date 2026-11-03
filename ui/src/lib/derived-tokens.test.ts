@@ -87,6 +87,7 @@ describe("the derived-token tier", () => {
       "--knob-face-hover",
       "--meter-off",
       "--neutral-face",
+      "--neutral-face-bed-down",
       "--neutral-face-down",
       "--neutral-face-hover",
       "--neutral-face-latched",

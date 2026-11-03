@@ -608,6 +608,7 @@
 
 <div class="file-preview" data-file-preview data-more-below={moreBelow || undefined}>
   <div class="fp-header ref-header">
+    <span class="header-bed" aria-hidden="true"></span>
     <button
       type="button"
       class="fp-close ref-icon-btn"

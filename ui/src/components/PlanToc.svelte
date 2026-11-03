@@ -669,7 +669,7 @@
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    height: 2.6rem;
+    height: var(--pane-header-h);
     padding-inline: 0.95rem calc(var(--toc-inset) - var(--well-pad));
   }
   .toc-title-row :global(.toc-title) {
@@ -684,12 +684,6 @@
     background: var(--ink-wash);
     color: var(--ink);
   }
-  /* The outline key's bed is floored with the paper, as its bed in the plan header is.
-     On the body, a dark key latched down sits at or under the body and reads as a hole. */
-  .toc-title-row > .header-tray {
-    background-color: var(--paper);
-  }
-
   .plan-toc :global(.toc-head) {
     position: relative;
     z-index: 1;

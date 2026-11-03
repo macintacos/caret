@@ -83,10 +83,23 @@ Open items first, then the log, newest first.
   - The outline key's latch riding its travel as the column stands and folds.
 - **Calls left to the user from the 2026-11-02 drawer title bar:** both were built and are
   waiting on the user's verdict.
-  - The close circle stays an 11px disc on no bed, rather than becoming a Close key in a
-    bed like the plan header's keys.
+  - The close circle stays an 11px disc with no tray of its own, rather than becoming a
+    Close key like the plan header's keys.
   - As the drawer narrows, the esc hint ("esc to close") and then the kind tag ("Preview")
     leave the bar.
+- **Calls left to the user from the 2026-11-02 header bed:** all four were built and are
+  waiting on the user's verdict.
+  - The bed's floor at 50% of the way to `--bed-floor`. A third of the way would stand a
+    resting key at least 4.0 ΔE off it over the source view in the Catppuccin darks, where
+    50% gives 2.9. It would also stand the floor nearer the screen's: 1.9 ΔE off it in
+    caret-dark, where 50% gives 3.2.
+  - In the Catppuccin darks, a chosen key on a bar's bed stands about 4 ΔE lighter than
+    its resting neighbours, because only its face rises off the floor.
+  - On the outline column's floor, the latched outline key stands at least 2.8 ΔE lighter
+    than the floor in the Catppuccin darks, and no more than 3.0. `tactile-kit.e2e.ts`
+    holds it to 2.3 ΔE there, a just noticeable step, and to 4.5 on the header's floor.
+    Reaching 4.5 on the column would take a hover that darkens a latched key.
+  - The folder card's bar lies in no bed and keeps its lip.
 - **Calls left to the user from the 2026-11-02 outline texture:** all three were built and
   are waiting on the user's verdict.
   - Every other key row, in the menus, the Settings nav, the comment navigator and the
@@ -94,6 +107,80 @@ Open items first, then the log, newest first.
   - `--toc-quiet` still steps `--ink-soft` 15% toward `--ink`. On the bed's floor plain
     `--ink-soft` holds 4.5:1 without it, at 4.96:1 at its lowest (Catppuccin Latte).
   - In light palettes the peek's rim stands under 4.5 ΔE from the floors it sits between.
+
+## 2026-11-02: the plan header lies in one long bed, between mockups A and B
+
+The user wanted the plan header's separate beds replaced by one bed the length of the bar.
+Three variants were mocked up in the real app
+([the mockups](https://claude.ai/artifact/JseNn6y5EkEckAmyozPAp6)). Of the first two the
+user said: "I feel like somewhere between A and B is the sweet spot". Of the outline key
+in the column's head they said: "I like the show / hide outline button as its implemented
+in C, without the 'bed' for it when the outline is open".
+
+- **The pick: a floored bed between A and B.**
+  - A ("Trough") was a floorless bed, the `.tray` recipe, the bar's length. It nearly
+    vanished on light paper.
+  - B ("Floored bed") floored it with the outline's grained `--bed-floor`. In light
+    palettes its floor sat 1–3 ΔE from the screen's. In the Catppuccin darks a resting key
+    sat 0.8–1.8 ΔE from it.
+  - The floor is now the pane's own floor stepped toward `--bed-floor` by
+    `--header-bed-mix`, one percentage in `tokens.css`. Three strengths were rendered in
+    caret-dark and caret-light, at rest and with Preview latched: a third, a half and two
+    thirds of the way to B. By eye they differ little in caret's own palettes, and none
+    read plainly better, so the middle one, 50%, was taken. The measured gap between them
+    shows in the Catppuccin darks, under "Calls left to the user".
+  - At 50% over the source view, a resting key stands 2.9–3.3 ΔE off the floor in the
+    Catppuccin darks. In light palettes the floor stands 0.4–1.5 ΔE from the screen's, so
+    the bed reads by its shading, as A did.
+- **Geometry, as in A and B.** The bed stands `--well-pad` in from the pane's top and
+  sides and rounds at 11px, so the end keys (8px), the bed and the pane (14px) nest.
+  Through `--pane-header-h`, the header drops from 2.85rem to 2.6rem. The outline column's
+  head now reads that token too, so the two stand the same height. The header's foot shade
+  goes, because the bed's walls mark the edge.
+- **The keys stand on the floor with no bed of their own.**
+  - That covers the outline key, Versions and Preview, the Base and Target pickers, the
+    find row's steps and Close, and the segmented controls, which keep their 3px gang.
+    Each tray keeps its pads, so the gap round a key holds.
+  - Search stays a closed field cut into the floor, as in B. The ring round it that hides
+    the crumbs passing under it takes the bed's floor.
+  - The find row paints the bed's floor clear of the bed's shading. With no floor of its
+    own, the crumbs and the Search entry showed through it as it tucked away.
+- **The drawer's title bar** lies in a bed the same way, stepped from the drawer's
+  `--paper` and level with the plan header's bed. Its close circle stays as it was. The
+  folder card's bar lies in no bed and keeps its lip.
+- **The column's head key drops its tray, as in C.** It stands on the column's floor as
+  the header's key stands on the bar's, so the fold carries one look across.
+  - The tray was floored with `--paper` because a dark latched key on the body read as a
+    hole. On `--bed-floor` the down face sits under the floor in five dark palettes, down
+    to 5.0 ΔE under it in Duskfox.
+  - A dark key latched on either bed now takes `--neutral-face-bed-down`: the hover face
+    mixed 62% of the way to `--bed-floor`. It stands lighter than the column's floor in
+    every dark palette, by at least 2.8 ΔE (the Catppuccin darks), and at least 6.2 ΔE off
+    the header's floor. The hover face stays at least 4.5 ΔE above it.
+  - Catppuccin Frappé sets the 62%. Any nearer the hover face, and the hover would step
+    less than 4.5 ΔE. Raising the hover face instead would take Frappé's `--ink` under
+    4.5:1 on it, and it holds only 4.90:1 now.
+  - Weighed: stepping every face of a key on a bed off its floor rather than the paper. On
+    the column's floor that put a resting key's label under AA in three palettes, and
+    `--ink` under AA on a hover face stepped off the floor in Frappé and Macchiato.
+- **Motion.** The bed slides with the outline and the file drawer, stretching from the
+  plan's moving edge as the floor does. In compare's view transition it is its own part
+  and stretches with its box, so both its ends stay round. The view keys' well, which no
+  longer draws anything, left the transition.
+- **Thresholds:** the header's container steps (37.45rem and 31.3rem) and the find row's
+  were re-measured, and hold. A container query reads its container's content box, and the
+  parts inside that box kept their widths. The header's own padding shrank from 8px to
+  `--well-pad` (3px) at each end, so at a given pane width its content box is 10px wider,
+  and each step comes at a pane 10px narrower.
+- **Tests:**
+  - `concentric.e2e.ts` holds the bed in the pane's corners and the end keys in the bed's.
+  - `plan-toc.e2e.ts` holds the header as tall as the column's head, and the outline key's
+    mirror of Preview, now measured on the keys.
+  - `file-drawer.e2e.ts` holds the two beds level.
+  - `tactile-kit.e2e.ts` holds that no tray on either bed draws a cut, and the latched
+    faces above.
+  - `theme.test.ts` holds the latched face's hover step and AA, and the header's quiet
+    text and crumb hover against the bed's floor over both of the plan's floors.
 
 ## 2026-11-02: the outline lies in a bed, its rows are flat rubber, and the peek is a pad
 

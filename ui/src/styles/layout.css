@@ -32,9 +32,10 @@
   /* How far the plan pane, and the file drawer beside it, sit in from the window's
      sides. App.svelte's arrival curtain takes the same inset. */
   --pane-gap: 6px;
-  /* A pane's header bar: the plan header, and the reference surfaces' (the file drawer,
-     the folder card), so the plan's and the drawer's stand level beside each other. */
-  --pane-header-h: 2.85rem;
+  /* A pane's header bar: the plan header, the outline column's head, and the reference
+     surfaces' (the file drawer, the folder card), so they stand level beside each other
+     and the outline key travels level between the column's head and the plan header. */
+  --pane-header-h: 2.6rem;
 }
 
 /* ----- App shell: plan + annotation-gutter grid ----- */

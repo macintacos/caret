@@ -1051,6 +1051,7 @@
   let paneEl = $state<HTMLElement | undefined>();
   let floorEl = $state<HTMLElement | undefined>();
   let lipEl = $state<HTMLElement | undefined>();
+  let bedEl = $state<HTMLElement | undefined>();
   let crumbSlotEl = $state<HTMLElement | undefined>();
   let headerWellEl = $state<HTMLElement | undefined>();
   const COLUMN_KEY = ".toc-title-row .header-tray";
@@ -1075,16 +1076,18 @@
       after: () => outlineEl?.querySelector<HTMLElement>(COLUMN_KEY),
     },
   ];
-  // The column's edge moves only the plan's left edge, so the pane holds still: its floor
-  // and recess stretch from that edge, and the plan's text, the crumbs and the find row
-  // slide with it, inside a crumb slot that clips them at its own end. The Search entry and
-  // the view keys stay where they are. Only transforms move, so nothing waits on a frame.
+  // The column's edge moves only the plan's left edge, so the pane holds still: its floor,
+  // recess and header bed stretch from that edge, and the plan's text, the crumbs and the
+  // find row slide with it, inside a crumb slot that clips them at its own end. The Search
+  // entry and the view keys stay where they are. Only transforms move, so nothing waits on
+  // a frame.
   const outlineParts: SlidePart[] = [
     ...columnParts,
     // Held only, so a move it interrupts ends where this one starts, and what it holds
     // slides from wherever that move had got it to.
     { before: () => null, after: () => paneEl },
     { ...part(() => floorEl), stretches: "both" },
+    { ...part(() => bedEl), stretches: "both" },
     part(() => scrollEl),
     part(() => crumbSlotEl?.querySelector<HTMLElement>(".plan-breadcrumbs")),
     part(() => crumbSlotEl?.querySelector<HTMLElement>(".plan-search")),
@@ -1094,13 +1097,14 @@
   ];
   // A file moves both of the plan's edges, the lane covering the right one, so the pane
   // slides whole, the crumbs and the find row inside it from where they stood. The floor,
-  // the recess and the plan's text start their left edge from wherever an outline move had
-  // got it to; their right edge is the pane's.
+  // the recess, the header bed and the plan's text start their left edge from wherever an
+  // outline move had got it to; their right edge is the pane's.
   const fileParts: SlidePart[] = [
     ...columnParts,
     part(() => paneEl),
     { ...part(() => floorEl), stretches: "start" },
     { ...part(() => lipEl), stretches: "start" },
+    { ...part(() => bedEl), stretches: "start" },
     part(() => scrollEl),
     part(() => crumbSlotEl?.querySelector<HTMLElement>(".plan-breadcrumbs")),
     part(() => crumbSlotEl?.querySelector<HTMLElement>(".plan-search")),
@@ -2796,13 +2800,14 @@
   >
     <span class="pane-floor" aria-hidden="true" bind:this={floorEl}></span>
     <!-- The plan's header, stuck to the pane's top edge above the scroller: the outline
-         key while the column is not shown, the crumb slot, then the view keys. While
-         comparing, the compare controls take the crumbs' place. -->
+         key while the column is not shown, the crumb slot, then the view keys, all in one
+         bed. While comparing, the compare controls take the crumbs' place. -->
     <div
       class="plan-header"
       class:comparing={showDiff}
       class:searching={keyboardStore.searchOpen}
     >
+      <span class="header-bed" aria-hidden="true" bind:this={bedEl}></span>
       {#if outlineRuns && !columnShown}
         <span class="tray header-tray" bind:this={headerWellEl}>
           <!-- Its name holds whatever the state, as ARIA's toggle pattern asks; pressed
@@ -3424,10 +3429,9 @@
   }
   /* The column's edge covers only the gap between its bed and the plan pane, its end
      padding, below the column's head, so it takes no click meant for a row, the head's
-     keys or the plan, and its grip never rises beside the head's outline key. Keep in step
-     with the title row's height (PlanToc.svelte). */
+     keys or the plan, and its grip never rises beside the head's outline key. */
   .plan-outline > :global(.splitter) {
-    inset: 2.6rem 0 0 auto;
+    inset: var(--pane-header-h) 0 0 auto;
     width: 0.5rem;
   }
   /* The parts of a layout slide (lib/layoutSlide.ts), each sliding home from the offset it
@@ -3436,9 +3440,13 @@
   .plan-outline :global(.toc-title-row .header-tray),
   .plan-pane,
   .diff-plan,
+  .header-bed,
   .crumb-slot :global(:is(.plan-breadcrumbs, .plan-search)),
   .plan-header :global(.compare-picker) {
     transition: transform var(--slide-dur, var(--dur-state)) var(--ease-out);
+  }
+  .header-bed {
+    transform-origin: left;
   }
   /* The slot clips what slides in it at its end, so the crumbs and the find row never run
      over the view keys. Open to its left, where they slide in from as the column stands. */
@@ -3477,9 +3485,9 @@
     opacity: 0;
   }
 
-  /* The plan's header, stuck to the pane's top edge above the scroller, on the plan's
-     own floor with a shade at its foot. Its keys stand at the top bar's height
-     (atoms.css). */
+  /* The plan's header, stuck to the pane's top edge above the scroller, in one bed
+     (atoms.css). Its keys stand at the top bar's height, and its end keys' pads, with its
+     own, put them as far inside the bed's walls as the bed is inside the pane. */
   .plan-header {
     --ctl-h: 1.75rem;
     container: plan-header / inline-size;
@@ -3491,11 +3499,10 @@
     gap: 0.6rem;
     height: var(--pane-header-h);
     min-width: 0;
-    padding-inline: 1.15rem 0.5rem;
+    padding-inline: 1.15rem var(--well-pad);
   }
-  /* The outline key stands as far in from the pane's side as Preview does from the other. */
   .plan-header:has(> .header-tray) {
-    padding-left: 0.5rem;
+    padding-left: var(--well-pad);
   }
   /* The parts a layout move (lib/paneMove.ts) moves apart from the window, named only for
      its transition so no other one picks them up. */
@@ -3510,6 +3517,9 @@
   }
   :global(:root[data-pane-move]) .plan-header > .header-tray {
     view-transition-name: outline-key;
+  }
+  :global(:root[data-pane-move]) .header-bed {
+    view-transition-name: header-bed;
   }
   :global(:root[data-pane-move]) .plan-header :global(.preview-toggle) {
     view-transition-name: preview-key;
@@ -3567,10 +3577,10 @@
   /* The way into search, at the slot's end before the view keys: a closed field the find
      row slides open from and tucks back into. It lies in a field's shallow cut rather than
      standing as a key, so the crumbs and the view keys keep the header's weight. Its
-     hover, focus and press are a ghost control's. A ring of the plan's floor hides the
+     hover, focus and press are a ghost control's. A ring of the bed's floor hides the
      crumbs that pass under it as the column folds. */
   .search-entry {
-    --entry-ring: 0 0 0 0.2rem var(--plan-floor);
+    --entry-ring: 0 0 0 0.2rem var(--header-bed-floor);
     position: relative;
     flex: none;
     margin-left: auto;
@@ -3666,6 +3676,7 @@
     min-height: 0;
     border-radius: var(--pane-radius);
     --plan-floor: var(--paper);
+    --header-bed-floor: color-mix(in lab, var(--plan-floor), var(--bed-floor) var(--header-bed-mix));
   }
   /* Where the diff library draws the plan, the room past its rows takes the rows' floor,
      so the pane reads as one surface. Keep in step with --diffs-bg (styles/diffview.css). */
@@ -3683,9 +3694,8 @@
     transform-origin: left;
     transition: transform var(--slide-dur, var(--dur-state)) var(--ease-out);
   }
-  /* The recess, on its own layer over the plan and its header, with the shade at the
-     header's foot that marks the plan's top edge, so only the bottom shades here. An idle
-     shade stays an inset layer so it fades rather than snaps. */
+  /* The recess, on its own layer over the plan and its header, and the shade at the pane's
+     foot. An idle shade stays an inset layer so it fades rather than snaps. */
   .pane-lip {
     --bottom-shade: inset 0 0 0 0 transparent;
     position: absolute;
@@ -3700,14 +3710,6 @@
     transition:
       box-shadow var(--dur-state) var(--ease-out),
       transform var(--slide-dur, var(--dur-state)) var(--ease-out);
-  }
-  /* The header's box, casting its foot shade. */
-  .pane-lip::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto;
-    height: var(--pane-header-h);
-    box-shadow: 0 9px 8px -9px var(--pane-shade);
   }
   .plan-pane[data-more-below] .pane-lip {
     --bottom-shade: inset 0 -7px 8px -7px var(--pane-shade);

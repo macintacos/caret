@@ -268,11 +268,47 @@ function floorUnder(el: Locator): Promise<string> {
   });
 }
 
+// The plan header and the outline column's head are each one bed with a floor of its own,
+// and their keys stand on that floor rather than in beds of their own.
+test("the keys in the plan header and the column's head stand on their bed's floor, in no cut of their own", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seedVersions(2, ["# Plan\n\nFirst.\n", "# Plan\n\nSecond.\n"]);
+  await page.goto("/");
+  await planSurface(page);
+  const cuts = () =>
+    page.evaluate(() =>
+      [
+        ...document.querySelectorAll(
+          ':is(.plan-header, .toc-title-row) :is(.tray, [data-slot="toggle-group"])',
+        ),
+      ]
+        .filter((el) => el.getClientRects().length > 0)
+        .flatMap((el) => {
+          const s = getComputedStyle(el);
+          const flat = s.boxShadow === "none" && s.backgroundImage === "none";
+          return flat && /^rgba\(.*, 0\)$/.test(s.backgroundColor)
+            ? []
+            : [el.outerHTML.slice(0, 80)];
+        }),
+    );
+  await expect(page.locator(".toc-title-row .header-tray")).toBeVisible();
+  expect(await cuts()).toEqual([]);
+  await page.keyboard.press("d");
+  await expect(page.locator(".plan-header .pair")).toBeVisible();
+  expect(await cuts()).toEqual([]);
+});
+
 // A latched key drops its side and cast shadow, so only its face against the floor round it
 // says where the key is. A dark key lifts toward ink, so that face must read lighter than
-// the floor, or the key reads as a hole with its hint cap standing in it.
+// the floor, or the key reads as a hole with its hint cap standing in it. The outline
+// column's floor is the lightest bed's, and there the face rises only a just noticeable step:
+// any higher and the hover face, held to FOUND above it and to AA for --ink, has no room.
+// On the plan header's floor it clears FOUND.
+const NOTICEABLE = 2.3;
 for (const theme of bundledThemes().filter((t) => t.scheme === "dark")) {
-  test(`the column's latched outline key reads lighter than the floor round it, ${theme.id}`, async ({
+  test(`a latched key reads lighter than the bed's floor round it, ${theme.id}`, async ({
     daemon,
     page,
   }) => {
@@ -280,17 +316,39 @@ for (const theme of bundledThemes().filter((t) => t.scheme === "dark")) {
       localStorage.setItem("caret.theme.mode", "dark");
       localStorage.setItem("caret.theme.dark", id);
     }, theme.id);
-    await seedAndOpen(page, daemon);
-    const tray = page.locator("aside.plan-outline .header-tray");
-    const key = tray.getByRole("button", { name: "Outline", exact: true });
-    await expect(key).toHaveAttribute("aria-pressed", "true");
+    await daemon.seedVersions(2, ["# Plan\n\nFirst.\n", "# Plan\n\nSecond.\n"]);
+    await page.goto("/");
+    await planSurface(page);
     await page.mouse.move(0, 0);
-    const [face = [], floor = []] = await toLab(page, [
-      await settledFace(key),
-      await floorUnder(tray),
-    ]);
-    expect(face[0] ?? 0).toBeGreaterThan(floor[0] ?? 0);
-    expect(Math.hypot(...face.map((v, i) => v - (floor[i] ?? 0)))).toBeGreaterThanOrEqual(4.5);
+    const step = async (key: Locator, floor: string) => {
+      const [face = [], under = []] = await toLab(page, [await settledFace(key), floor]);
+      return {
+        lighter: (face[0] ?? 0) > (under[0] ?? 0),
+        de: Math.hypot(...face.map((v, i) => v - (under[i] ?? 0))),
+      };
+    };
+
+    const tray = page.locator("aside.plan-outline .header-tray");
+    const columnKey = tray.getByRole("button", { name: "Outline", exact: true });
+    await expect(columnKey).toHaveAttribute("aria-pressed", "true");
+    const onColumn = await step(columnKey, await floorUnder(tray));
+    expect(onColumn.lighter).toBe(true);
+    expect(onColumn.de).toBeGreaterThanOrEqual(NOTICEABLE);
+
+    // Comparing, a chosen segment stands on the header's floor over the diff's.
+    await page.keyboard.press("d");
+    const chosen = page
+      .locator('.plan-header [data-slot="toggle-group-item"][data-state="on"]')
+      .first();
+    await expect(chosen).toBeVisible();
+    const bed = page.locator(".plan-header > .header-bed");
+    await expect(bed).toBeVisible();
+    const onHeader = await step(
+      chosen,
+      await bed.evaluate((el) => getComputedStyle(el).backgroundColor),
+    );
+    expect(onHeader.lighter).toBe(true);
+    expect(onHeader.de).toBeGreaterThanOrEqual(4.5);
   });
 }
 

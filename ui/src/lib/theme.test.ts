@@ -192,6 +192,17 @@ function lab50ToHex([L, A, B]: Lab): string {
     .join("")}`;
 }
 
+/** The plan header bed's floor over the plan's `floor`: that floor stepped toward
+ * --bed-floor by --header-bed-mix (styles/tokens.css), mixed in lab as the sheet mixes it. */
+function headerBedFloor(
+  floor: "--paper" | "--paper-sunk",
+  theme: (typeof THEMES)[BuiltinThemeId],
+): string {
+  const pct = Number(/--header-bed-mix:\s*(\d+)%/.exec(readAppCss())?.[1]) / 100;
+  const [p, q] = [hexToLab50(theme.tokens[floor]), hexToLab50(derived("--bed-floor", theme))];
+  return lab50ToHex(p.map((v, i) => v * (1 - pct) + q[i]! * pct) as Lab);
+}
+
 /** A colour as the sheet derives it for a theme's scheme: a palette token, or a
  * derived-tier color-mix(in lab, A, B N%) whose inputs are palette tokens, black or other
  * derived tokens, resolved through each other. Mixed in lab and rounded once, as the browser
@@ -564,15 +575,16 @@ describe("every theme", () => {
     }
   });
 
-  // The plan header sits on the plan's own floor, --paper over the preview and
-  // --paper-sunk over the source view and the compare diff. Its quiet text — the closed
-  // search hint, the find row's count and key hints — is --ink-soft there.
-  test("keeps the plan header's quiet text at AA on both of the plan's floors", () => {
+  // The plan header lies in a bed whose floor is the plan's own, --paper over the preview
+  // and --paper-sunk over the source view and the compare diff, stepped toward --bed-floor.
+  // Its quiet text — the closed search hint, the find row's count and key hints — is
+  // --ink-soft there.
+  test("keeps the plan header's quiet text at AA on its bed's floor over both of the plan's", () => {
     for (const [id, theme] of themeEntries()) {
       for (const floor of ["--paper", "--paper-sunk"] as const) {
         expect(
-          contrast(theme.tokens["--ink-soft"], theme.tokens[floor]),
-          `${id} --ink-soft on ${floor}`,
+          contrast(theme.tokens["--ink-soft"], headerBedFloor(floor, theme)),
+          `${id} --ink-soft on the bed over ${floor}`,
         ).toBeGreaterThanOrEqual(4.5);
       }
     }
@@ -766,6 +778,7 @@ describe("every theme", () => {
       for (const face of [
         "--neutral-face-hover",
         "--neutral-face-down",
+        "--neutral-face-bed-down",
         "--crumb-face-hover",
         "--neutral-face-latched-hover",
       ]) {
@@ -786,12 +799,11 @@ describe("every theme", () => {
   const HOVER_STEPS: [string, string, string][] = [
     ["a neutral key or segment", "--neutral-face", "--neutral-face-hover"],
     ["a chosen key, segment or row", "--neutral-face-down", "--neutral-face-hover"],
+    ["a chosen key or segment on a floored bed", "--neutral-face-bed-down", "--neutral-face-hover"],
     ["a latched row or toggle", "--neutral-face-latched", "--neutral-face-latched-hover"],
     ["a row in a menu, listbox or panel", "--paper-raised", "--neutral-face-hover"],
     ["a row in the settings nav", "--group-floor", "--neutral-face-hover"],
     ["a row in the outline column's bed", "--bed-floor", "--neutral-face-hover"],
-    ["a crumb in the plan header, over the preview", "--paper", "--crumb-face-hover"],
-    ["a crumb in the plan header, over the source view", "--paper-sunk", "--crumb-face-hover"],
     ["an accent key or the gutter +", "--accent", "--accent-face-hover"],
     ["a danger key", "--danger-face", "--danger-face-hover"],
     ["the preview's close key", "--danger", "--danger-face-hover"],
@@ -805,6 +817,28 @@ describe("every theme", () => {
           `${id} ${what}`,
         ).toBeGreaterThanOrEqual(FOUND);
       }
+    }
+  });
+  test("moves a crumb's hover face a findable step off the plan header's bed", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const floor of ["--paper", "--paper-sunk"] as const) {
+        expect(
+          deltaE(headerBedFloor(floor, theme), derived("--crumb-face-hover", theme)),
+          `${id} a crumb over ${floor}`,
+        ).toBeGreaterThanOrEqual(FOUND);
+      }
+    }
+  });
+  // A key standing on a floored bed (the plan header's, the outline column's head) has no
+  // floor of its own round it. A dark key lifts toward ink, so a chosen one must read lighter
+  // than the brightest of those floors, --bed-floor, or it reads as a hole.
+  test("keeps a dark key chosen on a floored bed lighter than the bed's floor", () => {
+    for (const [id, theme] of themeEntries().filter(([, t]) => t.scheme === "dark")) {
+      const [face, floor] = [
+        derived("--neutral-face-bed-down", theme),
+        derived("--bed-floor", theme),
+      ];
+      expect(lab(face)[0], id).toBeGreaterThan(lab(floor)[0]);
     }
   });
   // The plan header's Search entry lies in a text field's cut, and its hover is the ghost

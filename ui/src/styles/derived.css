@@ -58,6 +58,11 @@
   /* A press sinks at least as deep as the hover it comes from. Dark presses down to the
      latched face; light's hover is already the darker, so a press keeps it. */
   --neutral-face-press: var(--neutral-face-down);
+  /* The latched face of a key standing on a floored bed (the plan header's, the outline
+     column's head), where no floor of the key's own lies under it. The down face sits at or
+     under a floor this light and reads as a hole, so it rises toward the hover face, as far
+     as still leaves the hover a findable step above it: Catppuccin Frappé binds. */
+  --neutral-face-bed-down: color-mix(in lab, var(--neutral-face-hover), var(--bed-floor) 62%);
   /* A crumb lies flat on the plan header, over the plan's own floor, and steps further than
      the hover face: as far as Catppuccin Frappé's --ink keeps 4.5:1 on it. */
   --crumb-face-hover: color-mix(in lab, var(--paper), var(--ink) 30%);
@@ -157,6 +162,8 @@
   --neutral-face-hover: color-mix(in lab, var(--paper-raised), black 10%);
   --neutral-face-down: color-mix(in lab, var(--paper-raised), black 5%);
   --neutral-face-press: var(--neutral-face-hover);
+  /* A light key's faces stand on the raised paper, above any bed's floor. */
+  --neutral-face-bed-down: var(--neutral-face-down);
   /* The hover face is lighter than a latched face, so the cursor steps the latched face. */
   --neutral-face-latched-hover: color-mix(in lab, var(--neutral-face-latched), black 6%);
   /* A key's white face is the plan's own paper in light, so a crumb steps toward black

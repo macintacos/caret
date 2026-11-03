@@ -35,21 +35,26 @@ column's bed floor `--bed-floor`, a table's `--table-floor`, `--table-floor-rule
 tactile kit's `--well-floor`, `--field-floor`, `--group-floor` (the settings beds and nav,
 the modal footer shelf, and a dialog's read-only cuts), `--field-edge-focus` (a focused
 field's lit wall, `--ink-faint`), the `--neutral-face` steps (with `--neutral-face-press`,
-the face a press takes, and `--neutral-face-latched-hover`, the face the cursor gives a
-latched one), a crumb's risen face `--crumb-face-hover`, the key row's `--key-row-up`,
-`--key-row-up-image`, `--key-row-down` and `--key-row-down-image`, the danger key's face
-`--danger-face`, the accent and danger keys' hover and press faces `--accent-face-hover`,
-`--accent-face-press`, `--danger-face-hover` and `--danger-face-press`, the switch's
-`--knob-face`, `--knob-face-hover`, `--knob-face-down`, `--knob-edge` and `--switch-on`,
-the meter's `--meter-off`, and the `--float-surface-low`, `-mid` and `-high` composites),
-is mixed in `ui/src/styles/derived.css`. In light, the top bar, the outline column and the
-status bar re-cut `--well-floor` from `--body`, so a stamp's or a count chip's pocket
-stays visible on it. The outline's quieter text takes `--toc-quiet`, local to
+the face a press takes, `--neutral-face-latched-hover`, the face the cursor gives a
+latched one, and `--neutral-face-bed-down`, the face a latched key takes on a floored bed
+in dark palettes), a crumb's risen face `--crumb-face-hover`, the key row's
+`--key-row-up`, `--key-row-up-image`, `--key-row-down` and `--key-row-down-image`, the
+danger key's face `--danger-face`, the accent and danger keys' hover and press faces
+`--accent-face-hover`, `--accent-face-press`, `--danger-face-hover` and
+`--danger-face-press`, the switch's `--knob-face`, `--knob-face-hover`,
+`--knob-face-down`, `--knob-edge` and `--switch-on`, the meter's `--meter-off`, and the
+`--float-surface-low`, `-mid` and `-high` composites), is mixed in
+`ui/src/styles/derived.css`. In light, the top bar, the outline column and the status bar
+re-cut `--well-floor` from `--body`, so a stamp's or a count chip's pocket stays visible
+on it. The outline's quieter text takes `--toc-quiet`, local to
 `ui/src/components/PlanToc.svelte`: `--ink-soft` on the float's raised paper, and stepped
 toward `--ink` in the column's bed. The row faces' shadows, `--toc-key-up` and
 `--toc-key-down`, are local to the same file and built from the `--rubber-*` set below,
-with `--scoop-lip`. Focus has no token of its own, since it wears each control's hover
-faces. shadcn-svelte's token names map onto these roles in
+with `--scoop-lip`. A bar's bed floor, `--header-bed-floor`, is mixed by the pane that
+holds the bar, from that pane's floor: the plan pane in
+`ui/src/components/DiffPlanView.svelte` and the file drawer in
+`ui/src/components/FileDrawer.svelte`. Focus has no token of its own, since it wears each
+control's hover faces. shadcn-svelte's token names map onto these roles in
 `ui/src/styles/shadcn-bridge.css`.
 
 ## Type, motion, radius, depth
@@ -72,8 +77,9 @@ All in `ui/src/styles/tokens.css`:
   corner plus `--composer-inset`, its padding.
 - **Depth:** the tactile geometry is hand-written here, its alphas keyed per scheme:
   - the beds: `--well-pad` (the gap round a key), `--well-top` and `--well-foot` (the pads
-    above and below a key, which take its rise and side), `--tray-gap`, and `--bed-shade`;
-    a stamp's pocket: `--well-shade` and `--well-lip`;
+    above and below a key, which take its rise and side), `--tray-gap`, `--bed-shade`, and
+    `--header-bed-mix` (how far a bar's bed floors itself from its pane's floor toward
+    `--bed-floor`); a stamp's pocket: `--well-shade` and `--well-lip`;
   - the keys: `--key-side` (the depth of a key's rubber side, which its rise, press and
     cast shadow scale from), `--key-rise` (how far a resting key stands above its place)
     and `--key-sink` (how far below it a press takes the key), the last two 0 under
@@ -108,11 +114,11 @@ All in `ui/src/styles/tokens.css`:
   `--shadow-card` still comes from the palette.
 - **Layout:** `--pane-gap` (6px), the inset around the plan pane, and `--status-bar-h`
   (2.25rem), the status bar's height, are in `ui/src/styles/layout.css`. So is
-  `--pane-header-h` (2.85rem), which sets the plan header's height and the file drawer's
-  and folder card's title bars to match. The outline column's opening, narrowest and
-  widest widths are `OUTLINE_REM` in `ui/src/lib/outlineColumn.ts`. The plan's reading
-  width is `MIN_READING_PX` in `ui/src/lib/fileDrawer.ts`. The column stops widening, and
-  yields to a file, to keep it.
+  `--pane-header-h` (2.6rem), which sets the plan header's height, and the outline
+  column's head and the file drawer's and folder card's title bars to match. The outline
+  column's opening, narrowest and widest widths are `OUTLINE_REM` in
+  `ui/src/lib/outlineColumn.ts`. The plan's reading width is `MIN_READING_PX` in
+  `ui/src/lib/fileDrawer.ts`. The column stops widening, and yields to a file, to keep it.
 
 ## Terminal
 

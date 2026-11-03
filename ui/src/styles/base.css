@@ -181,9 +181,9 @@ body {
 /* Compare's move (lib/paneMove.ts): entering or leaving compare swaps the plan and its
    header's controls, and folds or stands the outline column, as one view transition. Each
    component names its moving parts under the root's `data-pane-move` tag, so no other
-   transition picks them up. The column standing again takes --dur-pane, and the plan,
-   crumbs and outline key moving with it; everything else, the column folding included,
-   takes --dur-state. The column moves as the outline's own slide moves it. */
+   transition picks them up. The column standing again takes --dur-pane, and the plan, its
+   header's bed, crumbs and outline key moving with it; everything else, the column folding
+   included, takes --dur-state. The column moves as the outline's own slide moves it. */
 :root[data-pane-move]::view-transition-old(root) {
   animation: none;
   opacity: 0;
@@ -196,6 +196,7 @@ body {
   animation-timing-function: var(--ease-out);
 }
 :root[data-pane-move~="enter"]::view-transition-group(plan-pane),
+:root[data-pane-move~="enter"]::view-transition-group(header-bed),
 :root[data-pane-move~="enter"]::view-transition-group(plan-outline),
 :root[data-pane-move~="enter"]::view-transition-group(plan-crumbs),
 :root[data-pane-move~="enter"]::view-transition-group(outline-key) {
@@ -207,18 +208,17 @@ body {
 :root[data-pane-move]::view-transition-group(versions-key) {
   z-index: 1;
 }
-/* Versions, and the well its keys share, slide only once the slot Versions moves into is
-   clear: Preview's going into compare, the compare controls' coming out. */
+/* Versions slides only once the slot it moves into is clear: Preview's going into compare,
+   the compare controls' coming out. */
 :root[data-pane-move]::view-transition-group(versions-key),
 :root[data-pane-move]::view-transition-old(versions-key),
-:root[data-pane-move]::view-transition-new(versions-key),
-:root[data-pane-move]::view-transition-group(view-keys) {
+:root[data-pane-move]::view-transition-new(versions-key) {
   animation-delay: calc(var(--dur-state) * 0.4);
   animation-duration: calc(var(--dur-state) * 0.6);
 }
 /* The plan and its crumbs change width as they move: drawn at their own size from their
-   left edge, cropped to the moving box, so the text slides rather than stretches. The view
-   keys' well, holding no text once its keys are named apart, stretches with its box. */
+   left edge, cropped to the moving box, so the text slides rather than stretches. The
+   header's bed, holding no text, stretches with its box, so both its ends stay rounded. */
 :root[data-pane-move]::view-transition-old(plan-pane),
 :root[data-pane-move]::view-transition-new(plan-pane),
 :root[data-pane-move]::view-transition-old(plan-crumbs),
@@ -227,8 +227,8 @@ body {
   object-fit: none;
   object-position: left top;
 }
-:root[data-pane-move]::view-transition-old(view-keys),
-:root[data-pane-move]::view-transition-new(view-keys) {
+:root[data-pane-move]::view-transition-old(header-bed),
+:root[data-pane-move]::view-transition-new(header-bed) {
   height: 100%;
 }
 /* The column slides off the window's edge as it folds, and back on as it stands. */

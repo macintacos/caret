@@ -33,6 +33,33 @@
   box-shadow: var(--bed-shade);
 }
 
+/* The one bed a pane's header bar lies in, the bar's length: the plan header's, the file
+   drawer's title bar's. It stands --well-pad in from the pane's top and sides and rounds
+   at a key's radius plus that, so the bar's end keys nest in it as it nests in the pane.
+   Its floor, --header-bed-floor, is the pane's own floor stepped toward the outline
+   column's, so the pane sets it. */
+.header-bed {
+  position: absolute;
+  inset: var(--well-pad);
+  z-index: -1;
+  border-radius: calc(var(--key-radius) + var(--well-pad));
+  background-color: var(--header-bed-floor);
+  background-image: var(--grain);
+  background-size: 128px;
+  background-blend-mode: soft-light;
+  box-shadow: var(--bed-shade);
+  pointer-events: none;
+}
+/* A key on a floored bed, a bar's or the outline column's head, stands on that floor with
+   no bed of its own: its tray keeps only its pads, so the gap round the key still shows. */
+:is(.plan-header, .toc-title-row) :is(.tray, [data-slot="toggle-group"]) {
+  background: none;
+  box-shadow: none;
+}
+:is(.plan-header, .toc-title-row) :is(button.float-chip, [data-slot="toggle-group-item"]) {
+  --cap-face-down: var(--neutral-face-bed-down);
+}
+
 
 /* The rubber key. .float-chip IS the neutral key: every neutral control wears it by
    that name, and the amber primary wears .cap-accent, which the vendored Button's
@@ -693,8 +720,9 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
 }
-/* The header's lip, as Floating shells in the tactile kit describes. */
-.ref-header::after {
+/* The header's lip, as Floating shells in the tactile kit describes. A header lying in a
+   bed has the bed's walls for an edge instead. */
+.ref-header:not(:has(> .header-bed))::after {
   content: "";
   position: absolute;
   inset: 100% 0 auto;

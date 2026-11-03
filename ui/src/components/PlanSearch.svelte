@@ -178,9 +178,10 @@
 </div>
 
 <style>
-  /* A row laid over the header's crumb slot (DiffPlanView), on the plan's own floor.
+  /* A row laid over the header's crumb slot (DiffPlanView), on the header bed's floor.
      The slot clips it at its end, where the Search entry sits, so it slides open out of
-     the entry and tucks back into it. */
+     the entry and tucks back into it. It paints the bed's floor clear of the bed's top
+     shade and lower wall, so the crumbs and the entry it tucks away over stay covered. */
   .plan-search {
     --query-floor: 3rem;
     --search-cap: 24px;
@@ -192,7 +193,8 @@
     display: flex;
     align-items: center;
     gap: 0.55rem;
-    background: var(--plan-floor);
+    background: linear-gradient(var(--header-bed-floor), var(--header-bed-floor)) center /
+      100% calc(100% - 2 * var(--well-pad) - 0.75rem) no-repeat;
     animation: search-open var(--dur-pane) var(--ease-out);
   }
   /* Closing tucks the row back into the entry while planKeyboard keeps it mounted;
