@@ -1,6 +1,9 @@
 [settings]
 # Commit mise.lock for reproducible, checksum-pinned tool versions.
 lockfile = true
+# mise's default, aube, ignores bats's `directories.bin` and installs it with no
+# executable, and its locked mode refuses an npm tool whose graph mise.lock lacks.
+npm.package_manager = "bun"
 
 # HK_MISE routes hk's git-hook subprocesses through `mise x`, so each hook step
 # uses the versions pinned below — even for committers who never activated mise.
