@@ -39,21 +39,22 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   sits in a cut on `--group-floor`.
 - **The window is a body, and the plan is a pane set into it.** Every control outside the
   plan pane is cut into the body (`--body`), and chrome never paints a bar face or a rule.
-  The outline column is cut into the body too, with no surface of its own: its rows lie as
-  keys on the rubber. The body is grained rubber, lit faintly from above over the chrome
-  (`--chrome-light`). The pane is a screen set into it, inset `--pane-gap` with
-  `--pane-radius` corners. Its recess, `--pane-recess`, is a soft inset shade that reaches
-  down from the top edge, with a 1px contact edge and no outer layer, and the body's lit
-  edge round it is `--pane-lip`. Each view fills the pane with one floor, `--plan-floor`.
-  In the source view and the version compare, where the diff library draws the plan, the
-  room past the rows takes the rows' `--paper-sunk`. The preview stays on `--paper`. The
-  pane's foot shades the text under it with `--pane-shade` while more lies below
-  (`data-more-below`). The file drawer is a second pane beside the plan, and the gap
-  between them is the resize handle. It shades its edges as the plan pane does: its foot
-  while more of the file lies below, and the gutter's edge while the code is scrolled
-  sideways under it. Its gutter draws no rule. The empty screen is the same pane, and the
-  daemon banner sits on the body. Text cut into the body is `--ink-soft` at its faintest,
-  because `--ink-faint` falls under 4.5:1 there in several palettes.
+  The outline column lies in one large bed cut into the body, beside the pane (see
+  **The outline's bed** in the tactile kit). The body is grained rubber, lit faintly from
+  above over the chrome (`--chrome-light`). The pane is a screen set into it, inset
+  `--pane-gap` with `--pane-radius` corners. Its recess, `--pane-recess`, is a soft inset
+  shade that reaches down from the top edge, with a 1px contact edge and no outer layer,
+  and the body's lit edge round it is `--pane-lip`. Each view fills the pane with one
+  floor, `--plan-floor`. In the source view and the version compare, where the diff
+  library draws the plan, the room past the rows takes the rows' `--paper-sunk`. The
+  preview stays on `--paper`. The pane's foot shades the text under it with `--pane-shade`
+  while more lies below (`data-more-below`). The file drawer is a second pane beside the
+  plan, and the gap between them is the resize handle. It shades its edges as the plan
+  pane does: its foot while more of the file lies below, and the gutter's edge while the
+  code is scrolled sideways under it. Its gutter draws no rule. The empty screen is the
+  same pane, and the daemon banner sits on the body. Text cut into the body is
+  `--ink-soft` at its faintest, because `--ink-faint` falls under 4.5:1 there in several
+  palettes.
 - **The plan header holds its keys on the plan's floor.** It is stuck to the pane's top
   edge above the scroller, on `--plan-floor`, and casts a foot shade in `--pane-shade`
   over the plan that scrolls under it. While comparing, Base → Target and the diff toggles
@@ -149,13 +150,17 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   - It is a copy of the live view, so its type, colour, chips and code highlighting are
     the plan's own in every theme. It starts at the heading and ends on the section's last
     line of text. A heading with no text of its own shows its subsections too.
-  - It floats at the menus' height, `--float-mid`, on a face of the view's floor:
-    `--paper-sunk` under source and `--paper` under Preview. It is rounded at
-    `--radius-lg`, with no arrow and no label. It is up to 36rem wide, and shows nowhere
+  - It is a raised rubber pad, as a code block is. A rim of `--body`, `--code-bezel` wide
+    and lit along its top by `--rubber-gloss` and `--pad-top`, holds the copy. The copy
+    lies in a scoop (`--scoop-top`, `--scoop-foot`) on the view's floor: `--paper-sunk`
+    under source and `--paper` under Preview. The pad stands on `--pad-stand` and floats
+    at the menus' height, `--float-mid`, with their `--rule` ring. It rounds at
+    `--pad-radius`, with no arrow and no label. It is up to 36rem wide, and shows nowhere
     with less than 18rem of room.
-  - Its 1px ring, `--peek-edge`, is `--ink-faint` stepped a quarter toward `--ink-soft`,
-    so it holds at least 3:1 against its face and the plan beneath in every bundled
-    palette.
+  - The rim parts the copy from the plan beneath it. In every dark palette it reads at
+    least 4.5 ΔE (CIE76 colour difference) off both the copy's floor and the plan across
+    3px or more, which `outline-peek.e2e.ts` holds. In light palettes the rim stands
+    closer to the floors, and the pad's side, its ring and its shadow carry the edge.
   - Preview's text wraps to the peek. Source lines keep their length and fade at the
     peek's right edge. A section taller than 16rem is cut there and fades over its last
     3rem; one that fits ends on its text, unfaded. It measures again when its copy grows.
@@ -182,17 +187,30 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 
 - **Beds.** A control sits in a bed: a shallow cut in the chrome's own rubber. The code
   calls a bed `.tray`, and its pad tokens keep the `--well-` prefix; `--well-floor` and
-  `--well-shade` belong to a stamp's pocket, not a bed. A bed has no floor of its own. Its
-  shading (`--bed-shade`) darkens just under its top edge and lights the cut's lower wall
-  and the lip below it. The keys cast their shadow onto the same material they stand on. A
-  group of controls shares one bed, and a lone control gets its own, with `--tray-gap`
-  (5px) between keys. Every bed shows the same 3px gap (`--well-pad`) round the key's
-  visible face and side. Its top pad (`--well-top`) adds the key's rise, and its foot
-  (`--well-foot`) adds the key's side less the rise, so the gap stays even. A bar holding
-  beds trims its own padding by the same amounts to keep its height. Every cap rounds at
-  `--key-radius` (8px), whatever its Button `size`. A bed rounds at `--key-radius` plus
-  `--well-pad`, 11px, so the two corners stay concentric. The row-wide scratch marker is a
-  `button.tray` and keeps its tinted floor.
+  `--well-shade` belong to a stamp's pocket, not a bed. A control's bed has no floor of
+  its own. Its shading (`--bed-shade`) darkens just under its top edge and lights the
+  cut's lower wall and the lip below it. The keys cast their shadow onto the same material
+  they stand on. A group of controls shares one bed, and a lone control gets its own, with
+  `--tray-gap` (5px) between keys. Every bed shows the same 3px gap (`--well-pad`) round
+  the key's visible face and side. Its top pad (`--well-top`) adds the key's rise, and its
+  foot (`--well-foot`) adds the key's side less the rise, so the gap stays even. A bar
+  holding beds trims its own padding by the same amounts to keep its height. Every cap
+  rounds at `--key-radius` (8px), whatever its Button `size`. A bed rounds at
+  `--key-radius` plus `--well-pad`, 11px, so the two corners stay concentric. The row-wide
+  scratch marker is a `button.tray` and keeps its tinted floor.
+- **The outline's bed.** The outline column lies in one large bed, its head and filter
+  included. Unlike a control's bed, it has a floor of its own, as a setting group does:
+  `--bed-floor`, the body a step toward the plan pane's floor, darker in dark and lighter
+  in light. The floor is grained as the body is, and the bed shades as any bed does
+  (`--bed-shade`). Its rows lie as keys on that floor.
+  - It stands level with the plan pane, top and bottom, and inset `--pane-gap` from the
+    window's left edge, as the pane is from its right.
+  - The 0.5rem between the bed and the pane, below the column's head, is the column's
+    splitter, and nothing else.
+  - Its rows and its filter stand 0.45rem in from its walls, and it rounds at
+    `--key-radius` plus that inset. The head's outline key ends where the rows do.
+  - `theme.test.ts` holds a row's hover face 4.5 ΔE off the floor, and the outline's quiet
+    text at 4.5:1 on it, in every palette.
 - **The working-directory path lies in a bed with no key.** It sits centred on the status
   bar, between the version and the review's status, as a `button.tray`, because it is
   metadata the reader copies rather than a control they work. It shows whenever a review
@@ -385,17 +403,21 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   In a menu or listbox the highlight is the only cursor, so a row rises on
   `data-highlighted` and never on hover. In a bits-ui listbox (a Select),
   `[data-selected]` means the chosen option, so the chosen row is named by `data-active`
-  and latched, never risen. The outline row is the one key row outside the atom. It wears
-  the `--key-row-*` rise and press, so it stands as low as every other key row. It rises
-  from its indent onward, and latches onto `--neutral-face-latched` while it is the
-  section being read, an open exception to the accent rule
-  ([`decisions.md`](decisions.md)). The cursor on it takes `--neutral-face-latched-hover`.
-  Its press and its latch override its rise, so a row clicked under the pointer goes down
-  at the press and stays down: the click latches it where it stands, and the row latched
-  before lets go. A latch goes down on `--ease-out`, as a press does. A key row's keyboard
-  indicator is its hover look, so the row the keys move to looks exactly like the row the
-  pointer moves to. A chosen row under the highlight stays down on the hover face, so the
-  highlight reads on it too.
+  and latched, never risen. The outline row is the one key row outside the atom. It rises
+  and sinks as far as every other key row (`--key-rise`, `--key-sink`), but its face is
+  its own: flat grained rubber with no gradient. On a key that wide, the key row's domed
+  gradient reads as painted on. Inset shadows that follow its corners light its top edge
+  (`--rubber-gloss`) and shade its foot (`--rubber-foot`). Latched or pressed, it sinks as
+  a bed does, shaded under its top edge (`--rubber-press`) and lit along its lower wall
+  (`--scoop-lip`). It rises from its indent onward, and latches onto
+  `--neutral-face-latched` while it is the section being read, an open exception to the
+  accent rule ([`decisions.md`](decisions.md)). The cursor on it takes
+  `--neutral-face-latched-hover`. Its press and its latch override its rise, so a row
+  clicked under the pointer goes down at the press and stays down: the click latches it
+  where it stands, and the row latched before lets go. A latch goes down on `--ease-out`,
+  as a press does. A key row's keyboard indicator is its hover look, so the row the keys
+  move to looks exactly like the row the pointer moves to. A chosen row under the
+  highlight stays down on the hover face, so the highlight reads on it too.
 - **Setting groups.** Each Settings section's rows sit in a bed on `--group-floor` with
   `--bed-shade`, rounded at `--key-radius` plus `--well-pad` plus `--group-pad`, parted by
   space with no hairline. The nav's sections share one bed (`.tray` on `--group-floor`),
@@ -418,9 +440,9 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   `role="separator"` whose value the arrow keys change
   (`ui/src/components/Splitter.svelte`). The file drawer's edge and the outline column's
   are the two. It lies over the bare gap between two panes and nothing else, so it never
-  takes a click meant for either. The outline column's edge starts below the column's
-  head, whose outline key reaches into the gap. At rest the gap is all that shows. Under
-  the pointer or keyboard focus, a grip rises in the gap where the pointer is: the
+  takes a click meant for either. The outline column's edge is the gap between its bed and
+  the plan pane, and starts below the column's head. At rest the gap is all that shows.
+  Under the pointer or keyboard focus, a grip rises in the gap where the pointer is: the
   switch's key, light in both schemes, 6px wide and a key's 2rem tall. Held, the grip goes
   down as a pressed key does, its side folding away and its shading turning concave.
   `theme.test.ts` holds it to 3:1 on the body, risen and held. A mouse drag leaves the

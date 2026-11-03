@@ -29,26 +29,28 @@ it. User theme files follow
 | Syntax and markdown colours | the `syntax` and `markdown` blocks of each theme file |
 
 The derived tier, colours a palette implies rather than sets (`--chip`, `--chip-hover`,
-`--ink-wash`, `--attention-wash`, `--code-panel`, the window's `--body`, a table's
-`--table-floor`, `--table-floor-rule` and `--table-head-ink`, a raised pad's lit band
-`--pad-top` and side `--pad-side`, and the tactile kit's `--well-floor`, `--field-floor`,
-`--group-floor` (the settings beds and nav, the modal footer shelf, and a dialog's
-read-only cuts), `--field-edge-focus` (a focused field's lit wall, `--ink-faint`), the
-`--neutral-face` steps (with `--neutral-face-press`, the face a press takes, and
-`--neutral-face-latched-hover`, the face the cursor gives a latched one), a crumb's risen
-face `--crumb-face-hover`, the key row's `--key-row-up`, `--key-row-up-image`,
-`--key-row-down` and `--key-row-down-image`, the danger key's face `--danger-face`, the
-accent and danger keys' hover and press faces `--accent-face-hover`,
+`--ink-wash`, `--attention-wash`, `--code-panel`, the window's `--body` and the outline
+column's bed floor `--bed-floor`, a table's `--table-floor`, `--table-floor-rule` and
+`--table-head-ink`, a raised pad's lit band `--pad-top` and side `--pad-side`, and the
+tactile kit's `--well-floor`, `--field-floor`, `--group-floor` (the settings beds and nav,
+the modal footer shelf, and a dialog's read-only cuts), `--field-edge-focus` (a focused
+field's lit wall, `--ink-faint`), the `--neutral-face` steps (with `--neutral-face-press`,
+the face a press takes, and `--neutral-face-latched-hover`, the face the cursor gives a
+latched one), a crumb's risen face `--crumb-face-hover`, the key row's `--key-row-up`,
+`--key-row-up-image`, `--key-row-down` and `--key-row-down-image`, the danger key's face
+`--danger-face`, the accent and danger keys' hover and press faces `--accent-face-hover`,
 `--accent-face-press`, `--danger-face-hover` and `--danger-face-press`, the switch's
 `--knob-face`, `--knob-face-hover`, `--knob-face-down`, `--knob-edge` and `--switch-on`,
 the meter's `--meter-off`, and the `--float-surface-low`, `-mid` and `-high` composites),
 is mixed in `ui/src/styles/derived.css`. In light, the top bar, the outline column and the
 status bar re-cut `--well-floor` from `--body`, so a stamp's or a count chip's pocket
 stays visible on it. The outline's quieter text takes `--toc-quiet`, local to
-`ui/src/components/PlanToc.svelte`: `--ink-soft` on the float's raised paper, stepped
-toward `--ink` on the body, where `--ink-soft` falls under 4.5:1 in some palettes. Focus
-has no token of its own, since it wears each control's hover faces. shadcn-svelte's token
-names map onto these roles in `ui/src/styles/shadcn-bridge.css`.
+`ui/src/components/PlanToc.svelte`: `--ink-soft` on the float's raised paper, and stepped
+toward `--ink` in the column's bed. The row faces' shadows, `--toc-key-up` and
+`--toc-key-down`, are local to the same file and built from the `--rubber-*` set below,
+with `--scoop-lip`. Focus has no token of its own, since it wears each control's hover
+faces. shadcn-svelte's token names map onto these roles in
+`ui/src/styles/shadcn-bridge.css`.
 
 ## Type, motion, radius, depth
 

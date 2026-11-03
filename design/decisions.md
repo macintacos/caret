@@ -87,6 +87,83 @@ Open items first, then the log, newest first.
     bed like the plan header's keys.
   - As the drawer narrows, the esc hint ("esc to close") and then the kind tag ("Preview")
     leave the bar.
+- **Calls left to the user from the 2026-11-02 outline texture:** all three were built and
+  are waiting on the user's verdict.
+  - Every other key row, in the menus, the Settings nav, the comment navigator and the
+    folder tree, keeps the domed gradient the outline row dropped.
+  - `--toc-quiet` still steps `--ink-soft` 15% toward `--ink`. On the bed's floor plain
+    `--ink-soft` holds 4.5:1 without it, at 4.96:1 at its lowest (Catppuccin Latte).
+  - In light palettes the peek's rim stands under 4.5 ΔE from the floors it sits between.
+
+## 2026-11-02: the outline lies in a bed, its rows are flat rubber, and the peek is a pad
+
+The user didn't like the outline's gradients and asked for "textures that might be a
+little nicer". They asked for three things. The whole outline should sit "in a large
+'bed'", so it looks less bland. Its row faces, under hover and on a selected heading,
+should look less "fake". The peek should follow the rest of the aesthetic instead of
+reading "flat" with a "flat" border. Two or three variants of each were tried in the real
+app, in caret-dark and caret-light, with a row at rest, under hover, keyboard-selected and
+latched.
+
+- **The column lies in one large bed.** It is cut into the body beside the plan pane,
+  level with the pane top and bottom, and holds the column's head, filter and rows.
+  - Its floor, `--bed-floor`, is the body a step toward the pane's floor: 14% toward black
+    in dark, and halfway to the raised paper in light. It is grained like the body and
+    shades as any bed does (`--bed-shade`).
+  - The 0.5rem between the bed and the pane is the splitter. The rows, the filter and the
+    head's outline key end 0.45rem inside the bed. The bed starts `--pane-gap`, the inset
+    round the pane, from the window's left edge.
+  - On the bare body, a row's hover face stepped less than the 4.5 ΔE that keyboard focus
+    needs in five palettes, down to 2.3 ΔE in GitHub light. On the bed's floor it steps at
+    least 5.4 ΔE (Catppuccin Latte), above the 4.5 ΔE `theme.test.ts` now holds it to. The
+    same test holds the outline's quiet ink at 4.5:1 on the floor.
+  - Weighed:
+    - A bed with no floor, the `.tray` recipe at the column's size. It read as a shade
+      round the column, and stayed bland, most of all in light.
+    - A bed round the list alone, on Settings' `--group-floor`. In dark that floor sits
+      close to the pane's, and in light it is a cool white beside the warm body.
+    - A second screen, `--pane-recess` on `--paper-sunk`. The outline read as a second
+      plan and competed with it.
+- **Row faces are flat grained rubber.** The key row's gradient, a lit band over its top
+  third and a dark foot over its lower half, read as painted on a row 15rem wide.
+  - The outline row keeps the key row's rise, sink, side and cast shadow, and drops the
+    gradient. Inset shadows that follow its corners light its top edge (`--rubber-gloss`)
+    and shade its foot (`--rubber-foot`).
+  - Latched or pressed, it shades under its top edge (`--rubber-press`) and lights its
+    lower wall (`--scoop-lip`), as a bed does.
+  - The grain stays the body's `--grain`.
+  - Weighed:
+    - The same gradient with its stops in pixels at the edges. It was flatter, but still
+      read as a painted band.
+    - The flat face with a grain about twice as strong. It read as more textured, but it
+      would part the rows' rubber from the body's and the keys'.
+- **The peek is a raised rubber pad**, as a code block is. Its rim, `--code-bezel` wide in
+  `--body` and lit along its top, holds the copy in a scoop of the view's floor. It stands
+  on `--pad-stand`, floats at `--float-mid` with the menus' `--rule` ring, and rounds at
+  `--pad-radius`.
+  - This replaces the 3:1 `--peek-edge` ring chosen when the peek was built ("an outline
+    row peeks at its section", below). The rim, not a hairline, now parts the copy from
+    the plan.
+  - In every dark palette, the rim stands at least 4.5 ΔE off both the copy's floor and
+    the plan across 3px or more, which `outline-peek.e2e.ts` holds. In light the rim
+    stands as little as 2.9 ΔE from the source floor (Catppuccin Latte), and the pad's
+    side, ring and shadow carry its edge.
+  - The peek stands where it did, 0.5rem inside the plan pane. Its left edge, on the
+    outline's side, takes whichever is further right: 0.5rem past the outline's edge, or
+    0.5rem inside the pane. The outline's edge is now the bed's, 0.5rem short of the pane,
+    so the first would set the peek on the pane's edge and the second decides.
+  - Weighed:
+    - A float of the menus' `--paper-raised` round the copy in a field's cut. In dark it
+      read as a dark box in a thin frame, still flat.
+    - The menus' float composite with a scoop and no rim. In dark its edge almost vanished
+      against the plan.
+- **The float and the filtered outline:** the float keeps its `--paper-raised` panel and
+  takes the flat row faces. The filter opens inside the column's bed.
+- **Tests:**
+  - `concentric.e2e.ts` holds the bed's corner at a row's corner plus the inset.
+  - `outline-resize.e2e.ts` holds the bed level with the pane, with the splitter filling
+    the gap between them.
+  - `theme.test.ts` and `outline-peek.e2e.ts` hold the steps above.
 
 ## 2026-11-02: the header's outline key stands as far in as Preview
 

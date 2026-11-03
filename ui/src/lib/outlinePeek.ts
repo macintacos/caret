@@ -81,10 +81,16 @@ export interface PeekSize {
   maxWidth: number;
 }
 
-/** The peek's width beside an outline whose right edge is at `edge`, or null where the
- * room up to `boundsRight` is narrower than its least width. Pixels throughout. */
-export function peekWidth(edge: number, boundsRight: number, size: PeekSize): number | null {
-  const room = boundsRight - size.margin - (edge + size.gap);
+/** The peek's left: the gap past an outline whose right edge is at `edge`, and never
+ * nearer the bounds' left than the margin. Pixels throughout. */
+export function peekLeft(edge: number, boundsLeft: number, size: PeekSize): number {
+  return Math.max(edge + size.gap, boundsLeft + size.margin);
+}
+
+/** The peek's width from its left at `left`, or null where the room up to `boundsRight` is
+ * narrower than its least width. Pixels throughout. */
+export function peekWidth(left: number, boundsRight: number, size: PeekSize): number | null {
+  const room = boundsRight - size.margin - left;
   return room < size.minWidth ? null : Math.min(size.maxWidth, room);
 }
 

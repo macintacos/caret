@@ -6,7 +6,7 @@
   // repeats text the plan already holds, a jump away.
   import { untrack } from "svelte";
 
-  import { type PeekTarget, peekTop, peekWidth } from "$lib/outlinePeek.ts";
+  import { type PeekTarget, peekLeft, peekTop, peekWidth } from "$lib/outlinePeek.ts";
 
   interface Props {
     /** The row to stand beside, or null to hide. */
@@ -87,12 +87,13 @@
     const node = copyOf(next.line);
     if (node === null) return false;
     const rem = remPx();
-    const edge = next.outline.getBoundingClientRect().right;
+    const room = bounds.getBoundingClientRect();
     const size = { gap: GAP * rem, margin: MARGIN * rem, minWidth: MIN_WIDTH * rem, maxWidth: MAX_WIDTH * rem };
-    const width = peekWidth(edge, bounds.getBoundingClientRect().right, size);
+    const left = peekLeft(next.outline.getBoundingClientRect().right, room.left, size);
+    const width = peekWidth(left, room.right, size);
     if (width === null) return false;
     // Whole pixels, so its one-pixel edge stays one crisp pixel.
-    el.style.left = `${Math.round(edge + size.gap)}px`;
+    el.style.left = `${Math.round(left)}px`;
     el.style.width = `${Math.floor(width)}px`;
     if (body.firstChild !== node) body.replaceChildren(node);
     copy = node;
@@ -133,24 +134,26 @@
 </div>
 
 <style>
-  /* A float over the plan whose face is the view's own floor, so the copy reads as the
-     plan it came from. It arrives from the row's side and leaves twice as fast; moving
-     between rows it jumps, with no re-entry.
-
-     Its plan text lies over the plan's own, so its edge is the one cue between the two,
-     and holds 3:1 against both floors. --ink-faint does in every bundled palette but on
-     catppuccin-latte's source floor, so it steps a quarter toward --ink-soft. */
+  /* A raised rubber pad floating over the plan, as a code block stands on it: a rim of the
+     body, lit along its top, round the copy sunk in a scoop of the view's own floor, so the
+     copy reads as the plan it came from and the rim parts it from the plan beneath. It
+     floats at the menus' height, with their ring. It arrives from the row's side and leaves
+     twice as fast; moving between rows it jumps, with no re-entry. */
   .outline-peek {
     --peek-floor: var(--paper-sunk);
-    --peek-edge: color-mix(in oklab, var(--ink-faint), var(--ink-soft) 25%);
     position: fixed;
     z-index: 30;
     top: 0;
     left: 0;
     overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--peek-floor);
-    box-shadow: var(--float-rim), 0 0 0 1px var(--peek-edge), var(--float-mid);
+    border: var(--code-bezel) solid transparent;
+    border-radius: var(--pad-radius);
+    background:
+      linear-gradient(var(--peek-floor), var(--peek-floor)) padding-box,
+      linear-gradient(var(--rubber-gloss), transparent 2px) border-box,
+      linear-gradient(var(--pad-top), transparent 28px) border-box,
+      var(--body);
+    box-shadow: var(--pad-stand), 0 0 0 1px var(--rule), var(--float-mid);
     opacity: 0;
     visibility: hidden;
     translate: -0.375rem 0;
@@ -170,6 +173,15 @@
   }
   .outline-peek[data-view="preview"] {
     --peek-floor: var(--paper);
+  }
+  /* The scoop's shade, over the copy, whose rows paint floors of their own. */
+  .outline-peek::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: calc(var(--pad-radius) - var(--code-bezel));
+    box-shadow: var(--scoop-top), var(--scoop-foot);
+    pointer-events: none;
   }
 
   /* Cut to a fixed height, fading at the foot where the section runs on. A source line

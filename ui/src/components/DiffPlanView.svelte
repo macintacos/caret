@@ -3410,8 +3410,9 @@
     overflow: hidden;
   }
 
-  /* The outline column, cut into the body with no surface of its own: its rows lie as
-     keys on the rubber. Its left edge lines up with the top bar's inset. */
+  /* The outline column: a bed cut into the body (PlanToc.svelte draws it), level with the
+     plan pane and inset from the window's edge as the pane is. The 1px at its foot is the
+     room the pane keeps for its lip. */
   .plan-outline {
     position: relative;
     z-index: 1;
@@ -3419,12 +3420,12 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
-    padding-left: calc(var(--bar-inset) - 0.45rem);
+    padding: 0 0.5rem 1px var(--pane-gap);
   }
-  /* The column's edge covers only the gap its rows leave before the plan pane, below the
-     column's head, so it takes no click meant for a row, the head's keys or the plan, and
-     its grip never rises over the head's outline key. Keep in step with the title row's
-     height and the outline list's end padding (PlanToc.svelte). */
+  /* The column's edge covers only the gap between its bed and the plan pane, its end
+     padding, below the column's head, so it takes no click meant for a row, the head's
+     keys or the plan, and its grip never rises beside the head's outline key. Keep in step
+     with the title row's height (PlanToc.svelte). */
   .plan-outline > :global(.splitter) {
     inset: 2.6rem 0 0 auto;
     width: 0.5rem;

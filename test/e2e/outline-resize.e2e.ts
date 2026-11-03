@@ -76,6 +76,30 @@ test("dragging the column's edge resizes it, and the width survives a reload", a
   await expect.poll(() => widthOf(column(page))).toBeCloseTo(OPENING_PX + 80, 0);
 });
 
+// The column's bed and the plan pane are two cuts in the body, side by side: the edge is
+// all of the gap between them, so the grip rises in the gap and never over either.
+test("the column's bed stands level with the plan pane, parted from it by the edge alone", async ({
+  daemon,
+  page,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await open(page);
+  const box = (l: Locator) =>
+    l.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+    });
+  const [bed, gap, pane] = await Promise.all([
+    box(column(page).locator(".plan-toc")),
+    box(edge(page)),
+    box(page.locator(".plan-pane")),
+  ]);
+  expect(bed.top).toBeCloseTo(pane.top, 0);
+  expect(bed.bottom).toBeCloseTo(pane.bottom, 0);
+  expect(gap.left).toBeCloseTo(bed.right, 0);
+  expect(gap.right).toBeCloseTo(pane.left, 0);
+});
+
 /** The names of the elements whose last pixel column, at their middle, something else
  * takes the click on. */
 function stolenRightEdges(locator: Locator): Promise<string[]> {

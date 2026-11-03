@@ -629,9 +629,8 @@
      that reach them are :global and anchored on .plan-toc, the outline's own root. Being
      unlayered, they also beat the copied components' own Tailwind utilities. The float's
      panel itself (radius, surface, size) is its host's, DiffPlanView. */
-  /* --toc-quiet is the outline's secondary ink. On the float's raised paper that is
-     --ink-soft; on the body, where --ink-soft misses AA in the palest palettes, it is a
-     neutral key's label ink (theme.test.ts measures it there). */
+  /* --toc-quiet is the outline's secondary ink: --ink-soft on the float's raised paper, and
+     a neutral key's label ink in the column's bed (theme.test.ts measures it there). */
   .plan-toc {
     --toc-step: 1rem;
     --toc-guide-x: 0.55rem;
@@ -641,9 +640,19 @@
     min-height: 0;
     min-width: 0;
   }
+  /* The column lies in one large bed cut into the body, grained like the body, with a floor
+     a step toward the plan pane's. Its rows stand --toc-inset in from its walls, and its
+     corners round at theirs plus that inset. */
   .plan-toc[data-placement="column"] {
     --toc-quiet: color-mix(in lab, var(--ink-soft), var(--ink) 15%);
+    --toc-inset: 0.45rem;
     height: 100%;
+    border-radius: calc(var(--key-radius) + var(--toc-inset));
+    background-color: var(--bed-floor);
+    background-image: var(--grain);
+    background-size: 128px;
+    background-blend-mode: soft-light;
+    box-shadow: var(--bed-shade);
   }
   .plan-toc :global([data-slot="command"]) {
     flex: 1 1 auto;
@@ -654,14 +663,14 @@
   }
 
   /* The column's head: the Outline key that opens the filter, and the key that hides
-     the column. */
+     the column, whose face ends where the rows' do. */
   .toc-title-row {
     flex: none;
     display: flex;
     align-items: center;
     gap: 0.45rem;
     height: 2.6rem;
-    padding-inline: 0.95rem 0.35rem;
+    padding-inline: 0.95rem calc(var(--toc-inset) - var(--well-pad));
   }
   .toc-title-row :global(.toc-title) {
     margin-inline-end: auto;
@@ -696,7 +705,7 @@
     padding: calc(var(--key-radius) + 4px - var(--radius));
   }
   .plan-toc[data-placement="column"] :global([data-slot="command-input-wrapper"]) {
-    padding: 0.35rem 0.5rem 0.2rem 0.45rem;
+    padding: 0.35rem var(--toc-inset) 0.2rem;
   }
   .plan-toc :global([data-slot="command-input-wrapper"] [data-slot="input-group-addon"]) {
     opacity: 1;
@@ -837,10 +846,10 @@
   .plan-toc :global([data-slot="command-list"]) {
     flex: 1 1 auto;
     min-height: 0;
-    padding: 0.15rem 0.5rem 0.75rem 0.45rem;
   }
   .plan-toc[data-placement="column"] :global([data-slot="command-list"]) {
     max-height: none;
+    padding: 0.15rem var(--toc-inset) 0.75rem;
   }
   /* An empty list doesn't fill the column, so the line saying why stands under the field. */
   .plan-toc[data-placement="column"] :global([data-slot="command-list"]:not(:has([data-slot="command-item"]))) {
@@ -916,19 +925,40 @@
     pointer-events: none;
   }
 
-  /* The key: a row's key, flat on the ground at rest. It rises under the pointer and,
+  /* The key: a row's key, flat on the bed at rest. It rises under the pointer and,
      while the filter is open, on the selection the keys move, so the keyboard's row
      looks exactly as the pointer's. With the filter closed bits-ui still holds a
      selection (it seeds the first row), so the column rises on hover alone. The heading
-     being read is latched down, as the compare toggle is when it is on. Every state
-     draws the same five shadow layers, so a change of state transitions. The rise and
-     press are the key row's (the --key-row-* tokens); a row is no `.key-row`, whose
-     states key on the row itself rather than on the command item around it. */
+     being read is latched down, as the compare toggle is when it is on. A row is no
+     `.key-row`, whose states key on the row itself rather than on the command item around
+     it. It travels as a key row does, but its face is flat grained rubber: on a key this
+     wide the key row's domed gradient reads as painted, so inset shadows that follow its
+     corners light and shade it instead. Every state draws the same six shadow layers, so a
+     change of state transitions. */
+  .plan-toc {
+    --toc-key-side: color-mix(in lab, var(--neutral-face-hover), black var(--rubber-side));
+    --toc-key-up:
+      inset 0 1.5px 1px -0.5px var(--rubber-gloss),
+      inset 0 -2.5px 3px -1.5px var(--rubber-foot),
+      0 calc(var(--key-side) - 1px) 0 var(--toc-key-side),
+      0 var(--key-side) 1px var(--toc-key-side),
+      0 calc(var(--key-side) * 5 / 3) calc(var(--key-side) * 2) -1px var(--rubber-cast-near),
+      0 calc(var(--key-side) * 8 / 3) calc(var(--key-side) * 14 / 3) calc(var(--key-side) * -2)
+        var(--rubber-cast);
+    --toc-key-down:
+      inset 0 2px 3px -1px var(--rubber-press),
+      inset 0 -1px 1px var(--scoop-lip),
+      0 0 0 transparent,
+      0 0 0 transparent,
+      0 1px 1px var(--rubber-cast-near),
+      0 0 0 transparent;
+  }
   .plan-toc :global(.toc-key) {
     --key-face: transparent;
     --key-image: none;
     --key-shadow:
-      inset 0 2px 2px -1px transparent,
+      inset 0 0 0 transparent,
+      inset 0 0 0 transparent,
       0 0 0 transparent,
       0 0 0 transparent,
       0 0 0 transparent,
@@ -944,8 +974,8 @@
     border-radius: var(--key-radius);
     background-color: var(--key-face);
     background-image: var(--key-image);
-    background-size: auto, 128px;
-    background-blend-mode: normal, soft-light;
+    background-size: 128px;
+    background-blend-mode: soft-light;
     box-shadow: var(--key-shadow);
     translate: 0 var(--key-shift);
     transition:
@@ -959,8 +989,8 @@
   .plan-toc:where([data-filtering]) :global([data-slot="command-item"][data-selected] .toc-key),
   .plan-toc:where(:not([data-filtering])) :global([data-slot="command-item"]:hover .toc-key) {
     --key-face: var(--neutral-face-hover);
-    --key-image: var(--key-row-up-image);
-    --key-shadow: var(--key-row-up);
+    --key-image: var(--grain);
+    --key-shadow: var(--toc-key-up);
     --key-shift: calc(-1 * var(--key-rise));
     color: var(--ink);
   }
@@ -969,8 +999,8 @@
   }
   .plan-toc :global([data-slot="command-item"][aria-current="location"] .toc-key) {
     --key-face: var(--neutral-face-latched);
-    --key-image: var(--key-row-down-image);
-    --key-shadow: var(--key-row-down);
+    --key-image: var(--grain);
+    --key-shadow: var(--toc-key-down);
     --key-shift: var(--key-sink);
     color: var(--ink);
     transition-timing-function: var(--ease-out);
@@ -981,8 +1011,8 @@
   }
   .plan-toc :global([data-slot="command-item"]:is(:active, [data-key-pressed]) .toc-key) {
     --key-face: var(--neutral-face-press);
-    --key-image: var(--key-row-down-image);
-    --key-shadow: var(--key-row-down);
+    --key-image: var(--grain);
+    --key-shadow: var(--toc-key-down);
     --key-shift: var(--key-sink);
     transition-timing-function: var(--ease-out);
   }

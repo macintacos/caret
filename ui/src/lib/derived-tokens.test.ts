@@ -61,6 +61,7 @@ describe("the derived-token tier", () => {
       "--accent-face-hover",
       "--accent-face-press",
       "--attention-wash",
+      "--bed-floor",
       "--body",
       "--chip",
       "--chip-hover",

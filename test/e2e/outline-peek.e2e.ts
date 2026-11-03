@@ -16,9 +16,11 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { toLab } from "@test/e2e/support/color.ts";
 import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { awaitPlanReadyForKeys, PLAN_PREVIEW, planSurface } from "@test/e2e/support/source-view.ts";
+import { bundledThemes } from "@test/support/theme.ts";
 
 const filler = (label: string) =>
   Array.from(
@@ -99,29 +101,16 @@ async function watchForClose(page: Page): Promise<() => Promise<boolean>> {
   return () => page.evaluate(() => (window as unknown as { peekClosed: boolean }).peekClosed);
 }
 
-/** The contrast between two sRGB colours, by WCAG 2.2's formula. */
-function contrast(a: number[], b: number[]): number {
-  const lum = (rgb: number[]) => {
-    const [r = 0, g = 0, bl = 0] = rgb.map((v) => {
-      const c = v / 255;
-      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-    });
-    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
-  };
-  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
-  return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
-}
-
-/** The pixels of a one-pixel strip across the peek's right edge, halfway down: a few
- * inside the peek, then the edge, then a few of the plan past it. */
-async function rightEdgeStrip(page: Page): Promise<number[][]> {
+/** The pixels of a one-pixel strip across the peek's right edge, halfway down, each as
+ * `rgb(r g b)`: the copy's floor 16px inside, then the edge, then the plan 8px past it. */
+async function rightEdgeStrip(page: Page): Promise<string[]> {
   const box = await openPeek(page).boundingBox();
   if (!box) throw new Error("no open peek");
   const shot = await page.screenshot({
     clip: {
-      x: Math.round(box.x + box.width) - 6,
+      x: Math.round(box.x + box.width) - 16,
       y: Math.round(box.y + box.height / 2),
-      width: 14,
+      width: 24,
       height: 1,
     },
   });
@@ -137,7 +126,10 @@ async function rightEdgeStrip(page: Page): Promise<number[][]> {
       const context = canvas.getContext("2d");
       context?.drawImage(image, 0, 0);
       const data = context?.getImageData(0, 0, image.width, 1).data ?? [];
-      return Array.from({ length: image.width }, (_, i) => [...data].slice(i * 4, i * 4 + 3));
+      return Array.from({ length: image.width }, (_, i) => {
+        const [r, g, b] = [...data].slice(i * 4, i * 4 + 3);
+        return `rgb(${r} ${g} ${b})`;
+      });
     }, shot.toString("base64"));
   } finally {
     await scratch.close();
@@ -255,21 +247,31 @@ test("when its copy grows, the peek measures again: inside the plan, fading at t
   expect(room).toBeGreaterThanOrEqual(7.5);
 });
 
-test("in dark, the peek's edge stands at least 3:1 from its face and from the plan", async ({
-  page,
-}) => {
-  await page.emulateMedia({ colorScheme: "dark" });
-  await openAt(page);
-  await row(page.locator(COLUMN), "Retention").hover();
-  await expect(peekHeading(page, "source")).toHaveText("## Retention");
-  await expect(openPeek(page)).toHaveCSS("opacity", "1");
+// The peek lays plan text over plan text, so what parts the copy from the plan is the
+// rubber rim round it: a band, not a hairline, that a reader finds apart from the copy's
+// floor and from the plan. FOUND is theme.test.ts's findable step, in CIE76.
+const FOUND = 4.5;
+for (const theme of bundledThemes().filter((t) => t.scheme === "dark")) {
+  test(`in dark, the peek's copy sits in a rim that stands off its floor and the plan, ${theme.id}`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.addInitScript((id) => {
+      localStorage.setItem("caret.theme.mode", "dark");
+      localStorage.setItem("caret.theme.dark", id);
+    }, theme.id);
+    await openAt(page);
+    await row(page.locator(COLUMN), "Retention").hover();
+    await expect(peekHeading(page, "source")).toHaveText("## Retention");
+    await expect(openPeek(page)).toHaveCSS("opacity", "1");
 
-  const strip = await rightEdgeStrip(page);
-  const face = strip[1] ?? [];
-  const plan = strip.at(-1) ?? [];
-  const edge = Math.max(...strip.map((px) => Math.min(contrast(px, face), contrast(px, plan))));
-  expect(edge).toBeGreaterThanOrEqual(3);
-});
+    const [face = [], ...rest] = await toLab(page, await rightEdgeStrip(page));
+    const plan = rest.at(-1) ?? [];
+    const apart = (a: number[], b: number[]) => Math.hypot(...a.map((v, i) => v - (b[i] ?? 0)));
+    const rim = rest.filter((px) => apart(px, face) >= FOUND && apart(px, plan) >= FOUND);
+    expect(rim.length).toBeGreaterThanOrEqual(3);
+  });
+}
 
 test("a closed peek leaves no copy of the plan in the page", async ({ page }) => {
   for (const [view, live] of [

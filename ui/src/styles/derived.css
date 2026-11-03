@@ -66,6 +66,10 @@
      pane is set into it. Dark lifts it off the raised paper, which sits too close to the
      pane's sunk floor for the pane to read as set in. */
   --body: color-mix(in lab, var(--paper-raised), var(--ink) 7%);
+  /* The floor of the outline column's bed: the body a step toward the plan pane's floor,
+     which is darker than the body in dark and lighter in light. Far enough that a row's
+     hover face reads off it by FOUND (theme.test.ts). */
+  --bed-floor: color-mix(in lab, var(--body), black 14%);
 
   /* A table is a raised pad of --body with its rows in a scoop on its face. The scoop's
      floor steps below the plan, and its row hairline is that floor stepped toward ink. The
@@ -165,6 +169,7 @@
   --danger-face-hover: color-mix(in lab, var(--danger), black 18%);
   --danger-face-press: var(--danger-face-hover);
   --body: color-mix(in lab, var(--paper-sunk), var(--ink) 5%);
+  --bed-floor: color-mix(in lab, var(--body), var(--paper-raised) 50%);
   --table-floor: color-mix(in lab, var(--paper-sunk), var(--ink) 3%);
   --pad-top: color-mix(in lab, var(--body), var(--paper-raised) 60%);
   --pad-side: color-mix(in lab, var(--body), black 13%);

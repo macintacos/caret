@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { createPeekIntent, PEEK_INTENT_MS, peekTop, peekWidth } from "$lib/outlinePeek.ts";
+import {
+  createPeekIntent,
+  PEEK_INTENT_MS,
+  peekLeft,
+  peekTop,
+  peekWidth,
+} from "$lib/outlinePeek.ts";
 
 // A hand-cranked clock: each scheduled callback waits in `pending` until `fire` runs it.
 function harness() {
@@ -85,19 +91,31 @@ describe("createPeekIntent", () => {
   });
 });
 
+describe("peekLeft", () => {
+  const size = { gap: 8, margin: 8, minWidth: 288, maxWidth: 576 };
+
+  test("stands the gap past the outline's edge", () => {
+    expect(peekLeft(250, 100, size)).toBe(258);
+  });
+
+  test("stays the margin inside the bounds where the outline's edge stops short of them", () => {
+    expect(peekLeft(240, 248, size)).toBe(256);
+  });
+});
+
 describe("peekWidth", () => {
   const size = { gap: 8, margin: 8, minWidth: 288, maxWidth: 576 };
 
-  test("takes its full width where the room past the outline's edge allows", () => {
-    expect(peekWidth(250, 1400, size)).toBe(576);
+  test("takes its full width where the room past its left edge allows", () => {
+    expect(peekWidth(258, 1400, size)).toBe(576);
   });
 
-  test("narrows to the room left between the outline's edge and the bounds", () => {
-    expect(peekWidth(250, 800, size)).toBe(800 - 8 - (250 + 8));
+  test("narrows to the room left between its left edge and the bounds", () => {
+    expect(peekWidth(258, 800, size)).toBe(800 - 8 - 258);
   });
 
   test("is null where the room is narrower than its least width", () => {
-    expect(peekWidth(250, 550, size)).toBeNull();
+    expect(peekWidth(258, 550, size)).toBeNull();
   });
 });
 

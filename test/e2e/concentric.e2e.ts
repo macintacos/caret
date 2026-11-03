@@ -247,6 +247,15 @@ test("the outline's float: the filter nests in its corner, and so does a top-lev
   await expectConcentric(panel, panel.locator("[data-level='1'] .toc-key").first(), "bl");
 });
 
+test("the outline column's bed: a top-level row's key nests in its corner", async ({
+  daemon,
+  page,
+}) => {
+  await seedAndOpen(page, daemon);
+  const bed = page.locator(".plan-outline .plan-toc");
+  await expectConcentric(bed, bed.locator("[data-level='1'] .toc-key").first(), "tl");
+});
+
 test("a saved comment's header controls nest in its corners", async ({ daemon, page }) => {
   await openSeeded(page, daemon);
   const card = page.locator("[data-annotation-card='ann-1']");
