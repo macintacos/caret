@@ -16,9 +16,10 @@ HK_MISE = 1
 # patch version would only duplicate the lock while hiding the tool from upgrade sweeps.
 # The per-tool notes below say where a value is deliberately narrower than that.
 [tools]
-# Keep hk in lockstep with hk.pkl's amends/import version; the two are compared exactly,
-# so even a patch bump landing here needs the hk.pkl edit. test/structure/hk-pin.test.ts
-# fails if they diverge.
+# hk.pkl's amends/import URLs must name exactly the hk release mise.lock resolves, as
+# test/structure/hk-pin.test.ts enforces. Keep this a plain string: `mise up --bump hk`
+# rewrites it as a table with `workflow = "release.yml"`, which that test can't read
+# (mise.lock's `signer` lines already name the workflow).
 hk  = "2.11"
 pkl = "0"
 bun = "1.4"

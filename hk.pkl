@@ -2,7 +2,7 @@ amends "package://github.com/jdx/hk/releases/download/v2.11.1/hk@2.11.1#/Config.
 
 import "package://github.com/jdx/hk/releases/download/v2.11.1/hk@2.11.1#/Builtins.pkl"
 
-// Keep the amends/import version in lockstep with the `hk` version in mise.toml.
+// Keep the amends/import version in lockstep with the hk release mise.lock resolves.
 //
 // caret is a Bun + TypeScript + Svelte project. Biome formats/lints the JS/TS/
 // JSON; type-level checking is folded into linting via tsc (backend) and
