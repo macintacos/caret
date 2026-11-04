@@ -213,6 +213,7 @@ function derived(name: string, theme: (typeof THEMES)[BuiltinThemeId]): string {
   const tokens = theme.tokens as Record<string, string>;
   const resolve = (ref: string): Lab => {
     if (ref === "black") return [0, 0, 0];
+    if (ref === "white") return [100, 0, 0];
     const token = /^var\((--[\w-]+)\)$/.exec(ref)?.[1] ?? ref;
     if (tokens[token] !== undefined) return hexToLab50(tokens[token]);
     const value = decls[token] ?? "";
@@ -959,6 +960,54 @@ describe("every theme", () => {
         expect(contrast(word, stamp), `${id} ${hue}`).toBeGreaterThanOrEqual(4.5);
       }
       expect(contrast(tokens["--ink-soft"]!, well), `${id} expired`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  // The waiting screen's key is lit from behind: its legend's amber and, in dark, its
+  // hotter core are what show the ^ on the key's face, at rest, hovered and pressed. A
+  // display-size glyph and a graphic both owe 3:1. Offline the key is disabled, which
+  // 1.4.11 exempts, so its unlit legend is not held here.
+  test("keeps the waiting key's lit legend above the non-text floor on each face it wears", () => {
+    for (const [id, theme] of themeEntries()) {
+      for (const face of ["--neutral-face", "--neutral-face-hover", "--neutral-face-press"]) {
+        const ground = derived(face, theme);
+        expect(
+          contrast(theme.tokens["--accent"], ground),
+          `${id} --accent on ${face}`,
+        ).toBeGreaterThanOrEqual(3);
+        expect(
+          contrast(derived("--lit-core", theme), ground),
+          `${id} --lit-core on ${face}`,
+        ).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+
+  // The waiting screen's listening stamp sits in a pocket on the pane, whose floor is the
+  // plain --well-floor (the bars' re-cut floor is not under it). Its word is text. Its LED
+  // is a graphic carrying the connection state: a lens lit in its state's colour and
+  // darkened at its rim (the .led atom), which stands off its pocket by whichever of the
+  // two is further off it, the body on dark paper and the rim on light.
+  test("keeps the waiting screen's listening stamp legible in its pocket", () => {
+    const rimMix = Number(
+      /\.led\s*\{[^}]*color-mix\(in lab, var\(--led\), black (\d+)%\)/.exec(readAppCss())?.[1],
+    );
+    expect(rimMix).toBeGreaterThan(0);
+    const lens = (led: string, well: string) =>
+      Math.max(
+        contrast(led, well),
+        contrast(lab50ToHex(hexToLab50(led).map((v) => v * (1 - rimMix / 100)) as Lab), well),
+      );
+    for (const [id, theme] of themeEntries()) {
+      const recipe = stampRecipe(theme.scheme);
+      const tokens = theme.tokens as Record<string, string>;
+      const toward = (c: string) => tokens[c] ?? c;
+      const well = derived("--well-floor", theme);
+      const offline = banded(tokens["--danger"]!, toward(recipe.inkToward), recipe.ink);
+      expect(contrast(tokens["--ink-soft"]!, well), `${id} listening`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(offline, well), `${id} offline`).toBeGreaterThanOrEqual(4.5);
+      expect(lens(tokens["--ok"]!, well), `${id} live LED`).toBeGreaterThanOrEqual(3);
+      expect(lens(tokens["--danger"]!, well), `${id} offline LED`).toBeGreaterThanOrEqual(3);
     }
   });
 

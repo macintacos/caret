@@ -119,12 +119,23 @@ body {
 
    Both halves run on the state tokens, so a decided guard receding and what replaces it
    arriving read as one crossfade. `forwards` states the departure's end state rather
-   than leaving it to the transition's own teardown. */
+   than leaving it to the transition's own teardown.
+
+   The browser's own crossfade adds its two images (plus-lighter) through an animation of
+   its own, which these replace, so the blend is restated: layered at their two opacities,
+   the chrome both windows share dims toward the canvas mid-fade. The group is timed with
+   them because the transition takes the pointer until its last animation ends, and the
+   browser's group animation runs 250ms. */
+:root.plan-handoff::view-transition-group(root) {
+  animation-duration: var(--dur-state);
+}
 :root.plan-handoff::view-transition-old(root) {
   animation: plan-handoff-out var(--dur-state) var(--ease-out) forwards;
+  mix-blend-mode: plus-lighter;
 }
 :root.plan-handoff::view-transition-new(root) {
   animation: plan-handoff-in var(--dur-state) var(--ease-out);
+  mix-blend-mode: plus-lighter;
 }
 @keyframes plan-handoff-out {
   from {

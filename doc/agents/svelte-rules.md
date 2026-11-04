@@ -425,19 +425,27 @@ surface arriving or leaving, a control sliding between positions — takes `--du
 `motion.test.ts` pins the vocabulary as closed at those three. The portalled shadcn
 surfaces (dialogs, dropdown menus, tooltips, popovers) instead animate their enter/exit
 through `tw-animate-css` — the `animate-in`/`fade`/`zoom`/`slide` utilities the copied
-components ship with. Ambient/infinite animations (the safe-mode pulse, the EmptyState
-float, the theme wipe) are exempt from both and keep their own bespoke durations. The plan
-hand-off (`lib/planHandoff.ts`, EXC-1400) is the second view transition, after the theme
-wipe, and is NOT exempt: every plan swap — a plan arriving, the next one after a decision,
-a switch, the queue draining — crossfades the whole window on the state tokens, the same
-timing a dialog spends. It is a transition rather than an animation beside the swap
-because the swap's render is synchronous and long: an animation started in the same frame
-spends its duration before the first frame paints, while the transition holds a still
-until the new window has rendered. That still freezes everything, so the hand-off first
-lets one-shot motion already in flight finish — a decided guard's exit, its confirmation
-sliding in. Its two arms are scoped under a class that module tags, because the theme wipe
-claims the bare `::view-transition-*(root)` pseudo-elements unconditionally. Compare's
-move (`lib/paneMove.ts`) is the third, scoped the same way under the root's
+components ship with. Ambient/infinite animations (the safe-mode pulse, the waiting
+screen's breathing legend, the theme wipe) are exempt from both and keep their own bespoke
+durations. The plan hand-off (`lib/planHandoff.ts`, EXC-1400) is the second view
+transition, after the theme wipe, and is NOT exempt: every plan swap — a plan arriving,
+the next one after a decision, a switch, the queue draining — crossfades the whole window
+on the state tokens, the same timing a dialog spends. It is a transition rather than an
+animation beside the swap because the swap's render is synchronous and long: an animation
+started in the same frame spends its duration before the first frame paints, while the
+transition holds a still until the new window has rendered. The hand-off starts as soon as
+the decision lands and does not wait for motion already in flight. A decided guard's exit
+and its confirmation sliding in stay mounted in the new window, so they play on inside the
+crossfade. Waiting for them to end uncovers the decided plan between the two. The
+hand-off's two arms are scoped under a class that module tags, because the theme wipe
+claims the bare `::view-transition-*(root)` pseudo-elements unconditionally. The arms
+restate the browser's `plus-lighter` blend, which an author `animation` on those
+pseudo-elements replaces. Without that blend the chrome both windows share dims toward the
+canvas mid-fade. The root's group runs on `--dur-state`, because the transition takes the
+pointer until its last animation ends, and the browser's group animation runs 250ms,
+longer than the crossfade. The page's first poll answer is not a swap, so it lands with no
+crossfade; until it answers, `App.svelte` holds a bare pane rather than the waiting room.
+Compare's move (`lib/paneMove.ts`) is the third, scoped the same way under the root's
 `data-pane-move` tag. The outline and the file drawer move on the page itself
 (`lib/layoutSlide.ts`), not as a view transition. A part of that slide must move by
 `transform` alone. A `clip-path` or a width animates on the main thread, which the long

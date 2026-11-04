@@ -43,12 +43,13 @@ danger key's face `--danger-face`, the accent and danger keys' hover and press f
 `--accent-face-hover`, `--accent-face-press`, `--danger-face-hover` and
 `--danger-face-press`, the switch's `--knob-face`, `--knob-face-hover`,
 `--knob-face-down`, `--knob-edge` and `--switch-on`, the meter's `--meter-off`, and the
-`--float-surface-low`, `-mid` and `-high` composites), is mixed in
-`ui/src/styles/derived.css`. In light, the top bar, the outline column and the status bar
-re-cut `--well-floor` from `--body`, so a stamp's or a count chip's pocket stays visible
-on it. The outline's quieter text takes `--toc-quiet`, local to
-`ui/src/components/PlanToc.svelte`: `--ink-soft` on the float's raised paper, and stepped
-toward `--ink` in the column's bed. The row faces' shadows, `--toc-key-up` and
+`--float-surface-low`, `-mid` and `-high` composites, and the waiting screen's lit legend:
+its core `--lit-core` (the amber itself in light), its rim `--lit-rim` and its unlit face
+`--lit-off`), is mixed in `ui/src/styles/derived.css`. In light, the top bar, the outline
+column and the status bar re-cut `--well-floor` from `--body`, so a stamp's or a count
+chip's pocket stays visible on it. The outline's quieter text takes `--toc-quiet`, local
+to `ui/src/components/PlanToc.svelte`: `--ink-soft` on the float's raised paper, and
+stepped toward `--ink` in the column's bed. The row faces' shadows, `--toc-key-up` and
 `--toc-key-down`, are local to the same file and built from the `--rubber-*` set below,
 with `--scoop-lip`. A bar's bed floor, `--header-bed-floor`, is mixed by the pane that
 holds the bar, from that pane's floor: the plan pane in
@@ -62,7 +63,10 @@ control's hover faces. shadcn-svelte's token names map onto these roles in
 All in `ui/src/styles/tokens.css`:
 
 - **Faces:** `--font-sans` and `--font-display` (Geist), `--font-mono` (Berkeley Mono). No
-  font files ship; each stack falls back to the platform.
+  font files ship; each stack falls back to the platform. Outside this file, the waiting
+  screen's legend names one more face in `EmptyState.svelte`, for readers without Berkeley
+  Mono: macOS's own SF Mono, with its line metrics adjusted so its `^` sits where Berkeley
+  Mono's does.
 - **Size:** the `--text-2xs` … `--text-xl` ramp, and the role-keyed `--leading-*` tokens.
   The reading base is the 15px on `<body>` in `ui/src/styles/base.css`.
 - **Motion:** `--dur-pane` for a pane or column entering, `--dur-state` and `--ease-out`
@@ -76,10 +80,11 @@ All in `ui/src/styles/tokens.css`:
   its corner below 640px wide. `--composer-radius` rounds the comment composer: its tray's
   corner plus `--composer-inset`, its padding.
 - **Depth:** the tactile geometry is hand-written here, its alphas keyed per scheme:
-  - the beds: `--well-pad` (the gap round a key), `--well-top` and `--well-foot` (the pads
-    above and below a key, which take its rise and side), `--tray-gap`, `--bed-shade`, and
-    `--header-bed-mix` (how far a bar's bed floors itself from its pane's floor toward
-    `--bed-floor`); a stamp's pocket: `--well-shade` and `--well-lip`;
+  - the beds: `--well-pad` (the gap round a key; `.tray-deep` in `atoms.css` restates the
+    bed and key geometry for a key at twice `--key-side`), `--well-top` and `--well-foot`
+    (the pads above and below a key, which take its rise and side), `--tray-gap`,
+    `--bed-shade`, and `--header-bed-mix` (how far a bar's bed floors itself from its
+    pane's floor toward `--bed-floor`); a stamp's pocket: `--well-shade` and `--well-lip`;
   - the keys: `--key-side` (the depth of a key's rubber side, which its rise, press and
     cast shadow scale from), `--key-rise` (how far a resting key stands above its place)
     and `--key-sink` (how far below it a press takes the key), the last two 0 under
@@ -104,6 +109,8 @@ All in `ui/src/styles/tokens.css`:
     weaker shade with no lip; in light, `--bed-shade`);
   - the floats (`--float-rim`, `--float-rim-ink`, `--float-low`, `--float-mid`,
     `--float-high`) and `--shadow-chip` for small hints;
+  - the waiting screen's key's `--lit-glow`, its glow's strength at the peak of its
+    breathing;
   - the plan's `--chip-stamped` and `--chip-raised`, `--panel-recess` for text fields and
     copy boxes, and `--field-wall`, the wall of a focused field's cut that
     `--field-edge-focus` lights: the lower in dark, the upper in light.

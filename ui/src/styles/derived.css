@@ -116,6 +116,12 @@
   --neutral-face-latched: color-mix(in lab, var(--neutral-face-down), var(--accent) 14%);
   --neutral-face-latched-hover: var(--neutral-face-hover);
 
+  /* The waiting key's backlit legend (EmptyState.svelte): a hot core, the accent, and a
+     rim, and while the light is out the bare legend moulded into the key's rubber. */
+  --lit-core: color-mix(in lab, var(--accent), white 62%);
+  --lit-rim: color-mix(in lab, var(--accent), black 24%);
+  --lit-off: color-mix(in lab, var(--neutral-face), black 32%);
+
   /* A list row's two key states (the .key-row atom, styles/atoms.css): risen on the
      hover face, with a key's lift, side and cast shadow, and latched down on the pressed
      face. Tokens rather than the atom alone so a list in a shadow root, which the atom
@@ -187,6 +193,10 @@
   --knob-face-down: color-mix(in lab, var(--paper-raised), black 5%);
   --knob-edge: color-mix(in lab, var(--ink-faint), var(--ink-soft) 50%);
   --switch-on: color-mix(in lab, var(--well-floor), var(--accent) 18%);
+  /* On a white key any whiter core falls under 3:1 once the key is hovered, so the glow
+     carries the light. */
+  --lit-core: var(--accent);
+  --lit-off: color-mix(in lab, var(--neutral-face), var(--ink) 10%);
 }
 /* Light chrome is the grey body rather than the raised paper, so a stamp's or a count
    chip's pocket there, the outline column's included, re-cuts off the body; modals and

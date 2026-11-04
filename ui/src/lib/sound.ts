@@ -60,7 +60,8 @@ export type SoundEvent =
   | "searchStepped"
   | "visualEntered"
   | "visualExited"
-  | "commentsToggled";
+  | "commentsToggled"
+  | "factTurned";
 
 /**
  * The single event→sound table. Which cuelume sound suits which moment is a
@@ -119,6 +120,8 @@ export const SOUND_MAP: Partial<Record<SoundEvent, SoundName>> = {
   searchStepped: "select",
   visualEntered: "tap",
   visualExited: "tap",
+  // The waiting screen's key, pressed for the next carrot fact.
+  factTurned: "tap",
 };
 
 /** The gestures that count as the reviewer's first interaction with the page. */

@@ -7,15 +7,23 @@ Open items first, then the log, newest first.
 
 ## Open: where the code still differs
 
-- **`--ink-faint` on raised surfaces:** falls under the 4.5:1 text contrast floor in
-  several bundled third-party palettes. On `--paper-raised` it measures 4.45 in Catppuccin
-  Mocha, 3.49 in Catppuccin Latte, 3.26 in GitHub dark, 3.45 in GitHub light and 3.59 in
-  Dracula; in Dracula the outline filter's match count is 4.46 on the float.
-  `theme.test.ts` holds only caret's two palettes to the floor. CommentNavigator's
-  `.nav-hints` is unchecked. The 2026-10-31 pass moved the dialogs and the settings panes
-  off it, apart from the search field's glyph and key hint, which are non-text. The file
-  preview's gutter line numbers still use it; that call is listed below under "Calls left
-  to the user".
+- **`--ink-faint` as text:** falls under the 4.5:1 text contrast floor in several bundled
+  third-party palettes. On `--paper-raised` it measures 4.45 in Catppuccin Mocha, 3.49 in
+  Catppuccin Latte, 3.26 in GitHub dark, 3.45 in GitHub light and 3.59 in Dracula; in
+  Dracula the outline filter's match count is 4.46 on the float. On `--paper`, the waiting
+  screen's carrot fact measures 3.10 in Dawnfox, 3.24 in GitHub light, 3.25 in Catppuccin
+  Latte, 3.57 in GitHub dark and 4.44 in Duskfox. `theme.test.ts` holds only caret's two
+  palettes to the floor. CommentNavigator's `.nav-hints` is unchecked. The 2026-10-31 pass
+  moved the dialogs and the settings panes off it, apart from the search field's glyph and
+  key hint, which are non-text. The file preview's gutter line numbers still use it; that
+  call is listed below under "Calls left to the user".
+- **The carrot fact covers the heading at 200% zoom in a short window:** the fact is fixed
+  above the status bar, so it doesn't move with the pane. In an 880×580 window at 200%
+  zoom, 440×290 CSS pixels, it sits over the waiting screen's heading and paragraph, which
+  misses WCAG 1.4.4, Resize Text. In a 1280×800 or 1200×900 window at 200% zoom, 640×400
+  or 600×450 CSS pixels, nothing overlaps. The layout before the lit key overlaps the same
+  way, so the lit key didn't cause it. Putting the fact in the pane's flow, at its foot,
+  or hiding it when the pane is too short would fix it.
 - **Keycap hints on GitHub dark's body:** keycaps and breadcrumb chevrons keep
   `--ink-faint`, about 2.9:1 on GitHub dark's `--body`. The old raised bar gave about
   3.2:1, also under the floor.
@@ -40,7 +48,8 @@ Open items first, then the log, newest first.
   bell colours measure 2.96:1 (`--ok`, Catppuccin Latte, settings panel), 2.05:1
   (`--attention`, Dawnfox, settings panel) and 2.32:1 (`--ok`, Latte, code panel). Each
   sits beside words that carry the state, so it is never the only signal. The status bar's
-  LED uses the same tokens.
+  LED uses the same tokens. The waiting screen's live LED measures 2.68:1 in Latte at its
+  body, and its rim holds 5.04:1 on the pane's pocket.
 - **Focus under `GLANCE`:** no palette's neutral key clears `GLANCE`, the 20 ΔE step
   `theme.test.ts` treats as telling two colours apart at a glance, and keyboard focus
   shows only as a control's hover face. Steps here are CIE76 colour differences (ΔE),
@@ -114,6 +123,246 @@ Open items first, then the log, newest first.
   - As the column narrows, the field's magnifier goes.
   - Tab stops at the field and moves on to the outline key until the reader engages the
     field with `\`, a click or a key pressed in it.
+
+## 2026-11-04: the waiting screen's `^` stands as a lit key
+
+The user asked for a cohesion pass on the waiting screen, not a new design: "I kinda like
+what it looks like now, and I like the "carrot facts" that we cycle through." They wanted
+to "see what tweaks we can make to ensure that the design feels cohesive" with the Keypad
+kit ([`patterns.md` § The tactile kit](patterns.md#the-tactile-kit)). The screen's `^`
+glowed, which broke the kit's rule that only lights glow, and the user left its treatment
+to the mockups. Three variants were mocked up with caret's own tokens, top bar and status
+bar, in caret-light and caret-dark, connected and offline. Of those the user said: "I
+kinda like the lamp and the key - can we come up with something that is a combination of
+the two? I like the key itself, but I like the caret symbol on the lamp one more (and I
+like that it being disconnected has the caret "turned off", which is a cool effect)". A
+fourth variant combined them
+([the mockup](https://claude.ai/artifact/MLfgaHePfijuoeaf1XWtou)), and the user picked it:
+"yeah that looks good, I like it better where it sits down and the listening stamp is in
+the pane".
+
+- **The pick: D, "Lit key".** The `^` is a backlit legend on a rubber key in its own bed.
+  A press, or `^` typed anywhere on the screen, shows the next carrot fact. Under the
+  paragraph, the listening stamp, a pocket holding the status bar's LED and the word
+  "listening", says caret is connected. Offline, the light goes out and the key sits down.
+- **The variants that lost:**
+  - A, "Lamp" ([mockup](https://claude.ai/artifact/46om8TTi6tdKKasZXbwea1)), lit the `^`
+    in the pane as a light and put it out offline.
+  - B, "Stamp" ([mockup](https://claude.ai/artifact/9dReb2ezZdqk7YtZGp1EMi)), pressed the
+    `^` into the pane in amber ink with no glow, and renamed the heading "Waiting for a
+    plan".
+  - C, "Key" ([mockup](https://claude.ai/artifact/CdF2zWRD1KEWEmnwZEbHRJ)), stood the `^`
+    as a rubber key that shows the next fact, and moved the listening stamp to the status
+    bar's right end.
+- **The key, from C.** It stands in its own bed at twice the kit's key side (`--key-side`,
+  the rubber that shows under a key's face): a 3px side. It is 5.25rem wide and 5rem tall,
+  rounded at 12px, in a bed padded 4px. Its rise, press, cast shadow and bed pads scale
+  from that side, as every key's do from `--key-side`. It presses and springs back like
+  every key in caret. Its tooltip and accessible name are "Next carrot fact", and it
+  carries `aria-keyshortcuts="^"`.
+- **The legend, from A.** The `^` is lit the way the status bar's LED is: a core lightened
+  toward white in dark (in light the core is the amber itself; **Floors** below says why),
+  then the amber, then a rim stepped 24% toward black. Behind it, a blurred copy in
+  `--accent` is its glow. The key clips the glow to its own face, as a backlight lights
+  only its own key. So the glow is a light's, and keeps the kit's rule. The glow breathes
+  over 5s, between half and full strength, where full opacity is 0.75 in dark and 0.45 in
+  light. The `^`'s float is gone, because a light doesn't drift.
+- **Offline, the light goes out, from A.** The lit legend and its glow fade on
+  `--dur-state`, and the bare legend shows in their place, moulded into the rubber: a
+  shade off the key's face, with a shadow under its top edge and a lit lower wall.
+- **Choices the user ratified.** The user named only the key, A's `^` and A's offline
+  effect. The mockups decided the rest, and the pick kept them:
+  - A press shows the next fact, from C. The kit stands only what can be pressed, so a
+    raised key has to do something. This is the screen's one new behaviour.
+  - The glow breathes, from A. Under reduced motion it stops, lit.
+  - The heading stays "No plans awaiting review", so the 8 e2e specs that find it by name
+    need no change.
+  - The paragraph is one sentence: "When an agent proposes a plan, it opens here." The
+    listening stamp, not the paragraph, now says the screen is listening.
+  - Offline, the paragraph is A's line in `--ink-soft`, without its unplug glyph: "Not
+    connected to the caret daemon. This page reconnects on its own once the daemon is
+    running." The amber leaves the offline state, because a warning is not one of the
+    accent's uses. The dark key shows the outage and the stamp's red LED names it, so the
+    glyph went. C's pointer to `caret doctor` went too, because the next review restarts
+    the daemon.
+  - The stamp drops "polling /api/reviews", which named the plumbing.
+  - In light, the legend's core is the amber itself.
+  - The carrot fact keeps its place above the status bar, and still hides offline.
+- **The two switches the user set:**
+  - **Key offline: sits down,** over staying up. With no fact to show, the key takes the
+    kit's disabled state: no rise, a 1px side, faded to half. Staying up kept the key
+    standing with only its light out, the purer lamp, but left a key with nothing to do.
+  - **Listening stamp: in the pane,** under the paragraph, over the status bar's right
+    end, where "● live" sits during a review. Its LED is the status bar's `.led`. Offline,
+    the LED turns `--danger`, as `StatusStrip.svelte`'s `.conn` does. The word reads
+    "offline" in the comment stamps' word ink, as a state word in a pocket does.
+- **Floors.** Every pair holds its floor in caret-light and caret-dark, by WCAG 2 contrast
+  ratio. These figures are token pairs, each colour flat on the surface it sits on;
+  **The legend as painted** below measures the glyph itself.
+  - **Text, 4.5:1:** the lowest is the carrot fact, `--ink-faint` on `--paper`, at 4.81:1
+    in light and 5.54:1 in dark. Five bundled third-party palettes put it under 4.5:1,
+    listed in the `--ink-faint` open item. On the stamp's pocket, "listening" measures
+    7.35:1 and 9.22:1, and "offline" 10.99:1 and 10.23:1.
+  - **Graphics, 3:1:** on the pocket, the live LED measures 4.34:1 in light and 9.79:1 in
+    dark, and the offline LED 5.17:1 and 6.18:1. The legend's amber measures 4.90:1 in
+    light and 6.47:1 in dark on the key's face, and 3.78:1 and 4.48:1 on its hover face.
+  - **The legend's core:** in dark it is the amber mixed 62% toward white, at 10.79:1 on
+    the face and 7.47:1 hovered. In light a paler core falls under 3:1 once the key is
+    hovered: a core 20% toward white measured 3.39:1 at rest and about 2.5:1 hovered. So
+    in light the core is the amber itself, and the glow carries the light.
+  - **A's lamp had the same flaw:** its light-theme core, the amber 62% toward white,
+    measured about 1.7:1 on `--paper` at its centre.
+  - **Offline:** the unlit legend sits on a disabled key, which WCAG 1.4.11 exempts from
+    contrast. The red LED and the word "offline" carry the state, so colour is never the
+    only signal.
+  - **Reduced motion** stops the breathe and the fact timer. The key's rise and press drop
+    to 0, so a press changes only its shading.
+  - **Every bundled palette:** `theme.test.ts` holds, as token pairs, the legend's amber
+    and its core at 3:1 on the key's face at rest, hovered and pressed, the stamp's two
+    words at 4.5:1 on the pane's pocket, and its two LEDs at 3:1 there, measured as a lens
+    (below). The legend's pairs leave out the glow, which lifts the face round the glyph.
+  - **An LED is measured as a lens:** the `.led` is its colour at its body and that colour
+    30% toward black at its rim, and the test takes whichever stands further off the
+    pocket. On dark paper that is the body; on light, the rim. In Catppuccin Latte the
+    live LED's body measures 2.68:1 on the pocket and its rim 5.04:1.
+  - **The legend as painted:** each pixel inside the glyph's strokes, against the face
+    painted round the glyph, with the glow at its peak, in all eleven bundled palettes.
+    - At rest and pressed, the whole glyph holds 3:1 in every palette, 3.30:1 at its
+      lowest (Catppuccin Latte, pressed).
+    - Hovered, eight palettes hold, the lowest being Catppuccin Latte at 3.28:1; caret's
+      own hold 3.35:1 in light and 3.70:1 in dark. In Dracula, GitHub dark and Catppuccin
+      Frappé the outer tips of the arms fall under 3:1: 9% of the glyph in Dracula, at
+      2.68:1, 4% in GitHub dark, at 2.72:1, and 1% in Frappé, at 2.91:1.
+    - The glow puts those tips under, because it lightens the face round them. With the
+      glow off, the hovered glyph holds 3.22:1 in Dracula, 3.27:1 in GitHub dark and
+      3.54:1 in Frappé.
+    - The rim colour, `--lit-rim`, falls under 3:1 on the hovered face as a token pair in
+      the dark palettes, 1.78:1 at its lowest in Dracula. No stroke is painted in it: the
+      darkest stroke pixel on Dracula's bare hovered face measures 3.22:1.
+  - **The tips are not a floor violation.** WCAG 1.4.11 asks that the parts of a graphic
+    needed to identify it reach 3:1. The apex and both arms of the `^` hold 3:1 in every
+    palette and state, so the glyph stays identifiable. Only the tips of the arms drop,
+    and only on the hover face, which the key wears under the pointer or keyboard focus.
+    So the tips stand as built, and no open item records them.
+- **Decisions the build made,** where the mockup hand-rolled a behaviour or the kit lacked
+  a value:
+  - **The shortcut** is `^` as the character typed. It is registered through the shortcut
+    dispatcher while the screen is up, so it plays the key's press for `PRESS_HOLD_MS`.
+    The shortcuts help lists it while the screen is up. It sits in the review keymap's
+    scope, so a modal that silences the review keymap silences it too. On a layout where
+    `^` is a dead key, such as German or French, `KeyboardEvent.key` reads `Dead`, so the
+    shortcut doesn't fire there and a click turns the fact. Matching the physical key
+    instead would fire on a different character on other layouts.
+  - **A turn spends one fact.** A press during a turn, or a held key, changes nothing. A
+    press restarts the timer, so a timed turn never lands just after one. Under reduced
+    motion the timer stops and a press still turns the fact.
+  - **The press sounds** the `tap` cue from `sound.ts`, as starting a comment does. A
+    timed turn is silent.
+  - **The deep bed** is `.tray-deep` in `atoms.css`. It restates the geometry derived from
+    `--key-side`, which resolves on `:root`, and joins `:root` in the reduced-motion rule
+    that zeroes `--key-rise` and `--key-sink`.
+  - **The unlit legend's moulding** is the mockup's two SVG filters, set inside the screen
+    and picked by the palette's scheme, not by caret's own two palettes.
+  - **The legend's colours** are derived tokens, so every palette gets them: `--lit-core`,
+    `--lit-rim` and `--lit-off` in `derived.css`, keyed by scheme as its other recipes
+    are. The glow's strength, `--lit-glow`, is an alpha keyed by scheme in `tokens.css`.
+  - **The tooltip** is the app's, on `--paper-raised` with `--shadow-chip`, and opens
+    after 300ms. It stays shut while the key is disabled.
+  - **The key's fade to half** offline is the kit's disabled state and changes at once, as
+    every disabled key's does. Only the legend's light fades, on `--dur-state`.
+  - **Going offline under keyboard focus** moves focus to the heading. The key is the
+    pane's only control, and a browser drops focus from a control that disables to the
+    page's body. So the heading takes `tabindex="-1"` and focus moves to it while the key
+    is still enabled, and the reader keeps their place in the pane.
+  - **The legend's face where Berkeley Mono is missing.** No font files ship, so without
+    Berkeley Mono the `^` is another mono's, drawn at its own height. SF Mono's `^` is
+    taller and sits lower than Berkeley Mono's, about 5px low on the key. Trimming the
+    line box to the cap height (`text-box`) leaves it there, because the offset is in the
+    glyph, not the font's line metrics. So the legend names one face of its own: macOS's
+    SF Mono by its regular instance, `local("SFMono-Regular")`. The face's
+    `ascent-override` and `descent-override` move its baseline so its `^` lands where
+    Berkeley Mono's does, within half a pixel in Chromium and WebKit. It is named by that
+    instance because Chrome resolves "SF Mono" to a heavy one and only Safari reads
+    `ui-monospace`. Where SF Mono is missing too, the legend falls back to `--font-mono`
+    unadjusted, and Menlo's `^` sits 3px higher than Berkeley Mono's.
+  - **A screen reader hears the key's name twice** while the tooltip is open, because the
+    tooltip's text repeats the key's accessible name, "Next carrot fact". It stands as
+    built.
+- **What the build changes in
+  [`exceptions.md` § The waiting screen](exceptions.md#the-waiting-screen):**
+  - "a large floating amber `^`" becomes a large `^` standing as a rubber key in its own
+    bed, its legend lit as a light that goes out while caret is offline.
+  - "the `listening` status pill" becomes the listening stamp, a pocket holding the status
+    bar's LED and "listening".
+  - "The float is slow and small, and it stops under reduced motion" becomes: the legend's
+    glow breathes slowly, and under reduced motion it stops, lit.
+  - Two departures join it. The legend lightens the amber toward white at its core in dark
+    and darkens it at its rim, where the accent is otherwise used verbatim. The key's
+    geometry scales from a 3px side, twice the kit's.
+  - A closing sentence dates it: "Chosen over the Lamp, Stamp and Key variants on
+    2026-11-04."
+- **What the build changes in [`patterns.md`](patterns.md):**
+  - **Surfaces and emphasis,** the accent line: name the waiting screen's lit legend as
+    the one place the amber is lightened, and point to `exceptions.md`.
+  - **The tactile kit,** the glows line, "The only glows are lights": add the waiting
+    screen's listening LED and its key's lit legend.
+  - **The tactile kit,** **Stamps**: "the waiting screen's hint" becomes "the waiting
+    screen's listening stamp", which joins the Notifications bell as a passive status mark
+    in a pocket.
+  - **The tactile kit,** a new bullet for a lit legend: a key whose legend is a light, its
+    glow clipped to the key's face, that goes out and sits disabled while the key has
+    nothing to do.
+  - **Motion,** the ambient loops: "the empty screen's floating `^`" becomes "the waiting
+    screen's breathing legend".
+- **What this replaces:** the floating `^` and its `--accent-wash` shadow, the "listening
+  · polling /api/reviews" pill, and the amber offline warning with its unplug glyph. The
+  2026-10-23 choice of a centred `^` screen as caret's one brand moment stands.
+
+## 2026-11-03: the hand-off to and from the waiting room plays as one gesture
+
+The user said that showing or dismissing a plan, and going back to the waiting room, could
+look glitchy. A frame-by-frame probe in Chromium measured every route: a plan arriving in
+the waiting room, the next plan after a decision, the last decision returning to the
+waiting room, a first load with and without a plan pending, and the daemon dropping and
+returning. A switch between plans takes the same crossfade and was not probed on its own.
+It found four causes. Each timing below is the median of three runs on the GPU, counted
+from the click; a range spans routes and themes.
+
+- **A decision played as two beats.** The hand-off waited for every running animation to
+  end before it started: the guard's exit, the confirmation sliding in, and the top bar's
+  keys easing to busy. The guard left first. The decided plan then sat uncovered for about
+  130ms before the crossfade began, 183 to 198ms after the click. The hand-off now starts
+  as soon as the decision lands, 19 to 140ms after the click. The guard and the
+  confirmation are still mounted in the new window, so they play on inside the crossfade.
+  The swap ends by 215 to 377ms, against 462 to 498ms.
+- **The chrome dimmed mid-fade.** The hand-off's own keyframes replace the browser's
+  crossfade animation, and that animation is what adds the two images (`plus-lighter`).
+  Without it the browser stacks the two images at their two opacities, so the top bar and
+  status bar, which both images show, dropped 21% toward the canvas in dark and rose 6%
+  toward white in light, for about 80ms of every hand-off. The arms now set `plus-lighter`
+  themselves, and those regions hold steady.
+- **The window refused clicks after the fade.** A view transition takes the pointer until
+  its last animation ends, and the browser's own animation on the root group runs 250ms
+  against the fade's 160ms. The group now runs on `--dur-state`. After a decision the
+  window refuses clicks for 196 to 241ms, against 278 to 301ms.
+- **A plan pending at load opened on the waiting room.** Until the first poll answered,
+  the window showed the waiting room. A page opened for a pending plan said "No plans
+  awaiting review" for about 150ms, then crossfaded to the plan. Until the first answer,
+  the content row now holds a bare pane, and that answer lands with no crossfade. With no
+  plan pending, the waiting room appears one frame after the bare pane.
+- **Not changed:**
+  - A plan arriving in the waiting room still freezes the window while the plan renders
+    inside the transition, for 120 to 300ms. Only the floating `^` moves there, about 1px
+    in that time. Rendering the plan on the live page, behind the `.arrival` curtain,
+    showed a half-built first frame instead: a blank pane, an empty outline and an empty
+    action cluster.
+  - Losing or regaining the daemon swaps the waiting room's copy with no motion, since the
+    reader did not cause it. The centred stack shifts slightly as the copy's height
+    changes.
+  - Headless Chromium on its software renderer, the e2e suite's default, draws the modal
+    scrim's 4px blur at 30fps. It also takes about 100ms to capture the transition's first
+    frame while a guard is up. On the GPU both run at 60fps, so these are limits of the
+    test renderer, not of caret.
 
 ## 2026-11-03: the find row's Close key stands beside the step keys
 

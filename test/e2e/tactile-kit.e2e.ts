@@ -130,6 +130,18 @@ async function latchedTrayInset(page: Page): Promise<{ top: number; bottom: numb
   return keyInset(page.locator(".tray").filter({ has: key }), key);
 }
 
+/** Waits out the top bar's mount: its action keys scale in, and a box read mid-scale is
+ * short. */
+async function topBarAtRest(page: Page): Promise<void> {
+  await page.evaluate(() =>
+    Promise.all(
+      (document.querySelector(".topbar")?.getAnimations({ subtree: true }) ?? []).map((a) =>
+        a.finished.catch(() => {}),
+      ),
+    ),
+  );
+}
+
 /** The gap round the keys of each rendered bed — a tray or a segmented control — as the
  * distance from the bed's box to its resting keys' union, with the key's rubber side,
  * which shows below its face, taken off the bottom; to the half pixel. */
@@ -211,6 +223,7 @@ test("the settings' chosen segment sits latched down, as a latched toggle does",
 test("every bed shows the same gap round its resting keys", async ({ daemon, page }) => {
   await openWithScratchMarker(daemon, page);
   await page.mouse.move(0, 0);
+  await topBarAtRest(page);
   for (const { bed, gaps } of await bedGaps(page)) {
     expect(new Set(gaps).size, `${gaps.join("/")}: ${bed}`).toBe(1);
   }
@@ -218,6 +231,7 @@ test("every bed shows the same gap round its resting keys", async ({ daemon, pag
 
 test("every key in the top bar stands the same height", async ({ daemon, page }) => {
   await seedAndOpen(page, daemon);
+  await topBarAtRest(page);
   const heights = await page.evaluate(() =>
     [...document.querySelectorAll<HTMLElement>(".topbar :is(button.float-chip, .cap)")]
       .filter((el) => el.getClientRects().length > 0)

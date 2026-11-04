@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { createPlanHandoff, type PlanHandoffDeps } from "$lib/planHandoff.ts";
 
-/** Deps for a browser that crossfades, with everything already settled. */
+/** Deps for a browser that crossfades. */
 function crossfading(over: Partial<PlanHandoffDeps> = {}): PlanHandoffDeps {
   return {
     startViewTransition: (update) => {
@@ -11,7 +11,6 @@ function crossfading(over: Partial<PlanHandoffDeps> = {}): PlanHandoffDeps {
     },
     prefersReducedMotion: () => false,
     tag: () => {},
-    settled: () => Promise.resolve(),
     ...over,
   };
 }
@@ -39,7 +38,6 @@ describe("createPlanHandoff", () => {
       crossfading({
         startViewTransition: undefined,
         tag: (on) => tagCalls.push(on),
-        settled: () => new Promise(() => {}),
       }),
     );
     void handoff(() => ran++);
@@ -60,7 +58,6 @@ describe("createPlanHandoff", () => {
         },
         prefersReducedMotion: () => true,
         tag: (on) => tagCalls.push(on),
-        settled: () => new Promise(() => {}),
       }),
     );
     void handoff(() => ran++);
@@ -73,28 +70,6 @@ describe("createPlanHandoff", () => {
     let ran = 0;
     await createPlanHandoff(crossfading())(() => ran++);
     expect(ran).toBe(1);
-  });
-
-  test("lets the motion already in flight finish before the transition takes its still", async () => {
-    // The still freezes the window while the update renders, so a decided guard mid-exit
-    // would hang there for the whole render instead of answering the click.
-    const motion = deferred();
-    let started = false;
-    const done = createPlanHandoff(
-      crossfading({
-        startViewTransition: (update) => {
-          started = true;
-          update();
-          return undefined;
-        },
-        settled: () => motion.promise,
-      }),
-    )(() => {});
-    await ticks();
-    expect(started).toBe(false);
-    motion.resolve();
-    await done;
-    expect(started).toBe(true);
   });
 
   test("resolves only once the update has run inside the transition", async () => {
@@ -119,10 +94,9 @@ describe("createPlanHandoff", () => {
   });
 
   test("a swap asked for before the still is taken joins that transition", async () => {
-    // A resolve's advance and the poll that saw the same plan leave can both ask inside one
-    // settle wait. Two transitions would have the second skip the first, cutting its update
-    // in with no crossfade at all.
-    const motion = deferred();
+    // A resolve's advance and the poll that saw the same plan leave can both ask before the
+    // transition starts. Two transitions would have the second skip the first, cutting its
+    // update in with no crossfade at all.
     const starts: (() => void)[] = [];
     const ran: string[] = [];
     const handoff = createPlanHandoff(
@@ -132,12 +106,10 @@ describe("createPlanHandoff", () => {
           update();
           return undefined;
         },
-        settled: () => motion.promise,
       }),
     );
     const first = handoff(() => ran.push("advance"));
     const second = handoff(() => ran.push("merge"));
-    motion.resolve();
     await Promise.all([first, second]);
     expect(starts).toHaveLength(1);
     expect(ran).toEqual(["advance", "merge"]);

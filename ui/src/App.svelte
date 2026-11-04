@@ -124,6 +124,9 @@
     arrivals: 0,
   });
   let resStore = $state<ResolveStore>({ approveMode: readApproveMode(), busy: false });
+  // Whether the reviews poll has answered yet. Until it has, nothing says whether a plan is
+  // waiting, so the waiting room would be a claim the first answer can take back.
+  let polled = $state(false);
   // The in-UI alert/toast queue (EXC-850): App owns the reactive backing store,
   // createAlerts (below) mutates it, and AlertHost renders it bottom-right.
   let alertStore = $state<AlertStore>({ alerts: [] });
@@ -592,8 +595,14 @@
         // it whole inside the hand-off; a poll that swaps one in waits for them itself. Asked
         // before merging, since the hand-off has to snapshot the outgoing plan, and only on a
         // move: a revision in place is the compare view's news, not a new plan.
+        // The first answer is what the page opens on, not a swap, so it lands without one.
         const prepared = Promise.all(incoming.map((r) => preloadPlanLanguages(r.currentPlan)));
-        if (selection.movesActive(incoming))
+        if (!polled)
+          void prepared.then(() => {
+            selection.mergeReviews(incoming);
+            polled = true;
+          });
+        else if (selection.movesActive(incoming))
           void prepared.then(() => handoff(() => selection.mergeReviews(incoming)));
         else selection.mergeReviews(incoming);
       },
@@ -850,8 +859,11 @@
       {showShortcutHints}
       {settingsRev}
     />
-  {:else}
+  {:else if polled || !selection.connected}
     <EmptyState connected={selection.connected} />
+  {:else}
+    <!-- The pane, bare until the poll answers, so the window keeps its shape. -->
+    <div class="unpolled" aria-hidden="true"></div>
   {/if}
 
   <!-- The arrival (EXC-894): the second half of the hand-off a decided modal starts.
@@ -1090,12 +1102,14 @@
     grid-row: 1;
   }
   .shell > :global(.plan-body),
-  .shell > :global(.empty) {
+  .shell > :global(.empty),
+  .unpolled {
     grid-row: 3;
   }
   /* With no plan the content row is still a pane set into the body, so the window
      keeps its shape whether or not a plan is waiting. */
-  .shell > :global(.empty) {
+  .shell > :global(.empty),
+  .unpolled {
     margin: 0 var(--pane-gap);
     border-radius: var(--pane-radius);
     background: var(--paper);

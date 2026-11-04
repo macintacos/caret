@@ -89,7 +89,7 @@ describe("the --text-*/--leading-* type scale in app.css", () => {
 // inline justification so the exemption is intentional, not a missed migration.
 // Keyed by component → the literal sizes allowed there.
 const EXEMPT: Record<string, string[]> = {
-  "EmptyState.svelte": ["6rem", "1.7rem"],
+  "EmptyState.svelte": ["4.25rem", "1.7rem"],
   "RequestChangesDialog.svelte": ["1.35rem"],
   // Shares the request-changes dialog's title size — the two review dialogs read
   // as one vocabulary, so their <h2> sits at the same display step above the scale.

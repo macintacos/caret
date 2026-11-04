@@ -214,7 +214,9 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   - While you compare versions, there is no peek.
 - One emphasis per view. The amber accent is used verbatim, never lightened, and only for
   the wordmark, the primary action, and the text cursor. Everything else steps down
-  through `--ink-soft` and `--ink-faint`.
+  through `--ink-soft` and `--ink-faint`. The waiting screen's lit legend is the one place
+  the amber is lightened
+  ([`exceptions.md` § The waiting screen](exceptions.md#the-waiting-screen)).
 - Page structure is left-aligned.
 - Compose from shadcn-svelte first ([`shadcn-rules.md`](../doc/agents/shadcn-rules.md));
   icons are vendored ([`icon-rules.md`](../doc/agents/icon-rules.md)).
@@ -409,13 +411,13 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   anyway) and the confirm bubble's Discard. Enable notifications is not a submit and keeps
   the full size.
 - **Stamps.** Passive labels (`.stamp`, counts, the comment states, the file preview's
-  line-range readout, the waiting screen's hint, the build tag's "Copied") sit in a
-  pocket. Unlike a bed, a pocket has a darker floor (`--well-floor`) and its own shade and
-  lip (`--well-shade`, `--well-lip`), and holds no cap. A passive status mark, such as the
-  Notifications bell, sits in a pocket too, and a state word beside it takes the comment
-  stamps' word ink. `.tag` is the stamp that names a kind, in sentence case: Folder,
-  Preview and Settings' "In use". Text fields (`.field-well`) take a shallower cut,
-  `--panel-recess`, with no ink ring.
+  line-range readout, the waiting screen's listening stamp, the build tag's "Copied") sit
+  in a pocket. Unlike a bed, a pocket has a darker floor (`--well-floor`) and its own
+  shade and lip (`--well-shade`, `--well-lip`), and holds no cap. A passive status mark,
+  such as the Notifications bell or the waiting screen's listening stamp, sits in a pocket
+  too, and a state word beside it takes the comment stamps' word ink. `.tag` is the stamp
+  that names a kind, in sentence case: Folder, Preview and Settings' "In use". Text fields
+  (`.field-well`) take a shallower cut, `--panel-recess`, with no ink ring.
 - **Settled values are stamped.** A committed value leaves its field for a `.stamp` set on
   the field's exact pixels, so committing changes only the material. The committed search
   query is the example, and because no field keeps focus, bare-key shortcuts still work
@@ -578,9 +580,16 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - **A key on no bed** stands straight on the surface, with a key's face, grain and press
   at the lowered rise. The gutter "+" and the file preview's round close disc, kept on
   `--danger`, share the recipe.
+- **A lit legend** is a key's legend, the glyph on its face, lit from behind, as the
+  waiting screen's `^` is. The glyph runs from `--lit-core` through the amber to
+  `--lit-rim`, over a blurred copy in `--accent` at `--lit-glow`. That glow is clipped to
+  the key's face, as a backlight lights only its own key, so the glow is a light's. While
+  the key has nothing to do, the light goes out and the key sits disabled, its bare legend
+  in `--lit-off` moulded into the rubber.
 - Not used: glass and heavy gradients. The only glows are lights: the status bar's live
-  LED, the status lights in Settings and the safe-mode toast (`.led` and `.led-off` in
-  `atoms.css`), each lit in its state's colour, and a latched key's corner light.
+  LED, the status lights in Settings, the safe-mode toast and the waiting screen's
+  listening stamp (`.led` and `.led-off` in `atoms.css`), each lit in its state's colour,
+  a latched key's corner light, and the waiting screen's lit legend.
 
 ### Type and shape
 
@@ -626,6 +635,16 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   with its box, so both its ends stay round. The Versions key slides only once the slot it
   moves into is clear, and what it leaves fills only once it has passed. Leaving compare,
   the column waits until the plan's old image has gone, and arrives with the plan.
+- A plan swap crossfades the whole window on `--dur-state` (`ui/src/lib/planHandoff.ts`,
+  timed in `ui/src/styles/base.css`). That covers a plan arriving in the waiting room, the
+  next plan after a decision, a switch, and the last decision returning to the waiting
+  room. The two windows' images add rather than stack, so the top bar and status bar,
+  which both show, hold steady through the fade. A decision's swap starts as its guard
+  starts to leave, so the guard recedes inside the crossfade. The window takes clicks
+  again as soon as the fade ends.
+- A page that opens shows a bare pane, the waiting room's pane with nothing in it, until
+  the first poll answers, usually within a frame. Then the plan or the waiting room
+  appears with no crossfade. Until then nothing says whether a plan is waiting.
 - Motion confirms a change the reader made. The outline's latched row fades across when
   the reader jumps to a heading, and moves with no motion while the plan scrolls under it,
   because motion on a change that runs through a scroll reads as lag. What comes and goes
@@ -641,8 +660,9 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - A key's return from a press is the one spring: it travels back over `--dur-state` on
   `--ease-spring`, past rest and back. The press itself, and every shading and colour
   change, stays on `--ease-out`.
-- Ambient loops (the empty screen's floating `^`, the reference-hint ping, the safe-mode
-  pulse) and the plan's scroll travel are not state transitions and keep their own timing.
+- Ambient loops (the waiting screen's breathing legend, the reference-hint ping, the
+  safe-mode pulse) and the plan's scroll travel are not state transitions and keep their
+  own timing.
 - Motion is CSS only. A Svelte JS transition throws under happy-dom and ignores reduced
   motion; `ui/src/lib/motion.test.ts` enforces this.
 - Reduced motion stops every animation. Where a timer swaps content (the carrot fact), the

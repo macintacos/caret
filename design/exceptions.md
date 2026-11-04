@@ -36,11 +36,20 @@ the shading changes. Chosen with the Keypad kit on 2026-10-31.
 icon, and louder motion is kept very subtle.
 
 **caret:** the screen shown while no plan is waiting
-(`ui/src/components/EmptyState.svelte`) is centred and carries a large floating amber `^`,
-a heading, a short paragraph, the `listening` status pill, and a rotating carrot fact at
-the foot. It is the screen people see most and caret's one brand moment. The float is slow
-and small, and it stops under reduced motion, as does the fact rotation. Chosen over the
-plain sentence and over a one-line blinking cursor on 2026-10-23.
+(`ui/src/components/EmptyState.svelte`) is centred and carries a large `^` standing as a
+rubber key in its own bed, a heading, a short paragraph, the listening stamp, and a
+rotating carrot fact at the foot. The key's legend is lit as a light, which goes out while
+caret is offline. The listening stamp is a pocket holding the status bar's LED and
+"listening". It is the screen people see most and caret's one brand moment. The legend's
+glow breathes slowly, and under reduced motion it stops, lit; the fact rotation stops too.
+The centred `^` screen was chosen over the plain sentence and over a one-line blinking
+cursor on 2026-10-23.
+
+Two departures from the kit go with it. The legend lightens the amber toward white at its
+core in dark and darkens it at its rim, where the accent is otherwise used verbatim. The
+key's geometry scales from a 3px side, twice the kit's. Chosen over the Lamp, Stamp and
+Key variants on 2026-11-04
+([`decisions.md`](decisions.md#2026-11-04-the-waiting-screens--stands-as-a-lit-key)).
 
 This exception covers this screen only. Other empty views and the rest of the page
 structure follow the defaults.
