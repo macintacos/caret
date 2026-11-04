@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.4/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -12,7 +12,7 @@
     // build output (dist/bin), deps, and the file types Biome doesn't own here:
     // `.svelte` (svelte-check owns the UI; Biome misparses runes as unused
     // bindings) and `.css`/`.html`/`.svg` (hand-authored or vendored UI assets,
-    // not Biome's to reformat). (hk's wider glob still routes staged files here;
+    // not Biome's to reformat) and `.md` (rumdl owns Markdown). (hk's wider glob still routes staged files here;
     // these excludes filter them.)
     "includes": [
       "**",
@@ -22,6 +22,7 @@
       "!**/*.svelte",
       "!**/*.css",
       "!**/*.html",
+      "!**/*.md",
       // Biome parses SVG, which puts `ui/src/icons/` in scope for a11y rules —
       // noSvgWithoutTitle in particular. Those icons are vendored verbatim from
       // Lucide (doc/agents/icon-rules.md), so annotating or reformatting them

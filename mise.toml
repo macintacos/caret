@@ -19,12 +19,12 @@ HK_MISE = 1
 # Keep hk in lockstep with hk.pkl's amends/import version; the two are compared exactly,
 # so even a patch bump landing here needs the hk.pkl edit. test/structure/hk-pin.test.ts
 # fails if they diverge.
-hk  = "2.7"
+hk  = "2.11"
 pkl = "0"
 bun = "1.4"
 # Bump biome.jsonc's `$schema` to match whatever release mise.lock resolves. biome
 # prints the mismatch on every run, but only as an info — nothing fails on it.
-biome = "2.5"
+biome = "2.6"
 # Non-web formatters/linters (declared so hk runs these pinned versions, not global ones).
 
 # rumdl is held at the release mise.lock resolved, because caret ships that same release
