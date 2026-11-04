@@ -32,6 +32,18 @@
   background: linear-gradient(rgb(0 0 0 / 0.05), transparent 60%);
   box-shadow: var(--bed-shade);
 }
+/* A deep bed, for a key at twice the kit's side: the waiting screen's ^. The geometry
+   derived from --key-side resolves where it is declared, on :root, so the bed restates it,
+   and reduced motion below restates its stillness. */
+.tray-deep {
+  --key-side: 3px;
+  --key-radius: 12px;
+  --well-pad: 4px;
+  --key-rise: calc(var(--key-side) / 2);
+  --key-sink: calc(var(--key-side) / 3);
+  --well-top: calc(var(--well-pad) + var(--key-rise));
+  --well-foot: calc(var(--well-pad) + var(--key-side) - var(--key-rise));
+}
 
 /* The one bed a pane's header bar lies in, the bar's length: the plan header's, the file
    drawer's title bar's. It stands --well-pad in from the pane's top and sides and rounds
@@ -177,7 +189,8 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
 /* Reduced motion keeps every key at its place, the outline's rows too, and changes only
    its shading. */
 @media (prefers-reduced-motion: reduce) {
-  :root {
+  :root,
+  .tray-deep {
     --key-rise: 0px;
     --key-sink: 0px;
   }

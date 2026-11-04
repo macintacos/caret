@@ -17,44 +17,16 @@ import { type ViewTransitionDeps, viewTransitionDeps } from "$lib/viewTransition
 /** The class the stylesheet's crossfade arms are scoped under. */
 const HANDOFF_CLASS = "plan-handoff";
 
-/** How long a swap waits on motion already playing, at most: above every one-shot tier, so
- * the wait is a courtesy and never a gate an animation that misjudged its end can hold shut. */
-const SETTLE_LIMIT_MS = 500;
-
 export interface PlanHandoffDeps extends ViewTransitionDeps {
   /** Tag the document for the transition's lifetime so CSS can pick this animation. */
   tag: (on: boolean) => void;
-  /** Resolves once the one-shot motion already running has finished. */
-  settled: () => Promise<unknown>;
 }
 
 function defaultHandoffDeps(): PlanHandoffDeps {
   return {
     ...viewTransitionDeps(),
     tag: (on) => document.documentElement.classList.toggle(HANDOFF_CLASS, on),
-    settled: () =>
-      Promise.race([
-        Promise.allSettled(
-          document
-            .getAnimations()
-            .filter(isOneShot)
-            .map((animation) => animation.finished),
-        ),
-        new Promise((resolve) => setTimeout(resolve, SETTLE_LIMIT_MS)),
-      ]),
   };
-}
-
-/** A running animation that ends on its own clock: not an ambient loop, which never ends,
- * nor a scroll-driven one — the preview's pinned table headers — which ends only on scroll. */
-function isOneShot(animation: Animation): boolean {
-  const end = animation.effect?.getComputedTiming().endTime;
-  return (
-    animation.playState === "running" &&
-    animation.timeline === document.timeline &&
-    typeof end === "number" &&
-    Number.isFinite(end)
-  );
 }
 
 /** Runs a plan swap, resolving once its update has run. */
@@ -75,10 +47,10 @@ export function createPlanHandoff(deps: PlanHandoffDeps = defaultHandoffDeps()):
     start: NonNullable<PlanHandoffDeps["startViewTransition"]>,
     updates: (() => void)[],
   ): Promise<void> {
-    // The transition freezes the window on a still while the update renders, and the motion
-    // in flight — a decided guard leaving, its confirmation sliding in — is the answer to the
-    // reader's click. Frozen mid-gesture it reads as the click not landing, so it ends first.
-    await Promise.all([previous, deps.settled()]);
+    // Not held for motion already in flight: a decided guard leaving and its confirmation
+    // sliding in are still mounted in the new window, so they play on, live, inside the
+    // crossfade. Waiting for them to end would uncover the decided plan between the two.
+    await previous;
     gathering = null;
     deps.tag(true);
     return new Promise<void>((ran) => {

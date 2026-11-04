@@ -172,7 +172,7 @@ describe("motion tokens in app.css", () => {
 
   test("documents the ambient/infinite carve-out", () => {
     // The functional tokens are for one-shot reveals; ambient/infinite
-    // animations (safe-mode pulse, EmptyState float) keep their own durations.
+    // animations (safe-mode pulse, the waiting key's breathe) keep their own durations.
     // A comment must record that exemption near the tokens.
     expect(appCss).toMatch(/ambient|infinite/i);
   });
@@ -683,7 +683,7 @@ describe("chrome motion declarations draw from the tokens, not bare literals", (
   // to remain. Matched by keyframe name. The first two are infinite; ref-hint-ping
   // is finite (three pings) and is ambient by SCALE rather than by repetition — a
   // teaching pulse that read at --dur-state would be a flicker, not a wave.
-  const ambient = /\b(float|safe-mode-pulse|ref-hint-ping)\b/;
+  const ambient = /\b(lit-breathe|safe-mode-pulse|ref-hint-ping)\b/;
 
   // Pull every `transition:`/`animation:` declaration body (the text up to the
   // terminating semicolon) from a stylesheet, multi-line shorthands included.
@@ -705,9 +705,9 @@ describe("chrome motion declarations draw from the tokens, not bare literals", (
 
   test("the ambient animations keep their bespoke durations", () => {
     // The carve-out is real, not vacuous: each ambient animation still carries
-    // its own long literal (4s float, 1.2s pulse, 1.6s ping) — the sweep must not
+    // its own long literal (5s breathe, 1.2s pulse, 1.6s ping) — the sweep must not
     // have pulled them onto the snappy one-shot tokens.
-    expect(emptyState).toMatch(/animation:\s*float\s+4s\b/);
+    expect(emptyState).toMatch(/animation:\s*lit-breathe\s+5s\b/);
     expect(chromeSources["App.svelte"]).toMatch(/animation:\s*safe-mode-pulse\s+1\.2s\b/);
     expect(chromeSources["components/RefHintBadge.svelte"]).toMatch(
       /animation:\s*ref-hint-ping\s+1\.6s\b/,

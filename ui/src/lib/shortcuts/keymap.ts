@@ -191,6 +191,9 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     group: "actions",
     label: "Show or hide outline",
   },
+  // The waiting screen's key. `^` is matched as the character typed, so a layout where it is
+  // a dead key never sends it; the key still takes a click.
+  { id: "actions.nextFact", keys: [{ key: "^" }], group: "actions", label: "Next carrot fact" },
   // Settings
   ...SETTINGS_SHORTCUTS,
   // Help

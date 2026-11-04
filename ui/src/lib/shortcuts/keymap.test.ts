@@ -121,6 +121,18 @@ describe("CANONICAL_KEYMAP", () => {
     expect(ariaKeyshortcutsFor("actions.headingNav")).toBe("b");
   });
 
+  // `^` is the character typed, so it is what the dispatcher matches and what the waiting
+  // screen's key advertises, as `?` is for help. Dead-key layouts never send it as a key.
+  test("reserves ^ for the next carrot fact, rendered as a ^ cap", () => {
+    const entry = CANONICAL_KEYMAP.find((e) => e.id === "actions.nextFact");
+    if (!entry) throw new Error("actions.nextFact missing");
+    expect(entry.group).toBe("actions");
+    expect(entry.scope).toBeUndefined();
+    expect(specSignature(entry.keys)).toBe("^");
+    expect(keyCaps(entry.keys)).toEqual([["^"]]);
+    expect(ariaKeyshortcutsFor("actions.nextFact")).toBe("^");
+  });
+
   test("derives shift + letter caps for the bare shifted vim keys (no cap override)", () => {
     // EXC-831: V and G are bare shifted keys, so keyCaps derives the shift affordance from
     // the key's case and they render as the shift icon plus the capital.

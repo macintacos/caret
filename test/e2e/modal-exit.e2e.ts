@@ -49,21 +49,13 @@ type ChoreographyWindow = {
   __closing: Promise<number[]>;
 };
 
-/** One animation the hand-off recorder saw START (EXC-894). Ordering is the claim, so the
- * sample is taken at animationstart rather than at animationend — an exit that both begins
- * and ends before a slower arrival begins would satisfy an end-ordering trivially. `who`
- * is the surface's `data-slot`, `arrival` for the curtain (no slot), or the
- * `::view-transition-*` pseudo-element the crossfade runs on, which dispatches on the
- * document element and names itself through the event's `pseudoElement`.
- *
- * `at` is the event's own `timeStamp` — the frame the animation was scheduled for — and
- * NOT a `performance.now()` read inside the handler. Two animations that start in the same
- * frame are dispatched in document order, and the curtain (inside #app) precedes the
- * portalled modal surfaces (appended to body), so a sampled clock would report the arrival
- * as first whenever the resolve lands inside one frame. `timeStamp` makes a same-frame pair
- * compare EQUAL, which is what the ordering assertion below is actually claiming. */
-type HandoffAnimation = { who: string; name: string; at: number };
-type HandoffWindow = { __handoff: HandoffAnimation[] };
+/** One animation the hand-off recorder saw START (EXC-894). `who` is the surface's
+ * `data-slot`, `arrival` for the curtain (no slot), or the `::view-transition-*`
+ * pseudo-element the crossfade runs on, which dispatches on the document element and names
+ * itself through the event's `pseudoElement`. */
+type HandoffAnimation = { who: string; name: string };
+/** `__guardLeaving` is whether the decided guard was still leaving as the hand-off began. */
+type HandoffWindow = { __handoff: HandoffAnimation[]; __guardLeaving?: boolean };
 
 /** Record every animation that starts anywhere in the document, tagged by the surface it
  * ran on. Capture-phase on the document, so it sees the portalled modal surfaces (outside
@@ -85,11 +77,31 @@ async function recordHandoff(page: import("@playwright/test").Page) {
             el.dataset.slot ??
             (el.classList.contains("arrival") ? "arrival" : played.pseudoElement),
           name: played.animationName,
-          at: e.timeStamp,
         });
       },
       true,
     );
+  });
+}
+
+/** Sample whether the decided guard's exit is still running as the hand-off begins: the
+ * moment it tags the document, just before it starts the transition. The guard's own
+ * animation events cannot say: the transition holds them while it captures, and bits-ui
+ * detaches the guard before they dispatch. */
+async function sampleGuardAtHandoff(page: import("@playwright/test").Page) {
+  await page.evaluate(() => {
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => {
+      if (!root.classList.contains("plan-handoff")) return;
+      observer.disconnect();
+      (window as unknown as HandoffWindow).__guardLeaving =
+        document
+          .querySelector("[data-slot='alert-dialog-content']")
+          ?.getAnimations()
+          .some((a) => (a as CSSAnimation).animationName === "exit" && a.playState === "running") ??
+        false;
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
   });
 }
 
@@ -364,9 +376,10 @@ test("a decided guard landing on the next plan hands over in one crossfade", asy
   daemon,
   page,
 }) => {
-  // The hand-off as a SEQUENCE (EXC-894): the guard leaving and the next plan arriving are
-  // two animations, and what matters is their relationship. Which one STARTS first only
-  // exists while the app runs, so it is sampled at animationstart.
+  // The hand-off as ONE GESTURE (EXC-894): the guard leaving and the next plan arriving play
+  // together. The crossfade begins while the guard is still leaving, so the guard recedes
+  // inside it; begun only once the guard had gone, it would uncover the decided plan between
+  // the two.
   //
   // A crossfade rather than a curtain: the next plan's render is synchronous and long, and a
   // curtain keyed in the same flush starts its clock beside it — by the first painted frame
@@ -377,26 +390,23 @@ test("a decided guard landing on the next plan hands over in one crossfade", asy
 
   await recordEnters(page);
   const guard = await openRejectGuard(page);
-  // Let the guard's own arrival finish first, so the recorder cannot mistake the enter it
-  // is still playing for part of the hand-off that has not started yet.
+  // Let the guard's own arrival finish first, so the sample cannot mistake the enter it is
+  // still playing for the exit.
   await waitForEnterToSettle(page, [guardContent, guardOverlay]);
 
   await recordHandoff(page);
+  await sampleGuardAtHandoff(page);
   await guard.getByRole("button", { name: "Reject", exact: true }).click();
 
   const played = await handoffPlayed(page);
-  const exit = played.find((a) => a.who === "alert-dialog-content" && a.name === "exit");
   const departing = played.find((a) => a.who === "::view-transition-old(root)");
   const arriving = played.find((a) => a.who === "::view-transition-new(root)");
-  expect(exit).toBeDefined();
   expect(departing?.name).toBe("plan-handoff-out");
   expect(arriving?.name).toBe("plan-handoff-in");
   // One cover per hand-off.
   expect(played.filter((a) => a.who === "arrival")).toEqual([]);
   await expect(page.getByRole("banner")).toContainText("Plan Beta");
-
-  // The exit LEADS: the hand-off lets it finish before it takes its still.
-  expect(exit?.at ?? 0).toBeLessThanOrEqual(departing?.at ?? 0);
+  expect(await page.evaluate(() => (window as unknown as HandoffWindow).__guardLeaving)).toBe(true);
 });
 
 test("a plan arriving into the waiting room crossfades in", async ({ daemon, page }) => {
@@ -459,13 +469,12 @@ test("draining the queue hands the whole window over in one crossfade", async ({
   await waitForEnterToSettle(page, [guardContent, guardOverlay]);
 
   await recordHandoff(page);
+  await sampleGuardAtHandoff(page);
   await guard.getByRole("button", { name: "Reject", exact: true }).click();
 
   const played = await handoffPlayed(page);
-  const exit = played.find((a) => a.who === "alert-dialog-content" && a.name === "exit");
   const departing = played.find((a) => a.who === "::view-transition-old(root)");
   const arriving = played.find((a) => a.who === "::view-transition-new(root)");
-  expect(exit).toBeDefined();
   expect(departing?.name).toBe("plan-handoff-out");
   expect(arriving?.name).toBe("plan-handoff-in");
   // One cover per hand-off: the curtain is withheld wherever the crossfade runs. The wait
@@ -473,7 +482,87 @@ test("draining the queue hands the whole window over in one crossfade", async ({
   // would already have started by the time the arriving half does.
   expect(played.filter((a) => a.who === "arrival")).toEqual([]);
 
-  expect(exit?.at ?? 0).toBeLessThanOrEqual(departing?.at ?? 0);
+  expect(await page.evaluate(() => (window as unknown as HandoffWindow).__guardLeaving)).toBe(true);
+});
+
+/** The crossfade's two blend modes, the end time of every animation it runs, and the
+ * `--dur-state` token, parked on window as the arriving half starts. */
+type CrossfadeWindow = {
+  __crossfade: Promise<{ blends: string[]; ends: number[]; state: string }>;
+};
+
+test("the crossfade keeps what both windows share whole, and lets go when it ends", async ({
+  daemon,
+  page,
+}) => {
+  // The top bar and status bar sit in both images. Laid over each other at their two
+  // opacities they cover less than either does alone, so the chrome dims toward the canvas
+  // mid-fade unless the two images ADD (plus-lighter), as the browser's own crossfade does.
+  // And the transition takes the pointer for as long as any of its animations runs, so one
+  // outlasting the fade holds the next screen unclickable after it has visibly landed.
+  await seedAndOpen(page, daemon);
+  await waitPastSafeModeGrace(page);
+  const guard = await openRejectGuard(page);
+
+  // Sampled as the arriving half starts, while every pseudo-element exists.
+  await page.evaluate(() => {
+    (window as unknown as CrossfadeWindow).__crossfade = new Promise((resolve) => {
+      document.addEventListener("animationstart", function sample(e) {
+        if ((e as AnimationEvent).pseudoElement !== "::view-transition-new(root)") return;
+        document.removeEventListener("animationstart", sample);
+        const root = document.documentElement;
+        resolve({
+          blends: ["::view-transition-old(root)", "::view-transition-new(root)"].map(
+            (pseudo) => getComputedStyle(root, pseudo).mixBlendMode,
+          ),
+          ends: document
+            .getAnimations()
+            .filter((a) =>
+              (a.effect as KeyframeEffect | null)?.pseudoElement?.startsWith("::view-transition"),
+            )
+            .map((a) => Number(a.effect?.getComputedTiming().endTime)),
+          state: getComputedStyle(root).getPropertyValue("--dur-state").trim(),
+        });
+      });
+    });
+  });
+  await guard.getByRole("button", { name: "Reject", exact: true }).click();
+
+  const { blends, ends, state } = await page.evaluate(
+    () => (window as unknown as CrossfadeWindow).__crossfade,
+  );
+  expect(blends).toEqual(["plus-lighter", "plus-lighter"]);
+  const stateMs = state.endsWith("ms") ? Number.parseFloat(state) : Number.parseFloat(state) * 1000;
+  expect(ends.length).toBeGreaterThan(0);
+  expect(Math.max(...ends)).toBe(stateMs);
+});
+
+test("a plan already pending at load opens on the plan, not the waiting room", async ({
+  daemon,
+  page,
+}) => {
+  // Until the first poll answers, nothing says whether a plan is waiting, so the waiting room
+  // would be a claim the next poll takes back — "No plans awaiting review" on screen, then a
+  // crossfade to the plan that was there all along.
+  await daemon.seed();
+  await page.addInitScript(() => {
+    const w = window as unknown as { __waitingRoom: boolean; __crossfaded: boolean };
+    w.__waitingRoom = false;
+    w.__crossfaded = false;
+    new MutationObserver(() => {
+      w.__waitingRoom ||= document.querySelector(".shell > .empty") !== null;
+      w.__crossfaded ||= document.documentElement.classList.contains("plan-handoff");
+    }).observe(document, { childList: true, subtree: true, attributes: true });
+  });
+  await page.goto("/");
+  await expect(page.locator(".diff-plan")).toBeVisible();
+
+  expect(
+    await page.evaluate(() => {
+      const w = window as unknown as { __waitingRoom: boolean; __crossfaded: boolean };
+      return { waitingRoom: w.__waitingRoom, crossfaded: w.__crossfaded };
+    }),
+  ).toEqual({ waitingRoom: false, crossfaded: false });
 });
 
 test("a decision hands over from the preview, whose table headers animate on scroll", async ({

@@ -1,55 +1,211 @@
 import "@ui/support/mount.ts";
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
 
 import { flushUntil, render } from "@ui/support/mount.ts";
 import EmptyState from "@/components/EmptyState.svelte";
-import { CARROT_FACTS } from "$lib/carrotFacts.ts";
+import { CARROT_FACTS, type CarrotFact } from "$lib/carrotFacts.ts";
+import {
+  createShortcutDispatcher,
+  type ShortcutDispatcher,
+  shortcuts,
+} from "$lib/shortcuts/index.ts";
+import { sound } from "$lib/sound.ts";
+
+/** A fact source that counts its draws, so a test sees how many facts a turn spent. */
+function countedFacts(): { facts: { next: () => CarrotFact }; drawn: () => number } {
+  let drawn = 0;
+  return {
+    facts: { next: () => CARROT_FACTS[drawn++ % CARROT_FACTS.length] as CarrotFact },
+    drawn: () => drawn,
+  };
+}
+
+const keyOf = (target: HTMLElement) =>
+  target.querySelector<HTMLButtonElement>('button[aria-label="Next carrot fact"]');
 
 describe("EmptyState", () => {
-  test("connected (default): shows the listening copy, no warning", () => {
-    const { target } = render(EmptyState, {});
-    expect(target.textContent).toContain("No plans awaiting review");
-    expect(target.textContent).toContain("This window stays open and listening");
-    expect(target.querySelector(".warn")).toBeNull();
-  });
-
-  test("disconnected: shows the not-connected warning with the unplug icon", () => {
+  test("disconnected: says the daemon is not connected", () => {
     const { target } = render(EmptyState, { connected: false });
-    const warn = target.querySelector(".warn");
-    expect(warn).not.toBeNull();
-    expect(warn!.textContent).toContain("Not connected to the caret daemon");
-    expect(warn!.querySelector(".icon svg")).not.toBeNull();
+    expect(target.querySelector(".body")!.textContent).toContain(
+      "Not connected to the caret daemon",
+    );
   });
 
-  test("always shows the brand glyph and the status hint", () => {
-    const { target } = render(EmptyState, { connected: true });
-    expect(target.querySelector(".glyph")!.textContent).toBe("^");
-    expect(target.querySelector(".hint")!.textContent).toContain("polling /api/reviews");
-  });
-
-  // The hint pill shares the badge numeric vocabulary by carrying the shared
-  // .metric atom — the same source VersionBadge/DevBadge draw their tabular figures
-  // from, so empty and populated chrome read as one tabular system. The harness
-  // loads no stylesheet, so the runtime class, not a resolved font-feature value, is
-  // the falsifiable fact.
-  test("the hint pill carries the .metric atom (badge numeric vocabulary)", () => {
-    for (const connected of [true, false]) {
+  // The stamp is a live region, so a screen reader hears the swap the LED shows.
+  test("the status stamp reads listening while connected and offline while not", () => {
+    for (const [connected, word] of [
+      [true, "listening"],
+      [false, "offline"],
+    ] as const) {
       const { target } = render(EmptyState, { connected });
-      const hint = target.querySelector(".hint");
-      expect(hint).not.toBeNull();
-      expect(hint!.classList.contains("metric")).toBe(true);
+      const stamp = target.querySelector('[role="status"]');
+      expect(stamp).not.toBeNull();
+      expect(stamp!.textContent!.trim()).toBe(word);
+      expect(stamp!.querySelector(".led")).not.toBeNull();
     }
   });
 
-  // The amber ^ glyph is the hero of this screen and must survive the elevate:
-  // the accent color, the accent-wash text-shadow, and the 6rem display size are
-  // pinned so a refactor can't quietly demote or recolor the brand mark.
-  test("preserves the amber ^ glyph (accent color, accent-wash, 6rem)", async () => {
-    const glyphRule = ruleBody(await componentCss("EmptyState.svelte"), ".glyph");
-    expect(glyphRule).toContain("color: var(--accent);");
-    expect(glyphRule).toContain("var(--accent-wash)");
-    expect(glyphRule).toContain("font-size: 6rem;");
+  // The stamp shares the badge numeric vocabulary by carrying the shared .metric atom,
+  // the same source VersionBadge and the status strip draw their mono from. The harness
+  // loads no stylesheet, so the runtime class, not a resolved font value, is the
+  // falsifiable fact.
+  test("the status stamp carries the .metric atom (badge numeric vocabulary)", () => {
+    for (const connected of [true, false]) {
+      const { target } = render(EmptyState, { connected });
+      expect(target.querySelector('[role="status"]')!.classList.contains("metric")).toBe(true);
+    }
+  });
+
+  test("the ^ stands as a key that names what it does", () => {
+    const { target } = render(EmptyState, { connected: true });
+    const key = keyOf(target);
+    expect(key).not.toBeNull();
+    expect(key!.textContent).toContain("^");
+    expect(key!.getAttribute("aria-keyshortcuts")).toBe("^");
+    expect(key!.disabled).toBe(false);
+  });
+
+  test("offline, the key sits disabled: there is no fact to turn", () => {
+    const { target } = render(EmptyState, { connected: false });
+    expect(keyOf(target)!.disabled).toBe(true);
+  });
+
+  test("pressing the key shows the next fact", async () => {
+    const { facts, drawn } = countedFacts();
+    const { target, flush } = render(EmptyState, { connected: true, facts });
+    const text = () => target.querySelector(".carrot-fact")!.textContent;
+    const first = text();
+    keyOf(target)!.click();
+    await flushUntil(flush, () => text() !== first);
+    expect(text()).not.toBe(first);
+    expect(drawn()).toBe(2);
+  });
+
+  // A press landing while the last turn is still fading out would otherwise draw a
+  // second fact for one visible swap.
+  test("a press during a turn spends no second fact", async () => {
+    const { facts, drawn } = countedFacts();
+    const { target, flush } = render(EmptyState, { connected: true, facts });
+    const key = keyOf(target)!;
+    key.click();
+    key.click();
+    await flushUntil(flush, () => drawn() > 2, 5);
+    expect(drawn()).toBe(2);
+  });
+
+  // One cue per explicit action: the reader's press sounds, the timer's turn does not.
+  test("a press plays the turn's cue, and a timed turn plays none", async () => {
+    const play = spyOn(sound, "play").mockImplementation(() => {});
+    try {
+      const { facts, drawn } = countedFacts();
+      const { target, flush } = render(EmptyState, { connected: true, rotateMs: 10, facts });
+      await flushUntil(flush, () => drawn() > 1);
+      expect(play).not.toHaveBeenCalled();
+      keyOf(target)!.click();
+      expect(play).toHaveBeenCalledWith("factTurned");
+    } finally {
+      play.mockRestore();
+    }
+  });
+
+  // The cadence starts over from a press, so a timed turn never lands just after one the
+  // reader asked for.
+  test("after a press, no timed turn lands within one interval", async () => {
+    const rotateMs = 80;
+    const drawnAt: number[] = [];
+    const facts = {
+      next: () => {
+        drawnAt.push(performance.now());
+        return CARROT_FACTS[drawnAt.length % CARROT_FACTS.length] as CarrotFact;
+      },
+    };
+    const { target, flush } = render(EmptyState, { connected: true, rotateMs, facts });
+    flush();
+    await Bun.sleep(rotateMs / 2);
+    const before = drawnAt.length;
+    const pressedAt = performance.now();
+    keyOf(target)!.click();
+    await flushUntil(flush, () => drawnAt.length > before);
+    await Bun.sleep(rotateMs * 1.5);
+    flush();
+    const timed = drawnAt.slice(before + 1).map((at) => Math.round(at - pressedAt));
+    expect(timed.length).toBeGreaterThan(0);
+    // A timer can fire a millisecond early on its own clock.
+    expect(Math.min(...timed)).toBeGreaterThanOrEqual(rotateMs - 2);
+  });
+
+  describe("the ^ shortcut", () => {
+    let dispatcher: ShortcutDispatcher;
+    beforeAll(() => {
+      dispatcher = createShortcutDispatcher({ target: window, registry: shortcuts });
+    });
+    afterAll(() => dispatcher.destroy());
+    const typeCaret = () =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "^", bubbles: true }));
+
+    test("shows the next fact", async () => {
+      const { facts, drawn } = countedFacts();
+      const { flush } = render(EmptyState, { connected: true, facts });
+      flush();
+      typeCaret();
+      await flushUntil(flush, () => drawn() > 1);
+      expect(drawn()).toBe(2);
+    });
+
+    test("does nothing offline", async () => {
+      const { facts, drawn } = countedFacts();
+      const { flush } = render(EmptyState, { connected: false, facts });
+      flush();
+      typeCaret();
+      await flushUntil(flush, () => drawn() > 1, 5);
+      expect(drawn()).toBe(1);
+    });
+
+    // A review's screen has no fact to turn, so the key is live only on this one.
+    test("is live only while the waiting screen is mounted", () => {
+      const live = () => shortcuts.list().some((e) => e.id === "actions.nextFact" && e.run);
+      expect(live()).toBe(false);
+      const { flush } = render(EmptyState, { connected: true });
+      flush();
+      expect(live()).toBe(true);
+    });
+  });
+
+  // Reduced motion stops the timer, but a press is the reader asking for the next fact.
+  test("under reduced motion the fact holds, and a press still turns it", async () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, "matchMedia");
+    Object.defineProperty(globalThis, "matchMedia", {
+      configurable: true,
+      value: (query: string) => ({ matches: query.includes("reduce"), media: query }),
+    });
+    try {
+      const { facts, drawn } = countedFacts();
+      const { target, flush } = render(EmptyState, { connected: true, rotateMs: 10, facts });
+      await flushUntil(flush, () => drawn() > 1, 5);
+      expect(drawn()).toBe(1);
+      keyOf(target)!.click();
+      await flushUntil(flush, () => drawn() > 1);
+      expect(drawn()).toBe(2);
+    } finally {
+      if (original) Object.defineProperty(globalThis, "matchMedia", original);
+      else Reflect.deleteProperty(globalThis, "matchMedia");
+    }
+  });
+
+  // The lit legend is the hero of this screen: a hot core over the accent, a darker rim,
+  // and a glow in the accent behind it, at a display size and the regular weight (the
+  // Button it sits in is medium). Pinned so a refactor can't quietly demote, embolden or
+  // recolor the brand mark.
+  test("lights the ^ legend in the accent (core, rim and glow), at display size and regular weight", async () => {
+    const css = await componentCss("EmptyState.svelte");
+    const core = ruleBody(css, ".lit-core");
+    expect(core).toContain("var(--lit-core)");
+    expect(core).toContain("var(--accent)");
+    expect(core).toContain("var(--lit-rim)");
+    expect(ruleBody(css, ".lit-glow")).toContain("color: var(--accent);");
+    expect(ruleBody(css, ".legend")).toContain("font-size: 4.25rem;");
+    expect(ruleBody(css, ".legend")).toContain("font-weight: 400;");
   });
 
   // EXC-763: the screen composes the shadcn Empty container, so its structure

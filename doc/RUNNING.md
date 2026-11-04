@@ -74,8 +74,10 @@ reading a plan: starting a comment, and discarding or dropping one; the outline'
 or a breadcrumb menu opening; search opening, committing, stepping between matches, and
 closing; entering or leaving visual line-select; switching plans; comparing versions;
 showing or hiding the comments panel; the file preview opening or closing; Settings or the
-shortcuts help opening; a theme change; and copy-code. None is longer than a fraction of a
-second, and none is attached to scrolling, hovering, or pointer movement.
+shortcuts help opening; a theme change; and copy-code. On the waiting screen, clicking its
+`^` key or typing `^` to show the next carrot fact, the line of trivia at its foot, plays
+one too. None is longer than a fraction of a second, and none is attached to scrolling,
+hovering, or pointer movement.
 
 A moment sounds the same however you reach it — the keyboard shortcut and the button play
 one cue, because the cue belongs to the action rather than to the key or the click.
