@@ -26,9 +26,10 @@ BSD-flavored `ps -axo pid=,comm=` everywhere.
 > If the browser doesn't open, or doctor shows no processes, on Linux or Windows: the
 > review URL caret prints to stderr is the fallback.
 
-caret supports OpenCode v1 1.3.4 or later and v2 2.0.18 or later.
+caret supports OpenCode v1 1.3.4 or later and v2 2.0.29 or later; an older v2 still loads
+caret but refuses every `path` review, so the agent passes the plan inline.
 [The OpenCode adapter](ARCHITECTURE.md#the-opencode-adapter) has the detail, including the
-`caret doctor` check that flags an older v1.
+`caret doctor` check that flags an older v1 or v2.
 
 ## Config file
 

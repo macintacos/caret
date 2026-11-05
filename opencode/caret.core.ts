@@ -407,8 +407,9 @@ export type ReviewHost = {
   /** Fail-open: false when the session is unreadable. */
   isSubagent: () => Promise<boolean>;
   /** caret rewrites the file and the model chose the path, so OpenCode's own edit rules
-   * must allow it. false = denied, ask-only, or the check failed. */
-  canEdit: (planFilePath: string) => Promise<boolean>;
+   * must allow it. false = denied or the check failed; a string is the host's own
+   * refusal, returned instead of the not-permitted text. */
+  canEdit: (planFilePath: string) => Promise<boolean | string>;
   /** Aborting it kills the `caret review` child. */
   signal?: AbortSignal;
   /** Fires once with the review URL while the review is pending. */
@@ -426,8 +427,10 @@ export async function runPlanReview(
   if (await host.isSubagent()) return { text: SUBAGENT_REFUSAL };
   const source = resolvePlanSource(args, host.directory, readRegularFile);
   if ("error" in source) return { text: source.error };
-  if (source.planFilePath && !(await host.canEdit(source.planFilePath))) {
-    return { text: notPermittedToEdit(source.planFilePath, deps.plansDir) };
+  if (source.planFilePath) {
+    const editVerdict = await host.canEdit(source.planFilePath);
+    if (typeof editVerdict === "string") return { text: editVerdict };
+    if (!editVerdict) return { text: notPermittedToEdit(source.planFilePath, deps.plansDir) };
   }
   const envelope = buildEnvelope(source.plan, {
     sessionID: host.sessionID,

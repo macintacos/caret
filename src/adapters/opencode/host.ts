@@ -146,10 +146,14 @@ export function loadedConfigFiles(
 /** v1.3.4 is the first loader that accepts the plugin's object default. */
 const V1_FLOOR = "1.3.4";
 
-/** doctor's `opencode-host` check: whether every `opencode` on `PATH` loads caret from the
- * keys its entries in loaded files sit in, and whether any `ignoredFiles` — config files
- * holding caret that OpenCode v2 never loads — exist. Every fault joins into one fail, each
- * with its remedy. */
+/** v2.0.29 is the first with `permission.assert`; below it the plugin refuses every `path`
+ * review. Keep in sync with the 2.0.29 in `cannotAskToEdit` (opencode/caret.plugin.v2.ts). */
+const V2_FLOOR = "2.0.29";
+
+/** doctor's `opencode-host` check. It fails for an `opencode` on `PATH` below its major's
+ * floor (v1 to load caret, v2 to review a plan file by `path`), for caret in a key those
+ * hosts don't load, and for caret in any `ignoredFiles` — config files OpenCode v2 never
+ * loads. Every fault joins into one fail, each with its remedy. */
 export function hostCheck(
   hosts: readonly OpencodeHost[],
   keys: readonly PluginKey[],
@@ -163,13 +167,14 @@ export function hostCheck(
   const faults: string[] = [];
   const remedies: string[] = [];
   for (const { bin, version } of hosts) {
-    if (version === null || isV2Host(version)) continue;
+    if (version === null) continue;
     const shown = version.join(".");
-    if (isNewer(V1_FLOOR, shown)) {
-      faults.push(
-        `OpenCode ${shown} at ${bin} is older than ${V1_FLOOR}, the first that loads caret`,
-      );
-      remedies.push(`upgrade OpenCode to ${V1_FLOOR} or later`);
+    const [floor, reason] = isV2Host(version)
+      ? [V2_FLOOR, "the first where caret can review a plan file by `path`"]
+      : [V1_FLOOR, "the first that loads caret"];
+    if (isNewer(floor, shown)) {
+      faults.push(`OpenCode ${shown} at ${bin} is older than ${floor}, ${reason}`);
+      remedies.push(`upgrade OpenCode to ${floor} or later`);
     }
   }
   const wrongKey = keys.find((k) => k !== pluginKeyFor(sharedHost(hosts)));
