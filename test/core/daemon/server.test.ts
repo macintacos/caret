@@ -273,9 +273,9 @@ test("a revision that declares variants replaces the review's list", async () =>
   await boot();
   const { id } = await newReview({ approveVariants: VARIANTS });
   await resolve(id, { behavior: "deny", feedback: "redo" });
-  const next = [{ id: "only", label: "Only" }];
-  await newReview({ plan: "# v2\n\nrevised", approveVariants: next });
-  expect(await servedVariants(id)).toEqual(next);
+  const revisedVariants = [{ id: "only", label: "Only" }];
+  await newReview({ plan: "# v2\n\nrevised", approveVariants: revisedVariants });
+  expect(await servedVariants(id)).toEqual(revisedVariants);
 });
 
 test.each([[[]], [[{ id: "", label: "x" }]], [[{ id: "x" }]]])(

@@ -36,11 +36,11 @@ export function toWireDecision(input: DecisionInput): OpencodeDecision {
     // build variant rides the wire, asking the v2 plugin to switch to the build agent;
     // any other acceptMode leaves a bare allow.
     const notes = input.feedback?.trim();
-    const mode = input.acceptMode === BUILD_VARIANT.id ? input.acceptMode : undefined;
+    const buildMode = input.acceptMode === BUILD_VARIANT.id ? input.acceptMode : undefined;
     return {
       behavior: "allow",
       ...(notes && { feedback: notes }),
-      ...(mode && { acceptMode: mode }),
+      ...(buildMode && { acceptMode: buildMode }),
     };
   }
   return { behavior: "deny", feedback: denyMessage(input.feedback) };

@@ -142,13 +142,13 @@ export function createCaretSetup(opts: {
     const readSession = (sessionID: string) => ctx.session.get({ sessionID });
 
     // Catches its own failure: execute's outer catch would turn a throw into a fail-safe deny.
-    async function switchToBuild(sessionID: string, text: string): Promise<string> {
+    async function switchToBuild(sessionID: string, approvalText: string): Promise<string> {
       try {
         await ctx.session.switchAgent({ sessionID, agent: "build" });
-        return text;
+        return approvalText;
       } catch (error) {
         logError(`caret: could not switch session ${sessionID} to the build agent`, error);
-        return `${text}\n\n${BUILD_SWITCH_FAILED}`;
+        return `${approvalText}\n\n${BUILD_SWITCH_FAILED}`;
       }
     }
 

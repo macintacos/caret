@@ -118,12 +118,12 @@ export async function reviewHookInput(
   return { decision: await runReview({ input }, deps), input };
 }
 
-/** Stamps `fallback` (the adapter's variants) on an input that declares none. */
+/** Stamps `adapterVariants` on an input that declares none. */
 export function declareApproveVariants(
   input: PlanInput,
-  fallback: readonly ApproveVariant[],
+  adapterVariants: readonly ApproveVariant[],
 ): PlanInput {
-  return input.approveVariants ? input : { ...input, approveVariants: [...fallback] };
+  return input.approveVariants ? input : { ...input, approveVariants: [...adapterVariants] };
 }
 
 export async function runReviewSubcommand(): Promise<void> {

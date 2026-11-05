@@ -58,11 +58,11 @@ export function parseDecision(stdout: string): CaretDecision {
     if (parsed.behavior === "allow") {
       // Reviewer notes (EXC-791) ride the allow; surface them to the agent below.
       const notes = typeof parsed.feedback === "string" ? parsed.feedback.trim() : "";
-      const mode = typeof parsed.acceptMode === "string" ? parsed.acceptMode : "";
+      const acceptMode = typeof parsed.acceptMode === "string" ? parsed.acceptMode : "";
       return {
         behavior: "allow",
         ...(notes && { feedback: notes }),
-        ...(mode && { acceptMode: mode }),
+        ...(acceptMode && { acceptMode }),
       };
     }
     if (parsed.behavior === "deny") {
