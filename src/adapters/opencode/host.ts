@@ -147,14 +147,13 @@ export function loadedConfigFiles(
 const V1_FLOOR = "1.3.4";
 
 /** v2.0.29 is the first with `permission.assert`; below it the plugin refuses every `path`
- * review. */
+ * review. Keep in sync with the 2.0.29 in `cannotAskToEdit` (opencode/caret.plugin.v2.ts). */
 const V2_FLOOR = "2.0.29";
 
-/** doctor's `opencode-host` check: whether every `opencode` on `PATH` is new enough — v1 to
- * load caret, v2 to review a plan file by `path` — and loads caret from the
- * keys its entries in loaded files sit in, and whether any `ignoredFiles` — config files
- * holding caret that OpenCode v2 never loads — exist. Every fault joins into one fail, each
- * with its remedy. */
+/** doctor's `opencode-host` check. It fails for an `opencode` on `PATH` below its major's
+ * floor (v1 to load caret, v2 to review a plan file by `path`), for caret in a key those
+ * hosts don't load, and for caret in any `ignoredFiles` — config files OpenCode v2 never
+ * loads. Every fault joins into one fail, each with its remedy. */
 export function hostCheck(
   hosts: readonly OpencodeHost[],
   keys: readonly PluginKey[],

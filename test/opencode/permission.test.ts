@@ -1,5 +1,4 @@
-// The resources `editChecks` forms — the same ones OpenCode v2 checks before its own tools
-// edit a file — for caret to `permission.assert` before writing a plan back to `path`.
+// `editChecks`: the resources caret asserts before writing a plan back to `path`.
 
 import { describe, expect, test } from "bun:test";
 

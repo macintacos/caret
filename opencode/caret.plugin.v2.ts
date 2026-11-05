@@ -47,9 +47,10 @@ export function withPlanAllow(
 }
 
 /** The `path` refusal on a v2 before 2.0.29, which has no `permission.assert` to ask
- * whether caret may rewrite the file. */
+ * whether caret may rewrite the file. Keep 2.0.29 in sync with `V2_FLOOR` in
+ * src/adapters/opencode/host.ts. */
 function cannotAskToEdit(planFilePath: string): string {
-  return `caret: ${REVIEW_TOOL} can't ask this OpenCode whether it may edit ${planFilePath}, which a path review rewrites; that needs OpenCode 2.0.29 or later. Pass the plan inline as \`plan\`, or upgrade OpenCode.`;
+  return `caret: ${REVIEW_TOOL} can't ask the running OpenCode whether it may edit ${planFilePath}, which a path review rewrites. Pass the plan inline as \`plan\`; path reviews need OpenCode 2.0.29 or later, which the user can upgrade to.`;
 }
 
 type SessionInfo = {

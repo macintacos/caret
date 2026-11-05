@@ -407,8 +407,8 @@ export type ReviewHost = {
   /** Fail-open: false when the session is unreadable. */
   isSubagent: () => Promise<boolean>;
   /** caret rewrites the file and the model chose the path, so OpenCode's own edit rules
-   * must allow it. false = denied, ask-only, or the check failed; a string refuses with
-   * that text instead of the not-permitted one. */
+   * must allow it. false = denied or the check failed; a string is the host's own
+   * refusal, returned instead of the not-permitted text. */
   canEdit: (planFilePath: string) => Promise<boolean | string>;
   /** Aborting it kills the `caret review` child. */
   signal?: AbortSignal;

@@ -1,7 +1,8 @@
 // Unit coverage for caret's OpenCode v2 `setup` adapter: tool registration, the
 // planning steer, the `context`-hook subagent removal, the prewarm, the plan-agent allow,
-// the `path` check (host assert, or a refusal on a host without it), the subagent refusal, abort, and the toast
-// progress and metadata keys — driven through a fake v2 plugin context and a stub runner.
+// the `path` check (host assert, or a refusal on a host without it), the subagent refusal,
+// abort, and the toast progress and metadata keys — driven through a fake v2 plugin
+// context and a stub runner.
 
 import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
@@ -584,6 +585,16 @@ test("a host assert decides an in-project path review", async () => {
   ]);
 });
 
+test("a path review asserts as the calling agent", async () => {
+  const directory = planDir({ "p.md": "# P\n" });
+  const host = recordingAssert();
+  const { tool } = await setupWith(stubRunner(ALLOW), { directory, assert: host.assert });
+  await tool.execute({ path: "p.md" }, toolContext({ agent: "build" } as Partial<ToolContext>));
+  expect(host.calls).toEqual([
+    { sessionID: "S", agent: "build", action: "edit", resources: ["p.md"] },
+  ]);
+});
+
 test("a file in the project but outside the session directory counts as internal", async () => {
   const project = planDir({ "plan.md": "# P\n", "pkg/.keep": "" });
   const host = recordingAssert();
@@ -600,10 +611,7 @@ test("a file in the project but outside the session directory counts as internal
 test("a Tool.Error from the host assert refuses a path review without spawning", async () => {
   const directory = planDir({ "p.md": "# P\n" });
   const host = recordingAssert(() => toolError("denied by policy"));
-  const { result, stdins } = await pathReview(
-    { directory, agentRules: async () => ALLOW_ALL, assert: host.assert },
-    "p.md",
-  );
+  const { result, stdins } = await pathReview({ directory, assert: host.assert }, "p.md");
   expect(String(result.content)).toContain("not permitted to edit");
   expect(stdins).toEqual([]);
 });

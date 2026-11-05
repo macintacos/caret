@@ -542,11 +542,12 @@ doctor's `opencode-host` check (`hostCheck` in `host.ts`, composed in `readOpenc
 in `checks.ts`) runs whenever caret has an entry in either key, the `file:` form included.
 It lists every `opencode` it finds and judges the key by the rule install uses, so a mixed
 v1/v2 `PATH` passes with `plugin`. It fails for each v1 below 1.3.4 (the dual export's
-floor, § The export surface), for caret in `plugins` unless every `opencode` reads as v2,
-since v1 never loads it (before 1.18.16 it refuses to start with the key), for caret in
-`plugin` when every one is v2, and for caret in a config file the host does not load
-(`config.json` on v2). Each remedy is `caret install`. It reports `unknown` when no binary
-is found or none can be read.
+floor, § The export surface), for each v2 below 2.0.29 (the first with
+`permission.assert`), for caret in `plugins` unless every `opencode` reads as v2, since v1
+never loads it (before 1.18.16 it refuses to start with the key), for caret in `plugin`
+when every one is v2, and for caret in a config file the host does not load (`config.json`
+on v2). A version fault's remedy is to upgrade OpenCode; every other fault's is
+`caret install`. It reports `unknown` when no binary is found or none can be read.
 
 ## Runtime resolution + update check (EXC-794)
 

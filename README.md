@@ -80,10 +80,10 @@ check = false
 ```
 
 `caret` supports OpenCode v1 1.3.4 or later and v2 2.0.29 or later; an older v2 still
-loads caret but refuses every `path` review, so the agent passes the plan inline. See
-[the OpenCode adapter](doc/ARCHITECTURE.md#the-opencode-adapter) for the by-hand
-equivalents, for pinning a version in OpenCode's plugin array (`plugin` on v1, `plugins`
-on v2), and for what each agent's install touches;
+loads caret but can't review a plan file the agent wrote, so the agent sends the plan text
+instead. See [the OpenCode adapter](doc/ARCHITECTURE.md#the-opencode-adapter) for the
+by-hand equivalents, for pinning a version in OpenCode's plugin array (`plugin` on v1,
+`plugins` on v2), and for what each agent's install touches;
 [the Claude Code adapter](doc/ARCHITECTURE.md#the-claude-code-adapter) covers the hooks
 `caret` registers there.
 
