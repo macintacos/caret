@@ -4,6 +4,7 @@ import { parseReviewUrl } from "@oc/review-bridge.ts";
 import { fakeReviewDeps } from "@test/support/wire-contract.ts";
 import {
   browserOpenCmd,
+  declareApproveVariants,
   notesAppendTarget,
   reviewHookInput,
   reviewUrlLine,
@@ -136,4 +137,17 @@ test.each([
   ["no plan file", "allow", "n", undefined, undefined, undefined],
 ] as const)("notes append target with %s", (_, behavior, feedback, path, posted, expected) => {
   expect(notesAppendTarget({ behavior, feedback }, path, posted)).toEqual(expected);
+});
+
+const FALLBACK = [{ id: "approve", label: "Approve" }];
+
+test("declareApproveVariants keeps a list the input declares", () => {
+  const declared = [{ id: "yolo", label: "Yolo" }];
+  const input: PlanInput = { plan: "p", sessionId: "s", approveVariants: declared };
+  expect(declareApproveVariants(input, FALLBACK).approveVariants).toEqual(declared);
+});
+
+test("declareApproveVariants stamps the fallback when the input declares none", () => {
+  const input: PlanInput = { plan: "p", sessionId: "s" };
+  expect(declareApproveVariants(input, FALLBACK).approveVariants).toEqual(FALLBACK);
 });

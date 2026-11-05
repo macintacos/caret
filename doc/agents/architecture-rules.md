@@ -22,13 +22,13 @@ slots in without touching core internals; blur it and agent vocabulary leaks eve
   seam. An adapter owns nine surfaces: `parseHookInput` (raw hook stdin → core
   `PlanInput`), `emitDecision` (core `Decision` → the tool's stdout wire shape),
   `fatalDenyLine` (a dependency-free last-resort deny line for the CLI's fatal handler),
-  `approveVariants` (the post-approval options it offers), `approveCarriesNotes` (whether
-  its approval can carry notes to the agent), `readInstallState` (the doctor install
-  probe), `listSkills` (the skill names the reviewer's `/` completion offers — names only,
-  never a skill's contents), `readSkillDescription` (one named skill's own description,
-  read on demand for the preview panel that completion opens — that description, never the
-  rest of the skill's file), and `restartHint` (optional: the post-upgrade line What's new
-  shows).
+  `approveVariants` (the post-approval options it offers, which `caret review` stamps on
+  each review), `approveCarriesNotes` (whether its approval can carry notes to the agent),
+  `readInstallState` (the doctor install probe), `listSkills` (the skill names the
+  reviewer's `/` completion offers — names only, never a skill's contents),
+  `readSkillDescription` (one named skill's own description, read on demand for the
+  preview panel that completion opens — that description, never the rest of the skill's
+  file), and `restartHint` (optional: the post-upgrade line What's new shows).
 
 ## The dependency law (grep-enforceable)
 
@@ -50,18 +50,20 @@ an adapter.
   keeps a hard-coded minimal deny string as a fallback for the one case the adapter itself
   failed to load, so the truly-fatal path still fails safe.
 - **`ui/` never imports `src/adapters/*`.** Adapter capabilities reach the browser
-  **over the wire**, not by import. The pattern: the daemon publishes the active adapter's
-  `approveVariants` in `GET /api/health`, and the UI renders its approve split-button from
-  that wire field (`ui/src/lib/approve.ts`), falling back to a built-in set when the field
-  is absent. `approveCarriesNotes` rides `GET /api/health` beside it, so the approve
-  dialog can warn when notes won't reach the agent. `listSkills` rides the same pattern
-  one route over — the daemon serves the active adapter's skill names on
-  `GET /api/reviews/:id/skills` and the feedback editors' `/` completion reads them from
-  there (`ui/src/lib/skillCompletion.ts`), so an adapter that enumerates nothing simply
-  leaves the list empty and no completion fires. `restartHint` rides `GET /api/health`
-  too, but only from a spawned daemon: a resident one (the service, `caret serve`)
-  withholds it, since its adapter is a default rather than the harness the user actually
-  runs.
+  **over the wire**, not by import. The pattern: `caret review` stamps the adapter's
+  `approveVariants` on each review it opens (the OpenCode v2 plugin declares its own in
+  the envelope). The daemon stores them on the review, serves them on
+  `GET /api/reviews[/:id]`, and refuses an approval whose `acceptMode` the review didn't
+  declare. The UI renders its approve split-button from the active review's set
+  (`ui/src/lib/approve.ts`), falling back to a built-in set when the review declares none.
+  `approveCarriesNotes` rides `GET /api/health`, so the approve dialog can warn when notes
+  won't reach the agent. `listSkills` rides the same pattern one route over — the daemon
+  serves the active adapter's skill names on `GET /api/reviews/:id/skills` and the
+  feedback editors' `/` completion reads them from there
+  (`ui/src/lib/skillCompletion.ts`), so an adapter that enumerates nothing simply leaves
+  the list empty and no completion fires. `restartHint` rides `GET /api/health` too, but
+  only from a spawned daemon: a resident one (the service, `caret serve`) withholds it,
+  since its adapter is a default rather than the harness the user actually runs.
 
 ## Where agent vocabulary lives
 

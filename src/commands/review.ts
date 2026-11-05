@@ -17,7 +17,7 @@ import { ensureDaemon, prodEnsureDeps, SUPERVISOR_WINDOW_MS } from "@/daemon/lif
 import { readToken } from "@/daemon/token.ts";
 import { readCmuxPane } from "@/lib/cmux.ts";
 import { logError, logInfo, logWarn } from "@/lib/log.ts";
-import type { Decision, PlanInput } from "@/lib/types.ts";
+import type { ApproveVariant, Decision, PlanInput } from "@/lib/types.ts";
 import { appendReviewerNotesToPlanFile, readPlanFile } from "@/plan/canonical-file.ts";
 import {
   expireAbandoned,
@@ -118,6 +118,14 @@ export async function reviewHookInput(
   return { decision: await runReview({ input }, deps), input };
 }
 
+/** Stamps `adapterVariants` on an input that declares none. */
+export function declareApproveVariants(
+  input: PlanInput,
+  adapterVariants: readonly ApproveVariant[],
+): PlanInput {
+  return input.approveVariants ? input : { ...input, approveVariants: [...adapterVariants] };
+}
+
 export async function runReviewSubcommand(): Promise<void> {
   // Wire [logging].level and .redact before anything can emit. One synchronous read —
   // the same snapshot feeds the review deps below, so the hook's logging config and
@@ -174,7 +182,10 @@ export async function runReviewSubcommand(): Promise<void> {
     posted = handle;
   };
   const { decision: out, input } = await reviewHookInput(
-    parseHook(adapter.parseHookInput, stdin),
+    parseHook(
+      (raw) => declareApproveVariants(adapter.parseHookInput(raw), adapter.approveVariants),
+      stdin,
+    ),
     deps,
     readPlanFile,
   );

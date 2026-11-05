@@ -6,10 +6,22 @@ test("plain approve emits behavior=allow with no extra fields", () => {
   expect(toWireDecision({ behavior: "allow" })).toEqual({ behavior: "allow" });
 });
 
-test("approve with an acceptMode still emits a plain allow (no escalation in v1)", () => {
-  // OpenCode v1 exposes only a plain approve; an acceptMode never escalates on the
-  // wire (mirrors the codex single-variant rationale).
+test("approve & build carries acceptMode build", () => {
+  expect(toWireDecision({ behavior: "allow", acceptMode: "build", feedback: "n" })).toEqual({
+    behavior: "allow",
+    feedback: "n",
+    acceptMode: "build",
+  });
+});
+
+test("a plain approve (acceptMode default) stays a bare allow", () => {
   expect(toWireDecision({ behavior: "allow", acceptMode: "default" })).toEqual({
+    behavior: "allow",
+  });
+});
+
+test("an acceptMode this adapter doesn't declare (acceptEdits) stays a bare allow", () => {
+  expect(toWireDecision({ behavior: "allow", acceptMode: "acceptEdits" })).toEqual({
     behavior: "allow",
   });
 });

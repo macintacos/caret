@@ -80,12 +80,22 @@ type ReviewTool = {
   ) => Promise<{ content: string; metadata?: Record<string, string> }>;
 };
 
+/** The approve-variant id for "Approve & build"; must equal BUILD_VARIANT.id in
+ * src/adapters/opencode/approve.ts. */
+export const APPROVE_AND_BUILD = "build";
+
+/** Appended to an approval's tool result when the switch to build fails, so the model asks
+ * rather than implements. */
+export const BUILD_SWITCH_FAILED =
+  "caret could not switch this session to the build agent, so it is still in the plan agent. Ask the user to switch to build before implementing.";
+
 /** The slice of v2's plugin `Context` caret uses. */
 export type SetupContext = {
   location: { directory: string; project: { directory: string } };
   session: {
     get: (input: { sessionID: string }) => Promise<SessionInfo>;
     update: (input: { sessionID: string; permissions: Rule[] }) => Promise<unknown>;
+    switchAgent: (input: { sessionID: string; agent: string }) => Promise<unknown>;
     hook: {
       (name: "context", callback: (event: ContextEvent) => Promise<void>): Promise<unknown>;
       (name: "prompt", callback: (event: PromptEvent) => Promise<void>): Promise<unknown>;
@@ -124,11 +134,23 @@ export function createCaretSetup(opts: {
   run: SpawnRunner;
   warm: WarmRunner;
   plansDir: string;
+  logError: (message: string, error: unknown) => void;
 }): (ctx: SetupContext) => Promise<void> {
-  const { bin, run, warm, plansDir } = opts;
+  const { bin, run, warm, plansDir, logError } = opts;
 
   return async (ctx) => {
     const readSession = (sessionID: string) => ctx.session.get({ sessionID });
+
+    // Catches its own failure: execute's outer catch would turn a throw into a fail-safe deny.
+    async function switchToBuild(sessionID: string, approvalText: string): Promise<string> {
+      try {
+        await ctx.session.switchAgent({ sessionID, agent: "build" });
+        return approvalText;
+      } catch (error) {
+        logError(`caret: could not switch session ${sessionID} to the build agent`, error);
+        return `${approvalText}\n\n${BUILD_SWITCH_FAILED}`;
+      }
+    }
 
     async function execute(
       input: unknown,
@@ -174,12 +196,18 @@ export function createCaretSetup(opts: {
             onUrl: (url) => {
               context.progress({ [CARET_URL_KEY]: url }).catch(() => {});
             },
+            // Only a planning session has a build agent to hand off to.
+            ...(isPlanningAgent(context.agent) && { approveVariants: [APPROVE_AND_BUILD] }),
           },
           { bin, run, plansDir },
         );
         // An abort's fail-safe deny is no reviewer's decision; the TUI reads a missing key as cancelled.
         if (!decision || context.signal.aborted) return { content: text };
-        return { content: text, metadata: { [CARET_DECISION_KEY]: decision.behavior } };
+        const content =
+          decision.behavior === "allow" && decision.acceptMode === APPROVE_AND_BUILD
+            ? await switchToBuild(context.sessionID, text)
+            : text;
+        return { content, metadata: { [CARET_DECISION_KEY]: decision.behavior } };
       } catch (error) {
         if (declined !== undefined && error === declined) throw error;
         const message = error instanceof Error ? error.message : String(error);
@@ -266,5 +294,6 @@ const setup = createCaretSetup({
     // v2's plan agent may edit only this dir, and v2 roots it at $HOME, not XDG.
     defaultDir: join(homedir(), ".opencode", "plan"),
   }),
+  logError: (message, error) => console.error(message, error),
 });
 export default setup;

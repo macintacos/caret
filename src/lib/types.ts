@@ -24,9 +24,9 @@ export type Behavior = "allow" | "deny";
 export type ApproveVariantId = string;
 
 /**
- * A post-approval approve variant offered to the reviewer — the wire shape the
- * daemon publishes (sourced from the active adapter) and the UI renders. `id` is
- * the opaque token carried on the decision.
+ * A post-approval approve variant offered to the reviewer — the wire shape a
+ * review declares and the UI renders. `id` is the opaque token carried on the
+ * decision.
  */
 export interface ApproveVariant {
   id: ApproveVariantId;
@@ -187,6 +187,8 @@ export interface Review {
   /** The cmux pane the latest version was submitted from (see CmuxPane).
    * Deliberately absent from ClientReview — the browser never needs the ids. */
   cmux?: CmuxPane;
+  /** The approve variants this review offers (see PlanInput.approveVariants). */
+  approveVariants?: ApproveVariant[];
   createdAt: number;
   updatedAt: number;
   decision?: Decision;
@@ -211,6 +213,8 @@ export interface ClientReview {
   composerScratches: PersistedScratch[];
   /** The current version's `agentCopyMatches`, coerced to false when absent. */
   agentCopyMatches: boolean;
+  /** The approve variants this review offers; absent when it declared none. */
+  approveVariants?: ApproveVariant[];
   createdAt: number;
   updatedAt: number;
   decision?: Decision;
@@ -242,6 +246,10 @@ export interface PlanInput {
    * plan unless it changed since ingest. Absent for a review without a plan file
    * (Codex, an inline `plan`, `caret mcp`). */
   planFilePath?: string;
+  /** The approve variants this review offers, in display order. `caret review`
+   * declares them: the adapter's set, or the OpenCode v2 plugin's declaration.
+   * Absent on a review from an older caret or a bare dev/e2e seed. */
+  approveVariants?: ApproveVariant[];
 }
 
 /** Result of routing an incoming plan through the threading state machine. */
@@ -446,11 +454,6 @@ export interface HealthIdentity {
    * brand-new-user session. Present only in that dev mode; a production daemon
    * (CARET_FRESH unset) omits it entirely. */
   fresh?: boolean;
-  /** The active adapter's declared approve variants, in display order — the wire
-   * channel that lets the UI render its approve split-button from the adapter's
-   * capability instead of hard-coding tool mode names. Optional: a daemon that
-   * predates this field omits it, and the UI falls back to its built-in set. */
-  approveVariants?: ApproveVariant[];
   /** Whether the active adapter's approval carries the reviewer's notes and comments
    * to the agent. Optional: a daemon that predates this field omits it, and the UI
    * then reads it as true. */
@@ -633,6 +636,7 @@ export function toClientReview(review: Review): ClientReview {
     generalCommentDraft: review.generalCommentDraft ?? "",
     composerScratches: cur.composerScratches ?? [],
     agentCopyMatches: cur.agentCopyMatches ?? false,
+    approveVariants: review.approveVariants,
     createdAt: review.createdAt,
     updatedAt: review.updatedAt,
     decision: review.decision,

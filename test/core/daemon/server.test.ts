@@ -237,24 +237,89 @@ test("GET /api/health omits stateDir and instanceId when not provided", async ()
   expect("instanceId" in body).toBe(false);
 });
 
-// ---- adapter-declared approve variants in health (EXC-515) ----
+// ---- approve variants declared per review ----
 
-test("GET /api/health publishes the adapter's declared approve variants", async () => {
-  const variants = [
-    { id: "approve", label: "Approve" },
-    { id: "yolo", label: "Approve & auto", description: "all gas" },
-  ];
-  await boot({ approveVariants: variants });
-  const body = (await (await fetch(`${base}/api/health`)).json()) as {
-    approveVariants?: typeof variants;
-  };
-  expect(body.approveVariants).toEqual(variants);
-});
+const VARIANTS = [
+  { id: "approve", label: "Approve" },
+  { id: "yolo", label: "Approve & auto", description: "all gas" },
+];
 
-test("GET /api/health omits approveVariants when the adapter declares none", async () => {
+async function servedVariants(id: string): Promise<unknown> {
+  const body = (await (await fetch(`${base}/api/reviews/${id}`)).json()) as Record<string, unknown>;
+  return body.approveVariants;
+}
+
+test("GET /api/health carries no approve variants", async () => {
   await boot();
   const body = (await (await fetch(`${base}/api/health`)).json()) as Record<string, unknown>;
   expect("approveVariants" in body).toBe(false);
+});
+
+test("a review serves the approve variants it declared", async () => {
+  await boot();
+  const { id } = await newReview({ approveVariants: VARIANTS });
+  expect(await servedVariants(id)).toEqual(VARIANTS);
+});
+
+test("a revision that declares no variants keeps the review's list", async () => {
+  await boot();
+  const { id } = await newReview({ approveVariants: VARIANTS });
+  await resolve(id, { behavior: "deny", feedback: "redo" });
+  await newReview({ plan: "# v2\n\nrevised" });
+  expect(await servedVariants(id)).toEqual(VARIANTS);
+});
+
+test("a revision that declares variants replaces the review's list", async () => {
+  await boot();
+  const { id } = await newReview({ approveVariants: VARIANTS });
+  await resolve(id, { behavior: "deny", feedback: "redo" });
+  const revisedVariants = [{ id: "only", label: "Only" }];
+  await newReview({ plan: "# v2\n\nrevised", approveVariants: revisedVariants });
+  expect(await servedVariants(id)).toEqual(revisedVariants);
+});
+
+test.each([[[]], [[{ id: "", label: "x" }]], [[{ id: "x" }]]])(
+  "a malformed approveVariants %j degrades to none and keeps the review",
+  async (approveVariants) => {
+    await boot();
+    const { id } = await newReview({ approveVariants });
+    expect(await servedVariants(id)).toBeUndefined();
+    expect(store.get(id)?.status).toBe("pending");
+  },
+);
+
+test("resolving with an undeclared acceptMode is refused and leaves the review pending", async () => {
+  const { recs, log } = recordingLog();
+  await boot({ log });
+  const { id } = await newReview({ approveVariants: VARIANTS });
+  const res = await d.resolve(id, { behavior: "allow", acceptMode: "nope" });
+  expect(res.status).toBe(400);
+  expect(typeof ((await res.json()) as { error?: unknown }).error).toBe("string");
+  expect(store.get(id)?.status).toBe("pending");
+  expect(store.get(id)?.decision).toBeUndefined();
+  expect(recs.filter((r) => r.step === "resolve").at(-1)).toMatchObject({
+    level: "info",
+    extra: { acceptMode: "nope" },
+  });
+});
+
+test("resolving with a declared acceptMode succeeds", async () => {
+  await boot();
+  const { id } = await newReview({ approveVariants: VARIANTS });
+  expect((await d.resolve(id, { behavior: "allow", acceptMode: "yolo" })).status).toBe(200);
+});
+
+test("a deny carrying an undeclared acceptMode still lands as a deny", async () => {
+  await boot();
+  const { id } = await newReview({ approveVariants: VARIANTS });
+  expect((await d.resolve(id, { behavior: "deny", acceptMode: "nope" })).status).toBe(200);
+  expect(store.get(id)?.status).toBe("rejected");
+});
+
+test("a review that declared no variants accepts any acceptMode", async () => {
+  await boot();
+  const { id } = await newReview();
+  expect((await d.resolve(id, { behavior: "allow", acceptMode: "anything" })).status).toBe(200);
 });
 
 test.each([true, false])(
@@ -2564,14 +2629,8 @@ test("the review record is emitted once, by the router, with threading extras", 
 
 test("the resolve record carries reviewId, sessionId, and acceptMode extras", async () => {
   const { recs, log } = recordingLog();
-  await boot({
-    log,
-    approveVariants: [
-      { id: "default", label: "Approve" },
-      { id: "yolo", label: "Approve & auto" },
-    ],
-  });
-  const { id } = await newReview();
+  await boot({ log });
+  const { id } = await newReview({ approveVariants: VARIANTS });
   await resolve(id, { behavior: "allow", acceptMode: "yolo" });
   const rec = recs.find((r) => r.step === "resolve");
   expect(rec).toMatchObject({

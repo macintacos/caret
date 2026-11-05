@@ -357,6 +357,15 @@ test("a path review sends the file's text and its absolute path in the envelope"
   });
 });
 
+test("the v1 envelope declares no approve variants", async () => {
+  const stdins: string[] = [];
+  const hooks = await buildHooks(
+    stubRunner(`{"behavior":"allow"}`, (_command, _env, stdin) => stdins.push(stdin)),
+  );
+  await hooks.tool?.[REVIEW_TOOL]?.execute?.({ plan: "# P" }, ctx("plan"));
+  expect("approve_variants" in JSON.parse(stdins[0] ?? "{}")).toBe(false);
+});
+
 test("a path review's change request names the file and asks for a re-read", async () => {
   const { directory, planFilePath } = planDir("# P\n");
   const hooks = await buildHooks(stubRunner(`{"behavior":"deny","feedback":"narrow it"}`));

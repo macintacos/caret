@@ -11,6 +11,12 @@ import type { Behavior, ConfigPatch, DraftBody, PlanInput, ResolveBody } from "@
 // fallback rather than rejecting, matching the cast-and-trust behavior they replace.
 // ConfigPatchSchema is the one exception and says below why it rejects instead.
 
+const ApproveVariantSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  description: z.string().optional(),
+});
+
 // POST /api/reviews: an incoming plan. Every field is optional and the whole
 // object falls back to {} on a non-object body, mirroring the `req.json()
 // .catch(() => ({}))` tolerance the body parser keeps — the router then defaults
@@ -31,6 +37,9 @@ export const PlanInputSchema: z.ZodType<PlanInput> = z
       .object({ workspaceId: z.string().min(1), surfaceId: z.string().min(1) })
       .optional()
       .catch(undefined),
+    // An empty or malformed list degrades to undefined ("declared none": the UI's
+    // fallback renders, any acceptMode resolves) rather than failing the plan.
+    approveVariants: z.array(ApproveVariantSchema).min(1).optional().catch(undefined),
   })
   .catch({});
 
@@ -69,7 +78,7 @@ const BehaviorSchema: z.ZodType<Behavior> = z.enum(["allow", "deny"]);
 // body explicitly says "deny" (fail-safe: an absent or garbled behavior never
 // denies on its own). `acceptMode` is an opaque approve-variant id carried
 // verbatim into the decision the hook reads — a non-string degrades to undefined
-// at the field.
+// at the field; `handleResolve` refuses an allow whose id the review didn't declare.
 export const ResolveBodySchema: z.ZodType<ResolveBody> = z
   .object({
     behavior: BehaviorSchema.catch("allow"),

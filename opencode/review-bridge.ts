@@ -9,7 +9,7 @@
 import { spawn } from "node:child_process";
 
 export type CaretDecision =
-  | { behavior: "allow"; feedback?: string }
+  | { behavior: "allow"; feedback?: string; acceptMode?: string }
   | { behavior: "deny"; feedback: string };
 
 /** Asks the model to open its plan on a `#` heading, which deriveTitle
@@ -23,12 +23,18 @@ export const PLAN_TITLE_INSTRUCTION =
  * reads — both ends are caret-owned. */
 export function buildEnvelope(
   plan: string,
-  ctx: { sessionID?: string; directory?: string; planFilePath?: string },
+  ctx: {
+    sessionID?: string;
+    directory?: string;
+    planFilePath?: string;
+    approveVariants?: readonly string[];
+  },
 ): string {
   return JSON.stringify({
     session_id: ctx.sessionID,
     cwd: ctx.directory,
     tool_input: { plan, planFilePath: ctx.planFilePath },
+    approve_variants: ctx.approveVariants,
   });
 }
 
@@ -44,11 +50,20 @@ export function parseDecision(stdout: string): CaretDecision {
       .filter(Boolean)
       .at(-1) ?? "";
   try {
-    const parsed = JSON.parse(line) as { behavior?: unknown; feedback?: unknown };
+    const parsed = JSON.parse(line) as {
+      behavior?: unknown;
+      feedback?: unknown;
+      acceptMode?: unknown;
+    };
     if (parsed.behavior === "allow") {
       // Reviewer notes (EXC-791) ride the allow; surface them to the agent below.
       const notes = typeof parsed.feedback === "string" ? parsed.feedback.trim() : "";
-      return notes ? { behavior: "allow", feedback: notes } : { behavior: "allow" };
+      const acceptMode = typeof parsed.acceptMode === "string" ? parsed.acceptMode : "";
+      return {
+        behavior: "allow",
+        ...(notes && { feedback: notes }),
+        ...(acceptMode && { acceptMode }),
+      };
     }
     if (parsed.behavior === "deny") {
       return {

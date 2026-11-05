@@ -41,6 +41,7 @@ import { markPaneRead as clearCmuxMark } from "@/lib/cmux.ts";
 import { type CaretLogger, noopLogger, shortId } from "@/lib/log.ts";
 import {
   type ApproveVariant,
+  type ApproveVariantId,
   type CmuxPane,
   type ConfigValues,
   currentVersion,
@@ -177,11 +178,6 @@ export interface CreateServerOptions {
    * detection; the lock and listen-record copies tie a lock file and a
    * daemon.log boot back to the same boot for diagnostics. Safe to log. */
   instanceId?: string;
-  /** The active adapter's declared approve variants, published in /api/health so
-   * the UI renders its approve split-button from the adapter capability. Omitted
-   * (default) means the field is absent from the health body and the UI uses its
-   * built-in fallback set. */
-  approveVariants?: readonly ApproveVariant[];
   /** Whether the active adapter's approval carries notes to the agent, published
    * in /api/health. Omitted (default) means the field is absent from the health body. */
   approveCarriesNotes?: boolean;
@@ -293,7 +289,6 @@ interface ResolvedOptions {
   commit: string | undefined;
   stateDir: string | undefined;
   instanceId: string | undefined;
-  approveVariants: readonly ApproveVariant[] | undefined;
   approveCarriesNotes: boolean | undefined;
   source: string | undefined;
   listSkills: ((cwd: string) => Promise<SkillRef[]>) | undefined;
@@ -336,7 +331,6 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     commit: opts.commit,
     stateDir: opts.stateDir,
     instanceId: opts.instanceId,
-    approveVariants: opts.approveVariants,
     approveCarriesNotes: opts.approveCarriesNotes,
     source: opts.source,
     listSkills: opts.listSkills,
@@ -413,6 +407,15 @@ function isStaleVersion(review: Review | undefined, version: number | undefined)
   );
 }
 
+/** Whether the review offers approve variant `id`. A plain resolve (no id) and a review
+ * that declared no variants (one from an older caret, or a bare seed) accept any. */
+function offersVariant(
+  declared: readonly ApproveVariant[] | undefined,
+  id: ApproveVariantId | undefined,
+): boolean {
+  return id === undefined || declared === undefined || declared.some((v) => v.id === id);
+}
+
 function expiredDeny(): Decision {
   return {
     behavior: "deny",
@@ -429,7 +432,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   const cfg = resolveOptions(opts);
   const { store, idle, heartbeat, resident, assets, onShutdown, routePlan, configPath, log } = cfg;
   const { buildId, assetDigest, commit, stateDir, instanceId } = cfg;
-  const { approveVariants, approveCarriesNotes, source, lockPath } = cfg;
+  const { approveCarriesNotes, source, lockPath } = cfg;
   const { awaitDecision, resolveDecision, clearDecision, openDecisionCount, unreadDecisionCount } =
     createDecisions(log);
 
@@ -512,10 +515,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       // Only the dev --fresh boot sets CARET_FRESH; production omits the field
       // entirely so the wire stays byte-identical there (EXC-781).
       ...(process.env.CARET_FRESH === "1" ? { fresh: true } : {}),
-      ...(approveVariants ? { approveVariants: [...approveVariants] } : {}),
       ...(approveCarriesNotes === undefined ? {} : { approveCarriesNotes }),
-      // The active adapter's id (EXC-791): the "source" the UI adapts to (e.g.
-      // OpenCode's single-variant approve). Absent when the daemon declares none.
+      // The active adapter's id (EXC-791): the "source" the UI adapts to. Absent
+      // when the daemon declares none.
       ...(source ? { source } : {}),
       ...(cfg.restartHint ? { restartHint: cfg.restartHint } : {}),
       ...(cfg.home ? { home: cfg.home } : {}),
@@ -1109,6 +1111,15 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // Only a pending review can be resolved — guards against a double resolve
     // diverging the store from the decision the hook received.
     if (existing?.status !== "pending") return notFound();
+    if (body.behavior !== "deny" && !offersVariant(existing.approveVariants, body.acceptMode)) {
+      route.log.info("resolve", "resolve refused: approve variant not offered", {
+        acceptMode: body.acceptMode,
+      });
+      return Response.json(
+        { error: `approve variant "${body.acceptMode}" is not offered for this review` },
+        { status: 400 },
+      );
+    }
     const decision: Decision = {
       behavior: body.behavior === "deny" ? "deny" : "allow",
       feedback: body.feedback,

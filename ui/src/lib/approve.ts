@@ -1,14 +1,13 @@
-// The approve split-button's variants and label derivation. The variant set is
-// adapter-declared and reaches the UI over the wire (the daemon's /api/health
-// `approveVariants`).
+// The approve split-button's variants and label derivation. Each review declares
+// its variant set, and it reaches the UI on the review (`approveVariants`).
 
 import type { ApproveVariant, ApproveVariantId } from "@core/lib/types";
 
 export type { ApproveVariant, ApproveVariantId };
 
-/** The variants rendered when the daemon predates the /api/health
- * `approveVariants` field — the one place the UI carries the agent tool's variant
- * ids itself. A current daemon's live set supersedes these. */
+/** The variants rendered for a review that declares none — one from an older caret,
+ * or a dev/e2e seed. The one place the UI carries the agent tool's variant ids
+ * itself; a review's declared set supersedes these. */
 export const WIRE_FALLBACK: ApproveVariant[] = [
   { id: "default", label: "Approve", description: "Approve edits manually" },
   {
@@ -37,7 +36,7 @@ export function approveLabel(id: ApproveVariantId, variants: ApproveVariant[]): 
 
 /** The variant id to drive the primary Approve button: what this browser remembered,
  * gated against the live set so an id from another adapter (or an older caret) can
- * never resolve to a variant this daemon does not declare. */
+ * never resolve to a variant this review does not declare. */
 export function pickApproveMode(
   remembered: ApproveVariantId | null,
   variants: ApproveVariant[],

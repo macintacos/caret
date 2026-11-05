@@ -90,9 +90,10 @@ export async function routeIncomingPlan(
       r.versions.push({ version, plan, annotations: [], agentCopyMatches, createdAt: now });
       r.title = deriveTitle(plan);
       r.status = "pending";
-      // Re-point at the pane that actually submitted this revision; a submission
-      // carrying none leaves the original in place (EXC-961).
+      // Re-point at the pane that actually submitted this revision, and take its
+      // approve variants; a submission carrying none keeps the original (EXC-961).
       r.cmux = input.cmux ?? r.cmux;
+      r.approveVariants = input.approveVariants ?? r.approveVariants;
       // Re-pended and awaiting a fresh decision: clear any decision already
       // recorded (a rejection; pending has none) so the daemon's /decision
       // handler waits for the next one instead of re-serving a stale deny.
@@ -123,6 +124,7 @@ export async function routeIncomingPlan(
     title: deriveTitle(plan),
     status: "pending",
     cmux: input.cmux,
+    approveVariants: input.approveVariants,
     versions: [{ version: 1, plan, annotations: [], agentCopyMatches, createdAt: now }],
     createdAt: now,
     updatedAt: now,

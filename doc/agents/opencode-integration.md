@@ -34,10 +34,10 @@ this:
   `options: { codemode: false }`, without which v2 registers the tool only inside its Code
   Mode catalog. Both `execute`s are thin adapters over one host-neutral `runPlanReview`
   (`caret.core.ts`), which takes a small `ReviewHost` port — session id, base directory,
-  `isSubagent`, `canEdit`, abort `signal`, `onUrl` — and both registrations read the same
-  exported tool strings. v2's `execute` never throws: a rejection would skip v2's
-  `execute.after` hooks, so every failure comes back as `{ content }` carrying the
-  bridge's fail-safe deny.
+  `isSubagent`, `canEdit`, abort `signal`, `onUrl`, and the approve-variant ids it can
+  honor — and both registrations read the same exported tool strings. v2's `execute` never
+  throws: a rejection would skip v2's `execute.after` hooks, so every failure comes back
+  as `{ content }` carrying the bridge's fail-safe deny.
 - A hook injects a planning steer telling the Plan agent to call `caret_review_plan`. On
   v1 that is `experimental.chat.system.transform` (and a `tool.definition` hook redirects
   the native `plan_exit` description toward it); on v2 it is
@@ -116,6 +116,15 @@ reading the flat decision JSON (`{ behavior, feedback? }`) on stdout. That reuse
 entire existing daemon/review pipeline unchanged — the OpenCode plugin is the
 OpenCode-side counterpart to Claude Code's `hooks.json`, which likewise spawns
 `caret review`.
+
+On v2, when the calling agent is a planning agent, the envelope also carries
+`approve_variants: ["build"]`, so the review offers **Approve & build** beside the plain
+approve; a call from `build` or a user-defined primary agent offers only plain approve.
+That decision comes back as `{ behavior: "allow", acceptMode: "build" }`, and v2's
+`execute` then calls `ctx.session.switchAgent` to move the session from `plan` to `build`.
+A failed switch keeps the approval: the tool result says the session is still in `plan`,
+and the failure is logged to OpenCode's stderr (`console.error`; v2's plugin context has
+no log API). v1 declares no variants.
 
 On a `path` call the plugin reads the file itself and sends its text along with the
 resolved absolute path as `planFilePath`, which gives the envelope the same shape Claude
@@ -223,7 +232,8 @@ background process. No throttle, no per-session state.
 as the `review` spawn does — the warm is what stands the daemon up, and the daemon picks
 its adapter from that env, so omitting it yields a claude-flavored daemon that the later
 `caret review` reuses (`ensureDaemon` matches on build/version/state dir, not adapter),
-offering OpenCode reviewers Claude's approve variants. And it registers its own `'error'`
+with Claude's `approveCarriesNotes` and `source`. Approve variants ride the review, so
+that daemon still offers OpenCode reviewers OpenCode's. And it registers its own `'error'`
 handler: `spawn` emits `'error'` **asynchronously** (ENOENT on a bad `CARET_OPENCODE_BIN`
 or a partial install), so the hook's synchronous `try`/`catch` cannot see it and an
 unhandled `'error'` event would take OpenCode's whole process down.
@@ -330,10 +340,10 @@ so it wants the live check § Verified vs. follow-up already schedules.
 
 - **Adapter (`src/adapters/opencode/`)** — the wire + probe, mirroring
   `src/adapters/codex/`: `parseHookInput` (the envelope), `emitDecision` (the flat
-  decision), a single `default` approve variant, `fatalDenyLine`, and
-  `readOpencodeInstallState` (a read-only probe of OpenCode's config dir). Registered in
-  `src/adapters/index.ts`; selectable via `CARET_AGENT=opencode`. Claude stays the
-  default.
+  decision), a `default` approve variant plus `build` when the v2 plugin declares it (for
+  a planning-agent call only), `fatalDenyLine`, and `readOpencodeInstallState` (a
+  read-only probe of OpenCode's config dir). Registered in `src/adapters/index.ts`;
+  selectable via `CARET_AGENT=opencode`. Claude stays the default.
 - **Packaging (`opencode/`)** — the host-neutral core (`caret.core.ts`), the v1 plugin
   (`caret.plugin.ts`), the v2 plugin (`caret.plugin.v2.ts`) and the edit-check resources
   it asserts (`permission.ts`), the v2 TUI module (`caret.tui.ts`, `exports["./tui"]`),
@@ -670,8 +680,10 @@ refusal and its fail-open, the `context`-hook tool removal and its fail-open, th
 plan-agent allow and its agent-and-session skip, the default agent the warm and allow
 resolve from `ctx.agent.list()` (failing closed on an unreadable or empty list and on a
 non-plan default), the TUI half's toasts and update check, abort on both hosts, and v1↔v2
-parity of the refusal texts. For the plugin key they cover the host probe's 5 s bound (a
-grandchild holding stdout included), key selection and the one-transform move, deleting
+parity of the refusal texts, the v2 envelope declaring `build` only from a planning agent
+(and v1's declaring nothing), the Approve & build switch, and a failed switch keeping the
+approval with its note and log. For the plugin key they cover the host probe's 5 s bound
+(a grandchild holding stdout included), key selection and the one-transform move, deleting
 `plugins` without losing comments (a trailing comma and CRLF included), v2 cache reads and
 clears, the service launcher's pick of v2's live generation (bash and TS against one
 shared fixture), and doctor's `opencode-host` and `opencode-caret-version` checks and
@@ -751,7 +763,9 @@ events are unchanged in source through 2.2.0. That the review-link and decision 
 offer to open the plan's session (`ToastOptions.sessionID`, present from the 2.0.18 floor)
 is unit-tested against a fake TUI only, not observed live. OpenCode's interactive prompt
 through `permission.assert` for an `ask` rule (for example a non-plan agent's
-out-of-project `path` on ≥ 2.0.29) is not live-checked.
+out-of-project `path` on ≥ 2.0.29) is not live-checked. The full Approve & build round
+trip through caret's UI is not live-checked either — only the `switchAgent` probe ran; the
+reviewer hand check on the PR covers it.
 
 **v1 follow-up.** v1 loading the dual default through OpenCode's npm installer (the
 published package) is inferred, not observed: the re-enable runs used a directory entry,
@@ -802,6 +816,14 @@ v1.18.15 and v1.18.29 from npm):
   non-caret entries and the comment, and removed the command files.
 - **doctor.** `opencode-host` failed for caret in `plugin` on v2 and in `plugins` on
   1.18.15, and passed after install moved each.
+
+**Confirmed live for EXC-2250** (2026-11-05, v2.2.1, isolated `XDG_CONFIG_HOME`, a real
+model):
+
+- **`switchAgent` mid-tool-call.** A probe tool's `execute` awaited
+  `ctx.session.switchAgent({ sessionID, agent: "build" })` and returned; the very next
+  model step in the same turn ran as `build`, with no user message between. That is what
+  Approve & build relies on.
 
 ## Sources
 

@@ -195,17 +195,19 @@ put a plan in front of you without going through plan mode — see
 [Calling the review tool from your own skill](#calling-the-review-tool-from-your-own-skill).
 
 The reviewer's approve choice is an opaque variant id the core stores and the UI renders;
-the Claude adapter declares its variants (`default` / `acceptEdits` / `auto`) and rides
-them to the UI over `GET /api/health`, so the approve split-button reflects the active
-adapter's capabilities rather than hard-coded mode names. The adapter's skill enumeration
-rides the same pattern one route over: `listSkills` walks the agent's own well-known
-directories and the daemon serves the result on `GET /api/reviews/:id/skills`, which is
-where the feedback editors' `/` completion reads the names a reviewer can cite. Both are
-the same rule — a capability reaches the browser over the wire, never by importing an
-adapter — so an agent that enumerates nothing simply yields an empty list and no
-completion fires. The adapter's `restartHint`, the post-upgrade line What's new shows,
-rides `GET /api/health` too, but a resident daemon withholds it: its adapter is a default,
-not the harness the user actually runs.
+the Claude adapter declares its variants (`default` / `acceptEdits` / `auto`), and
+`caret review` stamps them on each review it opens. The daemon stores them on the review,
+serves them to the UI on `GET /api/reviews[/:id]`, and refuses an approval naming a
+variant the review didn't declare, so the approve split-button reflects what that review's
+agent offers rather than hard-coded mode names. The adapter's skill enumeration rides the
+same pattern one route over: `listSkills` walks the agent's own well-known directories and
+the daemon serves the result on `GET /api/reviews/:id/skills`, which is where the feedback
+editors' `/` completion reads the names a reviewer can cite. Both are the same rule — a
+capability reaches the browser over the wire, never by importing an adapter — so an agent
+that enumerates nothing simply yields an empty list and no completion fires. The adapter's
+`restartHint`, the post-upgrade line What's new shows, rides `GET /api/health` beside
+`approveCarriesNotes`, but a resident daemon withholds it: its adapter is a default, not
+the harness the user actually runs.
 
 Skills reach the reviewer by two routes, not one. The enumeration only names them; a
 second, on-demand route answers what a named skill actually does. When the reviewer
@@ -278,9 +280,11 @@ feedback, without the plan echoed back) the agent revises and resubmits — see
 [Calling the review tool from your own skill](#calling-the-review-tool-from-your-own-skill)
 for who may call it and how to call it yourself. The whole daemon/review pipeline is
 reused unchanged — the plugin is the OpenCode-side counterpart to Claude's `hooks.json`.
-While the Plan agent is working, the plugin also warms the daemon in the background —
-`caret prewarm` on each plan-agent message, mirroring the `caret prewarm` row in the
-Claude hooks table above — so your first review doesn't wait on a cold start.
+On OpenCode v2 a review called from the plan agent also offers **Approve & build**, which
+approves and switches the session from the `plan` agent to `build`. While the Plan agent
+is working, the plugin also warms the daemon in the background — `caret prewarm` on each
+plan-agent message, mirroring the `caret prewarm` row in the Claude hooks table above — so
+your first review doesn't wait on a cold start.
 
 caret installs into OpenCode as a plugin array entry. `caret install` probes every
 `opencode` on `PATH` (each bounded at 5 s) and adds `@macintacos/caret` to your OpenCode

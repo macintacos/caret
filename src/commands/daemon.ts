@@ -117,9 +117,7 @@ export async function runDaemon(opts: {
     log,
   });
   warnInvalidEnvVars((msg) => log.warn("env", msg));
-  // The active adapter (CARET_AGENT, default claude). Its declared approve
-  // variants are published in /api/health so the UI renders its approve
-  // split-button from the capability rather than baked-in tool mode names.
+  // The active adapter (CARET_AGENT, default claude).
   const adapter = selectAdapter();
   // The identity the update check judges, captured once: all three are process
   // constants, and the check's cache record is keyed on the version and commit so a
@@ -278,7 +276,6 @@ export async function runDaemon(opts: {
       // logged — identifying); the per-boot instanceId is the loggable handle.
       stateDir: stateDir(),
       instanceId: randomUUID().slice(0, 8),
-      approveVariants: adapter.approveVariants,
       approveCarriesNotes: adapter.approveCarriesNotes,
       // The active adapter's id, published on /api/health so the UI can adapt to
       // the environment (EXC-791).
