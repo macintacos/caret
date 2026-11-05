@@ -5,7 +5,9 @@
 // browser rather than in the happy-dom unit suite (doc/agents/browser-testing.md).
 // The fixture daemon's reviews declare no variants, so they render the
 // WIRE_FALLBACK set (Approve / Approve & accept edits / Approve & auto mode)
-// unless a spec seeds its own.
+// unless a spec seeds its own. The per-review specs are e2e for the fixture-daemon
+// round trip — a review POSTed with `approveVariants`, served back, and derived
+// by App.svelte — which no mounted TopBar can be handed.
 
 import { approveViaVariant } from "@test/e2e/support/decision.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";

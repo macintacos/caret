@@ -20,10 +20,11 @@ export const BUILD_VARIANT: ApproveVariant = {
   description: "Approve and switch this session to the build agent",
 };
 
-/** The variants a review offers when its plugin declared `declared` (the envelope's
- * `approve_variants`): the plain approve plus each variant it named that this adapter
- * knows. Undefined when it declared none, so `caret review` stamps APPROVE_VARIANTS. */
-export function declaredApproveVariants(declared: unknown): ApproveVariant[] | undefined {
-  if (!Array.isArray(declared) || !declared.includes(BUILD_VARIANT.id)) return undefined;
+/** The variants a review offers given the variant `ids` its plugin declared (the
+ * envelope's `approve_variants`): the plain approve plus each one this adapter knows.
+ * Undefined when it declared none this adapter knows, so `caret review` stamps
+ * APPROVE_VARIANTS. */
+export function declaredApproveVariants(ids: unknown): ApproveVariant[] | undefined {
+  if (!Array.isArray(ids) || !ids.includes(BUILD_VARIANT.id)) return undefined;
   return [...APPROVE_VARIANTS, BUILD_VARIANT];
 }

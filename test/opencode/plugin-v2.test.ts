@@ -681,9 +681,7 @@ test("switchAgent: a failed switch keeps the approval, notes the plan agent, and
     },
   });
   const result = await tool.execute({ plan: "# P" }, toolContext());
-  const content = String(result.content);
-  expect(content.startsWith(approvedMessage())).toBe(true);
-  expect(content.endsWith(BUILD_SWITCH_FAILED)).toBe(true);
+  expect(result.content).toBe(`${approvedMessage()}\n\n${BUILD_SWITCH_FAILED}`);
   expect(result.metadata).toEqual({ [CARET_DECISION_KEY]: "allow" });
   expect(errors).toHaveLength(1);
 });
@@ -693,4 +691,19 @@ test("switchAgent: the v2 envelope declares approve_variants build", async () =>
   const { tool } = await setupWith(stubRunner(ALLOW, (_c, _e, stdin) => stdins.push(stdin)));
   await tool.execute({ plan: "# P" }, toolContext());
   expect(JSON.parse(stdins[0] ?? "{}").approve_variants).toEqual(["build"]);
+});
+
+test("switchAgent: a build-agent review declares no approve_variants", async () => {
+  const stdins: string[] = [];
+  const { tool } = await setupWith(stubRunner(ALLOW, (_c, _e, stdin) => stdins.push(stdin)));
+  await tool.execute({ plan: "# P" }, toolContext({ agent: "build" } as Partial<ToolContext>));
+  expect(JSON.parse(stdins[0] ?? "{}").approve_variants).toBeUndefined();
+});
+
+test("switchAgent: an aborted Approve & build review never switches", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const { tool, switches } = await setupWith(stubRunner(BUILD));
+  await tool.execute({ plan: "# P" }, toolContext({ signal: controller.signal }));
+  expect(switches).toEqual([]);
 });

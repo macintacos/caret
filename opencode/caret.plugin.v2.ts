@@ -84,6 +84,8 @@ type ReviewTool = {
  * src/adapters/opencode/approve.ts. */
 export const APPROVE_AND_BUILD = "build";
 
+/** Appended to an approval's tool result when the switch to build fails, so the model asks
+ * rather than implements. */
 export const BUILD_SWITCH_FAILED =
   "caret could not switch this session to the build agent, so it is still in the plan agent. Ask the user to switch to build before implementing.";
 
@@ -146,7 +148,7 @@ export function createCaretSetup(opts: {
         return text;
       } catch (error) {
         logError(`caret: could not switch session ${sessionID} to the build agent`, error);
-        return `${text}\n${BUILD_SWITCH_FAILED}`;
+        return `${text}\n\n${BUILD_SWITCH_FAILED}`;
       }
     }
 
@@ -194,7 +196,8 @@ export function createCaretSetup(opts: {
             onUrl: (url) => {
               context.progress({ [CARET_URL_KEY]: url }).catch(() => {});
             },
-            approveVariants: [APPROVE_AND_BUILD],
+            // Only a planning session has a build agent to hand off to.
+            ...(isPlanningAgent(context.agent) && { approveVariants: [APPROVE_AND_BUILD] }),
           },
           { bin, run, plansDir },
         );

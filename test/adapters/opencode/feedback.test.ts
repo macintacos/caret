@@ -20,6 +20,12 @@ test("a plain approve (acceptMode default) stays a bare allow", () => {
   });
 });
 
+test("an acceptMode this adapter doesn't declare (acceptEdits) stays a bare allow", () => {
+  expect(toWireDecision({ behavior: "allow", acceptMode: "acceptEdits" })).toEqual({
+    behavior: "allow",
+  });
+});
+
 test("approve with reviewer notes carries them on the allow (EXC-791)", () => {
   // Both ends of the wire are caret-owned, so the notes ride the allow for the
   // plugin to surface to the agent.

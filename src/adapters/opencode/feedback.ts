@@ -9,9 +9,11 @@
 //   approve & build -> { behavior: "allow", acceptMode: "build" }
 //   request changes -> { behavior: "deny", feedback: <text> }
 //
-// The plugin renders an allow into "proceed with the build agent" and a deny into
+// The plugin renders an allow into its approval text, switching a v2 session to the
+// build agent on `acceptMode: "build"`, and a deny into
 // the tool-result string the model revises against (see the opencode/ packaging).
 
+import { BUILD_VARIANT } from "@/adapters/opencode/approve.ts";
 import { denyMessage } from "@/adapters/wire.ts";
 import type { ApproveVariantId, Behavior } from "@/lib/types.ts";
 
@@ -30,10 +32,11 @@ export interface DecisionInput {
 export function toWireDecision(input: DecisionInput): OpencodeDecision {
   if (input.behavior === "allow") {
     // Reviewer notes on an approval (EXC-791) ride the allow so the plugin can
-    // surface them to the agent; a blank/absent note leaves a bare allow. A non-default
-    // acceptMode asks the v2 plugin to switch the session's agent after approving.
+    // surface them to the agent; a blank/absent note leaves a bare allow. Only the
+    // build variant rides the wire, asking the v2 plugin to switch to the build agent;
+    // any other acceptMode leaves a bare allow.
     const notes = input.feedback?.trim();
-    const mode = input.acceptMode && input.acceptMode !== "default" ? input.acceptMode : undefined;
+    const mode = input.acceptMode === BUILD_VARIANT.id ? input.acceptMode : undefined;
     return {
       behavior: "allow",
       ...(notes && { feedback: notes }),

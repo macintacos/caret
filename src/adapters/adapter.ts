@@ -34,7 +34,8 @@ export interface AgentAdapter {
    * `/api/health` so the UI can adapt to the active environment (EXC-791). */
   readonly id: string;
 
-  /** The approve variants this adapter offers, in display order. */
+  /** The approve variants `caret review` stamps on a review whose hook input declares
+   * none, in display order. */
   readonly approveVariants: readonly ApproveVariant[];
 
   /** True when `emitDecision` delivers an allow's `feedback` to the agent. Published

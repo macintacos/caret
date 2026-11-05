@@ -53,17 +53,17 @@ an adapter.
   **over the wire**, not by import. The pattern: `caret review` stamps the adapter's
   `approveVariants` on each review it opens (the OpenCode v2 plugin declares its own in
   the envelope). The daemon stores them on the review, serves them on
-  `GET /api/reviews[/:id]`, and refuses an `acceptMode` the review didn't declare. The UI
-  renders its approve split-button from the active review's set (`ui/src/lib/approve.ts`),
-  falling back to a built-in set when the review declares none. `approveCarriesNotes`
-  rides `GET /api/health`, so the approve dialog can warn when notes won't reach the
-  agent. `listSkills` rides the same pattern one route over — the daemon serves the active
-  adapter's skill names on `GET /api/reviews/:id/skills` and the feedback editors' `/`
-  completion reads them from there (`ui/src/lib/skillCompletion.ts`), so an adapter that
-  enumerates nothing simply leaves the list empty and no completion fires. `restartHint`
-  rides `GET /api/health` too, but only from a spawned daemon: a resident one (the
-  service, `caret serve`) withholds it, since its adapter is a default rather than the
-  harness the user actually runs.
+  `GET /api/reviews[/:id]`, and refuses an approval whose `acceptMode` the review didn't
+  declare. The UI renders its approve split-button from the active review's set
+  (`ui/src/lib/approve.ts`), falling back to a built-in set when the review declares none.
+  `approveCarriesNotes` rides `GET /api/health`, so the approve dialog can warn when notes
+  won't reach the agent. `listSkills` rides the same pattern one route over — the daemon
+  serves the active adapter's skill names on `GET /api/reviews/:id/skills` and the
+  feedback editors' `/` completion reads them from there
+  (`ui/src/lib/skillCompletion.ts`), so an adapter that enumerates nothing simply leaves
+  the list empty and no completion fires. `restartHint` rides `GET /api/health` too, but
+  only from a spawned daemon: a resident one (the service, `caret serve`) withholds it,
+  since its adapter is a default rather than the harness the user actually runs.
 
 ## Where agent vocabulary lives
 

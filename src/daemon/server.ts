@@ -407,6 +407,8 @@ function isStaleVersion(review: Review | undefined, version: number | undefined)
   );
 }
 
+/** Whether the review offers approve variant `id`. A plain resolve (no id) and a review
+ * that declared no variants (one from an older caret, or a bare seed) accept any. */
 function offersVariant(
   declared: readonly ApproveVariant[] | undefined,
   id: ApproveVariantId | undefined,
@@ -1109,7 +1111,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     // Only a pending review can be resolved — guards against a double resolve
     // diverging the store from the decision the hook received.
     if (existing?.status !== "pending") return notFound();
-    if (!offersVariant(existing.approveVariants, body.acceptMode)) {
+    if (body.behavior !== "deny" && !offersVariant(existing.approveVariants, body.acceptMode)) {
       route.log.info("resolve", "resolve refused: approve variant not offered", {
         acceptMode: body.acceptMode,
       });

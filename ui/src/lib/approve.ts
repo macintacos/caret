@@ -36,7 +36,7 @@ export function approveLabel(id: ApproveVariantId, variants: ApproveVariant[]): 
 
 /** The variant id to drive the primary Approve button: what this browser remembered,
  * gated against the live set so an id from another adapter (or an older caret) can
- * never resolve to a variant this daemon does not declare. */
+ * never resolve to a variant this review does not declare. */
 export function pickApproveMode(
   remembered: ApproveVariantId | null,
   variants: ApproveVariant[],

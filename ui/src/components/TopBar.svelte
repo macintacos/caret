@@ -27,7 +27,7 @@
     busy: boolean;
     /** Remembered approve variant id; sets the primary button's id + label. */
     approveMode: ApproveVariantId;
-    /** The adapter-declared approve variants to render (labels/order/default). */
+    /** The active review's declared approve variants to render (labels/order/default). */
     variants: ApproveVariant[];
     /** True when the daemon runs from source; shows the "local build" badge. */
     isDev?: boolean;

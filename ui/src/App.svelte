@@ -385,8 +385,8 @@
     active ? { reviewId: active.id, cwd: active.cwd, adapter: source } : undefined,
   );
   let variants = $derived(approveVariants(active?.approveVariants));
-  // The remembered id gated against the live set, so a variant this daemon no longer
-  // declares never drives the primary Approve button.
+  // The remembered id gated against the live set, so a variant this review doesn't
+  // declare never drives the primary Approve button.
   let effectiveApproveMode = $derived(pickApproveMode(resolve.approveMode, variants));
   // Whether to mark the update surfaces (EXC-1207). The daemon's verdict alone: an
   // opted-out reviewer is served `disabled`, which is not pending.

@@ -309,6 +309,13 @@ test("resolving with a declared acceptMode succeeds", async () => {
   expect((await d.resolve(id, { behavior: "allow", acceptMode: "yolo" })).status).toBe(200);
 });
 
+test("a deny carrying an undeclared acceptMode still lands as a deny", async () => {
+  await boot();
+  const { id } = await newReview({ approveVariants: VARIANTS });
+  expect((await d.resolve(id, { behavior: "deny", acceptMode: "nope" })).status).toBe(200);
+  expect(store.get(id)?.status).toBe("rejected");
+});
+
 test("a review that declared no variants accepts any acceptMode", async () => {
   await boot();
   const { id } = await newReview();
