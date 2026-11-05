@@ -123,6 +123,25 @@ Open items first, then the log, newest first.
   - As the column narrows, the field's magnifier goes.
   - Tab stops at the field and moves on to the outline key until the reader engages the
     field with `\`, a click or a key pressed in it.
+- **The Claude Code band still differs from the OpenCode notice:** `mod/hooks/band.tsx`
+  paints the waiting plan as an inverse `warning` fill with a 🥕 emoji. Either align it
+  with the 2026-11-05 OpenCode decision or record why the two hosts differ.
+
+## 2026-11-05: caret inside OpenCode's TUI: the pending-plan notice
+
+The user found the line above OpenCode's composer bare: "could probably look a little
+nicer, and also maybe have a link to open in the browser (+ some styling to call more
+attention to it)". The line now takes the host's own queued-card idiom, one row tall.
+
+- **Colours:** the host's theme tokens are the analog of the ANSI slots. caret owns no
+  colour inside OpenCode.
+- **Amber:** once, on the `^` of `^caret`, through `text.feedback.warning.base`.
+- **Rail:** neutral `border.base`, never the agent's colour. A warning rail would read as
+  a second composer bar when the active agent's colour is amber.
+- **Shape:** one row. The key comes from the host's keymap and sits before its verb, and
+  the whole row opens the review.
+- **No inverse fill:** a filled amber block would outshout the composer and merge with an
+  amber agent bar.
 
 ## 2026-11-04: the outline stands beside a file, and only `\` opens its float
 
