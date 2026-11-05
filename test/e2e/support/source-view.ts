@@ -665,3 +665,129 @@ export function rowColors(page: Page, text: string): Promise<string[]> {
     return [];
   }, text);
 }
+
+/** A window whose plan is narrower than the preview's 800px column. */
+export const BELOW_COLUMN = { width: 640, height: 900 } as const;
+
+/** How far, in px, the plan is wider than the preview's text column; 0 when the column
+ * does not fit. Read off the root's end padding, which only grows past its 0.8em floor by
+ * the room the column leaves. */
+export function columnSlack(page: Page): Promise<number> {
+  return page.locator(PLAN_PREVIEW).evaluate((el) => {
+    const style = getComputedStyle(el);
+    const floor = 0.8 * Number.parseFloat(style.fontSize);
+    return Math.max(0, Number.parseFloat(style.paddingInlineEnd) - floor);
+  });
+}
+
+/** Whether the preview's text column fits inside the plan. */
+export async function columnFits(page: Page): Promise<boolean> {
+  return (await columnSlack(page)) > 0.5;
+}
+
+/** Whether the plan scroller has nothing to scroll sideways. */
+export function planFits(page: Page): Promise<boolean> {
+  return page.locator(PLAN_SURFACE).evaluate((el) => el.scrollWidth <= el.clientWidth);
+}
+
+/** Whether every preview text rect outside a `pre` or `table` ends inside the plan's
+ * right edge. */
+export function textInsidePlan(page: Page): Promise<boolean> {
+  return page.evaluate(
+    ({ preview, surface }) => {
+      const plan = document.querySelector(surface) as HTMLElement;
+      const right = plan.getBoundingClientRect().left + plan.clientWidth + 0.5;
+      const walker = document.createTreeWalker(
+        document.querySelector(preview) as Node,
+        NodeFilter.SHOW_TEXT,
+      );
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node.parentElement?.closest("pre, table")) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        for (const r of range.getClientRects()) if (r.width > 0 && r.right > right) return false;
+      }
+      return true;
+    },
+    { preview: PLAN_PREVIEW, surface: PLAN_SURFACE },
+  );
+}
+
+/** The first word of each visual row of the preview block holding source `line`. */
+export function rowStarts(page: Page, line: number): Promise<string[]> {
+  return page.evaluate(
+    ({ line, preview }) => {
+      const block = [
+        ...document.querySelectorAll<HTMLElement>(`${preview} > [data-source-start]`),
+      ].find((b) => Number(b.dataset.sourceStart) <= line && line <= Number(b.dataset.sourceEnd));
+      const starts: string[] = [];
+      let lastTop = Number.NEGATIVE_INFINITY;
+      const walker = document.createTreeWalker(block as Node, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        for (const m of (node.textContent ?? "").matchAll(/\S+/g)) {
+          const range = document.createRange();
+          range.setStart(node, m.index);
+          range.setEnd(node, m.index + 1);
+          const top = range.getBoundingClientRect().top;
+          if (top - lastTop > 4) starts.push(m[0]);
+          lastTop = Math.max(lastTop, top);
+        }
+      }
+      return starts;
+    },
+    { line, preview: PLAN_PREVIEW },
+  );
+}
+
+/** Must outlast the rewrap hold's 100ms scroll settle (`SCROLL_SETTLE_MS` in
+ * ui/src/lib/planPlace.ts), after which it re-takes the reader's place. */
+const PAST_SCROLL_SETTLE_MS = 250;
+
+/** Wheels the plan to about its middle, waits for the scroll to stop, then waits past the
+ * rewrap hold's settle so the hold has taken the place there. */
+export async function scrollPlanToMiddle(page: Page): Promise<void> {
+  const scroller = page.locator(PLAN_SURFACE);
+  const box = await scroller.boundingBox();
+  if (!box) throw new Error("the plan did not render");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const half = await scroller.evaluate((el) => (el.scrollHeight - el.clientHeight) / 2);
+  await page.mouse.wheel(0, half);
+  let previous = -1;
+  await expect
+    .poll(async () => {
+      const now = await scroller.evaluate((el) => el.scrollTop);
+      const still = now > half / 2 && now === previous;
+      previous = now;
+      return still;
+    })
+    .toBe(true);
+  const t0 = await page.evaluate(() => performance.now());
+  await page.waitForFunction((t) => performance.now() > t, t0 + PAST_SCROLL_SETTLE_MS);
+}
+
+/** Records the text point at the app's reading zone, just inside the first paragraph's
+ * start, for `readingOffset` to follow. */
+export function markReadingLine(page: Page): Promise<void> {
+  return page.evaluate(
+    ({ preview, surface, offset }) => {
+      const top = (document.querySelector(surface) as HTMLElement).getBoundingClientRect().top;
+      const left = (document.querySelector(`${preview} p`) as HTMLElement).getBoundingClientRect()
+        .left;
+      const at = document.caretRangeFromPoint(left + 2, top + offset);
+      if (!at) throw new Error("no text at the reading zone");
+      (window as unknown as { readingAt: Range }).readingAt = at;
+    },
+    { preview: PLAN_PREVIEW, surface: PLAN_SURFACE, offset: SCROLL_OFFSET_TOP + READING_ZONE_SLOP },
+  );
+}
+
+/** How far the marked point's visual line top sits below the scroller's top. */
+export function readingOffset(page: Page): Promise<number> {
+  return page.evaluate((surface) => {
+    const top = (document.querySelector(surface) as HTMLElement).getBoundingClientRect().top;
+    const range = (window as unknown as { readingAt: Range }).readingAt.cloneRange();
+    const end = range.startContainer.textContent?.length ?? 0;
+    range.setEnd(range.startContainer, Math.min(range.startOffset + 1, end));
+    return (range.getClientRects()[0]?.top ?? Number.NaN) - top;
+  }, PLAN_SURFACE);
+}

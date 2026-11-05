@@ -41,6 +41,7 @@ import {
   waitForTwoPollTicks,
 } from "@test/e2e/support/fixtures.ts";
 import {
+  BELOW_COLUMN,
   expectNoComposerOpens,
   PLAN_PREVIEW,
   PLAN_SURFACE,
@@ -1827,7 +1828,7 @@ test.describe("on the preview", () => {
       const wide = await placement();
       expect(wide?.ok).toBe(true);
 
-      await page.setViewportSize({ width: 640, height: 900 });
+      await page.setViewportSize(BELOW_COLUMN);
       await expect
         .poll(async () => {
           const p = await placement();

@@ -262,9 +262,9 @@
     color: var(--mark-active-ink);
   }
 
-  /* The text's widest wrap, in the preview's own em: at or above it, every line wraps at
-     the same word at any zoom, text size or base font size. A narrower plan rewraps the
-     text to the plan, and what a row cites follows the wrap. The text is 15px at the
+  /* The text's widest wrap, in the preview's own em. In a plan at least this wide every
+     line wraps at the same word at any zoom, text size or base font size; a narrower plan
+     rewraps the text, and what a row cites follows the wrap. The text is 15px at the
      default base font size, so this is an 800px column with 2ch + 25px and 12px of
      padding there. The end padding takes up any wider plan, so a row reaches the plan's
      right edge, as a source row does. */

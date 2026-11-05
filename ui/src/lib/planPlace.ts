@@ -1,6 +1,7 @@
-// Finds the reader's place on one plan surface and holds it on the other across a
-// source/preview flip. Places are block-granular, found by binary search over the
-// preview's block spans, so a long plan is never measured block by block.
+// Finds the reader's place on a plan surface and holds it: block by block across a
+// source/preview flip, and line by line through a change in the preview's width. Block
+// places are found by binary search over the preview's block spans, so a long plan is
+// never measured block by block.
 import { indexAtReadingZone, parkAt, SCROLL_TAKEOVER_SLOP } from "$lib/diffview/scroll.ts";
 import type { SourceSpan } from "$lib/planMarkdown.ts";
 import type { TextPoint } from "$lib/planSourceMap.ts";
@@ -107,12 +108,25 @@ export interface RewrapHold {
   lineTop: (point: TextPoint) => number | null;
 }
 
-/** Holds the reader's place through every rewrap of `content`. A resize that changes its
- * width re-parks the place taken before it and holds it: later resizes re-park too, until
- * the reader scrolls, which re-takes the place. Returns the disconnect. */
+/** setTimeout-shaped: runs `fn` after `ms` and returns its cancel. */
+type Schedule = (fn: () => void, ms: number) => () => void;
+
+const schedule: Schedule = (fn, ms) => {
+  const id = setTimeout(fn, ms);
+  return () => clearTimeout(id);
+};
+
+/** How long (ms) scrolling must stop before the rewrap hold re-takes the place. */
+const SCROLL_SETTLE_MS = 100;
+
+/** Holds the reader's place through each change in `content`'s width: such a resize
+ * re-parks the place taken before it, and later resizes re-park too, until any scroll
+ * other than the park's own drops the place. It is re-taken once scrolling settles; a
+ * resize before then parks nothing. It never releases itself; returns the disconnect. */
 export function holdThroughRewrap(
   hold: RewrapHold,
   observe: ObserveResize = observeResize,
+  later: Schedule = schedule,
 ): () => void {
   const { scroller, content } = hold;
   let place = hold.take();
@@ -133,11 +147,19 @@ export function holdThroughRewrap(
     if (parkedTop !== null && Math.abs(scroller.scrollTop - parkedTop) <= SCROLL_TAKEOVER_SLOP)
       return;
     parkedTop = null;
-    place = hold.take();
+    // Taking the place measures the reading block's text, too costly for every scroll
+    // frame; mid-scroll, native scroll anchoring holds a rewrap instead.
+    place = null;
+    cancelSettle();
+    cancelSettle = later(() => {
+      place = hold.take();
+    }, SCROLL_SETTLE_MS);
   };
+  let cancelSettle = (): void => {};
   const stopObserving = observe(content, park);
   scroller.addEventListener("scroll", onScroll, { passive: true });
   return () => {
+    cancelSettle();
     stopObserving();
     scroller.removeEventListener("scroll", onScroll);
   };

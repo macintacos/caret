@@ -572,11 +572,12 @@
     if (!sameSlotBoxes(untrack(() => slotBoxes), next)) slotBoxes = next;
   });
 
+  // Parks in its own ResizeObserver callback, not on previewLayoutRev, so the re-park
+  // paints in the rewrap's frame. Reads no api/host, so it needs no SURFACE_BEHAVIORS gate.
   $effect(() => {
-    const root = previewEl;
-    const scroller = scrollEl;
-    const map = previewSourceMap;
-    if (root == null || scroller == null || map == null) return;
+    const geometry = previewGeometry();
+    if (geometry === null) return;
+    const { root, scroller, map } = geometry;
     return holdThroughRewrap({
       scroller,
       content: root,

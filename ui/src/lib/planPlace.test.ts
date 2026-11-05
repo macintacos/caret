@@ -214,35 +214,52 @@ describe("holdThroughRewrap", () => {
     const scroller = document.createElement("div");
     scroller.getBoundingClientRect = () => rect(TOP);
     const content = document.createElement("div");
-    const geo = { width: 800, lineTop: 2000 };
+    const geo = { width: 800, lineTop: 2000, text: true };
     content.getBoundingClientRect = () => new DOMRect(0, 0, geo.width, 0);
     scroller.append(content);
     document.body.append(scroller);
     const observer = { fire: () => {}, disconnects: 0 };
-    const observe = (_el: Element, onResize: () => void) => {
+    const observed: Element[] = [];
+    const observe = (el: Element, onResize: () => void) => {
+      observed.push(el);
       observer.fire = onResize;
       return () => {
         observer.disconnects += 1;
       };
     };
-    const takes = { count: 0 };
+    const settle = { run: null as (() => void) | null, ms: 0 };
+    const schedule = (fn: () => void, ms: number) => {
+      settle.run = fn;
+      settle.ms = ms;
+      return () => {
+        if (settle.run === fn) settle.run = null;
+      };
+    };
+    // The place's point carries the scrollTop it was taken at, so a park shows which
+    // take it parked: the line sits `taken` px further down the content.
     const disconnect = holdThroughRewrap(
       {
         scroller,
         content,
-        take: () => {
-          takes.count += 1;
-          return { point: POINT, offset: OFFSET };
-        },
-        lineTop: () => geo.lineTop - scroller.scrollTop,
+        take: () =>
+          geo.text
+            ? { point: { line: POINT.line, column: scroller.scrollTop }, offset: OFFSET }
+            : null,
+        lineTop: (point) => (geo.text ? geo.lineTop + point.column - scroller.scrollTop : null),
       },
       observe,
+      schedule,
     );
     const scrollTo = (top: number) => {
       scroller.scrollTop = top;
       scroller.dispatchEvent(new Event("scroll"));
     };
-    return { scroller, geo, observer, takes, disconnect, scrollTo };
+    const settled = () => {
+      const run = settle.run;
+      settle.run = null;
+      run?.();
+    };
+    return { scroller, geo, observer, observed, settle, settled, disconnect, scrollTo };
   }
 
   const parked = (lineTop: number) => lineTop - TOP - OFFSET;
@@ -271,33 +288,58 @@ describe("holdThroughRewrap", () => {
     expect(scroller.scrollTop).toBe(parked(2700));
   });
 
-  test("a reader's scroll re-takes the place and ends the hold", () => {
-    const { scroller, geo, observer, takes, scrollTo } = arrange();
+  test("it observes the content", () => {
+    const { observed, scroller } = arrange();
+    expect(observed.length === 1 && observed[0] === scroller.firstElementChild).toBe(true);
+  });
+
+  test("a reader's scroll ends the hold, and a width change before it settles parks nothing", () => {
+    const { scroller, geo, observer, scrollTo } = arrange();
     geo.width = 500;
     observer.fire();
-    const before = takes.count;
     scrollTo(scroller.scrollTop + 300);
-    expect(takes.count).toBe(before + 1);
+    const top = scroller.scrollTop;
+    geo.width = 400;
     geo.lineTop = 2900;
     observer.fire();
-    expect(scroller.scrollTop).toBe(parked(2000) + 300);
+    expect(scroller.scrollTop).toBe(top);
   });
 
-  test("the park's own scroll re-takes nothing", () => {
-    const { scroller, geo, observer, takes, scrollTo } = arrange();
+  test("once scrolling settles, a width change parks the line taken then", () => {
+    const { scroller, geo, observer, settle, settled, scrollTo } = arrange();
+    scrollTo(300);
+    expect(settle.ms).toBeGreaterThan(0);
+    settled();
+    geo.width = 500;
+    geo.lineTop = 2600;
+    observer.fire();
+    // The line taken at 300 sits 300px further down, at 2900 in the content.
+    expect(scroller.scrollTop).toBe(parked(2900));
+  });
+
+  test("the park's own scroll keeps the hold", () => {
+    const { scroller, geo, observer, scrollTo } = arrange();
     geo.width = 500;
     observer.fire();
-    const before = takes.count;
     scrollTo(scroller.scrollTop + SCROLL_TAKEOVER_SLOP);
-    expect(takes.count).toBe(before);
+    geo.lineTop = 2700;
+    observer.fire();
+    expect(scroller.scrollTop).toBe(parked(2700));
   });
 
-  test("the disconnect stops observing and listening for scrolls", () => {
-    const { scroller, observer, takes, disconnect, scrollTo } = arrange();
+  test("with no text, a width change parks nothing", () => {
+    const { scroller, geo, observer } = arrange();
+    geo.text = false;
+    geo.width = 500;
+    observer.fire();
+    expect(scroller.scrollTop).toBe(0);
+  });
+
+  test("the disconnect stops observing and cancels a pending settle", () => {
+    const { observer, settle, disconnect, scrollTo } = arrange();
+    scrollTo(300);
     disconnect();
     expect(observer.disconnects).toBe(1);
-    const before = takes.count;
-    scrollTo(scroller.scrollTop + 300);
-    expect(takes.count).toBe(before);
+    expect(settle.run).toBeNull();
   });
 });

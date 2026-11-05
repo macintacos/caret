@@ -23,6 +23,7 @@ import {
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
   awaitPlanReadyForKeys,
+  BELOW_COLUMN,
   glideCounter,
   lineOf,
   openPlanForKeys,
@@ -467,7 +468,7 @@ test.describe("preview keyboard cursor", () => {
     };
     expect(await anchorRowCovers(anchor)).toBe(true);
 
-    await page.setViewportSize({ width: 640, height: 900 });
+    await page.setViewportSize(BELOW_COLUMN);
     await expect.poll(() => bandText(page)).not.toBe(cursor);
     await expect.poll(() => bandCovers(page, cursor)).toBe(true);
     await expect.poll(() => anchorRowCovers(anchor)).toBe(true);

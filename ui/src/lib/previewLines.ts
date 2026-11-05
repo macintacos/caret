@@ -9,7 +9,8 @@ import type { PlanSourceMap, TextPoint } from "$lib/planSourceMap.ts";
 
 export type { TextPoint };
 
-/** The client rects of a range's text, one per line fragment. */
+/** The client rects of a range's text, one per line fragment. The range is a scratch reused
+ * across calls: read it synchronously and never retain it. */
 export type RangeRects = (range: Range) => readonly Box[];
 
 /** How far `el`'s table header row has slid down its table to stay in view (PlanPreview.svelte

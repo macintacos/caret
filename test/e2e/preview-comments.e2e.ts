@@ -9,7 +9,7 @@
 // nodes, real hover, real mouse drags and clicks building native selections, real
 // wrapping under keyboard visual mode and comments, the slots' placement and the
 // reveal's scroll geometry, the discard popover, the CodeMirror editor, and persistence
-// through the daemon across surface flips. The pure half stays units: visual-line text
+// through the daemon across surface flips and across a resize. The pure half stays units: visual-line text
 // ranges in ui/src/lib/previewLines.test.ts, visual mode and `c` in
 // ui/src/state/previewCursor.test.ts, slot grouping, span ranges, slot boxes and the
 // click and drag gates in ui/src/lib/previewComments.test.ts, the click and drag reporting
@@ -31,6 +31,8 @@ import { openApproveGuard, openRequestChangesDialog } from "@test/e2e/support/de
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { awaitAnnotationCount, submitForRevision } from "@test/e2e/support/review-state.ts";
 import {
+  BELOW_COLUMN,
+  columnFits,
   linesOnRow,
   PLAN_PREVIEW,
   PLAN_SURFACE,
@@ -42,7 +44,7 @@ import {
   selectGutterRange,
 } from "@test/e2e/support/source-view.ts";
 import { caretThemeVariant, selectThemeFile } from "@test/e2e/support/themes.ts";
-import { SCROLL_OFFSET_TOP } from "@ui/src/lib/layout.ts";
+import { NARROW_WIDTH_PX, SCROLL_OFFSET_TOP } from "@ui/src/lib/layout.ts";
 
 const NEAR =
   "Nearby paragraph opens with alpha words that set the scene for the reviewer to read carefully, " +
@@ -282,8 +284,6 @@ const headingRows = (page: Page) =>
     range.selectNodeContents(h1);
     return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
   }, PLAN_PREVIEW);
-
-const NARROW = { width: 640, height: 900 };
 
 type Row = { top: number; bottom: number; lines: number[] };
 
@@ -598,7 +598,7 @@ test("after the window narrows below the column, each comment, scratch and draft
   await expect(page.locator(marker)).toBeVisible();
   const before = await nearRows(page, s);
 
-  await page.setViewportSize(NARROW);
+  await page.setViewportSize(BELOW_COLUMN);
   await expect.poll(() => nearRows(page, s)).not.toEqual(before);
 
   await expect
@@ -637,23 +637,28 @@ test.describe("a resize changes no stored comment and no payload", () => {
       comment: a.comment,
     }));
 
-  /** Seeds a review, resizes it to NARROW and back first when `resize`, and sends it
-   * through `flow`, returning the feedback it carried. */
-  async function send(daemon: Daemon, page: Page, flow: Flow, resize: boolean) {
-    // The surface choice persists, so the review after the resized one opens on the
-    // preview already.
-    const s = await seedPreview(daemon, page, { scratch: false, preview: resize });
+  /** Wide enough that the TopBar keeps its send buttons inline, while the outline beside
+   * the plan leaves it narrower than the column. */
+  const NARROW_WITH_SEND = { width: NARROW_WIDTH_PX + 40, height: 900 };
+
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem("caret.planView", "preview"));
+  });
+
+  /** Seeds a review on the preview and sends it through `flow`, from a plan narrowed
+   * below the column when `narrowed`, returning the feedback it carried. */
+  async function send(daemon: Daemon, page: Page, flow: Flow, { narrowed = false } = {}) {
+    const s = await seedPreview(daemon, page, { scratch: false, preview: false });
     await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
     await expect(card(page, "ann-1")).toBeVisible();
     await awaitAnnotationCount(daemon, s.id, 4);
-    if (resize) {
-      const wide = page.viewportSize() ?? NARROW;
+    if (narrowed) {
       const comments = await stored(daemon, s.id);
-      const before = await nearRows(page, s);
-      await page.setViewportSize(NARROW);
-      await expect.poll(() => nearRows(page, s)).not.toEqual(before);
-      await page.setViewportSize(wide);
-      await expect.poll(() => nearRows(page, s)).toEqual(before);
+      expect(await columnFits(page)).toBe(true);
+      await page.setViewportSize(NARROW_WITH_SEND);
+      await expect.poll(() => columnFits(page)).toBe(false);
+      await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Request changes" })).toBeVisible();
       expect(await stored(daemon, s.id)).toEqual(comments);
     }
     return flow(page, daemon, s.id);
@@ -664,8 +669,8 @@ test.describe("a resize changes no stored comment and no payload", () => {
     ["approve", approve],
   ] as const) {
     test(`the ${name} payload is the same with or without a resize`, async ({ daemon, page }) => {
-      const resized = await send(daemon, page, flow, true);
-      const still = await send(daemon, page, flow, false);
+      const still = await send(daemon, page, flow);
+      const resized = await send(daemon, page, flow, { narrowed: true });
       expect(resized).toContain("tighten these two lines");
       expect(resized).toBe(still);
     });
@@ -853,7 +858,7 @@ test.describe("commenting from the preview", () => {
     const heightBefore = (await band.boundingBox())?.height ?? 0;
     expect(heightBefore).toBeGreaterThan(0);
 
-    await page.setViewportSize(NARROW);
+    await page.setViewportSize(BELOW_COLUMN);
     await expect.poll(async () => (await band.boundingBox())?.height ?? 0).not.toBe(heightBefore);
 
     await expect(dialog).toBeVisible();

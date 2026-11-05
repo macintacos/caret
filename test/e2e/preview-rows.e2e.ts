@@ -17,15 +17,24 @@ import type { Page } from "@playwright/test";
 import { openSettings, previewToggle } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import {
+  BELOW_COLUMN,
+  columnFits,
+  columnSlack,
   glideCounter,
   linesOnRow,
+  markReadingLine,
   PLAN_PREVIEW,
   PLAN_SURFACE,
   PREVIEW_DRAG,
   PREVIEW_DRAG_BAR,
   PREVIEW_HOVER,
+  planFits,
   planSurface,
+  readingOffset,
   rowLabel,
+  rowStarts,
+  scrollPlanToMiddle,
+  textInsidePlan,
 } from "@test/e2e/support/source-view.ts";
 
 const PROSE =
@@ -135,32 +144,6 @@ const composerLabel = (page: Page) =>
 
 const plusButton = (page: Page) =>
   page.locator(PLAN_SURFACE).getByRole("button", { name: "Add a comment" });
-
-/** The first word of each visual row of the block holding `line`. */
-function rowStarts(page: Page, line: number): Promise<string[]> {
-  return page.evaluate(
-    ({ line, preview }) => {
-      const block = [
-        ...document.querySelectorAll<HTMLElement>(`${preview} > [data-source-start]`),
-      ].find((b) => Number(b.dataset.sourceStart) <= line && line <= Number(b.dataset.sourceEnd));
-      const starts: string[] = [];
-      let lastTop = Number.NEGATIVE_INFINITY;
-      const walker = document.createTreeWalker(block as Node, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        for (const m of (node.textContent ?? "").matchAll(/\S+/g)) {
-          const range = document.createRange();
-          range.setStart(node, m.index);
-          range.setEnd(node, m.index + 1);
-          const top = range.getBoundingClientRect().top;
-          if (top - lastTop > 4) starts.push(m[0]);
-          lastTop = Math.max(lastTop, top);
-        }
-      }
-      return starts;
-    },
-    { line, preview: PLAN_PREVIEW },
-  );
-}
 
 /** The opacity of the hover band's wash, or null while no band is drawn. */
 const bandAlpha = (page: Page) =>
@@ -580,22 +563,6 @@ test("the + beside a hovered row opens the composer on what a click there cites"
 
 /** A window wide enough that the scaled column plus the outline still fits the plan. */
 const WIDE = { width: 2000, height: 900 };
-/** A window narrower than the column. */
-const NARROW = { width: 640, height: 900 };
-
-/** Whether the text column fits inside the plan's visible width. */
-async function columnFits(page: Page): Promise<boolean> {
-  const [column, plan] = await Promise.all([
-    columnBox(page),
-    page.locator(PLAN_SURFACE).evaluate((el) => el.clientWidth),
-  ]);
-  return column.width <= plan;
-}
-
-/** Whether the plan scroller has nothing to scroll sideways. */
-const planFits = (page: Page) =>
-  page.locator(PLAN_SURFACE).evaluate((el) => el.scrollWidth <= el.clientWidth);
-
 /** Picks the Preview base font size option `size` ("18 px") in Settings and closes it. */
 async function setBaseFontSize(page: Page, size: string): Promise<void> {
   const dialog = await openSettings(page);
@@ -671,40 +638,18 @@ test("the column scales with its text, so each row holds its words at another ro
   expect(await starts()).toEqual(base);
 });
 
-/** Whether every text rect outside a `pre` or `table` ends inside the plan's right edge. */
-function textInsidePlan(page: Page): Promise<boolean> {
-  return page.evaluate(
-    ({ preview, surface }) => {
-      const plan = document.querySelector(surface) as HTMLElement;
-      const right = plan.getBoundingClientRect().left + plan.clientWidth + 0.5;
-      const root = document.querySelector(preview) as Node;
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        if (node.parentElement?.closest("pre, table")) continue;
-        const range = document.createRange();
-        range.selectNodeContents(node);
-        for (const r of range.getClientRects()) if (r.width > 0 && r.right > right) return false;
-      }
-      return true;
-    },
-    { preview: PLAN_PREVIEW, surface: PLAN_SURFACE },
-  );
-}
-
 test("a window narrower than the column rewraps the text to the plan, and the band and + stay on their row", async ({
   daemon,
   page,
 }) => {
   const { prose } = await openRows(daemon, page);
   const base = await rowStarts(page, prose);
-  await page.setViewportSize(NARROW);
+  await page.setViewportSize(BELOW_COLUMN);
   await expect.poll(() => rowStarts(page, prose)).not.toEqual(base);
 
   const scroller = page.locator(PLAN_SURFACE);
   const y = await mixedRow(page, prose);
   await page.mouse.move(300, y);
-  await page.mouse.wheel(150, 0);
-  expect(await scroller.evaluate((el) => el.scrollLeft)).toBe(0);
   expect(await planFits(page)).toBe(true);
   expect(await textInsidePlan(page)).toBe(true);
 
@@ -721,13 +666,12 @@ test("a window narrower than the column rewraps the text to the plan, and the ba
  * row baseline there. */
 async function openJustWider(daemon: Daemon, page: Page) {
   const { prose } = await openRows(daemon, page);
-  const [column, plan] = await Promise.all([
-    columnBox(page),
-    page.locator(PLAN_SURFACE).evaluate((el) => el.clientWidth),
-  ]);
-  const width = 1600 - (plan - column.width) + 100;
-  await page.setViewportSize({ width: Math.round(width), height: 900 });
-  await expect.poll(() => columnFits(page)).toBe(true);
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error("the page has no viewport");
+  const slack = await columnSlack(page);
+  if (slack <= 0) throw new Error("the column does not fit the default viewport");
+  await page.setViewportSize({ ...viewport, width: Math.round(viewport.width - slack + 100) });
+  await expect.poll(async () => Math.abs((await columnSlack(page)) - 100)).toBeLessThan(1);
   return { prose, base: await rowStarts(page, prose) };
 }
 
@@ -754,31 +698,32 @@ test("a long URL, path and inline code break inside a narrow plan", async ({ dae
   const url = `https://example.com/${"a".repeat(180)}`;
   const path = `/${"b".repeat(199)}`;
   const code = "c".repeat(200);
-  await page.setViewportSize(NARROW);
+  await page.setViewportSize(BELOW_COLUMN);
   await openRows(daemon, page, [`# Tokens`, url, path, `\`${code}\``, filler].join("\n\n"));
 
-  const ends = await page.evaluate(
-    ({ preview, surface, tokens }) => {
-      const plan = document.querySelector(surface) as HTMLElement;
-      const right = plan.getBoundingClientRect().left + plan.clientWidth + 0.5;
-      const root = document.querySelector(preview) as Node;
-      return tokens.map((token) => {
-        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-          const at = node.textContent?.indexOf(token) ?? -1;
-          if (at < 0) continue;
-          const range = document.createRange();
-          range.setStart(node, at);
-          range.setEnd(node, at + token.length);
-          const rects = [...range.getClientRects()];
-          return (rects.at(-1)?.right ?? Number.POSITIVE_INFINITY) <= right;
-        }
-        return false;
-      });
-    },
-    { preview: PLAN_PREVIEW, surface: PLAN_SURFACE, tokens: [url, path, code] },
-  );
-  expect(ends).toEqual([true, true, true]);
+  const ends = () =>
+    page.evaluate(
+      ({ preview, surface, tokens }) => {
+        const plan = document.querySelector(surface) as HTMLElement;
+        const right = plan.getBoundingClientRect().left + plan.clientWidth + 0.5;
+        const root = document.querySelector(preview) as Node;
+        return tokens.map((token) => {
+          const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const at = node.textContent?.indexOf(token) ?? -1;
+            if (at < 0) continue;
+            const range = document.createRange();
+            range.setStart(node, at);
+            range.setEnd(node, at + token.length);
+            const rects = [...range.getClientRects()];
+            return (rects.at(-1)?.right ?? Number.POSITIVE_INFINITY) <= right;
+          }
+          return false;
+        });
+      },
+      { preview: PLAN_PREVIEW, surface: PLAN_SURFACE, tokens: [url, path, code] },
+    );
+  await expect.poll(ends).toEqual([true, true, true]);
   expect(await planFits(page)).toBe(true);
 });
 
@@ -786,7 +731,7 @@ test("a click on a rewrapped row cites every source line with text on it and ope
   daemon,
   page,
 }) => {
-  await page.setViewportSize(NARROW);
+  await page.setViewportSize(BELOW_COLUMN);
   const { prose } = await openRows(daemon, page);
   const y = await mixedRow(page, prose);
   const cited = rowLabel(await linesOnRow(page, y));
@@ -808,63 +753,22 @@ test("a click on a rewrapped row cites every source line with text on it and ope
   await expect.poll(under).toBe(true);
 });
 
-/** Records the visual line at the plan's reading zone: the text point just inside the
- * column's start a few px below the scroller's top. */
-function markReadingLine(page: Page): Promise<void> {
-  return page.evaluate(
-    ({ preview, surface }) => {
-      const top = (document.querySelector(surface) as HTMLElement).getBoundingClientRect().top;
-      const left = (document.querySelector(`${preview} p`) as HTMLElement).getBoundingClientRect()
-        .left;
-      const at = document.caretRangeFromPoint(left + 2, top + 4);
-      if (!at) throw new Error("no text at the reading zone");
-      (window as unknown as { readingAt: Range }).readingAt = at;
-    },
-    { preview: PLAN_PREVIEW, surface: PLAN_SURFACE },
-  );
-}
-
-/** How far the marked point's visual line top sits below the scroller's top. */
-function readingOffset(page: Page): Promise<number> {
-  return page.evaluate((surface) => {
-    const top = (document.querySelector(surface) as HTMLElement).getBoundingClientRect().top;
-    const range = (window as unknown as { readingAt: Range }).readingAt.cloneRange();
-    const end = range.startContainer.textContent?.length ?? 0;
-    range.setEnd(range.startContainer, Math.min(range.startOffset + 1, end));
-    return (range.getClientRects()[0]?.top ?? Number.NaN) - top;
-  }, PLAN_SURFACE);
-}
-
 test("a rewrap keeps the line at the top of the plan where it was", async ({ daemon, page }) => {
   await page.setViewportSize(WIDE);
   const paragraphs = Array.from({ length: 60 }, (_, i) => `Paragraph ${i + 1}. ${PROSE}`);
   await openRows(daemon, page, ["# Reading place", ...paragraphs].join("\n\n"));
   // Safari has no overflow-anchor; Chromium's would hold the place without the hold.
   await page.addStyleTag({ content: `${PLAN_SURFACE} { overflow-anchor: none; }` });
-  const scroller = page.locator(PLAN_SURFACE);
-  const box = await scroller.boundingBox();
-  if (!box) throw new Error("the plan did not render");
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  const half = await scroller.evaluate((el) => (el.scrollHeight - el.clientHeight) / 2);
-  await page.mouse.wheel(0, half);
-  await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(half / 2);
-
+  await scrollPlanToMiddle(page);
   await markReadingLine(page);
   const offset = await readingOffset(page);
-  const lineHeight = await page
-    .locator(`${PLAN_PREVIEW} p`)
-    .first()
-    .evaluate((el) => Number.parseFloat(getComputedStyle(el).lineHeight));
+  const drift = async () => Math.abs((await readingOffset(page)) - offset);
 
-  await page.setViewportSize(NARROW);
-  await expect.poll(() => planFits(page)).toBe(true);
-  await expect
-    .poll(async () => Math.abs((await readingOffset(page)) - offset))
-    .toBeLessThanOrEqual(lineHeight);
+  await page.setViewportSize(BELOW_COLUMN);
+  await expect.poll(() => columnFits(page)).toBe(false);
+  await expect.poll(drift).toBeLessThanOrEqual(2);
 
   await page.setViewportSize(WIDE);
   await expect.poll(() => columnFits(page)).toBe(true);
-  await expect
-    .poll(async () => Math.abs((await readingOffset(page)) - offset))
-    .toBeLessThanOrEqual(lineHeight);
+  await expect.poll(drift).toBeLessThanOrEqual(2);
 });

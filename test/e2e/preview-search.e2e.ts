@@ -13,6 +13,7 @@ import { PREVIEW_BAND, previewCursor } from "@test/e2e/support/cursor.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
   awaitPlanReadyForKeys,
+  BELOW_COLUMN,
   lineOf,
   openPlanForKeys,
   PLAN_PREVIEW,
@@ -251,24 +252,25 @@ test("search highlights and the current match sit on their text after a rewrap",
   await expect.poll(async () => (await counter(page)).current).toBe(2);
   const before = await currentSpot(page);
 
-  await page.setViewportSize({ width: 640, height: 900 });
+  await page.setViewportSize(BELOW_COLUMN);
   await expect.poll(async () => (await currentSpot(page))?.mid).not.toBe(before?.mid);
 
   const lower = async (name: string) =>
     (await highlightTexts(page, name)).map((t) => t.toLowerCase());
   await expect.poll(() => lower("caret-preview-search")).toEqual(["gadget", "gadget"]);
   await expect.poll(() => lower("caret-preview-search-current")).toEqual(["gadget"]);
-  const inside = await page.evaluate((surface) => {
-    const range = [...(CSS.highlights.get("caret-preview-search-current") ?? [])][0];
-    const plan = document.querySelector(surface)?.getBoundingClientRect();
-    if (!(range instanceof Range) || !plan) return false;
-    return [...range.getClientRects()].every(
-      (r) =>
-        r.left >= plan.left &&
-        r.right <= plan.right &&
-        r.top >= plan.top &&
-        r.bottom <= plan.bottom,
-    );
-  }, PLAN_SURFACE);
-  expect(inside).toBe(true);
+  const inside = () =>
+    page.evaluate((surface) => {
+      const range = [...(CSS.highlights.get("caret-preview-search-current") ?? [])][0];
+      const plan = document.querySelector(surface)?.getBoundingClientRect();
+      if (!(range instanceof Range) || !plan) return false;
+      return [...range.getClientRects()].every(
+        (r) =>
+          r.left >= plan.left &&
+          r.right <= plan.right &&
+          r.top >= plan.top &&
+          r.bottom <= plan.bottom,
+      );
+    }, PLAN_SURFACE);
+  await expect.poll(inside).toBe(true);
 });

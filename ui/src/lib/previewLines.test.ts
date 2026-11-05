@@ -1,5 +1,5 @@
 import "@ui/support/setup.ts";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 
 import type { ThemedToken } from "shiki/core";
 
@@ -523,6 +523,21 @@ describe("readingPoint", () => {
     const padded: RectReader = (el) =>
       el === root.firstElementChild ? { ...g.rect(el), bottom: 300 } : g.rect(el);
     expect(readingPoint(root, map, 25, g.read, padded)).toEqual({ line: 3, column: 0 });
+  });
+
+  test("measuring lines across blocks leaves at most one range alive", () => {
+    const { root, map } = mount(`${LONG}\n\n${LONG}\n\n${LONG}\n`);
+    const g = grid(root, 20);
+    const create = spyOn(document, "createRange");
+    try {
+      const p = readingPoint(root, map, 45, g.read, g.rect);
+      expect(p).not.toBeNull();
+      expect(visualLineBox(root, map, p as TextPoint, g.read)).not.toBeNull();
+      expect(g.blocksRead.length).toBeGreaterThan(1);
+      expect(create.mock.calls.length).toBeLessThanOrEqual(1);
+    } finally {
+      create.mockRestore();
+    }
   });
 });
 

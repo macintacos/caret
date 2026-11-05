@@ -22,7 +22,12 @@ import {
   rgb,
   STYLES,
 } from "@test/e2e/support/markdown-styles.ts";
-import { openPlan, PLAN_PREVIEW, PLAN_SURFACE } from "@test/e2e/support/source-view.ts";
+import {
+  BELOW_COLUMN,
+  openPlan,
+  PLAN_PREVIEW,
+  PLAN_SURFACE,
+} from "@test/e2e/support/source-view.ts";
 import { caretThemeVariant, selectThemeFile } from "@test/e2e/support/themes.ts";
 
 async function showPreview(page: Page): Promise<void> {
@@ -477,7 +482,7 @@ test("a wide table and a long code line scroll inside their own box in a narrow 
   daemon,
   page,
 }) => {
-  await page.setViewportSize({ width: 640, height: 900 });
+  await page.setViewportSize(BELOW_COLUMN);
   const code = ["```", `const line = "${"x".repeat(200)}";`, "```"].join("\n");
   await openPreview(page, daemon, `${TABLE_PLAN}\n${code}\n`);
   await expect

@@ -347,11 +347,12 @@ cited rows' band and bar, the visual selection, and search. The signal is one
 rAF-throttled bump from a `ResizeObserver` on the root and on each slot, a text
 `MutationObserver` on the root, and the theme paint on `<html>`. Attributes under the root
 stay unobserved, because the slot gaps write their heights there and the root's resize
-reports each. A pane resize rewraps the text, which reaches the overlays through the
-root's `ResizeObserver`, with no observer of its own. A new preview overlay reads the
-signal rather than observing the root. The slot sync, the one effect that moves text, is
-declared ahead of every overlay that measures it; a reader declared before it measures a
-frame late, so declare a new overlay after it.
+reports each. A pane resize rewraps the text and reaches the overlays through the root's
+`ResizeObserver`. Only the rewrap hold (§ Keeping the place through a rewrap) observes the
+root itself, because it must park in the resize's own frame. A new preview overlay reads
+the signal rather than observing the root. The slot sync, the one effect that moves text,
+is declared ahead of every overlay that measures it; a reader declared before it measures
+a frame late, so declare a new overlay after it.
 
 `codeChrome` is the first ported behavior. `codeChrome.ts` gives it a light-DOM geometry
 over the preview's `pre`s, keyed by the opening fence line (the code marker's line minus
@@ -589,16 +590,19 @@ surface.
 
 ### Keeping the place through a rewrap
 
-A rewrap of the preview keeps the reader's visual line at the reading zone.
+A change in the preview root's width keeps the reader's visual line at the reading zone.
 `holdThroughRewrap` in `ui/src/lib/planPlace.ts` keeps a `TextPoint` plus its visual
-line's offset below the scroller's top, re-taken on every reader scroll.
+line's offset below the scroller's top. A reader's scroll drops it, and it is re-taken
+once scrolling has settled for 100ms; a resize before then parks nothing, and native
+scroll anchoring holds it. It is not a `SURFACE_BEHAVIORS` row because it reads only the
+preview's own root.
 
 - **It re-parks in the ResizeObserver callback** when the preview root's width changes, so
   the re-park paints in the rewrap's own frame. Later resizes re-park too while the hold
   lasts. Each park writes an absolute `scrollTop`, so Safari, which has no
   `overflow-anchor`, holds as well.
 - **The reader's scroll ends it.** A scroll within `SCROLL_TAKEOVER_SLOP` of the parked
-  top is the park's own and is ignored. Any other scroll re-takes the place.
+  top is the park's own and is ignored. Any other scroll drops the place until it settles.
 - **Its lifecycle differs from `holdPlace`'s** because a drawer drag starts with a pointer
   press, which would release `holdPlace`. It also keeps a line rather than a block: a
   rewrap inside a long paragraph moves the line being read within its block.

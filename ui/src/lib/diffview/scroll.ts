@@ -68,8 +68,9 @@ function prefersReducedMotion(): boolean {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-/** How far (px) the scroller may drift from what the tween last wrote before the
- * tween treats it as someone else's scroll. The read-back below already absorbs
+/** How far (px) the scroller may drift from a value caret last wrote and read back
+ * before that writer treats the scroll as someone else's: the tween, `parkAt` and the
+ * rewrap hold. The read-back below already absorbs
  * the browser's own rounding and clamping, so what is left for the slop is drift
  * a set/get round-trip cannot report exactly — a fractional device-pixel ratio,
  * page zoom, or a reflow re-clamping scrollTop as rows paint in. */
