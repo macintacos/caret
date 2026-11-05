@@ -650,19 +650,20 @@ this module as a v1 TUI plugin, and v1's TUI loader throws on a default without 
 `Object.values` rule binds only `index.ts`: both TUI loaders read only `default`, so
 `createCaretTui` stays a named export for tests.
 
-**The same module registers one `keymap` layer, `mode: "global"` because the palette and
-slash completion list only commands reachable from their own input mode, with one command,
-`caret.open`:** the `/caret` slash command, a palette entry, and the `<leader>p` default
-bind. It spawns `caret band-link [--session <id>] --open` (the binary from
-`resolveCaretBin`, detached and unwaited), because the TUI API has no URL opener;
-`--session` comes from the current route and is omitted off a session route, so
-`band-link` opens the session's waiting review or else caret's home page. The spawn
-carries no `CARET_AGENT`: `band-link` only reads the daemon, never starts one. A child
-that fails to start or exits non-zero shows an error toast; `band-link` exits 0 on its own
-failures, so non-zero means caret never ran (no `bun` on `PATH`, an older caret). The
-layer sits behind a `typeof ctx.keymap?.layer === "function"` guard and a `try`: a context
-without a keymap, or a host that rejects the command shape (v2 throws synchronously on
-one), still keeps caret's toasts.
+**The same module registers one `keymap` layer with one command, `caret.open`:** the
+`/caret` slash command, a palette entry, and the `<leader>p` default bind. The layer is
+`mode: "global"`: the palette and slash completion list only commands reachable from their
+own input mode, and a default `base` layer is unreachable from both. It spawns
+`caret band-link [--session <id>] --open` (the binary from `resolveCaretBin`, detached and
+unwaited), because the TUI API has no URL opener; `--session` comes from the current route
+and is omitted off a session route, so `band-link` opens the session's waiting review or
+else caret's home page. The spawn carries no `CARET_AGENT`: `band-link` only reads the
+daemon, never starts one. A child that fails to start or exits non-zero shows an error
+toast; `band-link` exits 0 on its own failures, so non-zero means caret never ran (no
+`bun` on `PATH`, an older caret). The layer sits behind a
+`typeof ctx.keymap?.layer === "function"` guard and a `try`: a context without a keymap,
+or a host that rejects the command shape (v2 throws synchronously on one), still keeps
+caret's toasts.
 
 **Known gap, accepted.** On a child (subagent) session `/caret` opens caret's home page:
 reviews sit on the root session.
@@ -723,14 +724,16 @@ to the agent, which proceeds.
 round-trip did not reach — the PUBLISHED entry (`@macintacos/caret`) resolving out of npm
 into OpenCode's cache on restart, a **`build`-agent** call being offered rather than
 denied while that session receives no unprompted steer, the update toast firing when the
-plugin is behind, `caret.open` opening the browser on a real v2 host and its `<leader>p`
-default not colliding with a built-in bind, a live `path` round-trip (the plan agent
-writing its plan to OpenCode's data-dir `plans/` and being allowed to, re-reading and
-editing that file on a change request, and the approved file ending with the reviewer
-notes), and the `path` ask's worktree-relative `edit` pattern matching OpenCode's own edit
-rules, including in a session started from a repo subdirectory, where `context.directory`
-and `context.worktree` differ. This mirrors the Codex adapter's live-contract follow-up
-(EXC-549) and the upgrade story tracked in EXC-383.
+plugin is behind, `caret.open` actually opening the browser (a shim stood in for caret),
+passing `--session <id>` from a session route (that needs a model), and showing the
+non-zero-exit toast (unit-tested against a real `exit 127` child only), a live `path`
+round-trip (the plan agent writing its plan to OpenCode's data-dir `plans/` and being
+allowed to, re-reading and editing that file on a change request, and the approved file
+ending with the reviewer notes), and the `path` ask's worktree-relative `edit` pattern
+matching OpenCode's own edit rules, including in a session started from a repo
+subdirectory, where `context.directory` and `context.worktree` differ. This mirrors the
+Codex adapter's live-contract follow-up (EXC-549) and the upgrade story tracked in
+EXC-383.
 
 **Confirmed against a live OpenCode v2.0.18** loading a `"plugin": ["file:<checkout>"]`
 entry, with all four `XDG_*` directories and `HOME` isolated and a scripted
@@ -843,6 +846,23 @@ model):
   `ctx.session.switchAgent({ sessionID, agent: "build" })` and returned; the very next
   model step in the same turn ran as `build`, with no user message between. That is what
   Approve & build relies on.
+
+**Confirmed live for EXC-2247** (2026-11-05, v2.2.1 TUI, `--standalone`, isolated `HOME`
+and all four `XDG_*` dirs, a `"plugins": ["file:<checkout>"]` entry, `CARET_OPENCODE_BIN`
+pointing at an argv-recording shim, no model or provider):
+
+- **Load.** The TUI half loaded from `exports["./tui"]`; OpenCode's plugin count rose by
+  one.
+- **`caret.open`.** On the home route, `/caret` (listed first in slash completion, with
+  its description), the palette entry (searching `caret` shows "Open caret … ctrl+x p"),
+  and `ctrl+x p` each ran the shim with `band-link --open`.
+- **Spawn failure.** With `CARET_OPENCODE_BIN=/nonexistent/caret`, `ctrl+x p` toasted
+  "caret: couldn't start caret (ENOENT: no such file or directory, posix_spawn
+  '/nonexistent/caret')" and OpenCode stayed up.
+- **Layer mode.** Before the layer was `mode: "global"`, the key worked but neither
+  `/caret` nor the palette listed the command; this check found that defect.
+- **`<leader>p` collision.** Rests on 2.2.1's default binds (§ Sources) plus the live
+  palette showing `ctrl+x p` for the command.
 
 ## Sources
 
