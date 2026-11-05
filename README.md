@@ -107,6 +107,8 @@ your browser instead of the terminal prompt. There you:
 > Claude Code (from the plugin's MCP server) and `caret_review_plan` in OpenCode. The tool
 > is for plans only; see
 > [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md#calling-the-review-tool-from-your-own-skill).
+> In OpenCode v2, `/caret` or `ctrl+x p` opens the plan waiting in the session; rebind the
+> key as `caret.open` under OpenCode's `keybinds`.
 
 ## Configuration
 

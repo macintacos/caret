@@ -650,6 +650,15 @@ this module as a v1 TUI plugin, and v1's TUI loader throws on a default without 
 `Object.values` rule binds only `index.ts`: both TUI loaders read only `default`, so
 `createCaretTui` stays a named export for tests.
 
+**The same module registers one `keymap` layer with one command, `caret.open`:** the
+`/caret` slash command, a palette entry, and the `<leader>p` default bind. It spawns
+`caret band-link [--session <id>] --open` (the binary from `resolveCaretBin`, detached and
+unwaited), because the TUI API has no URL opener; `--session` comes from the current route
+and is omitted off a session route, so `band-link` opens the session's waiting review or
+else caret's home page. A spawn that fails shows an error toast. The layer sits behind a
+`typeof ctx.keymap?.layer === "function"` guard and a `try`: a v1 host has no `keymap`,
+and a host that rejects the command must still keep caret's toasts.
+
 ## Verified vs. follow-up
 
 **Verified in this repo (unit + integration tests, no live OpenCode required):** the
@@ -679,15 +688,16 @@ steer and prewarm gating, the `path` assert and its pre-2.0.29 refusal, the suba
 refusal and its fail-open, the `context`-hook tool removal and its fail-open, the
 plan-agent allow and its agent-and-session skip, the default agent the warm and allow
 resolve from `ctx.agent.list()` (failing closed on an unreadable or empty list and on a
-non-plan default), the TUI half's toasts and update check, abort on both hosts, and v1↔v2
-parity of the refusal texts, the v2 envelope declaring `build` only from a planning agent
-(and v1's declaring nothing), the Approve & build switch, and a failed switch keeping the
-approval with its note and log. For the plugin key they cover the host probe's 5 s bound
-(a grandchild holding stdout included), key selection and the one-transform move, deleting
-`plugins` without losing comments (a trailing comma and CRLF included), v2 cache reads and
-clears, the service launcher's pick of v2's live generation (bash and TS against one
-shared fixture), and doctor's `opencode-host` and `opencode-caret-version` checks and
-their gating.
+non-plan default), the TUI half's toasts and update check, its `caret.open` command (the
+`band-link` argv with and without a session, the `keymap` guard, and the spawn-failure
+toast), abort on both hosts, and v1↔v2 parity of the refusal texts, the v2 envelope
+declaring `build` only from a planning agent (and v1's declaring nothing), the Approve &
+build switch, and a failed switch keeping the approval with its note and log. For the
+plugin key they cover the host probe's 5 s bound (a grandchild holding stdout included),
+key selection and the one-transform move, deleting `plugins` without losing comments (a
+trailing comma and CRLF included), v2 cache reads and clears, the service launcher's pick
+of v2's live generation (bash and TS against one shared fixture), and doctor's
+`opencode-host` and `opencode-caret-version` checks and their gating.
 
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
 the array install's LOCAL form, which is what ties the run to that plugin version: a
@@ -705,13 +715,14 @@ to the agent, which proceeds.
 round-trip did not reach — the PUBLISHED entry (`@macintacos/caret`) resolving out of npm
 into OpenCode's cache on restart, a **`build`-agent** call being offered rather than
 denied while that session receives no unprompted steer, the update toast firing when the
-plugin is behind, a live `path` round-trip (the plan agent writing its plan to OpenCode's
-data-dir `plans/` and being allowed to, re-reading and editing that file on a change
-request, and the approved file ending with the reviewer notes), and the `path` ask's
-worktree-relative `edit` pattern matching OpenCode's own edit rules, including in a
-session started from a repo subdirectory, where `context.directory` and `context.worktree`
-differ. This mirrors the Codex adapter's live-contract follow-up (EXC-549) and the upgrade
-story tracked in EXC-383.
+plugin is behind, `caret.open` opening the browser on a real v2 host and its `<leader>p`
+default not colliding with a built-in bind, a live `path` round-trip (the plan agent
+writing its plan to OpenCode's data-dir `plans/` and being allowed to, re-reading and
+editing that file on a change request, and the approved file ending with the reviewer
+notes), and the `path` ask's worktree-relative `edit` pattern matching OpenCode's own edit
+rules, including in a session started from a repo subdirectory, where `context.directory`
+and `context.worktree` differ. This mirrors the Codex adapter's live-contract follow-up
+(EXC-549) and the upgrade story tracked in EXC-383.
 
 **Confirmed against a live OpenCode v2.0.18** loading a `"plugin": ["file:<checkout>"]`
 entry, with all four `XDG_*` directories and `HOME` isolated and a scripted
