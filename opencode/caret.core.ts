@@ -71,7 +71,7 @@ export function isPlanningAgent(agent: string | undefined): boolean {
 const REVIEW_TOAST_TITLE = "caret: review this plan";
 
 /** A toast's content — structurally both v1's `showToast` body and v2's TUI
- * `ToastOptions`, which `caret.tui.ts` passes it to unchanged. */
+ * `ToastOptions`, which `caret.tui.ts` extends with the plan's session. */
 export type ToastBody = {
   title?: string;
   message: string;

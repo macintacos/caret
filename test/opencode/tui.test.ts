@@ -3,14 +3,21 @@
 
 import { expect, test } from "bun:test";
 
-import type { ToastBody, ToastSink } from "@oc/caret.core.ts";
+import {
+  decisionToast,
+  type ReviewOutcome,
+  reviewLinkToast,
+  type ToastBody,
+  type ToastSink,
+} from "@oc/caret.core.ts";
 import { createCaretTui, type TuiContext } from "@oc/caret.tui.ts";
 
 type Handler = Parameters<TuiContext["data"]["on"]>[1];
+type Toast = Parameters<TuiContext["ui"]["toast"]["show"]>[0];
 
 function fakeTui(show: ToastSink = () => {}) {
   const handlers = new Map<string, Handler>();
-  const shown: ToastBody[] = [];
+  const shown: Toast[] = [];
   let unsubscribed = 0;
   const ctx: TuiContext = {
     data: {
@@ -31,7 +38,7 @@ function fakeTui(show: ToastSink = () => {}) {
     },
   };
   const emit = (type: string, id: string, metadata?: Record<string, unknown>) =>
-    handlers.get(type)?.({ data: { id, ...(metadata ? { metadata } : {}) } });
+    handlers.get(type)?.({ data: { id, sessionID: SESSION, ...(metadata ? { metadata } : {}) } });
   return { ctx, shown, emit, unsubscribed: () => unsubscribed };
 }
 
@@ -42,12 +49,19 @@ function start(checkUpdate: (show: ToastSink) => void = () => {}) {
 }
 
 const URL = "http://127.0.0.1:4242/r/1";
+const SESSION = "ses_review";
 
 test("a progress event carrying the review URL shows the review-link toast", () => {
   const { shown, emit } = start();
   emit("session.tool.progress", "C", { caretUrl: URL });
   expect(shown).toEqual([
-    { title: "caret: review this plan", message: URL, variant: "info", duration: 600_000 },
+    {
+      title: "caret: review this plan",
+      message: URL,
+      variant: "info",
+      duration: 600_000,
+      sessionID: SESSION,
+    },
   ]);
 });
 
@@ -71,7 +85,7 @@ test("a success after the link shows the decision toast", () => {
     const { shown, emit } = start();
     emit("session.tool.progress", "C", { caretUrl: URL });
     emit("session.tool.success", "C", decision ? { caretDecision: decision } : {});
-    expect(shown[1]).toEqual({ ...expected, duration: 4_000 });
+    expect(shown[1]).toEqual({ ...expected, duration: 4_000, sessionID: SESSION });
   }
 });
 
@@ -81,6 +95,14 @@ test("a failed call after the link shows cancelled, and a call's decision toasts
   emit("session.tool.failed", "C");
   emit("session.tool.success", "C", { caretDecision: "allow" });
   expect(shown.map((b) => b.message)).toEqual([URL, "caret: review cancelled"]);
+  expect(shown.map((b) => b.sessionID)).toEqual([SESSION, SESSION]);
+});
+
+test("the shared bodies v1 forwards as-is carry no sessionID", () => {
+  const outcomes: ReviewOutcome[] = ["allow", "deny", "cancelled"];
+  for (const body of [reviewLinkToast(URL), ...outcomes.map(decisionToast)]) {
+    expect(body).not.toHaveProperty("sessionID");
+  }
 });
 
 test("a throwing toast surface does not escape a handler", () => {
