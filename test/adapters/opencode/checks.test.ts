@@ -12,7 +12,7 @@ import { readOpencodeChecks } from "@/adapters/opencode/checks.ts";
 import type { OpencodeHost } from "@/adapters/opencode/host.ts";
 
 const PKG = "@macintacos/caret";
-const V2 = (): OpencodeHost[] => [{ bin: "/v2/opencode", version: [2, 0, 18] }];
+const V2 = (): OpencodeHost[] => [{ bin: "/v2/opencode", version: [2, 0, 29] }];
 
 let tmp: string;
 beforeEach(async () => {
@@ -121,7 +121,7 @@ test("v2 with a stale caret in config.json beside opencode.json fails the host c
 
 const MIXED = (): OpencodeHost[] => [
   { bin: "/v1/opencode", version: [1, 18, 15] },
-  { bin: "/v2/opencode", version: [2, 0, 18] },
+  { bin: "/v2/opencode", version: [2, 0, 29] },
 ];
 
 test("v1 beside v2 passes caret in plugin, naming both", async () => {
