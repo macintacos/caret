@@ -1,11 +1,12 @@
 // The preview's rows: the hover band over the visual line under the pointer and the "+"
 // beside it, a comment drag's band over the rows it crosses and the bar down the "+" lane,
 // what a click, a drag or the "+" cites — every source line with text on those rows — the
-// rows' reach to the plan's right edge, and the column's wrap, which holds the same words
-// on each row at any root font size or window width so a row's citation never moves.
+// rows' reach to the plan's right edge, and the column's wrap, which holds each row's words
+// at any zoom or font size while the plan is at least as wide as the column, and rewraps
+// the text to a narrower plan.
 //
 // What needs a real browser here: wrapping, the pointer and wheel driving the bands, a
-// real drag, the sideways scroll of a window narrower than the column, and the rows a
+// real drag, the rewrap to a plan narrower than the column, and the rows a
 // reader sees, read from live text rects. The pure half stays units: the row under a
 // height, a row's band and the rows' text in ui/src/lib/previewLines.test.ts, the click
 // and drag reporting in ui/src/components/PlanPreview.test.ts, and the gates and slot
@@ -13,7 +14,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { openSettings, previewToggle } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import {
   glideCounter,
@@ -577,10 +578,38 @@ test("the + beside a hovered row opens the composer on what a click there cites"
   await expect(composerLabel(page)).toHaveText(rowLabel(await linesOnRow(page, y)));
 });
 
-test("each row holds the same words under page zoom and in a window narrower than the column", async ({
+/** A window wide enough that the scaled column plus the outline still fits the plan. */
+const WIDE = { width: 2000, height: 900 };
+/** A window narrower than the column. */
+const NARROW = { width: 640, height: 900 };
+
+/** Whether the text column fits inside the plan's visible width. */
+async function columnFits(page: Page): Promise<boolean> {
+  const [column, plan] = await Promise.all([
+    columnBox(page),
+    page.locator(PLAN_SURFACE).evaluate((el) => el.clientWidth),
+  ]);
+  return column.width <= plan;
+}
+
+/** Whether the plan scroller has nothing to scroll sideways. */
+const planFits = (page: Page) =>
+  page.locator(PLAN_SURFACE).evaluate((el) => el.scrollWidth <= el.clientWidth);
+
+/** Picks the Preview base font size option `size` ("18 px") in Settings and closes it. */
+async function setBaseFontSize(page: Page, size: string): Promise<void> {
+  const dialog = await openSettings(page);
+  await dialog.getByRole("combobox", { name: "Base font size" }).click();
+  await page.getByRole("option", { name: size }).click();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+}
+
+test("each row holds the same words under page zoom while the column fits", async ({
   daemon,
   page,
 }) => {
+  await page.setViewportSize(WIDE);
   const { prose } = await openRows(daemon, page);
   const starts = () => rowStarts(page, prose);
   const width = async () => (await columnBox(page)).width;
@@ -593,13 +622,27 @@ test("each row holds the same words under page zoom and in a window narrower tha
     document.documentElement.style.zoom = "1.25";
   });
   await expect.poll(width).toBeGreaterThan(baseWidth);
+  expect(await columnFits(page)).toBe(true);
   expect(await starts()).toEqual(base);
+});
 
-  await page.evaluate(() => document.documentElement.style.removeProperty("zoom"));
-  await page.setViewportSize({ width: 640, height: 900 });
-  await expect
-    .poll(() => page.locator(PLAN_SURFACE).evaluate((el) => el.clientWidth))
-    .toBeLessThan(baseWidth);
+test("each row holds the same words at a larger Preview base font size while the column fits", async ({
+  daemon,
+  page,
+}) => {
+  await page.setViewportSize(WIDE);
+  const { prose } = await openRows(daemon, page);
+  await page.addStyleTag({ content: `${PLAN_PREVIEW} { font-family: Arial, sans-serif; }` });
+  const starts = () => rowStarts(page, prose);
+  const width = async () => (await columnBox(page)).width;
+  const base = await starts();
+  const baseWidth = await width();
+  expect(base.length).toBeGreaterThan(1);
+
+  await setBaseFontSize(page, "18 px");
+
+  await expect.poll(width).toBeGreaterThan(baseWidth);
+  expect(await columnFits(page)).toBe(true);
   expect(await starts()).toEqual(base);
 });
 
@@ -607,6 +650,7 @@ test("the column scales with its text, so each row holds its words at another ro
   daemon,
   page,
 }) => {
+  await page.setViewportSize(WIDE);
   const { prose } = await openRows(daemon, page);
   // A text-size preference changes the root font size alone. macOS's system font respaces
   // its glyphs by point size, which no CSS turns off, so a face whose advances scale
@@ -623,27 +667,143 @@ test("the column scales with its text, so each row holds its words at another ro
   });
 
   await expect.poll(width).toBeGreaterThan(baseWidth);
+  expect(await columnFits(page)).toBe(true);
   expect(await starts()).toEqual(base);
 });
 
-test("a window narrower than the column scrolls it sideways, and the band and + stay on their row", async ({
+/** Whether every text rect outside a `pre` or `table` ends inside the plan's right edge. */
+function textInsidePlan(page: Page): Promise<boolean> {
+  return page.evaluate(
+    ({ preview, surface }) => {
+      const plan = document.querySelector(surface) as HTMLElement;
+      const right = plan.getBoundingClientRect().left + plan.clientWidth + 0.5;
+      const root = document.querySelector(preview) as Node;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node.parentElement?.closest("pre, table")) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        for (const r of range.getClientRects()) if (r.width > 0 && r.right > right) return false;
+      }
+      return true;
+    },
+    { preview: PLAN_PREVIEW, surface: PLAN_SURFACE },
+  );
+}
+
+test("a window narrower than the column rewraps the text to the plan, and the band and + stay on their row", async ({
   daemon,
   page,
 }) => {
-  await page.setViewportSize({ width: 640, height: 900 });
   const { prose } = await openRows(daemon, page);
+  const base = await rowStarts(page, prose);
+  await page.setViewportSize(NARROW);
+  await expect.poll(() => rowStarts(page, prose)).not.toEqual(base);
+
   const scroller = page.locator(PLAN_SURFACE);
   const y = await mixedRow(page, prose);
   await page.mouse.move(300, y);
-  await expect.poll(() => bandHolds(page, y)).toBe(true);
-
   await page.mouse.wheel(150, 0);
+  expect(await scroller.evaluate((el) => el.scrollLeft)).toBe(0);
+  expect(await planFits(page)).toBe(true);
+  expect(await textInsidePlan(page)).toBe(true);
 
-  await expect.poll(() => scroller.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
   await expect.poll(() => bandHolds(page, y)).toBe(true);
   const plus = plusButton(page);
   await expect(plus).toBeInViewport();
   const [plusBox, plan] = [await plus.boundingBox(), await scroller.boundingBox()];
-  expect((plusBox?.x ?? -1) >= (plan?.x ?? 0)).toBe(true);
-  expect((plusBox?.y ?? 0) <= y && y < (plusBox?.y ?? 0) + (plusBox?.height ?? 0)).toBe(true);
+  if (!plusBox || !plan) throw new Error("the + or the plan did not render");
+  expect(plusBox.x >= plan.x && plusBox.x + plusBox.width <= plan.x + plan.width).toBe(true);
+  expect(plusBox.y <= y && y < plusBox.y + plusBox.height).toBe(true);
+});
+
+/** Opens the rows in a window whose plan is 100px wider than the column, and returns the
+ * row baseline there. */
+async function openJustWider(daemon: Daemon, page: Page) {
+  const { prose } = await openRows(daemon, page);
+  const [column, plan] = await Promise.all([
+    columnBox(page),
+    page.locator(PLAN_SURFACE).evaluate((el) => el.clientWidth),
+  ]);
+  const width = 1600 - (plan - column.width) + 100;
+  await page.setViewportSize({ width: Math.round(width), height: 900 });
+  await expect.poll(() => columnFits(page)).toBe(true);
+  return { prose, base: await rowStarts(page, prose) };
+}
+
+test("a zoom that pushes the column past the plan rewraps the text", async ({ daemon, page }) => {
+  const { prose, base } = await openJustWider(daemon, page);
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "1.25";
+  });
+  await expect.poll(() => rowStarts(page, prose)).not.toEqual(base);
+  expect(await planFits(page)).toBe(true);
+});
+
+test("a base font size that pushes the column past the plan rewraps the text", async ({
+  daemon,
+  page,
+}) => {
+  const { prose, base } = await openJustWider(daemon, page);
+  await setBaseFontSize(page, "18 px");
+  await expect.poll(() => rowStarts(page, prose)).not.toEqual(base);
+  expect(await planFits(page)).toBe(true);
+});
+
+test("a long URL, path and inline code break inside a narrow plan", async ({ daemon, page }) => {
+  const url = `https://example.com/${"a".repeat(180)}`;
+  const path = `/${"b".repeat(199)}`;
+  const code = "c".repeat(200);
+  await page.setViewportSize(NARROW);
+  await openRows(daemon, page, [`# Tokens`, url, path, `\`${code}\``, filler].join("\n\n"));
+
+  const ends = await page.evaluate(
+    ({ preview, surface, tokens }) => {
+      const plan = document.querySelector(surface) as HTMLElement;
+      const right = plan.getBoundingClientRect().left + plan.clientWidth + 0.5;
+      const root = document.querySelector(preview) as Node;
+      return tokens.map((token) => {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const at = node.textContent?.indexOf(token) ?? -1;
+          if (at < 0) continue;
+          const range = document.createRange();
+          range.setStart(node, at);
+          range.setEnd(node, at + token.length);
+          const rects = [...range.getClientRects()];
+          return (rects.at(-1)?.right ?? Number.POSITIVE_INFINITY) <= right;
+        }
+        return false;
+      });
+    },
+    { preview: PLAN_PREVIEW, surface: PLAN_SURFACE, tokens: [url, path, code] },
+  );
+  expect(ends).toEqual([true, true, true]);
+  expect(await planFits(page)).toBe(true);
+});
+
+test("a click on a rewrapped row cites every source line with text on it and opens the composer under it", async ({
+  daemon,
+  page,
+}) => {
+  await page.setViewportSize(NARROW);
+  const { prose } = await openRows(daemon, page);
+  const y = await mixedRow(page, prose);
+  const cited = rowLabel(await linesOnRow(page, y));
+
+  await page.mouse.click(await textX(page), y);
+  const composer = page.getByRole("dialog", { name: "Add a comment" });
+  await expect(composer).toBeVisible();
+  await page.mouse.move(1, 1);
+  await expect(composerLabel(page)).toHaveText(cited);
+
+  const under = async () => {
+    const [band, at] = await Promise.all([
+      page.locator(PREVIEW_DRAG).boundingBox(),
+      composer.boundingBox(),
+    ]);
+    const gap = band && at ? at.y - (band.y + band.height) : Number.NaN;
+    return band !== null && band.y <= y && y < band.y + band.height && gap > -1 && gap < 24;
+  };
+  await expect.poll(under).toBe(true);
 });

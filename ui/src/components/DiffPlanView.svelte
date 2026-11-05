@@ -2074,8 +2074,7 @@
   type PreviewHover = {
     row: TextPoint;
     band: BandBox;
-    /** The "+"'s lane: the preview's left padding, pinned to the scroller's visible left
-     * edge when a narrow window scrolls the column sideways, as the source gutter is. */
+    /** The "+"'s lane: the preview's left padding. */
     plus: { left: number; width: number };
     glide: boolean;
   };
@@ -2125,17 +2124,17 @@
     return {
       row,
       band,
-      plus: laneBeside({ root, scroller }, band),
+      plus: laneBeside({ root }, band),
       glide: glide && previous !== null && glidesFrom(root, map, previous.row, row),
     };
   }
 
   function laneBeside(
-    { root, scroller }: Pick<PreviewGeometry, "root" | "scroller">,
+    { root }: Pick<PreviewGeometry, "root">,
     band: BandBox,
   ): PreviewHover["plus"] {
     return {
-      left: Math.max(band.left, scroller.scrollLeft),
+      left: band.left,
       width: Number.parseFloat(getComputedStyle(root).paddingInlineStart),
     };
   }

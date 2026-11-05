@@ -473,6 +473,35 @@ test("a table has headers, a sunk pane, column alignment and scrolls on its own"
     .toEqual({ overflow: "auto", scrolls: true, planScrolls: false });
 });
 
+test("a wide table and a long code line scroll inside their own box in a narrow plan", async ({
+  daemon,
+  page,
+}) => {
+  await page.setViewportSize({ width: 640, height: 900 });
+  const code = ["```", `const line = "${"x".repeat(200)}";`, "```"].join("\n");
+  await openPreview(page, daemon, `${TABLE_PLAN}\n${code}\n`);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        ([root, surface]) => {
+          const table = [...document.querySelectorAll(`${root} table`)].find((t) =>
+            t.textContent?.includes("column59"),
+          );
+          const pre = document.querySelector(`${root} pre`);
+          const plan = document.querySelector(surface);
+          if (!table || !pre || !plan) return null;
+          return {
+            table: table.scrollWidth > table.clientWidth,
+            code: pre.scrollWidth > pre.clientWidth,
+            plan: plan.scrollWidth <= plan.clientWidth,
+          };
+        },
+        [PLAN_PREVIEW, PLAN_SURFACE] as const,
+      ),
+    )
+    .toEqual({ table: true, code: true, plan: true });
+});
+
 const LONG_TABLE_PLAN = [
   "Before the table.",
   [

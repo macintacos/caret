@@ -245,7 +245,7 @@ function offsetInScroller(page: Page, id: string): Promise<number> {
   );
 }
 
-/** Narrows the preview's column, which keeps its width in any window, to the first width at
+/** Narrows the preview's column, the text's widest wrap in any window, to the first width at
  * which the heavy theme's heading face (bold italic) wraps the heading onto one more line
  * than the thin theme's (the default 600 weight); false when no width does. */
 const narrowToRewrap = (page: Page) =>

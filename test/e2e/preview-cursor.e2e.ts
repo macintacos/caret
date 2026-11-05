@@ -181,8 +181,8 @@ const blockLines = (page: Page, block: "table" | "ul") =>
     [PLAN_PREVIEW, block] as const,
   );
 
-/** Sets the preview column's width, which no window width changes, so the text wraps at
- * another measure. */
+/** Sets the preview column's width, the text's widest wrap, so the text wraps at another
+ * measure in any window. */
 const setColumnWidth = (page: Page, width: number) =>
   page.locator(PLAN_PREVIEW).evaluate((el, w) => {
     (el as HTMLElement).style.setProperty("--column", `${w}px`);
