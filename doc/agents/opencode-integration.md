@@ -123,7 +123,7 @@ Code's hook sends. The core's plan-file guard, write-back, and notes append then
 unchanged. The plugin can't import `src/`, so it repeats the core's "`.md`, existing
 regular file" check. It then checks `edit` permission on the file, the pattern being the
 path relative to the session worktree: v1 asks OpenCode (`context.ask`); v2 asks through
-`ctx.permission.assert` where the host has it, else evaluates OpenCode's rules itself, as
+`ctx.permission.assert`, and a v2 before 2.0.29, which lacks it, gets the 2.0.29 refusal
 below. The core's plan-file guard assumes the agent wrote the file itself, as Claude
 Code's does; here the model picks the string, so without that check caret's write-back
 would bypass OpenCode's edit rules and rewrite a file the agent may not edit. When the
@@ -138,33 +138,11 @@ rules, saved "always" grants, and its native prompt. A resolve permits; a `Tool.
 is rethrown out of `execute`, as the SDK requires, so it ends the step instead of reading
 as a deny.
 
-**Older v2 hosts fall back to evaluate-then-refuse**, because they give a plugin no API
-that raises an interactive permission ask. `opencode/permission.ts` copies OpenCode v2's
-`Wildcard.match` and `Permission.evaluate` (its `*` crosses `/`, which `Bun.Glob` and
-`path.matchesGlob` do not, and no published package exports the matcher) and mirrors the
-resource forming of v2's `file-access.ts`. `editPermitted` evaluates the agent's rules
-(`ctx.agent.get`, config `permission` already folded in), then the session's `permissions`
-— last matching rule wins, default `ask` — for `edit` on the file, plus
-`external_directory` when the file is outside the project, since that is OpenCode's own
-check for such a file. It permits only when every evaluated effect is `allow`; a failed
-agent or session read refuses. **An `ask` refuses** too, with the not-permitted text,
-which tells the agent to pass the plan inline as `plan`: `ask` means "only with the user's
-consent", v2 gives a plugin no way to obtain it, and proceeding would write without it.
-
-Known limits of the fallback, all closed where `assert` exists:
-
-- **Stock v2 refuses a non-plan agent's out-of-project `path`.** Stock agent rules are
-  `* * allow`, then `external_directory * ask`, so a `build` agent submitting
-  `~/notes/plan.md` is refused and passes the plan inline — the review still happens,
-  without the file write-back. In-project files fall through to `* allow`. v1 raises
-  OpenCode's interactive ask instead.
-- **Saved "always" grants are invisible to a plugin**, so caret may refuse a file OpenCode
-  would allow; the inline hint applies.
-- **Config and organization policy denies are invisible too**, so caret may proceed where
-  a policy would deny.
-
-Raising caret's v2 floor to 2.0.29 would let `permission.ts`'s matcher and the fallback
-go; `editChecks` still forms the asserted resources.
+**A v2 before 2.0.29 refuses every `path` review**, because those hosts give a plugin no
+API that raises a permission ask and caret will not rewrite a file without one. The
+refusal names 2.0.29 and tells the agent to pass the plan inline as `plan`, which still
+reviews. `caret doctor`'s `opencode-host` check flags such a host. Nothing in the package
+enforces the floor, since `@opencode/plugin` is a dev dependency.
 
 Abort reaches the child on both hosts: `runPlanReview` passes the host's signal (v1's
 `context.abort`, v2's `context.signal`) to the bridge, whose `spawn({ signal })` kills
@@ -357,12 +335,12 @@ so it wants the live check § Verified vs. follow-up already schedules.
   `src/adapters/index.ts`; selectable via `CARET_AGENT=opencode`. Claude stays the
   default.
 - **Packaging (`opencode/`)** — the host-neutral core (`caret.core.ts`), the v1 plugin
-  (`caret.plugin.ts`), the v2 plugin (`caret.plugin.v2.ts`) and its permission evaluator
-  (`permission.ts`), the v2 TUI module (`caret.tui.ts`, `exports["./tui"]`), their package
-  entrypoint (`index.ts`, see § The export surface), and command files (`commands/*.md`).
-  The plugin ships in the `@macintacos/caret` npm package and resolves its binary and
-  version at runtime from that package (§ Runtime resolution + update check); only the
-  command files still carry substituted markers — `__CARET_BIN__` and
+  (`caret.plugin.ts`), the v2 plugin (`caret.plugin.v2.ts`) and the edit-check resources
+  it asserts (`permission.ts`), the v2 TUI module (`caret.tui.ts`, `exports["./tui"]`),
+  their package entrypoint (`index.ts`, see § The export surface), and command files
+  (`commands/*.md`). The plugin ships in the `@macintacos/caret` npm package and resolves
+  its binary and version at runtime from that package (§ Runtime resolution + update
+  check); only the command files still carry substituted markers — `__CARET_BIN__` and
   `__CARET_DEMO_TEMPLATE__`, the template embedded rather than read because under `bunx`
   the install-time root is a temp dir.
 - **Install (`caret install`)** — adds caret to the user's OpenCode config
@@ -685,18 +663,18 @@ runs `prewarm` with `CARET_AGENT=opencode`); the entrypoint's
 config-array editor (add/remove, comment-preserving); target selection + dispatch; the
 `claude` target's CLI command sequence; the runtime bin/version resolvers; and the update
 check (toasts when behind, silent on error / opt-out). On v2 they also cover the
-permission evaluator, the tool's registration (`codemode: false`, JSON Schema input),
-steer and prewarm gating, evaluate-then-refuse on `path`, the subagent refusal and its
-fail-open, the `context`-hook tool removal and its fail-open, the plan-agent allow and its
-agent-and-session skip, the default agent the warm and allow resolve from
-`ctx.agent.list()` (failing closed on an unreadable or empty list and on a non-plan
-default), the TUI half's toasts and update check, abort on both hosts, and v1↔v2 parity of
-the refusal texts. For the plugin key they cover the host probe's 5 s bound (a grandchild
-holding stdout included), key selection and the one-transform move, deleting `plugins`
-without losing comments (a trailing comma and CRLF included), v2 cache reads and clears,
-the service launcher's pick of v2's live generation (bash and TS against one shared
-fixture), and doctor's `opencode-host` and `opencode-caret-version` checks and their
-gating.
+edit-check resources, the tool's registration (`codemode: false`, JSON Schema input),
+steer and prewarm gating, the `path` assert and its pre-2.0.29 refusal, the subagent
+refusal and its fail-open, the `context`-hook tool removal and its fail-open, the
+plan-agent allow and its agent-and-session skip, the default agent the warm and allow
+resolve from `ctx.agent.list()` (failing closed on an unreadable or empty list and on a
+non-plan default), the TUI half's toasts and update check, abort on both hosts, and v1↔v2
+parity of the refusal texts. For the plugin key they cover the host probe's 5 s bound (a
+grandchild holding stdout included), key selection and the one-transform move, deleting
+`plugins` without losing comments (a trailing comma and CRLF included), v2 cache reads and
+clears, the service launcher's pick of v2's live generation (bash and TS against one
+shared fixture), and doctor's `opencode-host` and `opencode-caret-version` checks and
+their gating.
 
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
 the array install's LOCAL form, which is what ties the run to that plugin version: a
