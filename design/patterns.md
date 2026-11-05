@@ -825,6 +825,18 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - For progress, show a spinner on a short step, only while work is happening, then a final
   line that states the result. For many items, show a counter like `3 of 50`.
 
+### Inside a host's TUI (OpenCode)
+
+- Take every colour from the host's theme tokens, read live: the news in bold `text.base`,
+  secondary text in `text.muted`, caret's mark in `text.feedback.warning.base`, the frame
+  in `border.base`, the card in `background.raised.base`.
+- Align text to the host's composer text column.
+- Keep a notice to one row.
+- Show the key that acts on the notice on the notice itself, read from the host's keymap.
+- Put the key before its verb, as the host's footer does.
+- Make the whole row the click target, and ignore a mouse-up that ends a text selection.
+- With nothing waiting, collapse the notice fully: no blank row and no gap.
+
 ### Reports (`caret doctor`)
 
 The reference layout for any report a command prints:

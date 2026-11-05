@@ -651,22 +651,51 @@ this module as a v1 TUI plugin, and v1's TUI loader throws on a default without 
 `createCaretTui` stays a named export for tests.
 
 **The same module registers one `keymap` layer with one command, `caret.open`:** the
-`/caret` slash command, a palette entry, and the `<leader>p` default bind. The layer is
-`mode: "global"`: the palette and slash completion list only commands reachable from their
-own input mode, and a default `base` layer is unreachable from both. It spawns
+`/caret` slash command, a palette entry, and the `<leader>p` default bind. Its `suggested`
+predicate promotes it in the palette while the routed session has a plan waiting. The
+layer is `mode: "global"`: the palette and slash completion list only commands reachable
+from their own input mode, and a default `base` layer is unreachable from both. It spawns
 `caret band-link [--session <id>] --open` (the binary from `resolveCaretBin`, detached and
 unwaited), because the TUI API has no URL opener; `--session` comes from the current route
 and is omitted off a session route, so `band-link` opens the session's waiting review or
 else caret's home page. The spawn carries no `CARET_AGENT`: `band-link` only reads the
 daemon, never starts one. A child that fails to start or exits non-zero shows an error
-toast; `band-link` exits 0 on its own failures, so non-zero means caret never ran (no
-`bun` on `PATH`, an older caret). The layer sits behind a
-`typeof ctx.keymap?.layer === "function"` guard and a `try`: a context without a keymap,
-or a host that rejects the command shape (v2 throws synchronously on one), still keeps
-caret's toasts.
+toast that names `caret doctor` as the next step; `band-link` exits 0 on its own failures,
+so non-zero means caret never ran (no `bun` on `PATH`, an older caret). The layer sits
+behind a `typeof ctx.keymap?.layer === "function"` guard and a `try`: a context without a
+keymap, or a host that rejects the command shape (v2 throws synchronously on one), still
+keeps caret's toasts.
 
 **Known gap, accepted.** On a child (subagent) session `/caret` opens caret's home page:
 reviews sit on the root session.
+
+The same `setup` keeps a pending-plan line above the waiting session's prompt. A
+`storage.memory` map, `sessionID → { callId, url }`, records the review-link event and
+drops the entry when that call settles. One entry per session: a later review link in a
+session replaces it, and the earlier call's settle then shows no line change and no
+decision toast. The line is a `session.composer.top` slot claim, made only when the host
+has both `ui.slot` and `storage`. It renders through `@opentui/solid`, which v2's TUI
+runtime maps to the host's own copy for every TUI plugin. The host rewrites only a bare
+string-literal specifier, so the dynamic `import()` takes no cast or variable; it runs
+only in `setup`, which v1 never calls, and the dependency gate names the specifier in
+`HOST_PROVIDED`. There is no JSX: a `.tsx` needs the three `@opentui`/`solid-js` peers and
+sits outside both tsconfig's `include` and the gate's `SHIPPED_GLOB`. Known gaps: a
+terminal attached after the plan arrived shows no line, and a deleted session or a
+restarted daemon leaves a stale one.
+
+How the row looks is in `design/patterns.md` § Inside a host's TUI. It nests two boxes, as
+the host's queued card does: OpenTUI paints a border cell with its own box's
+`backgroundColor`, so the rail goes on an outer box with no background and the raised fill
+on an inner one. Every colour is read from `ctx.theme` inside an `effect`, and spans take
+colour only through `setProp(span, "style", …)`, because the reconciler drops a bare `fg`
+on a text node. A host without `ctx.theme` gets the row in OpenTUI's default colours. With
+nothing pending the row is `visible: false`, which OpenTUI lays out as `display: none`,
+margin included. A mouse-up on the row spawns the same `band-link` for the slot's own
+`sessionID`, not the routed one, and does nothing while `renderer.getSelection()` holds
+text (the host holds an empty selection on every click, so test its text, not its
+presence), so a drag-to-copy across the row opens nothing. `ctx.theme` and `ctx.renderer`
+type as `any` in the installed SDK (their `@opencode/theme` and `@opentui/core` types are
+not installed), so their conformance rows cannot go red.
 
 ## Verified vs. follow-up
 
@@ -699,14 +728,16 @@ plan-agent allow and its agent-and-session skip, the default agent the warm and 
 resolve from `ctx.agent.list()` (failing closed on an unreadable or empty list and on a
 non-plan default), the TUI half's toasts and update check, its `caret.open` command (the
 `band-link` argv with and without a session, the `keymap` guard, and the spawn-failure
-toast), abort on both hosts, and v1↔v2 parity of the refusal texts, the v2 envelope
-declaring `build` only from a planning agent (and v1's declaring nothing), the Approve &
-build switch, and a failed switch keeping the approval with its note and log. For the
-plugin key they cover the host probe's 5 s bound (a grandchild holding stdout included),
-key selection and the one-transform move, deleting `plugins` without losing comments (a
-trailing comma and CRLF included), v2 cache reads and clears, the service launcher's pick
-of v2's live generation (bash and TS against one shared fixture), and doctor's
-`opencode-host` and `opencode-caret-version` checks and their gating.
+toast), its pending-line map (set and clear per call, two sessions apart, a later call
+superseding), the slot guard, loader failure and cleanup, abort on both hosts, and v1↔v2
+parity of the refusal texts, the v2 envelope declaring `build` only from a planning agent
+(and v1's declaring nothing), the Approve & build switch, and a failed switch keeping the
+approval with its note and log. For the plugin key they cover the host probe's 5 s bound
+(a grandchild holding stdout included), key selection and the one-transform move, deleting
+`plugins` without losing comments (a trailing comma and CRLF included), v2 cache reads and
+clears, the service launcher's pick of v2's live generation (bash and TS against one
+shared fixture), and doctor's `opencode-host` and `opencode-caret-version` checks and
+their gating.
 
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
 the array install's LOCAL form, which is what ties the run to that plugin version: a
@@ -787,7 +818,10 @@ is unit-tested against a fake TUI only, not observed live. OpenCode's interactiv
 through `permission.assert` for an `ask` rule (for example a non-plan agent's
 out-of-project `path` on ≥ 2.0.29) is not live-checked. The full Approve & build round
 trip through caret's UI is not live-checked either — only the `switchAgent` probe ran; the
-reviewer hand check on the PR covers it.
+reviewer hand check on the PR covers it. caret's own module rendering the pending line is
+observed through a `file:` checkout entry, with a scripted mock model driving a real
+review; the bare `@opentui/solid` specifier resolving from OpenCode's npm package cache,
+and the 2.0.29 floor, are unobserved.
 
 **v1 follow-up.** v1 loading the dual default through OpenCode's npm installer (the
 published package) is inferred, not observed: the re-enable runs used a directory entry,
@@ -864,6 +898,25 @@ pointing at an argv-recording shim, no model or provider):
 - **`<leader>p` collision.** Rests on 2.2.1's default binds (§ Sources) plus the live
   palette showing `ctrl+x p` for the command.
 
+**Confirmed live for EXC-2248** (2026-11-05, v2.2.1, a TUI probe plugin from an isolated
+`cli.json` `plugins` entry):
+
+- **Bare string.** A string returned from `render` renders nothing and throws nothing.
+- **Element.** `createElement("text")` plus `insert(el, string)`, with `@opentui/solid`
+  imported dynamically by bare specifier, renders the line above the composer with the
+  right `sessionID`.
+- **Reactivity.** `insert(el, () => store.flag ? text : "")` over a `ctx.storage.memory`
+  store flipped by a timer re-renders, and the empty string collapses the row.
+- **Specifier form.** A cast specifier is not rewritten, so Bun resolves it on disk and it
+  fails with "Cannot find package". The bare literal resolves to the host's module both
+  from a `file:` checkout and from a package under `node_modules`.
+- **The card row.** With a review waiting, the row rendered on the composer's text column
+  as `┃  ^caret  plan waiting for your review … ctrl+x p  open in browser`. An SGR mouse
+  press and release on it ran the shim with `band-link --session <that session> --open`;
+  approving removed it.
+- **Not seen live:** the token colours, a theme switch, truncation, and the selection
+  guard. The margin's collapse rests on OpenTUI's source.
+
 ## Sources
 
 - OpenCode plugin API: `@opencode-ai/plugin` (`packages/plugin/src/index.ts`, `tool.ts`) —
@@ -916,6 +969,11 @@ pointing at an argv-recording shim, no model or provider):
   — `createLayer` gives a layer without `mode` the `base` mode, and the palette and slash
   completion list reachable commands only; the built-in stats plugin
   (`packages/tui/src/feature-plugins/system/stats.tsx`) is the `mode: "global"` precedent.
+- v2 TUI module mapping and slot/storage (upstream): anomalyco/opencode
+  `packages/tui/src/plugin/runtime-plugin-support.bun.ts` (`ensureRuntimePluginSupport`
+  maps `@opentui/solid`, `@opentui/core`, `solid-js`); `@opencode/plugin`
+  `dist/tui/context.d.ts` — `SlotMap["session.composer.top"]`, `SlotClaim`,
+  `Storage.memory` (declared from 2.0.0).
 - `<leader>p` checked free against OpenCode 2.2.1's default keybinds: leader `ctrl+x`;
   default leader binds `0-9 a b c e g i l m n q r s t u w x y`, arrows and `return`.
   `keybinds["caret.open"]` overrides the command's `bind`.

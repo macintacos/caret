@@ -131,3 +131,6 @@ All in `ui/src/styles/tokens.css`:
 
 Terminal output has no tokens. It uses the terminal's own ANSI colour slots, so the user's
 terminal theme supplies every colour.
+
+Inside OpenCode's TUI the roles map to the host's `ctx.theme` tokens in
+`opencode/caret.tui.ts`; caret owns no value there.

@@ -323,8 +323,9 @@ it does not load (`config.json` on v2). On v2 the same package loads through a d
 default export. The review tool, planning steer, prewarm, abort, and the review-link and
 update toasts work; the toasts come from a TUI half under the package's `./tui` export, so
 they need an attached terminal UI (web and desktop show none). The same TUI half adds the
-`/caret` command (`caret.open`, `<leader>p`), which opens the session's waiting plan.
-Prewarm runs per prompt, and a v2 below 2.0.29 refuses every `path` review (see
+`/caret` command (`caret.open`, `<leader>p`), which opens the session's waiting plan. It
+also shows a pending-plan line above the prompt of a session whose plan waits. Prewarm
+runs per prompt, and a v2 below 2.0.29 refuses every `path` review (see
 [Calling the review tool from your own skill](#calling-the-review-tool-from-your-own-skill)).
 
 `caret install --refresh` takes an update: it compares the caret OpenCode would load

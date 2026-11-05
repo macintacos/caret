@@ -192,7 +192,7 @@ export function createCaretSetup(opts: {
               return cannotAskToEdit(planFilePath);
             },
             signal: context.signal,
-            // The TUI half toasts from these progress and result keys.
+            // The TUI half reads these progress and result keys.
             onUrl: (url) => {
               context.progress({ [CARET_URL_KEY]: url }).catch(() => {});
             },
