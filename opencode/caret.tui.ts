@@ -47,13 +47,25 @@ export type TuiContext = {
     slot?: (claim: ComposerClaim) => () => void;
     router?: { current: () => Route };
   };
-  keymap?: { layer: (factory: () => { mode: "global"; commands: CaretCommand[] }) => void };
+  keymap?: {
+    layer: (factory: () => { mode: "global"; commands: CaretCommand[] }) => void;
+    shortcuts?: (id: string) => readonly string[];
+  };
+  theme?: TuiTheme;
+  renderer?: { getSelection?: () => { getSelectedText: () => string } | null };
   storage?: {
     memory: (
       key: string,
       options: { readonly initial: PendingBySession },
     ) => readonly [PendingBySession, (mutation: (draft: PendingBySession) => void) => void];
   };
+};
+
+/** The host theme's tokens the pending row paints with; each is an opaque OpenTUI colour. */
+type TuiTheme = {
+  text: { base: unknown; muted: unknown; feedback: { warning: { base: unknown } } };
+  background: { raised: { base: unknown } };
+  border: { base: unknown };
 };
 
 type PendingReview = { callId: string; url: string };
@@ -77,6 +89,7 @@ type CaretCommand = {
   palette: true;
   slash: { name: string };
   bind: string;
+  suggested: () => boolean;
   run: () => void;
 };
 
@@ -95,13 +108,17 @@ export const nodeDetachedSpawn: DetachedSpawn = (bin, args, onError) => {
   child.unref();
 };
 
-/** The two `@opentui/solid` reconciler calls the pending line takes. */
+/** The `@opentui/solid` reconciler calls the pending row takes. */
 type OpenTuiText = {
-  createElement: (tag: "text") => unknown;
-  insert: (parent: unknown, accessor: () => string) => unknown;
+  createElement: (tag: "box" | "text" | "span" | "b") => unknown;
+  insertNode: (parent: unknown, child: unknown) => void;
+  insert: (parent: unknown, value: string) => unknown;
+  setProp: <T>(node: unknown, name: string, value: T, prev?: T) => T;
+  effect: <T>(fn: (prev?: T) => T) => void;
 };
 
-const PENDING_LINE = "plan waiting in caret";
+const PENDING_LABEL = "plan waiting for your review";
+const PENDING_ACTION = "open in browser";
 
 const plainMemory = (): readonly [
   PendingBySession,
@@ -121,19 +138,28 @@ export function createCaretTui(opts: {
 }): (ctx: TuiContext) => () => void {
   return (ctx) => {
     const show: ToastSink = (body) => ctx.ui.toast.show(body);
-    const openPlan = () => {
-      const sessionID = ctx.ui.router?.current().sessionID;
+    const openPlan = (sessionID: string | undefined) => {
       const args =
         sessionID === undefined
           ? ["band-link", "--open"]
           : ["band-link", "--session", sessionID, "--open"];
       opts.spawn(opts.bin, args, (err) =>
         toastBestEffort(show, {
-          message: `caret: couldn't start caret (${err.message})`,
+          title: "caret: couldn't open caret",
+          message: `${err.message}. Run caret doctor to see why.`,
           variant: "error",
         }),
       );
     };
+    // Tool events carry the call id, not the tool name: a session's entry names the one call
+    // whose link it showed, and a later link in that session replaces it.
+    const storage = ctx.storage;
+    const hasReactiveStore = typeof storage?.memory === "function";
+    const [pending, setPending] =
+      typeof storage?.memory === "function"
+        ? storage.memory("caret.pending", { initial: {} })
+        : plainMemory();
+    const routedSession = () => ctx.ui.router?.current().sessionID;
     if (typeof ctx.keymap?.layer === "function") {
       try {
         ctx.keymap.layer(() => ({
@@ -143,11 +169,12 @@ export function createCaretTui(opts: {
             {
               id: "caret.open",
               title: "Open caret",
-              description: "Open this session's waiting plan, or caret's home page",
+              description: "Open this session's waiting plan in the browser, or caret's home page",
               palette: true,
               slash: { name: "caret" },
               bind: "<leader>p",
-              run: openPlan,
+              suggested: () => pending[routedSession() ?? ""] !== undefined,
+              run: () => openPlan(routedSession()),
             },
           ],
         }));
@@ -165,14 +192,6 @@ export function createCaretTui(opts: {
       // best-effort
     }
 
-    // Tool events carry the call id, not the tool name: a session's entry names the one call
-    // whose link it showed, and a later link in that session replaces it.
-    const storage = ctx.storage;
-    const hasReactiveStore = typeof storage?.memory === "function";
-    const [pending, setPending] =
-      typeof storage?.memory === "function"
-        ? storage.memory("caret.pending", { initial: {} })
-        : plainMemory();
     const settle = (id: string, sessionID: string, outcome: ReviewOutcome) => {
       if (pending[sessionID]?.callId !== id) return;
       setPending((draft) => {
@@ -212,12 +231,12 @@ export function createCaretTui(opts: {
           if (disposed) return;
           releaseSlot = ctx.ui.slot?.({
             prepend: "session.composer.top",
-            render: (input) => {
-              const line = openTui.createElement("text");
-              // input is reactive: read sessionID inside the accessor, never destructure it.
-              openTui.insert(line, () => (pending[input.sessionID] ? PENDING_LINE : ""));
-              return line;
-            },
+            render: (input) =>
+              pendingRow(openTui, ctx, {
+                // input is reactive: read sessionID at each call, never destructure it.
+                isPending: () => pending[input.sessionID] !== undefined,
+                open: () => openPlan(input.sessionID),
+              }),
           });
         })
         // best-effort: a host whose runtime can't resolve @opentui/solid shows no line
@@ -229,6 +248,79 @@ export function createCaretTui(opts: {
       for (const unsubscribe of unsubscribers) unsubscribe();
     };
   };
+}
+
+/** The row above a waiting session's composer: the host's queued-card idiom, one row tall,
+ * opening the review on click. */
+function pendingRow(
+  ui: OpenTuiText,
+  ctx: Pick<TuiContext, "theme" | "keymap" | "renderer">,
+  { isPending, open }: { isPending: () => boolean; open: () => void },
+): unknown {
+  // Read the theme inside effects only: ctx.theme is a live getter that follows theme switches.
+  const paint = (node: unknown, name: string, color: (theme: TuiTheme) => unknown) =>
+    ui.effect((prev) => ui.setProp(node, name, ctx.theme && color(ctx.theme), prev));
+  const styled = (
+    tag: "span" | "b",
+    text: string,
+    color: (theme: TuiTheme) => unknown,
+  ): unknown => {
+    const node = ui.createElement(tag);
+    ui.insert(node, text);
+    ui.effect((prev) => ui.setProp(node, "style", ctx.theme ? { fg: color(ctx.theme) } : {}, prev));
+    return node;
+  };
+  const props = (node: unknown, values: Record<string, unknown>) => {
+    for (const [name, value] of Object.entries(values)) ui.setProp(node, name, value);
+  };
+
+  const row = ui.createElement("box");
+  props(row, {
+    flexDirection: "row",
+    border: ["left"],
+    borderStyle: "heavy",
+    paddingLeft: 2,
+    paddingRight: 1,
+    marginBottom: 1,
+    onMouseUp: () => {
+      // As the host's own rows do: a mouse-up that ends a text selection is a copy, not a click.
+      if (ctx.renderer?.getSelection?.()?.getSelectedText()) return;
+      open();
+    },
+  });
+  paint(row, "borderColor", (t) => t.border.base);
+  paint(row, "backgroundColor", (t) => t.background.raised.base);
+  ui.effect((prev) => ui.setProp(row, "visible", isPending(), prev));
+
+  const label = ui.createElement("text");
+  props(label, { flexGrow: 1, flexShrink: 1, minWidth: 0, wrapMode: "none", truncate: true });
+  ui.insertNode(
+    label,
+    styled("b", "^", (t) => t.text.feedback.warning.base),
+  );
+  ui.insertNode(
+    label,
+    styled("span", "caret  ", (t) => t.text.muted),
+  );
+  ui.insertNode(
+    label,
+    styled("b", PENDING_LABEL, (t) => t.text.base),
+  );
+
+  const hint = ui.createElement("text");
+  props(hint, { flexShrink: 0, wrapMode: "none" });
+  ui.insertNode(
+    hint,
+    styled("span", ctx.keymap?.shortcuts?.("caret.open")[0] ?? "/caret", (t) => t.text.base),
+  );
+  ui.insertNode(
+    hint,
+    styled("span", `  ${PENDING_ACTION}`, (t) => t.text.muted),
+  );
+
+  ui.insertNode(row, label);
+  ui.insertNode(row, hint);
+  return row;
 }
 
 // The v2 host rewrites only a bare string-literal specifier here; a cast or a variable sends

@@ -15,11 +15,18 @@ import type caret from "@oc/index.ts";
 /** Fails to compile unless `From` is assignable to `To`. */
 type Fits<From extends To, To> = [From, To];
 
+type HostTui = Parameters<TuiPlugin.Definition["setup"]>[0];
+type Slice<K extends keyof TuiContext> = NonNullable<TuiContext[K]>;
+
 export type SdkConformance = [
   // What the host passes caret.
   Fits<Plugin.Context, SetupContext>,
   Fits<HostToolContext, ToolContext>,
-  Fits<Parameters<TuiPlugin.Definition["setup"]>[0], TuiContext>,
+  Fits<HostTui, TuiContext>,
+  // The pending row's slices, pinned one by one so a red names the slice that moved.
+  Fits<HostTui["keymap"]["shortcuts"], NonNullable<Slice<"keymap">["shortcuts"]>>,
+  Fits<HostTui["theme"], Slice<"theme">>,
+  Fits<HostTui["renderer"], Slice<"renderer">>,
   // session.hook's overloads hide its events from the Context row, so pin each by key.
   Fits<SessionHooks["context"], ContextEvent>,
   Fits<SessionHooks["prompt"], PromptEvent>,

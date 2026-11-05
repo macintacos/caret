@@ -31,17 +31,55 @@ type Keymap = NonNullable<TuiContext["keymap"]>;
 
 type Claim = Parameters<NonNullable<TuiContext["ui"]["slot"]>>[0];
 type Memory = ReturnType<NonNullable<TuiContext["storage"]>["memory"]>[0];
-type FakeLine = { text: () => string };
+type FakeNode = {
+  tag: string;
+  props: Record<string, unknown>;
+  children: Array<FakeNode | string | (() => string)>;
+};
+
+const effects: Array<() => void> = [];
 
 const fakeOpenTui = {
-  createElement: (): FakeLine => ({ text: () => "" }),
-  insert: (line: unknown, accessor: () => string) => {
-    (line as FakeLine).text = accessor;
+  createElement: (tag: string): FakeNode => ({ tag, props: {}, children: [] }),
+  insertNode: (parent: unknown, child: unknown) => {
+    (parent as FakeNode).children.push(child as FakeNode);
+  },
+  insert: (parent: unknown, value: string | (() => string)) => {
+    (parent as FakeNode).children.push(value);
+  },
+  setProp: <T>(node: unknown, name: string, value: T): T => {
+    (node as FakeNode).props[name] = value;
+    return value;
+  },
+  effect: <T>(fn: (prev?: T) => T) => {
+    let prev: T | undefined;
+    const run = () => {
+      prev = fn(prev);
+    };
+    effects.push(run);
+    run();
   },
 };
 
-const lineFor = (claim: Claim, sessionID: string) =>
-  (claim.render({ sessionID }) as FakeLine).text();
+/** The rendered row with every effect re-run, as the host would after a store write. */
+function rowFor(claim: Claim, input: { sessionID: string }): () => FakeNode {
+  const row = claim.render(input) as FakeNode;
+  return () => {
+    for (const run of effects) run();
+    return row;
+  };
+}
+
+const textOf = (node: FakeNode | string | (() => string)): string =>
+  typeof node === "string"
+    ? node
+    : typeof node === "function"
+      ? node()
+      : node.children.map(textOf).join("");
+
+const visibleText = (row: FakeNode) => (row.props.visible ? textOf(row) : "");
+
+const lineFor = (claim: Claim, sessionID: string) => visibleText(rowFor(claim, { sessionID })());
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -52,7 +90,18 @@ function fakeTui(
     keymap,
     slot = true,
     storage = true,
-  }: { route?: Route; keymap?: Keymap | "record"; slot?: boolean; storage?: boolean } = {
+    theme = true,
+    shortcuts = ["ctrl+x p"],
+    selection = "",
+  }: {
+    route?: Route;
+    keymap?: Keymap | "record";
+    slot?: boolean;
+    storage?: boolean;
+    theme?: boolean;
+    shortcuts?: string[];
+    selection?: string;
+  } = {
     keymap: "record",
   },
 ) {
@@ -65,10 +114,17 @@ function fakeTui(
   let released = 0;
   const ctx: TuiContext = {
     ...(keymap === "record"
-      ? { keymap: { layer: (factory) => void layers.push(factory()) } }
+      ? {
+          keymap: {
+            layer: (factory) => void layers.push(factory()),
+            shortcuts: (id) => (id === "caret.open" ? shortcuts : []),
+          },
+        }
       : keymap
         ? { keymap }
         : {}),
+    ...(theme ? { theme: THEME } : {}),
+    renderer: { getSelection: () => (selection ? { getSelectedText: () => selection } : null) },
     data: {
       on: (type, handler) => {
         handlers.set(type, handler);
@@ -135,6 +191,12 @@ function onlyClaim(claims: Claim[]): Claim {
 
 const BIN = "/caret/bin/caret";
 
+const THEME = {
+  text: { base: "fg-base", muted: "fg-muted", feedback: { warning: { base: "fg-warning" } } },
+  background: { raised: { base: "bg-raised" } },
+  border: { base: "border" },
+};
+
 function recordingSpawn(failWith?: string) {
   const spawned: Array<{ bin: string; args: string[] }> = [];
   const spawn: DetachedSpawn = (bin, args, onError) => {
@@ -155,6 +217,7 @@ function start({
   failWith?: string;
   loadOpenTui?: () => Promise<typeof fakeOpenTui>;
 } = {}) {
+  effects.length = 0;
   const { spawned, spawn } = recordingSpawn(failWith);
   const cleanup = createCaretTui({ checkUpdate, bin: BIN, spawn, loadOpenTui })(fake.ctx);
   return { ...fake, cleanup, spawned };
@@ -312,8 +375,13 @@ test("a spawn that fails shows an error toast naming the failure", () => {
   const { layers, shown } = start({ failWith: "spawn /caret/bin/caret ENOENT" });
   runCommand(layers);
   expect(shown).toHaveLength(1);
-  expect(shown[0]?.variant).toBe("error");
-  expect(shown[0]?.message).toContain("ENOENT");
+  expect(shown).toEqual([
+    {
+      title: "caret: couldn't open caret",
+      message: "spawn /caret/bin/caret ENOENT. Run caret doctor to see why.",
+      variant: "error",
+    },
+  ]);
 });
 
 test("a host without a keymap still shows the review-link toast", () => {
@@ -378,7 +446,9 @@ test("the pending line shows only in the waiting session and clears on success",
   const { emit, claims, stores } = start();
   await flush();
   emit("session.tool.progress", "A", { caretUrl: URL });
-  expect(lineFor(onlyClaim(claims), "ses_A")).toBe("plan waiting in caret");
+  expect(lineFor(onlyClaim(claims), "ses_A")).toBe(
+    "^caret  plan waiting for your reviewctrl+x p  open in browser",
+  );
   expect(lineFor(onlyClaim(claims), "ses_B")).toBe("");
   emit("session.tool.success", "A", { caretDecision: "allow" });
   expect(lineFor(onlyClaim(claims), "ses_A")).toBe("");
@@ -389,16 +459,16 @@ test("a rendered line follows the store and its slot input", async () => {
   const { emit, claims } = start();
   await flush();
   const input = { sessionID: "ses_A" };
-  const line = onlyClaim(claims).render(input) as FakeLine;
-  expect(line.text()).toBe("");
+  const row = rowFor(onlyClaim(claims), input);
+  expect(visibleText(row())).toBe("");
   emit("session.tool.progress", "A", { caretUrl: URL });
-  const waiting = line.text();
+  const waiting = visibleText(row());
   expect(waiting).not.toBe("");
   emit("session.tool.success", "A", { caretDecision: "allow" });
-  expect(line.text()).toBe("");
+  expect(visibleText(row())).toBe("");
   emit("session.tool.progress", "B", { caretUrl: URL });
   input.sessionID = "ses_B";
-  expect(line.text()).toBe(waiting);
+  expect(visibleText(row())).toBe(waiting);
 });
 
 test("a later linked call in a session supersedes the earlier one", async () => {
@@ -484,4 +554,94 @@ test("a cleanup before the OpenTUI load lands makes no claim", async () => {
 test("the production loader imports @opentui/solid by a bare string literal, the only form the v2 host rewrites", () => {
   const source = readFileSync(join(import.meta.dir, "../../opencode/caret.tui.ts"), "utf8");
   expect(/import\s*\(\s*"@opentui\/solid"\s*\)/.test(source)).toBe(true);
+});
+
+async function waitingRow(options: Parameters<typeof fakeTui>[1] = { keymap: "record" }) {
+  const started = start({ fake: fakeTui(undefined, options) });
+  await flush();
+  started.emit("session.tool.progress", "A", { caretUrl: URL });
+  return { ...started, row: rowFor(onlyClaim(started.claims), { sessionID: "ses_A" })() };
+}
+
+const spans = (node: FakeNode) =>
+  node.children.map((child) => {
+    const span = child as FakeNode;
+    return { tag: span.tag, text: textOf(span), style: span.props.style };
+  });
+
+test("the pending row is a raised, left-railed card in the host's theme", async () => {
+  const { row } = await waitingRow();
+  expect(row.tag).toBe("box");
+  expect(row.props).toMatchObject({
+    flexDirection: "row",
+    border: ["left"],
+    borderStyle: "heavy",
+    borderColor: "border",
+    backgroundColor: "bg-raised",
+    paddingLeft: 2,
+    paddingRight: 1,
+    marginBottom: 1,
+    visible: true,
+  });
+  const [label, hint] = row.children as FakeNode[];
+  expect(label?.props).toMatchObject({
+    flexGrow: 1,
+    flexShrink: 1,
+    wrapMode: "none",
+    truncate: true,
+  });
+  expect(hint?.props).toMatchObject({ flexShrink: 0, wrapMode: "none" });
+  expect(spans(label as FakeNode)).toEqual([
+    { tag: "b", text: "^", style: { fg: "fg-warning" } },
+    { tag: "span", text: "caret  ", style: { fg: "fg-muted" } },
+    { tag: "b", text: "plan waiting for your review", style: { fg: "fg-base" } },
+  ]);
+  expect(spans(hint as FakeNode)).toEqual([
+    { tag: "span", text: "ctrl+x p", style: { fg: "fg-base" } },
+    { tag: "span", text: "  open in browser", style: { fg: "fg-muted" } },
+  ]);
+});
+
+test("a host without a theme still gets the pending row, uncoloured", async () => {
+  const { row } = await waitingRow({ keymap: "record", theme: false });
+  expect(row.props.visible).toBe(true);
+  expect(row.props.borderColor).toBeUndefined();
+  expect(textOf(row)).toContain("plan waiting for your review");
+});
+
+test("the key hint falls back to /caret when the command has no binding", async () => {
+  for (const options of [
+    { keymap: "record" as const, shortcuts: [] },
+    { keymap: { layer: () => {} } },
+  ]) {
+    const { row } = await waitingRow(options);
+    expect(textOf((row.children as FakeNode[])[1] as FakeNode)).toBe("/caret  open in browser");
+  }
+});
+
+test("clicking the row opens the review of the row's own session", async () => {
+  const { row, spawned } = await waitingRow({
+    keymap: "record",
+    route: { type: "session", sessionID: "ses_OTHER" },
+  });
+  (row.props.onMouseUp as () => void)();
+  expect(spawned).toEqual([{ bin: BIN, args: ["band-link", "--session", "ses_A", "--open"] }]);
+});
+
+test("a click that ends a text selection opens nothing", async () => {
+  const { row, spawned } = await waitingRow({ keymap: "record", selection: "copied" });
+  (row.props.onMouseUp as () => void)();
+  expect(spawned).toEqual([]);
+});
+
+test("the command is suggested exactly while the routed session has a plan waiting", () => {
+  const { layers, emit } = start({
+    fake: fakeTui(undefined, { route: { type: "session", sessionID: "ses_A" }, keymap: "record" }),
+  });
+  const suggested = layers[0]?.commands[0]?.suggested;
+  expect(suggested?.()).toBe(false);
+  emit("session.tool.progress", "A", { caretUrl: URL });
+  expect(suggested?.()).toBe(true);
+  emit("session.tool.success", "A", { caretDecision: "allow" });
+  expect(suggested?.()).toBe(false);
 });
