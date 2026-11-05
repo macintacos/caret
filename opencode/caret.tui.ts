@@ -107,8 +107,8 @@ const plainMemory = (): readonly [
   PendingBySession,
   (mutation: (draft: PendingBySession) => void) => void,
 ] => {
-  const map: PendingBySession = {};
-  return [map, (mutate) => mutate(map)];
+  const pending: PendingBySession = {};
+  return [pending, (mutate) => mutate(pending)];
 };
 
 /** caret's v2 TUI setup over injected effects; its cleanup releases the slot claim (which
@@ -168,7 +168,7 @@ export function createCaretTui(opts: {
     // Tool events carry the call id, not the tool name: a session's entry names the one call
     // whose link it showed, and a later link in that session replaces it.
     const storage = ctx.storage;
-    const reactive = typeof storage?.memory === "function";
+    const hasReactiveStore = typeof storage?.memory === "function";
     const [pending, setPending] =
       typeof storage?.memory === "function"
         ? storage.memory("caret.pending", { initial: {} })
@@ -205,7 +205,7 @@ export function createCaretTui(opts: {
     let releaseSlot: (() => void) | undefined;
     let disposed = false;
     // Without the host's reactive store the line could never update.
-    if (typeof ctx.ui.slot === "function" && reactive) {
+    if (typeof ctx.ui.slot === "function" && hasReactiveStore) {
       opts
         .loadOpenTui()
         .then((openTui) => {
