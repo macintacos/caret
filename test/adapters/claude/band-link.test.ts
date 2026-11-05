@@ -61,3 +61,18 @@ test("caret band-link prints nothing and exits 0 with the band turned off", asyn
   expect(r.exit).toBe(0);
   expect(r.stdout).toBe("");
 });
+
+test("caret band-link without --session prints caret's home page", async () => {
+  const configFile = join(stateDir(), "config.toml");
+  await writeFile(configFile, "[review]\nband = true\n");
+  const r = await drainProcess(
+    Bun.spawn([process.execPath, "src/cli.ts", "band-link"], {
+      env: { ...process.env, CARET_CONFIG_FILE: configFile },
+      stdout: "pipe",
+      stderr: "pipe",
+    }),
+  );
+  expect(r.exit).toBe(0);
+  expect(r.stdout).toMatch(/^http:\/\/\S+\/\n$/);
+  expect(r.stdout).not.toContain("review=");
+});
