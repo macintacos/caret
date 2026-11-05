@@ -3,7 +3,7 @@
 // TUI context (`fakeTui`).
 
 import { expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -479,4 +479,9 @@ test("a cleanup before the OpenTUI load lands makes no claim", async () => {
   await flush();
   expect(claims).toHaveLength(0);
   expect(released()).toBe(0);
+});
+
+test("the production loader imports @opentui/solid by a bare string literal, the only form the v2 host rewrites", () => {
+  const source = readFileSync(join(import.meta.dir, "../../opencode/caret.tui.ts"), "utf8");
+  expect(/import\s*\(\s*"@opentui\/solid"\s*\)/.test(source)).toBe(true);
 });

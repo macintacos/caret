@@ -674,8 +674,9 @@ drops the entry when that call settles. One entry per session: a later review li
 session replaces it, and the earlier call's settle then shows no line change and no
 decision toast. The line is a `session.composer.top` slot claim, made only when the host
 has both `ui.slot` and `storage`. It renders through `@opentui/solid`, which v2's TUI
-runtime maps to the host's own copy for every TUI plugin; the dynamic `import()` runs only
-in `setup`, which v1 never calls, and the dependency gate names the specifier in
+runtime maps to the host's own copy for every TUI plugin. The host rewrites only a bare
+string-literal specifier, so the dynamic `import()` takes no cast or variable; it runs
+only in `setup`, which v1 never calls, and the dependency gate names the specifier in
 `HOST_PROVIDED`. There is no JSX: a `.tsx` needs the three `@opentui`/`solid-js` peers and
 sits outside both tsconfig's `include` and the gate's `SHIPPED_GLOB`. Known gaps: a
 terminal attached after the plan arrived shows no line, and a deleted session or a
@@ -802,9 +803,10 @@ is unit-tested against a fake TUI only, not observed live. OpenCode's interactiv
 through `permission.assert` for an `ask` rule (for example a non-plan agent's
 out-of-project `path` on ≥ 2.0.29) is not live-checked. The full Approve & build round
 trip through caret's UI is not live-checked either — only the `switchAgent` probe ran; the
-reviewer hand check on the PR covers it. The pending line was probed only through a probe
-plugin: caret's own module rendering it, the bare `@opentui/solid` specifier resolving
-from OpenCode's npm package cache, and the 2.0.29 floor are unobserved.
+reviewer hand check on the PR covers it. caret's own module rendering the pending line is
+observed through a `file:` checkout entry, with a scripted mock model driving a real
+review; the bare `@opentui/solid` specifier resolving from OpenCode's npm package cache,
+and the 2.0.29 floor, are unobserved.
 
 **v1 follow-up.** v1 loading the dual default through OpenCode's npm installer (the
 published package) is inferred, not observed: the re-enable runs used a directory entry,
@@ -890,6 +892,9 @@ pointing at an argv-recording shim, no model or provider):
   right `sessionID`.
 - **Reactivity.** `insert(el, () => store.flag ? text : "")` over a `ctx.storage.memory`
   store flipped by a timer re-renders, and the empty string collapses the row.
+- **Specifier form.** A cast specifier is not rewritten, so Bun resolves it on disk and it
+  fails with "Cannot find package". The bare literal resolves to the host's module both
+  from a `file:` checkout and from a package under `node_modules`.
 
 ## Sources
 

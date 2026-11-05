@@ -231,9 +231,9 @@ export function createCaretTui(opts: {
   };
 }
 
-// The v2 host's runtime hands TUI plugins its own @opentui/solid; nothing installs it, and
-// `as string` keeps tsc from resolving it.
-const loadOpenTui = (): Promise<OpenTuiText> => import("@opentui/solid" as string);
+// The v2 host rewrites only a bare string-literal specifier here; a cast or a variable sends
+// the import to disk, where nothing installs @opentui/solid.
+const loadOpenTui = (): Promise<OpenTuiText> => import("@opentui/solid");
 const setup = createCaretTui({
   checkUpdate: productionUpdateCheck,
   bin: resolveCaretBin({ env: process.env, importMetaUrl: import.meta.url }),
