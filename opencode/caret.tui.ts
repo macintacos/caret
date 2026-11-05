@@ -1,11 +1,12 @@
-// caret's OpenCode v2 TUI plugin: the review-link, decision, and update toasts, and the
-// `/caret` command that opens the session's waiting plan. v2's server `Context` has no
-// toast surface, so v2 loads this module from package.json `exports["./tui"]` as
-// `{ id, setup }`. v1 keeps its own toasts in `server()`; the no-op `tui` exists because
-// v1's installer may register this module as a v1 TUI plugin, and v1's TUI loader throws
-// on a default without one. `keymap` and `ui.router` stay optional, and the command
-// registers only when `keymap.layer` is a function, so a context without them still gets
-// caret's toasts.
+// caret's OpenCode v2 TUI plugin: the review-link, decision, and update toasts, the
+// `/caret` command that opens the session's waiting plan, and the pending line above a
+// waiting session's prompt. v2's server `Context` has no toast surface, so v2 loads this
+// module from package.json `exports["./tui"]` as `{ id, setup }`. v1 keeps its own toasts
+// in `server()`; the no-op `tui` exists because v1's installer may register this module as
+// a v1 TUI plugin, and v1's TUI loader throws on a default without one. Because v1 can load
+// this module, `@opentui/solid` is imported only dynamically, from `setup`, which v1 never
+// calls. `keymap` and `ui.router` stay optional, and the command registers only when
+// `keymap.layer` is a function, so a context without them still gets caret's toasts.
 
 import { spawn } from "node:child_process";
 
@@ -40,8 +41,28 @@ export type TuiContext = {
       handler: (event: ToolEvent) => void,
     ) => () => void;
   };
-  ui: { toast: { show: (options: TuiToast) => void }; router?: { current: () => Route } };
+  ui: {
+    toast: { show: (options: TuiToast) => void };
+    slot: (claim: ComposerClaim) => () => void;
+    router?: { current: () => Route };
+  };
   keymap?: { layer: (factory: () => { mode: "global"; commands: CaretCommand[] }) => void };
+  storage: {
+    memory: (
+      key: string,
+      options: { readonly initial: PendingBySession },
+    ) => readonly [PendingBySession, (mutation: (draft: PendingBySession) => void) => void];
+  };
+};
+
+type PendingReview = { callId: string; url: string };
+type PendingBySession = Record<string, PendingReview>;
+
+type ComposerClaim = {
+  readonly prepend: "session.composer.top";
+  // `unknown`, not the host's `JSX.Element`, which is `any` only while @opentui/solid is
+  // uninstalled; never loosen sdk-conformance's row.
+  readonly render: (input: { readonly sessionID: string }) => unknown;
 };
 
 /** v2's `Route` as caret reads it: only a session route carries `sessionID`. */
@@ -73,11 +94,21 @@ export const nodeDetachedSpawn: DetachedSpawn = (bin, args, onError) => {
   child.unref();
 };
 
-/** Build caret's v2 TUI `setup` over an injected update check, caret binary, and spawn. */
+/** The two `@opentui/solid` reconciler calls the pending line takes. */
+type OpenTuiText = {
+  createElement: (tag: "text") => unknown;
+  insert: (parent: unknown, accessor: () => string) => unknown;
+};
+
+const PENDING_LINE = "plan waiting in caret";
+
+/** Build caret's v2 TUI `setup` over an injected update check, caret binary, spawn, and
+ * OpenTUI loader. */
 export function createCaretTui(opts: {
   checkUpdate: (show: ToastSink) => void;
   bin: string;
   spawn: DetachedSpawn;
+  loadOpenTui: () => Promise<OpenTuiText>;
 }): (ctx: TuiContext) => () => void {
   return (ctx) => {
     const show: ToastSink = (body) => ctx.ui.toast.show(body);
@@ -125,16 +156,24 @@ export function createCaretTui(opts: {
       // best-effort
     }
 
-    // Tool events carry the call id, not the tool name: only calls that showed a link count.
-    const callsWithLink = new Set<string>();
+    // Tool events carry the call id, not the tool name: a session's entry names the one call
+    // whose link it showed, and a later link in that session replaces it.
+    // The url can carry the login token, so it stays in memory and is never logged.
+    const [pending, setPending] = ctx.storage.memory("caret.pending", { initial: {} });
     const settle = (id: string, sessionID: string, outcome: ReviewOutcome) => {
-      if (callsWithLink.delete(id)) toastBestEffort(showIn(sessionID), decisionToast(outcome));
+      if (pending[sessionID]?.callId !== id) return;
+      setPending((draft) => {
+        delete draft[sessionID];
+      });
+      toastBestEffort(showIn(sessionID), decisionToast(outcome));
     };
     const unsubscribers = [
       ctx.data.on("session.tool.progress", ({ data }) => {
         const url = data.metadata?.[CARET_URL_KEY];
         if (typeof url !== "string") return;
-        callsWithLink.add(data.id);
+        setPending((draft) => {
+          draft[data.sessionID] = { callId: data.id, url };
+        });
         toastBestEffort(showIn(data.sessionID), reviewLinkToast(url));
       }),
       ctx.data.on("session.tool.success", ({ data }) => {
@@ -149,16 +188,41 @@ export function createCaretTui(opts: {
         settle(data.id, data.sessionID, "cancelled"),
       ),
     ];
+
+    let releaseSlot: (() => void) | undefined;
+    let disposed = false;
+    opts
+      .loadOpenTui()
+      .then((openTui) => {
+        if (disposed) return;
+        releaseSlot = ctx.ui.slot({
+          prepend: "session.composer.top",
+          render: (input) => {
+            const line = openTui.createElement("text");
+            // input is reactive: read sessionID inside the accessor, never destructure it.
+            openTui.insert(line, () => (pending[input.sessionID] ? PENDING_LINE : ""));
+            return line;
+          },
+        });
+      })
+      // best-effort: a host whose runtime can't resolve @opentui/solid shows no line
+      .catch(() => {});
     return () => {
+      disposed = true;
+      releaseSlot?.();
       for (const unsubscribe of unsubscribers) unsubscribe();
     };
   };
 }
 
+// The v2 host's runtime hands TUI plugins its own @opentui/solid; nothing installs it, and
+// `as string` keeps tsc from resolving it.
+const loadOpenTui = (): Promise<OpenTuiText> => import("@opentui/solid" as string);
 const setup = createCaretTui({
   checkUpdate: productionUpdateCheck,
   bin: resolveCaretBin({ env: process.env, importMetaUrl: import.meta.url }),
   spawn: nodeDetachedSpawn,
+  loadOpenTui,
 });
 
 export default {

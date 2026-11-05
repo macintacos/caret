@@ -1,6 +1,7 @@
 // Unit coverage for caret's OpenCode v2 TUI module: the review-link, decision, and update
-// toasts and the `caret.open` command, driven through a fake context of `data.on`,
-// `ui.toast.show`, `ui.router`, and `keymap`.
+// toasts, the `caret.open` command, and the pending-plan line, driven through a fake
+// context of `data.on`, `ui.toast.show`, `ui.router`, `ui.slot`, `keymap`, and
+// `storage.memory`.
 
 import { expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
@@ -29,6 +30,22 @@ type Route = ReturnType<NonNullable<TuiContext["ui"]["router"]>["current"]>;
 type Layer = ReturnType<Parameters<NonNullable<TuiContext["keymap"]>["layer"]>[0]>;
 type Keymap = NonNullable<TuiContext["keymap"]>;
 
+type Claim = Parameters<TuiContext["ui"]["slot"]>[0];
+type Memory = ReturnType<TuiContext["storage"]["memory"]>[0];
+type FakeLine = { text: () => string };
+
+const fakeOpenTui = {
+  createElement: (): FakeLine => ({ text: () => "" }),
+  insert: (line: unknown, accessor: () => string) => {
+    (line as FakeLine).text = accessor;
+  },
+};
+
+const lineFor = (claim: Claim, sessionID: string) =>
+  (claim.render({ sessionID }) as FakeLine).text();
+
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 function fakeTui(
   show: ToastSink = () => {},
   { route, keymap }: { route?: Route; keymap?: Keymap | "record" } = { keymap: "record" },
@@ -36,7 +53,10 @@ function fakeTui(
   const handlers = new Map<string, Handler>();
   const shown: Toast[] = [];
   const layers: Layer[] = [];
+  const claims: Claim[] = [];
+  const stores = new Map<string, Memory>();
   let unsubscribed = 0;
+  let released = 0;
   const ctx: TuiContext = {
     ...(keymap === "record"
       ? { keymap: { layer: (factory) => void layers.push(factory()) } }
@@ -59,13 +79,44 @@ function fakeTui(
         },
       },
       ...(route ? { router: { current: () => route } } : {}),
+      slot: (claim) => {
+        claims.push(claim);
+        return () => {
+          released++;
+        };
+      },
+    },
+    storage: {
+      memory: (key, { initial }) => {
+        stores.set(key, initial);
+        return [initial, (mutate) => mutate(initial)] as const;
+      },
     },
   };
-  const emit = (type: string, id: string, metadata?: Record<string, unknown>) =>
+  const emit = (
+    type: string,
+    id: string,
+    metadata?: Record<string, unknown>,
+    sessionID = `ses_${id}`,
+  ) =>
     handlers.get(type)?.({
-      data: { id, sessionID: `ses_${id}`, ...(metadata ? { metadata } : {}) },
+      data: { id, sessionID, ...(metadata ? { metadata } : {}) },
     });
-  return { ctx, shown, layers, emit, unsubscribed: () => unsubscribed };
+  return {
+    ctx,
+    shown,
+    layers,
+    emit,
+    claims,
+    stores,
+    unsubscribed: () => unsubscribed,
+    released: () => released,
+  };
+}
+
+function onlyClaim(claims: Claim[]): Claim {
+  expect(claims).toHaveLength(1);
+  return claims[0] as Claim;
 }
 
 const BIN = "/caret/bin/caret";
@@ -83,9 +134,10 @@ function start(
   checkUpdate: (show: ToastSink) => void = () => {},
   fake: ReturnType<typeof fakeTui> = fakeTui(),
   failWith?: string,
+  loadOpenTui: () => Promise<typeof fakeOpenTui> = async () => fakeOpenTui,
 ) {
   const { spawned, spawn } = recordingSpawn(failWith);
-  const cleanup = createCaretTui({ checkUpdate, bin: BIN, spawn })(fake.ctx);
+  const cleanup = createCaretTui({ checkUpdate, bin: BIN, spawn, loadOpenTui })(fake.ctx);
   return { ...fake, cleanup, spawned };
 }
 
@@ -288,4 +340,105 @@ test("the real detached spawn reports a caret that exits non-zero", async () => 
   nodeDetachedSpawn(shim, ["band-link", "--open"], (e) => errors.push(e));
   expect(await until(() => errors.length === 1)).toBe(true);
   expect(errors[0]?.message).toContain("127");
+});
+
+test("a progress event carrying the review URL records the session's pending review", () => {
+  const { emit, stores } = start();
+  emit("session.tool.progress", "C", { caretUrl: URL });
+  expect(stores.get("caret.pending")).toEqual({ ses_C: { callId: "C", url: URL } });
+});
+
+test("setup claims the slot above the composer once", async () => {
+  const { claims } = start();
+  await flush();
+  expect(claims).toHaveLength(1);
+  expect(claims[0]?.prepend).toBe("session.composer.top");
+});
+
+test("the pending line shows only in the waiting session and clears on success", async () => {
+  const { emit, claims, stores } = start();
+  await flush();
+  emit("session.tool.progress", "A", { caretUrl: URL });
+  expect(lineFor(onlyClaim(claims), "ses_A")).toBe("plan waiting in caret");
+  expect(lineFor(onlyClaim(claims), "ses_B")).toBe("");
+  emit("session.tool.success", "A", { caretDecision: "allow" });
+  expect(lineFor(onlyClaim(claims), "ses_A")).toBe("");
+  expect(stores.get("caret.pending")).not.toHaveProperty("ses_A");
+});
+
+test("a rendered line follows the store and its slot input", async () => {
+  const { emit, claims } = start();
+  await flush();
+  const input = { sessionID: "ses_A" };
+  const line = onlyClaim(claims).render(input) as FakeLine;
+  expect(line.text()).toBe("");
+  emit("session.tool.progress", "A", { caretUrl: URL });
+  const waiting = line.text();
+  expect(waiting).not.toBe("");
+  emit("session.tool.success", "A", { caretDecision: "allow" });
+  expect(line.text()).toBe("");
+  emit("session.tool.progress", "B", { caretUrl: URL });
+  input.sessionID = "ses_B";
+  expect(line.text()).toBe(waiting);
+});
+
+test("a later linked call in a session supersedes the earlier one", async () => {
+  const { emit, claims, shown } = start();
+  await flush();
+  emit("session.tool.progress", "A1", { caretUrl: URL }, "ses_S");
+  emit("session.tool.progress", "A2", { caretUrl: URL }, "ses_S");
+  emit("session.tool.success", "A1", { caretDecision: "allow" }, "ses_S");
+  expect(lineFor(onlyClaim(claims), "ses_S")).not.toBe("");
+  expect(shown.map((b) => b.message)).toEqual([URL, URL]);
+  emit("session.tool.success", "A2", { caretDecision: "allow" }, "ses_S");
+  expect(lineFor(onlyClaim(claims), "ses_S")).toBe("");
+  expect(shown.map((b) => b.message)).toEqual([URL, URL, "caret: plan approved"]);
+});
+
+test("a failed call clears its session's pending line", async () => {
+  const { emit, claims } = start();
+  await flush();
+  emit("session.tool.progress", "A", { caretUrl: URL });
+  expect(lineFor(onlyClaim(claims), "ses_A")).not.toBe("");
+  emit("session.tool.failed", "A");
+  expect(lineFor(onlyClaim(claims), "ses_A")).toBe("");
+});
+
+test("settling one session's review leaves another session's pending line", async () => {
+  const { emit, claims } = start();
+  await flush();
+  emit("session.tool.progress", "A", { caretUrl: URL });
+  emit("session.tool.progress", "B", { caretUrl: URL });
+  emit("session.tool.success", "A", { caretDecision: "allow" });
+  expect(lineFor(onlyClaim(claims), "ses_A")).toBe("");
+  expect(lineFor(onlyClaim(claims), "ses_B")).not.toBe("");
+});
+
+test("a rejecting OpenTUI load makes no claim and leaves no unhandled rejection", async () => {
+  const unhandled: unknown[] = [];
+  const record = (reason: unknown) => unhandled.push(reason);
+  process.on("unhandledRejection", record);
+  try {
+    const { claims } = start(undefined, undefined, undefined, () => Promise.reject(new Error("x")));
+    await flush();
+    expect(claims).toHaveLength(0);
+    expect(unhandled).toEqual([]);
+  } finally {
+    process.off("unhandledRejection", record);
+  }
+});
+
+test("the cleanup releases the slot claim", async () => {
+  const { cleanup, released } = start();
+  await flush();
+  cleanup();
+  expect(released()).toBe(1);
+});
+
+test("a cleanup before the OpenTUI load lands makes no claim", async () => {
+  const { cleanup, claims, released } = start();
+  cleanup();
+  await flush();
+  expect(claims).toHaveLength(0);
+  expect(released()).toBe(0);
 });

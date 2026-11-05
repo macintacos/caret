@@ -8,7 +8,7 @@
 // is what makes it falsifiable, so the next misplacement fails `bun test` on the push that
 // adds it rather than being caught by an audit years later.
 //
-// Two escape hatches, both real:
+// Three escape hatches, all real:
 //
 // - **A non-optional peer of an `opencode/` import belongs in `dependencies` with no
 //   import site to derive it from.** Today the term is empty — `@opencode-ai/plugin`'s
@@ -19,6 +19,9 @@
 //   `opencode/` ships as source, so a consumer has no tsconfig `paths` to resolve it with.
 //   The extractor reads such a specifier as an undeclared package name and the gate reds,
 //   which is the correct outcome.
+// - **A host-provided specifier is imported but never declared** (`HOST_PROVIDED`). The
+//   v2 host maps it to its own copy for TUI plugins, so a declared copy would be
+//   downloaded by every OpenCode user and loaded by none.
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { isBuiltin } from "node:module";
@@ -62,8 +65,16 @@ for (const file of new Bun.Glob(SHIPPED_GLOB).scanSync({ cwd: join(REPO_ROOT, SH
   for (const name of importedPackages(source)) shipped.add(name);
 }
 
+const HOST_PROVIDED = new Set(["@opentui/solid"]);
+
 test("`dependencies` carries exactly what opencode/ makes a consumer resolve", () => {
-  expect(Object.keys(pkg.dependencies).sort()).toEqual([...shipped].sort());
+  expect(Object.keys(pkg.dependencies).sort()).toEqual(
+    [...shipped].filter((name) => !HOST_PROVIDED.has(name)).sort(),
+  );
+});
+
+test("every host-provided exception is still imported by opencode/", () => {
+  for (const name of HOST_PROVIDED) expect(shipped).toContain(name);
 });
 
 test("`dependencies` is the only section a consumer's install pulls", () => {

@@ -668,6 +668,19 @@ caret's toasts.
 **Known gap, accepted.** On a child (subagent) session `/caret` opens caret's home page:
 reviews sit on the root session.
 
+The same `setup` keeps a pending-plan line above the waiting session's prompt. A
+`storage.memory` map, `sessionID → { callId, url }`, records the review-link event and
+loses the entry when that call settles; it stays in memory because the URL can carry the
+login token. One entry per session: a later review link in a session replaces it, and the
+earlier call's settle then shows no line change and no decision toast. The line is a
+`session.composer.top` slot claim. It renders through `@opentui/solid`, which v2's TUI
+runtime maps to the host's own copy for every TUI plugin; the dynamic `import()` runs only
+in `setup`, which v1 never calls, and the dependency gate names the specifier in
+`HOST_PROVIDED`. There is no JSX: a `.tsx` needs the three `@opentui`/`solid-js` peers and
+sits outside both tsconfig's `include` and the gate's `SHIPPED_GLOB`. Known gaps: a
+terminal attached after the plan arrived shows no line, and a deleted session or a
+restarted daemon leaves a stale one.
+
 ## Verified vs. follow-up
 
 **Verified in this repo (unit + integration tests, no live OpenCode required):** the
@@ -699,14 +712,16 @@ plan-agent allow and its agent-and-session skip, the default agent the warm and 
 resolve from `ctx.agent.list()` (failing closed on an unreadable or empty list and on a
 non-plan default), the TUI half's toasts and update check, its `caret.open` command (the
 `band-link` argv with and without a session, the `keymap` guard, and the spawn-failure
-toast), abort on both hosts, and v1↔v2 parity of the refusal texts, the v2 envelope
-declaring `build` only from a planning agent (and v1's declaring nothing), the Approve &
-build switch, and a failed switch keeping the approval with its note and log. For the
-plugin key they cover the host probe's 5 s bound (a grandchild holding stdout included),
-key selection and the one-transform move, deleting `plugins` without losing comments (a
-trailing comma and CRLF included), v2 cache reads and clears, the service launcher's pick
-of v2's live generation (bash and TS against one shared fixture), and doctor's
-`opencode-host` and `opencode-caret-version` checks and their gating.
+toast), its pending-line map (set and clear per call, two sessions apart, a later call
+superseding), loader failure and cleanup, abort on both hosts, and v1↔v2 parity of the
+refusal texts, the v2 envelope declaring `build` only from a planning agent (and v1's
+declaring nothing), the Approve & build switch, and a failed switch keeping the approval
+with its note and log. For the plugin key they cover the host probe's 5 s bound (a
+grandchild holding stdout included), key selection and the one-transform move, deleting
+`plugins` without losing comments (a trailing comma and CRLF included), v2 cache reads and
+clears, the service launcher's pick of v2's live generation (bash and TS against one
+shared fixture), and doctor's `opencode-host` and `opencode-caret-version` checks and
+their gating.
 
 **Confirmed against a live OpenCode 1.18.11 with `@opencode-ai/plugin` 1.18.17 — EXC-1085,
 the array install's LOCAL form, which is what ties the run to that plugin version: a
@@ -787,7 +802,9 @@ is unit-tested against a fake TUI only, not observed live. OpenCode's interactiv
 through `permission.assert` for an `ask` rule (for example a non-plan agent's
 out-of-project `path` on ≥ 2.0.29) is not live-checked. The full Approve & build round
 trip through caret's UI is not live-checked either — only the `switchAgent` probe ran; the
-reviewer hand check on the PR covers it.
+reviewer hand check on the PR covers it. The pending line was probed only through a probe
+plugin: caret's own module rendering it, the bare `@opentui/solid` specifier resolving
+from OpenCode's npm package cache, and the 2.0.29 floor are unobserved.
 
 **v1 follow-up.** v1 loading the dual default through OpenCode's npm installer (the
 published package) is inferred, not observed: the re-enable runs used a directory entry,
@@ -863,6 +880,16 @@ pointing at an argv-recording shim, no model or provider):
   `/caret` nor the palette listed the command; this check found that defect.
 - **`<leader>p` collision.** Rests on 2.2.1's default binds (§ Sources) plus the live
   palette showing `ctrl+x p` for the command.
+
+**Confirmed live for EXC-2248** (v2.2.1, a TUI probe plugin from an isolated `cli.json`
+`plugins` entry):
+
+- **Bare string.** A string returned from `render` renders nothing and throws nothing.
+- **Element.** `createElement("text")` plus `insert(el, string)`, with `@opentui/solid`
+  imported dynamically by bare specifier, renders the line above the composer with the
+  right `sessionID`.
+- **Reactivity.** `insert(el, () => store.flag ? text : "")` over a `ctx.storage.memory`
+  store flipped by a timer re-renders, and the empty string collapses the row.
 
 ## Sources
 
