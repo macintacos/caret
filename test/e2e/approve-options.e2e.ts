@@ -3,12 +3,40 @@
 // DropdownMenu of every approve variant. That menu is bits-ui overlay
 // interaction (open on click, pick, Escape), so it is proven here in a real
 // browser rather than in the happy-dom unit suite (doc/agents/browser-testing.md).
-// The fixture daemon declares no adapter variants, so the UI renders the
-// WIRE_FALLBACK set (Approve / Approve & accept edits / Approve & auto mode).
+// The fixture daemon's reviews declare no variants, so they render the
+// WIRE_FALLBACK set (Approve / Approve & accept edits / Approve & auto mode)
+// unless a spec seeds its own.
 
 import { approveViaVariant } from "@test/e2e/support/decision.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { seedAndOpen } from "@test/e2e/support/source-view.ts";
+import { planSurface, seedAndOpen } from "@test/e2e/support/source-view.ts";
+import {
+  APPROVE_VARIANTS,
+  BUILD_VARIANT,
+  declaredApproveVariants,
+} from "@/adapters/opencode/approve.ts";
+
+test("an OpenCode v2 review offers Approve & build", async ({ daemon, page }) => {
+  const id = await daemon.seed({
+    approveVariants: declaredApproveVariants([BUILD_VARIANT.id]),
+  });
+  await page.goto("/");
+  await planSurface(page);
+
+  await page.getByRole("button", { name: "Approve options" }).click();
+  await expect(page.getByRole("menuitem", { name: "Approve & build" })).toBeVisible();
+  await approveViaVariant(daemon, page, "Approve & build", id);
+});
+
+test("an OpenCode v1 review offers only plain Approve", async ({ daemon, page }) => {
+  await daemon.seed({ approveVariants: [...APPROVE_VARIANTS] });
+  await page.goto("/");
+  await planSurface(page);
+
+  await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Approve options" })).toHaveCount(0);
+  await expect(page.getByText("Approve & build")).toHaveCount(0);
+});
 
 test("the options menu approves the review in a chosen variant", async ({ daemon, page }) => {
   const id = await seedAndOpen(page, daemon);
