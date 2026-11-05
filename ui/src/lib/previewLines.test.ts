@@ -528,15 +528,15 @@ describe("readingPoint", () => {
   test("measuring lines across blocks leaves at most one range alive", () => {
     const { root, map } = mount(`${LONG}\n\n${LONG}\n\n${LONG}\n`);
     const g = grid(root, 20);
-    const create = spyOn(document, "createRange");
+    const createRange = spyOn(document, "createRange");
     try {
-      const p = readingPoint(root, map, 45, g.read, g.rect);
-      expect(p).not.toBeNull();
-      expect(visualLineBox(root, map, p as TextPoint, g.read)).not.toBeNull();
+      const point = readingPoint(root, map, 45, g.read, g.rect);
+      expect(point).not.toBeNull();
+      expect(visualLineBox(root, map, point as TextPoint, g.read)).not.toBeNull();
       expect(g.blocksRead.length).toBeGreaterThan(1);
-      expect(create.mock.calls.length).toBeLessThanOrEqual(1);
+      expect(createRange.mock.calls.length).toBeLessThanOrEqual(1);
     } finally {
-      create.mockRestore();
+      createRange.mockRestore();
     }
   });
 });

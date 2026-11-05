@@ -135,9 +135,9 @@ export function holdThroughRewrap(
   // Runs in the ResizeObserver callback, after layout and before paint, so the rewrap
   // and its re-park paint in the same frame.
   const park = (): void => {
-    const next = content.getBoundingClientRect().width;
-    if (next === width && parkedTop === null) return;
-    width = next;
+    const newWidth = content.getBoundingClientRect().width;
+    if (newWidth === width && parkedTop === null) return;
+    width = newWidth;
     const top = place && hold.lineTop(place.point);
     if (place == null || top == null) return;
     scroller.scrollTop += top - (scroller.getBoundingClientRect().top + place.offset);

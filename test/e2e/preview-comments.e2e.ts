@@ -318,7 +318,7 @@ const previewRows = (page: Page): Promise<Row[]> =>
 /** The rows that hold only source lines `start` through `end`, or every row they touch
  * when none does. */
 function heldBy(rows: Row[], start: number, end: number): Row[] {
-  const inSpan = (l: number) => start <= l && l <= end;
+  const inSpan = (line: number) => start <= line && line <= end;
   const touching = rows.filter((r) => r.lines.some(inSpan));
   const held = touching.filter((r) => r.lines.every(inSpan));
   return held.length > 0 ? held : touching;
@@ -669,10 +669,10 @@ test.describe("a resize changes no stored comment and no payload", () => {
     ["approve", approve],
   ] as const) {
     test(`the ${name} payload is the same with or without a resize`, async ({ daemon, page }) => {
-      const still = await send(daemon, page, flow);
+      const unresized = await send(daemon, page, flow);
       const resized = await send(daemon, page, flow, { narrowed: true });
       expect(resized).toContain("tighten these two lines");
-      expect(resized).toBe(still);
+      expect(resized).toBe(unresized);
     });
   }
 });

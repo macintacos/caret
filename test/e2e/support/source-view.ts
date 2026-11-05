@@ -755,10 +755,10 @@ export async function scrollPlanToMiddle(page: Page): Promise<void> {
   let previous = -1;
   await expect
     .poll(async () => {
-      const now = await scroller.evaluate((el) => el.scrollTop);
-      const still = now > half / 2 && now === previous;
-      previous = now;
-      return still;
+      const scrollTop = await scroller.evaluate((el) => el.scrollTop);
+      const stopped = scrollTop > half / 2 && scrollTop === previous;
+      previous = scrollTop;
+      return stopped;
     })
     .toBe(true);
   const t0 = await page.evaluate(() => performance.now());
