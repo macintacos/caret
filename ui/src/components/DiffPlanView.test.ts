@@ -219,29 +219,32 @@ describe("DiffPlanView outline", () => {
     expect(filter() != null && document.activeElement === filter()).toBe(true);
   });
 
-  // Comparing folds the column into the header's key: the split diff needs the width, and
-  // there is no reading position to track. The mode never writes the reader's choice.
-  test("folds into the header's key while comparing, and stands again after", async () => {
+  // Compare has no outline. The mode never writes the reader's choice.
+  test("folds while comparing, and stands again after", async () => {
     const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
     const versions = () => target.querySelector<HTMLButtonElement>(".compare-toggle");
     versions()?.click();
     await until(() => column(target) == null);
-    expect(showKey(target)).not.toBeNull();
+    expect(column(target)).toBeNull();
 
     versions()?.click();
     await until(() => column(target) != null);
-    expect(showKey(target)).toBeNull();
+    expect(column(target)).not.toBeNull();
     expect(localStorage.getItem("caret.planOutline")).toBeNull();
   });
 
-  test("Shift+\\ while comparing drops the float rather than hiding the column", async () => {
+  test("while comparing, no outline key shows and \\ and Shift+\\ stand down", async () => {
     const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
     target.querySelector<HTMLButtonElement>(".compare-toggle")?.click();
-    await until(() => showKey(target) != null);
-    runKey("actions.toggleOutline");
-    await until(() => showKey(target)?.getAttribute("aria-pressed") === "true");
-    expect(showKey(target)?.getAttribute("aria-pressed")).toBe("true");
-    expect(localStorage.getItem("caret.planOutline")).toBeNull();
+    await until(() => column(target) == null);
+    const enabled = (id: string) =>
+      shortcuts
+        .list()
+        .find((e) => e.id === id)
+        ?.enabled?.();
+    expect(showKey(target)).toBeNull();
+    expect(enabled("actions.contents")).toBe(false);
+    expect(enabled("actions.toggleOutline")).toBe(false);
   });
 });
 

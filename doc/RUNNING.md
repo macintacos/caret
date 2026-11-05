@@ -169,10 +169,11 @@ pointer and shows a **+** beside it. Click the line or its **+** to comment on e
 source line with text on it, as `c` does, or drag across wrapped lines to comment on all
 of theirs; `V` shades its selection the same way, with the **+** on the cursor's line. The
 lines stay shaded while you write the comment. In either view, clicking and dragging pick
-lines, not text: hold Shift to select text, which opens no comment. The preview keeps its
-width, so each wrapped line holds the same words at any zoom, and a narrow window scrolls
-it sideways. **Settings → Base font size** sets the preview's body text, 15px by default,
-and its headings and code scale with it.
+lines, not text: hold Shift to select text, which opens no comment. In a window wide
+enough for the preview's column, each wrapped line keeps its words at any zoom; in a
+narrower window, or beside a file preview, the preview rewraps to the space it has, and
+keeps your place while it does. **Settings → Base font size** sets the preview's body
+text, 15px by default, and its headings and code scale with it.
 
 Switching keeps your place: the other view opens at the part of the plan you were reading.
 A heading link opens at its heading in either view, and the address bar follows the

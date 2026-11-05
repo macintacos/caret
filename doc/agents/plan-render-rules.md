@@ -183,14 +183,15 @@ exist today.
   `title`; anything else renders as its alt text.
 - **`[/]`** renders as `data-task="slashed"`. `indeterminate` has no attribute form, so
   `PlanPreview.svelte` sets the property on each such input after every mount of new HTML.
-- **Column.** The preview's text column is a fixed width with its inline padding, both in
-  its own em, so every line wraps at the same word at any zoom, text size, base font size
-  or window width, and a window narrower than the column scrolls `.diff-plan` sideways. In
-  a wider plan the root's end padding takes up the rest, so a row runs to the plan's right
-  edge, as a source row does, for the hover, a click and a drag alike. What a click cites
-  depends on where text wraps. macOS's system font respaces its glyphs by point size, so a
-  text-size preference, which moves the root font size alone, can still move a word near a
-  line's end; page zoom does not.
+- **Column.** The preview's text column is a maximum width with its inline padding, both
+  in its own em, so while the plan is at least as wide, every line wraps at the same word
+  at any zoom, text size or base font size. A plan narrower than the column rewraps the
+  text to the plan. In a wider plan the root's end padding takes up the rest, so a row
+  runs to the plan's right edge, as a source row does, for the hover, a click and a drag
+  alike. What a click cites follows the current wrap; comments stay source-line spans, so
+  a resize changes no feedback or approve payload. macOS's system font respaces its glyphs
+  by point size, so a text-size preference, which moves the root font size alone, can
+  still move a word near a line's end; page zoom does not.
 - **Type scale.** The preview multiplies each `--text-*` step by `--preview-scale`, the
   Appearance setting's base font size (15px by default, `previewFontSizePref.ts`) over
   `--text-base`. `.diff-plan` declares it, so the overlays sized to the preview's rows,
@@ -346,10 +347,12 @@ cited rows' band and bar, the visual selection, and search. The signal is one
 rAF-throttled bump from a `ResizeObserver` on the root and on each slot, a text
 `MutationObserver` on the root, and the theme paint on `<html>`. Attributes under the root
 stay unobserved, because the slot gaps write their heights there and the root's resize
-reports each. A new preview overlay reads the signal rather than observing the root. The
-slot sync, the one effect that moves text, is declared ahead of every overlay that
-measures it; a reader declared before it measures a frame late, so declare a new overlay
-after it.
+reports each. A pane resize rewraps the text and reaches the overlays through the root's
+`ResizeObserver`. Only the rewrap hold (§ Keeping the place through a rewrap) observes the
+root itself, because it must park in the resize's own frame. A new preview overlay reads
+the signal rather than observing the root. The slot sync, the one effect that moves text,
+is declared ahead of every overlay that measures it; a reader declared before it measures
+a frame late, so declare a new overlay after it.
 
 `codeChrome` is the first ported behavior. `codeChrome.ts` gives it a light-DOM geometry
 over the preview's `pre`s, keyed by the opening fence line (the code marker's line minus
@@ -487,22 +490,20 @@ re-read under a still pointer on a scroll and on each `previewLayoutRev` bump, a
 when it leaves the plan. A full-bleed band (`data-caret-preview-hover`) in the source's
 hover grey covers the row under the pointer, except the keyboard cursor's row, which its
 own band keeps; the hover band hides there rather than unmounting, so it glides off. A "+"
-in the root's left padding opens the composer on what a click on that row cites, pinned to
-the scroller's visible left edge when a narrow window scrolls the column sideways. A
-comment drag paints one full-bleed band (`data-caret-preview-drag`) in the visual
-selection's wash, from its press row through the pointer's and across the margins and
-slots between them, drawn before the chrome and slots so they sit on it. The "+" rides on
-the pointer's row, and a faded accent bar (`data-caret-preview-drag-bar`), the source
-gutter's selection ticks drawn as one, runs the band's length down the "+" lane. The
-bands, the cursor's too, glide between rows on `--dur-state`, the cursor follow scroll's
-duration, and land in place on an entry, a scroll, a press or release, a layout bump, or a
-jump of more than two rows. `withinLines` counts those rows as visual lines, not pixels,
-so a heading's margins never turn its neighbour into a jump. Once the composer opens, the
-band and bar hold the rows its lines hold while it drafts, as the source view's
-`selectedRange` holds its lines, and the text highlight a focused comment gets gives way
-to them. `lineComments` stays source-only: its drag readout, gutter drag and drag hint
-chip belong to the source view's gutter, and the preview's drag band, bar and "+" are
-`textComments`' own.
+in the root's left padding opens the composer on what a click on that row cites. A comment
+drag paints one full-bleed band (`data-caret-preview-drag`) in the visual selection's
+wash, from its press row through the pointer's and across the margins and slots between
+them, drawn before the chrome and slots so they sit on it. The "+" rides on the pointer's
+row, and a faded accent bar (`data-caret-preview-drag-bar`), the source gutter's selection
+ticks drawn as one, runs the band's length down the "+" lane. The bands, the cursor's too,
+glide between rows on `--dur-state`, the cursor follow scroll's duration, and land in
+place on an entry, a scroll, a press or release, a layout bump, or a jump of more than two
+rows. `withinLines` counts those rows as visual lines, not pixels, so a heading's margins
+never turn its neighbour into a jump. Once the composer opens, the band and bar hold the
+rows its lines hold while it drafts, as the source view's `selectedRange` holds its lines,
+and the text highlight a focused comment gets gives way to them. `lineComments` stays
+source-only: its drag readout, gutter drag and drag hint chip belong to the source view's
+gutter, and the preview's drag band, bar and "+" are `textComments`' own.
 
 The preview renders a version once. `memoLast` returns the last result for the same text,
 so a toggle flip or a same-version poll tick reuses it. The 2s poll re-delivers the same
@@ -586,3 +587,22 @@ parks is the block the next flip reads back. `ui/src/lib/planPlace.ts` holds the
 
 Place-keeping is not a `SURFACE_BEHAVIORS` row. It runs at the flip itself, not on a
 surface.
+
+### Keeping the place through a rewrap
+
+A change in the preview root's width keeps the reader's visual line at the reading zone.
+`holdThroughRewrap` in `ui/src/lib/planPlace.ts` keeps a `TextPoint` plus its visual
+line's offset below the scroller's top. A reader's scroll drops it, and it is re-taken
+once scrolling has settled for 100ms; a resize before then parks nothing, and native
+scroll anchoring holds it. It is not a `SURFACE_BEHAVIORS` row because it reads only the
+preview's own root.
+
+- **It re-parks in the ResizeObserver callback** when the preview root's width changes, so
+  the re-park paints in the rewrap's own frame. Later resizes re-park too while the hold
+  lasts. Each park writes an absolute `scrollTop`, so Safari, which has no
+  `overflow-anchor`, holds as well.
+- **The reader's scroll ends it.** A scroll within `SCROLL_TAKEOVER_SLOP` of the parked
+  top is the park's own and is ignored. Any other scroll drops the place until it settles.
+- **Its lifecycle differs from `holdPlace`'s** because a drawer drag starts with a pointer
+  press, which would release `holdPlace`. It also keeps a line rather than a block: a
+  rewrap inside a long paragraph moves the line being read within its block.

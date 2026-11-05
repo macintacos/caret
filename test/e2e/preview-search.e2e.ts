@@ -13,9 +13,11 @@ import { PREVIEW_BAND, previewCursor } from "@test/e2e/support/cursor.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
   awaitPlanReadyForKeys,
+  BELOW_COLUMN,
   lineOf,
   openPlanForKeys,
   PLAN_PREVIEW,
+  PLAN_SURFACE,
 } from "@test/e2e/support/source-view.ts";
 
 const LONG = [
@@ -237,4 +239,38 @@ test("a flip re-seats the committed match on the new surface", async ({ daemon, 
 
   await flip(page, "preview");
   await expect.poll(() => counter(page)).toEqual({ current: 1, total: 1 });
+});
+
+test("search highlights and the current match sit on their text after a rewrap", async ({
+  daemon,
+  page,
+}) => {
+  await openPreview(page, daemon);
+  await search(page, "gadget", 3);
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("n");
+  await expect.poll(async () => (await counter(page)).current).toBe(2);
+  const before = await currentSpot(page);
+
+  await page.setViewportSize(BELOW_COLUMN);
+  await expect.poll(async () => (await currentSpot(page))?.mid).not.toBe(before?.mid);
+
+  const lower = async (name: string) =>
+    (await highlightTexts(page, name)).map((t) => t.toLowerCase());
+  await expect.poll(() => lower("caret-preview-search")).toEqual(["gadget", "gadget"]);
+  await expect.poll(() => lower("caret-preview-search-current")).toEqual(["gadget"]);
+  const inside = () =>
+    page.evaluate((surface) => {
+      const range = [...(CSS.highlights.get("caret-preview-search-current") ?? [])][0];
+      const plan = document.querySelector(surface)?.getBoundingClientRect();
+      if (!(range instanceof Range) || !plan) return false;
+      return [...range.getClientRects()].every(
+        (r) =>
+          r.left >= plan.left &&
+          r.right <= plan.right &&
+          r.top >= plan.top &&
+          r.bottom <= plan.bottom,
+      );
+    }, PLAN_SURFACE);
+  await expect.poll(inside).toBe(true);
 });

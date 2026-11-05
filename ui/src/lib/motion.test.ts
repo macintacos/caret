@@ -657,19 +657,6 @@ describe("compare never shows two images of one slot at once", () => {
   });
 });
 
-describe("the compare float's stamps", () => {
-  const toc = styleBlock(chromeSources["components/PlanToc.svelte"] ?? "");
-
-  test("a stamp's beat and its arrival together stay within --dur-state", () => {
-    const decl = /\.toc-delta\)\s*\{[^}]*animation:\s*([^;]+);/.exec(toc)?.[1] ?? "";
-    const parts = [...decl.matchAll(/calc\(var\(--dur-state\) \* ([\d.]+)\)/g)].map((m) =>
-      Number(m[1]),
-    );
-    expect(parts).toHaveLength(2);
-    expect(parts.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(1);
-  });
-});
-
 describe("chrome motion declarations draw from the tokens, not bare literals", () => {
   // The whole chrome, motion or not (see chromeComponents above). Each component's
   // `<style>` is scanned for `transition:`/`animation:` declarations; the one-shot ones

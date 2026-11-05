@@ -9,7 +9,8 @@ import type { PlanSourceMap, TextPoint } from "$lib/planSourceMap.ts";
 
 export type { TextPoint };
 
-/** The client rects of a range's text, one per line fragment. */
+/** The client rects of a range's text, one per line fragment. The range is a scratch reused
+ * across calls: read it synchronously and never retain it. */
 export type RangeRects = (range: Range) => readonly Box[];
 
 /** How far `el`'s table header row has slid down its table to stay in view (PlanPreview.svelte
@@ -46,8 +47,15 @@ const lineStart = (line: VisualLine, read: RangeRects): [Text, number] => [
   firstOffsetFrom(line.node, line.top, read),
 ];
 
+// The browser updates every live Range on each DOM mutation until it is collected: a fresh
+// range per read leaves thousands, and each slot-gap split after them costs tens of ms.
+const scratchRanges = new WeakMap<Document, Range>();
+
+/** A range over `node`'s `start`–`end`, valid only until the next call. */
 function rangeOver(node: Text, start: number, end: number): Range {
-  const range = node.ownerDocument.createRange();
+  const doc = node.ownerDocument;
+  const range = scratchRanges.get(doc) ?? doc.createRange();
+  scratchRanges.set(doc, range);
   range.setStart(node, start);
   range.setEnd(node, end);
   return range;

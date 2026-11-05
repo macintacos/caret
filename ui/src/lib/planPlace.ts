@@ -1,8 +1,10 @@
-// Finds the reader's place on one plan surface and holds it on the other across a
-// source/preview flip. Places are block-granular, found by binary search over the
-// preview's block spans, so a long plan is never measured block by block.
-import { indexAtReadingZone, parkAt } from "$lib/diffview/scroll.ts";
+// Finds the reader's place on a plan surface and holds it: block by block across a
+// source/preview flip, and line by line through a change in the preview's width. Block
+// places are found by binary search over the preview's block spans, so a long plan is
+// never measured block by block.
+import { indexAtReadingZone, parkAt, SCROLL_TAKEOVER_SLOP } from "$lib/diffview/scroll.ts";
 import type { SourceSpan } from "$lib/planMarkdown.ts";
+import type { TextPoint } from "$lib/planSourceMap.ts";
 
 /** The index of the block holding 1-based `line`: a line in a gap takes the next
  * block, a line past the end the last, and no blocks gives null. */
@@ -86,4 +88,79 @@ export function holdPlace(hold: PlaceHold, observe: ObserveResize = observeResiz
   for (const type of READER_INPUTS) doc.addEventListener(type, release, LISTEN);
   park();
   return release;
+}
+
+/** The reader's place in the preview: a source point and how far its visual line's top
+ * sits below the scroller's top. */
+export interface ReadingPlace {
+  point: TextPoint;
+  offset: number;
+}
+
+export interface RewrapHold {
+  /** The plan's scroll container. */
+  scroller: HTMLElement;
+  /** The preview root: a change in its width rewraps the text. */
+  content: Element;
+  /** The reader's place at the current layout, or null with no text. */
+  take: () => ReadingPlace | null;
+  /** The client-space top of `point`'s visual line at the current layout, or null. */
+  lineTop: (point: TextPoint) => number | null;
+}
+
+/** setTimeout-shaped: runs `fn` after `ms` and returns its cancel. */
+type Schedule = (fn: () => void, ms: number) => () => void;
+
+const schedule: Schedule = (fn, ms) => {
+  const id = setTimeout(fn, ms);
+  return () => clearTimeout(id);
+};
+
+/** How long (ms) scrolling must stop before the rewrap hold re-takes the place. */
+const SCROLL_SETTLE_MS = 100;
+
+/** Holds the reader's place through each change in `content`'s width: such a resize
+ * re-parks the place taken before it, and later resizes re-park too, until any scroll
+ * other than the park's own drops the place. It is re-taken once scrolling settles; a
+ * resize before then parks nothing. It never releases itself; returns the disconnect. */
+export function holdThroughRewrap(
+  hold: RewrapHold,
+  observe: ObserveResize = observeResize,
+  later: Schedule = schedule,
+): () => void {
+  const { scroller, content } = hold;
+  let place = hold.take();
+  let width = content.getBoundingClientRect().width;
+  let parkedTop: number | null = null;
+  // Runs in the ResizeObserver callback, after layout and before paint, so the rewrap
+  // and its re-park paint in the same frame.
+  const park = (): void => {
+    const newWidth = content.getBoundingClientRect().width;
+    if (newWidth === width && parkedTop === null) return;
+    width = newWidth;
+    const top = place && hold.lineTop(place.point);
+    if (place == null || top == null) return;
+    scroller.scrollTop += top - (scroller.getBoundingClientRect().top + place.offset);
+    parkedTop = scroller.scrollTop;
+  };
+  const onScroll = (): void => {
+    if (parkedTop !== null && Math.abs(scroller.scrollTop - parkedTop) <= SCROLL_TAKEOVER_SLOP)
+      return;
+    parkedTop = null;
+    // Taking the place measures the reading block's text, too costly for every scroll
+    // frame; mid-scroll, native scroll anchoring holds a rewrap instead.
+    place = null;
+    cancelSettle();
+    cancelSettle = later(() => {
+      place = hold.take();
+    }, SCROLL_SETTLE_MS);
+  };
+  let cancelSettle = (): void => {};
+  const stopObserving = observe(content, park);
+  scroller.addEventListener("scroll", onScroll, { passive: true });
+  return () => {
+    cancelSettle();
+    stopObserving();
+    scroller.removeEventListener("scroll", onScroll);
+  };
 }

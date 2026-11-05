@@ -503,131 +503,6 @@ test("Shift+\\ pressed twice reverses the column mid-flight, never shutting it",
   expect(edges.at(-1)).toBe(edges[0]);
 });
 
-test("opening a file slides the column out as the drawer slides in, in one frame", async ({
-  daemon,
-  page,
-}) => {
-  const proj = await makeProject({ "src/cache.ts": "export const cache = new Map();\n" });
-  try {
-    await armSlideLog(page);
-    await daemon.seed({ cwd: proj.dir, plan: FILE_PLAN });
-    await open(page);
-    const { state, pane } = await tokens(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-
-    await page.locator("[data-file-ref]").first().click();
-    await expect(page.locator("[data-file-preview]")).toBeVisible();
-    const opened = await slidesOf(page, ["drawer", "column", "pane"]);
-    expect(opened.drawer?.duration).toBe(pane);
-    expect(opened.column?.duration).toBe(state);
-    expect(opened.pane?.duration).toBe(state);
-    expect(together(opened)).toBe(true);
-    await expect(page.locator(".plan-outline")).toHaveCount(0);
-  } finally {
-    await proj.cleanup();
-  }
-});
-
-test("closing a file stands the column again as the drawer slides away, in one frame", async ({
-  daemon,
-  page,
-}) => {
-  const proj = await makeProject({ "src/cache.ts": "export const cache = new Map();\n" });
-  try {
-    await armSlideLog(page);
-    await daemon.seed({ cwd: proj.dir, plan: FILE_PLAN });
-    await open(page);
-    const { state, pane } = await tokens(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.locator("[data-file-ref]").first().click();
-    await expect(page.locator("[data-file-preview]")).toBeVisible();
-    await settleDrawer(page);
-    await page.evaluate(() => ((window as unknown as { __slides: Slide[] }).__slides = []));
-
-    await page.getByRole("button", { name: "Close preview" }).click();
-    await expect(hideKey(page)).toBeVisible();
-    const close = await slidesOf(page, ["drawer", "column", "pane"]);
-    expect(close.drawer?.duration).toBe(state);
-    expect(close.column?.duration).toBe(pane);
-    expect(close.pane?.duration).toBe(pane);
-    expect(together(close)).toBe(true);
-    await expect(page.locator("[data-file-drawer]")).toHaveCount(0);
-  } finally {
-    await proj.cleanup();
-  }
-});
-
-test("a file opened as the outline stands takes the plan's floor on from where it had got to", async ({
-  daemon,
-  page,
-}) => {
-  const proj = await makeProject({ "src/cache.ts": "export const cache = new Map();\n" });
-  try {
-    await daemon.seed({ cwd: proj.dir, plan: FILE_PLAN });
-    await open(page);
-    await expect.poll(() => fileRefCount(page)).toBe(1);
-    await page.keyboard.press("Shift+Backslash");
-    await expect(outlineKey(page)).toBeVisible();
-    await layoutStill(page);
-
-    // The file opens 80ms after the key that stands the column. Each frame from then on:
-    // the column's right edge, where it is in the page, and the floor's left edge.
-    await page.evaluate(() => {
-      const w = window as unknown as {
-        __rows: [number | null, number][];
-        __midSlide: boolean;
-        __sampling: boolean;
-      };
-      const floor = document.querySelector(".pane-floor") as HTMLElement;
-      w.__rows = [];
-      w.__sampling = true;
-      const sample = () => {
-        w.__rows.push([
-          document.querySelector(".plan-outline")?.getBoundingClientRect().right ?? null,
-          floor.getBoundingClientRect().left,
-        ]);
-        if (w.__sampling) requestAnimationFrame(sample);
-      };
-      const openFile = () => {
-        w.__midSlide = floor.getAnimations().length > 0;
-        const ref = document
-          .querySelector(".diffview")
-          ?.shadowRoot?.querySelector("[data-file-ref]");
-        (ref as HTMLElement).click();
-        requestAnimationFrame(sample);
-      };
-      const afterKey = (e: KeyboardEvent) => {
-        if (e.code !== "Backslash") return;
-        removeEventListener("keydown", afterKey, { capture: true });
-        setTimeout(openFile, 80);
-      };
-      addEventListener("keydown", afterKey, { capture: true });
-    });
-    await page.keyboard.press("Shift+Backslash");
-    await expect(page.locator("[data-file-preview]")).toBeVisible();
-    await layoutStill(page);
-    const { rows, midSlide } = await page.evaluate(() => {
-      const w = window as unknown as {
-        __rows: [number | null, number][];
-        __midSlide: boolean;
-        __sampling: boolean;
-      };
-      w.__sampling = false;
-      return { rows: w.__rows, midSlide: w.__midSlide };
-    });
-
-    expect(midSlide, "the file opened while the floor slid").toBe(true);
-    const lefts = rows.map(([, left]) => left);
-    const rightward = Math.max(...lefts.slice(1).map((left, i) => left - (lefts[i] ?? left)));
-    expect(rightward, "the floor's left edge moving right").toBeLessThan(0.5);
-    const bands = rows.flatMap(([column, left]) => (column === null ? [] : [left - column]));
-    expect(bands.length).toBeGreaterThan(0);
-    expect(Math.max(...bands), "the band between the column and the floor").toBeLessThan(7);
-  } finally {
-    await proj.cleanup();
-  }
-});
-
 test("the Search entry keeps its place beside Versions as the outline folds while a file closes", async ({
   daemon,
   page,
@@ -731,7 +606,7 @@ test("compare swaps the header's controls on --dur-state, Versions sliding into 
   expect(took(out, "::view-transition-group(plan-pane)")).toBe(pane);
 });
 
-test("focus holds through compare: on Versions when it is pressed, and on whichever outline key stands", async ({
+test("focus holds through compare: on Versions when it is pressed, and on Versions as the column folds", async ({
   daemon,
   page,
 }) => {
@@ -746,32 +621,11 @@ test("focus holds through compare: on Versions when it is pressed, and on whiche
   await expect(page.locator(".plan-header .pair")).toHaveCount(0);
   await expect(versions(page)).toBeFocused();
 
-  // Compare folds the column, so focus on its outline key moves to the header's, and back as
-  // the column stands again.
+  // Compare has no outline, so focus on the column's outline key moves to Versions as the
+  // column folds.
   await hideKey(page).focus();
   await page.keyboard.press("d");
-  await expect(outlineKey(page)).toBeFocused();
-  await page.keyboard.press("d");
-  await expect(hideKey(page)).toBeFocused();
-});
-
-test("the compare float's stamps arrive within --dur-state of its list", async ({
-  daemon,
-  page,
-}) => {
-  await daemon.seedVersions(2, [PLAN, REVISED]);
-  await open(page);
-  const { state } = await tokens(page);
-  await page.keyboard.press("d");
-  await outlineKey(page).click();
-  const stamp = page.locator(".outline-float .toc-delta");
-  await expect(stamp).toHaveCount(1);
-  const timing = await stamp.evaluate((el) => {
-    const style = getComputedStyle(el);
-    return Number.parseFloat(style.animationDelay) + Number.parseFloat(style.animationDuration);
-  });
-  expect(timing * 1000).toBeGreaterThan(0);
-  expect(timing * 1000).toBeLessThanOrEqual(state);
+  await expect(versions(page)).toBeFocused();
 });
 
 test.describe("under reduced motion", () => {

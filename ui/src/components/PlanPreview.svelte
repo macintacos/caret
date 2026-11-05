@@ -262,14 +262,14 @@
     color: var(--mark-active-ink);
   }
 
-  /* In the preview's own em, so every line wraps at the same word at any zoom, text size,
-     base font size or window width (a narrow window scrolls sideways): what a row cites
-     must not move. The text is 15px at the default base font size, so this is an 800px
-     column with 2ch + 25px and 12px of padding there. The end padding takes up any wider
-     plan, so a row reaches the plan's right edge, as a source row does. */
+  /* The text's widest wrap, in the preview's own em. In a plan at least this wide every
+     line wraps at the same word at any zoom, text size or base font size; a narrower plan
+     rewraps the text, and what a row cites follows the wrap. The text is 15px at the
+     default base font size, so this is an 800px column with 2ch + 25px and 12px of
+     padding there. The end padding takes up any wider plan, so a row reaches the plan's
+     right edge, as a source row does. */
   .plan-preview {
     --column: calc(800em / 15);
-    min-width: var(--column);
     padding-block: 0.5rem;
     padding-inline: calc(2ch + 25em / 15) max(0.8em, 100% - var(--column) + 0.8em);
     font-size: calc(var(--text-base) * var(--preview-scale));

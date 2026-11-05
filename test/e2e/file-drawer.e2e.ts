@@ -8,7 +8,8 @@
 // against the lane's own rect, and the helpers for that already live here — which
 // now includes where a lane opened FROM the card leaves it (EXC-1137). The
 // coexistence RULES — click routing, Escape order, what a row click opens — stay
-// in folder-refs.e2e.ts.
+// in folder-refs.e2e.ts. So is the plan preview rewrapping beside a right-docked
+// drawer that narrows it below the column, live through a drag of the drawer's edge.
 //
 // All of it is layout a browser decides (doc/agents/browser-testing.md): the
 // docking edge comes from a live matchMedia subscription, the sizes from real
@@ -17,18 +18,29 @@
 
 import type { Page } from "@playwright/test";
 
+import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { CACHE_TS, openPreview, ROWS_PROSE, WIDE } from "@test/e2e/support/drawer.ts";
 import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import type { Daemon } from "@test/e2e/support/fixtures.ts";
-import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import {
+  columnFits,
+  markReadingLine,
+  PLAN_PREVIEW,
+  PLAN_SURFACE,
+  planFits,
+  planSurface,
+  readingOffset,
+  rowStarts,
+  scrollPlanToMiddle,
+  textInsidePlan,
+} from "@test/e2e/support/source-view.ts";
 import { MIN_APP_WIDTH_PX, NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "@ui/src/lib/layout.ts";
 
 // Comfortably inside the narrow regime rather than a pixel off the breakpoint,
 // so a rounding difference in matchMedia can't decide the docking edge.
 const NARROW = { width: NARROW_WIDTH_PX - 160, height: 900 };
-const WIDE = { width: NARROW_WIDTH_PX + 440, height: 900 };
 
-const CACHE_TS = Array.from({ length: 300 }, (_, i) => `const line${i + 1} = ${i + 1};`).join("\n");
 const OTHER_TS = Array.from(
   { length: 120 },
   (_, i) => `export const other${i + 1} = "OTHER_MARKER_${i + 1}";`,
@@ -66,17 +78,6 @@ async function seedCacheDrawer(
   await page.goto("/");
   // Callers that measure geometry before opening the preview have no other wait.
   await planSurface(page);
-}
-
-/** Open the preview for the first resolved reference in the plan, and wait out
- * the lane's opening slide so every rect below is measured where it settles. */
-async function openPreview(page: Page): Promise<void> {
-  await planSurface(page);
-  await expect.poll(() => fileRefCount(page)).toBeGreaterThan(0);
-  await page.locator("[data-file-ref]").first().click();
-  await expect(page.locator("[data-file-drawer]")).toBeVisible();
-  await expect(page.locator("[data-file-preview]")).toBeVisible();
-  await settleDrawer(page);
 }
 
 /** Arm a `__drawerRemovals` counter that increments each time the lane leaves
@@ -161,9 +162,7 @@ test("at a wide width the drawer docks right, taking space rather than covering 
 }) => {
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    // At this width the outline column yields to the drawer and so widens the surface
-    // (plan-toc.e2e.ts covers that). Hidden, it leaves the plan and the drawer alone in
-    // the surface.
+    // Hidden, the outline column leaves the plan and the drawer alone in the surface.
     await page.addInitScript(() => localStorage.setItem("caret.planOutline", "hidden"));
     await seedCacheDrawer(daemon, page, proj.dir, WIDE);
 
@@ -972,6 +971,80 @@ test("the first file the plan cites in each language is read ahead of any open",
 
     await expect.poll(() => read).toEqual(expect.arrayContaining(["src/a.ts", "ui/C.svelte"]));
     await expect(page.locator("[data-file-preview]")).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+/** Seed `plan` (which cites `src/cache.ts`) at `cwd` with the outline hidden, open the
+ * drawer docked right at `WIDE`, then switch the plan to the preview. */
+async function openPreviewDrawer(
+  daemon: Daemon,
+  page: Page,
+  cwd: string,
+  plan: string,
+): Promise<void> {
+  await page.addInitScript(() => localStorage.setItem("caret.planOutline", "hidden"));
+  await daemon.seed({ cwd, plan });
+  await page.setViewportSize(WIDE);
+  await page.goto("/");
+  await waitPastSafeModeGrace(page);
+  await openPreview(page);
+  await previewToggle(page).click();
+  await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
+}
+
+test("a right-docked drawer that narrows the plan below the column rewraps the preview", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    const plan = ["# Refs", "Edit `src/cache.ts` to fix it.", ROWS_PROSE].join("\n\n");
+    await openPreviewDrawer(daemon, page, proj.dir, plan);
+
+    expect(await columnFits(page)).toBe(false);
+    await expect.poll(() => textInsidePlan(page)).toBe(true);
+    expect(await planFits(page)).toBe(true);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("dragging the drawer edge rewraps the preview during the drag", async ({ daemon, page }) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    const paragraphs = Array.from({ length: 60 }, (_, i) => `Paragraph ${i + 1}. ${ROWS_PROSE}`);
+    const plan = ["# Refs", "Edit `src/cache.ts` to fix it.", ROWS_PROSE, ...paragraphs].join(
+      "\n\n",
+    );
+    await openPreviewDrawer(daemon, page, proj.dir, plan);
+    // Safari has no overflow-anchor; Chromium's would hold the place without the hold.
+    await page.addStyleTag({ content: `${PLAN_SURFACE} { overflow-anchor: none; }` });
+
+    await scrollPlanToMiddle(page);
+    const line = Number(
+      await page
+        .locator(`${PLAN_PREVIEW} > [data-source-start]`, { hasText: "Paragraph 30." })
+        .getAttribute("data-source-start"),
+    );
+    const base = await rowStarts(page, line);
+    await markReadingLine(page);
+    const offset = await readingOffset(page);
+
+    const box = await page.getByRole("separator", { name: "Resize file preview" }).boundingBox();
+    if (!box) throw new Error("the handle did not render");
+    const y = box.y + box.height / 2;
+    await page.mouse.move(box.x + box.width / 2, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x - 200, y, { steps: 8 });
+
+    await expect.poll(() => rowStarts(page, line)).not.toEqual(base);
+    expect(await planFits(page)).toBe(true);
+    await expect
+      .poll(async () => Math.abs((await readingOffset(page)) - offset))
+      .toBeLessThanOrEqual(2);
+    await page.mouse.up();
   } finally {
     await proj.cleanup();
   }

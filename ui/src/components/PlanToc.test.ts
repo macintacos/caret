@@ -940,30 +940,3 @@ describe("PlanToc latch", () => {
     expect(root(target)?.hasAttribute("data-latch-snap")).toBe(false);
   });
 });
-
-describe("PlanToc while comparing", () => {
-  const DELTAS = new Map([[5, { added: 8, removed: 0, line: 7, side: "after" as const }]]);
-
-  test("lists only the sections that changed, each with what it gained", () => {
-    const jump = capture<number>();
-    const { flush } = mountToc({ activeLine: null, deltas: DELTAS, onJump: jump.cb });
-    flush();
-    expect(options().map((o) => o.querySelector(".toc-label")?.textContent?.trim())).toEqual([
-      "Approach",
-    ]);
-    const approach = row("Approach");
-    expect(approach.querySelector(".toc-meta")?.textContent?.trim()).toBe("+8");
-    const described = document.getElementById(approach.getAttribute("aria-describedby") ?? "");
-    expect(described?.textContent?.trim()).toBe("8 lines added");
-    approach.click();
-    expect(jump.last()).toBe(5);
-  });
-
-  test("with no section changed, the float says so, with no field to filter", () => {
-    const { flush } = mountToc({ activeLine: null, deltas: new Map(), placement: "float" });
-    flush();
-    expect(options().length).toBe(0);
-    expect(helper()?.textContent?.trim()).toBe("No sections changed");
-    expect(field() === null).toBe(true);
-  });
-});

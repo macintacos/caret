@@ -1,21 +1,16 @@
 // The outline column's resizable edge: a drag, the arrow keys and a double-click on the
-// window splitter at the column's right edge, the width remembered across a reload, and the
-// column yielding to a file drawer at the width the reader chose.
+// window splitter at the column's right edge, and the width remembered across a reload.
 //
 // All of it needs a real browser: the drag is real pointer events under pointer capture,
-// the steps are keys on a focused separator, the widths are laid-out rects, and the drawer
-// opens from a resolved file reference. The bounds themselves stay a unit
-// (ui/src/lib/outlineColumn.test.ts, and outlineRoom in ui/src/lib/fileDrawer.test.ts).
+// the steps are keys on a focused separator, and the widths are laid-out rects. The bounds
+// themselves stay a unit (ui/src/lib/outlineColumn.test.ts).
 
 import type { Locator, Page } from "@playwright/test";
 
-import { makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
 const PLAN = ["# Plan", "## Alpha", "Alpha text.", "## Bravo", "Bravo text.", ""].join("\n\n");
-const FILE_PLAN = "# Refs\n\n## Cache\n\nThe cache lives in `src/cache.ts`.\n";
-const CACHE_TS = "export const cache = new Map();\n";
 
 // The opening width, 15.5rem at the browser's 16px root.
 const OPENING_PX = 248;
@@ -45,13 +40,6 @@ async function dragEdge(page: Page, dx: number): Promise<void> {
   await page.mouse.down();
   await page.mouse.move(x + dx, y, { steps: 8 });
   await page.mouse.up();
-}
-
-/** Open the plan's file reference, and wait out the drawer's slide. */
-async function openFile(page: Page): Promise<void> {
-  await page.locator("[data-file-ref]").first().click();
-  await expect(page.locator("[data-file-preview]")).toBeVisible();
-  await settleDrawer(page);
 }
 
 test("dragging the column's edge resizes it, and the width survives a reload", async ({
@@ -397,80 +385,4 @@ test("the column folds and stands again at the width the reader chose", async ({
   await expect
     .poll(() => page.evaluate(() => (window as unknown as { __columnFrom: string[] }).__columnFrom))
     .toEqual([`-${OPENING_PX + 72}px`]);
-});
-
-test.describe("beside a file drawer", () => {
-  test("a narrowed column keeps its place beside a file the opening width yields to, and resets to the widest that keeps it there", async ({
-    daemon,
-    page,
-  }) => {
-    const proj = await makeProject({ "src/cache.ts": CACHE_TS });
-    try {
-      await daemon.seed({ cwd: proj.dir, plan: FILE_PLAN });
-      // The plan beside an opening-width column and the default drawer reads under 800px.
-      await open(page, { width: 1680, height: 900 });
-      await dragEdge(page, -56);
-      await expect.poll(() => widthOf(column(page))).toBeCloseTo(OPENING_PX - 56, 0);
-
-      await openFile(page);
-      await expect(column(page)).toBeVisible();
-
-      await edge(page).dblclick();
-      const max = Number(await edge(page).getAttribute("aria-valuemax"));
-      expect(max).toBeLessThan(OPENING_PX);
-      expect(max).toBeGreaterThan(OPENING_PX - 56);
-      await expect.poll(() => widthOf(column(page))).toBeCloseTo(max, 0);
-      await expect(column(page)).toBeVisible();
-    } finally {
-      await proj.cleanup();
-    }
-  });
-
-  test("a widened column yields to a file the opening width stands beside", async ({
-    daemon,
-    page,
-  }) => {
-    const proj = await makeProject({ "src/cache.ts": CACHE_TS });
-    try {
-      await daemon.seed({ cwd: proj.dir, plan: FILE_PLAN });
-      await open(page, { width: 1800, height: 900 });
-      await dragEdge(page, 152);
-      await expect.poll(() => widthOf(column(page))).toBeCloseTo(OPENING_PX + 152, 0);
-
-      await openFile(page);
-      await expect(column(page)).toHaveCount(0);
-      await expect(
-        page.locator(".plan-header").getByRole("button", { name: "Outline", exact: true }),
-      ).toBeVisible();
-    } finally {
-      await proj.cleanup();
-    }
-  });
-
-  test("a drag stops where the column would yield, so it never drops to a float mid-gesture", async ({
-    daemon,
-    page,
-  }) => {
-    const proj = await makeProject({ "src/cache.ts": CACHE_TS });
-    try {
-      await daemon.seed({ cwd: proj.dir, plan: FILE_PLAN });
-      await open(page, { width: 1920, height: 900 });
-      await openFile(page);
-      await expect(column(page)).toBeVisible();
-
-      await dragEdge(page, 400);
-      const max = Number(await edge(page).getAttribute("aria-valuemax"));
-      await expect.poll(() => widthOf(column(page))).toBeCloseTo(max, 0);
-      expect(max).toBeGreaterThan(OPENING_PX + 100);
-      await expect(column(page)).toBeVisible();
-
-      // A step past the bound holds too.
-      await edge(page).focus();
-      await page.keyboard.press("ArrowRight");
-      await expect(edge(page)).toHaveAttribute("aria-valuenow", String(max));
-      await expect(column(page)).toBeVisible();
-    } finally {
-      await proj.cleanup();
-    }
-  });
 });
