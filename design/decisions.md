@@ -123,6 +123,9 @@ Open items first, then the log, newest first.
   - As the column narrows, the field's magnifier goes.
   - Tab stops at the field and moves on to the outline key until the reader engages the
     field with `\`, a click or a key pressed in it.
+- **Call left to the user from the 2026-11-05 OpenCode notice:** Variant B (rail card) was
+  built from the design review's pick and is waiting on the user's verdict. A (quiet line)
+  and C (inverse banner) were the alternatives.
 - **The Claude Code band still differs from the OpenCode notice:** `mod/hooks/band.tsx`
   paints the waiting plan as an inverse `warning` fill with a 🥕 emoji. Either align it
   with the 2026-11-05 OpenCode decision or record why the two hosts differ.

@@ -652,9 +652,9 @@ this module as a v1 TUI plugin, and v1's TUI loader throws on a default without 
 
 **The same module registers one `keymap` layer with one command, `caret.open`:** the
 `/caret` slash command, a palette entry, and the `<leader>p` default bind. Its `suggested`
-getter promotes it in the palette while the routed session has a plan waiting. The layer
-is `mode: "global"`: the palette and slash completion list only commands reachable from
-their own input mode, and a default `base` layer is unreachable from both. It spawns
+predicate promotes it in the palette while the routed session has a plan waiting. The
+layer is `mode: "global"`: the palette and slash completion list only commands reachable
+from their own input mode, and a default `base` layer is unreachable from both. It spawns
 `caret band-link [--session <id>] --open` (the binary from `resolveCaretBin`, detached and
 unwaited), because the TUI API has no URL opener; `--session` comes from the current route
 and is omitted off a session route, so `band-link` opens the session's waiting review or
@@ -683,20 +683,19 @@ sits outside both tsconfig's `include` and the gate's `SHIPPED_GLOB`. Known gaps
 terminal attached after the plan arrived shows no line, and a deleted session or a
 restarted daemon leaves a stale one.
 
-The line is one row, the host's queued-card idiom: a `box` on a heavy left rail in
-`border.base`, raised on `background.raised.base`, padded so its text sits on the
-composer's text column. Its left `text` reads `^caret  plan waiting for your review` and
-truncates; its right `text` never shrinks and shows the command's first formatted binding
-from `keymap.shortcuts("caret.open")` (`ctrl+x p` by default), or `/caret` without one,
-then `open in browser`. Every colour is read from `ctx.theme` inside an `effect`, and
-spans take colour only through `setProp(span, "style", …)`, because the reconciler drops a
-bare `fg` on a text node. A host without `ctx.theme` gets the row uncoloured. With nothing
-pending the row is `visible: false`, which OpenTUI lays out as `display: none`, margin
-included. A mouse-up on the row spawns the same `band-link` for the slot's own
+How the row looks is in `design/patterns.md` § Inside a host's TUI. It nests two boxes, as
+the host's queued card does: OpenTUI paints a border cell with its own box's
+`backgroundColor`, so the rail goes on an outer box with no background and the raised fill
+on an inner one. Every colour is read from `ctx.theme` inside an `effect`, and spans take
+colour only through `setProp(span, "style", …)`, because the reconciler drops a bare `fg`
+on a text node. A host without `ctx.theme` gets the row in OpenTUI's default colours. With
+nothing pending the row is `visible: false`, which OpenTUI lays out as `display: none`,
+margin included. A mouse-up on the row spawns the same `band-link` for the slot's own
 `sessionID`, not the routed one, and does nothing while `renderer.getSelection()` holds
-text, so a drag-to-copy across the row opens nothing. `ctx.theme` and `ctx.renderer` type
-as `any` in the installed SDK (their `@opencode/theme` and `@opentui/core` types are not
-installed), so their conformance rows cannot go red.
+text (the host holds an empty selection on every click, so test its text, not its
+presence), so a drag-to-copy across the row opens nothing. `ctx.theme` and `ctx.renderer`
+type as `any` in the installed SDK (their `@opencode/theme` and `@opentui/core` types are
+not installed), so their conformance rows cannot go red.
 
 ## Verified vs. follow-up
 
@@ -915,6 +914,8 @@ pointing at an argv-recording shim, no model or provider):
   as `┃  ^caret  plan waiting for your review … ctrl+x p  open in browser`. An SGR mouse
   press and release on it ran the shim with `band-link --session <that session> --open`;
   approving removed it.
+- **Not seen live:** the token colours, a theme switch, truncation, and the selection
+  guard. The margin's collapse rests on OpenTUI's source.
 
 ## Sources
 

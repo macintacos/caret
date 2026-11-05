@@ -834,6 +834,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - Keep a notice to one row.
 - Show the key that acts on the notice on the notice itself, read from the host's keymap.
 - Put the key before its verb, as the host's footer does.
+- Make the whole row the click target, and ignore a mouse-up that ends a text selection.
+- With nothing waiting, collapse the notice fully: no blank row and no gap.
 
 ### Reports (`caret doctor`)
 

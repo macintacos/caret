@@ -25,6 +25,7 @@ export type SdkConformance = [
   Fits<HostTui, TuiContext>,
   // The pending row's slices, pinned one by one so a red names the slice that moved.
   Fits<HostTui["keymap"]["shortcuts"], NonNullable<Slice<"keymap">["shortcuts"]>>,
+  // These two pin nothing until @opencode/theme and @opentui/core types install: both are any.
   Fits<HostTui["theme"], Slice<"theme">>,
   Fits<HostTui["renderer"], Slice<"renderer">>,
   // session.hook's overloads hide its events from the Context row, so pin each by key.

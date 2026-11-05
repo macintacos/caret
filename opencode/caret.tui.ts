@@ -7,7 +7,8 @@
 // this module, `@opentui/solid` is imported only dynamically, from `setup`, which v1 never
 // calls. `keymap`, `ui.router`, `ui.slot`, and `storage` stay optional: a feature that
 // needs one runs only when the host has it, so a context without them still gets caret's
-// toasts.
+// toasts. `theme` and `renderer` are optional too: without them the pending row renders in
+// OpenTUI's default colours, or opens on every mouse-up, selection or not.
 
 import { spawn } from "node:child_process";
 
@@ -109,7 +110,7 @@ export const nodeDetachedSpawn: DetachedSpawn = (bin, args, onError) => {
 };
 
 /** The `@opentui/solid` reconciler calls the pending row takes. */
-type OpenTuiText = {
+type OpenTuiReconciler = {
   createElement: (tag: "box" | "text" | "span" | "b") => unknown;
   insertNode: (parent: unknown, child: unknown) => void;
   insert: (parent: unknown, value: string) => unknown;
@@ -134,7 +135,7 @@ export function createCaretTui(opts: {
   checkUpdate: (show: ToastSink) => void;
   bin: string;
   spawn: DetachedSpawn;
-  loadOpenTui: () => Promise<OpenTuiText>;
+  loadOpenTui: () => Promise<OpenTuiReconciler>;
 }): (ctx: TuiContext) => () => void {
   return (ctx) => {
     const show: ToastSink = (body) => ctx.ui.toast.show(body);
@@ -145,7 +146,7 @@ export function createCaretTui(opts: {
           : ["band-link", "--session", sessionID, "--open"];
       opts.spawn(opts.bin, args, (err) =>
         toastBestEffort(show, {
-          title: "caret: couldn't open caret",
+          title: "caret: open failed",
           message: `${err.message}. Run caret doctor to see why.`,
           variant: "error",
         }),
@@ -232,10 +233,17 @@ export function createCaretTui(opts: {
           releaseSlot = ctx.ui.slot?.({
             prepend: "session.composer.top",
             render: (input) =>
-              pendingRow(openTui, ctx, {
+              pendingRow(openTui, {
+                // Read live: ctx.theme is a getter that follows theme switches.
+                theme: () => ctx.theme,
+                openKey: ctx.keymap?.shortcuts?.("caret.open")[0] ?? "/caret",
                 // input is reactive: read sessionID at each call, never destructure it.
                 isPending: () => pending[input.sessionID] !== undefined,
-                open: () => openPlan(input.sessionID),
+                open: () => {
+                  // As the host's own rows do: a mouse-up that ends a text selection is a copy.
+                  if (ctx.renderer?.getSelection?.()?.getSelectedText()) return;
+                  openPlan(input.sessionID);
+                },
               }),
           });
         })
@@ -253,79 +261,79 @@ export function createCaretTui(opts: {
 /** The row above a waiting session's composer: the host's queued-card idiom, one row tall,
  * opening the review on click. */
 function pendingRow(
-  ui: OpenTuiText,
-  ctx: Pick<TuiContext, "theme" | "keymap" | "renderer">,
-  { isPending, open }: { isPending: () => boolean; open: () => void },
+  openTui: OpenTuiReconciler,
+  {
+    theme,
+    openKey,
+    isPending,
+    open,
+  }: {
+    theme: () => TuiTheme | undefined;
+    openKey: string;
+    isPending: () => boolean;
+    open: () => void;
+  },
 ): unknown {
-  // Read the theme inside effects only: ctx.theme is a live getter that follows theme switches.
   const paint = (node: unknown, name: string, color: (theme: TuiTheme) => unknown) =>
-    ui.effect((prev) => ui.setProp(node, name, ctx.theme && color(ctx.theme), prev));
+    openTui.effect((prev) => {
+      const t = theme();
+      return openTui.setProp(node, name, t && color(t), prev);
+    });
   const styled = (
     tag: "span" | "b",
     text: string,
     color: (theme: TuiTheme) => unknown,
   ): unknown => {
-    const node = ui.createElement(tag);
-    ui.insert(node, text);
-    ui.effect((prev) => ui.setProp(node, "style", ctx.theme ? { fg: color(ctx.theme) } : {}, prev));
+    const node = openTui.createElement(tag);
+    openTui.insert(node, text);
+    openTui.effect((prev) => {
+      const t = theme();
+      return openTui.setProp(node, "style", t ? { fg: color(t) } : {}, prev);
+    });
     return node;
   };
   const props = (node: unknown, values: Record<string, unknown>) => {
-    for (const [name, value] of Object.entries(values)) ui.setProp(node, name, value);
+    for (const [name, value] of Object.entries(values)) openTui.setProp(node, name, value);
+  };
+  const append = (parent: unknown, ...children: unknown[]) => {
+    for (const child of children) openTui.insertNode(parent, child);
   };
 
-  const row = ui.createElement("box");
-  props(row, {
-    flexDirection: "row",
-    border: ["left"],
-    borderStyle: "heavy",
-    paddingLeft: 2,
-    paddingRight: 1,
-    marginBottom: 1,
-    onMouseUp: () => {
-      // As the host's own rows do: a mouse-up that ends a text selection is a copy, not a click.
-      if (ctx.renderer?.getSelection?.()?.getSelectedText()) return;
-      open();
-    },
-  });
+  // Two boxes, as the host's queued card: the rail cell stays on the base background.
+  const row = openTui.createElement("box");
+  props(row, { border: ["left"], borderStyle: "heavy", marginBottom: 1, onMouseUp: open });
   paint(row, "borderColor", (t) => t.border.base);
-  paint(row, "backgroundColor", (t) => t.background.raised.base);
-  ui.effect((prev) => ui.setProp(row, "visible", isPending(), prev));
+  openTui.effect((prev) => openTui.setProp(row, "visible", isPending(), prev));
 
-  const label = ui.createElement("text");
+  const card = openTui.createElement("box");
+  props(card, { flexDirection: "row", flexGrow: 1, paddingLeft: 2, paddingRight: 1 });
+  paint(card, "backgroundColor", (t) => t.background.raised.base);
+
+  const label = openTui.createElement("text");
   props(label, { flexGrow: 1, flexShrink: 1, minWidth: 0, wrapMode: "none", truncate: true });
-  ui.insertNode(
+  append(
     label,
     styled("b", "^", (t) => t.text.feedback.warning.base),
-  );
-  ui.insertNode(
-    label,
     styled("span", "caret  ", (t) => t.text.muted),
-  );
-  ui.insertNode(
-    label,
     styled("b", PENDING_LABEL, (t) => t.text.base),
   );
 
-  const hint = ui.createElement("text");
+  const hint = openTui.createElement("text");
   props(hint, { flexShrink: 0, wrapMode: "none" });
-  ui.insertNode(
+  append(
     hint,
-    styled("span", ctx.keymap?.shortcuts?.("caret.open")[0] ?? "/caret", (t) => t.text.base),
-  );
-  ui.insertNode(
-    hint,
+    styled("span", openKey, (t) => t.text.base),
     styled("span", `  ${PENDING_ACTION}`, (t) => t.text.muted),
   );
 
-  ui.insertNode(row, label);
-  ui.insertNode(row, hint);
+  append(card, label, hint);
+  append(row, card);
   return row;
 }
 
 // The v2 host rewrites only a bare string-literal specifier here; a cast or a variable sends
 // the import to disk, where nothing installs @opentui/solid.
-const loadOpenTui = (): Promise<OpenTuiText> => import("@opentui/solid");
+const loadOpenTui = (): Promise<OpenTuiReconciler> => import("@opentui/solid");
 const setup = createCaretTui({
   checkUpdate: productionUpdateCheck,
   bin: resolveCaretBin({ env: process.env, importMetaUrl: import.meta.url }),
