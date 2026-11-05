@@ -41,7 +41,7 @@ export type TuiContext = {
     ) => () => void;
   };
   ui: { toast: { show: (options: TuiToast) => void }; router?: { current: () => Route } };
-  keymap?: { layer: (factory: () => { commands: CaretCommand[] }) => void };
+  keymap?: { layer: (factory: () => { mode: "global"; commands: CaretCommand[] }) => void };
 };
 
 /** v2's `Route` as caret reads it: only a session route carries `sessionID`. */
@@ -97,6 +97,8 @@ export function createCaretTui(opts: {
     if (typeof ctx.keymap?.layer === "function") {
       try {
         ctx.keymap.layer(() => ({
+          // The palette and slash completion list only commands reachable from their own input mode.
+          mode: "global",
           commands: [
             {
               id: "caret.open",

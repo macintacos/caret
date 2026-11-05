@@ -205,6 +205,7 @@ test("the cleanup unsubscribes every handler", () => {
 test("setup registers the /caret command on <leader>p and in the palette", () => {
   const { layers } = start();
   expect(layers).toHaveLength(1);
+  expect(layers[0]?.mode).toBe("global");
   expect(layers[0]?.commands).toHaveLength(1);
   const command = layers[0]?.commands[0];
   expect(command).toMatchObject({
