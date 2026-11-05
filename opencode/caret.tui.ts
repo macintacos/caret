@@ -5,8 +5,9 @@
 // in `server()`; the no-op `tui` exists because v1's installer may register this module as
 // a v1 TUI plugin, and v1's TUI loader throws on a default without one. Because v1 can load
 // this module, `@opentui/solid` is imported only dynamically, from `setup`, which v1 never
-// calls. `keymap` and `ui.router` stay optional, and the command registers only when
-// `keymap.layer` is a function, so a context without them still gets caret's toasts.
+// calls. `keymap`, `ui.router`, `ui.slot`, and `storage` stay optional: a feature that
+// needs one runs only when the host has it, so a context without them still gets caret's
+// toasts.
 
 import { spawn } from "node:child_process";
 
@@ -43,11 +44,11 @@ export type TuiContext = {
   };
   ui: {
     toast: { show: (options: TuiToast) => void };
-    slot: (claim: ComposerClaim) => () => void;
+    slot?: (claim: ComposerClaim) => () => void;
     router?: { current: () => Route };
   };
   keymap?: { layer: (factory: () => { mode: "global"; commands: CaretCommand[] }) => void };
-  storage: {
+  storage?: {
     memory: (
       key: string,
       options: { readonly initial: PendingBySession },
@@ -60,8 +61,8 @@ type PendingBySession = Record<string, PendingReview>;
 
 type ComposerClaim = {
   readonly prepend: "session.composer.top";
-  // `unknown`, not the host's `JSX.Element`, which is `any` only while @opentui/solid is
-  // uninstalled; never loosen sdk-conformance's row.
+  // unknown fits the host's JSX.Element only while @opentui/solid is uninstalled (it is any
+  // then); once installed, type this from the host's SlotClaim.
   readonly render: (input: { readonly sessionID: string }) => unknown;
 };
 
@@ -102,8 +103,16 @@ type OpenTuiText = {
 
 const PENDING_LINE = "plan waiting in caret";
 
-/** Build caret's v2 TUI `setup` over an injected update check, caret binary, spawn, and
- * OpenTUI loader. */
+const plainMemory = (): readonly [
+  PendingBySession,
+  (mutation: (draft: PendingBySession) => void) => void,
+] => {
+  const map: PendingBySession = {};
+  return [map, (mutate) => mutate(map)];
+};
+
+/** caret's v2 TUI setup over injected effects; its cleanup releases the slot claim (which
+ * lands asynchronously) and every subscription. */
 export function createCaretTui(opts: {
   checkUpdate: (show: ToastSink) => void;
   bin: string;
@@ -158,8 +167,12 @@ export function createCaretTui(opts: {
 
     // Tool events carry the call id, not the tool name: a session's entry names the one call
     // whose link it showed, and a later link in that session replaces it.
-    // The url can carry the login token, so it stays in memory and is never logged.
-    const [pending, setPending] = ctx.storage.memory("caret.pending", { initial: {} });
+    const storage = ctx.storage;
+    const reactive = typeof storage?.memory === "function";
+    const [pending, setPending] =
+      typeof storage?.memory === "function"
+        ? storage.memory("caret.pending", { initial: {} })
+        : plainMemory();
     const settle = (id: string, sessionID: string, outcome: ReviewOutcome) => {
       if (pending[sessionID]?.callId !== id) return;
       setPending((draft) => {
@@ -191,22 +204,25 @@ export function createCaretTui(opts: {
 
     let releaseSlot: (() => void) | undefined;
     let disposed = false;
-    opts
-      .loadOpenTui()
-      .then((openTui) => {
-        if (disposed) return;
-        releaseSlot = ctx.ui.slot({
-          prepend: "session.composer.top",
-          render: (input) => {
-            const line = openTui.createElement("text");
-            // input is reactive: read sessionID inside the accessor, never destructure it.
-            openTui.insert(line, () => (pending[input.sessionID] ? PENDING_LINE : ""));
-            return line;
-          },
-        });
-      })
-      // best-effort: a host whose runtime can't resolve @opentui/solid shows no line
-      .catch(() => {});
+    // Without the host's reactive store the line could never update.
+    if (typeof ctx.ui.slot === "function" && reactive) {
+      opts
+        .loadOpenTui()
+        .then((openTui) => {
+          if (disposed) return;
+          releaseSlot = ctx.ui.slot?.({
+            prepend: "session.composer.top",
+            render: (input) => {
+              const line = openTui.createElement("text");
+              // input is reactive: read sessionID inside the accessor, never destructure it.
+              openTui.insert(line, () => (pending[input.sessionID] ? PENDING_LINE : ""));
+              return line;
+            },
+          });
+        })
+        // best-effort: a host whose runtime can't resolve @opentui/solid shows no line
+        .catch(() => {});
+    }
     return () => {
       disposed = true;
       releaseSlot?.();

@@ -19,7 +19,8 @@
 //   `opencode/` ships as source, so a consumer has no tsconfig `paths` to resolve it with.
 //   The extractor reads such a specifier as an undeclared package name and the gate reds,
 //   which is the correct outcome.
-// - **A host-provided specifier is imported but never declared** (`HOST_PROVIDED`). The
+// - **A host-provided specifier is imported, only dynamically, but never declared**
+//   (`HOST_PROVIDED`). The
 //   v2 host maps it to its own copy for TUI plugins, so a declared copy would be
 //   downloaded by every OpenCode user and loaded by none.
 import { expect, test } from "bun:test";

@@ -670,10 +670,10 @@ reviews sit on the root session.
 
 The same `setup` keeps a pending-plan line above the waiting session's prompt. A
 `storage.memory` map, `sessionID → { callId, url }`, records the review-link event and
-loses the entry when that call settles; it stays in memory because the URL can carry the
-login token. One entry per session: a later review link in a session replaces it, and the
-earlier call's settle then shows no line change and no decision toast. The line is a
-`session.composer.top` slot claim. It renders through `@opentui/solid`, which v2's TUI
+drops the entry when that call settles. One entry per session: a later review link in a
+session replaces it, and the earlier call's settle then shows no line change and no
+decision toast. The line is a `session.composer.top` slot claim, made only when the host
+has both `ui.slot` and `storage`. It renders through `@opentui/solid`, which v2's TUI
 runtime maps to the host's own copy for every TUI plugin; the dynamic `import()` runs only
 in `setup`, which v1 never calls, and the dependency gate names the specifier in
 `HOST_PROVIDED`. There is no JSX: a `.tsx` needs the three `@opentui`/`solid-js` peers and
@@ -713,11 +713,11 @@ resolve from `ctx.agent.list()` (failing closed on an unreadable or empty list a
 non-plan default), the TUI half's toasts and update check, its `caret.open` command (the
 `band-link` argv with and without a session, the `keymap` guard, and the spawn-failure
 toast), its pending-line map (set and clear per call, two sessions apart, a later call
-superseding), loader failure and cleanup, abort on both hosts, and v1↔v2 parity of the
-refusal texts, the v2 envelope declaring `build` only from a planning agent (and v1's
-declaring nothing), the Approve & build switch, and a failed switch keeping the approval
-with its note and log. For the plugin key they cover the host probe's 5 s bound (a
-grandchild holding stdout included), key selection and the one-transform move, deleting
+superseding), the slot guard, loader failure and cleanup, abort on both hosts, and v1↔v2
+parity of the refusal texts, the v2 envelope declaring `build` only from a planning agent
+(and v1's declaring nothing), the Approve & build switch, and a failed switch keeping the
+approval with its note and log. For the plugin key they cover the host probe's 5 s bound
+(a grandchild holding stdout included), key selection and the one-transform move, deleting
 `plugins` without losing comments (a trailing comma and CRLF included), v2 cache reads and
 clears, the service launcher's pick of v2's live generation (bash and TS against one
 shared fixture), and doctor's `opencode-host` and `opencode-caret-version` checks and
@@ -881,8 +881,8 @@ pointing at an argv-recording shim, no model or provider):
 - **`<leader>p` collision.** Rests on 2.2.1's default binds (§ Sources) plus the live
   palette showing `ctrl+x p` for the command.
 
-**Confirmed live for EXC-2248** (v2.2.1, a TUI probe plugin from an isolated `cli.json`
-`plugins` entry):
+**Confirmed live for EXC-2248** (2026-11-05, v2.2.1, a TUI probe plugin from an isolated
+`cli.json` `plugins` entry):
 
 - **Bare string.** A string returned from `render` renders nothing and throws nothing.
 - **Element.** `createElement("text")` plus `insert(el, string)`, with `@opentui/solid`
@@ -943,6 +943,11 @@ pointing at an argv-recording shim, no model or provider):
   — `createLayer` gives a layer without `mode` the `base` mode, and the palette and slash
   completion list reachable commands only; the built-in stats plugin
   (`packages/tui/src/feature-plugins/system/stats.tsx`) is the `mode: "global"` precedent.
+- v2 TUI module mapping and slot/storage (upstream): anomalyco/opencode
+  `packages/tui/src/plugin/runtime-plugin-support.bun.ts` (`ensureRuntimePluginSupport`
+  maps `@opentui/solid`, `@opentui/core`, `solid-js`); `@opencode/plugin`
+  `dist/tui/context.d.ts` — `SlotMap["session.composer.top"]`, `SlotClaim`,
+  `Storage.memory` (declared from 2.0.0).
 - `<leader>p` checked free against OpenCode 2.2.1's default keybinds: leader `ctrl+x`;
   default leader binds `0-9 a b c e g i l m n q r s t u w x y`, arrows and `return`.
   `keybinds["caret.open"]` overrides the command's `bind`.

@@ -61,13 +61,14 @@ something that is — a peer obligation has no import site of its own, so it bel
 wherever the package declaring it belongs. Optional peers are not reachable:
 `@opencode-ai/plugin` declares three `@opentui/*` peers as optional, which is why caret
 declares none of them. A package the host's runtime maps to its own copy for every plugin
-of that kind is reachable but undeclared; name it in the gate's `HOST_PROVIDED`. Today
-that is only `@opentui/solid`, which `opencode/caret.tui.ts` imports dynamically from
-`setup`, which only v2 calls; declaring it would download OpenTUI to every OpenCode user
-for nothing. A statement TypeScript erases — `import type { X } from` or
-`export type { X } from` — does not count. `import { type X } from` still counts: whether
-it survives depends on the transpiler (caret's `verbatimModuleSyntax` keeps it as
-`import {} from`), so the gate assumes it does.
+of that kind is reachable but undeclared; name it in the gate's `HOST_PROVIDED`, and
+import it only dynamically, from code that host alone runs. Today that is only
+`@opentui/solid`, which `opencode/caret.tui.ts` imports dynamically from `setup`, which
+only v2 calls; declaring it would download OpenTUI to every OpenCode user for nothing. A
+statement TypeScript erases — `import type { X } from` or `export type { X } from` — does
+not count. `import { type X } from` still counts: whether it survives depends on the
+transpiler (caret's `verbatimModuleSyntax` keeps it as `import {} from`), so the gate
+assumes it does.
 
 [`../../test/structure/dependency-placement.test.ts`](../../test/structure/dependency-placement.test.ts)
 is the falsifier: it derives the reachable set from `opencode/`'s runtime imports

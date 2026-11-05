@@ -1,7 +1,6 @@
 // Unit coverage for caret's OpenCode v2 TUI module: the review-link, decision, and update
-// toasts, the `caret.open` command, and the pending-plan line, driven through a fake
-// context of `data.on`, `ui.toast.show`, `ui.router`, `ui.slot`, `keymap`, and
-// `storage.memory`.
+// toasts, the `caret.open` command, and the pending-plan line, driven through a fake v2
+// TUI context (`fakeTui`).
 
 import { expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
@@ -30,8 +29,8 @@ type Route = ReturnType<NonNullable<TuiContext["ui"]["router"]>["current"]>;
 type Layer = ReturnType<Parameters<NonNullable<TuiContext["keymap"]>["layer"]>[0]>;
 type Keymap = NonNullable<TuiContext["keymap"]>;
 
-type Claim = Parameters<TuiContext["ui"]["slot"]>[0];
-type Memory = ReturnType<TuiContext["storage"]["memory"]>[0];
+type Claim = Parameters<NonNullable<TuiContext["ui"]["slot"]>>[0];
+type Memory = ReturnType<NonNullable<TuiContext["storage"]>["memory"]>[0];
 type FakeLine = { text: () => string };
 
 const fakeOpenTui = {
@@ -48,7 +47,14 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 function fakeTui(
   show: ToastSink = () => {},
-  { route, keymap }: { route?: Route; keymap?: Keymap | "record" } = { keymap: "record" },
+  {
+    route,
+    keymap,
+    slot = true,
+    storage = true,
+  }: { route?: Route; keymap?: Keymap | "record"; slot?: boolean; storage?: boolean } = {
+    keymap: "record",
+  },
 ) {
   const handlers = new Map<string, Handler>();
   const shown: Toast[] = [];
@@ -79,19 +85,27 @@ function fakeTui(
         },
       },
       ...(route ? { router: { current: () => route } } : {}),
-      slot: (claim) => {
-        claims.push(claim);
-        return () => {
-          released++;
-        };
-      },
+      ...(slot
+        ? {
+            slot: (claim: Claim) => {
+              claims.push(claim);
+              return () => {
+                released++;
+              };
+            },
+          }
+        : {}),
     },
-    storage: {
-      memory: (key, { initial }) => {
-        stores.set(key, initial);
-        return [initial, (mutate) => mutate(initial)] as const;
-      },
-    },
+    ...(storage
+      ? {
+          storage: {
+            memory: (key, { initial }) => {
+              stores.set(key, initial);
+              return [initial, (mutate) => mutate(initial)] as const;
+            },
+          },
+        }
+      : {}),
   };
   const emit = (
     type: string,
@@ -130,12 +144,17 @@ function recordingSpawn(failWith?: string) {
   return { spawned, spawn };
 }
 
-function start(
-  checkUpdate: (show: ToastSink) => void = () => {},
-  fake: ReturnType<typeof fakeTui> = fakeTui(),
-  failWith?: string,
-  loadOpenTui: () => Promise<typeof fakeOpenTui> = async () => fakeOpenTui,
-) {
+function start({
+  checkUpdate = () => {},
+  fake = fakeTui(),
+  failWith,
+  loadOpenTui = async () => fakeOpenTui,
+}: {
+  checkUpdate?: (show: ToastSink) => void;
+  fake?: ReturnType<typeof fakeTui>;
+  failWith?: string;
+  loadOpenTui?: () => Promise<typeof fakeOpenTui>;
+} = {}) {
   const { spawned, spawn } = recordingSpawn(failWith);
   const cleanup = createCaretTui({ checkUpdate, bin: BIN, spawn, loadOpenTui })(fake.ctx);
   return { ...fake, cleanup, spawned };
@@ -212,7 +231,7 @@ test("a throwing toast surface does not escape a handler", () => {
   const fake = fakeTui(() => {
     throw new Error("no tui");
   });
-  start(undefined, fake);
+  start({ fake });
   expect(() => fake.emit("session.tool.progress", "C", { caretUrl: URL })).not.toThrow();
 });
 
@@ -222,7 +241,7 @@ test("a rejecting toast surface leaves no unhandled rejection", async () => {
   process.on("unhandledRejection", record);
   try {
     const fake = fakeTui(() => Promise.reject(new Error("x")));
-    start(undefined, fake);
+    start({ fake });
     fake.emit("session.tool.progress", "C", { caretUrl: URL });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(unhandled).toEqual([]);
@@ -233,15 +252,17 @@ test("a rejecting toast surface leaves no unhandled rejection", async () => {
 
 test("a throwing update check does not escape setup", () => {
   expect(() =>
-    start(() => {
-      throw new Error("boom");
+    start({
+      checkUpdate: () => {
+        throw new Error("boom");
+      },
     }),
   ).not.toThrow();
 });
 
 test("the update check runs once on a sink that toasts through the TUI", () => {
   const sinks: ToastSink[] = [];
-  const { shown } = start((show) => sinks.push(show));
+  const { shown } = start({ checkUpdate: (show) => sinks.push(show) });
   expect(sinks).toHaveLength(1);
   const body: ToastBody = { message: "caret 9.9.9 is available", variant: "info" };
   sinks[0]?.(body);
@@ -270,27 +291,25 @@ test("setup registers the /caret command on <leader>p and in the palette", () =>
 });
 
 test("on a session route the command opens that session's plan", () => {
-  const { layers, spawned } = start(
-    undefined,
-    fakeTui(undefined, { route: { type: "session", sessionID: "ses_A" }, keymap: "record" }),
-  );
+  const { layers, spawned } = start({
+    fake: fakeTui(undefined, { route: { type: "session", sessionID: "ses_A" }, keymap: "record" }),
+  });
   runCommand(layers);
   expect(spawned).toEqual([{ bin: BIN, args: ["band-link", "--session", "ses_A", "--open"] }]);
 });
 
 test("off a session route the command opens caret's home page", () => {
   for (const route of [{ type: "home" }, undefined]) {
-    const { layers, spawned } = start(
-      undefined,
-      fakeTui(undefined, { ...(route ? { route } : {}), keymap: "record" }),
-    );
+    const { layers, spawned } = start({
+      fake: fakeTui(undefined, { ...(route ? { route } : {}), keymap: "record" }),
+    });
     runCommand(layers);
     expect(spawned).toEqual([{ bin: BIN, args: ["band-link", "--open"] }]);
   }
 });
 
 test("a spawn that fails shows an error toast naming the failure", () => {
-  const { layers, shown } = start(undefined, fakeTui(), "spawn /caret/bin/caret ENOENT");
+  const { layers, shown } = start({ failWith: "spawn /caret/bin/caret ENOENT" });
   runCommand(layers);
   expect(shown).toHaveLength(1);
   expect(shown[0]?.variant).toBe("error");
@@ -301,7 +320,7 @@ test("a host without a keymap still shows the review-link toast", () => {
   const fake = fakeTui(undefined, {});
   let started: ReturnType<typeof start> | undefined;
   expect(() => {
-    started = start(undefined, fake);
+    started = start({ fake });
   }).not.toThrow();
   expect(started?.layers).toEqual([]);
   fake.emit("session.tool.progress", "C", { caretUrl: URL });
@@ -316,7 +335,7 @@ test("a keymap that rejects the command still leaves the review-link toast", () 
       },
     },
   });
-  expect(() => start(undefined, fake)).not.toThrow();
+  expect(() => start({ fake })).not.toThrow();
   fake.emit("session.tool.progress", "C", { caretUrl: URL });
   expect(fake.shown.map((b) => b.message)).toEqual([URL]);
 });
@@ -419,12 +438,31 @@ test("a rejecting OpenTUI load makes no claim and leaves no unhandled rejection"
   const record = (reason: unknown) => unhandled.push(reason);
   process.on("unhandledRejection", record);
   try {
-    const { claims } = start(undefined, undefined, undefined, () => Promise.reject(new Error("x")));
+    const { claims } = start({ loadOpenTui: () => Promise.reject(new Error("x")) });
     await flush();
     expect(claims).toHaveLength(0);
     expect(unhandled).toEqual([]);
   } finally {
     process.off("unhandledRejection", record);
+  }
+});
+
+test("a host missing the slot or storage gets no claim but keeps the review-link toast", async () => {
+  for (const missing of [{ slot: false }, { storage: false }]) {
+    const fake = fakeTui(undefined, { keymap: "record", ...missing });
+    let loads = 0;
+    start({
+      fake,
+      loadOpenTui: async () => {
+        loads++;
+        return fakeOpenTui;
+      },
+    });
+    await flush();
+    expect(fake.claims).toHaveLength(0);
+    expect(loads).toBe(0);
+    fake.emit("session.tool.progress", "C", { caretUrl: URL });
+    expect(fake.shown.map((b) => b.message)).toEqual([URL]);
   }
 });
 
