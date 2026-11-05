@@ -50,7 +50,7 @@ export async function runBandLinkSubcommand(opts: {
     // setting and the poll gate only printing.
     if (opts.open || s.review.band) {
       const baseUrl = daemonBaseUrl(s);
-      const id =
+      const reviewId =
         session === undefined
           ? undefined
           : await awaitPendingReview(
@@ -60,11 +60,11 @@ export async function runBandLinkSubcommand(opts: {
               },
               opts.open ? 1 : undefined,
             );
-      logDebug("band", "band link resolved", { found: id !== undefined });
+      logDebug("band", "band link resolved", { found: reviewId !== undefined });
       const url = browserReviewLink(
         baseUrl,
         localHostname(s.daemon.host),
-        id,
+        reviewId,
         browserLoginToken(s.daemon),
       );
       if (opts.open) openBrowser(url);
