@@ -73,7 +73,7 @@ function prefersReducedMotion(): boolean {
  * the browser's own rounding and clamping, so what is left for the slop is drift
  * a set/get round-trip cannot report exactly — a fractional device-pixel ratio,
  * page zoom, or a reflow re-clamping scrollTop as rows paint in. */
-const SCROLL_TAKEOVER_SLOP = 1;
+export const SCROLL_TAKEOVER_SLOP = 1;
 
 // The plan has one scroll container, so at most one flight is ever in the air: a
 // second scroll cancels the first rather than leaving two loops writing scrollTop

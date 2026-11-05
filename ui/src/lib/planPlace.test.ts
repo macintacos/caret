@@ -1,8 +1,9 @@
 import "@ui/support/setup.ts";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { SCROLL_TAKEOVER_SLOP } from "$lib/diffview/scroll.ts";
 import { SCROLL_OFFSET_TOP } from "$lib/layout.ts";
-import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
+import { blockIndexForLine, holdPlace, holdThroughRewrap, previewTopLine } from "$lib/planPlace.ts";
 
 // happy-dom has no layout, so every rect is stubbed in the viewport space
 // getBoundingClientRect reads from.
@@ -200,5 +201,103 @@ describe("holdPlace", () => {
     release();
     document.dispatchEvent(new Event("wheel"));
     expect(observer.disconnects).toBe(1);
+  });
+});
+
+describe("holdThroughRewrap", () => {
+  const OFFSET = 12;
+  const POINT = { line: 40, column: 3 };
+
+  /** A hold whose reading line sits at `geo.lineTop` (content space, mutable), whose
+   * content width the test sets, and whose observer the test fires by hand. */
+  function arrange() {
+    const scroller = document.createElement("div");
+    scroller.getBoundingClientRect = () => rect(TOP);
+    const content = document.createElement("div");
+    const geo = { width: 800, lineTop: 2000 };
+    content.getBoundingClientRect = () => new DOMRect(0, 0, geo.width, 0);
+    scroller.append(content);
+    document.body.append(scroller);
+    const observer = { fire: () => {}, disconnects: 0 };
+    const observe = (_el: Element, onResize: () => void) => {
+      observer.fire = onResize;
+      return () => {
+        observer.disconnects += 1;
+      };
+    };
+    const takes = { count: 0 };
+    const disconnect = holdThroughRewrap(
+      {
+        scroller,
+        content,
+        take: () => {
+          takes.count += 1;
+          return { point: POINT, offset: OFFSET };
+        },
+        lineTop: () => geo.lineTop - scroller.scrollTop,
+      },
+      observe,
+    );
+    const scrollTo = (top: number) => {
+      scroller.scrollTop = top;
+      scroller.dispatchEvent(new Event("scroll"));
+    };
+    return { scroller, geo, observer, takes, disconnect, scrollTo };
+  }
+
+  const parked = (lineTop: number) => lineTop - TOP - OFFSET;
+
+  test("a width change parks the line taken before it at its offset below the top", () => {
+    const { scroller, geo, observer } = arrange();
+    geo.width = 500;
+    geo.lineTop = 2600;
+    observer.fire();
+    expect(scroller.scrollTop).toBe(parked(2600));
+  });
+
+  test("a height-only resize before any width change parks nothing", () => {
+    const { scroller, geo, observer } = arrange();
+    geo.lineTop = 2600;
+    observer.fire();
+    expect(scroller.scrollTop).toBe(0);
+  });
+
+  test("after a width change, a height-only resize parks again", () => {
+    const { scroller, geo, observer } = arrange();
+    geo.width = 500;
+    observer.fire();
+    geo.lineTop = 2700;
+    observer.fire();
+    expect(scroller.scrollTop).toBe(parked(2700));
+  });
+
+  test("a reader's scroll re-takes the place and ends the hold", () => {
+    const { scroller, geo, observer, takes, scrollTo } = arrange();
+    geo.width = 500;
+    observer.fire();
+    const before = takes.count;
+    scrollTo(scroller.scrollTop + 300);
+    expect(takes.count).toBe(before + 1);
+    geo.lineTop = 2900;
+    observer.fire();
+    expect(scroller.scrollTop).toBe(parked(2000) + 300);
+  });
+
+  test("the park's own scroll re-takes nothing", () => {
+    const { scroller, geo, observer, takes, scrollTo } = arrange();
+    geo.width = 500;
+    observer.fire();
+    const before = takes.count;
+    scrollTo(scroller.scrollTop + SCROLL_TAKEOVER_SLOP);
+    expect(takes.count).toBe(before);
+  });
+
+  test("the disconnect stops observing and listening for scrolls", () => {
+    const { scroller, observer, takes, disconnect, scrollTo } = arrange();
+    disconnect();
+    expect(observer.disconnects).toBe(1);
+    const before = takes.count;
+    scrollTo(scroller.scrollTop + 300);
+    expect(takes.count).toBe(before);
   });
 });

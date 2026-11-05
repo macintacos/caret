@@ -586,3 +586,19 @@ parks is the block the next flip reads back. `ui/src/lib/planPlace.ts` holds the
 
 Place-keeping is not a `SURFACE_BEHAVIORS` row. It runs at the flip itself, not on a
 surface.
+
+### Keeping the place through a rewrap
+
+A rewrap of the preview keeps the reader's visual line at the reading zone.
+`holdThroughRewrap` in `ui/src/lib/planPlace.ts` keeps a `TextPoint` plus its visual
+line's offset below the scroller's top, re-taken on every reader scroll.
+
+- **It re-parks in the ResizeObserver callback** when the preview root's width changes, so
+  the re-park paints in the rewrap's own frame. Later resizes re-park too while the hold
+  lasts. Each park writes an absolute `scrollTop`, so Safari, which has no
+  `overflow-anchor`, holds as well.
+- **The reader's scroll ends it.** A scroll within `SCROLL_TAKEOVER_SLOP` of the parked
+  top is the park's own and is ignored. Any other scroll re-takes the place.
+- **Its lifecycle differs from `holdPlace`'s** because a drawer drag starts with a pointer
+  press, which would release `holdPlace`. It also keeps a line rather than a block: a
+  rewrap inside a long paragraph moves the line being read within its block.

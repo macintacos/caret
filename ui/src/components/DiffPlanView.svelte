@@ -156,7 +156,12 @@
     withinLines,
   } from "$lib/previewLines.ts";
   import { createPlanSourceMap, type PlanSourceMap } from "$lib/planSourceMap.ts";
-  import { blockIndexForLine, holdPlace, previewTopLine } from "$lib/planPlace.ts";
+  import {
+    blockIndexForLine,
+    holdPlace,
+    holdThroughRewrap,
+    previewTopLine,
+  } from "$lib/planPlace.ts";
   import {
     clearCommentHighlight,
     createSlotGaps,
@@ -565,6 +570,24 @@
     gaps.set(map, open);
     const next = gaps.boxes(scroller);
     if (!sameSlotBoxes(untrack(() => slotBoxes), next)) slotBoxes = next;
+  });
+
+  $effect(() => {
+    const root = previewEl;
+    const scroller = scrollEl;
+    const map = previewSourceMap;
+    if (root == null || scroller == null || map == null) return;
+    return holdThroughRewrap({
+      scroller,
+      content: root,
+      take: () => {
+        const top = scroller.getBoundingClientRect().top;
+        const point = readingPoint(root, map, top);
+        const box = point && visualLineBox(root, map, point);
+        return point && box ? { point, offset: box.top - top } : null;
+      },
+      lineTop: (point) => visualLineBox(root, map, point)?.top ?? null,
+    });
   });
 
   // Report the compared versions to the host, so App can point the docked comment

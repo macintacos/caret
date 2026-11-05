@@ -1,8 +1,9 @@
 // Finds the reader's place on one plan surface and holds it on the other across a
 // source/preview flip. Places are block-granular, found by binary search over the
 // preview's block spans, so a long plan is never measured block by block.
-import { indexAtReadingZone, parkAt } from "$lib/diffview/scroll.ts";
+import { indexAtReadingZone, parkAt, SCROLL_TAKEOVER_SLOP } from "$lib/diffview/scroll.ts";
 import type { SourceSpan } from "$lib/planMarkdown.ts";
+import type { TextPoint } from "$lib/planSourceMap.ts";
 
 /** The index of the block holding 1-based `line`: a line in a gap takes the next
  * block, a line past the end the last, and no blocks gives null. */
@@ -86,4 +87,58 @@ export function holdPlace(hold: PlaceHold, observe: ObserveResize = observeResiz
   for (const type of READER_INPUTS) doc.addEventListener(type, release, LISTEN);
   park();
   return release;
+}
+
+/** The reader's place in the preview: a source point and how far its visual line's top
+ * sits below the scroller's top. */
+export interface ReadingPlace {
+  point: TextPoint;
+  offset: number;
+}
+
+export interface RewrapHold {
+  /** The plan's scroll container. */
+  scroller: HTMLElement;
+  /** The preview root: a change in its width rewraps the text. */
+  content: Element;
+  /** The reader's place at the current layout, or null with no text. */
+  take: () => ReadingPlace | null;
+  /** The client-space top of `point`'s visual line at the current layout, or null. */
+  lineTop: (point: TextPoint) => number | null;
+}
+
+/** Holds the reader's place through every rewrap of `content`. A resize that changes its
+ * width re-parks the place taken before it and holds it: later resizes re-park too, until
+ * the reader scrolls, which re-takes the place. Returns the disconnect. */
+export function holdThroughRewrap(
+  hold: RewrapHold,
+  observe: ObserveResize = observeResize,
+): () => void {
+  const { scroller, content } = hold;
+  let place = hold.take();
+  let width = content.getBoundingClientRect().width;
+  let parkedTop: number | null = null;
+  // Runs in the ResizeObserver callback, after layout and before paint, so the rewrap
+  // and its re-park paint in the same frame.
+  const park = (): void => {
+    const next = content.getBoundingClientRect().width;
+    if (next === width && parkedTop === null) return;
+    width = next;
+    const top = place && hold.lineTop(place.point);
+    if (place == null || top == null) return;
+    scroller.scrollTop += top - (scroller.getBoundingClientRect().top + place.offset);
+    parkedTop = scroller.scrollTop;
+  };
+  const onScroll = (): void => {
+    if (parkedTop !== null && Math.abs(scroller.scrollTop - parkedTop) <= SCROLL_TAKEOVER_SLOP)
+      return;
+    parkedTop = null;
+    place = hold.take();
+  };
+  const stopObserving = observe(content, park);
+  scroller.addEventListener("scroll", onScroll, { passive: true });
+  return () => {
+    stopObserving();
+    scroller.removeEventListener("scroll", onScroll);
+  };
 }

@@ -807,3 +807,64 @@ test("a click on a rewrapped row cites every source line with text on it and ope
   };
   await expect.poll(under).toBe(true);
 });
+
+/** Records the visual line at the plan's reading zone: the text point just inside the
+ * column's start a few px below the scroller's top. */
+function markReadingLine(page: Page): Promise<void> {
+  return page.evaluate(
+    ({ preview, surface }) => {
+      const top = (document.querySelector(surface) as HTMLElement).getBoundingClientRect().top;
+      const left = (document.querySelector(`${preview} p`) as HTMLElement).getBoundingClientRect()
+        .left;
+      const at = document.caretRangeFromPoint(left + 2, top + 4);
+      if (!at) throw new Error("no text at the reading zone");
+      (window as unknown as { readingAt: Range }).readingAt = at;
+    },
+    { preview: PLAN_PREVIEW, surface: PLAN_SURFACE },
+  );
+}
+
+/** How far the marked point's visual line top sits below the scroller's top. */
+function readingOffset(page: Page): Promise<number> {
+  return page.evaluate((surface) => {
+    const top = (document.querySelector(surface) as HTMLElement).getBoundingClientRect().top;
+    const range = (window as unknown as { readingAt: Range }).readingAt.cloneRange();
+    const end = range.startContainer.textContent?.length ?? 0;
+    range.setEnd(range.startContainer, Math.min(range.startOffset + 1, end));
+    return (range.getClientRects()[0]?.top ?? Number.NaN) - top;
+  }, PLAN_SURFACE);
+}
+
+test("a rewrap keeps the line at the top of the plan where it was", async ({ daemon, page }) => {
+  await page.setViewportSize(WIDE);
+  const paragraphs = Array.from({ length: 60 }, (_, i) => `Paragraph ${i + 1}. ${PROSE}`);
+  await openRows(daemon, page, ["# Reading place", ...paragraphs].join("\n\n"));
+  // Safari has no overflow-anchor; Chromium's would hold the place without the hold.
+  await page.addStyleTag({ content: `${PLAN_SURFACE} { overflow-anchor: none; }` });
+  const scroller = page.locator(PLAN_SURFACE);
+  const box = await scroller.boundingBox();
+  if (!box) throw new Error("the plan did not render");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const half = await scroller.evaluate((el) => (el.scrollHeight - el.clientHeight) / 2);
+  await page.mouse.wheel(0, half);
+  await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(half / 2);
+
+  await markReadingLine(page);
+  const offset = await readingOffset(page);
+  const lineHeight = await page
+    .locator(`${PLAN_PREVIEW} p`)
+    .first()
+    .evaluate((el) => Number.parseFloat(getComputedStyle(el).lineHeight));
+
+  await page.setViewportSize(NARROW);
+  await expect.poll(() => planFits(page)).toBe(true);
+  await expect
+    .poll(async () => Math.abs((await readingOffset(page)) - offset))
+    .toBeLessThanOrEqual(lineHeight);
+
+  await page.setViewportSize(WIDE);
+  await expect.poll(() => columnFits(page)).toBe(true);
+  await expect
+    .poll(async () => Math.abs((await readingOffset(page)) - offset))
+    .toBeLessThanOrEqual(lineHeight);
+});
