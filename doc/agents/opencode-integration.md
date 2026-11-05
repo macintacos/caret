@@ -655,9 +655,16 @@ this module as a v1 TUI plugin, and v1's TUI loader throws on a default without 
 `caret band-link [--session <id>] --open` (the binary from `resolveCaretBin`, detached and
 unwaited), because the TUI API has no URL opener; `--session` comes from the current route
 and is omitted off a session route, so `band-link` opens the session's waiting review or
-else caret's home page. A spawn that fails shows an error toast. The layer sits behind a
-`typeof ctx.keymap?.layer === "function"` guard and a `try`: a v1 host has no `keymap`,
-and a host that rejects the command must still keep caret's toasts.
+else caret's home page. The spawn carries no `CARET_AGENT`: `band-link` only reads the
+daemon, never starts one. A child that fails to start or exits non-zero shows an error
+toast; `band-link` exits 0 on its own failures, so non-zero means caret never ran (no
+`bun` on `PATH`, an older caret). The layer sits behind a
+`typeof ctx.keymap?.layer === "function"` guard and a `try`: a context without a keymap,
+or a host that rejects the command shape (v2 throws synchronously on one), still keeps
+caret's toasts.
+
+**Known gap, accepted.** On a child (subagent) session `/caret` opens caret's home page:
+reviews sit on the root session.
 
 ## Verified vs. follow-up
 
@@ -882,3 +889,8 @@ model):
   `packages/opencode/specs/tui-plugins.md`, loader
   `packages/opencode/src/plugin/shared.ts`.
 - v2 permission assert (upstream, open): anomalyco/opencode#46530.
+- v2 TUI keymap and route (`@opencode/plugin` 2.2.5): `dist/tui/context.d.ts` —
+  `Keymap.layer`, `KeymapCommand`, `UI.router.current()` / `Route`.
+- `<leader>p` checked free against OpenCode 2.2.1's default keybinds: leader `ctrl+x`;
+  default leader binds `0-9 a b c e g i l m n q r s t u w x y`, arrows and `return`.
+  `keybinds["caret.open"]` overrides the command's `bind`.

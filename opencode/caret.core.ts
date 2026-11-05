@@ -20,7 +20,7 @@ import {
   type SpawnRunner,
 } from "./review-bridge.ts";
 
-/** The caret binary the review tool spawns. Env override wins; else the binary that
+/** The caret binary the OpenCode plugin spawns. Env override wins; else the binary that
  * ships beside this module in the npm package. */
 export function resolveCaretBin(opts: {
   env: Record<string, string | undefined>;

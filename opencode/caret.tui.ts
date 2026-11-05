@@ -3,7 +3,9 @@
 // toast surface, so v2 loads this module from package.json `exports["./tui"]` as
 // `{ id, setup }`. v1 keeps its own toasts in `server()`; the no-op `tui` exists because
 // v1's installer may register this module as a v1 TUI plugin, and v1's TUI loader throws
-// on a default without one. A v1 host has no `keymap`, hence the guard around it.
+// on a default without one. `keymap` and `ui.router` stay optional, and the command
+// registers only when `keymap.layer` is a function, so a context without them still gets
+// caret's toasts.
 
 import { spawn } from "node:child_process";
 
@@ -56,13 +58,18 @@ type CaretCommand = {
   run: () => void;
 };
 
-/** Spawns `bin args` detached and unwaited; `onError` hears a spawn that fails. */
+/** Spawns `bin args` detached and unwaited; `onError` hears a child that fails to start
+ * or exits non-zero. */
 export type DetachedSpawn = (bin: string, args: string[], onError: (err: Error) => void) => void;
 
-const nodeDetachedSpawn: DetachedSpawn = (bin, args, onError) => {
+export const nodeDetachedSpawn: DetachedSpawn = (bin, args, onError) => {
   // spawn reports ENOENT asynchronously; unhandled, that 'error' takes OpenCode down.
   const child = spawn(bin, args, { stdio: "ignore", detached: true });
   child.on("error", onError);
+  // band-link exits 0 on its own failures, so non-zero means caret never ran.
+  child.on("exit", (code) => {
+    if (code) onError(new Error(`exited with status ${code}`));
+  });
   child.unref();
 };
 

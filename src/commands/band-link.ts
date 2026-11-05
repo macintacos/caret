@@ -46,7 +46,8 @@ export async function runBandLinkSubcommand(opts: {
     const s = loadSettings();
     bootHookLogging(s);
     setLogContext({ sessionId: opts.session });
-    // --open answers a press on a band already drawn, so the setting and the poll gate only printing.
+    // --open answers an explicit press (the band's button, OpenCode's `/caret`), so the band
+    // setting and the poll gate only printing.
     if (opts.open || s.review.band) {
       const baseUrl = daemonBaseUrl(s);
       const id =

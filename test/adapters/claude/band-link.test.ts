@@ -1,5 +1,5 @@
-// `caret band-link`: the link Claude Code's plan-waiting band (mod/hooks/band.tsx) shows.
-// Covers the bounded poll for the session's review and the CLI's off switch.
+// `caret band-link`: the link to a session's pending review, else caret's home page.
+// Covers the bounded poll for the session's review, the CLI's off switch, and the no-session home link.
 
 import { expect, test } from "bun:test";
 import { writeFile } from "node:fs/promises";
