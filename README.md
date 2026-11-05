@@ -95,9 +95,9 @@ your browser instead of the terminal prompt. There you:
 - **Read** the plan as rendered HTML.
 - **Annotate** — select any passage to attach an inline comment.
 - **Decide** — **Approve** — with any comments you've left, applied without another
-  planning round (optionally also switching the session into accept-edits or auto mode) or
-  **Request changes**, which sends your comments back to the agent to revise and
-  re-present.
+  planning round (optionally also switching the session into accept-edits or auto mode,
+  or, on OpenCode v2, to the build agent) or **Request changes**, which sends your
+  comments back to the agent to revise and re-present.
 
 > [!TIP]
 > You don't have to wait to be intercepted: `/caret:plan <what you want done>` asks the

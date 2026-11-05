@@ -414,6 +414,9 @@ export type ReviewHost = {
   signal?: AbortSignal;
   /** Fires once with the review URL while the review is pending. */
   onUrl?: (url: string) => void;
+  /** Optional approve-variant ids this host can honor, sent as the envelope's
+   * `approve_variants`; v1 declares none. */
+  approveVariants?: readonly string[];
 };
 
 /** One review-tool call, host-neutral: subagent refusal, plan source, the `path` edit
@@ -436,6 +439,7 @@ export async function runPlanReview(
     sessionID: host.sessionID,
     directory: host.directory,
     planFilePath: source.planFilePath,
+    approveVariants: host.approveVariants,
   });
   const decision = await runReviewViaCaret(envelope, {
     command: [deps.bin, "review"],

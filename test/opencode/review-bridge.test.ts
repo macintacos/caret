@@ -78,6 +78,28 @@ test("parseDecision preserves reviewer notes on an allow (EXC-791)", () => {
   });
 });
 
+test("parseDecision keeps an allow's acceptMode", () => {
+  expect(parseDecision(`{"behavior":"allow","acceptMode":"build"}`)).toEqual({
+    behavior: "allow",
+    acceptMode: "build",
+  });
+});
+
+test("parseDecision drops a non-string acceptMode and never puts one on a deny", () => {
+  expect(parseDecision(`{"behavior":"allow","acceptMode":7}`)).toEqual({ behavior: "allow" });
+  expect(parseDecision(`{"behavior":"deny","feedback":"f","acceptMode":"build"}`)).toEqual({
+    behavior: "deny",
+    feedback: "f",
+  });
+});
+
+test("buildEnvelope emits approve_variants only when given", () => {
+  expect(JSON.parse(buildEnvelope("# P", { approveVariants: ["build"] })).approve_variants).toEqual(
+    ["build"],
+  );
+  expect("approve_variants" in JSON.parse(buildEnvelope("# P", {}))).toBe(false);
+});
+
 test("parseDecision drops a blank note on an allow", () => {
   expect(parseDecision(`{"behavior":"allow","feedback":"  "}`)).toEqual({ behavior: "allow" });
 });

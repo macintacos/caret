@@ -40,7 +40,7 @@ const REGISTRY: Record<string, AgentAdapter> = {
     ...claudeAdapter,
     id: CLAUDE_MCP_AGENT,
     parseHookInput: opencodeAdapter.parseHookInput,
-    emitDecision: opencodeAdapter.emitDecision,
+    emitDecision: ({ acceptMode: _dropped, ...decision }) => opencodeAdapter.emitDecision(decision),
     fatalDenyLine: opencodeAdapter.fatalDenyLine,
   },
 };

@@ -7,7 +7,7 @@
 // CARET_AGENT=opencode; Claude stays the default.
 
 import type { AgentAdapter, InstallProbe } from "@/adapters/adapter.ts";
-import { APPROVE_VARIANTS } from "@/adapters/opencode/approve.ts";
+import { APPROVE_VARIANTS, declaredApproveVariants } from "@/adapters/opencode/approve.ts";
 import { fatalDenyLine, toWireDecision } from "@/adapters/opencode/feedback.ts";
 import { readOpencodeInstallState } from "@/adapters/opencode/install.ts";
 import {
@@ -28,6 +28,8 @@ interface HookStdin {
   session_id?: string;
   cwd?: string;
   tool_input?: { plan?: string; planFilePath?: string };
+  /** Ids of optional approve variants the host can honor; only the v2 plugin sends them. */
+  approve_variants?: unknown;
 }
 
 export const opencodeAdapter: AgentAdapter = {
@@ -43,6 +45,7 @@ export const opencodeAdapter: AgentAdapter = {
       cwd: hook.cwd,
       plan: hook.tool_input?.plan,
       planFilePath: hook.tool_input?.planFilePath,
+      approveVariants: declaredApproveVariants(hook.approve_variants),
     };
   },
 

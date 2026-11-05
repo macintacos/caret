@@ -14,9 +14,14 @@ import type { PluginInput, ToolContext as V1ToolContext } from "@opencode-ai/plu
 
 import { CARET_DECISION_KEY, CARET_URL_KEY, planningSteer, REVIEW_TOOL } from "@oc/caret.core.ts";
 import { createCaretPlugin } from "@oc/caret.plugin.ts";
-import { createCaretSetup, PLAN_ALLOW_RULE, withPlanAllow } from "@oc/caret.plugin.v2.ts";
+import {
+  BUILD_SWITCH_FAILED,
+  createCaretSetup,
+  PLAN_ALLOW_RULE,
+  withPlanAllow,
+} from "@oc/caret.plugin.v2.ts";
 import type { Rule } from "@oc/permission.ts";
-import type { SpawnRunner } from "@oc/review-bridge.ts";
+import { approvedMessage, type SpawnRunner } from "@oc/review-bridge.ts";
 import { fakeDistDir } from "@test/support/fs-tree.ts";
 import { streamingRunner, stubRunner } from "@test/support/spawn-runner.ts";
 
@@ -44,6 +49,7 @@ type FakeOpts = {
   update?: (input: { sessionID: string; permissions: Rule[] }) => Promise<void>;
   /** Hosts ≥ 2.0.29 expose `permission.assert`; omitted, the fake is an older host. */
   assert?: (input: AssertCall) => Promise<void>;
+  switchAgent?: (input: { sessionID: string; agent: string }) => Promise<void>;
 };
 
 type AssertCall = { sessionID: string; agent?: string; action: string; resources: string[] };
@@ -54,6 +60,7 @@ function fakeContext(opts: FakeOpts = {}) {
   const tools: Registered[] = [];
   const hooks = new Map<string, (event: unknown) => Promise<void> | void>();
   const updates: Array<{ sessionID: string; permissions: Rule[] }> = [];
+  const switches: Array<{ sessionID: string; agent: string }> = [];
   const registration = { dispose: async () => {} };
   const ctx = {
     location: { directory, project: { directory: opts.projectDirectory ?? directory } },
@@ -72,6 +79,10 @@ function fakeContext(opts: FakeOpts = {}) {
         await opts.update?.(input);
         updates.push(input);
       },
+      switchAgent: async (input: { sessionID: string; agent: string }) => {
+        await opts.switchAgent?.(input);
+        switches.push(input);
+      },
       hook: async (name: string, cb: (event: unknown) => Promise<void> | void) => {
         hooks.set(name, cb);
         return registration;
@@ -89,7 +100,7 @@ function fakeContext(opts: FakeOpts = {}) {
     },
     ...(opts.assert && { permission: { assert: opts.assert } }),
   };
-  return { ctx: ctx as unknown as Plugin.Context, tools, hooks, updates };
+  return { ctx: ctx as unknown as Plugin.Context, tools, hooks, updates, switches };
 }
 
 async function setupWith(
@@ -98,10 +109,14 @@ async function setupWith(
   warm: (bin: string) => void = () => {},
 ) {
   const harness = fakeContext(fake);
-  await createCaretSetup({ bin: "caret", run, warm, plansDir: PLANS_DIR })(harness.ctx);
+  const errors: string[] = [];
+  const logError = (message: string) => {
+    errors.push(message);
+  };
+  await createCaretSetup({ bin: "caret", run, warm, plansDir: PLANS_DIR, logError })(harness.ctx);
   const tool = harness.tools[0];
   if (!tool) throw new Error("no tool registered");
-  return { ...harness, tool };
+  return { ...harness, tool, errors };
 }
 
 function toolContext(extra: Partial<ToolContext> = {}): ToolContext {
@@ -637,4 +652,45 @@ test("an out-of-project file asserts edit and its external_directory", async () 
     { action: "edit", resources: [join(outside, "p.md")] },
     { action: "external_directory", resources: [join(outside, "*")] },
   ]);
+});
+
+// --- approve & build ---
+
+const BUILD = `{"behavior":"allow","acceptMode":"build"}`;
+
+test("switchAgent: an Approve & build decision switches the session to build", async () => {
+  const { tool, switches } = await setupWith(stubRunner(BUILD));
+  const result = await tool.execute({ plan: "# P" }, toolContext());
+  expect(switches).toEqual([{ sessionID: "S", agent: "build" }]);
+  expect(result.content).toBe(approvedMessage());
+  expect(result.metadata).toEqual({ [CARET_DECISION_KEY]: "allow" });
+});
+
+test("switchAgent: a plain approve or a deny never switches", async () => {
+  for (const stdout of [ALLOW, `{"behavior":"deny","feedback":"x","acceptMode":"build"}`]) {
+    const { tool, switches } = await setupWith(stubRunner(stdout));
+    await tool.execute({ plan: "# P" }, toolContext());
+    expect(switches).toEqual([]);
+  }
+});
+
+test("switchAgent: a failed switch keeps the approval, notes the plan agent, and logs", async () => {
+  const { tool, errors } = await setupWith(stubRunner(BUILD), {
+    switchAgent: async () => {
+      throw new Error("no build agent");
+    },
+  });
+  const result = await tool.execute({ plan: "# P" }, toolContext());
+  const content = String(result.content);
+  expect(content.startsWith(approvedMessage())).toBe(true);
+  expect(content.endsWith(BUILD_SWITCH_FAILED)).toBe(true);
+  expect(result.metadata).toEqual({ [CARET_DECISION_KEY]: "allow" });
+  expect(errors).toHaveLength(1);
+});
+
+test("switchAgent: the v2 envelope declares approve_variants build", async () => {
+  const stdins: string[] = [];
+  const { tool } = await setupWith(stubRunner(ALLOW, (_c, _e, stdin) => stdins.push(stdin)));
+  await tool.execute({ plan: "# P" }, toolContext());
+  expect(JSON.parse(stdins[0] ?? "{}").approve_variants).toEqual(["build"]);
 });

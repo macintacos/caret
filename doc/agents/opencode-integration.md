@@ -117,6 +117,13 @@ entire existing daemon/review pipeline unchanged — the OpenCode plugin is the
 OpenCode-side counterpart to Claude Code's `hooks.json`, which likewise spawns
 `caret review`.
 
+On v2 the envelope also carries `approve_variants: ["build"]`, so the review offers
+**Approve & build** beside the plain approve. That decision comes back as
+`{ behavior: "allow", acceptMode: "build" }`, and v2's `execute` then calls
+`ctx.session.switchAgent` to move the session from `plan` to `build`. A failed switch
+keeps the approval: the tool result says the session is still in `plan`, and the failure
+is logged. v1 declares no variants.
+
 On a `path` call the plugin reads the file itself and sends its text along with the
 resolved absolute path as `planFilePath`, which gives the envelope the same shape Claude
 Code's hook sends. The core's plan-file guard, write-back, and notes append then run
@@ -223,7 +230,8 @@ background process. No throttle, no per-session state.
 as the `review` spawn does — the warm is what stands the daemon up, and the daemon picks
 its adapter from that env, so omitting it yields a claude-flavored daemon that the later
 `caret review` reuses (`ensureDaemon` matches on build/version/state dir, not adapter),
-offering OpenCode reviewers Claude's approve variants. And it registers its own `'error'`
+with Claude's `approveCarriesNotes` and `source`. Approve variants ride the review, so
+that daemon still offers OpenCode reviewers OpenCode's. And it registers its own `'error'`
 handler: `spawn` emits `'error'` **asynchronously** (ENOENT on a bad `CARET_OPENCODE_BIN`
 or a partial install), so the hook's synchronous `try`/`catch` cannot see it and an
 unhandled `'error'` event would take OpenCode's whole process down.
@@ -330,10 +338,10 @@ so it wants the live check § Verified vs. follow-up already schedules.
 
 - **Adapter (`src/adapters/opencode/`)** — the wire + probe, mirroring
   `src/adapters/codex/`: `parseHookInput` (the envelope), `emitDecision` (the flat
-  decision), a single `default` approve variant, `fatalDenyLine`, and
-  `readOpencodeInstallState` (a read-only probe of OpenCode's config dir). Registered in
-  `src/adapters/index.ts`; selectable via `CARET_AGENT=opencode`. Claude stays the
-  default.
+  decision), a `default` approve variant plus `build` when the v2 plugin declares it,
+  `fatalDenyLine`, and `readOpencodeInstallState` (a read-only probe of OpenCode's config
+  dir). Registered in `src/adapters/index.ts`; selectable via `CARET_AGENT=opencode`.
+  Claude stays the default.
 - **Packaging (`opencode/`)** — the host-neutral core (`caret.core.ts`), the v1 plugin
   (`caret.plugin.ts`), the v2 plugin (`caret.plugin.v2.ts`) and the edit-check resources
   it asserts (`permission.ts`), the v2 TUI module (`caret.tui.ts`, `exports["./tui"]`),
@@ -802,6 +810,10 @@ v1.18.15 and v1.18.29 from npm):
   non-caret entries and the comment, and removed the command files.
 - **doctor.** `opencode-host` failed for caret in `plugin` on v2 and in `plugins` on
   1.18.15, and passed after install moved each.
+- **`switchAgent` mid-tool-call (2026-11-05, v2.2.1).** A probe tool's `execute` awaited
+  `ctx.session.switchAgent({ sessionID, agent: "build" })` and returned; the very next
+  model step in the same turn ran as `build`, with no user message between. That is what
+  Approve & build relies on.
 
 ## Sources
 

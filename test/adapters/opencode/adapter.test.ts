@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { APPROVE_VARIANTS, BUILD_VARIANT } from "@/adapters/opencode/approve.ts";
 import { toWireDecision } from "@/adapters/opencode/feedback.ts";
 import { opencodeAdapter } from "@/adapters/opencode/index.ts";
 import type { Decision } from "@/lib/types.ts";
@@ -42,6 +43,14 @@ test("parseHookInput maps the caret OpenCode envelope into a core PlanInput", ()
     plan: "# Plan",
     planFilePath: "/proj/plans/p.md",
   });
+});
+
+test("parseHookInput offers approve & build when the envelope declares it", () => {
+  const parse = (approve_variants?: unknown) =>
+    opencodeAdapter.parseHookInput(JSON.stringify({ approve_variants })).approveVariants;
+  expect(parse(["build"])).toEqual([...APPROVE_VARIANTS, BUILD_VARIANT]);
+  expect(parse()).toBe(undefined);
+  expect(parse(["warp"])).toBe(undefined);
 });
 
 test("parseHookInput tolerates a payload missing every field", () => {

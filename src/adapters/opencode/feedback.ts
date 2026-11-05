@@ -6,6 +6,7 @@
 // clean flat decision — the least speculative of the three adapters:
 //
 //   approve         -> { behavior: "allow" }
+//   approve & build -> { behavior: "allow", acceptMode: "build" }
 //   request changes -> { behavior: "deny", feedback: <text> }
 //
 // The plugin renders an allow into "proceed with the build agent" and a deny into
@@ -17,6 +18,7 @@ import type { ApproveVariantId, Behavior } from "@/lib/types.ts";
 export interface OpencodeDecision {
   behavior: Behavior;
   feedback?: string;
+  acceptMode?: ApproveVariantId;
 }
 
 export interface DecisionInput {
@@ -28,11 +30,15 @@ export interface DecisionInput {
 export function toWireDecision(input: DecisionInput): OpencodeDecision {
   if (input.behavior === "allow") {
     // Reviewer notes on an approval (EXC-791) ride the allow so the plugin can
-    // surface them to the agent; a blank/absent note leaves a bare allow. An
-    // acceptMode still escalates nothing (mirrors codex) — a plan-agent →
-    // build-agent switch variant is a documented future addition.
+    // surface them to the agent; a blank/absent note leaves a bare allow. A non-default
+    // acceptMode asks the v2 plugin to switch the session's agent after approving.
     const notes = input.feedback?.trim();
-    return notes ? { behavior: "allow", feedback: notes } : { behavior: "allow" };
+    const mode = input.acceptMode && input.acceptMode !== "default" ? input.acceptMode : undefined;
+    return {
+      behavior: "allow",
+      ...(notes && { feedback: notes }),
+      ...(mode && { acceptMode: mode }),
+    };
   }
   return { behavior: "deny", feedback: denyMessage(input.feedback) };
 }

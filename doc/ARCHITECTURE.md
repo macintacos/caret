@@ -280,9 +280,11 @@ feedback, without the plan echoed back) the agent revises and resubmits — see
 [Calling the review tool from your own skill](#calling-the-review-tool-from-your-own-skill)
 for who may call it and how to call it yourself. The whole daemon/review pipeline is
 reused unchanged — the plugin is the OpenCode-side counterpart to Claude's `hooks.json`.
-While the Plan agent is working, the plugin also warms the daemon in the background —
-`caret prewarm` on each plan-agent message, mirroring the `caret prewarm` row in the
-Claude hooks table above — so your first review doesn't wait on a cold start.
+On OpenCode v2 a review also offers **Approve & build**, which approves and switches the
+session from the `plan` agent to `build`. While the Plan agent is working, the plugin also
+warms the daemon in the background — `caret prewarm` on each plan-agent message, mirroring
+the `caret prewarm` row in the Claude hooks table above — so your first review doesn't
+wait on a cold start.
 
 caret installs into OpenCode as a plugin array entry. `caret install` probes every
 `opencode` on `PATH` (each bounded at 5 s) and adds `@macintacos/caret` to your OpenCode

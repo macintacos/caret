@@ -13,9 +13,11 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { buildEnvelope } from "@oc/review-bridge.ts";
+import { APPROVE_AND_BUILD } from "@oc/caret.plugin.v2.ts";
+import { buildEnvelope, parseDecision } from "@oc/review-bridge.ts";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { emitWire as emitWireVia } from "@test/support/wire-contract.ts";
+import { APPROVE_VARIANTS, BUILD_VARIANT } from "@/adapters/opencode/approve.ts";
 import { opencodeAdapter } from "@/adapters/opencode/index.ts";
 import type { Decision } from "@/lib/types.ts";
 
@@ -39,10 +41,45 @@ test("plain approve over the fixture emits behavior=allow", async () => {
   expect(await emitWire({ behavior: "allow", decidedAt: 1 })).toEqual({ behavior: "allow" });
 });
 
-test("an approve variant over the fixture emits a plain allow (no escalation in v1)", async () => {
+test("the default approve variant over the fixture emits a bare allow", async () => {
   expect(await emitWire({ behavior: "allow", acceptMode: "default", decidedAt: 1 })).toEqual({
     behavior: "allow",
   });
+});
+
+test("approve & build over the fixture carries acceptMode build", async () => {
+  expect(await emitWire({ behavior: "allow", acceptMode: "build", decidedAt: 1 })).toEqual({
+    behavior: "allow",
+    acceptMode: "build",
+  });
+});
+
+test("the plugin's parseDecision keeps an emitted acceptMode and notes", () => {
+  const line = opencodeAdapter.emitDecision({
+    behavior: "allow",
+    acceptMode: "build",
+    feedback: "use the helper",
+    decidedAt: 1,
+  });
+  expect(parseDecision(line)).toEqual({
+    behavior: "allow",
+    acceptMode: "build",
+    feedback: "use the helper",
+  });
+});
+
+test("a v2 envelope's approve & build declaration reaches the PlanInput", () => {
+  const ctx = { sessionID: "S", directory: "/proj" };
+  const declared = buildEnvelope("# P", { ...ctx, approveVariants: [APPROVE_AND_BUILD] });
+  expect(opencodeAdapter.parseHookInput(declared).approveVariants).toEqual([
+    ...APPROVE_VARIANTS,
+    BUILD_VARIANT,
+  ]);
+  expect(opencodeAdapter.parseHookInput(buildEnvelope("# P", ctx)).approveVariants).toBe(undefined);
+});
+
+test("the adapter's build variant id is the one the v2 plugin declares", () => {
+  expect(BUILD_VARIANT.id).toBe(APPROVE_AND_BUILD);
 });
 
 test("a deny over the fixture carries the reviewer feedback", async () => {
