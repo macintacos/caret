@@ -649,14 +649,17 @@ events: `session.tool.progress` carrying the `caretUrl` metadata key shows the r
 toast, and `session.tool.success` (`caretDecision`) or `session.tool.failed` for that call
 supersedes it with the decision toast. Those events carry the call id, not the tool name,
 so the metadata keys the server half's `execute` writes are the only link between the
-halves. The decision toast matters because v2's toast surface is single-slot with no hide
-API — without it the 10-minute link toast would linger after every decision. v1 keeps its
-toasts in `server()` (`client.tui.showToast`), so caret needs no `tui.json` entry; the
-toast bodies (`reviewLinkToast`, `decisionToast`) are shared from `caret.core.ts`. The
-default also carries a no-op `tui`: v1's own installer may register this module as a v1
-TUI plugin, and v1's TUI loader throws on a default without one. The `Object.values` rule
-binds only `index.ts`: both TUI loaders read only `default`, so `createCaretTui` stays a
-named export for tests.
+halves. Both toasts carry their event's `sessionID`: when that session's family isn't
+open, OpenCode offers to open it and titles an untitled toast — the decision toast — with
+the session's title. `caret.tui.ts` adds it at its sink, so the shared bodies v1 forwards
+stay sessionless. The decision toast matters because v2's toast surface is single-slot
+with no hide API — without it the 10-minute link toast would linger after every decision.
+v1 keeps its toasts in `server()` (`client.tui.showToast`), so caret needs no `tui.json`
+entry; the toast bodies (`reviewLinkToast`, `decisionToast`) are shared from
+`caret.core.ts`. The default also carries a no-op `tui`: v1's own installer may register
+this module as a v1 TUI plugin, and v1's TUI loader throws on a default without one. The
+`Object.values` rule binds only `index.ts`: both TUI loaders read only `default`, so
+`createCaretTui` stays a named export for tests.
 
 ## Verified vs. follow-up
 
@@ -765,9 +768,11 @@ its plan and called `caret_review_plan` (anomalyco/opencode#49879). Other models
 unchecked. Web and desktop, which attach no TUI and so show no toasts. That the allow
 follows a plan session switched to another agent was not observed directly. The toasts
 were not re-checked live after 2.0.18; their loader shape and the three `session.tool.*`
-events are unchanged in source through 2.2.0. OpenCode's interactive prompt through
-`permission.assert` for an `ask` rule (for example a non-plan agent's out-of-project
-`path` on ≥ 2.0.29) is not live-checked.
+events are unchanged in source through 2.2.0. That the review-link and decision toasts
+offer to open the plan's session (`ToastOptions.sessionID`, present from the 2.0.18 floor)
+is unit-tested against a fake TUI only, not observed live. OpenCode's interactive prompt
+through `permission.assert` for an `ask` rule (for example a non-plan agent's
+out-of-project `path` on ≥ 2.0.29) is not live-checked.
 
 **v1 follow-up.** v1 loading the dual default through OpenCode's npm installer (the
 published package) is inferred, not observed: the re-enable runs used a directory entry,
