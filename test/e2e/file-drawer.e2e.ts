@@ -17,16 +17,22 @@
 
 import type { Page } from "@playwright/test";
 
+import { previewToggle } from "@test/e2e/support/chrome.ts";
 import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import type { Daemon } from "@test/e2e/support/fixtures.ts";
-import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { PLAN_PREVIEW, PLAN_SURFACE, planSurface } from "@test/e2e/support/source-view.ts";
 import { MIN_APP_WIDTH_PX, NARROW_WIDTH_PX, TIGHT_WIDTH_PX } from "@ui/src/lib/layout.ts";
 
 // Comfortably inside the narrow regime rather than a pixel off the breakpoint,
 // so a rounding difference in matchMedia can't decide the docking edge.
 const NARROW = { width: NARROW_WIDTH_PX - 160, height: 900 };
+
 const WIDE = { width: NARROW_WIDTH_PX + 440, height: 900 };
+
+// A retained trace snapshots the DOM on every action, which the long-frame probe would
+// report as the app's frames. Playwright allows `trace` only at a file's top level.
+test.use({ trace: "off" });
 
 const CACHE_TS = Array.from({ length: 300 }, (_, i) => `const line${i + 1} = ${i + 1};`).join("\n");
 const OTHER_TS = Array.from(
@@ -972,6 +978,257 @@ test("the first file the plan cites in each language is read ahead of any open",
 
     await expect.poll(() => read).toEqual(expect.arrayContaining(["src/a.ts", "ui/C.svelte"]));
     await expect(page.locator("[data-file-preview]")).toHaveCount(0);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+const ROWS_PROSE =
+  "Rows paragraph opens with alpha words that set the scene for the reviewer to read carefully, " +
+  "then continues with bravo words describing the middle of the change in plain detail, " +
+  "and closes with charlie words that wrap past the end of a stored line.";
+
+/** Seed `plan` (which cites `src/cache.ts`) at `cwd` with the outline hidden, open the
+ * drawer docked right at `WIDE`, then switch the plan to the preview. */
+async function openPreviewDrawer(
+  daemon: Daemon,
+  page: Page,
+  cwd: string,
+  plan: string,
+): Promise<void> {
+  await page.addInitScript(() => localStorage.setItem("caret.planOutline", "hidden"));
+  await daemon.seed({ cwd, plan });
+  await page.setViewportSize(WIDE);
+  await page.goto("/");
+  await waitPastSafeModeGrace(page);
+  await openPreview(page);
+  await previewToggle(page).click();
+  await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
+}
+
+/** The preview's text column width: `--column`, 800px at 15px text. */
+const columnWidth = (page: Page) =>
+  page
+    .locator(PLAN_PREVIEW)
+    .evaluate((el) => (Number.parseFloat(getComputedStyle(el).fontSize) * 800) / 15);
+
+const planFits = (page: Page) =>
+  page.locator(PLAN_SURFACE).evaluate((el) => el.scrollWidth <= el.clientWidth);
+
+/** Whether every text rect outside a `pre` or `table` ends inside the plan's right edge. */
+function textInsidePlan(page: Page): Promise<boolean> {
+  return page.evaluate(
+    ({ preview, surface }) => {
+      const plan = document.querySelector(surface) as HTMLElement;
+      const right = plan.getBoundingClientRect().left + plan.clientWidth + 0.5;
+      const walker = document.createTreeWalker(
+        document.querySelector(preview) as Node,
+        NodeFilter.SHOW_TEXT,
+      );
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node.parentElement?.closest("pre, table")) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        for (const r of range.getClientRects()) if (r.width > 0 && r.right > right) return false;
+      }
+      return true;
+    },
+    { preview: PLAN_PREVIEW, surface: PLAN_SURFACE },
+  );
+}
+
+/** The first word of each visual row of the first paragraph starting with `prefix`. */
+function rowStarts(page: Page, prefix: string): Promise<string[]> {
+  return page.evaluate(
+    ({ prefix, preview }) => {
+      const block = [...document.querySelectorAll(`${preview} p`)].find((p) =>
+        p.textContent?.startsWith(prefix),
+      );
+      const starts: string[] = [];
+      let lastTop = Number.NEGATIVE_INFINITY;
+      const walker = document.createTreeWalker(block as Node, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        for (const m of (node.textContent ?? "").matchAll(/\S+/g)) {
+          const range = document.createRange();
+          range.setStart(node, m.index);
+          range.setEnd(node, m.index + 1);
+          const top = range.getBoundingClientRect().top;
+          if (top - lastTop > 4) starts.push(m[0]);
+          lastTop = Math.max(lastTop, top);
+        }
+      }
+      return starts;
+    },
+    { prefix, preview: PLAN_PREVIEW },
+  );
+}
+
+/** Records the text point at the plan's reading zone: just inside the column's start, a few
+ * px below the scroller's top. */
+function markReadingLine(page: Page): Promise<void> {
+  return page.evaluate(
+    ({ preview, surface }) => {
+      const top = (document.querySelector(surface) as HTMLElement).getBoundingClientRect().top;
+      const left = (document.querySelector(`${preview} p`) as HTMLElement).getBoundingClientRect()
+        .left;
+      const at = document.caretRangeFromPoint(left + 2, top + 4);
+      if (!at) throw new Error("no text at the reading zone");
+      (window as unknown as { readingAt: Range }).readingAt = at;
+    },
+    { preview: PLAN_PREVIEW, surface: PLAN_SURFACE },
+  );
+}
+
+/** How far the marked point's visual line top sits below the scroller's top. */
+function readingOffset(page: Page): Promise<number> {
+  return page.evaluate((surface) => {
+    const top = (document.querySelector(surface) as HTMLElement).getBoundingClientRect().top;
+    const range = (window as unknown as { readingAt: Range }).readingAt.cloneRange();
+    const end = range.startContainer.textContent?.length ?? 0;
+    range.setEnd(range.startContainer, Math.min(range.startOffset + 1, end));
+    return (range.getClientRects()[0]?.top ?? Number.NaN) - top;
+  }, PLAN_SURFACE);
+}
+
+test("a right-docked drawer that narrows the plan below the column rewraps the preview", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    const plan = ["# Refs", "Edit `src/cache.ts` to fix it.", ROWS_PROSE].join("\n\n");
+    await openPreviewDrawer(daemon, page, proj.dir, plan);
+
+    const scroller = page.locator(PLAN_SURFACE);
+    expect(await scroller.evaluate((el) => el.clientWidth)).toBeLessThan(await columnWidth(page));
+    await expect.poll(() => textInsidePlan(page)).toBe(true);
+    expect(await scroller.evaluate((el) => el.scrollLeft)).toBe(0);
+    expect(await planFits(page)).toBe(true);
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("dragging the drawer edge rewraps the preview during the drag", async ({ daemon, page }) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    const paragraphs = Array.from({ length: 60 }, (_, i) => `Paragraph ${i + 1}. ${ROWS_PROSE}`);
+    const plan = ["# Refs", "Edit `src/cache.ts` to fix it.", ROWS_PROSE, ...paragraphs].join(
+      "\n\n",
+    );
+    await openPreviewDrawer(daemon, page, proj.dir, plan);
+    // Safari has no overflow-anchor; Chromium's would hold the place without the hold.
+    await page.addStyleTag({ content: `${PLAN_SURFACE} { overflow-anchor: none; }` });
+
+    const scroller = page.locator(PLAN_SURFACE);
+    const plane = await scroller.boundingBox();
+    if (!plane) throw new Error("the plan did not render");
+    await page.mouse.move(plane.x + plane.width / 2, plane.y + plane.height / 2);
+    const half = await scroller.evaluate((el) => (el.scrollHeight - el.clientHeight) / 2);
+    await page.mouse.wheel(0, half);
+    await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(half / 2);
+
+    const prefix = "Paragraph 30.";
+    const base = await rowStarts(page, prefix);
+    await markReadingLine(page);
+    const offset = await readingOffset(page);
+    const lineHeight = await page
+      .locator(`${PLAN_PREVIEW} p`)
+      .first()
+      .evaluate((el) => Number.parseFloat(getComputedStyle(el).lineHeight));
+
+    const box = await page.getByRole("separator", { name: "Resize file preview" }).boundingBox();
+    if (!box) throw new Error("the handle did not render");
+    const y = box.y + box.height / 2;
+    await page.mouse.move(box.x + box.width / 2, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x - 200, y, { steps: 8 });
+
+    await expect.poll(() => rowStarts(page, prefix)).not.toEqual(base);
+    expect(await planFits(page)).toBe(true);
+    await expect
+      .poll(async () => Math.abs((await readingOffset(page)) - offset))
+      .toBeLessThanOrEqual(lineHeight);
+    await page.mouse.up();
+  } finally {
+    await proj.cleanup();
+  }
+});
+
+test("a drawer drag over a long plan with many comments shows no long animation frames while it moves", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    const paragraphs = Array.from({ length: 300 }, (_, i) => `Paragraph ${i + 1}. ${ROWS_PROSE}`);
+    const plan = ["# Refs", "Edit `src/cache.ts` to fix it.", ...paragraphs].join("\n\n");
+    await page.addInitScript(() => localStorage.setItem("caret.planOutline", "hidden"));
+    const id = await daemon.seed({ cwd: proj.dir, plan });
+    const lines = ((await daemon.getReview(id)).body?.currentPlan ?? "").split("\n");
+    const starts = lines.flatMap((l, i) => (l.startsWith("Paragraph ") ? [i + 1] : []));
+    await daemon.putDraft(id, {
+      annotations: Array.from({ length: 30 }, (_, i) => {
+        const line = starts[i * 10] ?? 1;
+        return { id: `ann-${i}`, startLine: line, endLine: line, comment: `note ${i}` };
+      }),
+    });
+    await page.setViewportSize(WIDE);
+    await page.goto("/");
+    await planSurface(page);
+    await waitPastSafeModeGrace(page);
+    // The first gesture unlocks audio in one long frame; spend it here, not in the drag.
+    await openPreview(page);
+    await previewToggle(page).click();
+    await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
+
+    const box = await page.getByRole("separator", { name: "Resize file preview" }).boundingBox();
+    if (!box) throw new Error("the handle did not render");
+    await page.evaluate(
+      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+    );
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __loaf: unknown[];
+        __loafObserver: PerformanceObserver;
+        __loafRecord: (entries: PerformanceEntryList) => void;
+      };
+      w.__loaf = [];
+      w.__loafRecord = (entries) => {
+        for (const e of entries as unknown as {
+          duration: number;
+          blockingDuration: number;
+          scripts: { invoker: string; sourceFunctionName: string }[];
+        }[]) {
+          w.__loaf.push({
+            duration: e.duration,
+            blockingDuration: e.blockingDuration,
+            scripts: e.scripts.map((s) => `${s.invoker} ${s.sourceFunctionName}`),
+          });
+        }
+      };
+      w.__loafObserver = new PerformanceObserver((list) => w.__loafRecord(list.getEntries()));
+      w.__loafObserver.observe({ type: "long-animation-frame" });
+    });
+    const y = box.y + box.height / 2;
+    await page.mouse.move(box.x + box.width / 2, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x - 300, y, { steps: 30 });
+    await page.mouse.up();
+    await page.evaluate(
+      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+    );
+    const frames = await page.evaluate(() => {
+      const w = window as unknown as {
+        __loaf: unknown[];
+        __loafObserver: PerformanceObserver;
+        __loafRecord: (entries: PerformanceEntryList) => void;
+      };
+      w.__loafRecord(w.__loafObserver.takeRecords());
+      w.__loafObserver.disconnect();
+      return w.__loaf;
+    });
+    expect(frames).toEqual([]);
   } finally {
     await proj.cleanup();
   }
