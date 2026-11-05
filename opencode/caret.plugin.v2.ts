@@ -23,7 +23,7 @@ import {
   runPlanReview,
   type WarmRunner,
 } from "./caret.core.ts";
-import { editChecks, editPermitted, type Rule } from "./permission.ts";
+import { editChecks, type Rule } from "./permission.ts";
 import { decisionText, nodeSpawnRunner, type SpawnRunner } from "./review-bridge.ts";
 
 /** Appended last, it outranks a config deny-all: v2 disables a tool only when the last
@@ -44,6 +44,12 @@ export function withPlanAllow(
   const namesReviewTool = (rule: Rule) => rule.action === REVIEW_TOOL;
   if (agentRules.some(namesReviewTool) || sessionRules.some(namesReviewTool)) return undefined;
   return [...sessionRules, PLAN_ALLOW_RULE];
+}
+
+/** The `path` refusal on a v2 before 2.0.29, which has no `permission.assert` to ask
+ * whether caret may rewrite the file. */
+function cannotAskToEdit(planFilePath: string): string {
+  return `caret: ${REVIEW_TOOL} can't ask this OpenCode whether it may edit ${planFilePath}, which a path review rewrites; that needs OpenCode 2.0.29 or later. Pass the plan inline as \`plan\`, or upgrade OpenCode.`;
 }
 
 type SessionInfo = {
@@ -160,17 +166,7 @@ export function createCaretSetup(opts: {
                   throw error;
                 }
               }
-              // Session rules can deny, so an unreadable session cannot prove allow.
-              if (!session) return false;
-              try {
-                const agent = await ctx.agent.get({ agentID: context.agent });
-                return editPermitted(planFilePath, location, {
-                  agent: agent.data.permissions,
-                  session: session.permissions ?? [],
-                });
-              } catch {
-                return false;
-              }
+              return cannotAskToEdit(planFilePath);
             },
             signal: context.signal,
             // The TUI half toasts from these progress and result keys.

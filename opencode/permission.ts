@@ -1,8 +1,6 @@
-// OpenCode v2 permission evaluation, for checking a plan file write-back on a v2 before
-// 2.0.29, which gives a plugin no way to ask about it (2.0.29+ asks through
-// `permission.assert`). Copied from anomalyco/opencode at v2.0.18:
-// packages/core/src/util/wildcard.ts (match), packages/core/src/permission.ts (evaluate),
-// the resource forming in packages/core/src/file-access.ts (resolve), and
+// The resources OpenCode v2 checks before its own tools edit a file, so caret can
+// `permission.assert` the same ones before it rewrites a plan file. The resource forming
+// mirrors anomalyco/opencode at v2.0.18: packages/core/src/file-access.ts (resolve) and
 // packages/util/src/fs-util.ts (contains, from FSUtil.contains).
 //
 // Copyright (c) 2025 opencode. MIT License. Permission is hereby granted, free of charge,
@@ -30,32 +28,6 @@ export type Rule = {
 export type Check = { action: string; resource: string };
 
 export type Location = { directory: string; projectDirectory: string };
-
-/** OpenCode's wildcard match: `*` crosses `/`, and a trailing `" *"` also matches the
- * bare prefix. */
-export function wildcardMatch(input: string, pattern: string): boolean {
-  const normalized = input.replaceAll("\\", "/");
-  let escaped = pattern
-    .replaceAll("\\", "/")
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*/g, ".*")
-    .replace(/\?/g, ".");
-
-  if (escaped.endsWith(" .*")) escaped = `${escaped.slice(0, -3)}( .*)?`;
-
-  return new RegExp(`^${escaped}$`, process.platform === "win32" ? "si" : "s").test(normalized);
-}
-
-/** The last rule matching both `action` and `resource` wins; no match asks. */
-export function evaluate(action: string, resource: string, ...rulesets: (readonly Rule[])[]): Rule {
-  return (
-    rulesets
-      .flat()
-      .findLast(
-        (rule) => wildcardMatch(action, rule.action) && wildcardMatch(resource, rule.resource),
-      ) ?? { action, resource: "*", effect: "ask" }
-  );
-}
 
 const slash = (value: string) => value.replaceAll("\\", "/");
 
@@ -87,17 +59,4 @@ export function editChecks(planFilePath: string, location: Location): Check[] {
     { action: "edit", resource: slash(absolute) },
     { action: "external_directory", resource: slash(path.join(directory, "*")) },
   ];
-}
-
-/** Whether every check OpenCode would run for editing `planFilePath` is `allow`. Session
- * rules outrank agent rules. */
-export function editPermitted(
-  planFilePath: string,
-  location: Location,
-  rules: { agent: readonly Rule[]; session: readonly Rule[] },
-): boolean {
-  return editChecks(planFilePath, location).every(
-    (check) =>
-      evaluate(check.action, check.resource, rules.agent, rules.session).effect === "allow",
-  );
 }

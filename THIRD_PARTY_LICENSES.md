@@ -94,11 +94,10 @@ SOFTWARE.
 
 ## OpenCode
 
-[opencode/permission.ts](opencode/permission.ts) copies OpenCode's wildcard matcher,
-permission evaluator, and file-access resource forming from
+[opencode/permission.ts](opencode/permission.ts) mirrors OpenCode's file-access resource
+forming from
 [`anomalyco/opencode` at `v2.0.18`](https://github.com/anomalyco/opencode/tree/v2.0.18):
-`packages/core/src/util/wildcard.ts`, `packages/core/src/permission.ts`,
-`packages/core/src/file-access.ts`, and `packages/util/src/fs-util.ts`. The copied file
+`packages/core/src/file-access.ts` and `packages/util/src/fs-util.ts`. The copied file
 also carries the full notice, since this file does not ship in the npm package.
 
 ```text

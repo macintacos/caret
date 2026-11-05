@@ -1,6 +1,6 @@
 // Unit coverage for caret's OpenCode v2 `setup` adapter: tool registration, the
 // planning steer, the `context`-hook subagent removal, the prewarm, the plan-agent allow,
-// the `path` check (host assert or evaluate-then-refuse), the subagent refusal, abort, and the toast
+// the `path` check (host assert, or a refusal on a host without it), the subagent refusal, abort, and the toast
 // progress and metadata keys — driven through a fake v2 plugin context and a stub runner.
 
 import { afterAll, expect, test } from "bun:test";
@@ -427,7 +427,7 @@ test("a relative path resolves against the session directory and spawns when all
     {
       directory: "/elsewhere",
       session: async () => ({ location: { directory } }),
-      agentRules: async () => ALLOW_ALL,
+      assert: async () => {},
     },
     "plans/p.md",
   );
@@ -437,46 +437,15 @@ test("a relative path resolves against the session directory and spawns when all
   });
 });
 
-test("deny, ask, and failed reads refuse a path review without spawning", async () => {
+test("a host without permission.assert refuses every path review, naming 2.0.29", async () => {
   const directory = planDir({ "p.md": "# P\n" });
-  const cases: FakeOpts[] = [
-    { directory, agentRules: async () => [{ action: "edit", resource: "*", effect: "deny" }] },
-    { directory, agentRules: async () => [{ action: "edit", resource: "*", effect: "ask" }] },
-    {
-      directory,
-      agentRules: async () => {
-        throw new Error("no agent");
-      },
-    },
-    {
-      directory,
-      agentRules: async () => ALLOW_ALL,
-      session: async () => {
-        throw new Error("no session");
-      },
-    },
-  ];
-  for (const fake of cases) {
-    const { result, stdins } = await pathReview(fake, "p.md");
-    expect(String(result.content)).toContain("not permitted to edit");
-    expect(stdins).toEqual([]);
-  }
-});
-
-test("stock agent rules allow an in-project file and refuse an out-of-project one", async () => {
-  const stock: Rule[] = [
-    { action: "*", resource: "*", effect: "allow" },
-    { action: "external_directory", resource: "*", effect: "ask" },
-  ];
-  const project = planDir({ "p.md": "# In\n" });
-  const outside = planDir({ "p.md": "# Out\n" });
-  const inside = await pathReview({ directory: project, agentRules: async () => stock }, "p.md");
-  expect(inside.stdins).toHaveLength(1);
-  const out = await pathReview(
-    { directory: project, agentRules: async () => stock },
-    join(outside, "p.md"),
+  const { result, stdins } = await pathReview(
+    { directory, agentRules: async () => ALLOW_ALL },
+    "p.md",
   );
-  expect(out.stdins).toEqual([]);
+  expect(String(result.content)).toContain("OpenCode 2.0.29");
+  expect(String(result.content)).toContain(join(directory, "p.md"));
+  expect(stdins).toEqual([]);
 });
 
 // --- subagent refusal ---
@@ -539,51 +508,6 @@ test("a failure escaping the review core resolves to a fail-safe deny, not a rej
 });
 
 // --- trust-boundary inputs ---
-
-test("session edit denies refuse a path review even when the agent allows all", async () => {
-  const directory = planDir({ "p.md": "# P\n" });
-  const { result, stdins } = await pathReview(
-    {
-      directory,
-      agentRules: async () => ALLOW_ALL,
-      session: async () => ({
-        location: { directory },
-        permissions: [{ action: "edit", resource: "*", effect: "deny" }],
-      }),
-    },
-    "p.md",
-  );
-  expect(String(result.content)).toContain("not permitted to edit");
-  expect(stdins).toEqual([]);
-});
-
-test("the calling agent's rules decide a path review", async () => {
-  const directory = planDir({ "p.md": "# P\n" });
-  const stdins: string[] = [];
-  const { tool } = await setupWith(
-    stubRunner(ALLOW, (_c, _e, stdin) => stdins.push(stdin)),
-    { directory, agentRules: async (id) => (id === "plan" ? ALLOW_ALL : []) },
-  );
-  const result = await tool.execute(
-    { path: "p.md" },
-    toolContext({ agent: "build" } as Partial<ToolContext>),
-  );
-  expect(String(result.content)).toContain("not permitted to edit");
-  expect(stdins).toEqual([]);
-});
-
-test("a file in the project but outside the session directory counts as internal", async () => {
-  const project = planDir({ "plan.md": "# P\n", "pkg/.keep": "" });
-  const stock: Rule[] = [
-    { action: "*", resource: "*", effect: "allow" },
-    { action: "external_directory", resource: "*", effect: "ask" },
-  ];
-  const { stdins } = await pathReview(
-    { directory: join(project, "pkg"), projectDirectory: project, agentRules: async () => stock },
-    join(project, "plan.md"),
-  );
-  expect(stdins).toHaveLength(1);
-});
 
 test("a build-agent call with an inline plan spawns the review", async () => {
   let spawned = 0;
@@ -650,20 +574,26 @@ function recordingAssert(reject?: (call: AssertCall) => unknown) {
   };
 }
 
-test("a host assert decides an in-project path review over the local rules", async () => {
+test("a host assert decides an in-project path review", async () => {
   const directory = planDir({ "p.md": "# P\n" });
   const host = recordingAssert();
-  const { stdins } = await pathReview(
-    {
-      directory,
-      agentRules: async () => [{ action: "edit", resource: "*", effect: "deny" }],
-      assert: host.assert,
-    },
-    "p.md",
-  );
+  const { stdins } = await pathReview({ directory, assert: host.assert }, "p.md");
   expect(stdins).toHaveLength(1);
   expect(host.calls).toEqual([
     { sessionID: "S", agent: "plan", action: "edit", resources: ["p.md"] },
+  ]);
+});
+
+test("a file in the project but outside the session directory counts as internal", async () => {
+  const project = planDir({ "plan.md": "# P\n", "pkg/.keep": "" });
+  const host = recordingAssert();
+  const { stdins } = await pathReview(
+    { directory: join(project, "pkg"), projectDirectory: project, assert: host.assert },
+    join(project, "plan.md"),
+  );
+  expect(stdins).toHaveLength(1);
+  expect(host.calls.map(({ action, resources }) => ({ action, resources }))).toEqual([
+    { action: "edit", resources: ["../plan.md"] },
   ]);
 });
 
