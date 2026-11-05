@@ -428,9 +428,9 @@ export async function runPlanReview(
   const source = resolvePlanSource(args, host.directory, readRegularFile);
   if ("error" in source) return { text: source.error };
   if (source.planFilePath) {
-    const permitted = await host.canEdit(source.planFilePath);
-    if (typeof permitted === "string") return { text: permitted };
-    if (!permitted) return { text: notPermittedToEdit(source.planFilePath, deps.plansDir) };
+    const editVerdict = await host.canEdit(source.planFilePath);
+    if (typeof editVerdict === "string") return { text: editVerdict };
+    if (!editVerdict) return { text: notPermittedToEdit(source.planFilePath, deps.plansDir) };
   }
   const envelope = buildEnvelope(source.plan, {
     sessionID: host.sessionID,
