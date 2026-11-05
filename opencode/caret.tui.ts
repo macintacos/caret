@@ -21,7 +21,8 @@ type ToolEvent = {
 };
 
 /** v2's `ToastOptions` as caret uses it: the shared body plus the session it is about,
- * which OpenCode offers to open when that session's family is not open. */
+ * which OpenCode offers to open when that session's family is not open, titling an
+ * untitled toast with the session's title. */
 type TuiToast = ToastBody & { sessionID?: string };
 
 /** The slice of v2's TUI context caret uses, narrow so tests build it without casts;
