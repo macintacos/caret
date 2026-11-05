@@ -40,7 +40,12 @@ import {
   test,
   waitForTwoPollTicks,
 } from "@test/e2e/support/fixtures.ts";
-import { expectNoComposerOpens, PLAN_PREVIEW, planSurface } from "@test/e2e/support/source-view.ts";
+import {
+  expectNoComposerOpens,
+  PLAN_PREVIEW,
+  PLAN_SURFACE,
+  planSurface,
+} from "@test/e2e/support/source-view.ts";
 import { OVERSCAN_ROWS } from "@ui/src/lib/previewWindow.ts";
 import { MAX_EXCERPT_BYTES } from "@/plan/excerpt.ts";
 
@@ -1767,6 +1772,73 @@ test.describe("on the preview", () => {
       };
     }, text);
   }
+
+  test("a file-reference tag stays on its text after a rewrap", async ({ daemon, page }) => {
+    const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+    try {
+      const plan = [
+        "# Refs",
+        "",
+        "Reviewers read this paragraph at any width, and the cache key it names is built in",
+        "`src/cache.ts:42` before the reader flips to the new column behind its rollback flag.",
+        "",
+      ].join("\n");
+      await seedFileRefs(page, daemon, proj.dir, plan);
+      await previewToggle(page).click();
+      const tag = page.locator(`${PLAN_PREVIEW} span[data-file-ref]`);
+      await expect(tag).toHaveCount(1);
+
+      /** The tag's first rect, and whether its rects sit inside the plan with the
+       * characters either side of it laid out just before and just after it. */
+      const placement = () =>
+        tag.evaluate((el, surface) => {
+          const plan = document.querySelector(surface)?.getBoundingClientRect();
+          const rects = [...el.getClientRects()].filter((r) => r.width > 0);
+          const first = rects[0];
+          const last = rects.at(-1);
+          const charRect = (node: Node | null, at: "first" | "last") => {
+            if (!(node instanceof Text) || !node.length) return null;
+            const i = at === "first" ? 0 : node.length - 1;
+            const range = document.createRange();
+            range.setStart(node, i);
+            range.setEnd(node, i + 1);
+            return range.getBoundingClientRect();
+          };
+          const texts: Text[] = [];
+          const walker = document.createTreeWalker(
+            el.closest("p") ?? el.parentElement ?? el,
+            NodeFilter.SHOW_TEXT,
+          );
+          for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+            if (n.textContent?.trim()) texts.push(n as Text);
+          }
+          const own = texts.filter((t) => el.contains(t));
+          const before = charRect(texts[texts.indexOf(own[0] as Text) - 1] ?? null, "last");
+          const after = charRect(texts[texts.indexOf(own.at(-1) as Text) + 1] ?? null, "first");
+          if (!plan || !first || !last || !before || !after) return null;
+          const sameRow = (a: DOMRect, b: DOMRect) => Math.abs(a.top - b.top) < a.height / 2;
+          const inside = rects.every((r) => r.left >= plan.left && r.right <= plan.right + 0.5);
+          const ordered =
+            (sameRow(before, first) ? before.right <= first.left + 1 : before.top < first.top) &&
+            (sameRow(after, last) ? after.left >= last.right - 1 : after.top > last.top);
+          return { left: first.left, top: first.top, ok: inside && ordered };
+        }, PLAN_SURFACE);
+
+      const wide = await placement();
+      expect(wide?.ok).toBe(true);
+
+      await page.setViewportSize({ width: 640, height: 900 });
+      await expect
+        .poll(async () => {
+          const p = await placement();
+          return p && [p.left, p.top];
+        })
+        .not.toEqual([wide?.left, wide?.top]);
+      await expect.poll(async () => (await placement())?.ok).toBe(true);
+    } finally {
+      await proj.cleanup();
+    }
+  });
 
   test("tags the resolved references and leaves the rest plain", async ({ daemon, page }) => {
     const proj = await openOnPreview(page, daemon);

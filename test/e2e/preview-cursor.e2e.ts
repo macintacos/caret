@@ -444,6 +444,35 @@ test.describe("preview keyboard cursor", () => {
     await expect.poll(() => bandCovers(page, recorded)).toBe(true);
   });
 
+  test("the cursor and a visual-mode anchor keep their source positions through a resize", async ({
+    page,
+    daemon,
+  }) => {
+    await openPreview(page, daemon);
+    await toLongParagraph(page);
+    await stepFrom(page, "j", await bandTop(page));
+    const anchor = await bandText(page);
+    await press(page, "V");
+    await expect(page.locator(PREVIEW_DRAG)).toHaveCount(1);
+    await stepFrom(page, "j", await bandTop(page));
+    const cursor = await bandText(page);
+
+    /** Whether the visual band's first row, one cursor band tall, holds `text`. */
+    const anchorRowCovers = async (text: string) => {
+      const s = await snapshot(page);
+      const drag = await page.locator(PREVIEW_DRAG).boundingBox();
+      if (!drag) return false;
+      const top = drag.y;
+      return covers({ ...s, band: { top, bottom: top + (s.band.bottom - s.band.top) } }, text);
+    };
+    expect(await anchorRowCovers(anchor)).toBe(true);
+
+    await page.setViewportSize({ width: 640, height: 900 });
+    await expect.poll(() => bandText(page)).not.toBe(cursor);
+    await expect.poll(() => bandCovers(page, cursor)).toBe(true);
+    await expect.poll(() => anchorRowCovers(anchor)).toBe(true);
+  });
+
   test("the cursor keeps its text when a theme switch rewraps its heading", async ({
     page,
     daemon,

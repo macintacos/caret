@@ -27,9 +27,9 @@ import {
   previewToggle,
 } from "@test/e2e/support/chrome.ts";
 import { previewCursor } from "@test/e2e/support/cursor.ts";
-import { openRequestChangesDialog } from "@test/e2e/support/decision.ts";
+import { openApproveGuard, openRequestChangesDialog } from "@test/e2e/support/decision.ts";
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
-import { submitForRevision } from "@test/e2e/support/review-state.ts";
+import { awaitAnnotationCount, submitForRevision } from "@test/e2e/support/review-state.ts";
 import {
   linesOnRow,
   PLAN_PREVIEW,
@@ -81,16 +81,19 @@ const lineStarting = (lines: string[], prefix: string) =>
 type DraftAnnotations = NonNullable<Parameters<Daemon["putDraft"]>[1]["annotations"]>;
 
 /** Seed the plan and its comments, plus any `extra` annotations built from the anchors,
- * and open the review — on the preview unless `preview` is false. */
+ * and open the review — on the preview unless `preview` is false, with the code line's
+ * unsent draft unless `scratch` is false. */
 async function seedPreview(
   daemon: Daemon,
   page: Page,
   {
     extra = () => [],
     preview = true,
+    scratch = true,
   }: {
     extra?: (s: Seeded) => DraftAnnotations;
     preview?: boolean;
+    scratch?: boolean;
   } = {},
 ): Promise<Seeded> {
   const id = await daemon.seed({ plan: PLAN });
@@ -123,9 +126,9 @@ async function seedPreview(
       { id: "ann-4", startLine: far + 2, endLine: far + 2, comment: "second far thought" },
       ...extra(seeded),
     ],
-    composerScratches: [
-      { startLine: seeded.code, endLine: seeded.code, text: "an unsent code note" },
-    ],
+    composerScratches: scratch
+      ? [{ startLine: seeded.code, endLine: seeded.code, text: "an unsent code note" }]
+      : [],
   });
   await page.goto("/");
   await planSurface(page);
@@ -279,6 +282,70 @@ const headingRows = (page: Page) =>
     range.selectNodeContents(h1);
     return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
   }, PLAN_PREVIEW);
+
+const NARROW = { width: 640, height: 900 };
+
+type Row = { top: number; bottom: number; lines: number[] };
+
+/** The preview's visual rows of text outside its comment slots, top to bottom, each with
+ * the source lines whose text it holds. A code block's lines share one marker. */
+const previewRows = (page: Page): Promise<Row[]> =>
+  page.evaluate((preview) => {
+    const root = document.querySelector(preview);
+    const rows: Row[] = [];
+    if (!root) return rows;
+    let line = 0;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node instanceof HTMLElement) {
+        if (node.dataset.sourceLine) line = Number(node.dataset.sourceLine);
+        continue;
+      }
+      if (!node.textContent?.trim() || node.parentElement?.closest("[data-preview-slot]")) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      for (const r of range.getClientRects()) {
+        if (r.width === 0) continue;
+        const mid = (r.top + r.bottom) / 2;
+        const row = rows.find((w) => w.top <= mid && mid < w.bottom);
+        if (!row) rows.push({ top: r.top, bottom: r.bottom, lines: [line] });
+        else if (!row.lines.includes(line)) row.lines.push(line);
+      }
+    }
+    return rows.sort((a, b) => a.top - b.top);
+  }, PLAN_PREVIEW);
+
+/** The rows that hold only source lines `start` through `end`, or every row they touch
+ * when none does. */
+function heldBy(rows: Row[], start: number, end: number): Row[] {
+  const inSpan = (l: number) => start <= l && l <= end;
+  const touching = rows.filter((r) => r.lines.some(inSpan));
+  const held = touching.filter((r) => r.lines.every(inSpan));
+  return held.length > 0 ? held : touching;
+}
+
+/** The source lines on each of NEAR's rows: what a rewrap changes. */
+const nearRows = async (page: Page, s: Seeded) =>
+  heldBy(await previewRows(page), s.near, s.near + 2).map((r) => r.lines);
+
+/** Whether the slot holding `inside` opens under the last row source lines `start`
+ * through `end` hold, clear of the row after it. */
+async function slotUnderHeldRows(page: Page, inside: string, start: number, end: number) {
+  const rows = await previewRows(page);
+  const last = heldBy(rows, start, end).at(-1);
+  const next = last && rows.find((r) => r.top >= last.bottom - 1);
+  const slot = await page
+    .locator(inside)
+    .first()
+    .evaluate((el) => el.closest("[data-preview-slot]")?.getBoundingClientRect().toJSON());
+  return (
+    last !== undefined &&
+    next !== undefined &&
+    slot !== undefined &&
+    slot.top >= last.bottom - 1 &&
+    slot.bottom <= next.top + 1
+  );
+}
 
 test("each thread renders under the row its lines end on, clear of the row after", async ({
   daemon,
@@ -522,6 +589,89 @@ test("pointer leaving a slot keeps the highlight on the card holding focus", asy
   await expect.poll(() => highlighted(page)).toBe(joinLines(s.lines, s.near + 1, s.near + 2));
 });
 
+test("after the window narrows below the column, each comment, scratch and draft marker bands its held rows and opens under the last", async ({
+  daemon,
+  page,
+}) => {
+  const s = await seedPreview(daemon, page);
+  const marker = '[aria-label="Resume unsent comment"]';
+  await expect(page.locator(marker)).toBeVisible();
+  const before = await nearRows(page, s);
+
+  await page.setViewportSize(NARROW);
+  await expect.poll(() => nearRows(page, s)).not.toEqual(before);
+
+  await expect
+    .poll(() => slotUnderHeldRows(page, '[data-annotation-card="ann-1"]', s.near + 1, s.near + 2))
+    .toBe(true);
+  await expect
+    .poll(() => slotUnderHeldRows(page, '[data-annotation-card="ann-2"]', s.itemFour, s.itemFour))
+    .toBe(true);
+  await expect
+    .poll(() => slotUnderHeldRows(page, '[data-annotation-card="ann-4"]', s.far + 2, s.far + 2))
+    .toBe(true);
+  // A code block's lines share one marker, so the draft is placed by its rendered text.
+  await expect.poll(() => slotBetween(page, marker, "answer", "other")).toBe(true);
+});
+
+test.describe("a resize changes no stored comment and no payload", () => {
+  type Flow = (page: Page, daemon: Daemon, id: string) => Promise<string>;
+
+  const requestChanges: Flow = (page, daemon, id) =>
+    openRequestChangesDialog(page).then((dialog) => submitForRevision(page, dialog, daemon, id));
+
+  const approve: Flow = async (page, daemon, id) => {
+    const guard = await openApproveGuard(page);
+    await guard.getByRole("button", { name: "Approve with comments" }).click();
+    const decision = async () => {
+      const res = await fetch(`${daemon.url}/api/reviews/${encodeURIComponent(id)}/decision`);
+      return (await res.json()) as { behavior: string; feedback?: string };
+    };
+    await expect.poll(async () => (await decision()).behavior).toBe("allow");
+    return (await decision()).feedback ?? "";
+  };
+
+  const stored = async (daemon: Daemon, id: string) =>
+    ((await daemon.getReview(id)).body?.annotations ?? []).map((a) => ({
+      lines: "startLine" in a ? [a.startLine, a.endLine] : [],
+      comment: a.comment,
+    }));
+
+  /** Seeds a review, resizes it to NARROW and back first when `resize`, and sends it
+   * through `flow`, returning the feedback it carried. */
+  async function send(daemon: Daemon, page: Page, flow: Flow, resize: boolean) {
+    // The surface choice persists, so the review after the resized one opens on the
+    // preview already.
+    const s = await seedPreview(daemon, page, { scratch: false, preview: resize });
+    await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
+    await expect(card(page, "ann-1")).toBeVisible();
+    await awaitAnnotationCount(daemon, s.id, 4);
+    if (resize) {
+      const wide = page.viewportSize() ?? NARROW;
+      const comments = await stored(daemon, s.id);
+      const before = await nearRows(page, s);
+      await page.setViewportSize(NARROW);
+      await expect.poll(() => nearRows(page, s)).not.toEqual(before);
+      await page.setViewportSize(wide);
+      await expect.poll(() => nearRows(page, s)).toEqual(before);
+      expect(await stored(daemon, s.id)).toEqual(comments);
+    }
+    return flow(page, daemon, s.id);
+  }
+
+  for (const [name, flow] of [
+    ["request-changes", requestChanges],
+    ["approve", approve],
+  ] as const) {
+    test(`the ${name} payload is the same with or without a resize`, async ({ daemon, page }) => {
+      const resized = await send(daemon, page, flow, true);
+      const still = await send(daemon, page, flow, false);
+      expect(resized).toContain("tighten these two lines");
+      expect(resized).toBe(still);
+    });
+  }
+});
+
 test.describe("commenting from the preview", () => {
   /** A word in the preview: its `nth` (0-based) whole-word occurrence inside the deepest
    * rendered block holding source `line`. */
@@ -687,6 +837,50 @@ test.describe("commenting from the preview", () => {
     expect(row).toContain(s.near + 1);
     await expect(composerLabel(page)).toHaveText(rowLabel(row));
     await expectComposerFocused(page);
+  });
+
+  test("an open composer keeps its text and its rows through a resize", async ({
+    daemon,
+    page,
+  }) => {
+    const s = await seedPreview(daemon, page);
+    const cited = await clickWord(page, { text: "bravo", line: s.near });
+    const dialog = page.getByRole("dialog", { name: "Add a comment" });
+    const textbox = dialog.getByRole("textbox", { name: "Comment" });
+    await expect(textbox).toBeFocused();
+    await page.keyboard.type("keep this through the resize");
+    const band = page.locator(PREVIEW_DRAG);
+    const heightBefore = (await band.boundingBox())?.height ?? 0;
+    expect(heightBefore).toBeGreaterThan(0);
+
+    await page.setViewportSize(NARROW);
+    await expect.poll(async () => (await band.boundingBox())?.height ?? 0).not.toBe(heightBefore);
+
+    await expect(dialog).toBeVisible();
+    await expect(textbox).toHaveText("keep this through the resize");
+    await expect(composerLabel(page)).toHaveText(rowLabel(cited));
+    const bandsHeldRows = async () => {
+      const box = await band.boundingBox();
+      const slot = await dialog.evaluate((el) =>
+        el.closest("[data-preview-slot]")?.getBoundingClientRect().toJSON(),
+      );
+      if (!box || !slot) return false;
+      const rows = await previewRows(page);
+      const held = heldBy(rows, Math.min(...cited), Math.max(...cited));
+      const inBand = (r: Row) => {
+        const mid = (r.top + r.bottom) / 2;
+        return box.y <= mid && mid < box.y + box.height;
+      };
+      const next = rows.find((r) => r.top >= box.y + box.height - 1);
+      return (
+        held.length > 0 &&
+        rows.every((r) => inBand(r) === held.includes(r)) &&
+        slot.top >= box.y + box.height - 1 &&
+        next !== undefined &&
+        slot.bottom <= next.top + 1
+      );
+    };
+    await expect.poll(bandsHeldRows).toBe(true);
   });
 
   test("a Shift drag after a closed composer selects exactly the dragged text", async ({
