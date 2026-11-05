@@ -195,17 +195,19 @@ put a plan in front of you without going through plan mode — see
 [Calling the review tool from your own skill](#calling-the-review-tool-from-your-own-skill).
 
 The reviewer's approve choice is an opaque variant id the core stores and the UI renders;
-the Claude adapter declares its variants (`default` / `acceptEdits` / `auto`) and rides
-them to the UI over `GET /api/health`, so the approve split-button reflects the active
-adapter's capabilities rather than hard-coded mode names. The adapter's skill enumeration
-rides the same pattern one route over: `listSkills` walks the agent's own well-known
-directories and the daemon serves the result on `GET /api/reviews/:id/skills`, which is
-where the feedback editors' `/` completion reads the names a reviewer can cite. Both are
-the same rule — a capability reaches the browser over the wire, never by importing an
-adapter — so an agent that enumerates nothing simply yields an empty list and no
-completion fires. The adapter's `restartHint`, the post-upgrade line What's new shows,
-rides `GET /api/health` too, but a resident daemon withholds it: its adapter is a default,
-not the harness the user actually runs.
+the Claude adapter declares its variants (`default` / `acceptEdits` / `auto`), and
+`caret review` stamps them on each review it opens. The daemon stores them on the review,
+serves them to the UI on `GET /api/reviews[/:id]`, and refuses an approval naming a
+variant the review didn't declare, so the approve split-button reflects what that review's
+agent offers rather than hard-coded mode names. The adapter's skill enumeration rides the
+same pattern one route over: `listSkills` walks the agent's own well-known directories and
+the daemon serves the result on `GET /api/reviews/:id/skills`, which is where the feedback
+editors' `/` completion reads the names a reviewer can cite. Both are the same rule — a
+capability reaches the browser over the wire, never by importing an adapter — so an agent
+that enumerates nothing simply yields an empty list and no completion fires. The adapter's
+`restartHint`, the post-upgrade line What's new shows, rides `GET /api/health` too, but a
+resident daemon withholds it: its adapter is a default, not the harness the user actually
+runs.
 
 Skills reach the reviewer by two routes, not one. The enumeration only names them; a
 second, on-demand route answers what a named skill actually does. When the reviewer

@@ -278,7 +278,6 @@ export async function runDaemon(opts: {
       // logged — identifying); the per-boot instanceId is the loggable handle.
       stateDir: stateDir(),
       instanceId: randomUUID().slice(0, 8),
-      approveVariants: adapter.approveVariants,
       approveCarriesNotes: adapter.approveCarriesNotes,
       // The active adapter's id, published on /api/health so the UI can adapt to
       // the environment (EXC-791).

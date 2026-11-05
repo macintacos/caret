@@ -85,7 +85,6 @@
   import { preloadPlanLanguages } from "$lib/diffview/languages.ts";
   import type { DiffSide } from "$lib/diffview/types.ts";
   import type {
-    ApproveVariant,
     ApproveVariantId,
     Annotation,
     PersistedScratch,
@@ -130,10 +129,6 @@
   // The in-UI alert/toast queue (EXC-850): App owns the reactive backing store,
   // createAlerts (below) mutates it, and AlertHost renders it bottom-right.
   let alertStore = $state<AlertStore>({ alerts: [] });
-  // The adapter's declared approve variants, read once from the health probe.
-  // Undefined until it lands, or for a daemon predating the field; approveVariants()
-  // then falls back to the built-in set.
-  let declaredVariants = $state<ApproveVariant[] | undefined>(undefined);
   // A daemon predating the field omits it, so this stays true: the approve dialog warns
   // only when the adapter says its approval drops notes.
   let approveCarriesNotes = $state(true);
@@ -389,7 +384,7 @@
   let reviewContext = $derived(
     active ? { reviewId: active.id, cwd: active.cwd, adapter: source } : undefined,
   );
-  let variants = $derived(approveVariants(declaredVariants));
+  let variants = $derived(approveVariants(active?.approveVariants));
   // The remembered id gated against the live set, so a variant this daemon no longer
   // declares never drives the primary Approve button.
   let effectiveApproveMode = $derived(pickApproveMode(resolve.approveMode, variants));
@@ -553,12 +548,10 @@
   $effect(() => {
     // An immediate health probe sets the connection flag before the first
     // reviews tick resolves; the poll keeps it current thereafter. The same
-    // probe carries the adapter's declared approve variants, captured once for
-    // the split-button, and the dev-build flag for the "local build" badge.
+    // probe carries the dev-build flag for the "local build" badge.
     void getHealth()
       .then((h) => {
         selection.setConnected(true);
-        declaredVariants = h.approveVariants;
         approveCarriesNotes = h.approveCarriesNotes ?? true;
         isDev = h.isDev ?? false;
         version = h.version;

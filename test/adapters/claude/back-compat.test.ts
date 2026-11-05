@@ -11,7 +11,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
-import { APPROVE_VARIANTS } from "@/adapters/claude/approve.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures");
 
@@ -35,7 +34,7 @@ test("a pre-epic review record's decision.acceptMode survives the persisted-deci
 
   let d: TestDaemon | undefined;
   try {
-    d = await bootDaemon(dir, { approveVariants: APPROVE_VARIANTS });
+    d = await bootDaemon(dir);
     // White-box: the store parses the pre-epic file straight through.
     const persisted = await d.store.persisted(id);
     expect(persisted?.decision?.acceptMode).toBe("auto");

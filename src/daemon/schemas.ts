@@ -11,6 +11,12 @@ import type { Behavior, ConfigPatch, DraftBody, PlanInput, ResolveBody } from "@
 // fallback rather than rejecting, matching the cast-and-trust behavior they replace.
 // ConfigPatchSchema is the one exception and says below why it rejects instead.
 
+const ApproveVariantSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  description: z.string().optional(),
+});
+
 // POST /api/reviews: an incoming plan. Every field is optional and the whole
 // object falls back to {} on a non-object body, mirroring the `req.json()
 // .catch(() => ({}))` tolerance the body parser keeps — the router then defaults
@@ -31,6 +37,7 @@ export const PlanInputSchema: z.ZodType<PlanInput> = z
       .object({ workspaceId: z.string().min(1), surfaceId: z.string().min(1) })
       .optional()
       .catch(undefined),
+    approveVariants: z.array(ApproveVariantSchema).min(1).optional().catch(undefined),
   })
   .catch({});
 
