@@ -1,7 +1,8 @@
-// `caret band-link`: the link Claude Code's plan-waiting band (mod/hooks/band.tsx) shows
-// — this session's pending review, else caret's UI — printed, or opened with --open.
-// The mod asks this CLI rather than the daemon, so host, port, token and the
-// [review] band setting resolve by caret's own rules.
+// `caret band-link`: the link to a session's pending review, else caret's home page —
+// printed, or opened with --open. Two callers: Claude Code's plan-waiting band
+// (mod/hooks/band.tsx), and OpenCode's `/caret` command (opencode/caret.tui.ts), which
+// passes --session only on a session route. Both ask this CLI rather than the daemon, so
+// host, port, token and the [review] band setting resolve by caret's own rules.
 //
 // Like `caret reconcile`, it GATES NOTHING: every failure is a SILENT exit 0 with no
 // stdout (no link means no band), never the CLI's fail-safe deny line. It never logs
@@ -37,28 +38,33 @@ export async function awaitPendingReview(
 }
 
 export async function runBandLinkSubcommand(opts: {
-  session: string;
+  session?: string;
   open?: boolean;
 }): Promise<void> {
+  const { session } = opts;
   try {
     const s = loadSettings();
     bootHookLogging(s);
     setLogContext({ sessionId: opts.session });
-    // --open answers a press on a band already drawn, so the setting and the poll gate only printing.
+    // --open answers an explicit press (the band's button, OpenCode's `/caret`), so the band
+    // setting and the poll gate only printing.
     if (opts.open || s.review.band) {
       const baseUrl = daemonBaseUrl(s);
-      const id = await awaitPendingReview(
-        {
-          pendingReviewId: async () => (await sessionReview(baseUrl, opts.session))?.id,
-          sleep: Bun.sleep,
-        },
-        opts.open ? 1 : undefined,
-      );
-      logDebug("band", "band link resolved", { found: id !== undefined });
+      const reviewId =
+        session === undefined
+          ? undefined
+          : await awaitPendingReview(
+              {
+                pendingReviewId: async () => (await sessionReview(baseUrl, session))?.id,
+                sleep: Bun.sleep,
+              },
+              opts.open ? 1 : undefined,
+            );
+      logDebug("band", "band link resolved", { found: reviewId !== undefined });
       const url = browserReviewLink(
         baseUrl,
         localHostname(s.daemon.host),
-        id,
+        reviewId,
         browserLoginToken(s.daemon),
       );
       if (opts.open) openBrowser(url);

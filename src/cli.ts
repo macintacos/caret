@@ -83,8 +83,10 @@ function buildProgram(): Command {
 
   program
     .command("band-link")
-    .description("print or open the link Claude Code's plan-waiting band shows (mod hook)")
-    .requiredOption("--session <id>", "the Claude Code session id")
+    .description(
+      "print or open the link to a session's pending review, else caret's home page (Claude Code's band, OpenCode's /caret)",
+    )
+    .option("--session <id>", "the Claude Code or OpenCode session whose review to link")
     .option("--open", "open the link in a browser instead of printing it")
     .action((opts) => runBandLinkSubcommand(opts));
 

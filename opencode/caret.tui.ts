@@ -1,8 +1,13 @@
-// caret's OpenCode v2 TUI plugin: the review-link, decision, and update toasts. v2's server
-// `Context` has no toast surface, so v2 loads this module from package.json
-// `exports["./tui"]` as `{ id, setup }`. v1 keeps its own toasts in `server()`; the no-op
-// `tui` exists because v1's installer may register this module as a v1 TUI plugin, and
-// v1's TUI loader throws on a default without one.
+// caret's OpenCode v2 TUI plugin: the review-link, decision, and update toasts, and the
+// `/caret` command that opens the session's waiting plan. v2's server `Context` has no
+// toast surface, so v2 loads this module from package.json `exports["./tui"]` as
+// `{ id, setup }`. v1 keeps its own toasts in `server()`; the no-op `tui` exists because
+// v1's installer may register this module as a v1 TUI plugin, and v1's TUI loader throws
+// on a default without one. `keymap` and `ui.router` stay optional, and the command
+// registers only when `keymap.layer` is a function, so a context without them still gets
+// caret's toasts.
+
+import { spawn } from "node:child_process";
 
 import {
   CARET_DECISION_KEY,
@@ -10,6 +15,7 @@ import {
   decisionToast,
   productionUpdateCheck,
   type ReviewOutcome,
+  resolveCaretBin,
   reviewLinkToast,
   type ToastBody,
   type ToastSink,
@@ -34,15 +40,81 @@ export type TuiContext = {
       handler: (event: ToolEvent) => void,
     ) => () => void;
   };
-  ui: { toast: { show: (options: TuiToast) => void } };
+  ui: { toast: { show: (options: TuiToast) => void }; router?: { current: () => Route } };
+  keymap?: { layer: (factory: () => { mode: "global"; commands: CaretCommand[] }) => void };
 };
 
-/** Build caret's v2 TUI `setup` over an injected update check. */
+/** v2's `Route` as caret reads it: only a session route carries `sessionID`. */
+type Route = { type: string; sessionID?: string };
+
+/** caret's one keymap command: the slice of v2's `KeymapCommand` it sets. */
+type CaretCommand = {
+  id: string;
+  title: string;
+  description: string;
+  palette: true;
+  slash: { name: string };
+  bind: string;
+  run: () => void;
+};
+
+/** Spawns `bin args` detached and unwaited; `onError` hears a child that fails to start
+ * or exits non-zero. */
+export type DetachedSpawn = (bin: string, args: string[], onError: (err: Error) => void) => void;
+
+export const nodeDetachedSpawn: DetachedSpawn = (bin, args, onError) => {
+  // spawn reports ENOENT asynchronously; unhandled, that 'error' takes OpenCode down.
+  const child = spawn(bin, args, { stdio: "ignore", detached: true });
+  child.on("error", onError);
+  // band-link exits 0 on its own failures, so non-zero means caret never ran.
+  child.on("exit", (code) => {
+    if (code) onError(new Error(`exited with status ${code}`));
+  });
+  child.unref();
+};
+
+/** Build caret's v2 TUI `setup` over an injected update check, caret binary, and spawn. */
 export function createCaretTui(opts: {
   checkUpdate: (show: ToastSink) => void;
+  bin: string;
+  spawn: DetachedSpawn;
 }): (ctx: TuiContext) => () => void {
   return (ctx) => {
     const show: ToastSink = (body) => ctx.ui.toast.show(body);
+    const openPlan = () => {
+      const sessionID = ctx.ui.router?.current().sessionID;
+      const args =
+        sessionID === undefined
+          ? ["band-link", "--open"]
+          : ["band-link", "--session", sessionID, "--open"];
+      opts.spawn(opts.bin, args, (err) =>
+        toastBestEffort(show, {
+          message: `caret: couldn't start caret (${err.message})`,
+          variant: "error",
+        }),
+      );
+    };
+    if (typeof ctx.keymap?.layer === "function") {
+      try {
+        ctx.keymap.layer(() => ({
+          // The palette and slash completion list only commands reachable from their own input mode.
+          mode: "global",
+          commands: [
+            {
+              id: "caret.open",
+              title: "Open caret",
+              description: "Open this session's waiting plan, or caret's home page",
+              palette: true,
+              slash: { name: "caret" },
+              bind: "<leader>p",
+              run: openPlan,
+            },
+          ],
+        }));
+      } catch {
+        // best-effort: a host that rejects the command keeps caret's toasts
+      }
+    }
     const showIn =
       (sessionID: string): ToastSink =>
       (body) =>
@@ -83,7 +155,11 @@ export function createCaretTui(opts: {
   };
 }
 
-const setup = createCaretTui({ checkUpdate: productionUpdateCheck });
+const setup = createCaretTui({
+  checkUpdate: productionUpdateCheck,
+  bin: resolveCaretBin({ env: process.env, importMetaUrl: import.meta.url }),
+  spawn: nodeDetachedSpawn,
+});
 
 export default {
   id: "caret",
