@@ -127,17 +127,20 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
     level with the plan header's bed;
   - the bar at the drawer's narrowest, with nothing overflowing and the path in view.
 - **The outline is a column, or a float.** The column stands left of the plan pane while
-  the window has room for it. Under 960px wide, or once it yields to a file the plan could
-  not keep its 800px reading column beside, the header's outline key drops it as a float
-  instead: a `--float-mid` float on `--paper-raised`, which opens on its filter. The
-  outline key is one toggle named "Outline", in the column's head while the column stands
-  and in the header while it is folded. In the header, it stands as far in from the pane's
-  left edge as Preview does from the right. It latches down with its corner light while
-  the outline is open, as a column or as a float, and stands up while it is closed. In
-  both places it stands on a bed's floor with no bed of its own, so the fold carries the
-  same key across. A press, or ⇧ + `\`, opens or folds the outline. Comparing folds the
-  column too, without changing the reader's remembered choice. Its float then lists only
-  the sections that changed, each with its line count, or says "No sections changed".
+  the reader keeps it shown, unless the window is under 960px wide. A file docked right
+  stands beside it, and the plan rewraps into the width between them. The outline key is
+  one toggle named "Outline", in the column's head while the column stands and in the
+  header while it is hidden. In the header, it stands as far in from the pane's left edge
+  as Preview does from the right. It latches down with its corner light while the column
+  stands, and stands up while the column is hidden. In both places it stands on a bed's
+  floor with no bed of its own, so the fold carries the same key across. A press, or ⇧ +
+  `\`, shows or hides the column and never opens the float. Under 960px the column can't
+  stand, so the header has no outline key and ⇧ + `\` does nothing. `\` focuses the
+  column's filter while the column stands. While it's hidden, or under 960px, `\` drops
+  the outline from the header's start as a float instead: a `--float-mid` float on
+  `--paper-raised`, which opens on its filter. Compare has no outline: no column, no key
+  and no float, and neither key does anything there. Entering Compare folds the column and
+  leaving stands it again, without changing the reader's remembered choice.
 - **The outline column's head is its filter field and its outline key.** The field always
   shows, at the head's start, and the key stands at its end. The field is a closed field
   cut into the column's bed (`--field-floor` under `--panel-recess`), as the plan header's
@@ -169,12 +172,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - **The outline column takes the width the reader drags it to.** Its right edge is a
   splitter (see **Splitters** in the tactile kit). The column opens 15.5rem wide and
   narrows to 12rem. It widens to 30rem, but only while the plan beside it keeps its 800px
-  reading column. Even a narrow window lets it stand at 15.5rem. The column yields at the
-  width the reader chose, so a narrowed column stands beside a file that the opening width
-  would yield to. No gesture on the edge drops the column to a float. Beside a file
-  drawer, a drag stops where the column would yield, and a double-click returns the
-  opening width or, where that would yield, the widest width that fits. The browser
-  remembers the width.
+  reading column. Even a narrow window lets it stand at 15.5rem. A double-click returns
+  the opening width. The browser remembers the width.
 - **An outline row peeks at its section.** Resting on a row for 350ms, by the pointer or
   by the keys, opens a peek past the outline's right edge, level with the row and kept
   0.5rem inside the plan pane, clear of an open file. Once open it follows the pointer and

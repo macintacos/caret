@@ -51,8 +51,6 @@
   import { headingMatcher, type TocHeading } from "$lib/toc.ts";
   import {
     describeSection,
-    plural,
-    type SectionDelta,
     sectionCounts,
     tocSections,
   } from "$lib/tocSections.ts";
@@ -77,9 +75,6 @@
     onJump: (line: number) => void;
     /** A column cut into the body beside the plan, or a float over it. */
     placement: "column" | "float";
-    /** While comparing, what each changed section gained and lost, keyed on its
-     * heading's line. Only those sections are listed; null off compare. */
-    deltas?: Map<number, SectionDelta> | null;
     /** Whether `activeLine` moves because the reader jumped to a heading, which fades the
      * latch across, rather than because the plan scrolled, which snaps it. */
     latchGlides?: boolean;
@@ -108,7 +103,6 @@
     previous,
     onJump,
     placement,
-    deltas = null,
     latchGlides = false,
     showShortcutHints = false,
     onHide,
@@ -182,7 +176,7 @@
   // Every heading renders a row, bounded by the low hundreds of headings a caret plan
   // carries — agent-authored markdown, not a book. List virtualization is out of scope
   // until a real plan is measured past that ceiling (EXC-1062).
-  const listed = $derived(deltas === null ? headings : headings.filter((h) => deltas.has(h.line)));
+  const listed = $derived(headings);
   const tree = $derived(headingTree(listed));
   const groups = $derived(groupedHeadingMatches(listed, query));
   const sections = $derived(tocSections(headings, plan, comments, previous?.plan ?? null));
@@ -210,9 +204,7 @@
       ? ""
       : listed.length > 0
         ? "No headings match"
-        : deltas === null
-          ? "No headings in plan"
-          : "No sections changed",
+        : "No headings in plan",
   );
 
   // `\` on an empty field, and the float's open, start the walk on the heading being read,
@@ -387,21 +379,6 @@
       .filter((text) => text !== "")
       .join(" › ");
   }
-
-  function deltaStamp(delta: SectionDelta): string {
-    return [delta.added > 0 ? `+${delta.added}` : "", delta.removed > 0 ? `−${delta.removed}` : ""]
-      .filter((part) => part !== "")
-      .join(" ");
-  }
-
-  function deltaNote(delta: SectionDelta): string {
-    return [
-      delta.added > 0 ? `${plural(delta.added, "line")} added` : "",
-      delta.removed > 0 ? `${plural(delta.removed, "line")} removed` : "",
-    ]
-      .filter((part) => part !== "")
-      .join(", ");
-  }
 </script>
 
 <!-- ONE row, and the only place either view spells a destination out. Both views
@@ -417,16 +394,10 @@
        construction, and the unfiltered view's query is empty, which the matcher answers
        with the whole label unmarked. -->
   {@const parts = matcher(heading.text) ?? [{ text: heading.text, hit: false }]}
-  {@const delta = deltas?.get(heading.line)}
-  {@const section = deltas === null ? sections.get(heading.line) : undefined}
-  {@const note =
-    delta !== undefined
-      ? deltaNote(delta)
-      : section === undefined
-        ? ""
-        : describeSection(section, previous?.version ?? null)}
+  {@const section = sections.get(heading.line)}
+  {@const note = section === undefined ? "" : describeSection(section, previous?.version ?? null)}
   {@const counts = section === undefined ? null : sectionCounts(section)}
-  <!-- The counts, the change and the delta go through aria-describedby, so the option's
+  <!-- The counts and the change go through aria-describedby, so the option's
        name stays the heading alone. -->
   <Command.Item
     value={String(heading.line)}
@@ -452,16 +423,12 @@
       </span>
       {#if note !== ""}
         <span class="toc-meta" aria-hidden="true">
-          {#if delta !== undefined}
-            <span class="toc-delta">{deltaStamp(delta)}</span>
-          {:else}
-            {#if section?.change}<span class="toc-dot"></span>{/if}
-            {#if counts?.comments}
-              <span class="toc-count stamp"><Icon name="message-square" size={11} />{counts.comments}</span>
-            {/if}
-            {#if counts?.drafts}
-              <span class="toc-count toc-tint"><Icon name="message-square-more" size={11} />{counts.drafts}</span>
-            {/if}
+          {#if section?.change}<span class="toc-dot"></span>{/if}
+          {#if counts?.comments}
+            <span class="toc-count stamp"><Icon name="message-square" size={11} />{counts.comments}</span>
+          {/if}
+          {#if counts?.drafts}
+            <span class="toc-count toc-tint"><Icon name="message-square-more" size={11} />{counts.drafts}</span>
           {/if}
         </span>
         <span id="{uid}-note-{heading.line}" hidden>{note}</span>
@@ -811,20 +778,6 @@
     animation: toc-list-in var(--dur-state) var(--ease-out);
   }
 
-  /* While comparing, the float's stamps arrive a beat after its list: the list lands, then
-     says what changed, all within --dur-state so no stamp lands late enough to read as
-     loading. Not while a query re-forms the rows. */
-  .plan-toc[data-placement="float"] :global([data-toc-view="outline"] .toc-delta) {
-    animation: toc-stamp-in calc(var(--dur-state) * 0.75) var(--ease-out)
-      calc(var(--dur-state) * 0.25) both;
-  }
-  @keyframes toc-stamp-in {
-    from {
-      opacity: 0;
-      transform: scale(0.85);
-    }
-  }
-
   /* A match arriving, and its breadcrumb header arriving with it. ONE declaration for
      both, so a header cannot pop in above rows that faded. Rows animate IN only: a row
      that stops matching is removed by Svelte with nothing to hang an exit on, and the
@@ -1037,7 +990,7 @@
     border-radius: 99px;
     background: var(--attention);
   }
-  .plan-toc :global(:is(.toc-count, .toc-delta)) {
+  .plan-toc :global(.toc-count) {
     display: inline-flex;
     align-items: center;
     gap: 0.2rem;
@@ -1052,12 +1005,6 @@
   }
   .plan-toc :global(.toc-count) {
     padding: 0 0.42rem 0 0.32rem;
-  }
-  .plan-toc :global(.toc-delta) {
-    padding-inline: 0.35rem;
-    background: var(--well-floor);
-    box-shadow: var(--well-shade), var(--well-lip);
-    color: var(--ink-soft);
   }
   /* An unsent count is novelty, tinted at the comment stamp's strengths. Its glyph is
      the source marker's, not the Draft stamp's pencil. */

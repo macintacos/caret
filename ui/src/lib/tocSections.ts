@@ -3,7 +3,6 @@
 // what it gained and lost against the other version. Pure and DOM-free like `toc.ts`.
 
 import { lineCountOf } from "$lib/diffview/lineCursor.ts";
-import type { DiffSide } from "$lib/diffview/types.ts";
 import type { CommentIndexEntry } from "$lib/feedback.ts";
 import { extractHeadings, type TocHeading } from "$lib/toc.ts";
 
@@ -43,50 +42,6 @@ export function tocSections(
     });
   }
   return sections;
-}
-
-/** What a base section gained and lost against the target version, and where its
- * first change sits: the first gained line on the base ("after") side, or, for a
- * section that only lost lines, the first lost line on the target ("before") side. */
-export interface SectionDelta {
-  added: number;
-  removed: number;
-  line: number;
-  side: DiffSide;
-}
-
-/** Every base section whose own lines differ from its counterpart in `target`, keyed on
- * the heading's source line in `base`. A section the target lacks counts as wholly
- * gained. Lines pair as a multiset, so a line moved within its section counts as no
- * change. */
-export function sectionDeltas(
-  headings: TocHeading[],
-  base: string,
-  target: string,
-): Map<number, SectionDelta> {
-  const baseLines = base.split("\n");
-  const targetLines = target.split("\n");
-  const theirs = new Map(
-    ownRanges(extractHeadings(target), targetLines.length).map((r) => [r.key, r] as const),
-  );
-  const ours = ownRanges(headings, baseLines.length);
-  const deltas = new Map<number, SectionDelta>();
-  for (const [index, heading] of headings.entries()) {
-    const mine = ours[index];
-    if (mine === undefined) continue;
-    const other = theirs.get(mine.key);
-    const gained = unmatched(baseLines, mine, other === undefined ? [] : slice(targetLines, other));
-    const lost = other === undefined ? [] : unmatched(targetLines, other, slice(baseLines, mine));
-    const first = gained[0] ?? lost[0];
-    if (first === undefined) continue;
-    deltas.set(heading.line, {
-      added: gained.length,
-      removed: lost.length,
-      line: first,
-      side: gained.length > 0 ? "after" : "before",
-    });
-  }
-  return deltas;
 }
 
 /** The section's committed comments and unsent drafts, counted apart. */
@@ -146,40 +101,6 @@ function anchored(comments: CommentIndexEntry[], lo: number, hi: number): Commen
 function changeOf(previous: string | undefined, current: string | undefined): SectionChange | null {
   if (previous === undefined) return "new";
   return previous === current ? null : "edited";
-}
-
-// A section's own lines, its heading included, as 1-based inclusive bounds.
-interface OwnRange {
-  key: string;
-  from: number;
-  to: number;
-}
-
-function ownRanges(headings: TocHeading[], lineCount: number): OwnRange[] {
-  const keys = sectionKeys(headings);
-  return headings.map((heading, index) => ({
-    key: keys[index] ?? "",
-    from: heading.line,
-    to: ownEndOf(headings, index, lineCount),
-  }));
-}
-
-function slice(lines: string[], range: OwnRange): string[] {
-  return lines.slice(range.from - 1, range.to);
-}
-
-// The 1-based numbers of the range's lines that `others` has no copy left to pair with.
-function unmatched(lines: string[], range: OwnRange, others: string[]): number[] {
-  const left = new Map<string, number>();
-  for (const line of others) left.set(line, (left.get(line) ?? 0) + 1);
-  const missing: number[] = [];
-  for (let n = range.from; n <= range.to; n++) {
-    const line = lines[n - 1] ?? "";
-    const count = left.get(line) ?? 0;
-    if (count > 0) left.set(line, count - 1);
-    else missing.push(n);
-  }
-  return missing;
 }
 
 // Each heading's key: its title plus how many same-titled headings precede it, so two

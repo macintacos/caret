@@ -124,6 +124,30 @@ Open items first, then the log, newest first.
   - Tab stops at the field and moves on to the outline key until the reader engages the
     field with `\`, a click or a key pressed in it.
 
+## 2026-11-04: the outline stands beside a file, and only `\` opens its float
+
+The user asked for the outline and a file preview to be open together: "they shouldn't be
+mutually exclusive." The column had folded into the header's float whenever a file docked
+right would leave the plan under 800px. The plan now rewraps to a narrowed pane, so it no
+longer needs that width. The user also asked that ⇧ + `\` and the header's outline key
+never open the float, and that `\` open it only while the column is hidden: "if the
+outline is shown, hitting "\" should focus the "Filter headings" text box". On Compare:
+"pressing "\" and getting the popup should only work when in the plan view, not the
+compare view. shift+\ shouldn't do anything in compare view".
+
+- **Beside a file:** the column stands whenever the reader keeps it shown, at 960px and
+  up. The drawer's own clamp keeps the plan its narrowest width, and the plan rewraps into
+  what is left. A drag on the column's edge stops only at the column's own bounds, and a
+  double-click returns the opening width.
+- **The two keys:** ⇧ + `\` and the header's outline key show or hide the column. Under
+  960px, where the column can't stand, the header has no outline key and ⇧ + `\` does
+  nothing. In the header the key stands up, since it reports the column.
+- **`\`:** it focuses the column's filter while the column stands. While the column is
+  hidden, or under 960px, it drops the float from the header's start, on its filter.
+- **Compare:** no column, no key and no float. The changed-sections float, with its line
+  counts and "No sections changed", is gone. Entering and leaving Compare still folds and
+  stands the column without touching the reader's choice.
+
 ## 2026-11-04: the waiting screen's `^` stands as a lit key
 
 The user asked for a cohesion pass on the waiting screen, not a new design: "I kinda like

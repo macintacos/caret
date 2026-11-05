@@ -968,22 +968,16 @@ test("a row Enter picks in the column goes down as a press does, never past wher
   expect(Math.max(...drops)).toBeLessThanOrEqual(rest + 0.001);
 });
 
-// Comparing folds the column away, for the split diff needs the width and no reading
-// position is tracked there; the header's key drops the base version's changed sections
-// instead. Daemon state — two versions — so it is here.
-test("comparing folds the column into the header's key, whose float lists the changed sections", async ({
+// Compare has no outline, and leaving it stands the column as the reader left it. Daemon
+// state — two versions — so it is here.
+test("comparing has no outline: no key, and \\ and Shift+\\ open nothing", async ({
   daemon,
   page,
 }) => {
-  // Paragraphs of their own, so the daemon's reflow leaves the rest of each section
-  // alone. Bravo's run is what puts Whiskey's hunk below the fold: the diff folds every
-  // unchanged band, so with Whiskey's change alone there would be nothing to scroll.
-  const bravoRun = Array.from({ length: 40 }, (_, i) => `Bravo gained line ${i + 1}.`).join("\n\n");
-  const revised = TALL_PLAN.replace("## Charlie", `${bravoRun}\n\n## Charlie`).replace(
-    "## Xray",
-    "Whiskey gained a paragraph.\n\n## Xray",
-  );
-  await daemon.seedVersions(2, [TALL_PLAN, revised]);
+  await daemon.seedVersions(2, [
+    TALL_PLAN,
+    TALL_PLAN.replace("## Xray", "Whiskey gained.\n\n## Xray"),
+  ]);
   await page.goto("/");
   await readingAt(page, "Alpha");
   const choice = () => page.evaluate(() => localStorage.getItem("caret.planOutline"));
@@ -992,56 +986,16 @@ test("comparing folds the column into the header's key, whose float lists the ch
   const versions = page.getByRole("button", { name: /^Versions/ });
   await versions.click();
   await expect(panel(page)).toHaveCount(0);
-  await openFloat(page);
-  const rows = page.locator(FLOAT).getByRole("option");
-  await expect(rows).toHaveText([/^Bravo/, /^Whiskey/]);
-  const whiskey = rows.filter({ hasText: "Whiskey" });
-  await expect(whiskey.locator(".toc-delta")).toHaveText(/^\+\d+$/);
-  await expect(whiskey).toHaveAccessibleDescription(/^\d+ lines? added$/);
-
-  const scroller = page.locator(".diff-plan");
-  const top = await scroller.evaluate((el) => el.scrollTop);
-  await whiskey.click();
-  await expect(page.locator(FLOAT)).toHaveCount(0);
-  await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(top);
-
-  // Shift+\ and \ drop the float too, and neither writes the reader's choice.
-  await page.keyboard.press("Shift+Backslash");
-  await expect(
-    page.locator(FLOAT).getByRole("combobox", { name: "Filter headings" }),
-  ).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(outlineKey(page)).toBeFocused();
+  await expect(page.getByRole("button", { name: "Outline", exact: true })).toHaveCount(0);
+  await page.locator("body").focus();
   await page.keyboard.press("Backslash");
-  await expect(
-    page.locator(FLOAT).getByRole("combobox", { name: "Filter headings" }),
-  ).toBeFocused();
-  await page.keyboard.press("Escape");
+  await page.keyboard.press("Shift+Backslash");
+  await expect(page.locator(FLOAT)).toHaveCount(0);
+  await expect(panel(page)).toHaveCount(0);
 
-  // Leaving compare stands the column again, as the reader left it.
   await versions.click();
   await expect(listbox(page)).toBeVisible();
   expect(await choice()).toBe(before);
-});
-
-test("with nothing changed, the compare float is one quiet line that holds focus until Escape", async ({
-  daemon,
-  page,
-}) => {
-  await daemon.seedVersions(2, [TALL_PLAN, TALL_PLAN]);
-  await page.goto("/");
-  await readingAt(page, "Alpha");
-  await page.getByRole("button", { name: /^Versions/ }).click();
-  await expect(panel(page)).toHaveCount(0);
-
-  await page.keyboard.press("Shift+Backslash");
-  const float = page.locator(FLOAT);
-  await expect(float).toContainText("No sections changed");
-  await expect(float.getByRole("combobox")).toHaveCount(0);
-  await expect.poll(() => float.evaluate((el) => el.contains(document.activeElement))).toBe(true);
-  await page.keyboard.press("Escape");
-  await expect(float).toHaveCount(0);
-  await expect(outlineKey(page)).toBeFocused();
 });
 
 test("the indent guides sit on the indent's own grid and join across rows", async ({
@@ -1168,7 +1122,7 @@ async function recordDismissal(page: Page, dismiss: () => Promise<void>): Promis
 
 /** Under --w-narrow, open the outline's float from the header's key and settle it. */
 async function openFloat(page: Page): Promise<void> {
-  await outlineKey(page).click();
+  await page.keyboard.press("Backslash");
   await expect(
     page.locator(FLOAT).getByRole("combobox", { name: "Filter headings" }),
   ).toBeFocused();
@@ -1190,7 +1144,7 @@ test("the float arrives and leaves on the state duration", async ({ daemon, page
 
   const stateSeconds = await motionToken(page, "--dur-state");
 
-  await outlineKey(page).click();
+  await page.keyboard.press("Backslash");
   const entering = await animationOf(page.locator(FLOAT));
   // Still the vendored keyframes — a caret-named animation here would mean the exit
   // bits-ui waits on had been replaced.
@@ -1214,10 +1168,10 @@ test("the float arrives and leaves on the state duration", async ({ daemon, page
 });
 
 test("every way out of the float is animated, not cut", async ({ daemon, page }) => {
-  // Four ways out, and they are not four spellings of one: Escape and an outside click are
-  // the primitive's own dismissals, while a pick and the key are caret's own
-  // `floatOpen = false`. All four have to reach the same `data-state` flip, or one of
-  // them would drop the float out of the DOM instantly.
+  // Three ways out, and they are not three spellings of one: Escape and an outside click
+  // are the primitive's own dismissals, while a pick is caret's own `floatOpen = false`.
+  // All three have to reach the same `data-state` flip, or one of them would drop the
+  // float out of the DOM instantly.
   await page.setViewportSize({ width: 880, height: 900 });
   await daemon.seed({ plan: TALL_PLAN });
   await page.goto("/");
@@ -1231,7 +1185,6 @@ test("every way out of the float is animated, not cut", async ({ daemon, page })
     ["Escape", () => page.keyboard.press("Escape")],
     ["an outside click", outsideClick],
     ["picking a heading", () => page.locator(FLOAT).getByRole("option").first().click()],
-    ["the key", () => outlineKey(page).click()],
   ];
 
   for (const [name, dismiss] of paths) {
@@ -1620,7 +1573,7 @@ test("the plan header stands as tall as the outline column's head, level with it
   expect(header.y).toBeCloseTo(head.y, 0);
 });
 
-test("under 960px the outline drops from the header's key, filter focused, and closes back onto it", async ({
+test("under 960px there is no outline key or Shift+\\, and \\ drops the float, filter focused", async ({
   daemon,
   page,
 }) => {
@@ -1629,21 +1582,26 @@ test("under 960px the outline drops from the header's key, filter focused, and c
   await page.goto("/");
   await readingAt(page, "Golf");
   await expect(panel(page)).toHaveCount(0);
+  await expect(outlineKey(page)).toHaveCount(0);
 
   const float = page.locator(FLOAT);
-  await outlineKey(page).click();
-  await expect(outlineKey(page)).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Shift+Backslash");
+  await expect(float).toHaveCount(0);
+  await expect(panel(page)).toHaveCount(0);
+
+  await page.keyboard.press("Backslash");
   await expect(float.getByRole("combobox", { name: "Filter headings" })).toBeFocused();
   await expect(float.getByRole("option").and(page.locator("[data-selected]"))).toHaveText("Golf");
+  // It drops from the header's start, where the key stands at 960px and up.
+  const header = await page.locator(".plan-header").boundingBox();
+  const box = await float.boundingBox();
+  expect(Math.abs((box?.x ?? -99) - (header?.x ?? 0))).toBeLessThan(24);
 
   await page.keyboard.press("Escape");
   await expect(float).toHaveCount(0);
-  await expect(outlineKey(page)).toBeFocused();
-  await expect(outlineKey(page)).toHaveAttribute("aria-pressed", "false");
 
-  // `\` opens the float too, and a pick closes it into the plan.
-  await outlineKey(page).blur();
-  await page.keyboard.press("\\");
+  // A pick closes it into the plan.
+  await page.keyboard.press("Backslash");
   await expect(float.getByRole("combobox", { name: "Filter headings" })).toBeFocused();
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
@@ -1652,27 +1610,60 @@ test("under 960px the outline drops from the header's key, filter focused, and c
   await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe("BODY");
 });
 
-test("the column yields to a file drawer that would leave the plan under 800px", async ({
+test("with the column hidden, the header's key and Shift+\\ each stand it, and \\ drops the float", async ({
+  daemon,
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.addInitScript(() => localStorage.setItem("caret.planOutline", "hidden"));
+  await daemon.seed({ plan: TALL_PLAN });
+  await page.goto("/");
+  await readingAt(page, "Golf");
+  const float = page.locator(FLOAT);
+  await expect(panel(page)).toHaveCount(0);
+  await expect(outlineKey(page)).toHaveAttribute("aria-pressed", "false");
+
+  await page.keyboard.press("Backslash");
+  await expect(float.getByRole("combobox", { name: "Filter headings" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(float).toHaveCount(0);
+
+  await outlineKey(page).click();
+  await expect(listbox(page)).toBeVisible();
+  await expect(float).toHaveCount(0);
+
+  await page.keyboard.press("Shift+Backslash");
+  await expect(panel(page)).toHaveCount(0);
+  await page.keyboard.press("Shift+Backslash");
+  await expect(listbox(page)).toBeVisible();
+  await expect(float).toHaveCount(0);
+});
+
+test("a file docked right leaves the column standing, the plan between them, and \\ in its filter", async ({
   daemon,
   page,
 }) => {
   const proj = await makeProject({ "src/cache.ts": "export const cache = new Map();\n" });
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe cache lives in `src/cache.ts`.\n" });
-    // Wide enough for the column, the plan and a default 45% drawer side by side.
-    await page.setViewportSize({ width: 1920, height: 900 });
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/");
     await planSurface(page);
     await page.locator("[data-file-ref]").first().click();
-    await expect(page.locator("[data-file-preview]")).toBeVisible();
+    const drawer = page.locator("[data-file-preview]");
+    await expect(drawer).toBeVisible();
     await expect(listbox(page)).toBeVisible();
 
-    // Narrower, the same drawer would squeeze the plan, so the column yields to the key.
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await expect(panel(page)).toHaveCount(0);
-    await expect(outlineKey(page)).toHaveAttribute("aria-pressed", "false");
-    await openFloat(page);
-    await expect(page.locator(FLOAT).getByRole("option")).toHaveText(["Refs"]);
+    const column = await panel(page).boundingBox();
+    const plan = await page.locator(".plan-pane").boundingBox();
+    const file = await drawer.boundingBox();
+    expect(plan?.x ?? 0).toBeGreaterThanOrEqual((column?.x ?? 0) + (column?.width ?? 0) - 1);
+    expect(file?.x ?? 0).toBeGreaterThanOrEqual((plan?.x ?? 0) + (plan?.width ?? 0) - 1);
+
+    await page.locator("body").focus();
+    await page.keyboard.press("Backslash");
+    await expect(field(page)).toBeFocused();
+    await expect(page.locator(FLOAT)).toHaveCount(0);
   } finally {
     await proj.cleanup();
   }
@@ -1688,6 +1679,7 @@ test("Escape closes the outline float before the file drawer it stands over", as
   try {
     await daemon.seed({ cwd: proj.dir, plan: "# Refs\n\nThe cache lives in `src/cache.ts`.\n" });
     await page.setViewportSize({ width: 1440, height: 900 });
+    await page.addInitScript(() => localStorage.setItem("caret.planOutline", "hidden"));
     await page.goto("/");
     await planSurface(page);
     await page.locator("[data-file-ref]").first().click();
@@ -1698,7 +1690,6 @@ test("Escape closes the outline float before the file drawer it stands over", as
     await page.keyboard.press("Escape");
     await expect(page.locator(FLOAT)).toHaveCount(0);
     await expect(page.locator("[data-file-preview]")).toBeVisible();
-    await expect(outlineKey(page)).toBeFocused();
   } finally {
     await proj.cleanup();
   }

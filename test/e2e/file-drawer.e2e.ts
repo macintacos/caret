@@ -162,9 +162,7 @@ test("at a wide width the drawer docks right, taking space rather than covering 
 }) => {
   const proj = await makeProject({ "src/cache.ts": CACHE_TS });
   try {
-    // At this width the outline column yields to the drawer and so widens the surface
-    // (plan-toc.e2e.ts covers that). Hidden, it leaves the plan and the drawer alone in
-    // the surface.
+    // Hidden, the outline column leaves the plan and the drawer alone in the surface.
     await page.addInitScript(() => localStorage.setItem("caret.planOutline", "hidden"));
     await seedCacheDrawer(daemon, page, proj.dir, WIDE);
 

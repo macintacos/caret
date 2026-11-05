@@ -235,11 +235,11 @@ test("the outline's float: the filter nests in its corner, and so does a top-lev
   daemon,
   page,
 }) => {
-  // Under --w-narrow the outline drops from the header's key as a float.
+  // Under --w-narrow `\\` drops the outline as a float.
   await page.setViewportSize({ width: 880, height: 900 });
   await seedAndOpen(page, daemon);
   await waitPastSafeModeGrace(page);
-  await page.locator(".plan-header").getByRole("button", { name: "Outline", exact: true }).click();
+  await page.keyboard.press("Backslash");
   const panel = page.locator(".outline-float");
   await expect(panel).toBeVisible();
   await expectConcentric(panel, panel.locator("[data-slot='input-group']"), "tl");
@@ -251,8 +251,9 @@ test("the plan header's bed nests in the pane's top corners, and its end keys in
   daemon,
   page,
 }) => {
-  // Under --w-narrow the header holds the outline key, with no column folding to wait on.
-  await page.setViewportSize({ width: 880, height: 900 });
+  // With the column hidden the header holds the outline key, with no column folding to wait
+  // on.
+  await page.addInitScript(() => localStorage.setItem("caret.planOutline", "hidden"));
   await seedAndOpen(page, daemon);
   const pane = page.locator(".plan-pane");
   const bed = pane.locator(".plan-header > .header-bed");

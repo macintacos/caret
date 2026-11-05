@@ -176,15 +176,18 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   // EXC-947: opens the heading breadcrumbs bar's trailing crumb — the level being read —
   // so the trail is reachable without the mouse.
   { id: "actions.headingNav", keys: [{ key: "b" }], group: "actions", label: "Open breadcrumbs" },
-  // Moves focus into the outline's filter, opening the outline as a float where its
-  // column is not shown. `\` has already been rebound three times (EXC-830's docked
-  // rail, EXC-949's breadcrumbs alias, EXC-1097's contents popup), so it stays with the
-  // outline. It only OPENS: the filter is a text field, so the dispatcher's
-  // editing-context guard suppresses bare keys while it has focus and a second `\`
-  // types a backslash into it.
+  // Moves focus into the outline's filter: the column's while it is shown, or the
+  // float's, opened over the plan, while it is hidden or the window is under
+  // --w-narrow. Compare has no outline, so it does nothing there. `\` has already been
+  // rebound three times (EXC-830's docked rail, EXC-949's breadcrumbs alias, EXC-1097's
+  // contents popup), so it stays with the outline. It only OPENS: the filter is a text
+  // field, so the dispatcher's editing-context guard suppresses bare keys while it has
+  // focus and a second `\` types a backslash into it.
   { id: "actions.contents", keys: [{ key: "\\" }], group: "actions", label: "Filter outline" },
-  // Shows or hides the outline. Shift+\ arrives as `|` on a US layout, so `|` is the key
-  // matched and the one aria-keyshortcuts names; the caps show the keys pressed.
+  // Shows or hides the outline column, never the float, so it does nothing where the
+  // column cannot stand (under --w-narrow) or in Compare. Shift+\ arrives as `|` on a
+  // US layout, so `|` is the key matched and the one aria-keyshortcuts names; the caps
+  // show the keys pressed.
   {
     id: "actions.toggleOutline",
     keys: [{ key: "|", cap: ["shift", "\\"] }],

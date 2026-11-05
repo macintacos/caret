@@ -55,33 +55,8 @@ export function clampDrawerSize(size: number, available: number, edge: DrawerEdg
   return Math.min(Math.max(size, MIN_DRAWER_PX), maxDrawerSize(available, edge));
 }
 
-/** The narrowest the plan reads at beside the outline column and a right-hand drawer. */
+/** The plan width the outline column stops widening to keep. */
 export const MIN_READING_PX = 800;
-
-/**
- * Whether the outline column fits beside a drawer docked right: the plan keeps
- * `MIN_READING_PX` once the `column` and the drawer it would leave room for have
- * taken their share of the `available` width. `chosen` is the reader's remembered
- * drawer width, or null for the default share.
- */
-export function outlineFits(available: number, column: number, chosen: number | null): boolean {
-  const surface = available - column;
-  const drawer = clampDrawerSize(chosen ?? surface * DEFAULT_DRAWER_SHARE, surface, "right");
-  return surface - drawer >= MIN_READING_PX;
-}
-
-/**
- * The widest column `outlineFits` keeps beside a drawer docked right on `available`
- * width: what is left once the plan has `MIN_READING_PX` and the drawer the rest of the
- * surface would open it at. Floored, so the column it allows fits on whole pixels.
- */
-export function outlineRoom(available: number, chosen: number | null): number {
-  const surface =
-    chosen === null
-      ? MIN_READING_PX / (1 - DEFAULT_DRAWER_SHARE)
-      : MIN_READING_PX + Math.max(chosen, MIN_DRAWER_PX);
-  return Math.floor(available - surface);
-}
 
 /** The remembered size for this edge, or `null` when none is, so the caller applies
  * its own default. Fail-safe. */

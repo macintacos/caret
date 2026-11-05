@@ -125,7 +125,7 @@ All in `ui/src/styles/tokens.css`:
   column's head and the file drawer's and folder card's title bars to match. The outline
   column's opening, narrowest and widest widths are `OUTLINE_REM` in
   `ui/src/lib/outlineColumn.ts`. The plan's reading width is `MIN_READING_PX` in
-  `ui/src/lib/fileDrawer.ts`. The column stops widening, and yields to a file, to keep it.
+  `ui/src/lib/fileDrawer.ts`. The column stops widening to keep it.
 
 ## Terminal
 

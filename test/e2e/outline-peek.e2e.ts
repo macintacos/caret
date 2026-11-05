@@ -422,7 +422,7 @@ test("clearing the filter from its × closes the peek", async ({ page }) => {
 test("beside the float, the peek stands past the float's edge", async ({ page }) => {
   await page.setViewportSize({ width: 880, height: 900 });
   await openAt(page);
-  await page.locator(".plan-header").getByRole("button", { name: "Outline", exact: true }).click();
+  await page.keyboard.press("Backslash");
   const float = page.locator(FLOAT);
   await expect(float.getByRole("combobox", { name: "Filter headings" })).toBeFocused();
 
@@ -449,11 +449,9 @@ test("beside the float and an open file, the peek stops short of the file", asyn
     await page.locator("[data-file-ref]").first().click();
     await expect(page.locator("[data-file-drawer]")).toBeVisible();
     await settleDrawer(page);
-    // The column folds to keep the plan's reading width beside the file.
-    await page
-      .locator(".plan-header")
-      .getByRole("button", { name: "Outline", exact: true })
-      .click();
+    await page.keyboard.press("Shift+Backslash");
+    await expect(page.locator(".plan-outline")).toHaveCount(0);
+    await page.keyboard.press("Backslash");
 
     await row(page.locator(FLOAT), "Retention").hover();
     await expect(peekHeading(page, "source")).toHaveText("## Retention");

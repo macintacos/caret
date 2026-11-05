@@ -117,17 +117,11 @@
     clampDrawerSize,
     DEFAULT_DRAWER_SHARE,
     type DrawerEdge,
-    outlineFits,
     readDrawerSize,
     writeDrawerSize,
   } from "$lib/fileDrawer.ts";
-  import {
-    outlineBounds,
-    outlineReset,
-    outlineWidth,
-    outlineWidthPref,
-  } from "$lib/outlineColumn.ts";
-  import { sectionDeltas, sectionLines } from "$lib/tocSections.ts";
+  import { outlineBounds, outlineWidth, outlineWidthPref } from "$lib/outlineColumn.ts";
+  import { sectionLines } from "$lib/tocSections.ts";
   import type { PeekTarget } from "$lib/outlinePeek.ts";
   import { previewSnippet, sourceSnippet } from "$lib/peekSnippet.ts";
   import {
@@ -1015,36 +1009,22 @@
     writeDrawerSize(drawerEdge, px);
   }
 
-  // The outline stands as a column beside the plan while the reader keeps it out and
-  // the window has room for it: not under --w-narrow, and not where a file drawer docked
-  // right would leave the plan under its reading width. Comparing folds it too, as a mode
-  // that leaves the reader's choice alone: the split diff needs the width, and no reading
-  // position is tracked there. Otherwise it drops from the header's outline key as a
-  // float, which while comparing lists the sections that changed.
+  // The outline stands as a column beside the plan while the reader keeps it out, unless
+  // the window is under --w-narrow; a file docked right shares the surface beside it.
+  // Hidden or unable to stand, it drops from `\` as a float over the plan. Compare has no
+  // outline: the column folds as a mode that leaves the reader's choice alone.
   let outline = $state<PlanOutline>(readPlanOutline());
   let floatOpen = $state(false);
   let bodyWidth = $state(0);
-  const outlineRuns = $derived(runs("headingTracking") || showDiff);
-  // A closing lane has left the layout, so the column stands again as it goes.
-  const drawerRight = $derived(
-    runs("fileReferences") && filePreview !== undefined && !drawerClosing && drawerEdge === "right",
-  );
-  // The column stands at the width the reader chose, within the room the body leaves, and
-  // yields to a file at that width. A drag beside a file stops where it would yield.
+  const outlineRuns = $derived(runs("headingTracking") && !showDiff);
   let columnChosen = $state(outlineWidthPref.read());
   const columnWidth = $derived(outlineWidth(columnChosen, bodyWidth, remPx()));
-  const columnBounds = $derived(
-    outlineBounds(bodyWidth, remPx(), drawerRight ? { chosen: chosenSize.right } : undefined),
-  );
-  const columnRoom = $derived(
-    !narrow && (!drawerRight || outlineFits(bodyWidth, columnWidth, chosenSize.right)),
-  );
-  const columnStands = $derived(columnRoom && !showDiff);
-  const columnShown = $derived(outlineRuns && outline === "shown" && columnStands);
+  const columnBounds = $derived(outlineBounds(bodyWidth, remPx()));
+  const columnShown = $derived(outlineRuns && outline === "shown" && !narrow);
 
-  // The column yields in the same update that opens the drawer, but the bound surface
-  // width catches up a frame later, so the drawer would open sized for the narrower
-  // surface and then grow under a card already placed against it. Read it now.
+  // The column shows or hides in one update, but the bound surface width catches up a
+  // frame later, so an open drawer would size for the old surface and then shift under a
+  // card already placed against it. Read it now.
   $effect(() => {
     void columnShown;
     if (surfaceEl !== undefined) surfaceWidth = surfaceEl.clientWidth;
@@ -1218,10 +1198,9 @@
     });
   }
 
-  // Shift+\ and the header's key: the column where it has room, the float elsewhere.
+  // Shift+\ and the header's key show or hide the column; neither opens the float.
   function toggleOutline(): void {
-    if (columnStands) setOutline(outline === "shown" ? "hidden" : "shown");
-    else floatOpen = !floatOpen;
+    setOutline(outline === "shown" ? "hidden" : "shown");
   }
 
   // A press from the pointer or from Space holds the header's key down until its click
@@ -1237,10 +1216,14 @@
     outlineKeyClicked = false;
   }
 
-  // `\` lands in the outline's filter wherever the outline stands.
+  // `\` lands in the column's filter while it is shown, and opens the float on its own
+  // filter otherwise.
   function filterOutline(): void {
     if (columnShown) openColumnFilter?.();
-    else floatOpen = true;
+    else if (!floatOpen) {
+      floatReturn = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      floatOpen = true;
+    }
   }
 
   // Handed up by the column, which owns its filter.
@@ -1248,6 +1231,9 @@
   let outlineEl = $state<HTMLElement | undefined>();
   let outlineKey = $state<HTMLButtonElement | null>(null);
   let floatEl = $state<HTMLElement | null>(null);
+  let floatAnchor = $state<HTMLElement | null>(null);
+  // Where focus stood before `\` opened the float, for Escape to hand it back.
+  let floatReturn: HTMLElement | null = null;
   // A pick from the float hands the reviewer to the plan rather than back to the key.
   let floatPicked = false;
 
@@ -1257,8 +1243,8 @@
   });
 
   // The column and the header's outline key replace each other, so whichever one held
-  // focus hands it to the other as it leaves — the column yielding to a file included.
-  // The float leaves with the key.
+  // focus hands it to the other as it leaves; Compare has no outline key, so there it is
+  // Versions'. The float leaves as the column stands.
   $effect.pre(() => {
     const shown = columnShown;
     const leaving = untrack(() => (shown ? [outlineKey, floatEl] : [outlineEl]));
@@ -1266,26 +1252,15 @@
     void tick().then(() =>
       (shown
         ? outlineEl?.querySelector<HTMLButtonElement>(`${COLUMN_KEY} > button`)
-        : outlineKey
+        : (outlineKey ?? paneEl?.querySelector<HTMLButtonElement>(".compare-toggle"))
       )?.focus(),
     );
   });
 
-  // The outline's pick: a heading in the plan, or while comparing, the section's first
-  // change on whichever side holds it.
-  function jumpFromOutline(line: number): void {
-    if (!showDiff) {
-      pickHeading(line);
-      return;
-    }
-    const delta = outlineDeltas?.get(line);
-    if (delta !== undefined) revealLine(delta.line, delta.side);
-  }
-
   function pickFromFloat(line: number): void {
     floatPicked = true;
     floatOpen = false;
-    jumpFromOutline(line);
+    pickHeading(line);
   }
 
   // Scroll the clicked filename clear of the drawer. Only the bottom dock can
@@ -1319,12 +1294,6 @@
 
   const baseText = $derived(compare.planFor(review.versions, compareStore.baseVersion));
   const targetText = $derived(compare.planFor(review.versions, compareStore.targetVersion));
-  // While comparing, the outline lists the base version's headings and marks what each
-  // section changed against the target.
-  const compareHeadings = $derived(showDiff ? extractHeadings(baseText) : []);
-  const outlineDeltas = $derived(
-    showDiff ? sectionDeltas(compareHeadings, baseText, targetText) : null,
-  );
 
   // Headings scanned from the formatted source (fence-aware). Line numbers index
   // the stored plan text, which matches the view's per-line data-line, so a jump
@@ -2610,7 +2579,7 @@
     );
     offs.push(
       shortcuts.register(
-        bind("actions.toggleOutline", { run: toggleOutline, enabled: () => outlineRuns }),
+        bind("actions.toggleOutline", { run: toggleOutline, enabled: () => outlineRuns && !narrow }),
       ),
     );
     return () => {
@@ -2803,7 +2772,7 @@
         min={columnBounds.min}
         max={columnBounds.max}
         onResize={setColumnWidth}
-        onReset={() => setColumnWidth(outlineReset(columnBounds.max, remPx()))}
+        onReset={() => setColumnWidth(null)}
       />
     </aside>
   {/if}
@@ -2831,17 +2800,19 @@
       class:searching={keyboardStore.searchOpen}
     >
       <span class="header-bed" aria-hidden="true" bind:this={bedEl}></span>
-      {#if outlineRuns && !columnShown}
+      {#if outlineRuns && narrow}
+        <span class="float-anchor" aria-hidden="true" bind:this={floatAnchor}></span>
+      {:else if outlineRuns && !columnShown}
         <span class="tray header-tray" bind:this={headerWellEl}>
-          <!-- Its name holds whatever the state, as ARIA's toggle pattern asks; pressed
-               while the outline floats out. -->
+          <!-- Its name holds whatever the state, as ARIA's toggle pattern asks; it reports
+               the column, which is hidden while the key stands here. -->
           <Button
             variant="secondary"
             size={showShortcutHints ? "sm" : "icon-sm"}
             class="outline-key float-chip"
             bind:ref={outlineKey}
             aria-label="Outline"
-            aria-pressed={floatOpen}
+            aria-pressed="false"
             aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleOutline")}
             onkeydown={(e: KeyboardEvent) => (outlineKeySpace = e.key === " ")}
             onclick={clickOutlineKey}
@@ -3333,15 +3304,14 @@
 {#snippet outlineList(placement: "column" | "float")}
   <PlanToc
     {placement}
-    headings={showDiff ? compareHeadings : headings}
+    {headings}
     activeLine={showDiff ? null : latchedLine}
     latchGlides={latchJump !== null}
-    plan={showDiff ? baseText : review.currentPlan}
+    plan={review.currentPlan}
     previous={review.versions.at(-2) ?? null}
     comments={commentIndex(annotations, scratches)}
-    deltas={outlineDeltas}
     {showShortcutHints}
-    onJump={placement === "float" ? pickFromFloat : jumpFromOutline}
+    onJump={placement === "float" ? pickFromFloat : pickHeading}
     onHide={() => setOutline("hidden")}
     open={columnShown && keyEntry !== "rest"}
     onExposeFilter={placement === "column" ? (open) => (openColumnFilter = open) : undefined}
@@ -3350,14 +3320,14 @@
   />
 {/snippet}
 
-<!-- The outline as a float, dropped from the header's outline key under --w-narrow or
-     once the column has yielded to a file. It opens on its filter; Escape or a click
-     outside closes it back onto the key, and a pick closes it into the plan. -->
+<!-- The outline as a float, dropped from the header's start by `\` while the column is
+     hidden or under --w-narrow. It opens on its filter; Escape or a click outside closes
+     it back to where focus was, and a pick closes it into the plan. -->
 {#if outlineRuns && !columnShown}
   <Popover.Root bind:open={floatOpen}>
     <Popover.Content
       class="outline-float"
-      customAnchor={outlineKey}
+      customAnchor={outlineKey ?? floatAnchor}
       side="bottom"
       align="start"
       sideOffset={18}
@@ -3372,11 +3342,8 @@
       onCloseAutoFocus={(e) => {
         e.preventDefault();
         if (floatPicked) floatPicked = false;
-        else outlineKey?.focus();
-      }}
-      onInteractOutside={(e) => {
-        // The key toggles the float itself; letting this close it first would reopen it.
-        if (e.target instanceof Node && outlineKey?.contains(e.target)) e.preventDefault();
+        else if (floatReturn?.isConnected) floatReturn.focus();
+        floatReturn = null;
       }}
     >
       {@render outlineList("float")}
@@ -3526,6 +3493,16 @@
   }
   .plan-header:has(> .header-tray) {
     padding-left: var(--well-pad);
+  }
+  /* Where the header's outline key would stand, for the float to drop from under
+     --w-narrow, where the key is not rendered. */
+  .float-anchor {
+    position: absolute;
+    inset-inline-start: calc(var(--well-pad) * 2);
+    top: 50%;
+    height: var(--ctl-h);
+    translate: 0 -50%;
+    pointer-events: none;
   }
   /* The parts a layout move (lib/paneMove.ts) moves apart from the window, named only for
      its transition so no other one picks them up. */

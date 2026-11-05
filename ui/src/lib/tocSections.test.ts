@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { CommentIndexEntry } from "$lib/feedback.ts";
 import { extractHeadings } from "$lib/toc.ts";
-import { describeSection, sectionDeltas, sectionLines, tocSections } from "$lib/tocSections.ts";
+import { describeSection, sectionLines, tocSections } from "$lib/tocSections.ts";
 
 // Line numbers matter to every assertion here, so the plan is spelled one line per
 // array entry with its 1-based number alongside.
@@ -108,56 +108,6 @@ describe("describeSection", () => {
 
   test("uses the singular for one comment", () => {
     expect(describeSection(section(5, [comment(7, "a")]), null)).toBe("1 comment");
-  });
-});
-
-// Compare mode: what each of the base version's sections gained or lost against the
-// target version, and the line the outline jumps to. The base is PLAN; each target below
-// is PLAN with one kind of change.
-describe("sectionDeltas", () => {
-  const without = (...drop: number[]) =>
-    PLAN.split("\n")
-      .filter((_, i) => !drop.includes(i + 1))
-      .join("\n");
-
-  test("counts the lines a section gained, and jumps to the first of them", () => {
-    // The target lacks lines 7 and 8, so Intake gained both in the base.
-    const deltas = sectionDeltas(HEADINGS, PLAN, without(7, 8));
-    expect([...deltas.entries()]).toEqual([[5, { added: 2, removed: 0, line: 7, side: "after" }]]);
-  });
-
-  test("counts an edited line as one gained and one lost", () => {
-    const target = PLAN.replace("Keep a week.", "Keep a day.");
-    expect(sectionDeltas(HEADINGS, PLAN, target).get(14)).toEqual({
-      added: 1,
-      removed: 1,
-      line: 16,
-      side: "after",
-    });
-  });
-
-  test("jumps a section that only lost lines to the first lost line in the target", () => {
-    const target = PLAN.replace("Parse each frame.", "Parse each frame.\nLog the bad ones.");
-    expect(sectionDeltas(HEADINGS, PLAN, target).get(10)).toEqual({
-      added: 0,
-      removed: 1,
-      line: 13,
-      side: "before",
-    });
-  });
-
-  test("counts a section the target lacks as wholly gained, its heading included", () => {
-    // Retention (lines 14–17) is absent from the target.
-    expect(sectionDeltas(HEADINGS, PLAN, without(14, 15, 16, 17)).get(14)).toEqual({
-      added: 4,
-      removed: 0,
-      line: 14,
-      side: "after",
-    });
-  });
-
-  test("leaves out every section whose own lines match", () => {
-    expect(sectionDeltas(HEADINGS, PLAN, PLAN).size).toBe(0);
   });
 });
 
