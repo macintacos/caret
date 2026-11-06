@@ -15,7 +15,10 @@
 // Where the two scrolls PARK the row is covered here for the same reason: ]]/[[
 // take the top-parked shared jump and j the scrolloff follow, so the difference
 // is a measurement against a real box — a laid-out row's top as a fraction of
-// the scroller's height, which happy-dom has no layout to report.
+// the scroller's height, which happy-dom has no layout to report — and where
+// `zz`/`zt`/`zb` rest it, against the follow band's edges; the pure geometry is
+// `placementScrollTop` in `ui/src/lib/diffview/scroll.test.ts`, the factory in
+// `ui/src/state/planKeyboard.test.ts`.
 
 import type { Page } from "@playwright/test";
 
@@ -306,4 +309,118 @@ test("hovering a code row bands it as the cursor does", async ({ daemon, page })
     .locator(`.diffview [data-content] [data-line="${hovered}"]`)
     .evaluate((el) => getComputedStyle(el).backgroundColor);
   expect(contentBg).toBe(await probeColor(page, PANE_BAND));
+});
+
+test.describe("zz / zt / zb", () => {
+  // Reduced motion lands the placement and the follow inside the keydown, so a bare
+  // scrollTop read right after a key is a sound absence check.
+  test.use({ reducedMotion: "reduce" });
+
+  // Long enough that the cursor can sit a viewport or more from both ends.
+  const TALL = headedFillerPlan(40);
+
+  /** The cursor row's gaps to the scroller's top and bottom edges, its height, and the
+   * scroller's scrollTop. */
+  const rowGeometry = (page: Page) =>
+    cursor(page).evaluate((el, surface) => {
+      const row = el.getBoundingClientRect();
+      const scroller = document.querySelector(surface)!;
+      const view = scroller.getBoundingClientRect();
+      return {
+        top: row.top - view.top,
+        bottom: view.bottom - row.bottom,
+        height: row.height,
+        scrollTop: scroller.scrollTop,
+      };
+    }, PLAN_SURFACE);
+
+  const press = async (page: Page, ...keys: string[]) => {
+    for (const key of keys) await page.keyboard.press(key);
+  };
+
+  /** gg, then j until the cursor is `steps` lines down; returns that line. */
+  async function walkDown(page: Page, steps: number): Promise<number> {
+    await goToTop(page);
+    let line = 1;
+    for (let i = 0; i < steps; i++) {
+      await page.keyboard.press("j");
+      line = await readCursorLine(page, line);
+    }
+    return line;
+  }
+
+  const centered = async (page: Page) => {
+    const g = await rowGeometry(page);
+    return Math.abs(g.top - g.bottom) <= 2;
+  };
+
+  test("zz centers the cursor row, zt and zb rest it at the follow band's edges", async ({
+    daemon,
+    page,
+  }) => {
+    await openPlanForKeys(page, daemon, TALL);
+    const line = await walkDown(page, 50);
+
+    await press(page, "z", "z");
+    await expect.poll(() => centered(page)).toBe(true);
+    await expectCursorLine(page, line);
+
+    await press(page, "z", "t");
+    await expect
+      .poll(async () => {
+        const g = await rowGeometry(page);
+        return Math.abs(g.top - 5 * g.height) <= 1;
+      })
+      .toBe(true);
+    const afterTop = (await rowGeometry(page)).scrollTop;
+    await page.keyboard.press("j");
+    await expectCursorLine(page, line + 1);
+    expect((await rowGeometry(page)).scrollTop).toBe(afterTop);
+
+    await press(page, "z", "b");
+    await expect
+      .poll(async () => {
+        const g = await rowGeometry(page);
+        return Math.abs(g.bottom - 5 * g.height) <= 1;
+      })
+      .toBe(true);
+    const afterBottom = (await rowGeometry(page)).scrollTop;
+    await page.keyboard.press("k");
+    await expectCursorLine(page, line);
+    expect((await rowGeometry(page)).scrollTop).toBe(afterBottom);
+  });
+
+  test("zz in visual mode keeps the selection and the cursor", async ({ daemon, page }) => {
+    await openPlanForKeys(page, daemon, TALL);
+    await walkDown(page, 50);
+    const selected = page.locator(".diffview [data-content] [data-line][data-selected-line]");
+
+    await press(page, "V", "j", "j");
+    await expect(selected).toHaveCount(3);
+    const lines = await selected.evaluateAll((els) => els.map((el) => el.dataset.line));
+    const line = await readCursorLine(page);
+
+    await press(page, "z", "z");
+    await expect.poll(() => centered(page)).toBe(true);
+    expect(await selected.evaluateAll((els) => els.map((el) => el.dataset.line))).toEqual(lines);
+    await expectCursorLine(page, line);
+  });
+
+  test("zz with no cursor places it at the reading position and centers it", async ({
+    daemon,
+    page,
+  }) => {
+    await openPlanForKeys(page, daemon, TALL);
+    const box = (await page.locator(PLAN_SURFACE).boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, 1500);
+    await expect
+      .poll(() => page.locator(PLAN_SURFACE).evaluate((el) => el.scrollTop))
+      .toBeGreaterThan(0);
+    await expect(cursor(page)).toHaveCount(0);
+
+    await press(page, "z", "z");
+    await expect(cursor(page)).toHaveCount(1);
+    await expect.poll(() => centered(page)).toBe(true);
+  });
 });

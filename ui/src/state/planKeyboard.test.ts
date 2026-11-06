@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { createPlanKeyboard, type PlanKeyboardStore } from "@/state/planKeyboard.svelte.ts";
 import type { CursorMotion } from "$lib/diffview/lineCursor.ts";
 import { findMatches, type SearchMatch } from "$lib/diffview/planSearch.ts";
+import type { CursorPlacement } from "$lib/diffview/types.ts";
 import type { SoundEvent } from "$lib/sound.ts";
 
 // A plan whose lines carry known "alpha" matches: line 3 has two, line 5 has one
@@ -44,6 +45,7 @@ function build(
   const halfPage = over.halfPage ?? 5;
   const followed: number[] = [];
   const jumped: number[] = [];
+  const placed: Array<[number, CursorPlacement]> = [];
   const composerOpens: Array<{ startLine: number; endLine: number }> = [];
   const scheduled: Array<{ fn: () => void; handle: number }> = [];
   const sounds: SoundEvent[] = [];
@@ -64,6 +66,7 @@ function build(
       followed.push(m.line);
     },
     jump: (line) => jumped.push(line),
+    place: (line, where) => placed.push([line, where]),
     openComposer: (startLine, endLine) => {
       composerOpens.push({ startLine, endLine });
       // Mirror the component's openRange, which relocates the cursor onto the opened line.
@@ -92,6 +95,7 @@ function build(
     followed,
     landed,
     jumped,
+    placed,
     composerOpens,
     sounds,
     focusCount: () => focused,
@@ -656,5 +660,26 @@ describe("sound events (EXC-1126)", () => {
     const h = build(store, { text: PLAN });
     h.keyboard.clearForContentSwitch();
     expect(h.sounds).toEqual([]);
+  });
+});
+
+describe("scrollCursor", () => {
+  test("places the cursor line, leaving the cursor and visual anchor where they are", () => {
+    store.cursorLine = 12;
+    store.visualAnchor = 8;
+    const h = build(store, { text: PLAN });
+    h.keyboard.scrollCursor("center");
+    expect(h.placed).toEqual([[12, "center"]]);
+    expect(store.cursorLine).toBe(12);
+    expect(store.visualAnchor).toBe(8);
+    expect(h.followed).toEqual([]);
+    expect(h.jumped).toEqual([]);
+  });
+
+  test("an unplaced cursor reveals at the reading line, then places it", () => {
+    const h = build(store, { text: PLAN, reading: 30 });
+    h.keyboard.scrollCursor("top");
+    expect(store.cursorLine).toBe(30);
+    expect(h.placed).toEqual([[30, "top"]]);
   });
 });

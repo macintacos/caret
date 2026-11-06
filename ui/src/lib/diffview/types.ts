@@ -59,6 +59,9 @@ export interface SourceViewApi {
    * the view a line at a time instead of yanking the row to the top (EXC-788).
    * Returns whether a matching row was found. */
   followCursorLine(line: number): boolean;
+  /** Scrolls so the 1-based source line rests at `where` — `zz`/`zt`/`zb` — without moving
+   * the cursor. Returns whether it scrolled. */
+  placeCursorLine(line: number, where: CursorPlacement): boolean;
   /** The view's host element (the shadow host). Light-DOM children projected
    * into its annotation slots render inline within the library's reserved rows
    * (see annotationSlot.ts). */
@@ -68,6 +71,9 @@ export interface SourceViewApi {
 /** Which of a diff's two documents a line belongs to: the before (old) side or
  * the after (new) side. */
 export type DiffSide = "before" | "after";
+
+/** Where `zz` / `zt` / `zb` rest the cursor row in the view. */
+export type CursorPlacement = "center" | "top" | "bottom";
 
 /** Imperative handle a SourceDiffView hands its parent once mounted — the
  * diff-view counterpart to SourceViewApi. Separate because every line address in

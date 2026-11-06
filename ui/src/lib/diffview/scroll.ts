@@ -1,6 +1,6 @@
-// Scroll-to-line, active-line resolution, the keyboard cursor's follow scroll,
-// the composer reveal, and the instant park a view flip lands with — the plan's
-// scrolling. @pierre/diffs
+// Scroll-to-line, active-line resolution, the keyboard cursor's follow scroll, the
+// cursor placement (`zz`/`zt`/`zb`), the composer reveal, and the instant park a view
+// flip lands with — the plan's scrolling. @pierre/diffs
 // renders each line as a <div data-line="N"> inside the container's shadow root;
 // jumping to a heading finds that row and scrolls the surrounding scroll container
 // so the row rests near the top, and the reverse — which line currently occupies
@@ -15,10 +15,11 @@
 // the same regardless of the current scroll position or window size.
 import { quadOut } from "svelte/easing";
 
-import type { DiffSide } from "$lib/diffview/types.ts";
+import type { CursorPlacement, DiffSide } from "$lib/diffview/types.ts";
 import { READING_ZONE_SLOP, SCROLL_OFFSET_TOP } from "$lib/layout.ts";
 
-/** Duration (ms) of a jump to a place — the JS mirror of --dur-travel. */
+/** Duration (ms) of a scroll that travels — a jump to a place or a `zz`/`zt`/`zb`
+ * placement — the JS mirror of --dur-travel. */
 export const SCROLL_ANIM_MS = 240;
 
 /** Duration (ms) of the cursor follow — the JS mirror of --dur-state, so the view
@@ -89,8 +90,8 @@ let jumpFrame: number | undefined;
 let jumpScroller: HTMLElement | undefined;
 
 /** Tweens `scroller` to `top` over `duration`, or moves outright under reduced
- * motion. Both of the plan's scrolls run through here — the jump to a place and
- * the cursor follow — so they share one curve and one in-flight handle, and only
+ * motion. Every plan scroll runs through here — the jump, the placement and the
+ * cursor follow — so they share one curve and one in-flight handle, and only
  * differ in how long they take.
  *
  * The tween owns the scroll only until something else moves it in ONE step — a
@@ -300,6 +301,68 @@ export function followBox(scroller: HTMLElement, box: { top: number; bottom: num
     scrolloff: CURSOR_SCROLLOFF,
   });
   if (delta !== 0) animateScrollTop(scroller, scroller.scrollTop + delta, FOLLOW_ANIM_MS);
+}
+
+/**
+ * The scrollTop that rests the cursor row at `where`: centered, or CURSOR_SCROLLOFF
+ * row-heights inside the top or bottom edge — the edges of followScrollDelta's band, so
+ * the next step inward does not scroll. The margin is capped at what the view can hold,
+ * so a tall row stays in view. Floored, as parkedTop is; the far end is left to the
+ * browser's clamp.
+ */
+export function placementScrollTop(
+  g: { rowTop: number; rowBottom: number; viewTop: number; viewBottom: number; scrollTop: number },
+  where: CursorPlacement,
+): number {
+  const rowHeight = g.rowBottom - g.rowTop;
+  const margin = Math.min(
+    CURSOR_SCROLLOFF * rowHeight,
+    Math.max(0, (g.viewBottom - g.viewTop - rowHeight) / 2),
+  );
+  switch (where) {
+    case "center":
+      return Math.max(0, g.scrollTop + (g.rowTop + g.rowBottom - g.viewTop - g.viewBottom) / 2);
+    case "top":
+      return Math.max(0, g.scrollTop + g.rowTop - g.viewTop - margin);
+    case "bottom":
+      return Math.max(0, g.scrollTop + g.rowBottom - g.viewBottom + margin);
+  }
+}
+
+/** Scrolls `scroller` so the viewport `box` rests at `where`. */
+export function placeBox(
+  scroller: HTMLElement,
+  box: { top: number; bottom: number },
+  where: CursorPlacement,
+): void {
+  const view = scroller.getBoundingClientRect();
+  const top = placementScrollTop(
+    {
+      rowTop: box.top,
+      rowBottom: box.bottom,
+      viewTop: view.top,
+      viewBottom: view.bottom,
+      scrollTop: scroller.scrollTop,
+    },
+    where,
+  );
+  // SCROLL_ANIM_MS, not FOLLOW_ANIM_MS: a placement can cross half the viewport, which
+  // is travel.
+  animateScrollTop(scroller, top, SCROLL_ANIM_MS);
+}
+
+/** `placeBox` for the source view's row for 1-based `line`; false when the row or its
+ * scroller is missing. */
+export function placeCursorLine(
+  container: HTMLElement,
+  line: number,
+  where: CursorPlacement,
+): boolean {
+  const row = rowForLine(container, line);
+  const scroller = nearestScrollParent(container);
+  if (row == null || scroller == null) return false;
+  placeBox(scroller, row.getBoundingClientRect(), where);
+  return true;
 }
 
 /** Breathing room (px) below a revealed composer card, so its action row isn't

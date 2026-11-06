@@ -10,6 +10,8 @@ import {
   indexAtReadingZone,
   lineAtReadingZone,
   parkAt,
+  placeCursorLine,
+  placementScrollTop,
   REVEAL_MARGIN_BOTTOM,
   revealCard,
   revealScrollDelta,
@@ -681,6 +683,78 @@ describe("followBox", () => {
     now = FOLLOW_ANIM_MS;
     await frames(1);
     expect(el.scrollTop).toBe(0);
+  });
+});
+
+describe("placementScrollTop", () => {
+  const g = { rowTop: 500, rowBottom: 520, viewTop: 100, viewBottom: 700, scrollTop: 1000 };
+
+  test("centers the row, or rests it a scrolloff band inside the top or bottom edge", () => {
+    expect(placementScrollTop(g, "center")).toBe(1110);
+    expect(placementScrollTop(g, "top")).toBe(1300);
+    expect(placementScrollTop(g, "bottom")).toBe(920);
+  });
+
+  test("never returns a negative scrollTop", () => {
+    expect(
+      placementScrollTop(
+        { rowTop: 150, rowBottom: 170, viewTop: 100, viewBottom: 700, scrollTop: 0 },
+        "top",
+      ),
+    ).toBe(0);
+  });
+
+  test("keeps a row taller than the band inside the view at the top and bottom targets", () => {
+    const tall = { rowTop: 500, rowBottom: 830, viewTop: 100, viewBottom: 800, scrollTop: 1000 };
+    for (const where of ["top", "bottom"] as const) {
+      const shift = placementScrollTop(tall, where) - tall.scrollTop;
+      expect(tall.rowTop - shift).toBeGreaterThanOrEqual(tall.viewTop);
+      expect(tall.rowBottom - shift).toBeLessThanOrEqual(tall.viewBottom);
+    }
+  });
+
+  /** followScrollDelta for the row `offset` rows from the cursor once scrolled to `target`. */
+  function followAfter(target: number, offset: number): number {
+    const shift = target - g.scrollTop;
+    return followScrollDelta({
+      rowTop: g.rowTop + offset * 20 - shift,
+      rowBottom: g.rowBottom + offset * 20 - shift,
+      rowHeight: 20,
+      viewTop: g.viewTop,
+      viewBottom: g.viewBottom,
+      scrolloff: CURSOR_SCROLLOFF,
+    });
+  }
+
+  test("rests the top target on the follow band's top edge", () => {
+    const top = placementScrollTop(g, "top");
+    expect(followAfter(top, 1)).toBe(0);
+    expect(followAfter(top, -1)).toBeLessThan(0);
+  });
+
+  test("rests the bottom target on the follow band's bottom edge", () => {
+    const bottom = placementScrollTop(g, "bottom");
+    expect(followAfter(bottom, -1)).toBe(0);
+    expect(followAfter(bottom, 1)).toBeGreaterThan(0);
+  });
+});
+
+describe("placeCursorLine", () => {
+  test("scrolls the row to the center target", () => {
+    const { host, scroller } = harness([1, 5, 9], { rect: rect(100, 700) });
+    stubRow(host, 5, 500, 520);
+    withReducedMotion(() => {
+      expect(placeCursorLine(host, 5, "center")).toBe(true);
+    });
+    expect(scroller.scrollTop).toBe(110);
+  });
+
+  test("returns false and leaves the scroll alone for a line with no row", () => {
+    const { host, scroller } = harness([1, 2, 3], { rect: rect(100, 700) });
+    withReducedMotion(() => {
+      expect(placeCursorLine(host, 99, "center")).toBe(false);
+    });
+    expect(scroller.scrollTop).toBe(0);
   });
 });
 
