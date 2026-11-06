@@ -32,7 +32,13 @@ describe("CANONICAL_KEYMAP", () => {
     // so that cross-scope reuse is safe rather than a collision. The scope set is derived
     // from the table — the base review surface (null) plus every distinct modal scope any
     // entry declares — so a new modal scope is covered without editing this test.
-    const dispatchable = CANONICAL_KEYMAP.filter((e) => e.group !== "editor");
+    //
+    // The change motions are exempt: they share ]] / [[ with the heading motions, which
+    // never register on compare.
+    const COMPARE_ONLY = new Set(["motion.nextChange", "motion.prevChange"]);
+    const dispatchable = CANONICAL_KEYMAP.filter(
+      (e) => e.group !== "editor" && !COMPARE_ONLY.has(e.id),
+    );
     const modalScopes = [
       ...new Set(
         dispatchable
@@ -46,6 +52,19 @@ describe("CANONICAL_KEYMAP", () => {
         .map((e) => specSignature(e.keys));
       expect(new Set(sigs).size).toBe(sigs.length);
     }
+  });
+
+  test("compare's ]] and [[ share keys only with the heading motions they stand in for", () => {
+    const idsSharingKeysWith = (id: string) => {
+      const entry = CANONICAL_KEYMAP.find((e) => e.id === id);
+      if (!entry) throw new Error(`${id} missing`);
+      const sig = specSignature(entry.keys);
+      return CANONICAL_KEYMAP.filter(
+        (e) => e.id !== id && e.group !== "editor" && specSignature(e.keys) === sig,
+      ).map((e) => e.id);
+    };
+    expect(idsSharingKeysWith("motion.nextChange")).toEqual(["motion.nextHeading"]);
+    expect(idsSharingKeysWith("motion.prevChange")).toEqual(["motion.prevHeading"]);
   });
 
   test("reserves the settings shortcuts in the table, scoped to settings (EXC-876)", () => {

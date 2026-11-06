@@ -14,6 +14,7 @@ import {
   type SourceCommentingDeps,
   scratchKey,
 } from "$lib/diffview/commenting.ts";
+import { flush as flushLog } from "$lib/log.ts";
 import { shortcuts } from "$lib/shortcuts/index.ts";
 
 // Default props: no-op handlers and an empty annotation set, so the rendering
@@ -1294,6 +1295,29 @@ describe("DiffPlanView preview cursor", () => {
         "commenting.visualLine",
       ].map(live),
     ).toEqual([true, true, true, true, true, true]);
+  });
+
+  test("compare swaps the heading motions for the change motions, and back, with no collision", async () => {
+    const cap = logCapture();
+    try {
+      const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
+      const versions = () => target.querySelector<HTMLButtonElement>(".compare-toggle");
+      await until(() => live("motion.nextHeading"));
+      versions()?.click();
+      await until(() => live("motion.nextChange"));
+      expect(["motion.nextHeading", "motion.prevHeading", "motion.prevChange"].map(live)).toEqual([
+        false,
+        false,
+        true,
+      ]);
+      versions()?.click();
+      await until(() => live("motion.nextHeading"));
+      expect(live("motion.nextChange")).toBe(false);
+      flushLog();
+      expect(cap.events().filter((e) => e.msg === "shortcut key collision")).toHaveLength(0);
+    } finally {
+      cap.restore();
+    }
   });
 
   test("gg paints the cursor band on the preview's first line", async () => {

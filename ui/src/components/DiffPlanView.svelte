@@ -2408,6 +2408,29 @@
     "motion.scrollCursorToBottom": "bottom",
   };
 
+  // Compare's ]] / [[ (motion.nextChange/prevChange): no cursor there, so they scroll
+  // from change block to change block instead of moving one.
+  const CHANGE_MOTIONS: Record<string, 1 | -1> = {
+    "motion.nextChange": 1,
+    "motion.prevChange": -1,
+  };
+
+  function registerChangeMotions(): () => void {
+    const offs = Object.entries(CHANGE_MOTIONS).map(([id, dir]) =>
+      shortcuts.register(
+        bind(id, {
+          run: () => {
+            diffApi?.jumpChange(dir);
+          },
+          enabled: () => !defaultIsEditingContext(),
+        }),
+      ),
+    );
+    return () => {
+      for (const off of offs) off();
+    };
+  }
+
   // Half-page size from the scroller height over a rendered row's height, with a
   // constant fallback before the view paints. Injected into the keyboard factory as its
   // halfPage dep and measured per motion — cheap at keyboard cadence.
@@ -2435,14 +2458,19 @@
   // timer, and cancelClose tears it down.
   $effect(() => () => keyboard.cancelClose());
 
-  // Register the live motion shortcuts on the keyboardCursor surfaces, driving the
-  // surface's own cursor; teardown unregisters them, so motion is gone elsewhere.
-  // Depends only on the surface — the closures read cursorLine/headings/api live at
-  // dispatch, so a cursor move never re-runs this effect (which would churn the registry).
+  // Register the surface's live motion shortcuts: the cursor motions on the
+  // keyboardCursor surfaces, and on compare, which has no cursor, the change motions on
+  // the same ]] / [[ keys. Compare gates on the surface itself, not a SURFACE_BEHAVIORS
+  // row, since that table declares where source-view behaviours run. One effect for
+  // both, so a flip tears one set down before registering the other and the registry
+  // never sees both. Depends only on the surface — the closures read
+  // cursorLine/headings/api live at dispatch, so a cursor move never re-runs this
+  // effect (which would churn the registry).
   // Ctrl+d/Ctrl+u are non-bare, so the dispatcher does not suppress them in an
   // editing context; the enabled guard does, so half-page motions don't fire while
   // the composer is focused.
   $effect(() => {
+    if (surface === "compare") return registerChangeMotions();
     if (!runs("keyboardCursor")) return;
     const move = surface === "preview" ? previewCursor.moveCursor : keyboard.moveCursor;
     const offs: Array<() => void> = [];
