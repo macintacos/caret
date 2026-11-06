@@ -539,3 +539,73 @@ test.describe("preview keyboard cursor", () => {
     await expect.poll(() => bandCovers(page, "Closing")).toBe(true);
   });
 });
+
+test.describe("preview zz / zt / zb", () => {
+  test.use({ reducedMotion: "reduce" });
+
+  /** The band's center offset from the scroller's center, and the scroller's scrollTop. */
+  const placement = (page: Page) =>
+    page.evaluate(
+      ([surface, bandSelector]) => {
+        const band = document.querySelector(bandSelector)!.getBoundingClientRect();
+        const scroller = document.querySelector(surface)!;
+        const view = scroller.getBoundingClientRect();
+        return {
+          offCenter: (band.top + band.bottom - view.top - view.bottom) / 2,
+          scrollTop: scroller.scrollTop,
+        };
+      },
+      [PLAN_SURFACE, PREVIEW_BAND] as const,
+    );
+  const scrollTop = async (page: Page) => (await placement(page)).scrollTop;
+
+  /** Presses `keys` and waits for the scroller to come to rest. */
+  async function settle(page: Page, ...keys: string[]): Promise<number> {
+    await press(page, ...keys);
+    let previous = Number.NaN;
+    await expect
+      .poll(async () => {
+        const now = await scrollTop(page);
+        const still = now === previous;
+        previous = now;
+        return still;
+      })
+      .toBe(true);
+    return previous;
+  }
+
+  test("z-commands rest the cursor's visual line without moving it", async ({ page, daemon }) => {
+    await page.setViewportSize({ width: 420, height: 400 });
+    await openPreview(page, daemon);
+    await setColumnWidth(page, 420);
+    // Deep in the long paragraph: uniform prose with visual lines on both sides.
+    await toLongParagraph(page);
+    for (let i = 0; i < 8; i++) await stepFrom(page, "j", await bandTop(page));
+    const text = await bandText(page);
+
+    await settle(page, "z", "z");
+    expect(Math.abs((await placement(page)).offCenter)).toBeLessThanOrEqual(2);
+    expect(await bandText(page)).toBe(text);
+
+    const top = await settle(page, "z", "t");
+    expect(await bandText(page)).toBe(text);
+    await stepFrom(page, "j", await bandTop(page));
+    expect(await scrollTop(page)).toBe(top);
+    await stepFrom(page, "k", await bandTop(page));
+
+    const freshTop = await settle(page, "z", "t");
+    await stepFrom(page, "k", await bandTop(page));
+    await expect.poll(() => scrollTop(page)).not.toBe(freshTop);
+    await stepFrom(page, "j", await bandTop(page));
+
+    const bottom = await settle(page, "z", "b");
+    expect(await bandText(page)).toBe(text);
+    await stepFrom(page, "k", await bandTop(page));
+    expect(await scrollTop(page)).toBe(bottom);
+    await stepFrom(page, "j", await bandTop(page));
+
+    const freshBottom = await settle(page, "z", "b");
+    await stepFrom(page, "j", await bandTop(page));
+    await expect.poll(() => scrollTop(page)).not.toBe(freshBottom);
+  });
+});

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { createPreviewCursor, type PreviewCursorStore } from "@/state/previewCursor.ts";
+import type { CursorPlacement } from "$lib/diffview/types.ts";
 import type { TextPoint } from "$lib/previewLines.ts";
 import type { SoundEvent } from "$lib/sound.ts";
 
@@ -31,6 +32,7 @@ function build(
   const steps: number[] = [];
   const follows: TextPoint[] = [];
   const jumps: TextPoint[] = [];
+  const places: Array<[TextPoint, CursorPlacement]> = [];
   const seeds = { count: 0 };
   const selections: [TextPoint, TextPoint][] = [];
   const comments: Range[] = [];
@@ -52,6 +54,7 @@ function build(
     last: () => lines.at(-1) ?? null,
     follow: (p) => follows.push(p),
     jump: (p) => jumps.push(p),
+    place: (p, where) => places.push([p, where]),
     selection: (from, to) => {
       selections.push([from, to]);
       return over.noRange ? null : range;
@@ -59,7 +62,7 @@ function build(
     comment: (r) => comments.push(r),
     sound: (e) => sounds.push(e),
   });
-  return { cursor, steps, follows, jumps, seeds, selections, comments, sounds, range };
+  return { cursor, steps, follows, jumps, places, seeds, selections, comments, sounds, range };
 }
 
 const unplaced = (): PreviewCursorStore => ({
@@ -335,5 +338,54 @@ describe("visual mode and keyboard comments", () => {
     h.cursor.enterVisualMode();
     h.cursor.reset();
     expect(store.visualAnchorPoint).toBe(null);
+  });
+});
+
+describe("scrollCursor", () => {
+  test("places the cursor's point, leaving the cursor and anchor unchanged", () => {
+    const p = { line: 4, column: 17 };
+    const anchor = { line: 3, column: 0 };
+    const store: PreviewCursorStore = {
+      cursorLine: 4,
+      cursorPoint: p,
+      visualAnchor: 3,
+      visualAnchorPoint: anchor,
+    };
+    const h = build(store);
+    h.cursor.scrollCursor("bottom");
+    expect(h.places).toEqual([[p, "bottom"]]);
+    expect(store).toEqual({
+      cursorLine: 4,
+      cursorPoint: p,
+      visualAnchor: 3,
+      visualAnchorPoint: anchor,
+    });
+  });
+
+  test("a blank-line cursor places the next text line's point and keeps its line", () => {
+    const store: PreviewCursorStore = { ...unplaced(), cursorLine: 5 };
+    const h = build(store);
+    h.cursor.scrollCursor("center");
+    expect(h.places).toEqual([[at(4), "center"]]);
+    expect(store.cursorLine).toBe(5);
+  });
+
+  test("an unplaced cursor lands on the seed, then places it", () => {
+    const seed = { line: 9, column: 0 };
+    const store = unplaced();
+    const h = build(store, { seed });
+    h.cursor.scrollCursor("top");
+    expect(store.cursorLine).toBe(9);
+    expect(store.cursorPoint).toEqual(seed);
+    expect(h.places).toEqual([[seed, "top"]]);
+  });
+
+  test("with nothing to seed it does nothing", () => {
+    const store = unplaced();
+    const h = build(store, { seed: null });
+    h.cursor.scrollCursor("center");
+    expect(h.places).toEqual([]);
+    expect(h.follows).toEqual([]);
+    expect(store.cursorLine === null).toBe(true);
   });
 });

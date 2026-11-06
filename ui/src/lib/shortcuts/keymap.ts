@@ -113,6 +113,25 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     label: "Previous blank line",
     repeat: true,
   },
+  // zb's b is also breadcrumbs' bare key; a pending z completes first (match.ts).
+  {
+    id: "motion.scrollCenter",
+    keys: [{ key: "z" }, { key: "z" }],
+    group: "motion",
+    label: "Scroll cursor to center",
+  },
+  {
+    id: "motion.scrollTop",
+    keys: [{ key: "z" }, { key: "t" }],
+    group: "motion",
+    label: "Scroll cursor to top",
+  },
+  {
+    id: "motion.scrollBottom",
+    keys: [{ key: "z" }, { key: "b" }],
+    group: "motion",
+    label: "Scroll cursor to bottom",
+  },
   // Commenting
   { id: "commenting.comment", keys: [{ key: "c" }], group: "commenting", label: "Comment line" },
   {

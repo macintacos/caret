@@ -23,6 +23,7 @@ import {
   type SearchMatch,
   stepIndex,
 } from "$lib/diffview/planSearch.ts";
+import type { CursorPlacement } from "$lib/diffview/types.ts";
 import type { SoundEvent } from "$lib/sound.ts";
 
 /** Reactive fields the host component owns and the factory mutates. App/DiffPlanView
@@ -72,6 +73,8 @@ export interface PlanKeyboardDeps {
    * explicit place takes (a heading pick, a deep link), the counterpart to `follow`'s
    * scrolloff-only nudge. */
   jump(line: number): void;
+  /** Scroll the view so `line` rests at `where` — `zz`/`zt`/`zb`. */
+  place(line: number, where: CursorPlacement): void;
   /** Open the comment composer over an inclusive line range (retaining any live text and
    * relocating the cursor, as a gutter/line click does). */
   openComposer(startLine: number, endLine: number): void;
@@ -97,6 +100,9 @@ export interface PlanKeyboard {
    * top-parked jump, every other motion the scrolloff follow. An unplaced cursor reveals
    * at the reading position rather than stepping past it. */
   moveCursor(motion: CursorMotion): void;
+  /** `zz`/`zt`/`zb`: scroll the cursor line to `where`, leaving the cursor and any visual
+   * anchor where they are. An unplaced cursor reveals at the reading position first. */
+  scrollCursor(where: CursorPlacement): void;
   /** `c`: open the composer over the cursor line, or — in visual mode — over the whole
    * anchored selection, exiting visual mode as it opens. Seeds an unplaced cursor at the
    * reading position. */
@@ -202,6 +208,10 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
 
   return {
     matches,
+
+    scrollCursor(where) {
+      reveal(seedLine(), (line) => deps.place(line, where));
+    },
 
     moveCursor(motion) {
       const lines = deps.lines();

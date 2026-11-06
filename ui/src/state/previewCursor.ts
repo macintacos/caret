@@ -10,6 +10,7 @@ import {
   lineCountOf,
   resolveCursorLine,
 } from "$lib/diffview/lineCursor.ts";
+import type { CursorPlacement } from "$lib/diffview/types.ts";
 import type { TextPoint } from "$lib/previewLines.ts";
 import type { SoundEvent } from "$lib/sound.ts";
 
@@ -43,6 +44,8 @@ export interface PreviewCursorDeps {
   follow(p: TextPoint): void;
   /** Scrolls `p` to rest near the top. */
   jump(p: TextPoint): void;
+  /** Scrolls `p` to rest at `where` — `zz`/`zt`/`zb`. */
+  place(p: TextPoint, where: CursorPlacement): void;
   /** The text of the visual lines from `from`'s through `to`'s, `from` not after `to`. */
   selection(from: TextPoint, to: TextPoint): Range | null;
   /** Opens the composer on the source lines `range` covers. */
@@ -58,6 +61,9 @@ export interface PreviewCursor {
   point(): TextPoint | null;
   /** No-op when nothing resolves; heading motions jump, the rest follow. */
   moveCursor(motion: CursorMotion): void;
+  /** `zz`/`zt`/`zb`: scrolls the cursor's point to `where`, leaving the cursor and any
+   * visual anchor where they are. An unplaced cursor lands at the reading position first. */
+  scrollCursor(where: CursorPlacement): void;
   /** Places the cursor on `p` and follows it — a landing with no motion. */
   placeAt(p: TextPoint): void;
   /** Drops the preview's column, so a content switch leaves no point behind. */
@@ -162,6 +168,17 @@ export function createPreviewCursor(
       const p = resolve(motion, point());
       if (p == null) return;
       land(p, JUMP_MOTIONS.has(motion) ? deps.jump : deps.follow);
+    },
+
+    scrollCursor(where) {
+      const placed = point();
+      if (placed != null) {
+        // Not land(): point() resolves a blank cursorLine to the next text line.
+        deps.place(placed, where);
+        return;
+      }
+      const p = deps.seed();
+      if (p != null) land(p, (q) => deps.place(q, where));
     },
 
     placeAt(p) {

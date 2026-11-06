@@ -85,6 +85,7 @@
   import PlanSearch from "@/components/PlanSearch.svelte";
   import type { SourceViewGutter } from "$lib/diffview/options.ts";
   import type {
+    CursorPlacement,
     DiffSide,
     SourceDiffViewApi,
     SourceViewApi,
@@ -127,6 +128,7 @@
   import {
     followBox,
     lineAtReadingZone,
+    placeBox,
     REVEAL_MARGIN_BOTTOM,
     revealScrollDelta,
     rowForLine,
@@ -1873,6 +1875,7 @@
       previewCursor.placeAt({ line: m.line, column: m.startCol });
     },
     jump: (line) => api?.scrollToLine(line),
+    place: (line, where) => api?.placeCursorLine(line, where),
     openComposer: openRange,
     focusField: focusSearchField,
     blur: () => (document.activeElement as HTMLElement | null)?.blur(),
@@ -1953,6 +1956,11 @@
       const geometry = previewGeometry();
       const box = geometry && visualLineBox(geometry.root, geometry.map, p);
       if (geometry && box) followBox(geometry.scroller, box);
+    },
+    place: (p, where) => {
+      const geometry = previewGeometry();
+      const box = geometry && visualLineBox(geometry.root, geometry.map, p);
+      if (geometry && box) placeBox(geometry.scroller, box, where);
     },
     jump: (p) => {
       const block = previewBlock(p.line);
@@ -2388,6 +2396,12 @@
     "motion.prevBlank": "prevBlank",
   };
 
+  const CURSOR_PLACEMENTS: Record<string, CursorPlacement> = {
+    "motion.scrollCenter": "center",
+    "motion.scrollTop": "top",
+    "motion.scrollBottom": "bottom",
+  };
+
   // Half-page size from the scroller height over a rendered row's height, with a
   // constant fallback before the view paints. Injected into the keyboard factory as its
   // halfPage dep and measured per motion — cheap at keyboard cadence.
@@ -2438,6 +2452,15 @@
             },
             enabled: () => !defaultIsEditingContext(),
           }),
+        ),
+      );
+    }
+    const scrollCursor =
+      surface === "preview" ? previewCursor.scrollCursor : keyboard.scrollCursor;
+    for (const [id, where] of Object.entries(CURSOR_PLACEMENTS)) {
+      offs.push(
+        shortcuts.register(
+          bind(id, { run: () => scrollCursor(where), enabled: () => !defaultIsEditingContext() }),
         ),
       );
     }

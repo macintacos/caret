@@ -8,6 +8,7 @@ import {
   CANONICAL_KEYMAP,
   EDITOR_SHORTCUTS,
 } from "$lib/shortcuts/keymap.ts";
+import { matchKeydown } from "$lib/shortcuts/match.ts";
 import {
   createShortcutRegistry,
   keyCaps,
@@ -259,5 +260,24 @@ describe("shortcuts singleton", () => {
     expect(shortcuts.list().some((e) => e.id === "test.tmp")).toBe(true);
     off();
     expect(shortcuts.list().length).toBe(before);
+  });
+});
+
+describe("scroll-around-cursor bindings", () => {
+  test("zz, zt and zb are reserved motions", () => {
+    const sig = (id: string) => {
+      const e = CANONICAL_KEYMAP.find((x) => x.id === id);
+      return e && { group: e.group, keys: specSignature(e.keys) };
+    };
+    expect(sig("motion.scrollCenter")).toEqual({ group: "motion", keys: "z z" });
+    expect(sig("motion.scrollTop")).toEqual({ group: "motion", keys: "z t" });
+    expect(sig("motion.scrollBottom")).toEqual({ group: "motion", keys: "z b" });
+  });
+
+  test("b after a pending z completes zb rather than firing the breadcrumbs key", () => {
+    const kd = (key: string) => new KeyboardEvent("keydown", { key });
+    const first = matchKeydown(null, kd("z"), CANONICAL_KEYMAP, 0, 800);
+    const second = matchKeydown(first.state, kd("b"), CANONICAL_KEYMAP, 100, 800);
+    expect(second.entry?.id).toBe("motion.scrollBottom");
   });
 });
