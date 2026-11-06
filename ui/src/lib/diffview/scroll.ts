@@ -1,7 +1,7 @@
 // Scroll-to-line, active-line resolution, the keyboard cursor's follow scroll, the
 // cursor placement (`zz`/`zt`/`zb`), the composer reveal, the instant park a view
-// flip lands with, and compare's change-to-change jump — the plan's scrolling. @pierre/diffs
-// renders each line as a <div data-line="N"> inside the container's shadow root;
+// flip lands with, and compare's change-to-change jump — the plan's scrolling.
+// @pierre/diffs renders each line as a <div data-line="N"> inside the container's shadow root;
 // jumping to a heading finds that row and scrolls the surrounding scroll container
 // so the row rests near the top, and the reverse — which line currently occupies
 // the top of the view — reads the same row geometry. Lives in the wrapper module

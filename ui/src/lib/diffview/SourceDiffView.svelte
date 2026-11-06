@@ -58,8 +58,8 @@
   );
 
   // Hand the parent the scroll-to-line and change-jump API + host once the container
-  // exists. The container is stable for the component's life, and `notified` keeps this to a
-  // single hand-off even though `onReady`'s identity can change across parent
+  // exists. The container is stable for the component's life, and `notified` keeps
+  // this to a single hand-off even though `onReady`'s identity can change across parent
   // re-renders (the parent passes an inline arrow).
   let notified = false;
   $effect(() => {
