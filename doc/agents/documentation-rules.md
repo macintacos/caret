@@ -8,41 +8,38 @@ mirror for **docs**: it maps every piece of documentation caret ships and decide
 edit prose — a feature's user docs, a contributor note, a new rule-of-the-road — and
 aren't sure where it belongs.
 
-Like `CLAUDE.md`'s router, read the digraph as a checklist, not a single path: a change
-can touch several docs at once, so **update every doc whose edge matches**. Each box links
-onward to a pointer file under [`references/`](references/) that says *how* to edit that
-doc; those are loaded on demand, not all at once.
+Like `CLAUDE.md`'s router, walk the `router` fence from `@changing-documentation`.
+`which-doc` fans out, because a change can touch several docs at once:
+**update every doc whose exit label matches**. Each of those docs has a pointer file under
+[`references/`](references/) that says *how* to edit it; those are loaded on demand, not
+all at once.
 
 ## Routing
 
-```graphviz
-digraph caret_docs_router {
-    "Changing documentation" [shape=doublecircle];
-    "Which doc does the change affect?" [shape=diamond];
-
-    "Edit README.md" [shape=box];
-    "Edit doc/CONFIGURING.md" [shape=box];
-    "Edit doc/RUNNING.md" [shape=box];
-    "Edit doc/ARCHITECTURE.md" [shape=box];
-    "Edit doc/DEVELOPMENT.md" [shape=box];
-    "Edit CONTRIBUTING.md" [shape=box];
-    "Edit CLAUDE.md" [shape=box];
-    "Edit a doc/agents/*.md rule file" [shape=box];
-    "Edit doc/README.md" [shape=box];
-    "Edit design/*.md" [shape=box];
-
-    "Changing documentation" -> "Which doc does the change affect?";
-    "Which doc does the change affect?" -> "Edit README.md" [label="user-facing front door: what caret is, install, basic usage, pointers onward"];
-    "Which doc does the change affect?" -> "Edit doc/CONFIGURING.md" [label="configuration reference: platform support, config.toml, the CARET_* tables, plan formatting, theme files"];
-    "Which doc does the change affect?" -> "Edit doc/RUNNING.md" [label="runtime behavior a user sees: desktop notifications, cmux unread marks, logging and debugging"];
-    "Which doc does the change affect?" -> "Edit doc/ARCHITECTURE.md" [label="how caret works: the core/adapter boundary, adapter internals, the review tool, the source layout"];
-    "Which doc does the change affect?" -> "Edit doc/DEVELOPMENT.md" [label="developing caret: build-from-source, the mise task catalog and dev workflow, the tasks CLI, icons"];
-    "Which doc does the change affect?" -> "Edit CONTRIBUTING.md" [label="human contributor onboarding: local setup, the mise workflow, where tests live"];
-    "Which doc does the change affect?" -> "Edit CLAUDE.md" [label="the code-change routing index, plus the CodeGraph / verifying-changes prose"];
-    "Which doc does the change affect?" -> "Edit a doc/agents/*.md rule file" [label="a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, plan rendering, testing, icons, settings, dependencies, OpenCode, rumdl)"];
-    "Which doc does the change affect?" -> "Edit doc/README.md" [label="the router for the doc/ directory: which page answers a given reader's question"];
-    "Which doc does the change affect?" -> "Edit design/*.md" [label="design direction: how caret looks, moves, sounds, or prints, its deliberate exceptions, and the decision log"];
-}
+```router
+@changing-documentation: Changing documentation
+  > which-doc
+which-doc: Edit every doc the change affects
+  user-facing front door: what caret is, install, basic usage, pointers onward > readme
+  configuration reference: platform support, config.toml, the CARET_* tables, plan formatting, theme files > configuring
+  runtime behavior a user sees: desktop notifications, cmux unread marks, logging and debugging > running
+  how caret works: the core/adapter boundary, adapter internals, the review tool, the source layout > architecture
+  developing caret: build-from-source, the mise task catalog and dev workflow, the tasks CLI, icons > development
+  human contributor onboarding: local setup, the mise workflow, where tests live > contributing
+  the code-change routing index, plus the CodeGraph / verifying-changes prose > claude
+  a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, plan rendering, testing, icons, settings, dependencies, OpenCode, rumdl) > edit-a
+  the router for the doc/ directory: which page answers a given reader's question > readme-2
+  design direction: how caret looks, moves, sounds, or prints, its deliberate exceptions, and the decision log > edit-design
+readme!: Edit README.md
+configuring!: Edit doc/CONFIGURING.md
+running!: Edit doc/RUNNING.md
+architecture!: Edit doc/ARCHITECTURE.md
+development!: Edit doc/DEVELOPMENT.md
+contributing!: Edit CONTRIBUTING.md
+claude!: Edit CLAUDE.md
+edit-a!: Edit a doc/agents/*.md rule file
+readme-2!: Edit doc/README.md
+edit-design!: Edit design/*.md
 ```
 
 ## The doc landscape
@@ -70,11 +67,11 @@ digraph caret_docs_router {
   for depth. How to edit it: [`references/contributing.md`](references/contributing.md).
 - **`CLAUDE.md`** (repo root) — the agent-facing router for **code** changes, plus the
   CodeGraph and verifying-changes guidance. Adding or moving a `doc/agents/*.md` rule file
-  means adding or updating its edge here. How to edit it:
+  means adding or updating its exit and stop here. How to edit it:
   [`references/claude-md.md`](references/claude-md.md).
 - **`doc/agents/*.md`** — the rules-of-the-road: one file per code area, the substance
-  behind `CLAUDE.md`'s digraph. This routing reference lives among them. How to add or
-  edit one: [`references/agent-rules.md`](references/agent-rules.md).
+  behind `CLAUDE.md`'s router. This routing reference lives among them. How to add or edit
+  one: [`references/agent-rules.md`](references/agent-rules.md).
 - **`doc/README.md`** — the router for the `doc/` directory: a table mapping what a reader
   wants to do to the page that answers it, across the four reference pages, `doc/agents/`,
   and the two repo-root docs (`README.md` and `CONTRIBUTING.md`). How to edit it:
@@ -109,9 +106,8 @@ this call-out per doc.
 Documentation drifts when the map and the docs are edited in separate changes. So:
 **adding, removing, or renaming a doc updates, in the same change,**
 
-1. **this map** — the digraph above and the doc-landscape entry, and
-2. **its `CLAUDE.md` routing edge**, if the doc is a `doc/agents/*.md` rule file with one,
-   and
+1. **this map** — the router above and the doc-landscape entry, and
+2. **its `CLAUDE.md` route**, if the doc is a `doc/agents/*.md` rule file with one, and
 3. **its pointer file** under [`references/`](references/) — for a `doc/agents/*.md` rule
    file that is the shared [`references/agent-rules.md`](references/agent-rules.md), whose
    area list you extend rather than adding a new pointer, and

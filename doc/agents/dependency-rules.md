@@ -43,17 +43,14 @@ none.
 
 ## Where a new package goes
 
-```graphviz
-digraph caret_dependency_placement {
-    "Adding a package" [shape=doublecircle];
-    "Reachable from opencode/?" [shape=diamond];
-    "dependencies" [shape=box];
-    "devDependencies" [shape=box];
-
-    "Adding a package" -> "Reachable from opencode/?";
-    "Reachable from opencode/?" -> "dependencies" [label="yes, imported at runtime — opencode/ ships as source, so a consumer's install must resolve it"];
-    "Reachable from opencode/?" -> "devDependencies" [label="no — src/ and ui/src/ are bundled; scripts/ and test/ never ship"];
-}
+```router
+@adding-a: Adding a package
+  > reachable-from
+reachable-from?: Reachable from opencode/?
+  yes, imported at runtime — opencode/ ships as source, so a consumer's install must resolve it > dependencies
+  no — src/ and ui/src/ are bundled; scripts/ and test/ never ship > devdependencies
+dependencies!: dependencies
+devdependencies!: devDependencies
 ```
 
 *Reachable* means imported **at runtime** from `opencode/`, or a **non-optional** peer of

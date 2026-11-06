@@ -39,8 +39,8 @@ Find the row that matches what you came here to do, then follow the link.
 ## `agents/`
 
 caret's contributor rules-of-the-road: one file per area of the code, and the substance
-behind the routing digraph in the repo's [`AGENTS.md`](../AGENTS.md) — that file decides
-*which* of these a given change should pull into context; these files are what it pulls.
+behind the router in the repo's [`AGENTS.md`](../AGENTS.md) — that file decides *which* of
+these a given change should pull into context; these files are what it pulls.
 
 Writing docs rather than code? The same idea for prose lives in
 [`agents/documentation-rules.md`](agents/documentation-rules.md): it maps every doc caret
@@ -48,6 +48,6 @@ ships — this router, the top-level README, the four reference pages, `CONTRIBU
 and the `agents/` rule files — and decides which one a given change should update.
 
 Adding a new rule-of-the-road? Drop it in `agents/` as its own file, add a route to it
-from the digraph in `CLAUDE.md`, and update the doc map in
+from the router in `CLAUDE.md`, and update the doc map in
 [`agents/documentation-rules.md`](agents/documentation-rules.md) — see that file's
 maintenance rule.

@@ -7,49 +7,45 @@ This file is the router that decides which ones a given change needs.
 
 ## Routing
 
-Read the digraph as a checklist, not a single path: start from the change you're about to
-make, and **load every reference whose edge matches** — a change that spans areas pulls in
-several. Read the matching `doc/agents/*.md` file into context *before* you edit that
-area, not after.
+Walk the `router` fence from `@working-on`, starting from the change you're about to make.
+`what-does` fans out, so take **every exit whose label matches** — a change that spans
+areas pulls in several. Load each matching file into context *before* you edit that area,
+not after.
 
-```graphviz
-digraph caret_rules_router {
-    "Working on caret" [shape=doublecircle];
-    "What does the change touch?" [shape=diamond];
-
-    "Load doc/agents/architecture-rules.md" [shape=box];
-    "Load doc/agents/typescript-rules.md" [shape=box];
-    "Load doc/agents/svelte-rules.md" [shape=box];
-    "Load doc/agents/shadcn-rules.md" [shape=box];
-    "Load doc/agents/plan-render-rules.md" [shape=box];
-    "Load doc/agents/browser-testing.md" [shape=box];
-    "Load doc/agents/test-layout.md" [shape=box];
-    "Load doc/agents/logging-rules.md" [shape=box];
-    "Load doc/agents/settings-rules.md" [shape=box];
-    "Load doc/agents/dependency-rules.md" [shape=box];
-    "Load doc/agents/icon-rules.md" [shape=box];
-    "Load doc/agents/opencode-integration.md" [shape=box];
-    "Load doc/agents/rumdl-rules.md" [shape=box];
-    "Load doc/agents/documentation-rules.md" [shape=box];
-    "Load design/README.md" [shape=box];
-
-    "Working on caret" -> "What does the change touch?";
-    "What does the change touch?" -> "Load doc/agents/architecture-rules.md" [label="core/adapter boundary, daemon routing and lifecycle (the service supervisor, bin/caret-launcher), @core shared modules"];
-    "What does the change touch?" -> "Load doc/agents/typescript-rules.md" [label="TS module shape: DI, file-split seams, zod boundaries, helpers, import aliases (@/)"];
-    "What does the change touch?" -> "Load doc/agents/svelte-rules.md" [label="Svelte UI in ui/: components, runes, state factories, CSS tokens"];
-    "What does the change touch?" -> "Load doc/agents/shadcn-rules.md" [label="composing UI from shadcn-svelte components: compose-first norm, token bridge, icon swap, what stays custom"];
-    "What does the change touch?" -> "Load doc/agents/plan-render-rules.md" [label="how a plan is rendered: ui/src/lib/diffview/, the layer pipeline and its invariants, the preview renderer ui/src/lib/planMarkdown.ts, its source-line map ui/src/lib/planSourceMap.ts, its code-block highlight pass ui/src/lib/previewCode.ts, its reference-tagging pass ui/src/lib/previewRefs.ts, its comment slots ui/src/lib/previewComments.ts, its search ui/src/lib/previewSearch.ts, its mount ui/src/components/PlanPreview.svelte, the source/preview surface table ui/src/lib/planView.ts and the outline peek's copy of either surface ui/src/lib/peekSnippet.ts"];
-    "What does the change touch?" -> "Load doc/agents/browser-testing.md" [label="testing browser behavior: e2e vs. unit, the e2e harness"];
-    "What does the change touch?" -> "Load doc/agents/test-layout.md" [label="where a backend test suite belongs under test/"];
-    "What does the change touch?" -> "Load doc/agents/logging-rules.md" [label="logging: levels, message style, redaction"];
-    "What does the change touch?" -> "Load doc/agents/settings-rules.md" [label="adding a config.toml key or CARET_* env var"];
-    "What does the change touch?" -> "Load doc/agents/dependency-rules.md" [label="package.json: adding, moving, removing, or pinning a dependency"];
-    "What does the change touch?" -> "Load doc/agents/icon-rules.md" [label="adding or working with vendored icons"];
-    "What does the change touch?" -> "Load doc/agents/opencode-integration.md" [label="OpenCode adapter, plugin, or install (caret install)"];
-    "What does the change touch?" -> "Load doc/agents/rumdl-rules.md" [label="rumdl: bumping its version, touching any of its three configs or invocations (repo hygiene, plan formatting, release notes), or scripts/tasks/dev/fake-plan.md"];
-    "What does the change touch?" -> "Load doc/agents/documentation-rules.md" [label="documentation: which doc to update — README, the doc/ reference pages (CONFIGURING, RUNNING, ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the doc/ router, or the doc map itself"];
-    "What does the change touch?" -> "Load design/README.md" [label="how caret looks, moves, sounds, or prints: colour, type, radius, motion, sound, empty/loading/error states, CLI and task output layout"];
-}
+```router
+@working-on: Working on caret
+  > what-does
+what-does: Load the file for every area the change touches
+  core/adapter boundary, daemon routing and lifecycle (the service supervisor, bin/caret-launcher), @core shared modules > architecture-rules
+  TS module shape: DI, file-split seams, zod boundaries, helpers, import aliases (@/) > typescript-rules
+  Svelte UI in ui/: components, runes, state factories, CSS tokens > svelte-rules
+  composing UI from shadcn-svelte components: compose-first norm, token bridge, icon swap, what stays custom > shadcn-rules
+  how a plan is rendered: ui/src/lib/diffview/, the layer pipeline and its invariants, the preview renderer ui/src/lib/planMarkdown.ts, its source-line map ui/src/lib/planSourceMap.ts, its code-block highlight pass ui/src/lib/previewCode.ts, its reference-tagging pass ui/src/lib/previewRefs.ts, its comment slots ui/src/lib/previewComments.ts, its search ui/src/lib/previewSearch.ts, its mount ui/src/components/PlanPreview.svelte, the source/preview surface table ui/src/lib/planView.ts and the outline peek's copy of either surface ui/src/lib/peekSnippet.ts > plan-render-rules
+  testing browser behavior: e2e vs. unit, the e2e harness > browser-testing
+  where a backend test suite belongs under test/ > test-layout
+  logging: levels, message style, redaction > logging-rules
+  adding a config.toml key or CARET_* env var > settings-rules
+  package.json: adding, moving, removing, or pinning a dependency > dependency-rules
+  adding or working with vendored icons > icon-rules
+  OpenCode adapter, plugin, or install (caret install) > opencode-integration
+  rumdl: bumping its version, touching any of its three configs or invocations (repo hygiene, plan formatting, release notes), or scripts/tasks/dev/fake-plan.md > rumdl-rules
+  documentation: which doc to update — README, the doc/ reference pages (CONFIGURING, RUNNING, ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the doc/ router, or the doc map itself > documentation-rules
+  how caret looks, moves, sounds, or prints: colour, type, radius, motion, sound, empty/loading/error states, CLI and task output layout > readme
+architecture-rules!: Load doc/agents/architecture-rules.md
+typescript-rules!: Load doc/agents/typescript-rules.md
+svelte-rules!: Load doc/agents/svelte-rules.md
+shadcn-rules!: Load doc/agents/shadcn-rules.md
+plan-render-rules!: Load doc/agents/plan-render-rules.md
+browser-testing!: Load doc/agents/browser-testing.md
+test-layout!: Load doc/agents/test-layout.md
+logging-rules!: Load doc/agents/logging-rules.md
+settings-rules!: Load doc/agents/settings-rules.md
+dependency-rules!: Load doc/agents/dependency-rules.md
+icon-rules!: Load doc/agents/icon-rules.md
+opencode-integration!: Load doc/agents/opencode-integration.md
+rumdl-rules!: Load doc/agents/rumdl-rules.md
+documentation-rules!: Load doc/agents/documentation-rules.md
+readme!: Load design/README.md
 ```
 
 ## Verifying changes
