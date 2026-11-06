@@ -13,7 +13,7 @@
   import { type ImageSpanMap, type LinkSpanMap, openLinkInNewTab } from "$lib/diffview/links.ts";
   import { syncInlineImages } from "$lib/diffview/inlineImages.ts";
   import { type SourceViewGutter, type SourceViewLibOptions, toFileOptions } from "$lib/diffview/options.ts";
-  import { followCursorLine, scrollToLine } from "$lib/diffview/scroll.ts";
+  import { followCursorLine, placeCursorLine, scrollToLine } from "$lib/diffview/scroll.ts";
   import { holdUtilityWhileFocused } from "$lib/diffview/utilityFocus.ts";
   import { tagCursorRow } from "$lib/diffview/lineCursor.ts";
   import { clearSearchHighlights, paintSearchHighlights } from "$lib/diffview/searchHighlight.ts";
@@ -186,6 +186,7 @@
     onReady?.({
       scrollToLine: (line) => scrollToLine(el, line),
       followCursorLine: (line) => followCursorLine(el, line),
+      placeCursorLine: (line, where) => placeCursorLine(el, line, where),
       host: el,
     });
   });

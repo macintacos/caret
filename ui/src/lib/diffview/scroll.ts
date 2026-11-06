@@ -15,7 +15,7 @@
 // the same regardless of the current scroll position or window size.
 import { quadOut } from "svelte/easing";
 
-import type { DiffSide } from "$lib/diffview/types.ts";
+import type { CursorPlacement, DiffSide } from "$lib/diffview/types.ts";
 import { READING_ZONE_SLOP, SCROLL_OFFSET_TOP } from "$lib/layout.ts";
 
 /** Duration (ms) of a jump to a place — the JS mirror of --dur-travel. */
@@ -300,6 +300,60 @@ export function followBox(scroller: HTMLElement, box: { top: number; bottom: num
     scrolloff: CURSOR_SCROLLOFF,
   });
   if (delta !== 0) animateScrollTop(scroller, scroller.scrollTop + delta, FOLLOW_ANIM_MS);
+}
+
+/**
+ * The scrollTop that rests the cursor row at `where`: centered, or CURSOR_SCROLLOFF
+ * row-heights inside the top or bottom edge — the edges of followScrollDelta's band, so
+ * the next step inward does not scroll. Never negative.
+ */
+export function placementScrollTop(
+  g: { rowTop: number; rowBottom: number; viewTop: number; viewBottom: number; scrollTop: number },
+  where: CursorPlacement,
+): number {
+  const margin = CURSOR_SCROLLOFF * (g.rowBottom - g.rowTop);
+  switch (where) {
+    case "center":
+      return Math.max(0, g.scrollTop + (g.rowTop + g.rowBottom - g.viewTop - g.viewBottom) / 2);
+    case "top":
+      return Math.max(0, g.scrollTop + g.rowTop - g.viewTop - margin);
+    case "bottom":
+      return Math.max(0, g.scrollTop + g.rowBottom - g.viewBottom + margin);
+  }
+}
+
+/** Scrolls `scroller` so the viewport `box` rests at `where`. */
+export function placeBox(
+  scroller: HTMLElement,
+  box: { top: number; bottom: number },
+  where: CursorPlacement,
+): void {
+  const view = scroller.getBoundingClientRect();
+  const top = placementScrollTop(
+    {
+      rowTop: box.top,
+      rowBottom: box.bottom,
+      viewTop: view.top,
+      viewBottom: view.bottom,
+      scrollTop: scroller.scrollTop,
+    },
+    where,
+  );
+  animateScrollTop(scroller, top, SCROLL_ANIM_MS);
+}
+
+/** `placeBox` for the source view's row for 1-based `line`; false when the row or its
+ * scroller is missing. */
+export function placeCursorLine(
+  container: HTMLElement,
+  line: number,
+  where: CursorPlacement,
+): boolean {
+  const row = rowForLine(container, line);
+  const scroller = nearestScrollParent(container);
+  if (row == null || scroller == null) return false;
+  placeBox(scroller, row.getBoundingClientRect(), where);
+  return true;
 }
 
 /** Breathing room (px) below a revealed composer card, so its action row isn't
