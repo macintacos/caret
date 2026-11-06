@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 caret is a tool-agnostic core plus one adapter axis — the coding agent it speaks to. It
 routes that agent's plan to a human for review; a loopback daemon serves a Svelte UI.

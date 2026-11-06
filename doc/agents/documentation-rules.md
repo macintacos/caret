@@ -2,13 +2,13 @@
 
 *Audience: coding agents and contributors making **documentation** changes in caret.*
 
-`CLAUDE.md` routes a **code** change to the rule file that governs it. This file is the
+`AGENTS.md` routes a **code** change to the rule file that governs it. This file is the
 mirror for **docs**: it maps every piece of documentation caret ships and decides
 *which one* a given change should update. Reach for it whenever you are about to write or
 edit prose — a feature's user docs, a contributor note, a new rule-of-the-road — and
 aren't sure where it belongs.
 
-Like `CLAUDE.md`'s router, walk the `router` fence from `@changing-documentation`.
+Like `AGENTS.md`'s router, walk the `router` fence from `@changing-documentation`.
 `which-doc` fans out, because a change can touch several docs at once:
 **update every doc whose exit label matches**. Each of those docs has a pointer file under
 [`references/`](references/) that says *how* to edit it; those are loaded on demand, not
@@ -26,7 +26,7 @@ which-doc: Edit every doc the change affects
   how caret works: the core/adapter boundary, adapter internals, the review tool, the source layout > architecture
   developing caret: build-from-source, the mise task catalog and dev workflow, the tasks CLI, icons > development
   human contributor onboarding: local setup, the mise workflow, where tests live > contributing
-  the code-change routing index, plus the CodeGraph / verifying-changes prose > claude
+  the code-change routing index, plus the CodeGraph / verifying-changes prose > agents
   a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, plan rendering, testing, icons, settings, dependencies, OpenCode, rumdl) > edit-a
   the router for the doc/ directory: which page answers a given reader's question > readme-2
   design direction: how caret looks, moves, sounds, or prints, its deliberate exceptions, and the decision log > edit-design
@@ -36,7 +36,7 @@ running!: Edit doc/RUNNING.md
 architecture!: Edit doc/ARCHITECTURE.md
 development!: Edit doc/DEVELOPMENT.md
 contributing!: Edit CONTRIBUTING.md
-claude!: Edit CLAUDE.md
+agents!: Edit AGENTS.md
 edit-a!: Edit a doc/agents/*.md rule file
 readme-2!: Edit doc/README.md
 edit-design!: Edit design/*.md
@@ -65,12 +65,12 @@ edit-design!: Edit design/*.md
   want to develop caret: `bun install`, the `mise` task workflow, and where tests live. It
   stays minimal and points at `README.md`, the `doc/` reference pages, and `doc/agents/`
   for depth. How to edit it: [`references/contributing.md`](references/contributing.md).
-- **`CLAUDE.md`** (repo root) — the agent-facing router for **code** changes, plus the
+- **`AGENTS.md`** (repo root) — the agent-facing router for **code** changes, plus the
   CodeGraph and verifying-changes guidance. Adding or moving a `doc/agents/*.md` rule file
   means adding or updating its exit and stop here. How to edit it:
-  [`references/claude-md.md`](references/claude-md.md).
+  [`references/agents-md.md`](references/agents-md.md).
 - **`doc/agents/*.md`** — the rules-of-the-road: one file per code area, the substance
-  behind `CLAUDE.md`'s router. This routing reference lives among them. How to add or edit
+  behind `AGENTS.md`'s router. This routing reference lives among them. How to add or edit
   one: [`references/agent-rules.md`](references/agent-rules.md).
 - **`doc/README.md`** — the router for the `doc/` directory: a table mapping what a reader
   wants to do to the page that answers it, across the four reference pages, `doc/agents/`,
@@ -85,7 +85,7 @@ edit-design!: Edit design/*.md
 
 `README.md`, `CONTRIBUTING.md`, and everything directly under `doc/` — `doc/README.md`
 plus the four reference pages (`CONFIGURING.md`, `RUNNING.md`, `ARCHITECTURE.md`,
-`DEVELOPMENT.md`) — are **human-facing**. `CLAUDE.md` and everything under `doc/agents/` —
+`DEVELOPMENT.md`) — are **human-facing**. `AGENTS.md` and everything under `doc/agents/` —
 the rule files and this file's `references/` pointers — are **agent-facing**. State the
 audience explicitly at the top of each new doc so a reader knows in one line whether it is
 written for them.
@@ -107,7 +107,7 @@ Documentation drifts when the map and the docs are edited in separate changes. S
 **adding, removing, or renaming a doc updates, in the same change,**
 
 1. **this map** — the router above and the doc-landscape entry, and
-2. **its `CLAUDE.md` route**, if the doc is a `doc/agents/*.md` rule file with one, and
+2. **its `AGENTS.md` route**, if the doc is a `doc/agents/*.md` rule file with one, and
 3. **its pointer file** under [`references/`](references/) — for a `doc/agents/*.md` rule
    file that is the shared [`references/agent-rules.md`](references/agent-rules.md), whose
    area list you extend rather than adding a new pointer, and

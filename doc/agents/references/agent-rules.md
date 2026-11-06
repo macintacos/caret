@@ -4,7 +4,7 @@
 
 `doc/agents/*.md` holds caret's rules-of-the-road — one file per code area (architecture,
 logging, TypeScript, Svelte, shadcn, plan rendering, testing, icons, settings,
-dependencies, OpenCode, rumdl). They are the substance behind `CLAUDE.md`'s router; each
+dependencies, OpenCode, rumdl). They are the substance behind `AGENTS.md`'s router; each
 is concise and scoped to its own area.
 
 Adding a new rule file:
@@ -12,8 +12,8 @@ Adding a new rule file:
 1. Create `doc/agents/<area>-rules.md` — follow the existing `*-rules.md` naming and the
    concise style of, e.g., [`settings-rules.md`](../settings-rules.md). State its audience
    at the top.
-2. Add a **stop** that loads it to the `router` fence in `CLAUDE.md`, and an exit to it
-   labelled with when to read it (see [`claude-md.md`](claude-md.md)).
+2. Add a **stop** that loads it to the `router` fence in `AGENTS.md`, and an exit to it
+   labelled with when to read it (see [`agents-md.md`](agents-md.md)).
 3. Add it to the documentation map — see the maintenance rule in
    [`documentation-rules.md`](../documentation-rules.md).
 

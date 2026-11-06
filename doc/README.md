@@ -48,6 +48,6 @@ ships — this router, the top-level README, the four reference pages, `CONTRIBU
 and the `agents/` rule files — and decides which one a given change should update.
 
 Adding a new rule-of-the-road? Drop it in `agents/` as its own file, add a route to it
-from the router in `CLAUDE.md`, and update the doc map in
+from the router in `AGENTS.md`, and update the doc map in
 [`agents/documentation-rules.md`](agents/documentation-rules.md) — see that file's
 maintenance rule.

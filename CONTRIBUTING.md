@@ -71,4 +71,4 @@ and `CARET_AGENT`). The full list of keys, their defaults, and what each one doe
   and the source layout.
 - `doc/DEVELOPMENT.md` — build from source, the dev workflow, the tasks CLI, and icons.
 - `doc/agents/` — the rules-of-the-road for working in a given area of the code;
-  `CLAUDE.md` routes you to the right one.
+  `AGENTS.md` routes you to the right one.
