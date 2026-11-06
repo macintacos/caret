@@ -4,7 +4,9 @@
 // The control is always shown but disabled for single-version reviews (EXC-664),
 // and the chosen layout persists across reloads. EXC-804 adds a count of the other
 // comparable versions on the toggle and a "(current)" marker on the newest picker
-// row; both are covered at the end of this file.
+// row; both are covered at the end of this file. EXC-965's ]] / [[ change jumps close
+// the file: where a jump parks, and a second chord typed mid-flight, need real layout
+// and a real tween.
 //
 // Everything here needs a real browser or the live daemon. The multi-version
 // state only exists after real POSTs the daemon stores and serves back, which no
@@ -21,7 +23,12 @@
 // ui/src/state/compare.test.ts, the toggle's disabled state, count and
 // accessible name in ui/src/components/VersionComparePicker.test.ts, and the
 // preference read/write in ui/src/lib/diffStylePref.test.ts and
-// diffIndicatorsPref.test.ts.
+// diffIndicatorsPref.test.ts, the change-block stops in
+// ui/src/lib/diffview/changes.test.ts, the step choice and the in-flight stepping in
+// ui/src/lib/diffview/scroll.test.ts, and the keymap pin in
+// ui/src/lib/shortcuts/keymap.test.ts.
+
+import type { Locator } from "@playwright/test";
 
 import { press } from "@test/e2e/support/cursor.ts";
 import {
@@ -32,6 +39,7 @@ import {
   waitPastSafeModeGrace,
 } from "@test/e2e/support/fixtures.ts";
 import { parkedScrollTop, planSurface } from "@test/e2e/support/source-view.ts";
+import { SCROLL_OFFSET_TOP } from "@ui/src/lib/layout.ts";
 
 // Three versions whose bodies each carry a unique, greppable line so a diff
 // between a chosen pair is verifiable by visible text.
@@ -544,63 +552,75 @@ test("the version pickers annotate the current version, and only that one", asyn
   await expect(page.locator(".vmenu .cur")).toHaveCount(1);
 });
 
-// ]] / [[ on compare (EXC-965). Collapsed context adds no height, so the fixture's
-// change blocks themselves are tall: a modify (A), a 30-item list addition (B), and a
-// 30-row deletion (C), which keeps every stop inside the scroll range.
+// ]] / [[ on compare (EXC-965). Collapsed context adds no height, so two of the three
+// change blocks are tall themselves — B, a 30-item list addition, and C, a
+// 30-paragraph deletion — which keeps every stop inside the scroll range; A is a
+// one-line modify.
 async function openSparseCompare(page: import("@playwright/test").Page, daemon: Daemon) {
   const v1 = Array.from({ length: 80 }, (_, i) => `alpha line ${i + 1} of the plan body.`);
   // One tight list, not 30 paragraphs: blank-separated insertions would let the line
   // diff pair their blanks with C's and merge B and C into a single block.
-  const inserted = [
-    Array.from({ length: 30 }, (_, i) => `- inserted ${i + 1} of the plan body.`).join("\n"),
-  ];
+  const list = Array.from({ length: 30 }, (_, i) => `- inserted ${i + 1} of the plan body.`);
   const v2 = [
     ...v1.slice(0, 9),
     "edited line 10 of the plan body.",
     ...v1.slice(10, 30),
-    ...inserted,
+    list.join("\n"),
     ...v1.slice(30, 49),
     ...v1.slice(79),
   ];
   await daemon.seedVersions(2, [
-    `# Plan\n\n${tallBody("alpha")}\n`,
+    `# Plan\n\n${v1.join("\n\n")}\n`,
     `# Plan\n\n${v2.join("\n\n")}\n`,
   ]);
   await page.goto("/");
   await page.getByRole("button", { name: "Versions" }).click();
-  return planSurface(page);
+  const view = await planSurface(page);
+  await expect(view.getByText("edited line 10").first()).toBeVisible();
+  await waitPastSafeModeGrace(page);
+  return view;
 }
 
-/** The diff row holding `text`, as px below the plan scroller's top. */
-async function rowOffset(page: import("@playwright/test").Page, text: string): Promise<number> {
-  const row = await page.locator(".diffview [data-line]", { hasText: text }).first().boundingBox();
-  const plan = await page.locator(".diff-plan").boundingBox();
-  if (!row || !plan) throw new Error("row or plan not laid out");
-  return row.y - plan.y;
+// How far below the pinned header a parked row may rest: the jump offset plus one row,
+// since a block can open on its blank line and unified stacks the addition under its
+// removal.
+const PARKED_BAND = SCROLL_OFFSET_TOP + 24;
+
+/** The diff row holding `text`, as px below the pinned compare header's bottom edge,
+ * or NaN before both are laid out, so the poll retries. */
+async function belowHeader(plan: Locator, text: string): Promise<number> {
+  const row = await plan.locator(".diffview [data-line]", { hasText: text }).first().boundingBox();
+  const headerBottom = await plan.evaluate(
+    (el) =>
+      el
+        .querySelector(".diffview")
+        ?.shadowRoot?.querySelector("[data-diffs-header][data-sticky]")
+        ?.getBoundingClientRect().bottom ?? Number.NaN,
+  );
+  return row ? row.y - headerBottom : Number.NaN;
 }
 
-/** Parked: the row rests within one row of the jump offset from the scroller's top. */
-async function expectParked(page: import("@playwright/test").Page, text: string): Promise<void> {
+/** Parked: the row rests clear of the pinned header, within PARKED_BAND of it. */
+async function expectParked(plan: Locator, text: string): Promise<void> {
   await untilStill(
-    () => rowOffset(page, text),
-    (o) => o >= 0 && o <= 60,
+    () => belowHeader(plan, text),
+    (o) => o >= 0 && o <= PARKED_BAND,
   );
 }
 
 test("]] and [[ step between change blocks, stopping at the last", async ({ daemon, page }) => {
   const view = await openSparseCompare(page, daemon);
-  await expect(view.getByText("edited line 10").first()).toBeVisible();
   await press(page, "]", "]");
-  await expectParked(page, "edited line 10");
+  await expectParked(view, "edited line 10");
   await press(page, "]", "]");
-  await expectParked(page, "inserted 1 of");
+  await expectParked(view, "inserted 1 of");
   await press(page, "]", "]");
-  await expectParked(page, "alpha line 50 of");
+  await expectParked(view, "alpha line 50 of");
   const at = await parkedScrollTop(page);
   await press(page, "]", "]");
   expect(await parkedScrollTop(page)).toBe(at);
   await press(page, "[", "[");
-  await expectParked(page, "inserted 1 of");
+  await expectParked(view, "inserted 1 of");
 });
 
 test("]]]] typed straight through steps two changes in unified", async ({ daemon, page }) => {
@@ -608,5 +628,5 @@ test("]]]] typed straight through steps two changes in unified", async ({ daemon
   await page.getByRole("radio", { name: "Unified" }).click();
   await expect(view.getByText("edited line 10").first()).toBeVisible();
   await press(page, "]", "]", "]", "]");
-  await expectParked(page, "inserted 1 of");
+  await expectParked(view, "inserted 1 of");
 });

@@ -3,10 +3,10 @@
   // FileDiff class. Same shape as SourceView.svelte — the controller
   // (instance.ts) owns the imperative lifecycle.
   import { type FileContents, FileDiff } from "@pierre/diffs";
+  import { changeStarts } from "$lib/diffview/changes.ts";
   import { createDiffViewLifecycle } from "$lib/diffview/instance.ts";
   import { attachFenceLanguages } from "$lib/diffview/languages.ts";
   import { type SourceDiffViewLibOptions, toFileDiffOptions } from "$lib/diffview/options.ts";
-  import { changeStarts } from "$lib/diffview/changes.ts";
   import { jumpToChange, scrollToDiffLine } from "$lib/diffview/scroll.ts";
   import { registerCaretDiffThemes } from "$lib/diffview/theme.ts";
   import {
@@ -53,10 +53,12 @@
 
   const libOptions = $derived(toFileDiffOptions(options));
 
-  const changes = $derived(changeStarts(libraryContents(oldDoc), libraryContents(newDoc)));
+  const changes = $derived(
+    changeStarts(libraryContents(oldDoc), libraryContents(newDoc), libOptions.parseDiffOptions),
+  );
 
-  // Hand the parent the scroll-to-line and change-jump API + host once the container exists. The
-  // container is stable for the component's life, and `notified` keeps this to a
+  // Hand the parent the scroll-to-line and change-jump API + host once the container
+  // exists. The container is stable for the component's life, and `notified` keeps this to a
   // single hand-off even though `onReady`'s identity can change across parent
   // re-renders (the parent passes an inline arrow).
   let notified = false;

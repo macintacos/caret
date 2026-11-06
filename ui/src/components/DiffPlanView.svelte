@@ -2458,14 +2458,16 @@
   // timer, and cancelClose tears it down.
   $effect(() => () => keyboard.cancelClose());
 
-  // Register the live motion shortcuts on the keyboardCursor surfaces, driving the
-  // surface's own cursor; teardown unregisters them, so motion is gone elsewhere.
-  // Depends only on the surface — the closures read cursorLine/headings/api live at
+  // Register the surface's live motion shortcuts: the cursor motions on the
+  // keyboardCursor surfaces, and on compare, which has no cursor, the change motions on
+  // the same ]] / [[ keys. Compare gates on the surface itself, not a SURFACE_BEHAVIORS
+  // row, since that table declares where source-view behaviours run. One effect for
+  // both, so a flip tears one set down before registering the other and the registry
+  // never sees both. Depends only on the surface — the closures read cursorLine/headings/api live at
   // dispatch, so a cursor move never re-runs this effect (which would churn the registry).
   // Ctrl+d/Ctrl+u are non-bare, so the dispatcher does not suppress them in an
   // editing context; the enabled guard does, so half-page motions don't fire while
-  // the composer is focused. Compare's change motions register here too, so a surface
-  // flip tears one set down before registering the other on the same keys.
+  // the composer is focused.
   $effect(() => {
     if (surface === "compare") return registerChangeMotions();
     if (!runs("keyboardCursor")) return;

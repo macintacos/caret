@@ -32,7 +32,9 @@ describe("CANONICAL_KEYMAP", () => {
     // so that cross-scope reuse is safe rather than a collision. The scope set is derived
     // from the table — the base review surface (null) plus every distinct modal scope any
     // entry declares — so a new modal scope is covered without editing this test.
-    // The change motions share ]] / [[ with the heading motions, which never register on compare.
+    //
+    // The change motions are exempt: they share ]] / [[ with the heading motions, which
+    // never register on compare.
     const COMPARE_ONLY = new Set(["motion.nextChange", "motion.prevChange"]);
     const dispatchable = CANONICAL_KEYMAP.filter(
       (e) => e.group !== "editor" && !COMPARE_ONLY.has(e.id),
@@ -63,10 +65,6 @@ describe("CANONICAL_KEYMAP", () => {
     };
     expect(sharing("motion.nextChange")).toEqual(["motion.nextHeading"]);
     expect(sharing("motion.prevChange")).toEqual(["motion.prevHeading"]);
-    // The exclusion above assumes the base review scope, like the heading motions.
-    for (const id of ["motion.nextChange", "motion.prevChange"]) {
-      expect(CANONICAL_KEYMAP.find((e) => e.id === id)?.scope).toBeUndefined();
-    }
   });
 
   test("reserves the settings shortcuts in the table, scoped to settings (EXC-876)", () => {

@@ -94,7 +94,7 @@ export interface SourceDiffViewApi {
   scrollToLine(line: number, side: DiffSide): boolean;
   /** Scrolls to the next (1) or previous (-1) change block from where the view is
    * headed, parking it at the top. Returns whether one lay that way — false at either
-   * end, which is a no-op. */
+   * end or before the view has painted, which is a no-op. */
   jumpChange(dir: 1 | -1): boolean;
 }
 
