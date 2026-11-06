@@ -1,6 +1,6 @@
-// The keyboard cursor's markers: SourceView tags the focused row's content cell
-// data-caret-cursor (EXC-788, EXC-790); the preview draws a band carrying the cursor's
-// source line.
+// The keyboard cursor's markers, and the keystrokes that drive it: SourceView tags the
+// focused row's content cell data-caret-cursor (EXC-788, EXC-790); the preview draws a
+// band carrying the cursor's source line.
 
 import type { Page } from "@playwright/test";
 
@@ -17,6 +17,15 @@ export const cursor = (page: Page) =>
 export const PREVIEW_BAND = `${PLAN_SURFACE} [data-caret-preview-cursor]`;
 
 export const previewCursor = (page: Page) => page.locator(PREVIEW_BAND);
+
+/** The library's amber selection band, one content cell per selected line. */
+export const selectedLines = (page: Page) =>
+  page.locator(".diffview [data-content] [data-line][data-selected-line]");
+
+/** Presses each of `keys` in turn. */
+export async function press(page: Page, ...keys: string[]): Promise<void> {
+  for (const key of keys) await page.keyboard.press(key);
+}
 
 const lineOf = async (page: Page): Promise<number> =>
   Number((await cursor(page).getAttribute("data-line")) ?? -1);
@@ -41,4 +50,13 @@ export async function goToTop(page: Page): Promise<void> {
   await page.keyboard.press("g");
   await page.keyboard.press("g");
   await expectCursorLine(page, 1);
+}
+
+/** gg, then `steps` presses of j; returns the line the cursor lands on. Each j is one
+ * synchronous step in its keydown, so only the landing needs waiting for. */
+export async function walkCursor(page: Page, steps: number): Promise<number> {
+  await goToTop(page);
+  for (let i = 0; i < steps; i++) await page.keyboard.press("j");
+  await expectCursorLine(page, 1 + steps);
+  return 1 + steps;
 }

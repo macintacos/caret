@@ -18,6 +18,7 @@ import {
   expectCursorLine,
   goToTop,
   PREVIEW_BAND,
+  press,
   previewCursor,
 } from "@test/e2e/support/cursor.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
@@ -80,10 +81,6 @@ const SHAPES = [
   "Fenceend paragraph.",
   "",
 ].join("\n\n");
-
-const press = async (page: Page, ...keys: string[]) => {
-  for (const key of keys) await page.keyboard.press(key);
-};
 
 /** The band's top in `.diff-plan` content coordinates, which the follow scroll leaves still. */
 const bandTop = (page: Page): Promise<number> =>

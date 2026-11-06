@@ -468,9 +468,10 @@ only slides beside it waits until that group's old image has gone.
 Where the thing being animated is a JS property rather than a style — `scrollTop`, or a
 timer standing in for the `animationend` happy-dom never fires — the duration is MIRRORED
 as a plain constant instead of read from the sheet, and every mirror is pinned by
-`motion.test.ts` so the two cannot drift. There are five: `SCROLL_ANIM_MS` and
-`FOLLOW_ANIM_MS` (`diffview/scroll.ts`) carry `--dur-travel` and `--dur-state` for the
-plan's two scrolls, and three exit windows carry `--dur-state` — `CLOSE_ANIM_MS` in
+`motion.test.ts` so the two cannot drift. There are five: `SCROLL_ANIM_MS`
+(`diffview/scroll.ts`) carries `--dur-travel` for the plan's scrolls that travel, the jump
+and the `zz`/`zt`/`zb` placement; `FOLLOW_ANIM_MS` beside it carries `--dur-state` for the
+cursor follow; and three exit windows carry `--dur-state` — `CLOSE_ANIM_MS` in
 `state/planKeyboard.svelte.ts` (PlanSearch's collapse), `CLOSE_ANIM_MS` in
 `components/DiffPlanView.svelte` (FileDrawer's slide out, and the outline column's as it
 folds), and the `exitMs` default in `state/alerts.ts` (AlertHost's `alert-out`). The three
@@ -536,12 +537,14 @@ pins that as a floor on the last quarter's distance rather than as a curve name,
 name is the implementation and the visible glide is the contract. Judge a JS easing by
 what its last frames do over the real distance, not by where it sits at the midpoint.
 
-**Both of the plan's scrolls ride that one curve and driver**, differing only in duration:
-the jump to a place (`--dur-travel`) and the keyboard cursor's follow (`--dur-state`, so
-the view lands with the cursor band's glide, and since a held `j`/`k` retargets it every
-few frames a jump-length glide would leave the view trailing the cursor). Sharing the
-driver is also what stops them fighting — a follow landing inside a jump retargets that
-flight rather than being mistaken for a reader grabbing the scrollbar.
+**The jump, the `zz`/`zt`/`zb` placement and the cursor follow ride that one curve and
+driver**, differing only in duration. The jump to a place and the placement take
+`--dur-travel`, since a placement can cross half the viewport. The keyboard cursor's
+follow takes `--dur-state`, so the view lands with the cursor band's glide, and since a
+held `j`/`k` retargets it every few frames a jump-length glide would leave the view
+trailing the cursor. Sharing the driver is also what stops them fighting — a follow
+landing inside a jump retargets that flight rather than being mistaken for a reader
+grabbing the scrollbar.
 
 **The two tracks may meet, and there is exactly one way to do it.** A portalled surface
 that wants caret's timing sets `--tw-duration` and `--tw-ease` — the two custom properties

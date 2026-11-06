@@ -12,7 +12,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { currentCrumb } from "@test/e2e/support/chrome.ts";
-import { expect, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import { expect, untilStill, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { READING_ZONE_SLOP, SCROLL_OFFSET_TOP } from "@ui/src/lib/layout.ts";
 
 /**
@@ -273,15 +273,21 @@ export async function wheelPlan(page: Page, dy: number, over = PLAN_SURFACE): Pr
   const before = await plan.evaluate((el) => el.scrollTop);
   await page.locator(over).hover();
   await page.mouse.wheel(0, dy);
-  let previous = before;
-  await expect
-    .poll(async () => {
-      const now = await plan.evaluate((el) => el.scrollTop);
-      const landed = now !== before && now === previous;
-      previous = now;
-      return landed;
-    })
-    .toBe(true);
+  await untilStill(
+    () => plan.evaluate((el) => el.scrollTop),
+    (now) => now !== before,
+  );
+}
+
+/** The plan's resting scroll position: a jump scrolls smoothly, so a spec that goes on to
+ * assert where it parked, or that nothing moved, samples a position that has stopped
+ * moving. Only usable where the scroll lands somewhere OTHER than the top: a zero landing
+ * is indistinguishable from "has not started", so it would poll until the deadline. */
+export function parkedScrollTop(page: Page): Promise<number> {
+  return untilStill(
+    () => page.locator(PLAN_SURFACE).evaluate((el) => el.scrollTop),
+    (now) => now > 0,
+  );
 }
 
 /** The 1-based line of the first source row whose bottom clears the reading zone
@@ -481,15 +487,7 @@ export async function settledMutations(page: Page): Promise<number> {
   });
   const read = () =>
     page.evaluate(() => (window as unknown as { __mutations: number }).__mutations);
-  let previous = -1;
-  await expect
-    .poll(async () => {
-      const now = await read();
-      const unchanged = now === previous;
-      previous = now;
-      return unchanged;
-    })
-    .toBe(true);
+  await untilStill(read);
   return read();
 }
 
@@ -752,15 +750,10 @@ export async function scrollPlanToMiddle(page: Page): Promise<void> {
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   const half = await scroller.evaluate((el) => (el.scrollHeight - el.clientHeight) / 2);
   await page.mouse.wheel(0, half);
-  let previous = -1;
-  await expect
-    .poll(async () => {
-      const scrollTop = await scroller.evaluate((el) => el.scrollTop);
-      const stopped = scrollTop > half / 2 && scrollTop === previous;
-      previous = scrollTop;
-      return stopped;
-    })
-    .toBe(true);
+  await untilStill(
+    () => scroller.evaluate((el) => el.scrollTop),
+    (scrollTop) => scrollTop > half / 2,
+  );
   const t0 = await page.evaluate(() => performance.now());
   await page.waitForFunction((t) => performance.now() > t, t0 + PAST_SCROLL_SETTLE_MS);
 }

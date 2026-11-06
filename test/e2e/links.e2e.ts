@@ -13,6 +13,7 @@
 // production opener (openLinkInNewTab) passes, with no real cross-origin
 // navigation: the test owns the seam the daemon serves, not the wider web.
 
+import { selectedLines } from "@test/e2e/support/cursor.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
   expectNoComposerOpens,
@@ -281,9 +282,7 @@ test("the link chip survives a drag-selected row, unlike the emphasis chips", as
 
   const plus = await revealGutterPlus(page, await linkLine(page));
   await plus.click();
-  await expect(
-    page.locator(".diffview [data-content] [data-line][data-selected-line]").first(),
-  ).toBeVisible();
+  await expect(selectedLines(page).first()).toBeVisible();
 
   // Still lit, and still round: a chip that vanished beside a file reference's on the
   // same selected row would read as a glitch rather than as a policy.

@@ -10,6 +10,7 @@
 // emulated here too.
 
 import { commentTally } from "@test/e2e/support/chrome.ts";
+import { selectedLines } from "@test/e2e/support/cursor.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -89,9 +90,7 @@ test("with hints off, V-mode still selects lines but the hint chip stays hidden"
   await page.keyboard.press("g");
   await page.keyboard.press("V");
   await page.keyboard.press("j");
-  await expect(
-    page.locator(".diffview [data-content] [data-line][data-selected-line]"),
-  ).toHaveCount(2);
+  await expect(selectedLines(page)).toHaveCount(2);
   await expect(page.locator(".visual-hint")).toHaveCount(0);
 });
 
