@@ -314,10 +314,10 @@ export function placementScrollTop(
   g: { rowTop: number; rowBottom: number; viewTop: number; viewBottom: number; scrollTop: number },
   where: CursorPlacement,
 ): number {
-  const rowH = g.rowBottom - g.rowTop;
+  const rowHeight = g.rowBottom - g.rowTop;
   const margin = Math.min(
-    CURSOR_SCROLLOFF * rowH,
-    Math.max(0, (g.viewBottom - g.viewTop - rowH) / 2),
+    CURSOR_SCROLLOFF * rowHeight,
+    Math.max(0, (g.viewBottom - g.viewTop - rowHeight) / 2),
   );
   switch (where) {
     case "center":
