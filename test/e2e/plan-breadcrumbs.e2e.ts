@@ -38,7 +38,7 @@ import {
   waitPastSafeModeGrace,
 } from "@test/e2e/support/fixtures.ts";
 import { clickBelowPanel, holdAndSettle, isWithinBox } from "@test/e2e/support/plan-nav.ts";
-import { jumpToHeading, PLAN_SURFACE } from "@test/e2e/support/source-view.ts";
+import { jumpToHeading, PLAN_SURFACE, parkedScrollTop } from "@test/e2e/support/source-view.ts";
 
 // Each section must be taller than the viewport, so scrolling to a later one
 // genuinely changes which heading is being read rather than leaving the whole plan
@@ -176,22 +176,6 @@ async function openFilterOn(page: Page, daemon: Daemon, plan: string): Promise<v
 /** Where the plan is parked. Several specs below assert that walking the menus
  * moves nothing until the reviewer commits to a heading. */
 const scrollTop = (page: Page) => page.locator(PLAN_SURFACE).evaluate((el) => el.scrollTop);
-
-/** The plan's RESTING scroll position. A jump scrolls smoothly, so a spec that
- * goes on to assert "nothing moved" has to sample a position that has stopped
- * moving — two identical non-zero reads — rather than the first one it sees. */
-async function parkedAt(page: Page): Promise<number> {
-  let previous = -1;
-  await expect
-    .poll(async () => {
-      const now = await scrollTop(page);
-      const settled = now > 0 && now === previous;
-      previous = now;
-      return settled;
-    })
-    .toBe(true);
-  return previous;
-}
 
 /** Arrange a reading position. The specs below reach their starting heading through
  * the very surface they go on to assert — unavoidable since EXC-949 left the bar as
@@ -567,7 +551,7 @@ test("h and l walk into a section the reader is not in, and only Enter goes ther
 }) => {
   await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
-  const parked = await parkedAt(page);
+  const parked = await parkedScrollTop(page);
 
   // The outermost crumb holds the top level, and every heading below it is a
   // submenu away — including the whole Delta branch, which the reader is not in.
@@ -607,7 +591,7 @@ test("h steps out to the crumb before it once there is no submenu left to close"
   // different branch is the reach the issue asks for.
   await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
-  const parked = await parkedAt(page);
+  const parked = await parkedScrollTop(page);
 
   // Out to Bravo's level, then out again to Alpha's — the top of the trail.
   const menu = await openThenStepOut(page, ["Charlie"], ["Bravo", "Delta", "Foxtrot"]);
@@ -639,7 +623,7 @@ test("ArrowLeft walks the trail exactly as h does", async ({ daemon, page }) => 
   // onto ArrowLeft and re-enters the handler as one.
   await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
-  const parked = await parkedAt(page);
+  const parked = await parkedScrollTop(page);
 
   await page.keyboard.press("b");
   const menu = page.locator(MENU);
@@ -772,7 +756,7 @@ test("holding h walks out to the top of the trail and settles there", async ({ d
   // re-arming behind its own cancel — the shape ui/src/lib/keyRepeat.test.ts pins
   // directly, and the only place a browser can show what it looks like.
   await arriveAt(page, daemon, DEEP_PLAN, "Echo");
-  const parked = await parkedAt(page);
+  const parked = await parkedScrollTop(page);
   const menu = page.locator(MENU);
 
   await page.keyboard.press("b");
@@ -799,7 +783,7 @@ test("b shuts the bar from whatever crumb the walk reached", async ({ daemon, pa
   // nothing dismisses it, since a programmatic click carries no pointerdown.
   await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
   await expect(page.locator(CRUMB)).toHaveText(["Alpha", "Bravo", "Charlie"]);
-  await parkedAt(page);
+  await parkedScrollTop(page);
 
   const menu = await openThenStepOut(page, ["Charlie"], ["Bravo", "Delta", "Foxtrot"]);
   await expect(menu).toHaveCount(1);
@@ -856,7 +840,7 @@ test("Escape and an outside click leave the reader exactly where they were", asy
   page,
 }) => {
   await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
-  const parked = await parkedAt(page);
+  const parked = await parkedScrollTop(page);
   const menu = page.locator(MENU);
   // bits-ui focuses an opened menu a frame after mounting it. A `j` sent before then
   // lands on the crumb and moves the plan's line cursor, whose scrolloff moves the reader.
@@ -1171,7 +1155,7 @@ test("a click outside dismisses the filter and leaves the plan where it was", as
   // it: a popover left standing over the plan after the reviewer clicks away is the
   // failure this pins.
   await arriveAt(page, daemon, NESTED_PLAN, "Charlie");
-  const parked = await parkedAt(page);
+  const parked = await parkedScrollTop(page);
 
   await page.keyboard.press("b");
   await page.keyboard.press("/");

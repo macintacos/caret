@@ -15,7 +15,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { previewToggle } from "@test/e2e/support/chrome.ts";
-import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
+import { type Daemon, expect, test, untilStill } from "@test/e2e/support/fixtures.ts";
 import {
   lineOf,
   openPlan,
@@ -217,15 +217,7 @@ test("a wide block's bezel and pane edges stay put while its code scrolls", asyn
   await card.hover();
   await page.mouse.wheel(240, 0);
   await expect.poll(() => card.evaluate((el) => el.scrollLeft)).toBeGreaterThan(100);
-  let previous = -1;
-  await expect
-    .poll(async () => {
-      const now = await card.evaluate((el) => el.scrollLeft);
-      const settled = now === previous;
-      previous = now;
-      return settled;
-    })
-    .toBe(true);
+  await untilStill(() => card.evaluate((el) => el.scrollLeft));
   await restPointer(page);
 
   // The code moved under the frame, and the frame did not move with it.

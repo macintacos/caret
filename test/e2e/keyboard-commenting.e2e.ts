@@ -13,7 +13,14 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { cursor, expectCursorLine, goToTop, readCursorLine } from "@test/e2e/support/cursor.ts";
+import {
+  cursor,
+  expectCursorLine,
+  goToTop,
+  press,
+  selectedLines,
+  walkCursor,
+} from "@test/e2e/support/cursor.ts";
 import { headedFillerPlan } from "@test/e2e/support/fixture-plan.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { expectSingleAnnotation } from "@test/e2e/support/review-state.ts";
@@ -25,21 +32,10 @@ const PLAN = headedFillerPlan(10);
 // A distinct second version so a two-version review can enter compare mode.
 const PLAN_V2 = PLAN.replace("# Alpha", "# Alpha revised");
 
-// The library's amber selection band, one cell per selected content line.
-const selectedLines = (page: Page) =>
-  page.locator(".diffview [data-content] [data-line][data-selected-line]");
 // The inline composer and its CodeMirror editing surface (aria-label "Comment").
 const composerOf = (page: Page): Locator => page.getByRole("dialog", { name: "Add a comment" });
 const composerInput = (composer: Locator): Locator =>
   composer.getByRole("textbox", { name: "Comment" });
-
-// Place the cursor a couple of lines below the top by real keystrokes (gg then
-// j×n), returning the settled cursor line read from the DOM.
-async function placeCursorBelowTop(page: Page, steps: number): Promise<number> {
-  await goToTop(page);
-  for (let i = 0; i < steps; i++) await page.keyboard.press("j");
-  return readCursorLine(page, 1);
-}
 
 // From the top, enter visual line-select mode and extend the selection down
 // `steps` lines with j.
@@ -55,7 +51,7 @@ test("c opens the composer on the cursor line and ⌘Enter submits a line commen
 }) => {
   const id = await openPlanForKeys(page, daemon, PLAN);
 
-  const line = await placeCursorBelowTop(page, 2);
+  const line = await walkCursor(page, 2);
 
   // c opens the composer anchored to the cursor line (no gutter click needed).
   await page.keyboard.press("c");
@@ -158,7 +154,7 @@ test("commenting keys are inert in compare (read-only) mode", async ({ daemon, p
 
   // Neither the cursor motions nor the commenting keys are registered here, so
   // none of them place a cursor, select a range, or open a composer.
-  for (const key of ["g", "g", "j", "c", "V"]) await page.keyboard.press(key);
+  await press(page, "g", "g", "j", "c", "V");
   await expect(cursor(page)).toHaveCount(0);
   await expect(selectedLines(page)).toHaveCount(0);
   await expect(composerOf(page)).toHaveCount(0);

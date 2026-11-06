@@ -709,6 +709,30 @@ export async function walkVisits(read: () => Promise<string>, count: number): Pr
 }
 
 /**
+ * Poll `read` until two reads in a row agree on a value `accept` takes, and return it.
+ *
+ * A scroll or a paint that animates is still in flight until it reads the same twice, so
+ * a spec that goes on to assert where something rests samples it here rather than on the
+ * first read. `accept` rejects a value that is still but not landed: the start position
+ * before a wheel has moved anything, say.
+ */
+export async function untilStill(
+  read: () => Promise<number>,
+  accept: (value: number) => boolean = () => true,
+): Promise<number> {
+  let previous = Number.NaN;
+  await expect
+    .poll(async () => {
+      const now = await read();
+      const still = now === previous && accept(now);
+      previous = now;
+      return still;
+    })
+    .toBe(true);
+  return previous;
+}
+
+/**
  * Resolve a motion token the way the engine does, in seconds — the units both
  * `getComputedStyle` and `AnimationEvent.elapsedTime` report.
  *

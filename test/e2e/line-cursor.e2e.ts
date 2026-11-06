@@ -22,10 +22,23 @@
 
 import type { Page } from "@playwright/test";
 
-import { cursor, expectCursorLine, goToTop, readCursorLine } from "@test/e2e/support/cursor.ts";
+import {
+  cursor,
+  expectCursorLine,
+  goToTop,
+  press,
+  readCursorLine,
+  selectedLines,
+  walkCursor,
+} from "@test/e2e/support/cursor.ts";
 import { bodyFiller, headedFillerPlan } from "@test/e2e/support/fixture-plan.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
-import { openPlanForKeys, PLAN_SURFACE, probeColor } from "@test/e2e/support/source-view.ts";
+import {
+  openPlanForKeys,
+  PLAN_SURFACE,
+  parkedScrollTop,
+  probeColor,
+} from "@test/e2e/support/source-view.ts";
 import { CURSOR_SCROLLOFF } from "@ui/src/lib/layout.ts";
 
 // Tall enough that G and the half-page jump actually scroll, with three headings
@@ -80,23 +93,6 @@ const relTop = (page: Page) =>
     const view = document.querySelector(surface)!.getBoundingClientRect();
     return (row.top - view.top) / view.height;
   }, PLAN_SURFACE);
-
-/** Waits for the plan's scroll position to stop moving. The jump is animated, so
- * a rect read on the frame after the keystroke measures the flight rather than
- * where it parked; two identical non-zero reads mean it has landed. Only usable
- * where the jump lands somewhere OTHER than the top — a zero landing is
- * indistinguishable from "has not started", so it would poll until the deadline. */
-async function settleScroll(page: Page): Promise<void> {
-  let previous = -1;
-  await expect
-    .poll(async () => {
-      const now = await page.locator(PLAN_SURFACE).evaluate((el) => el.scrollTop);
-      const landed = now > 0 && now === previous;
-      previous = now;
-      return landed;
-    })
-    .toBe(true);
-}
 
 test("j/k place and step the cursor, it reads as distinct, and Esc leaves it placed", async ({
   daemon,
@@ -173,7 +169,7 @@ test("]] and [[ jump between headings, and a line click relocates the cursor", a
   // it near the TOP of the scroller. The mirror of the scrolloff follow's
   // relTop > 0.4 below: a `j` crossing rides the lower band, a heading jump does
   // not, which is the whole difference between the two scrolls.
-  await settleScroll(page);
+  await parkedScrollTop(page);
   expect(await relTop(page)).toBeLessThan(0.2);
 
   await page.keyboard.press("[");
@@ -335,19 +331,6 @@ test.describe("zz / zt / zb", () => {
       };
     }, PLAN_SURFACE);
 
-  const press = async (page: Page, ...keys: string[]) => {
-    for (const key of keys) await page.keyboard.press(key);
-  };
-
-  /** gg, then `steps` presses of j; returns the line the cursor lands on. Each j is one
-   * synchronous step in its keydown, so only the landing needs waiting for. */
-  async function walkDown(page: Page, steps: number): Promise<number> {
-    await goToTop(page);
-    for (let i = 0; i < steps; i++) await page.keyboard.press("j");
-    await expectCursorLine(page, 1 + steps);
-    return 1 + steps;
-  }
-
   const centered = async (page: Page) => {
     const g = await rowGeometry(page);
     return Math.abs(g.top - g.bottom) <= 2;
@@ -358,7 +341,7 @@ test.describe("zz / zt / zb", () => {
     page,
   }) => {
     await openPlanForKeys(page, daemon, TALL);
-    const line = await walkDown(page, 50);
+    const line = await walkCursor(page, 50);
 
     await press(page, "z", "z");
     await expect.poll(() => centered(page)).toBe(true);
@@ -391,8 +374,8 @@ test.describe("zz / zt / zb", () => {
 
   test("zz in visual mode keeps the selection and the cursor", async ({ daemon, page }) => {
     await openPlanForKeys(page, daemon, TALL);
-    await walkDown(page, 50);
-    const selected = page.locator(".diffview [data-content] [data-line][data-selected-line]");
+    await walkCursor(page, 50);
+    const selected = selectedLines(page);
 
     await press(page, "V", "j", "j");
     await expect(selected).toHaveCount(3);

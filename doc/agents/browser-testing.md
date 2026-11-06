@@ -541,8 +541,10 @@ so the honest move is to note it, leave the class selector, and file it.
   "discard this draft". Pass `exact: true`, as `inlineRows` / `unsentRows` in `chrome.ts`
   document.
 
-Shared locators live in `test/e2e/support/chrome.ts` (the chrome around the plan) and
-`test/e2e/support/source-view.ts` (the plan surface itself) — one idiom, one home.
+Shared locators live in `test/e2e/support/chrome.ts` (the chrome around the plan),
+`test/e2e/support/source-view.ts` (the plan surface itself) and
+`test/e2e/support/cursor.ts` (the keyboard cursor and the selection it extends) — one
+idiom, one home.
 
 ## Absence and invisibility
 
