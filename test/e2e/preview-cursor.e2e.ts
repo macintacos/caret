@@ -33,6 +33,7 @@ import {
   PREVIEW_HOVER,
 } from "@test/e2e/support/source-view.ts";
 import { caretThemeVariant, selectThemeFile } from "@test/e2e/support/themes.ts";
+import { CURSOR_SCROLLOFF } from "@ui/src/lib/layout.ts";
 
 // No phrase repeats, so text recorded under the band identifies one place.
 const LONG = [
@@ -545,35 +546,59 @@ test.describe("preview zz / zt / zb", () => {
   // scrollTop read right after a key is a sound absence check.
   test.use({ reducedMotion: "reduce" });
 
-  /** The band's center offset from the scroller's center, and the scroller's scrollTop. */
+  /** The gaps from the band's visual line to the scroller's top and bottom edges, that
+   * line's height, and the scroller's scrollTop. The line is measured by its text, as the
+   * follow and the placement measure it: the band spans the full line pitch, which is
+   * taller. */
   const placement = (page: Page) =>
     page.evaluate(
-      ([surface, bandSelector]) => {
-        const band = document.querySelector(bandSelector)!.getBoundingClientRect();
+      ([surface, root, bandSelector]) => {
         const scroller = document.querySelector(surface)!;
         const view = scroller.getBoundingClientRect();
+        const band = document.querySelector(bandSelector)!.getBoundingClientRect();
+        const mid = (band.top + band.bottom) / 2;
+        let top = Number.POSITIVE_INFINITY;
+        let bottom = Number.NEGATIVE_INFINITY;
+        const walker = document.createTreeWalker(
+          document.querySelector(root)!,
+          NodeFilter.SHOW_TEXT,
+        );
+        const range = document.createRange();
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+          range.selectNodeContents(n);
+          for (const r of range.getClientRects()) {
+            if (r.width > 0 && r.top < mid && r.bottom > mid) {
+              top = Math.min(top, r.top);
+              bottom = Math.max(bottom, r.bottom);
+            }
+          }
+        }
         return {
-          offCenter: (band.top + band.bottom - view.top - view.bottom) / 2,
+          top: top - view.top,
+          bottom: view.bottom - bottom,
+          height: bottom - top,
           scrollTop: scroller.scrollTop,
         };
       },
-      [PLAN_SURFACE, PREVIEW_BAND] as const,
+      [PLAN_SURFACE, PLAN_PREVIEW, PREVIEW_BAND] as const,
     );
   const scrollTop = async (page: Page) => (await placement(page)).scrollTop;
 
-  /** Presses `keys` and waits for the scroller to come to rest. */
-  async function settle(page: Page, ...keys: string[]): Promise<number> {
+  type Placement = Awaited<ReturnType<typeof placement>>;
+  const centered = (g: Placement) => Math.abs(g.top - g.bottom) <= 2;
+  const onTopEdge = (g: Placement) => Math.abs(g.top - CURSOR_SCROLLOFF * g.height) <= 1;
+  const onBottomEdge = (g: Placement) => Math.abs(g.bottom - CURSOR_SCROLLOFF * g.height) <= 1;
+
+  /** Presses `keys`, waits for the band to rest where `rests` says, and returns the
+   * scrollTop it rests at. */
+  async function place(
+    page: Page,
+    rests: (g: Placement) => boolean,
+    ...keys: string[]
+  ): Promise<number> {
     await press(page, ...keys);
-    let previous = Number.NaN;
-    await expect
-      .poll(async () => {
-        const now = await scrollTop(page);
-        const still = now === previous;
-        previous = now;
-        return still;
-      })
-      .toBe(true);
-    return previous;
+    await expect.poll(async () => rests(await placement(page))).toBe(true);
+    return scrollTop(page);
   }
 
   test("z-commands rest the cursor's visual line without moving it", async ({ page, daemon }) => {
@@ -585,29 +610,18 @@ test.describe("preview zz / zt / zb", () => {
     for (let i = 0; i < 8; i++) await stepFrom(page, "j", await bandTop(page));
     const text = await bandText(page);
 
-    await settle(page, "z", "z");
-    expect(Math.abs((await placement(page)).offCenter)).toBeLessThanOrEqual(2);
+    await place(page, centered, "z", "z");
     expect(await bandText(page)).toBe(text);
 
-    const top = await settle(page, "z", "t");
+    const top = await place(page, onTopEdge, "z", "t");
     expect(await bandText(page)).toBe(text);
     await stepFrom(page, "j", await bandTop(page));
     expect(await scrollTop(page)).toBe(top);
     await stepFrom(page, "k", await bandTop(page));
 
-    const freshTop = await settle(page, "z", "t");
-    await stepFrom(page, "k", await bandTop(page));
-    await expect.poll(() => scrollTop(page)).not.toBe(freshTop);
-    await stepFrom(page, "j", await bandTop(page));
-
-    const bottom = await settle(page, "z", "b");
+    const bottom = await place(page, onBottomEdge, "z", "b");
     expect(await bandText(page)).toBe(text);
     await stepFrom(page, "k", await bandTop(page));
     expect(await scrollTop(page)).toBe(bottom);
-    await stepFrom(page, "j", await bandTop(page));
-
-    const freshBottom = await settle(page, "z", "b");
-    await stepFrom(page, "j", await bandTop(page));
-    await expect.poll(() => scrollTop(page)).not.toBe(freshBottom);
   });
 });

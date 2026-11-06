@@ -115,19 +115,19 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
   },
   // zb's b is also breadcrumbs' bare key; a pending z completes first (match.ts).
   {
-    id: "motion.scrollCenter",
+    id: "motion.scrollCursorToCenter",
     keys: [{ key: "z" }, { key: "z" }],
     group: "motion",
     label: "Scroll cursor to center",
   },
   {
-    id: "motion.scrollTop",
+    id: "motion.scrollCursorToTop",
     keys: [{ key: "z" }, { key: "t" }],
     group: "motion",
     label: "Scroll cursor to top",
   },
   {
-    id: "motion.scrollBottom",
+    id: "motion.scrollCursorToBottom",
     keys: [{ key: "z" }, { key: "b" }],
     group: "motion",
     label: "Scroll cursor to bottom",

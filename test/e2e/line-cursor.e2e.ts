@@ -26,6 +26,7 @@ import { cursor, expectCursorLine, goToTop, readCursorLine } from "@test/e2e/sup
 import { bodyFiller, headedFillerPlan } from "@test/e2e/support/fixture-plan.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { openPlanForKeys, PLAN_SURFACE, probeColor } from "@test/e2e/support/source-view.ts";
+import { CURSOR_SCROLLOFF } from "@ui/src/lib/layout.ts";
 
 // Tall enough that G and the half-page jump actually scroll, with three headings
 // so ]]/[[ have distinct targets.
@@ -338,15 +339,13 @@ test.describe("zz / zt / zb", () => {
     for (const key of keys) await page.keyboard.press(key);
   };
 
-  /** gg, then j until the cursor is `steps` lines down; returns that line. */
+  /** gg, then `steps` presses of j; returns the line the cursor lands on. Each j is one
+   * synchronous step in its keydown, so only the landing needs waiting for. */
   async function walkDown(page: Page, steps: number): Promise<number> {
     await goToTop(page);
-    let line = 1;
-    for (let i = 0; i < steps; i++) {
-      await page.keyboard.press("j");
-      line = await readCursorLine(page, line);
-    }
-    return line;
+    for (let i = 0; i < steps; i++) await page.keyboard.press("j");
+    await expectCursorLine(page, 1 + steps);
+    return 1 + steps;
   }
 
   const centered = async (page: Page) => {
@@ -369,7 +368,7 @@ test.describe("zz / zt / zb", () => {
     await expect
       .poll(async () => {
         const g = await rowGeometry(page);
-        return Math.abs(g.top - 5 * g.height) <= 1;
+        return Math.abs(g.top - CURSOR_SCROLLOFF * g.height) <= 1;
       })
       .toBe(true);
     const afterTop = (await rowGeometry(page)).scrollTop;
@@ -381,7 +380,7 @@ test.describe("zz / zt / zb", () => {
     await expect
       .poll(async () => {
         const g = await rowGeometry(page);
-        return Math.abs(g.bottom - 5 * g.height) <= 1;
+        return Math.abs(g.bottom - CURSOR_SCROLLOFF * g.height) <= 1;
       })
       .toBe(true);
     const afterBottom = (await rowGeometry(page)).scrollTop;

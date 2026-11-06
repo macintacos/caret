@@ -1890,6 +1890,12 @@
     return root == null || scroller == null || map == null ? null : { root, scroller, map };
   }
 
+  function previewLineBox(p: TextPoint) {
+    const geometry = previewGeometry();
+    const box = geometry && visualLineBox(geometry.root, geometry.map, p);
+    return geometry && box ? { scroller: geometry.scroller, box } : null;
+  }
+
   function previewHalfPage(): number {
     const lineHeight = previewEl ? Number.parseFloat(getComputedStyle(previewEl).lineHeight) : NaN;
     if (scrollEl == null || !(lineHeight > 0)) return 10;
@@ -1953,14 +1959,12 @@
       return geometry && lastVisualLine(geometry.root, geometry.map);
     },
     follow: (p) => {
-      const geometry = previewGeometry();
-      const box = geometry && visualLineBox(geometry.root, geometry.map, p);
-      if (geometry && box) followBox(geometry.scroller, box);
+      const at = previewLineBox(p);
+      if (at) followBox(at.scroller, at.box);
     },
     place: (p, where) => {
-      const geometry = previewGeometry();
-      const box = geometry && visualLineBox(geometry.root, geometry.map, p);
-      if (geometry && box) placeBox(geometry.scroller, box, where);
+      const at = previewLineBox(p);
+      if (at) placeBox(at.scroller, at.box, where);
     },
     jump: (p) => {
       const block = previewBlock(p.line);
@@ -2399,9 +2403,9 @@
   // Not CursorMotions: these scroll without moving the cursor, so they bypass
   // resolveCursorLine and keep every motion's landing.
   const CURSOR_PLACEMENTS: Record<string, CursorPlacement> = {
-    "motion.scrollCenter": "center",
-    "motion.scrollTop": "top",
-    "motion.scrollBottom": "bottom",
+    "motion.scrollCursorToCenter": "center",
+    "motion.scrollCursorToTop": "top",
+    "motion.scrollCursorToBottom": "bottom",
   };
 
   // Half-page size from the scroller height over a rendered row's height, with a

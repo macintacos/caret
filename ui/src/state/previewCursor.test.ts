@@ -386,6 +386,6 @@ describe("scrollCursor", () => {
     h.cursor.scrollCursor("center");
     expect(h.places).toEqual([]);
     expect(h.follows).toEqual([]);
-    expect(store.cursorLine === null).toBe(true);
+    expect(store.cursorLine).toBe(null);
   });
 });
