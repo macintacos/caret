@@ -209,10 +209,6 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
   return {
     matches,
 
-    scrollCursor(where) {
-      reveal(seedLine(), (line) => deps.place(line, where));
-    },
-
     moveCursor(motion) {
       const lines = deps.lines();
       const line = resolveCursorLine(motion, {
@@ -224,6 +220,10 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
         seed: deps.readingLine() ?? 1,
       });
       reveal(line, JUMP_MOTIONS.has(motion) ? deps.jump : deps.follow);
+    },
+
+    scrollCursor(where) {
+      reveal(seedLine(), (line) => deps.place(line, where));
     },
 
     commentCursorLine() {

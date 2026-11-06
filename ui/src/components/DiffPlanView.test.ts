@@ -1225,9 +1225,9 @@ describe("DiffPlanView preview cursor", () => {
     expect(
       [
         "motion.down",
-        "motion.scrollCenter",
-        "motion.scrollTop",
-        "motion.scrollBottom",
+        "motion.scrollCursorToCenter",
+        "motion.scrollCursorToTop",
+        "motion.scrollCursorToBottom",
         "commenting.comment",
         "commenting.visualLine",
       ].map(live),
@@ -1287,9 +1287,9 @@ describe("DiffPlanView preview cursor", () => {
     expect(
       [
         "motion.down",
-        "motion.scrollCenter",
-        "motion.scrollTop",
-        "motion.scrollBottom",
+        "motion.scrollCursorToCenter",
+        "motion.scrollCursorToTop",
+        "motion.scrollCursorToBottom",
         "commenting.comment",
         "commenting.visualLine",
       ].map(live),

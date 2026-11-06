@@ -20,6 +20,11 @@ export const SCROLL_OFFSET_TOP = 12;
  * the active slot. Kept well under a source line's height. */
 export const READING_ZONE_SLOP = 1;
 
+/** Rows the follow keeps between the keyboard cursor and each viewport edge — a
+ * vim-style `scrolloff`. Stepping the cursor into this margin scrolls the view
+ * with it (one row per keystroke) instead of letting the cursor reach the edge. */
+export const CURSOR_SCROLLOFF = 5;
+
 /**
  * Width foundation for the responsive effort (EXC-806, parent EXC-770). Three
  * thresholds, single-sourced here and mirrored as `--w-*` custom properties in

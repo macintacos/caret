@@ -70,6 +70,25 @@ describe("CANONICAL_KEYMAP", () => {
     }
   });
 
+  test("reserves zz, zt and zb as motions", () => {
+    const sig = (id: string) => {
+      const e = CANONICAL_KEYMAP.find((x) => x.id === id);
+      return e && { group: e.group, keys: specSignature(e.keys) };
+    };
+    expect(sig("motion.scrollCursorToCenter")).toEqual({ group: "motion", keys: "z z" });
+    expect(sig("motion.scrollCursorToTop")).toEqual({ group: "motion", keys: "z t" });
+    expect(sig("motion.scrollCursorToBottom")).toEqual({ group: "motion", keys: "z b" });
+  });
+
+  test("b after a pending z completes zb rather than firing the breadcrumbs key", () => {
+    // Live entries, as the dispatcher hands matchKeydown only what it can run.
+    const live = CANONICAL_KEYMAP.map((e) => ({ ...e, run: () => {} }));
+    const kd = (key: string) => new KeyboardEvent("keydown", { key });
+    const first = matchKeydown(null, kd("z"), live, 0, 800);
+    const second = matchKeydown(first.state, kd("b"), live, 100, 800);
+    expect(second.entry?.id).toBe("motion.scrollCursorToBottom");
+  });
+
   test("reserves Shift+C for the comment navigator, rendered as shift + C caps", () => {
     // EXC-792: a bare shifted key, so keyCaps derives shift + capital from the uppercase
     // key's case. "shift" is the token caps.ts resolves to the global shift icon at render.
@@ -260,24 +279,5 @@ describe("shortcuts singleton", () => {
     expect(shortcuts.list().some((e) => e.id === "test.tmp")).toBe(true);
     off();
     expect(shortcuts.list().length).toBe(before);
-  });
-});
-
-describe("scroll-around-cursor bindings", () => {
-  test("zz, zt and zb are reserved motions", () => {
-    const sig = (id: string) => {
-      const e = CANONICAL_KEYMAP.find((x) => x.id === id);
-      return e && { group: e.group, keys: specSignature(e.keys) };
-    };
-    expect(sig("motion.scrollCenter")).toEqual({ group: "motion", keys: "z z" });
-    expect(sig("motion.scrollTop")).toEqual({ group: "motion", keys: "z t" });
-    expect(sig("motion.scrollBottom")).toEqual({ group: "motion", keys: "z b" });
-  });
-
-  test("b after a pending z completes zb rather than firing the breadcrumbs key", () => {
-    const kd = (key: string) => new KeyboardEvent("keydown", { key });
-    const first = matchKeydown(null, kd("z"), CANONICAL_KEYMAP, 0, 800);
-    const second = matchKeydown(first.state, kd("b"), CANONICAL_KEYMAP, 100, 800);
-    expect(second.entry?.id).toBe("motion.scrollBottom");
   });
 });
