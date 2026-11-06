@@ -128,9 +128,9 @@ function withReducedMotion(fn: () => void): void {
   }
 }
 
-// scrollTweenTop is the whole curve both of the plan's scrolls ride: where scrollTop
-// should be at a given point in a flight. Two properties have to hold together, and
-// pulling too hard on either one breaks the other — the motion is front-loaded, so it
+// scrollTweenTop is the whole curve the jump, the placement and the follow ride: where
+// scrollTop should be at a given point in a flight. Two properties have to hold together,
+// and pulling too hard on either one breaks the other — the motion is front-loaded, so it
 // decelerates rather than accelerates, AND its last frames still move far enough to
 // be seen, so the view is watched coming to rest instead of just stopping.
 describe("scrollTweenTop", () => {
