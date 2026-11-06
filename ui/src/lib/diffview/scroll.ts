@@ -16,7 +16,7 @@
 import { quadOut } from "svelte/easing";
 
 import type { CursorPlacement, DiffSide } from "$lib/diffview/types.ts";
-import { READING_ZONE_SLOP, SCROLL_OFFSET_TOP } from "$lib/layout.ts";
+import { CURSOR_SCROLLOFF, READING_ZONE_SLOP, SCROLL_OFFSET_TOP } from "$lib/layout.ts";
 
 /** Duration (ms) of a scroll that travels — a jump to a place or a `zz`/`zt`/`zb`
  * placement — the JS mirror of --dur-travel. */
@@ -238,33 +238,54 @@ export function scrollToDiffLine(container: HTMLElement, line: number, side: Dif
   return true;
 }
 
-/** Rows the follow keeps between the keyboard cursor and each viewport edge — a
- * vim-style `scrolloff`. Stepping the cursor into this margin scrolls the view
- * with it (one row per keystroke) instead of letting the cursor reach the edge. */
-export const CURSOR_SCROLLOFF = 5;
-
-/**
- * The vertical scroll delta (px) that keeps the cursor row at least `scrolloff`
- * row-heights from the top and bottom of the reading viewport: negative scrolls
- * up, positive down, `0` when the row already sits comfortably inside the band.
- * Pure geometry (no DOM) so it is directly unit-testable. Because a motion steps
- * the cursor one row, the delta is one row-height at the edge — the view follows
- * the cursor by a line rather than yanking it to the top on every keystroke.
- */
-export function followScrollDelta(g: {
+/** The cursor row and the viewport it scrolls in, in viewport px, with the follow's
+ * margin in rows. */
+type RowInView = {
   rowTop: number;
   rowBottom: number;
   rowHeight: number;
   viewTop: number;
   viewBottom: number;
   scrolloff: number;
-}): number {
-  const margin = g.scrolloff * g.rowHeight;
-  const topBound = g.viewTop + margin;
-  const bottomBound = g.viewBottom - margin;
-  if (g.rowTop < topBound) return g.rowTop - topBound; // above the band → scroll up
-  if (g.rowBottom > bottomBound) return g.rowBottom - bottomBound; // below the band → scroll down
+};
+
+/** The span of the view the follow keeps the cursor row inside: `scrolloff` row-heights
+ * in from each edge. The margin is capped at half of what the view has left around the
+ * row, as vim caps a `scrolloff` past half the window, so a row too tall for the margin
+ * is centered instead of pushed off screen. */
+function scrolloffBand(g: RowInView): { top: number; bottom: number } {
+  const margin = Math.min(
+    g.scrolloff * g.rowHeight,
+    Math.max(0, (g.viewBottom - g.viewTop - g.rowHeight) / 2),
+  );
+  return { top: g.viewTop + margin, bottom: g.viewBottom - margin };
+}
+
+/**
+ * The vertical scroll delta (px) that keeps the cursor row inside the scrolloff band:
+ * negative scrolls up, positive down, `0` when the row already sits comfortably inside
+ * it. Pure geometry (no DOM) so it is directly unit-testable. Because a motion steps
+ * the cursor one row, the delta is one row-height at the edge — the view follows
+ * the cursor by a line rather than yanking it to the top on every keystroke.
+ */
+export function followScrollDelta(g: RowInView): number {
+  const band = scrolloffBand(g);
+  if (g.rowTop < band.top) return g.rowTop - band.top; // above the band → scroll up
+  if (g.rowBottom > band.bottom) return g.rowBottom - band.bottom; // below the band → scroll down
   return 0;
+}
+
+/** `box` and `scroller`'s viewport as the follow and the placement measure them. */
+function rowInView(scroller: HTMLElement, box: { top: number; bottom: number }): RowInView {
+  const view = scroller.getBoundingClientRect();
+  return {
+    rowTop: box.top,
+    rowBottom: box.bottom,
+    rowHeight: box.bottom - box.top,
+    viewTop: view.top,
+    viewBottom: view.bottom,
+    scrolloff: CURSOR_SCROLLOFF,
+  };
 }
 
 /**
@@ -291,42 +312,27 @@ export function followCursorLine(container: HTMLElement, line: number): boolean 
 /** The scrolloff follow over a viewport `box`: scrolls `scroller` just enough to keep
  * it `CURSOR_SCROLLOFF` box-heights inside both edges. */
 export function followBox(scroller: HTMLElement, box: { top: number; bottom: number }): void {
-  const hostRect = scroller.getBoundingClientRect();
-  const delta = followScrollDelta({
-    rowTop: box.top,
-    rowBottom: box.bottom,
-    rowHeight: box.bottom - box.top,
-    viewTop: hostRect.top,
-    viewBottom: hostRect.bottom,
-    scrolloff: CURSOR_SCROLLOFF,
-  });
+  const delta = followScrollDelta(rowInView(scroller, box));
   if (delta !== 0) animateScrollTop(scroller, scroller.scrollTop + delta, FOLLOW_ANIM_MS);
 }
 
 /**
- * The scrollTop that rests the cursor row at `where`: centered, or CURSOR_SCROLLOFF
- * row-heights inside the top or bottom edge — the edges of followScrollDelta's band, so
- * the next step inward does not scroll. The margin is capped at what the view can hold,
- * so a tall row stays in view. Floored, as parkedTop is; the far end is left to the
- * browser's clamp.
+ * The scrollTop that rests the cursor row at `where`: centered, or on the top or bottom
+ * edge of the follow's scrolloff band, so the next step inward does not scroll. Clamped
+ * to `[0, maxScrollTop]`, so the glide decelerates into a top the scroller can reach
+ * rather than hitting an end of its range mid-curve.
  */
 export function placementScrollTop(
-  g: { rowTop: number; rowBottom: number; viewTop: number; viewBottom: number; scrollTop: number },
+  g: RowInView & { scrollTop: number; maxScrollTop: number },
   where: CursorPlacement,
 ): number {
-  const rowHeight = g.rowBottom - g.rowTop;
-  const margin = Math.min(
-    CURSOR_SCROLLOFF * rowHeight,
-    Math.max(0, (g.viewBottom - g.viewTop - rowHeight) / 2),
-  );
-  switch (where) {
-    case "center":
-      return Math.max(0, g.scrollTop + (g.rowTop + g.rowBottom - g.viewTop - g.viewBottom) / 2);
-    case "top":
-      return Math.max(0, g.scrollTop + g.rowTop - g.viewTop - margin);
-    case "bottom":
-      return Math.max(0, g.scrollTop + g.rowBottom - g.viewBottom + margin);
-  }
+  const band = scrolloffBand(g);
+  const shift = {
+    center: (g.rowTop + g.rowBottom - g.viewTop - g.viewBottom) / 2,
+    top: g.rowTop - band.top,
+    bottom: g.rowBottom - band.bottom,
+  }[where];
+  return Math.max(0, Math.min(g.maxScrollTop, g.scrollTop + shift));
 }
 
 /** Scrolls `scroller` so the viewport `box` rests at `where`. */
@@ -335,14 +341,11 @@ export function placeBox(
   box: { top: number; bottom: number },
   where: CursorPlacement,
 ): void {
-  const view = scroller.getBoundingClientRect();
   const top = placementScrollTop(
     {
-      rowTop: box.top,
-      rowBottom: box.bottom,
-      viewTop: view.top,
-      viewBottom: view.bottom,
+      ...rowInView(scroller, box),
       scrollTop: scroller.scrollTop,
+      maxScrollTop: scroller.scrollHeight - scroller.clientHeight,
     },
     where,
   );
@@ -351,18 +354,24 @@ export function placeBox(
   animateScrollTop(scroller, top, SCROLL_ANIM_MS);
 }
 
-/** `placeBox` for the source view's row for 1-based `line`; false when the row or its
- * scroller is missing. */
+/** `placeBox` for the source view's row for 1-based `line`; a no-op when the line is
+ * not rendered. */
 export function placeCursorLine(
   container: HTMLElement,
   line: number,
   where: CursorPlacement,
-): boolean {
+): void {
   const row = rowForLine(container, line);
+  if (row == null) return;
   const scroller = nearestScrollParent(container);
-  if (row == null || scroller == null) return false;
+  // No identifiable scroll container: the row's own scrollIntoView, as the jump falls
+  // back to. It has no scrolloff band, so zt and zb rest the row on the edge itself.
+  if (scroller == null) {
+    const block = ({ center: "center", top: "start", bottom: "end" } as const)[where];
+    row.scrollIntoView({ block, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    return;
+  }
   placeBox(scroller, row.getBoundingClientRect(), where);
-  return true;
 }
 
 /** Breathing room (px) below a revealed composer card, so its action row isn't

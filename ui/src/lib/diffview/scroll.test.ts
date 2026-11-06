@@ -2,7 +2,6 @@ import "@ui/support/setup.ts";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
-  CURSOR_SCROLLOFF,
   FOLLOW_ANIM_MS,
   followBox,
   followCursorLine,
@@ -21,7 +20,7 @@ import {
   scrollToLine,
   scrollTweenTop,
 } from "$lib/diffview/scroll.ts";
-import { SCROLL_OFFSET_TOP } from "$lib/layout.ts";
+import { CURSOR_SCROLLOFF, SCROLL_OFFSET_TOP } from "$lib/layout.ts";
 
 // @pierre/diffs renders each source line as a <div data-line="N"> inside the
 // container's shadow root. scrollToLine finds that row and tweens the nearest
@@ -583,6 +582,15 @@ describe("followScrollDelta", () => {
     expect(followScrollDelta({ ...base, rowTop: 200, rowBottom: 220 })).toBe(0); // on the top bound
     expect(followScrollDelta({ ...base, rowTop: 580, rowBottom: 600 })).toBe(0); // on the bottom bound
   });
+
+  test("centers a row too tall for the margin instead of pushing it off screen", () => {
+    // A 300px row leaves 300px of the 600px view, so the margin caps at 150 and the band
+    // is [250, 550], exactly the row's height.
+    const tall = { ...base, rowHeight: 300 };
+    expect(followScrollDelta({ ...tall, rowTop: 650, rowBottom: 950 })).toBe(400);
+    expect(followScrollDelta({ ...tall, rowTop: -200, rowBottom: 100 })).toBe(-450);
+    expect(followScrollDelta({ ...tall, rowTop: 250, rowBottom: 550 })).toBe(0);
+  });
 });
 
 describe("followCursorLine", () => {
@@ -687,7 +695,16 @@ describe("followBox", () => {
 });
 
 describe("placementScrollTop", () => {
-  const g = { rowTop: 500, rowBottom: 520, viewTop: 100, viewBottom: 700, scrollTop: 1000 };
+  const g = {
+    rowTop: 500,
+    rowBottom: 520,
+    rowHeight: 20,
+    viewTop: 100,
+    viewBottom: 700,
+    scrolloff: CURSOR_SCROLLOFF,
+    scrollTop: 1000,
+    maxScrollTop: 5000,
+  };
 
   test("centers the row, or rests it a scrolloff band inside the top or bottom edge", () => {
     expect(placementScrollTop(g, "center")).toBe(1110);
@@ -696,16 +713,21 @@ describe("placementScrollTop", () => {
   });
 
   test("never returns a negative scrollTop", () => {
-    expect(
-      placementScrollTop(
-        { rowTop: 150, rowBottom: 170, viewTop: 100, viewBottom: 700, scrollTop: 0 },
-        "top",
-      ),
-    ).toBe(0);
+    expect(placementScrollTop({ ...g, rowTop: 150, rowBottom: 170, scrollTop: 0 }, "top")).toBe(0);
+  });
+
+  test("never returns a scrollTop past the end of the scroll range", () => {
+    for (const where of ["center", "top", "bottom"] as const) {
+      expect(placementScrollTop({ ...g, maxScrollTop: 900 }, where)).toBe(900);
+    }
+  });
+
+  test("returns 0 when the content is shorter than the view", () => {
+    expect(placementScrollTop({ ...g, maxScrollTop: -100 }, "top")).toBe(0);
   });
 
   test("keeps a row taller than the band inside the view at the top and bottom targets", () => {
-    const tall = { rowTop: 500, rowBottom: 830, viewTop: 100, viewBottom: 800, scrollTop: 1000 };
+    const tall = { ...g, rowTop: 500, rowBottom: 830, rowHeight: 330, viewBottom: 800 };
     for (const where of ["top", "bottom"] as const) {
       const shift = placementScrollTop(tall, where) - tall.scrollTop;
       expect(tall.rowTop - shift).toBeGreaterThanOrEqual(tall.viewTop);
@@ -740,21 +762,44 @@ describe("placementScrollTop", () => {
 });
 
 describe("placeCursorLine", () => {
+  /** A scroller over [100, 700] with `max` px of scroll range. */
+  function viewport(lines: number[], max: number): Harness {
+    const h = harness(lines, { rect: rect(100, 700) });
+    Object.defineProperty(h.scroller, "clientHeight", { value: 600 });
+    Object.defineProperty(h.scroller, "scrollHeight", { value: 600 + max });
+    return h;
+  }
+
   test("scrolls the row to the center target", () => {
-    const { host, scroller } = harness([1, 5, 9], { rect: rect(100, 700) });
+    const { host, scroller } = viewport([1, 5, 9], 2000);
     stubRow(host, 5, 500, 520);
-    withReducedMotion(() => {
-      expect(placeCursorLine(host, 5, "center")).toBe(true);
-    });
+    withReducedMotion(() => placeCursorLine(host, 5, "center"));
     expect(scroller.scrollTop).toBe(110);
   });
 
-  test("returns false and leaves the scroll alone for a line with no row", () => {
-    const { host, scroller } = harness([1, 2, 3], { rect: rect(100, 700) });
-    withReducedMotion(() => {
-      expect(placeCursorLine(host, 99, "center")).toBe(false);
-    });
+  test("stops at the end of the scroll range", () => {
+    const { host, scroller } = viewport([1, 5, 9], 50);
+    stubRow(host, 5, 500, 520);
+    withReducedMotion(() => placeCursorLine(host, 5, "top"));
+    expect(scroller.scrollTop).toBe(50);
+  });
+
+  test("leaves the scroll alone for a line with no row", () => {
+    const { host, scroller } = viewport([1, 2, 3], 2000);
+    withReducedMotion(() => placeCursorLine(host, 99, "center"));
     expect(scroller.scrollTop).toBe(0);
+  });
+
+  test("falls back to the row's scrollIntoView when there is no scroll container", () => {
+    const { host } = harness([5], { scrollable: false });
+    const row = rowForLine(host, 5);
+    if (row == null) throw new Error("row 5 missing");
+    const blocks: Array<ScrollLogicalPosition | undefined> = [];
+    row.scrollIntoView = (opts) => {
+      blocks.push(typeof opts === "object" ? opts.block : undefined);
+    };
+    for (const where of ["center", "top", "bottom"] as const) placeCursorLine(host, 5, where);
+    expect(blocks).toEqual(["center", "start", "end"]);
   });
 });
 
