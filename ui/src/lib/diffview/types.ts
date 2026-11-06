@@ -60,7 +60,7 @@ export interface SourceViewApi {
    * Returns whether a matching row was found. */
   followCursorLine(line: number): boolean;
   /** Scrolls so the 1-based source line rests at `where` — `zz`/`zt`/`zb` — without moving
-   * the cursor. Returns whether a matching row was found. */
+   * the cursor. Returns whether it scrolled. */
   placeCursorLine(line: number, where: CursorPlacement): boolean;
   /** The view's host element (the shadow host). Light-DOM children projected
    * into its annotation slots render inline within the library's reserved rows

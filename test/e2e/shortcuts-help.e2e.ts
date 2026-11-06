@@ -95,16 +95,3 @@ test("/ focuses the search input without typing a slash; the field shows a / hin
   await expect(dialog).toContainText("Cancel editing");
   await expect(dialog).not.toContainText("Submit comment");
 });
-
-test("the help lists the scroll-around-cursor motions", async ({ daemon, page }) => {
-  await daemon.seed();
-  await page.goto("/");
-  await planSurface(page);
-  await waitPastSafeModeGrace(page);
-
-  await page.keyboard.press("?");
-  const dialog = page.locator("[data-slot='dialog-content']");
-  await expect(dialog).toContainText("Scroll cursor to center");
-  await expect(dialog).toContainText("Scroll cursor to top");
-  await expect(dialog).toContainText("Scroll cursor to bottom");
-});

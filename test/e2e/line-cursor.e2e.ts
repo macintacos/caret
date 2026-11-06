@@ -15,7 +15,10 @@
 // Where the two scrolls PARK the row is covered here for the same reason: ]]/[[
 // take the top-parked shared jump and j the scrolloff follow, so the difference
 // is a measurement against a real box — a laid-out row's top as a fraction of
-// the scroller's height, which happy-dom has no layout to report.
+// the scroller's height, which happy-dom has no layout to report — and where
+// `zz`/`zt`/`zb` rest it, against the follow band's edges; the pure geometry is
+// `placementScrollTop` in `ui/src/lib/diffview/scroll.test.ts`, the factory in
+// `ui/src/state/planKeyboard.test.ts`.
 
 import type { Page } from "@playwright/test";
 
@@ -309,6 +312,8 @@ test("hovering a code row bands it as the cursor does", async ({ daemon, page })
 });
 
 test.describe("zz / zt / zb", () => {
+  // Reduced motion lands the placement and the follow inside the keydown, so a bare
+  // scrollTop read right after a key is a sound absence check.
   test.use({ reducedMotion: "reduce" });
 
   // Long enough that the cursor can sit a viewport or more from both ends.

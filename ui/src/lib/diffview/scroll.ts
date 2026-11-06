@@ -1,6 +1,6 @@
-// Scroll-to-line, active-line resolution, the keyboard cursor's follow scroll,
-// the composer reveal, and the instant park a view flip lands with — the plan's
-// scrolling. @pierre/diffs
+// Scroll-to-line, active-line resolution, the keyboard cursor's follow scroll, the
+// cursor placement (`zz`/`zt`/`zb`), the composer reveal, and the instant park a view
+// flip lands with — the plan's scrolling. @pierre/diffs
 // renders each line as a <div data-line="N"> inside the container's shadow root;
 // jumping to a heading finds that row and scrolls the surrounding scroll container
 // so the row rests near the top, and the reverse — which line currently occupies
@@ -18,7 +18,8 @@ import { quadOut } from "svelte/easing";
 import type { CursorPlacement, DiffSide } from "$lib/diffview/types.ts";
 import { READING_ZONE_SLOP, SCROLL_OFFSET_TOP } from "$lib/layout.ts";
 
-/** Duration (ms) of a jump to a place — the JS mirror of --dur-travel. */
+/** Duration (ms) of a scroll that travels — a jump to a place or a `zz`/`zt`/`zb`
+ * placement — the JS mirror of --dur-travel. */
 export const SCROLL_ANIM_MS = 240;
 
 /** Duration (ms) of the cursor follow — the JS mirror of --dur-state, so the view
@@ -89,8 +90,8 @@ let jumpFrame: number | undefined;
 let jumpScroller: HTMLElement | undefined;
 
 /** Tweens `scroller` to `top` over `duration`, or moves outright under reduced
- * motion. Both of the plan's scrolls run through here — the jump to a place and
- * the cursor follow — so they share one curve and one in-flight handle, and only
+ * motion. Every plan scroll runs through here — the jump, the placement and the
+ * cursor follow — so they share one curve and one in-flight handle, and only
  * differ in how long they take.
  *
  * The tween owns the scroll only until something else moves it in ONE step — a
@@ -305,13 +306,19 @@ export function followBox(scroller: HTMLElement, box: { top: number; bottom: num
 /**
  * The scrollTop that rests the cursor row at `where`: centered, or CURSOR_SCROLLOFF
  * row-heights inside the top or bottom edge — the edges of followScrollDelta's band, so
- * the next step inward does not scroll. Never negative.
+ * the next step inward does not scroll. The margin is capped at what the view can hold,
+ * so a tall row stays in view. Floored, as parkedTop is; the far end is left to the
+ * browser's clamp.
  */
 export function placementScrollTop(
   g: { rowTop: number; rowBottom: number; viewTop: number; viewBottom: number; scrollTop: number },
   where: CursorPlacement,
 ): number {
-  const margin = CURSOR_SCROLLOFF * (g.rowBottom - g.rowTop);
+  const rowH = g.rowBottom - g.rowTop;
+  const margin = Math.min(
+    CURSOR_SCROLLOFF * rowH,
+    Math.max(0, (g.viewBottom - g.viewTop - rowH) / 2),
+  );
   switch (where) {
     case "center":
       return Math.max(0, g.scrollTop + (g.rowTop + g.rowBottom - g.viewTop - g.viewBottom) / 2);
@@ -339,6 +346,8 @@ export function placeBox(
     },
     where,
   );
+  // SCROLL_ANIM_MS, not FOLLOW_ANIM_MS: a placement can cross half the viewport, which
+  // is travel.
   animateScrollTop(scroller, top, SCROLL_ANIM_MS);
 }
 

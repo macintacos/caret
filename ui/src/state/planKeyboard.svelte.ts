@@ -157,8 +157,8 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
   }
 
   // `scroll` picks WHICH scroll: the scrolloff follow by default (a match reveal, the
-  // visual-mode anchor, every stepping motion), or the shared top-parked jump for a
-  // heading motion.
+  // visual-mode anchor, every stepping motion), the shared top-parked jump for a
+  // heading motion, or a `zz`/`zt`/`zb` placement.
   function reveal(line: number, scroll: (line: number) => void = deps.follow): void {
     store.cursorLine = line;
     scroll(line);

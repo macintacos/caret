@@ -1222,11 +1222,16 @@ describe("DiffPlanView preview cursor", () => {
   test("the preview runs the motions and the keyboard comments", async () => {
     await renderOnPreview();
     await until(() => live("motion.down"));
-    expect(["motion.down", "commenting.comment", "commenting.visualLine"].map(live)).toEqual([
-      true,
-      true,
-      true,
-    ]);
+    expect(
+      [
+        "motion.down",
+        "motion.scrollCenter",
+        "motion.scrollTop",
+        "motion.scrollBottom",
+        "commenting.comment",
+        "commenting.visualLine",
+      ].map(live),
+    ).toEqual([true, true, true, true, true, true]);
   });
 
   test("Esc closes the preview's search pill", async () => {
@@ -1279,11 +1284,16 @@ describe("DiffPlanView preview cursor", () => {
   test("the source view runs the motions and the line comments", async () => {
     render(DiffPlanView, props());
     await until(() => live("commenting.comment"));
-    expect(["motion.down", "commenting.comment", "commenting.visualLine"].map(live)).toEqual([
-      true,
-      true,
-      true,
-    ]);
+    expect(
+      [
+        "motion.down",
+        "motion.scrollCenter",
+        "motion.scrollTop",
+        "motion.scrollBottom",
+        "commenting.comment",
+        "commenting.visualLine",
+      ].map(live),
+    ).toEqual([true, true, true, true, true, true]);
   });
 
   test("gg paints the cursor band on the preview's first line", async () => {

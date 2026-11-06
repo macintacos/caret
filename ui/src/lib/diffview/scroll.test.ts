@@ -704,6 +704,15 @@ describe("placementScrollTop", () => {
     ).toBe(0);
   });
 
+  test("keeps a row taller than the band inside the view at the top and bottom targets", () => {
+    const tall = { rowTop: 500, rowBottom: 830, viewTop: 100, viewBottom: 800, scrollTop: 1000 };
+    for (const where of ["top", "bottom"] as const) {
+      const shift = placementScrollTop(tall, where) - tall.scrollTop;
+      expect(tall.rowTop - shift).toBeGreaterThanOrEqual(tall.viewTop);
+      expect(tall.rowBottom - shift).toBeLessThanOrEqual(tall.viewBottom);
+    }
+  });
+
   /** followScrollDelta for the row `offset` rows from the cursor once scrolled to `target`. */
   function followAfter(target: number, offset: number): number {
     const shift = target - g.scrollTop;

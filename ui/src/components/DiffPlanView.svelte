@@ -1843,7 +1843,7 @@
   // and adds `cursorPoint` and `visualAnchorPoint`; no cursor on compare. The DOM
   // effects are injected: the rendered lines, heading lines, the reading position, the
   // half-page size, scroll-follow, the match space and its landing, the shared jump, the
-  // composer open, and focus/blur.
+  // placement, the composer open, and focus/blur.
   let keyboardStore = $state<PlanKeyboardStore & PreviewCursorStore>({
     cursorLine: null,
     cursorPoint: null,
@@ -2396,6 +2396,8 @@
     "motion.prevBlank": "prevBlank",
   };
 
+  // Not CursorMotions: these scroll without moving the cursor, so they bypass
+  // resolveCursorLine and keep every motion's landing.
   const CURSOR_PLACEMENTS: Record<string, CursorPlacement> = {
     "motion.scrollCenter": "center",
     "motion.scrollTop": "top",

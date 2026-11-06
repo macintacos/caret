@@ -1,12 +1,12 @@
 // The keyboard cursor on the plan preview. It steps visual lines — each wrapped line on
 // screen — so everything here is layout: line boxes that only exist at a real width, the
-// follow scroll, the band's glide from row to row and the hover's off its row, and the
-// band staying on its text across a resize, a comment card growing above it and a theme
-// switch that rewraps it. happy-dom has no layout, so the pure half
-// stays units: the motion resolution over fake rects in ui/src/lib/previewLines.test.ts and
-// ui/src/state/previewCursor.test.ts, the registry wiring and band mount in
-// ui/src/components/DiffPlanView.test.ts ("DiffPlanView preview cursor"), and the surface
-// pin in ui/src/lib/planView.test.ts.
+// follow scroll, the `zz`/`zt`/`zb` placement, the band's glide from row to row and the
+// hover's off its row, and the band staying on its text across a resize, a comment card
+// growing above it and a theme switch that rewraps it. happy-dom has no layout, so the
+// pure half stays units: the motion resolution over fake rects in
+// ui/src/lib/previewLines.test.ts and ui/src/state/previewCursor.test.ts, the registry
+// wiring and band mount in ui/src/components/DiffPlanView.test.ts ("DiffPlanView preview
+// cursor"), and the surface pin in ui/src/lib/planView.test.ts.
 //
 // The daemon reflows the plan on ingest, so text is located by content and line counts
 // are read from the DOM.
@@ -541,6 +541,8 @@ test.describe("preview keyboard cursor", () => {
 });
 
 test.describe("preview zz / zt / zb", () => {
+  // Reduced motion lands the placement and the follow inside the keydown, so a bare
+  // scrollTop read right after a key is a sound absence check.
   test.use({ reducedMotion: "reduce" });
 
   /** The band's center offset from the scroller's center, and the scroller's scrollTop. */
