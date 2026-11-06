@@ -55,7 +55,7 @@ describe("CANONICAL_KEYMAP", () => {
   });
 
   test("compare's ]] and [[ share keys only with the heading motions they stand in for", () => {
-    const sharing = (id: string) => {
+    const idsSharingKeysWith = (id: string) => {
       const entry = CANONICAL_KEYMAP.find((e) => e.id === id);
       if (!entry) throw new Error(`${id} missing`);
       const sig = specSignature(entry.keys);
@@ -63,8 +63,8 @@ describe("CANONICAL_KEYMAP", () => {
         (e) => e.id !== id && e.group !== "editor" && specSignature(e.keys) === sig,
       ).map((e) => e.id);
     };
-    expect(sharing("motion.nextChange")).toEqual(["motion.nextHeading"]);
-    expect(sharing("motion.prevChange")).toEqual(["motion.prevHeading"]);
+    expect(idsSharingKeysWith("motion.nextChange")).toEqual(["motion.nextHeading"]);
+    expect(idsSharingKeysWith("motion.prevChange")).toEqual(["motion.prevHeading"]);
   });
 
   test("reserves the settings shortcuts in the table, scoped to settings (EXC-876)", () => {

@@ -21,11 +21,11 @@ export function changeStarts(
   parseOptions?: CreatePatchOptionsNonabortable,
 ): DiffLine[] {
   return parseDiffFromFile(oldFile, newFile, parseOptions).hunks.flatMap((hunk) =>
-    hunk.hunkContent.flatMap((c): DiffLine[] => {
-      if (c.type !== "change") return [];
-      return c.deletions > 0
-        ? [{ line: c.deletionLineIndex + 1, side: "before" }]
-        : [{ line: c.additionLineIndex + 1, side: "after" }];
+    hunk.hunkContent.flatMap((block): DiffLine[] => {
+      if (block.type !== "change") return [];
+      return block.deletions > 0
+        ? [{ line: block.deletionLineIndex + 1, side: "before" }]
+        : [{ line: block.additionLineIndex + 1, side: "after" }];
     }),
   );
 }

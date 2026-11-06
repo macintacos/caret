@@ -604,7 +604,7 @@ async function belowHeader(plan: Locator, text: string): Promise<number> {
 async function expectParked(plan: Locator, text: string): Promise<void> {
   await untilStill(
     () => belowHeader(plan, text),
-    (o) => o >= 0 && o <= PARKED_BAND,
+    (gap) => gap >= 0 && gap <= PARKED_BAND,
   );
 }
 
@@ -616,9 +616,9 @@ test("]] and [[ step between change blocks, stopping at the last", async ({ daem
   await expectParked(view, "inserted 1 of");
   await press(page, "]", "]");
   await expectParked(view, "alpha line 50 of");
-  const at = await parkedScrollTop(page);
+  const lastStopTop = await parkedScrollTop(page);
   await press(page, "]", "]");
-  expect(await parkedScrollTop(page)).toBe(at);
+  expect(await parkedScrollTop(page)).toBe(lastStopTop);
   await press(page, "[", "[");
   await expectParked(view, "inserted 1 of");
 });
