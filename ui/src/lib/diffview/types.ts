@@ -72,6 +72,12 @@ export interface SourceViewApi {
  * the after (new) side. */
 export type DiffSide = "before" | "after";
 
+/** A line address in a two-document diff: the 1-based line on one side. */
+export interface DiffLine {
+  line: number;
+  side: DiffSide;
+}
+
 /** Where `zz` / `zt` / `zb` rest the cursor row in the view. */
 export type CursorPlacement = "center" | "top" | "bottom";
 

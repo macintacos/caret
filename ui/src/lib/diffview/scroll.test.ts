@@ -8,6 +8,7 @@ import {
   followScrollDelta,
   indexAtReadingZone,
   lineAtReadingZone,
+  nextStop,
   parkAt,
   placeCursorLine,
   placementScrollTop,
@@ -394,6 +395,38 @@ describe("scrollToDiffLine", () => {
 const TOP = 100;
 const PARK = TOP + SCROLL_OFFSET_TOP; // where a jumped heading's top edge rests
 const ROW = 18; // a representative source-line height
+
+describe("nextStop", () => {
+  const tops = [100, 300, 500];
+
+  test("going down steps to the first stop below", () => {
+    expect(nextStop(tops, 0, 1)).toBe(100);
+  });
+
+  test("going down skips the stop it is parked at", () => {
+    expect(nextStop(tops, 100, 1)).toBe(300);
+  });
+
+  test("going down treats a stop within the slop as parked", () => {
+    expect(nextStop(tops, 100.5, 1)).toBe(300);
+  });
+
+  test("going down from the last stop finds none", () => {
+    expect(nextStop(tops, 500, 1)).toBeUndefined();
+  });
+
+  test("going up steps to the last stop above", () => {
+    expect(nextStop(tops, 500, -1)).toBe(300);
+  });
+
+  test("going up from the first stop finds none", () => {
+    expect(nextStop(tops, 100, -1)).toBeUndefined();
+  });
+
+  test("stops clamped to the same top count as one", () => {
+    expect(nextStop([300, 300], 300, 1)).toBeUndefined();
+  });
+});
 
 describe("lineAtReadingZone", () => {
   test("after a jump, returns the parked heading — not the row above it", () => {

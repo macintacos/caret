@@ -15,7 +15,7 @@
 // the same regardless of the current scroll position or window size.
 import { quadOut } from "svelte/easing";
 
-import type { CursorPlacement, DiffSide } from "$lib/diffview/types.ts";
+import type { CursorPlacement, DiffLine, DiffSide } from "$lib/diffview/types.ts";
 import { CURSOR_SCROLLOFF, READING_ZONE_SLOP, SCROLL_OFFSET_TOP } from "$lib/layout.ts";
 
 /** Duration (ms) of a scroll that travels — a jump to a place or a `zz`/`zt`/`zb`
@@ -88,6 +88,13 @@ let jumpFrame: number | undefined;
 // The scroller in flight, whose scroll anchoring the flight holds off until it ends —
 // cut short by the next scroll included.
 let jumpScroller: HTMLElement | undefined;
+// Where jumpScroller's flight lands.
+let jumpTop: number | undefined;
+
+/** Where `scroller` is headed: the in-flight tween's destination, else where it is. */
+function scrollDestination(scroller: HTMLElement): number {
+  return scroller === jumpScroller && jumpTop !== undefined ? jumpTop : scroller.scrollTop;
+}
 
 /** Tweens `scroller` to `top` over `duration`, or moves outright under reduced
  * motion. Every plan scroll runs through here — the jump, the placement and the
@@ -106,6 +113,7 @@ function animateScrollTop(scroller: HTMLElement, top: number, duration: number):
   jumpFrame = undefined;
   jumpScroller?.style.removeProperty("overflow-anchor");
   jumpScroller = undefined;
+  jumpTop = undefined;
   // Assignment, not scrollTo({ behavior: "instant" }): nothing sets scroll-behavior
   // on the plan surface, and base.css forces it to `auto !important` under reduced
   // motion — the path where a smooth behavior would actually defeat the guarantee.
@@ -124,10 +132,12 @@ function animateScrollTop(scroller: HTMLElement, top: number, duration: number):
   // scroller in one step and read as a takeover.
   scroller.style.overflowAnchor = "none";
   jumpScroller = scroller;
+  jumpTop = top;
   const land = (): void => {
     scroller.style.removeProperty("overflow-anchor");
     jumpFrame = undefined;
     jumpScroller = undefined;
+    jumpTop = undefined;
   };
 
   function step(): void {
@@ -208,6 +218,17 @@ export function scrollToLine(container: HTMLElement, line: number): boolean {
  * Returns whether a matching row was found.
  */
 export function scrollToDiffLine(container: HTMLElement, line: number, side: DiffSide): boolean {
+  const row = diffRowForLine(container, line, side);
+  // ponytail: a line inside a collapsed unchanged band has no row, so this is a
+  // no-op — the same semantics scrollToLine has for an unpainted line. Auto-expand
+  // the containing band (the library's expandedHunks) if the miss matters.
+  if (row == null) return false;
+  scrollRowIntoView(container, row);
+  return true;
+}
+
+/** The diff view's row for 1-based `line` on `side`, or null when it is not rendered. */
+function diffRowForLine(container: HTMLElement, line: number, side: DiffSide): HTMLElement | null {
   // The library wraps each rendered column in a <code> marked data-unified (one
   // column) or data-deletions/data-additions (two), and stamps each row with
   // data-line (its own side's number), data-alt-line (the other side's, absent on
@@ -229,12 +250,36 @@ export function scrollToDiffLine(container: HTMLElement, line: number, side: Dif
           `[data-unified] [data-line="${line}"][data-line-type$="deletion"]`,
           `[data-unified] [data-alt-line="${line}"]:not([data-line-type$="deletion"])`,
         ];
-  const row = container.shadowRoot?.querySelector<HTMLElement>(selectors.join(","));
-  // ponytail: a line inside a collapsed unchanged band has no row, so this is a
-  // no-op — the same semantics scrollToLine has for an unpainted line. Auto-expand
-  // the containing band (the library's expandedHunks) if the miss matters.
-  if (row == null) return false;
-  scrollRowIntoView(container, row);
+  return container.shadowRoot?.querySelector<HTMLElement>(selectors.join(",")) ?? null;
+}
+
+/** The stop `dir` steps to from `from` among non-decreasing `tops`: the first more than
+ * SCROLL_TAKEOVER_SLOP below it going down (1), the last more than that above it going
+ * up (-1), or undefined when none lies that way. */
+export function nextStop(tops: readonly number[], from: number, dir: 1 | -1): number | undefined {
+  return dir === 1
+    ? tops.find((t) => t > from + SCROLL_TAKEOVER_SLOP)
+    : tops.findLast((t) => t < from - SCROLL_TAKEOVER_SLOP);
+}
+
+/** Scrolls the diff view to the next (1) or previous (-1) of `changes` from where the
+ * scroller is headed, parking it as scrollToDiffLine does. Returns whether a change lay
+ * that way. */
+export function jumpToChange(
+  container: HTMLElement,
+  changes: readonly DiffLine[],
+  dir: 1 | -1,
+): boolean {
+  const scroller = nearestScrollParent(container);
+  if (scroller == null) return false;
+  const maxTop = scroller.scrollHeight - scroller.clientHeight;
+  const tops = changes.flatMap(({ line, side }) => {
+    const row = diffRowForLine(container, line, side);
+    return row == null ? [] : [Math.min(parkedTop(scroller, row), maxTop)];
+  });
+  const top = nextStop(tops, scrollDestination(scroller), dir);
+  if (top === undefined) return false;
+  animateScrollTop(scroller, top, SCROLL_ANIM_MS);
   return true;
 }
 
