@@ -99,6 +99,22 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     label: "Previous heading",
     repeat: true,
   },
+  // Compare's stand-ins for the heading motions, on the same keys: compare has no
+  // cursor, so only one pair is ever registered.
+  {
+    id: "motion.nextChange",
+    keys: [{ key: "]" }, { key: "]" }],
+    group: "motion",
+    label: "Next change",
+    repeat: true,
+  },
+  {
+    id: "motion.prevChange",
+    keys: [{ key: "[" }, { key: "[" }],
+    group: "motion",
+    label: "Previous change",
+    repeat: true,
+  },
   {
     id: "motion.nextBlank",
     keys: [{ key: "}" }],

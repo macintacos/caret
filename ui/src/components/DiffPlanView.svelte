@@ -2408,6 +2408,29 @@
     "motion.scrollCursorToBottom": "bottom",
   };
 
+  // Compare's ]] / [[ (motion.nextChange/prevChange): no cursor there, so they scroll
+  // from change block to change block instead of moving one.
+  const CHANGE_MOTIONS: Record<string, 1 | -1> = {
+    "motion.nextChange": 1,
+    "motion.prevChange": -1,
+  };
+
+  function registerChangeMotions(): () => void {
+    const offs = Object.entries(CHANGE_MOTIONS).map(([id, dir]) =>
+      shortcuts.register(
+        bind(id, {
+          run: () => {
+            diffApi?.jumpChange(dir);
+          },
+          enabled: () => !defaultIsEditingContext(),
+        }),
+      ),
+    );
+    return () => {
+      for (const off of offs) off();
+    };
+  }
+
   // Half-page size from the scroller height over a rendered row's height, with a
   // constant fallback before the view paints. Injected into the keyboard factory as its
   // halfPage dep and measured per motion — cheap at keyboard cadence.
@@ -2441,8 +2464,10 @@
   // dispatch, so a cursor move never re-runs this effect (which would churn the registry).
   // Ctrl+d/Ctrl+u are non-bare, so the dispatcher does not suppress them in an
   // editing context; the enabled guard does, so half-page motions don't fire while
-  // the composer is focused.
+  // the composer is focused. Compare's change motions register here too, so a surface
+  // flip tears one set down before registering the other on the same keys.
   $effect(() => {
+    if (surface === "compare") return registerChangeMotions();
     if (!runs("keyboardCursor")) return;
     const move = surface === "preview" ? previewCursor.moveCursor : keyboard.moveCursor;
     const offs: Array<() => void> = [];

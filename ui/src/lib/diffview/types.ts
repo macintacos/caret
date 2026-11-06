@@ -92,6 +92,10 @@ export interface SourceDiffViewApi {
    * outside the rendered range, sits inside a collapsed band, or the view has not
    * painted yet. */
   scrollToLine(line: number, side: DiffSide): boolean;
+  /** Scrolls to the next (1) or previous (-1) change block from where the view is
+   * headed, parking it at the top. Returns whether one lay that way — false at either
+   * end, which is a no-op. */
+  jumpChange(dir: 1 | -1): boolean;
 }
 
 /** Display options caret exposes for the single-document view. */
