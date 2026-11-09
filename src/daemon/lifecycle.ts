@@ -33,7 +33,7 @@ import {
   stateDir,
 } from "@/config/paths.ts";
 import { logKeep, logMaxSize, type Settings } from "@/config/settings.ts";
-import { baseUrlFor, daemonBaseUrl } from "@/daemon/address.ts";
+import { baseUrlFor, daemonBaseUrl, isExposed } from "@/daemon/address.ts";
 import { DaemonAuthError, daemonFetch, type HealthBody, httpHealth } from "@/daemon/client.ts";
 import { buildKind, currentBuildId, type DaemonLock, VERSION } from "@/lib/build-id.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
@@ -52,8 +52,8 @@ export interface EnsureDeps {
   /** This binary's UI build fingerprint and version, for staleness comparison. */
   currentBuild: string;
   currentVersion: string;
-  /** The hook's own resolved state dir — its world identity. A daemon whose
-   * health reports a different stateDir belongs to another world and is never
+  /** The hook's own resolved state dir — its world identity. A daemon on this machine
+   * whose health reports a different stateDir belongs to another world and is never
    * reused or retired (EXC-461). */
   currentStateDir: string;
   /** The parsed /api/health body; null when nothing answers. Rejects with
@@ -84,6 +84,8 @@ export interface EnsureDeps {
   /** The world's launcher execs a pinned root, so a cycle brings that root back whatever
    * this hook's version. */
   pinned?: boolean;
+  /** daemon.host is not an address on this machine, so the hook only attaches to the daemon there (EXC-2310). */
+  remote?: boolean;
   timing: EnsureTiming;
 }
 
@@ -189,6 +191,27 @@ const FOREIGN_WORLD_ERROR =
  * and the review's opening `takeover` already moved any real stray. */
 export type EnsureMode = "takeover" | "attach" | "successor";
 
+/** A daemon on another machine (EXC-2310): its state dir is a path on that machine, and this
+ * hook can neither spawn, retire nor cycle it, so attach to whatever caret answers there. A
+ * `successor` first waits out the instance that just refused work. */
+async function attachRemote(deps: EnsureDeps, mode: EnsureMode): Promise<string> {
+  const { timing } = deps;
+  const windowEnd = timing.now() + timing.windowMs;
+  const draining = mode === "successor" ? (await deps.health(deps.baseUrl))?.instanceId : undefined;
+  for (let attempt = 0; attempt < timing.maxAttempts && timing.now() < windowEnd; attempt++) {
+    const h = await deps.health(deps.baseUrl);
+    if (h && h.service !== "caret") {
+      throw new Error(`${deps.baseUrl} is not a caret daemon — check daemon.host and daemon.port`);
+    }
+    if (h && (draining === undefined || h.instanceId !== draining)) return deps.baseUrl;
+    await timing.backoff(attempt);
+  }
+  if ((await deps.health(deps.baseUrl))?.service === "caret") return deps.baseUrl;
+  throw new Error(
+    `no caret daemon is answering at ${deps.baseUrl} — check that caret is running on that machine`,
+  );
+}
+
 /** Ensure a caret daemon owns the port and return its base URL: reuse a same-build
  * daemon, gracefully retire a stale one and spawn a fresh daemon, and clean orphan
  * locks (EXC-406). Under this world's supervisor a stale resident daemon is cycled
@@ -202,11 +225,13 @@ export type EnsureMode = "takeover" | "attach" | "successor";
  * the token (it rejects with DaemonAuthError). A `takeover` moves a same-world daemon the
  * lock places on an address other than the configured one — cycled through this world's
  * service when it runs it, else retired — before anything spawns; `attach` and
- * `successor` reattach to it instead. */
+ * `successor` reattach to it instead. A daemon on another machine is only attached to,
+ * whatever its world or build, and nothing answering there is refused. */
 export async function ensureDaemon(
   deps: EnsureDeps,
   mode: EnsureMode = "takeover",
 ): Promise<string> {
+  if (deps.remote) return attachRemote(deps, mode);
   const { timing } = deps;
   const windowEnd = timing.now() + timing.windowMs;
   const deadline = windowEnd + timing.reserveMs;
@@ -781,6 +806,9 @@ export async function prodEnsureDeps(
     // Not residency: a dev daemon is resident too.
     service: existsSync(launcherServiceFile()) ? service() : undefined,
     pinned: isLauncherPinned(),
+    // ponytail: on Linux, ip_nonlocal_bind reads every address as local; add an explicit
+    // setting if remote mode is ever needed there.
+    remote: isExposed(s.daemon.host) && (await isAddrNotAvail(s.daemon.host)),
     baseUrl: daemonBaseUrl(s),
     currentBuild: await currentBuildId(),
     currentVersion: VERSION,

@@ -578,6 +578,109 @@ test("the never-deny fallback still reuses a same-world stale daemon", async () 
   expect(url).toBe("http://localhost:42718");
 });
 
+// ---- ensureDaemon: a daemon on another machine (EXC-2310) ----
+
+/** A daemon on another machine: another state dir, another build. */
+const remoteBody = {
+  service: "caret",
+  build: "b9",
+  version: "v9",
+  stateDir: "/home/other/.local/state/caret",
+  supervised: true,
+  instanceId: "i1",
+};
+
+for (const mode of ["takeover", "attach", "successor"] as const) {
+  test(`${mode}: a remote daemon of another world and build is reused, never retired, cycled or spawned`, async () => {
+    const { calls, manager: service } = supervisor();
+    let retires = 0;
+    let spawns = 0;
+    let removes = 0;
+    const url = await ensureDaemon(
+      ensureDeps({
+        remote: true,
+        service,
+        timing: noOpTiming(2),
+        health: async () => remoteBody,
+        readLock: () => ({ pid: 1, port: 1, host: "127.0.0.1", instanceId: "x" }),
+        removeLock: () => {
+          removes++;
+        },
+        retire: async () => {
+          retires++;
+          return true;
+        },
+        spawn: () => spawns++,
+      }),
+      mode,
+    );
+    expect(url).toBe("http://localhost:42718");
+    expect({ retires, spawns, removes }).toEqual({ retires: 0, spawns: 0, removes: 0 });
+    expect(calls.includes("restart")).toBe(false);
+  });
+}
+
+test("a remote daemon that never answers is refused without spawning", async () => {
+  let spawns = 0;
+  let removes = 0;
+  await expect(
+    ensureDaemon(
+      ensureDeps({
+        remote: true,
+        timing: noOpTiming(2),
+        health: async () => null,
+        spawn: () => spawns++,
+        removeLock: () => {
+          removes++;
+        },
+      }),
+    ),
+  ).rejects.toThrow(/no caret daemon is answering at http:\/\/localhost:42718/);
+  expect(spawns).toBe(0);
+  expect(removes).toBe(0);
+});
+
+test("a remote address answering as something else is refused", async () => {
+  await expect(
+    ensureDaemon(
+      ensureDeps({
+        remote: true,
+        timing: noOpTiming(2),
+        health: async () => ({ service: "other" }),
+      }),
+    ),
+  ).rejects.toThrow(/is not a caret daemon/);
+});
+
+test("a remote daemon refusing the token rejects with its DaemonAuthError", async () => {
+  const err = new DaemonAuthError("x");
+  await expect(
+    ensureDaemon(
+      ensureDeps({
+        remote: true,
+        timing: noOpTiming(2),
+        health: async () => {
+          throw err;
+        },
+      }),
+    ),
+  ).rejects.toBe(err);
+});
+
+test("a successor on a remote daemon waits past the draining instance", async () => {
+  const ids = ["old", "old", "new"];
+  let calls = 0;
+  const url = await ensureDaemon(
+    ensureDeps({
+      remote: true,
+      health: async () => ({ ...remoteBody, instanceId: ids[Math.min(calls++, 2)] }),
+    }),
+    "successor",
+  );
+  expect(url).toBe("http://localhost:42718");
+  expect(calls).toBeGreaterThanOrEqual(3);
+});
+
 // ---- ensureDaemon under this world's supervisor (EXC-1166) ----
 
 /** A resident same-world daemon of another build (b0). */
@@ -1313,6 +1416,16 @@ test("prodEnsureDeps wires the supervisor only into the world that installed it,
   writeFileSync(launcherServiceFile(), "caret.service\n");
   expect((await prodEnsureDeps(DEFAULTS, manager, 0)).service).toBe(service);
   expect((await prodEnsureDeps(DEFAULTS, manager, 1234)).timing.reserveMs).toBe(1234);
+});
+
+test("prodEnsureDeps marks a daemon.host off this machine remote, and loopback and the wildcard local", async () => {
+  const { manager: service } = supervisor();
+  const at = async (host: string) =>
+    (await prodEnsureDeps({ ...DEFAULTS, daemon: { ...DEFAULTS.daemon, host } }, () => service, 0))
+      .remote;
+  expect(await at("192.0.2.1")).toBe(true);
+  expect((await prodEnsureDeps(DEFAULTS, () => service, 0)).remote).toBe(false);
+  expect(await at("0.0.0.0")).toBe(false);
 });
 
 test("prodEnsureDeps is pinned only while the pin names a runnable caret", async () => {
