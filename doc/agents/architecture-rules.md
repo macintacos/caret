@@ -283,11 +283,12 @@ bind and switch a token on; the rules below cover both shapes.
   a `daemon.hostnames` name passes both guards. Modern browsers still stop its writes —
   they send `Sec-Fetch-Site: same-site`, which `isCrossOrigin` rejects — but an older
   browser that omits the header does not.
-- **Residual: the token travels in cleartext.** Over plain HTTP the `http://` login link
-  and the auth cookie are only as safe as the network path and the name's resolution: a
-  passive listener on shared Wi-Fi, or any LAN peer answering an unauthenticated mDNS
-  `.local` name, captures them and gets full API access. Off a trusted network, keep the
-  bind on loopback behind an HTTPS reverse proxy that sends `X-Forwarded-Proto` (above).
+- **Residual: the token travels in cleartext.** Over plain HTTP the `http://` login link,
+  the auth cookie, and the bearer header a hook on another device sends its server are
+  only as safe as the network path and the name's resolution: a passive listener on shared
+  Wi-Fi, or any LAN peer answering an unauthenticated mDNS `.local` name, captures them
+  and gets full API access. Off a trusted network, keep the bind on loopback behind an
+  HTTPS reverse proxy that sends `X-Forwarded-Proto` (above).
 - **No preflight handler exists or is needed.** A same-origin request sends no `OPTIONS`
   preflight, and a cross-origin preflight would be denied by the browser before any
   request body is sent (no advertised CORS headers).

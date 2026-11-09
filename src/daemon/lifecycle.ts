@@ -1,10 +1,11 @@
 // Daemon takeover + lifecycle: resolve the port for hooks and `caret serve` — reuse a
 // daemon of THIS build, cycle a stale (build or address) supervised one through its
 // service, retire a stale unsupervised one, spawn the on-demand fallback, and clean
-// orphan locks (EXC-406) — never denying a review because takeover failed. This module
-// also owns the world-identity guards (EXC-461) and the lock read/write/liveness
-// primitives the takeover loop and the doctor command share, and the boot marker that
-// lets one daemon of a state dir boot at a time.
+// orphan locks (EXC-406) — never denying a review because takeover failed. A hook whose
+// daemon.host is on another machine only attaches to the daemon there, and is denied when
+// none answers (EXC-2310). This module also owns the world-identity guards (EXC-461) and
+// the lock read/write/liveness primitives the takeover loop and the doctor command share,
+// and the boot marker that lets one daemon of a state dir boot at a time.
 
 import {
   accessSync,
@@ -84,7 +85,8 @@ export interface EnsureDeps {
   /** The world's launcher execs a pinned root, so a cycle brings that root back whatever
    * this hook's version. */
   pinned?: boolean;
-  /** daemon.host is not an address on this machine, so the hook only attaches to the daemon there (EXC-2310). */
+  /** daemon.host is not an address on this machine, so the hook only attaches to the
+   * daemon there (EXC-2310). */
   remote?: boolean;
   timing: EnsureTiming;
 }
@@ -190,27 +192,6 @@ const FOREIGN_WORLD_ERROR =
  * each reattaches to it there, since its settings may predate the edit that moved it,
  * and the review's opening `takeover` already moved any real stray. */
 export type EnsureMode = "takeover" | "attach" | "successor";
-
-/** A daemon on another machine (EXC-2310): its state dir is a path on that machine, and this
- * hook can neither spawn, retire nor cycle it, so attach to whatever caret answers there. A
- * `successor` first waits out the instance that just refused work. */
-async function attachRemote(deps: EnsureDeps, mode: EnsureMode): Promise<string> {
-  const { timing } = deps;
-  const windowEnd = timing.now() + timing.windowMs;
-  const draining = mode === "successor" ? (await deps.health(deps.baseUrl))?.instanceId : undefined;
-  for (let attempt = 0; attempt < timing.maxAttempts && timing.now() < windowEnd; attempt++) {
-    const h = await deps.health(deps.baseUrl);
-    if (h && h.service !== "caret") {
-      throw new Error(`${deps.baseUrl} is not a caret daemon — check daemon.host and daemon.port`);
-    }
-    if (h && (draining === undefined || h.instanceId !== draining)) return deps.baseUrl;
-    await timing.backoff(attempt);
-  }
-  if ((await deps.health(deps.baseUrl))?.service === "caret") return deps.baseUrl;
-  throw new Error(
-    `no caret daemon is answering at ${deps.baseUrl} — check that caret is running on that machine`,
-  );
-}
 
 /** Ensure a caret daemon owns the port and return its base URL: reuse a same-build
  * daemon, gracefully retire a stale one and spawn a fresh daemon, and clean orphan
@@ -354,6 +335,36 @@ export async function ensureDaemon(
 /** Whether this call holds the boot marker; if not, the pid of a live boot that does —
  * absent when the marker was released or just cleared as stale. */
 type BootClaim = { claimed: true } | { claimed: false; bootPid?: number };
+
+/** A daemon on another machine (EXC-2310): its state dir is a path on that machine, and this
+ * hook can neither spawn, retire nor cycle it, so attach to whatever caret answers there. A
+ * `successor` first waits out the instance that just refused work. Waits only
+ * `timing.windowMs`: the reserve is the spawn's turn, and a remote hook never spawns. Not
+ * `awaitSuccessor`, whose `deps.service` is this machine's supervisor and which reads an
+ * empty port as the cue to spawn. */
+async function attachRemote(
+  deps: Pick<EnsureDeps, "baseUrl" | "health" | "timing">,
+  mode: EnsureMode,
+): Promise<string> {
+  const { timing } = deps;
+  const windowEnd = timing.now() + timing.windowMs;
+  const draining = mode === "successor" ? (await deps.health(deps.baseUrl))?.instanceId : undefined;
+  for (let attempt = 0; attempt < timing.maxAttempts && timing.now() < windowEnd; attempt++) {
+    const h = await deps.health(deps.baseUrl);
+    if (h && h.service !== "caret") {
+      throw new Error(`${deps.baseUrl} is not a caret daemon — check daemon.host and daemon.port`);
+    }
+    if (h && (draining === undefined || h.instanceId !== draining)) return deps.baseUrl;
+    await timing.backoff(attempt);
+  }
+  // A successor whose draining daemon never left gets it back; runReview's retry then
+  // reports the drain.
+  if ((await deps.health(deps.baseUrl))?.service === "caret") return deps.baseUrl;
+  throw new Error(
+    `no caret daemon is answering at ${deps.baseUrl} — check that caret is running there ` +
+      "and lists that address in its daemon.hostnames",
+  );
+}
 
 /** Claim the boot marker, or clear a dead or expired one. A stale marker is only cleared
  * here, never re-claimed in the same call — clearing and re-creating is not atomic; the
@@ -807,7 +818,8 @@ export async function prodEnsureDeps(
     service: existsSync(launcherServiceFile()) ? service() : undefined,
     pinned: isLauncherPinned(),
     // ponytail: on Linux, ip_nonlocal_bind reads every address as local; add an explicit
-    // setting if remote mode is ever needed there.
+    // setting if remote mode is ever needed there. A roaming device handed the server's
+    // LAN address on another network reads local too, and spawns its own daemon.
     remote: isExposed(s.daemon.host) && (await isAddrNotAvail(s.daemon.host)),
     baseUrl: daemonBaseUrl(s),
     currentBuild: await currentBuildId(),

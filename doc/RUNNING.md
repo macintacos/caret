@@ -530,15 +530,24 @@ A device's agent can send its plans to the server's daemon instead of running it
 
 The device's hooks only connect. They never start, stop, or upgrade the server's daemon,
 whichever caret version each side runs. When nothing answers, caret denies the review with
-`no caret daemon is answering at http://…`.
+`no caret daemon is answering at http://…`. A review denied with
+`the daemon rejected the token in …` means the device's copy is stale: copy the server's
+`daemon.token` again.
 
-The server's daemon reads files on the server, which sets three limits:
+The device sends the token with every request over plain HTTP, and it cannot go through an
+HTTPS proxy, so use this only on a network you trust.
+
+The server's daemon acts on the server, with its files, its skills and its cmux. That, and
+how the device recognizes the server, set these limits:
 
 - File previews and file search come up empty for a project that is only on the device.
 - The comment editor's `/` skill list shows the server user's own skills for the server's
   agent, not the project's.
 - caret does not rewrap the agent's plan file on the device. Approval notes still reach
   it, because the hook appends them on the device.
+- cmux unread marks on the device are not cleared.
+- On a network where the device itself holds `host`'s address, its hooks treat the address
+  as their own and start the device's own daemon there instead.
 
 ### Logging every device out
 

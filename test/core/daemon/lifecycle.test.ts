@@ -590,9 +590,11 @@ const remoteBody = {
   instanceId: "i1",
 };
 
+// `successor` returns through the final probe: its draining daemon (constant instanceId)
+// never leaves.
 for (const mode of ["takeover", "attach", "successor"] as const) {
   test(`${mode}: a remote daemon of another world and build is reused, never retired, cycled or spawned`, async () => {
-    const { calls, manager: service } = supervisor();
+    const { calls, manager: service, statusReads } = supervisor();
     let retires = 0;
     let spawns = 0;
     let removes = 0;
@@ -601,8 +603,11 @@ for (const mode of ["takeover", "attach", "successor"] as const) {
         remote: true,
         service,
         timing: noOpTiming(2),
-        health: async () => remoteBody,
-        readLock: () => ({ pid: 1, port: 1, host: "127.0.0.1", instanceId: "x" }),
+        health: async (u) =>
+          u === "http://127.0.0.1:1"
+            ? { ...remoteBody, stateDir: "/my/world", instanceId: "s1" }
+            : remoteBody,
+        readLock: () => ({ pid: 1, port: 1, host: "127.0.0.1", instanceId: "s1" }),
         removeLock: () => {
           removes++;
         },
@@ -616,7 +621,8 @@ for (const mode of ["takeover", "attach", "successor"] as const) {
     );
     expect(url).toBe("http://localhost:42718");
     expect({ retires, spawns, removes }).toEqual({ retires: 0, spawns: 0, removes: 0 });
-    expect(calls.includes("restart")).toBe(false);
+    expect(calls).toEqual([]);
+    expect(statusReads()).toBe(0);
   });
 }
 
@@ -629,6 +635,7 @@ test("a remote daemon that never answers is refused without spawning", async () 
         remote: true,
         timing: noOpTiming(2),
         health: async () => null,
+        readLock: () => ({ pid: 1, port: 42718 }),
         spawn: () => spawns++,
         removeLock: () => {
           removes++;
@@ -678,7 +685,7 @@ test("a successor on a remote daemon waits past the draining instance", async ()
     "successor",
   );
   expect(url).toBe("http://localhost:42718");
-  expect(calls).toBeGreaterThanOrEqual(3);
+  expect(calls).toBe(3);
 });
 
 // ---- ensureDaemon under this world's supervisor (EXC-1166) ----
