@@ -91,6 +91,11 @@ Every review and prewarm hook first makes sure a current daemon holds the port
   cleared.
 - A review hook whose long-poll drops mid-review only reattaches, to whatever daemon of
   its state directory answers, whatever its build.
+- When `daemon.host` is not an address on the hook's machine (an `isAddrNotAvail` bind
+  probe), the hook only attaches to the daemon there, whatever its build or state
+  directory. It never retires, cycles or spawns one, and a hook a draining daemon refused
+  still waits for its successor. Nothing answering there denies the review. Every bullet
+  above assumes the daemon runs on the hook's machine.
 
 `caret serve` retires an unsupervised daemon on its way in, including one the lock places
 on another address after a `daemon.host` or `daemon.port` edit, and refuses to start when

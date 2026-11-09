@@ -1,10 +1,11 @@
 // Daemon takeover + lifecycle: resolve the port for hooks and `caret serve` — reuse a
 // daemon of THIS build, cycle a stale (build or address) supervised one through its
 // service, retire a stale unsupervised one, spawn the on-demand fallback, and clean
-// orphan locks (EXC-406) — never denying a review because takeover failed. This module
-// also owns the world-identity guards (EXC-461) and the lock read/write/liveness
-// primitives the takeover loop and the doctor command share, and the boot marker that
-// lets one daemon of a state dir boot at a time.
+// orphan locks (EXC-406) — never denying a review because takeover failed. A hook whose
+// daemon.host is on another machine only attaches to the daemon there, and is denied when
+// none answers (EXC-2310). This module also owns the world-identity guards (EXC-461) and
+// the lock read/write/liveness primitives the takeover loop and the doctor command share,
+// and the boot marker that lets one daemon of a state dir boot at a time.
 
 import {
   accessSync,
@@ -33,7 +34,7 @@ import {
   stateDir,
 } from "@/config/paths.ts";
 import { logKeep, logMaxSize, type Settings } from "@/config/settings.ts";
-import { baseUrlFor, daemonBaseUrl } from "@/daemon/address.ts";
+import { baseUrlFor, daemonBaseUrl, isExposed } from "@/daemon/address.ts";
 import { DaemonAuthError, daemonFetch, type HealthBody, httpHealth } from "@/daemon/client.ts";
 import { buildKind, currentBuildId, type DaemonLock, VERSION } from "@/lib/build-id.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
@@ -52,8 +53,8 @@ export interface EnsureDeps {
   /** This binary's UI build fingerprint and version, for staleness comparison. */
   currentBuild: string;
   currentVersion: string;
-  /** The hook's own resolved state dir — its world identity. A daemon whose
-   * health reports a different stateDir belongs to another world and is never
+  /** The hook's own resolved state dir — its world identity. A daemon on this machine
+   * whose health reports a different stateDir belongs to another world and is never
    * reused or retired (EXC-461). */
   currentStateDir: string;
   /** The parsed /api/health body; null when nothing answers. Rejects with
@@ -84,6 +85,9 @@ export interface EnsureDeps {
   /** The world's launcher execs a pinned root, so a cycle brings that root back whatever
    * this hook's version. */
   pinned?: boolean;
+  /** daemon.host is not an address on this machine, so the hook only attaches to the
+   * daemon there (EXC-2310). */
+  remote?: boolean;
   timing: EnsureTiming;
 }
 
@@ -202,11 +206,13 @@ export type EnsureMode = "takeover" | "attach" | "successor";
  * the token (it rejects with DaemonAuthError). A `takeover` moves a same-world daemon the
  * lock places on an address other than the configured one — cycled through this world's
  * service when it runs it, else retired — before anything spawns; `attach` and
- * `successor` reattach to it instead. */
+ * `successor` reattach to it instead. A daemon on another machine is only attached to,
+ * whatever its world or build, and nothing answering there is refused. */
 export async function ensureDaemon(
   deps: EnsureDeps,
   mode: EnsureMode = "takeover",
 ): Promise<string> {
+  if (deps.remote) return attachRemote(deps, mode);
   const { timing } = deps;
   const windowEnd = timing.now() + timing.windowMs;
   const deadline = windowEnd + timing.reserveMs;
@@ -329,6 +335,36 @@ export async function ensureDaemon(
 /** Whether this call holds the boot marker; if not, the pid of a live boot that does —
  * absent when the marker was released or just cleared as stale. */
 type BootClaim = { claimed: true } | { claimed: false; bootPid?: number };
+
+/** A daemon on another machine (EXC-2310): its state dir is a path on that machine, and this
+ * hook can neither spawn, retire nor cycle it, so attach to whatever caret answers there. A
+ * `successor` first waits out the instance that just refused work. Waits only
+ * `timing.windowMs`: the reserve is the spawn's turn, and a remote hook never spawns. Not
+ * `awaitSuccessor`, whose `deps.service` is this machine's supervisor and which reads an
+ * empty port as the cue to spawn. */
+async function attachRemote(
+  deps: Pick<EnsureDeps, "baseUrl" | "health" | "timing">,
+  mode: EnsureMode,
+): Promise<string> {
+  const { timing } = deps;
+  const windowEnd = timing.now() + timing.windowMs;
+  const draining = mode === "successor" ? (await deps.health(deps.baseUrl))?.instanceId : undefined;
+  for (let attempt = 0; attempt < timing.maxAttempts && timing.now() < windowEnd; attempt++) {
+    const h = await deps.health(deps.baseUrl);
+    if (h && h.service !== "caret") {
+      throw new Error(`${deps.baseUrl} is not a caret daemon — check daemon.host and daemon.port`);
+    }
+    if (h && (draining === undefined || h.instanceId !== draining)) return deps.baseUrl;
+    await timing.backoff(attempt);
+  }
+  // A successor whose draining daemon never left gets it back; runReview's retry then
+  // reports the drain.
+  if ((await deps.health(deps.baseUrl))?.service === "caret") return deps.baseUrl;
+  throw new Error(
+    `no caret daemon is answering at ${deps.baseUrl} — check that caret is running there ` +
+      "and lists that address in its daemon.hostnames",
+  );
+}
 
 /** Claim the boot marker, or clear a dead or expired one. A stale marker is only cleared
  * here, never re-claimed in the same call — clearing and re-creating is not atomic; the
@@ -781,6 +817,10 @@ export async function prodEnsureDeps(
     // Not residency: a dev daemon is resident too.
     service: existsSync(launcherServiceFile()) ? service() : undefined,
     pinned: isLauncherPinned(),
+    // ponytail: on Linux, ip_nonlocal_bind reads every address as local; add an explicit
+    // setting if remote mode is ever needed there. A roaming device handed the server's
+    // LAN address on another network reads local too, and spawns its own daemon.
+    remote: isExposed(s.daemon.host) && (await isAddrNotAvail(s.daemon.host)),
     baseUrl: daemonBaseUrl(s),
     currentBuild: await currentBuildId(),
     currentVersion: VERSION,
