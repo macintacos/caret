@@ -497,12 +497,48 @@ A device that only opens the review UI needs a browser and the login link (step 
 caret. Only the server runs caret as a service.
 
 If another device runs caret for its own agent, answer **I'll run it myself** when
-`caret install` asks. Keep the server's `host` and `hostnames` out of that device's
-`config.toml`. Otherwise its daemon also listens on the network and prints links to the
-server's name. Those links open the server, so you never see the device's own reviews.
+`caret install` asks. Unless it reviews on the server (below), keep the server's `host`
+and `hostnames` out of that device's `config.toml`. Otherwise its daemon also listens on
+the network and prints links to the server's name. Those links open the server, so you
+never see the device's own reviews.
 
-An agent on another device reviews its plans on that device's own daemon, at
-`caret.localhost`.
+By default, an agent on another device reviews its plans on that device's own daemon, at
+`caret.localhost`. To review them on the server instead, see
+[Reviewing on the server from another device](#reviewing-on-the-server-from-another-device).
+
+### Reviewing on the server from another device
+
+A device's agent can send its plans to the server's daemon instead of running its own:
+
+1. Install caret on the device for its agent, and answer **I'll run it myself**.
+2. In the device's `config.toml`, set `[daemon]` `host` to the server's IP address, not a
+   name. The server must answer to that IP: list it in the server's `hostnames`, or bind
+   the server to it. Set `port` and `hostnames` to the server's, so the links the device
+   prints use the server's name:
+
+   ```toml
+   [daemon]
+   host = "192.168.1.5"
+   hostnames = ["caret.home.lan", "192.168.1.5"]
+   port = 42718
+   ```
+
+3. Copy the server's `daemon.token` to the same path on the device,
+   `${XDG_STATE_HOME:-$HOME/.local/state}/caret/daemon.token`, and make it readable only
+   by its owner (`chmod 600`). Copy it again after
+   [Logging every device out](#logging-every-device-out).
+
+The device's hooks only connect. They never start, stop, or upgrade the server's daemon,
+whichever caret version each side runs. When nothing answers, caret denies the review with
+`no caret daemon is answering at http://…`.
+
+The server's daemon reads files on the server, which sets three limits:
+
+- File previews and file search come up empty for a project that is only on the device.
+- The comment editor's `/` skill list shows the server user's own skills for the server's
+  agent, not the project's.
+- caret does not rewrap the agent's plan file on the device. Approval notes still reach
+  it, because the hook appends them on the device.
 
 ### Logging every device out
 

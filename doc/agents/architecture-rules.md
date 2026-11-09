@@ -180,6 +180,10 @@ How long a daemon stays up, and who may replace it.
   supervisor to cycle, and a supervised peer is retired like any other. `caret serve`
   refuses a supervised port instead. Never spawn into an empty port within
   `SUPERVISOR_WINDOW_MS` while the service `keepsAlive`.
+- **A hook whose `daemon.host` is not on this machine only attaches**
+  (`EnsureDeps.remote`, set by `prodEnsureDeps`). It skips the state-dir world check,
+  never retires, cycles or spawns, and denies when nothing answers. Every other rule in
+  this section assumes the daemon runs on the hook's machine.
 - **SIGTERM drains; SIGINT stops at once.** SIGTERM is how a supervisor cycles the
   service, so `DRAIN_DEADLINE_MS` stays under its stop grace.
 - **Only hand-run tasks exercise a real supervisor:** `mise run verify linux` and
