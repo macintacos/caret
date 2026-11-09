@@ -676,16 +676,16 @@ test("a remote daemon refusing the token rejects with its DaemonAuthError", asyn
 
 test("a successor on a remote daemon waits past the draining instance", async () => {
   const ids = ["old", "old", "new"];
-  let calls = 0;
+  let healthProbes = 0;
   const url = await ensureDaemon(
     ensureDeps({
       remote: true,
-      health: async () => ({ ...remoteBody, instanceId: ids[Math.min(calls++, 2)] }),
+      health: async () => ({ ...remoteBody, instanceId: ids[Math.min(healthProbes++, 2)] }),
     }),
     "successor",
   );
   expect(url).toBe("http://localhost:42718");
-  expect(calls).toBe(3);
+  expect(healthProbes).toBe(3);
 });
 
 // ---- ensureDaemon under this world's supervisor (EXC-1166) ----
@@ -1427,12 +1427,12 @@ test("prodEnsureDeps wires the supervisor only into the world that installed it,
 
 test("prodEnsureDeps marks a daemon.host off this machine remote, and loopback and the wildcard local", async () => {
   const { manager: service } = supervisor();
-  const at = async (host: string) =>
+  const isRemoteWithHost = async (host: string) =>
     (await prodEnsureDeps({ ...DEFAULTS, daemon: { ...DEFAULTS.daemon, host } }, () => service, 0))
       .remote;
-  expect(await at("192.0.2.1")).toBe(true);
+  expect(await isRemoteWithHost("192.0.2.1")).toBe(true);
   expect((await prodEnsureDeps(DEFAULTS, () => service, 0)).remote).toBe(false);
-  expect(await at("0.0.0.0")).toBe(false);
+  expect(await isRemoteWithHost("0.0.0.0")).toBe(false);
 });
 
 test("prodEnsureDeps is pinned only while the pin names a runnable caret", async () => {
