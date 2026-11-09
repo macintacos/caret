@@ -7,7 +7,9 @@ import {
   followCursorLine,
   followScrollDelta,
   indexAtReadingZone,
+  jumpToChange,
   lineAtReadingZone,
+  nextStop,
   parkAt,
   placeCursorLine,
   placementScrollTop,
@@ -20,6 +22,7 @@ import {
   scrollToLine,
   scrollTweenTop,
 } from "$lib/diffview/scroll.ts";
+import type { DiffLine } from "$lib/diffview/types.ts";
 import { CURSOR_SCROLLOFF, SCROLL_OFFSET_TOP } from "$lib/layout.ts";
 
 // @pierre/diffs renders each source line as a <div data-line="N"> inside the
@@ -272,44 +275,54 @@ describe("scrollToLine", () => {
 // row is named by where the jump lands once its flight is over (rowTop -
 // SCROLL_OFFSET_TOP, since the unstubbed scroller reports an all-zero rect and
 // scrollTop 0).
-describe("scrollToDiffLine", () => {
-  interface DiffRow {
-    /** data-line: this row's own side's 1-based number. */
-    line: number;
-    /** data-alt-line: the other side's number. Omitted on a change row. */
-    altLine?: number;
-    /** data-line-type — one of the library's LineTypes: change-deletion,
-     * change-addition, context, context-expanded. */
-    type: string;
-    /** Viewport top the stubbed rect reports, so assertions can name the row. */
-    top: number;
-  }
+interface DiffRow {
+  /** data-line: this row's own side's 1-based number. */
+  line: number;
+  /** data-alt-line: the other side's number. Omitted on a change row. */
+  altLine?: number;
+  /** data-line-type — one of the library's LineTypes: change-deletion,
+   * change-addition, context, context-expanded. */
+  type: string;
+  /** Viewport top the stubbed rect reports at scrollTop 0, so assertions can name the
+   * row. */
+  top: number;
+}
 
-  /** A scroll container wrapping a shadow host whose root holds the library's
-   * per-layout <code> columns, keyed by their data-* marker. */
-  function diffHarness(columns: Record<string, DiffRow[]>): Harness {
-    const scroller = document.createElement("div");
-    scroller.style.overflowY = "auto";
-    const host = document.createElement("div");
-    const root = host.attachShadow({ mode: "open" });
-    for (const [column, rows] of Object.entries(columns)) {
-      const code = document.createElement("code");
-      code.setAttribute(`data-${column}`, "");
-      for (const spec of rows) {
-        const row = document.createElement("div");
-        row.setAttribute("data-line", String(spec.line));
-        if (spec.altLine != null) row.setAttribute("data-alt-line", String(spec.altLine));
-        row.setAttribute("data-line-type", spec.type);
-        row.getBoundingClientRect = () => rect(spec.top);
-        code.append(row);
-      }
-      root.append(code);
+/** A scroll container wrapping a shadow host whose root holds the library's
+ * per-layout <code> columns, keyed by their data-* marker. Rows' rects follow
+ * scrollTop, so a re-measure mid-flight reads real geometry. `headerHeight` adds
+ * compare's pinned file header. */
+function diffHarness(columns: Record<string, DiffRow[]>, headerHeight?: number): Harness {
+  const scroller = document.createElement("div");
+  scroller.style.overflowY = "auto";
+  const host = document.createElement("div");
+  const root = host.attachShadow({ mode: "open" });
+  if (headerHeight !== undefined) {
+    const header = document.createElement("div");
+    header.setAttribute("data-diffs-header", "");
+    header.setAttribute("data-sticky", "");
+    header.getBoundingClientRect = () => rect(0, headerHeight);
+    root.append(header);
+  }
+  for (const [column, rows] of Object.entries(columns)) {
+    const code = document.createElement("code");
+    code.setAttribute(`data-${column}`, "");
+    for (const spec of rows) {
+      const row = document.createElement("div");
+      row.setAttribute("data-line", String(spec.line));
+      if (spec.altLine != null) row.setAttribute("data-alt-line", String(spec.altLine));
+      row.setAttribute("data-line-type", spec.type);
+      row.getBoundingClientRect = () => rect(spec.top - scroller.scrollTop);
+      code.append(row);
     }
-    scroller.append(host);
-    document.body.append(scroller);
-    return { host, scroller };
+    root.append(code);
   }
+  scroller.append(host);
+  document.body.append(scroller);
+  return { host, scroller };
+}
 
+describe("scrollToDiffLine", () => {
   // One change at line 2: the same number addresses a different row on each side.
   const split = (): Harness =>
     diffHarness({
@@ -383,6 +396,89 @@ describe("scrollToDiffLine", () => {
     const { host, scroller } = unified();
     expect(scrollToDiffLine(host, 4, "before")).toBe(false);
     expect(scroller.scrollTop).toBe(0);
+  });
+});
+
+describe("nextStop", () => {
+  const tops = [100, 300, 500];
+
+  test("going down steps to the first stop below", () => {
+    expect(nextStop(tops, 0, 1)).toBe(100);
+  });
+
+  test("going down skips the stop it is parked at", () => {
+    expect(nextStop(tops, 100, 1)).toBe(300);
+  });
+
+  test("going down treats a stop within the slop as parked", () => {
+    expect(nextStop(tops, 100.5, 1)).toBe(300);
+  });
+
+  test("going down from the last stop finds none", () => {
+    expect(nextStop(tops, 500, 1)).toBeUndefined();
+  });
+
+  test("going up steps to the last stop above", () => {
+    expect(nextStop(tops, 500, -1)).toBe(300);
+  });
+
+  test("going up from the first stop finds none", () => {
+    expect(nextStop(tops, 100, -1)).toBeUndefined();
+  });
+
+  test("stops clamped to the same top count as one", () => {
+    expect(nextStop([300, 300], 300, 1)).toBeUndefined();
+  });
+});
+
+describe("jumpToChange", () => {
+  const CHANGES: DiffLine[] = [1, 2, 3].map((line) => ({ line, side: "before" }));
+
+  /** Change rows at the given tops in a 600px viewport over 1600px of content, so the
+   * scroller tops out at 1000. */
+  function changeRows(tops: number[], headerHeight?: number): Harness {
+    const h = diffHarness(
+      { deletions: tops.map((top, i) => ({ line: i + 1, type: "change-deletion", top })) },
+      headerHeight,
+    );
+    Object.defineProperty(h.scroller, "clientHeight", { value: 600 });
+    Object.defineProperty(h.scroller, "scrollHeight", { value: 1600 });
+    return h;
+  }
+
+  test("a press mid-flight steps on from where the flight lands", async () => {
+    const { host, scroller } = changeRows([300, 500, 700]);
+    jumpToChange(host, CHANGES, 1);
+    await midFlight();
+    jumpToChange(host, CHANGES, 1);
+    now += SCROLL_ANIM_MS; // the second flight starts mid-way through the first
+    await frames(1);
+    expect(scroller.scrollTop).toBe(500 - SCROLL_OFFSET_TOP);
+  });
+
+  test("stops past the end clamp to it and count as one", async () => {
+    const { host, scroller } = changeRows([300, 1500, 1700]);
+    scroller.scrollTop = 300 - SCROLL_OFFSET_TOP;
+    expect(jumpToChange(host, CHANGES, 1)).toBe(true);
+    await settle();
+    expect(scroller.scrollTop).toBe(1000);
+    expect(jumpToChange(host, CHANGES, 1)).toBe(false);
+  });
+
+  test("a change whose row is not rendered is skipped", async () => {
+    const { host, scroller } = changeRows([300, 500]);
+    scroller.scrollTop = 300 - SCROLL_OFFSET_TOP;
+    const withUnrendered: DiffLine[] = [1, 9, 2].map((line) => ({ line, side: "before" }));
+    expect(jumpToChange(host, withUnrendered, 1)).toBe(true);
+    await settle();
+    expect(scroller.scrollTop).toBe(500 - SCROLL_OFFSET_TOP);
+  });
+
+  test("a row parks clear of compare's pinned header", async () => {
+    const { host, scroller } = changeRows([300], 46);
+    jumpToChange(host, CHANGES, 1);
+    await settle();
+    expect(scroller.scrollTop).toBe(300 - SCROLL_OFFSET_TOP - 46);
   });
 });
 

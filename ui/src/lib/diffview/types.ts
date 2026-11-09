@@ -72,6 +72,12 @@ export interface SourceViewApi {
  * the after (new) side. */
 export type DiffSide = "before" | "after";
 
+/** A line address in a two-document diff: the 1-based line on one side. */
+export interface DiffLine {
+  line: number;
+  side: DiffSide;
+}
+
 /** Where `zz` / `zt` / `zb` rest the cursor row in the view. */
 export type CursorPlacement = "center" | "top" | "bottom";
 
@@ -86,6 +92,10 @@ export interface SourceDiffViewApi {
    * outside the rendered range, sits inside a collapsed band, or the view has not
    * painted yet. */
   scrollToLine(line: number, side: DiffSide): boolean;
+  /** Scrolls to the next (1) or previous (-1) change block from where the view is
+   * headed, parking it at the top. Returns whether one lay that way — false at either
+   * end or before the view has painted, which is a no-op. */
+  jumpChange(dir: 1 | -1): boolean;
 }
 
 /** Display options caret exposes for the single-document view. */

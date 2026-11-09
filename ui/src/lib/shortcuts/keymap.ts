@@ -99,6 +99,23 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     label: "Previous heading",
     repeat: true,
   },
+  // Compare's stand-ins for the heading motions, on the same keys. Compare has no
+  // cursor, so DiffPlanView registers this pair there and the heading pair elsewhere,
+  // never both.
+  {
+    id: "motion.nextChange",
+    keys: [{ key: "]" }, { key: "]" }],
+    group: "motion",
+    label: "Next change",
+    repeat: true,
+  },
+  {
+    id: "motion.prevChange",
+    keys: [{ key: "[" }, { key: "[" }],
+    group: "motion",
+    label: "Previous change",
+    repeat: true,
+  },
   {
     id: "motion.nextBlank",
     keys: [{ key: "}" }],
