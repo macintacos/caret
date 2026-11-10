@@ -76,7 +76,7 @@ function failedText(reason: string): string {
   ].join("\n");
 }
 
-const result = (text: string, details: ReviewDetails): PiToolResult => ({
+const toolResult = (text: string, details: ReviewDetails): PiToolResult => ({
   content: [{ type: "text", text }],
   details,
   ...(details.state === "failed" && { isError: true as const }),
@@ -115,7 +115,7 @@ export function reviewTool(deps: { bin: string; run: SpawnRunner; store: ReviewS
       // Models sometimes prefix paths with `@`.
       const path = params.path?.replace(/^@/, "");
       const source = resolvePlanSource({ plan: params.plan, path }, ctx.cwd, readRegularFile);
-      if ("error" in source) return result(source.error, { state: "failed" });
+      if ("error" in source) return toolResult(source.error, { state: "failed" });
       const sessionId = ctx.sessionManager.getSessionId();
       let outcome: ReviewOutcome = "failed";
       try {
@@ -132,17 +132,19 @@ export function reviewTool(deps: { bin: string; run: SpawnRunner; store: ReviewS
             signal,
             onUrl: (url) => {
               deps.store.update(sessionId, { pending: url });
-              onUpdate?.(result(`caret: waiting for review at ${url}`, { state: "waiting", url }));
+              onUpdate?.(
+                toolResult(`caret: waiting for review at ${url}`, { state: "waiting", url }),
+              );
             },
           },
         );
         outcome = outcomeOf(decision, signal?.aborted ?? false);
-        return result(outcomeText(outcome, decision, source.planFilePath), { state: outcome });
+        return toolResult(outcomeText(outcome, decision, source.planFilePath), { state: outcome });
       } finally {
         deps.store.update(sessionId, { pending: undefined, lastOutcome: outcome });
       }
     },
     renderCall: (args, theme) => new Text(callLine(args, theme), 0, 0),
-    renderResult: (res, _options, theme) => new Text(resultLine(res, theme), 0, 0),
+    renderResult: (result, _options, theme) => new Text(resultLine(result, theme), 0, 0),
   };
 }

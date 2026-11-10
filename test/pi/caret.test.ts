@@ -36,12 +36,19 @@ function fakePi() {
   return { pi, tools, handlers, notices, fire };
 }
 
-const A = "file:///a/pi/caret.ts";
-const B = "file:///b/pi/caret.ts";
+const THIS_COPY_URL = "file:///a/pi/caret.ts";
+const OTHER_COPY_URL = "file:///b/pi/caret.ts";
 const ALLOW = JSON.stringify({ behavior: "allow" });
 
-function host(holder: Record<symbol, unknown>, over: Partial<CaretHost> = {}): CaretHost {
-  return { version: "1.5.1", entryUrl: A, holder, env: {}, run: stubRunner(ALLOW), ...over };
+function host(holder: Record<symbol, unknown>, overrides: Partial<CaretHost> = {}): CaretHost {
+  return {
+    version: "1.5.1",
+    entryUrl: THIS_COPY_URL,
+    holder,
+    env: {},
+    run: stubRunner(ALLOW),
+    ...overrides,
+  };
 }
 
 test("PI_FLOOR matches the adapter's floor", () => {
@@ -100,7 +107,7 @@ test("a second copy stays off and names both paths; the owner can reload", () =>
   const first = fakePi();
   installCaret(first.pi, host(holder));
   const second = fakePi();
-  installCaret(second.pi, host(holder, { entryUrl: B }));
+  installCaret(second.pi, host(holder, { entryUrl: OTHER_COPY_URL }));
   second.fire("session_start");
   second.fire("session_start");
   expect(first.tools.length).toBe(1);
@@ -119,7 +126,7 @@ test("the owner's session_shutdown frees the slot for another copy", () => {
   installCaret(first.pi, host(holder));
   first.fire("session_shutdown");
   const second = fakePi();
-  installCaret(second.pi, host(holder, { entryUrl: B }));
+  installCaret(second.pi, host(holder, { entryUrl: OTHER_COPY_URL }));
   expect(second.tools.length).toBe(1);
 });
 
