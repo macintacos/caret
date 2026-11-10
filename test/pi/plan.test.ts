@@ -32,7 +32,7 @@ beforeEach(() => {
 
 afterEach(() => rmSync(tmp, { recursive: true, force: true }));
 
-const on = (active: boolean): Entry => ({
+const planningEntry = (active: boolean): Entry => ({
   type: "custom",
   customType: PLANNING,
   data: { active },
@@ -252,13 +252,13 @@ describe("leaving on approval", () => {
 
 describe("rebuild from the branch", () => {
   test.each([
-    ["[on]", [on(true)], true],
-    ["[on, off]", [on(true), on(false)], false],
+    ["[on]", [planningEntry(true)], true],
+    ["[on, off]", [planningEntry(true), planningEntry(false)], false],
     ["empty", [], false],
     [
       "unrelated and malformed entries",
       [
-        on(true),
+        planningEntry(true),
         { type: "custom", customType: "other", data: { active: false } },
         { type: "custom", customType: PLANNING, data: "x" },
       ],

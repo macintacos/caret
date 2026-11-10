@@ -47,10 +47,10 @@ const write = (path: string, content: string) =>
 /** /caret:plan's run: write the plan, attempt a blocked write, submit, write again after
  * the review, then report whether the steer still reaches the model. */
 function planningStep(messages: Message[], plan: string) {
-  const results = messages.filter((m) => m.role === "toolResult").length;
-  if (results === 0) return write(plan, "# Greeting\n\n1. Add greeting.txt.\n");
-  if (results === 1 || results === 3) return write("greeting.txt", "hello");
-  if (results === 2) {
+  const toolResultCount = messages.filter((m) => m.role === "toolResult").length;
+  if (toolResultCount === 0) return write(plan, "# Greeting\n\n1. Add greeting.txt.\n");
+  if (toolResultCount === 1 || toolResultCount === 3) return write("greeting.txt", "hello");
+  if (toolResultCount === 2) {
     return fauxAssistantMessage(fauxToolCall("caret_review_plan", { path: plan }), {
       stopReason: "toolUse",
     });

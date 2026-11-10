@@ -36,14 +36,14 @@ function expandHome(path: string): string {
 /** The nearest existing ancestor's real path, plus the segments below it. Throws on an
  * existing entry that won't resolve (a dangling symlink, a loop) or a missing root. */
 function realPathOf(path: string): string {
-  const rest: string[] = [];
+  const missingSegments: string[] = [];
   let at = path;
   while (!lstatSync(at, { throwIfNoEntry: false })) {
     // An absent win32 root (an unmapped drive) is its own dirname.
     if (dirname(at) === at) throw new Error(`no such root: ${at}`);
-    rest.unshift(basename(at));
+    missingSegments.unshift(basename(at));
     at = dirname(at);
   }
   // .native: Node's JS realpathSync keeps the input's case on macOS.
-  return join(realpathSync.native(at), ...rest);
+  return join(realpathSync.native(at), ...missingSegments);
 }

@@ -93,13 +93,13 @@ export function planningSteer(plansDir: string, sessionId: string): string {
 
 /** Whether the branch's last planning entry turned planning on. */
 export function planningFromBranch(entries: readonly PlanningEntry[]): boolean {
-  const last = entries.findLast(
+  const lastPlanningEntry = entries.findLast(
     (e) =>
       e.type === "custom" &&
       e.customType === PLANNING &&
       typeof (e.data as { active?: unknown } | undefined)?.active === "boolean",
   );
-  return (last?.data as { active: boolean } | undefined)?.active === true;
+  return (lastPlanningEntry?.data as { active: boolean } | undefined)?.active === true;
 }
 
 /** Registers `/caret:plan` and its handlers on `pi`. Call once per pi instance: the set
@@ -114,7 +114,7 @@ export function installPlanning(pi: PlanningApi, deps: PlanningDeps): void {
     pi.appendEntry(PLANNING, { active });
     store.update(sid(ctx), { planning: active });
   };
-  const rebuild = (_event: unknown, ctx: PlanningContext) =>
+  const restorePlanningFromBranch = (_event: unknown, ctx: PlanningContext) =>
     store.update(sid(ctx), { planning: planningFromBranch(ctx.sessionManager.getBranch()) });
 
   pi.registerCommand("caret:plan", {
@@ -183,6 +183,6 @@ export function installPlanning(pi: PlanningApi, deps: PlanningDeps): void {
     }
   });
 
-  pi.on("session_start", rebuild);
-  pi.on("session_tree", rebuild);
+  pi.on("session_start", restorePlanningFromBranch);
+  pi.on("session_tree", restorePlanningFromBranch);
 }

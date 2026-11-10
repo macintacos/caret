@@ -190,13 +190,13 @@ export function waitForReview(
 function piSessionFile(sandbox: PiSandbox): { path: string; id: string } {
   const sessions = join(sandbox.agentDir, "sessions");
   const files = readdirSync(sessions, { recursive: true }).map(String);
-  const found = files.flatMap((f) => {
+  const sessionFiles = files.flatMap((f) => {
     const id = f.match(/_([0-9a-f-]{36})\.jsonl$/)?.[1];
     return id ? [{ path: join(sessions, f), id }] : [];
   });
-  if (found.length !== 1)
+  if (sessionFiles.length !== 1)
     throw new Error(`expected one pi session file, found: ${files.join(", ")}`);
-  return found[0] as { path: string; id: string };
+  return sessionFiles[0] as { path: string; id: string };
 }
 
 /** pi's session id. */
