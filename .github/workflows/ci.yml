@@ -1,0 +1,236 @@
+name: ci
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches: [trunk]
+  push:
+    branches: [trunk]
+permissions: {}
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5.2.1
+        with:
+          version: 2026.11.3
+          # lint is the one job that saves the mise cache; the other seven set cache_save: false.
+          cache_save: ${{ github.event_name == 'push' }}
+      - id: bun-cache
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - run: bun install --frozen-lockfile
+      - run: mise run lint
+      # Only trunk pushes save, so a PR can never write a cache trunk reads.
+      - if: github.event_name == 'push' && steps.bun-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+  test-unit:
+    name: test unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5.2.1
+        with:
+          version: 2026.11.3
+          cache_save: false
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - run: bun install --frozen-lockfile
+      - run: mise run test unit
+  test-bats:
+    name: test bats
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5.2.1
+        with:
+          version: 2026.11.3
+          cache_save: false
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - run: bun install --frozen-lockfile
+      - run: mise run test bats
+  test-mod:
+    name: test mod
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5.2.1
+        with:
+          version: 2026.11.3
+          cache_save: false
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - run: bun install --frozen-lockfile
+      # Keep in sync with publish.yml's mod-tests pin.
+      - run: npm install --global @anthropic-ai/claude-code@2.1.308
+      - run: mise run test mod
+  build-ui:
+    name: build ui
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5.2.1
+        with:
+          version: 2026.11.3
+          cache_save: false
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - run: bun install --frozen-lockfile
+      - run: mise run build ui
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: ui-dist
+          path: ui/dist
+          if-no-files-found: error
+  test-e2e:
+    name: test e2e
+    needs: build-ui
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5.2.1
+        with:
+          version: 2026.11.3
+          cache_save: false
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: ui-dist
+          path: ui/dist
+      - id: pw-cache
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - run: bunx playwright install --with-deps chromium webkit
+      - run: mise run test e2e --reporter=list,html
+        env:
+          CARET_SKIP_BUILD_UI: "1"
+      - if: failure()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+      - if: github.event_name == 'push' && steps.pw-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+  build-bin:
+    name: build bin
+    needs: build-ui
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5.2.1
+        with:
+          version: 2026.11.3
+          cache_save: false
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - run: bun install --frozen-lockfile
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: ui-dist
+          path: ui/dist
+      - run: mise run build bin
+        env:
+          CARET_SKIP_BUILD_UI: "1"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: bin
+          path: |
+            ui/dist
+            bin/caret-native
+            bin/ui
+          if-no-files-found: error
+  smoke:
+    name: smoke
+    needs: build-bin
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5.2.1
+        with:
+          version: 2026.11.3
+          cache_save: false
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - run: bun install --frozen-lockfile
+      # A multi-path artifact restores under the workspace root.
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: bin
+      - run: chmod +x bin/caret-native
+      - run: mise run smoke
+        env:
+          CARET_SKIP_BUILD_UI: "1"
+          CARET_SKIP_BUILD_BIN: "1"
