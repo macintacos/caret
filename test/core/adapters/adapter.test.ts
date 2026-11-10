@@ -98,6 +98,14 @@ test("the opencode adapter is registered and selectable via its id and env", () 
   expect(selectAdapter()).toBe(oc);
 });
 
+test("the pi adapter is registered and selectable via its id and env", () => {
+  expect(agentIds()).toContain("pi");
+  delete process.env.CARET_AGENT;
+  expect(selectAdapter("pi").id).toBe("pi");
+  process.env.CARET_AGENT = "pi";
+  expect(selectAdapter().id).toBe("pi");
+});
+
 test("selectAdapter() with no id returns the default adapter", () => {
   delete process.env.CARET_AGENT;
   expectAdapterShape(selectAdapter());

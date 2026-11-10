@@ -181,7 +181,7 @@ export interface CreateServerOptions {
   /** Whether the active adapter's approval carries notes to the agent, published
    * in /api/health. Omitted (default) means the field is absent from the health body. */
   approveCarriesNotes?: boolean;
-  /** The active adapter's id (e.g. "claude" | "opencode"), published in
+  /** The active adapter's id (e.g. "claude" | "opencode" | "pi"), published in
    * /api/health as `source` so the UI can adapt to the environment — e.g. an
    * OpenCode session (EXC-791). Omitted (default) drops the field from the body. */
   source?: string;
