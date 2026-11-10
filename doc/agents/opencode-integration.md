@@ -170,8 +170,8 @@ the *least* speculative — there is no foreign agent wire format to model. The 
 unit-tested in `test/bridge/`. The bridge is shared: `caret mcp` (`src/commands/mcp.ts`)
 runs Claude Code's `review_plan` tool through the same module, passing its own argv,
 `CARET_AGENT=claude-mcp`, and tool name, and pi's extension (`pi/caret.ts`, `pi/tool.ts`)
-reaches it the same way with `CARET_AGENT=pi`. Keep `review-bridge.ts` free of anything
-OpenCode-specific and of any import but node builtins. `caret steer`
+reaches it the same way with `CARET_AGENT=pi`. Keep `bridge/review-bridge.ts` free of
+anything OpenCode-specific and of any import but node builtins. `caret steer`
 (`src/adapters/claude/steer.ts`), Claude Code's title-steer hook, is a third consumer: it
 imports only `PLAN_TITLE_INSTRUCTION`, the title steer the plugin and `caret mcp` send
 too. The running-config mutation is `applyCaretConfig` in `opencode/caret.plugin.ts`, and
@@ -568,7 +568,7 @@ on v2). A version fault's remedy is to upgrade OpenCode; every other fault's is
 The array install has no marker-substitution step, so the plugin resolves what it needs at
 runtime from the package it ships in:
 
-- **Binary** (`resolveCaretBin`, in `review-bridge.ts`): the env var named by
+- **Binary** (`resolveCaretBin`, in `bridge/review-bridge.ts`): the env var named by
   `overrideVar` (`CARET_OPENCODE_BIN` for OpenCode) →
   `new URL("../bin/caret", import.meta.url)` (the `bin/caret` shim shipped beside the
   plugin in the package).
@@ -604,8 +604,8 @@ OpenCode's plugin loader iterates a module's exports (`Object.values(mod)`) and 
 `TypeError("Plugin export is not a function")` on the FIRST export it cannot coerce to a
 Plugin (a function, or a `{ server }` object) — one bad export rejects the whole module.
 caret's plugin modules export more than plugins: `caret.core.ts` exports the constants
-(`REVIEW_TOOL`, re-exported from `review-bridge.ts`, and `PLANNING_AGENTS`) and helpers
-the v1, v2 and TUI modules share, and each module exports helpers `test/opencode/`
+(`REVIEW_TOOL`, re-exported from `bridge/review-bridge.ts`, and `PLANNING_AGENTS`) and
+helpers the v1, v2 and TUI modules share, and each module exports helpers `test/opencode/`
 unit-tests. None of them can be OpenCode's entrypoint directly — the first non-Plugin
 export would reject it (a live EXC-339 bug, log line
 `failed to load plugin … "Plugin export is not a function"`).
