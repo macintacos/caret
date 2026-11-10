@@ -55,11 +55,15 @@ CARET
 # Seeds every line of shared cache case $1 under $home/.cache and prints its winning
 # version.
 seed_cache_case() {
-  local name version path win
+  local name version path win dest
   while read -r name version path win || [ -n "$name" ]; do
     case "$name" in '' | '#'*) continue ;; esac
     if [ "$name" != "$1" ]; then continue; fi
-    seed_caret "$home/.cache/$path" "$version"
+    case "$path" in
+    \~/*) dest="$home/${path#\~/}" ;;
+    *) dest="$home/.cache/$path" ;;
+    esac
+    seed_caret "$dest" "$version"
     if [ "$win" = win ]; then printf '%s' "$version"; fi
   done <"$CACHE_CASES"
 }
@@ -154,7 +158,7 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
     case "$name" in '' | '#'*) continue ;; esac
     case "$seen" in *" $name "*) continue ;; esac
     seen="$seen$name "
-    rm -rf "$home/.cache/opencode"
+    rm -rf "$home/.cache/opencode" "$home/.pi"
     want="$(seed_cache_case "$name")"
     # </dev/null: the launcher must not read the fixture this loop is consuming
     run launcher </dev/null

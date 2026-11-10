@@ -379,15 +379,20 @@ test("the candidates are every agent's caret dir and caret's own copies", () => 
   mkdirSync(join(v2Spec, "9/node_modules/@macintacos/caret"), { recursive: true });
   const ownedRoot = seedOwnedRoot("1.1.0");
   mkdirSync(join(ownedRootsDir(), ".1.2.0.9.tmp"));
+  const homeDir = mkdtempSync(join(tmpdir(), "caret-home-"));
+  const pi = join(homeDir, ".pi/agent/npm/node_modules/@macintacos/caret");
+  mkdirSync(pi, { recursive: true });
 
-  const dirs = withEnv({ CLAUDE_CONFIG_DIR: claudeDir, XDG_CACHE_HOME: cacheDir }, () =>
-    launcherCandidateDirs(),
+  const dirs = withEnv(
+    { CLAUDE_CONFIG_DIR: claudeDir, XDG_CACHE_HOME: cacheDir, HOME: homeDir },
+    () => launcherCandidateDirs(),
   );
 
   expect(dirs).toEqual([
     { dir: join(claudeRoots, "1.0.2"), owned: false },
     { dir: opencode, owned: false },
     { dir: v2Live, owned: false },
+    { dir: pi, owned: false },
     { dir: ownedRoot, owned: true },
   ]);
 });
@@ -397,6 +402,7 @@ test("an OpenCode-only machine still offers the owned root", () => {
   const env = {
     CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), "caret-claude-")),
     XDG_CACHE_HOME: mkdtempSync(join(tmpdir(), "caret-cache-")),
+    HOME: mkdtempSync(join(tmpdir(), "caret-home-")),
   };
 
   const dirs = withEnv(env, () => launcherCandidateDirs());
@@ -426,15 +432,19 @@ function cacheCases(): Map<string, CacheLine[]> {
 for (const [name, lines] of cacheCases()) {
   test(`the launcher picks the shared fixture's winner: ${name}`, () => {
     const cacheDir = mkdtempSync(join(tmpdir(), "caret-cache-"));
-    for (const { version, path } of lines) runnableRoot(join(cacheDir, path), manifest(version));
+    const homeDir = mkdtempSync(join(tmpdir(), "caret-home-"));
+    const resolve = (path: string) =>
+      path.startsWith("~/") ? join(homeDir, path.slice(2)) : join(cacheDir, path);
+    for (const { version, path } of lines) runnableRoot(resolve(path), manifest(version));
     const env = {
       CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), "caret-claude-")),
       XDG_CACHE_HOME: cacheDir,
+      HOME: homeDir,
     };
 
     const picked = withEnv(env, () => pickLauncherRoot(null, launcherCandidateDirs()));
 
     const winner = lines.find((l) => l.win);
-    expect(picked?.root).toBe(winner && join(cacheDir, winner.path));
+    expect(picked?.root).toBe(winner && resolve(winner.path));
   });
 }

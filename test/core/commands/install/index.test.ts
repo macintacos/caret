@@ -560,6 +560,7 @@ test("--refresh leaves the service a root at the installing caret that outlives 
     CARET_CONFIG_FILE: join(stateHome, "config.toml"),
     CLAUDE_CONFIG_DIR: claudeDir,
     XDG_CACHE_HOME: await mkdtemp(join(tmpdir(), "caret-install-cache-")),
+    HOME: await mkdtemp(join(tmpdir(), "caret-install-home-")),
   };
   const install = (refresh: boolean) => {
     const service = fakeServiceTarget({ status: { installed: true } });
