@@ -49,6 +49,8 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
+          # release-git.test.ts reads real history and release tags.
+          fetch-depth: 0
       - uses: jdx/mise-action@v5.2.1
         with:
           version: 2026.11.3
@@ -59,6 +61,9 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - run: bun install --frozen-lockfile
       - run: mise run test unit
+        env:
+          # The runner image presets this to ~/.config, which the test preload would keep.
+          XDG_CONFIG_HOME: /tmp/caret-test-xdg/config
   test-bats:
     name: test bats
     runs-on: ubuntu-latest

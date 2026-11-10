@@ -40,7 +40,7 @@ const UNREAD_MARKDOWN = "doc/RUNNING.md";
 
 /** The gate as if `claude` were on PATH, so the suite does not depend on the host's. */
 const runGate: typeof runPreflight = (deps) =>
-  runPreflight({ which: (bin) => `/usr/bin/${bin}`, ...deps });
+  runPreflight({ which: (bin) => `/usr/bin/${bin}`, concurrency: ALL_TASKS.length, ...deps });
 
 /** Fake spawner that resolves immediately from a per-task plan (default: pass). */
 function fakeSpawner(plan?: Record<string, SpawnOutcome>) {
