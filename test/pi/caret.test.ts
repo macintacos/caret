@@ -43,6 +43,7 @@ function fakePi() {
       shortcuts[key] = options;
     },
     appendEntry: () => {},
+    registerEntryRenderer: () => {},
     sendUserMessage: () => {},
     on: (event: string, handler: (...args: unknown[]) => void) => {
       const list = handlers[event] ?? [];
@@ -70,6 +71,7 @@ function host(holder: Record<symbol, unknown>, overrides: Partial<CaretHost> = {
     agentDir: "/tmp/caret-test-agent",
     warm: () => {},
     spawn: () => {},
+    stdout: () => {},
     ...overrides,
   };
 }
@@ -142,7 +144,7 @@ test("a second copy stays off and names both paths; the owner can reload", () =>
   expect(reload.tools.length).toBe(1);
 });
 
-test("only the owning copy registers /caret:plan", () => {
+test("only the owning copy registers caret's commands", () => {
   const holder = {};
   const owner = fakePi();
   installCaret(owner.pi, host(holder));
@@ -151,6 +153,8 @@ test("only the owning copy registers /caret:plan", () => {
   const old = fakePi();
   installCaret(old.pi, host({}, { version: "1.4.9" }));
   expect(Object.keys(owner.commands)).toContain("caret:plan");
+  expect(Object.keys(owner.commands)).toContain("caret:demo");
+  expect(Object.keys(owner.commands)).toContain("caret:doctor");
   expect(Object.keys(second.commands)).toEqual([]);
   expect(Object.keys(old.commands)).toEqual([]);
 });

@@ -1,11 +1,14 @@
-// Standing gate for the demo template. Claude Code reads it from the plugin root and
-// OpenCode's install embeds it, so dropping `templates/` from package.json's `files`, or
-// moving the template, breaks every installed `/caret:demo` with no error at install or
-// run time. Nothing but this suite catches it.
+// Standing gate for the demo template. Claude Code reads it from the plugin root,
+// OpenCode's install embeds it, and pi reads it at run time from beside its extension,
+// so dropping `templates/` from package.json's `files`, or moving the template, breaks
+// every installed `/caret:demo` with no error at install or run time. Nothing but this
+// suite catches it.
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { DEMO_TEMPLATE as PI_DEMO_TEMPLATE } from "@piext/demo.ts";
 import pkg from "@root/package.json" with { type: "json" };
 import { MARKDOWN_READ_BY_TESTS } from "@scripts/preflight.ts";
 import { DEMO_TEMPLATE } from "@/adapters/opencode/packaging.ts";
@@ -39,6 +42,17 @@ test(`${OPENCODE_COMMAND} embeds a template the package ships`, () => {
   expect(read(OPENCODE_COMMAND)).toContain("__CARET_DEMO_TEMPLATE__");
   expect(missing([DEMO_TEMPLATE])).toEqual([]);
   expect(unshipped([DEMO_TEMPLATE])).toEqual([]);
+});
+
+const PI_ENTRY = "pi/caret.ts";
+const piTemplate = relative(
+  REPO_ROOT,
+  fileURLToPath(new URL(PI_DEMO_TEMPLATE, pathToFileURL(join(REPO_ROOT, PI_ENTRY)))),
+);
+
+test(`${PI_ENTRY}'s /caret:demo reads a template the package ships`, () => {
+  expect(missing([piTemplate])).toEqual([]);
+  expect(unshipped([piTemplate])).toEqual([]);
 });
 
 test("preflight runs this suite when only the Markdown it reads changed", () => {

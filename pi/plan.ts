@@ -7,6 +7,7 @@
 import { mkdirSync } from "node:fs";
 
 import { PLAN_TITLE_INSTRUCTION, REVIEW_TOOL } from "../opencode/review-bridge.ts";
+import { sendAndWait } from "./follow-up.ts";
 import { landsInside } from "./gate.ts";
 import type { ReviewStore } from "./state.ts";
 
@@ -127,13 +128,7 @@ export function installPlanning(pi: PlanningApi, deps: PlanningDeps): void {
         return;
       }
       if (!isPlanning(ctx)) setPlanning(ctx, true);
-      pi.sendUserMessage(task || EARLIER_TASK, { deliverAs: "followUp" });
-      // ponytail: one macrotask lets the queued run start before waitForIdle; a run
-      // whose preflight awaits I/O (an extension's `input` handler, the auth check)
-      // starts later, so `pi -p "/caret:plan …"` may exit early. Fix once pi exposes the
-      // queued run's promise.
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await ctx.waitForIdle();
+      await sendAndWait(pi, ctx, task || EARLIER_TASK);
     },
   });
 

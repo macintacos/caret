@@ -5,6 +5,7 @@
 import type {
   AgentToolResult,
   CustomEntry,
+  EntryRenderer,
   ExtensionAPI,
   ExtensionCommandContext,
   ExtensionContext,
@@ -16,6 +17,8 @@ import type {
 
 import type caret from "@piext/caret.ts";
 import type { PiApi } from "@piext/caret.ts";
+import type { DemoCommandContext } from "@piext/demo.ts";
+import type { DoctorCommandContext, DoctorOutcome, renderDoctorEntry } from "@piext/doctor.ts";
 import type { NoticeContext, NoticeTheme } from "@piext/notice.ts";
 import type { PlanningCommandContext, PlanningContext, PlanningEntry } from "@piext/plan.ts";
 import type { PiTheme } from "@piext/render.ts";
@@ -31,6 +34,8 @@ export type SdkConformance = [
   Fits<Theme, PiTheme>,
   Fits<ExtensionContext, PlanningContext>,
   Fits<ExtensionCommandContext, PlanningCommandContext>,
+  Fits<ExtensionCommandContext, DemoCommandContext>,
+  Fits<ExtensionCommandContext, DoctorCommandContext>,
   Fits<CustomEntry, PlanningEntry>,
   Fits<ExtensionContext, NoticeContext>,
   Fits<Theme, NoticeTheme>,
@@ -38,4 +43,5 @@ export type SdkConformance = [
   Fits<PiTool, ToolDefinition<PiTool["parameters"], ReviewDetails>>,
   Fits<PiToolResult, AgentToolResult<ReviewDetails>>,
   Fits<typeof caret, ExtensionFactory>,
+  Fits<typeof renderDoctorEntry, EntryRenderer<DoctorOutcome>>,
 ];
