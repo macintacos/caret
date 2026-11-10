@@ -36,14 +36,14 @@ export default defineConfig<E2EOptions>({
   forbidOnly: true,
   // EXC-587: bound the fan-out. Each worker drives a browser tree plus a
   // spawned daemon, so an uncapped count is the dominant driver of the orphan
-  // storm when several preflight runs stack; cap it at half the cores
+  // storm when several runs stack; cap it at half the cores
   // (CARET_E2E_WORKERS overrides for a constrained host).
   workers: e2eWorkers,
   // EXC-587: a wedged suite self-aborts instead of needing an external SIGKILL
   // (the path that orphans a browser). Generous so it can't flake a slow or
   // loaded host's normal pass.
   globalTimeout: 15 * 60 * 1000,
-  // EXC-1050: budgets for the LOADED preflight host, not an idle one.
+  // EXC-1050: budgets for a LOADED host, not an idle one.
   // Playwright ships no default actionTimeout, navigationTimeout, or toPass
   // budget, so a starved click/goto/waitForFunction/toPass falls through to
   // whichever deadline is left rather than one of its own — which is why the
