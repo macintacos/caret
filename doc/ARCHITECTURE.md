@@ -409,7 +409,7 @@ which pi loads through the `pi` manifest in the `@macintacos/caret` package.
   folder. It also starts the caret daemon in the background while you plan, so the review
   opens fast.
 - **The notice.** A pending-plan notice and a `caret` footer status show a waiting review.
-  `/caret` or `f8` opens the waiting review in the browser.
+  `/caret` or `ctrl+alt+o` opens the waiting review in the browser.
 - **The commands.** `/caret:demo` presents the demo plan. `/caret:doctor` runs
   `caret doctor` and shows its report in the session.
 
