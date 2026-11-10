@@ -32,7 +32,10 @@ from the mapping rule; prefer the mapping.
   `test/adapters/opencode/`.
 - **`test/pi/`** — coverage for the repo-root `pi/` extension, the entrypoint pi loads. It
   mirrors `pi/`, not `src/`, and imports it through `@piext/*`; the pi *adapter* is tested
-  under `test/adapters/pi/`.
+  under `test/adapters/pi/`. `live.test.ts` is the one suite that runs real pi: it packs
+  it with `npm pack --ignore-scripts`, as `publish.yml` does, but without `ui/dist`,
+  installs it into a throwaway pi, and drives a review on Node through
+  `@test/support/pi-live.ts`, so it needs `node` (22.19+) and `npm` on `PATH`.
 - **`test/scripts/`** — coverage for `scripts/` (release tooling, the dev driver,
   preflight). These mirror `scripts/`, not `src/`, so they sit apart from the core/adapter
   split.
