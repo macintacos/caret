@@ -8,6 +8,7 @@ import { type DemoApi, installDemo } from "@piext/demo.ts";
 import { renderPlugin } from "@/adapters/opencode/deploy.ts";
 
 const TEMPLATE = "# A demo plan\n\nSome body.\n";
+const OPENCODE_COMMAND = join(import.meta.dir, "..", "..", "opencode", "commands", "demo.md");
 
 let tmp: string;
 let templatePath: string;
@@ -20,7 +21,7 @@ beforeEach(() => {
 
 afterEach(() => rmSync(tmp, { recursive: true, force: true }));
 
-function fakePi(path: string, planning = false) {
+function fakePi(files: { templatePath?: string; commandPath?: string } = {}, planning = false) {
   const commands: Record<string, (args: string, ctx: unknown) => Promise<void>> = {};
   const sent: { content: string; options: unknown }[] = [];
   const notices: { message: string; type?: string }[] = [];
@@ -38,7 +39,11 @@ function fakePi(path: string, planning = false) {
     },
     sendUserMessage: (content, options) => sent.push({ content, options }),
   };
-  installDemo(pi, { templatePath: path, isPlanning: (id) => planning && id === "s" });
+  installDemo(pi, {
+    templatePath: files.templatePath ?? templatePath,
+    commandPath: files.commandPath ?? OPENCODE_COMMAND,
+    isPlanning: (id) => planning && id === "s",
+  });
   return {
     sent,
     notices,
@@ -47,10 +52,8 @@ function fakePi(path: string, planning = false) {
   };
 }
 
-const OPENCODE_COMMAND = join(import.meta.dir, "..", "..", "opencode", "commands", "demo.md");
-
 test("/caret:demo sends OpenCode's rendered /caret:demo body as a follow-up and waits", async () => {
-  const pi = fakePi(templatePath);
+  const pi = fakePi();
   await pi.command();
   expect(pi.sent).toHaveLength(1);
   expect(pi.sent[0]?.options).toEqual({ deliverAs: "followUp" });
@@ -68,7 +71,7 @@ test("/caret:demo sends OpenCode's rendered /caret:demo body as a follow-up and 
 });
 
 test("/caret:demo refuses with one warning while the session is planning", async () => {
-  const pi = fakePi(join(tmp, "absent.md"), true);
+  const pi = fakePi({ templatePath: join(tmp, "absent.md") }, true);
   await pi.command();
   expect(pi.notices).toHaveLength(1);
   expect(pi.notices[0]?.type).toBe("warning");
@@ -76,13 +79,16 @@ test("/caret:demo refuses with one warning while the session is planning", async
   expect(pi.idle()).toBe(0);
 });
 
-test("an unreadable template is reported once and nothing is sent", async () => {
-  const missing = join(tmp, "absent.md");
-  const pi = fakePi(missing);
-  await pi.command();
-  expect(pi.notices).toHaveLength(1);
-  expect(pi.notices[0]?.type).toBe("error");
-  expect(pi.notices[0]?.message).toContain(missing);
-  expect(pi.sent).toEqual([]);
-  expect(pi.idle()).toBe(0);
-});
+test.each(["templatePath", "commandPath"] as const)(
+  "an unreadable %s is reported once and nothing is sent",
+  async (file) => {
+    const missing = join(tmp, "absent.md");
+    const pi = fakePi({ [file]: missing });
+    await pi.command();
+    expect(pi.notices).toHaveLength(1);
+    expect(pi.notices[0]?.type).toBe("error");
+    expect(pi.notices[0]?.message).toContain(missing);
+    expect(pi.sent).toEqual([]);
+    expect(pi.idle()).toBe(0);
+  },
+);

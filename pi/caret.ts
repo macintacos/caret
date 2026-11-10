@@ -19,7 +19,7 @@ import {
   type SpawnRunner,
   warmCaret,
 } from "../bridge/review-bridge.ts";
-import { DEMO_TEMPLATE, type DemoApi, installDemo } from "./demo.ts";
+import { DEMO_COMMAND, DEMO_TEMPLATE, type DemoApi, installDemo } from "./demo.ts";
 import { type DoctorApi, installDoctor } from "./doctor.ts";
 import { installNotice, type NoticeApi } from "./notice.ts";
 import { installPlanning, type PlanningApi } from "./plan.ts";
@@ -120,6 +120,7 @@ export function installCaret(pi: PiApi, host: CaretHost): void {
   });
   installNotice(pi, { store, bin, spawn: host.spawn });
   installDemo(pi, {
+    commandPath: fileURLToPath(new URL(DEMO_COMMAND, entryUrl)),
     templatePath: fileURLToPath(new URL(DEMO_TEMPLATE, entryUrl)),
     isPlanning: (id) => store.get(id).planning,
   });
