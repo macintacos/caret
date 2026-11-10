@@ -8,7 +8,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { sourceToggle } from "@test/e2e/support/chrome.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { PLAN_PREVIEW, planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -36,7 +36,7 @@ ${TS_BODY}
 async function openPreview(page: Page): Promise<void> {
   await page.goto("/");
   await planSurface(page);
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
 }
 

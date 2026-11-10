@@ -130,6 +130,14 @@ Open items first, then the log, newest first.
   paints the waiting plan as an inverse `warning` fill with a 🥕 emoji. Either align it
   with the 2026-11-05 OpenCode decision or record why the two hosts differ.
 
+## 2026-11-10: a plan opens in preview, and Source on `s` shows its markdown
+
+- **Preview is the default view.** The header's toggle is Source, bound to `s`; `p` is
+  unbound.
+- **A browser that used caret before moves once.** It lands on preview whatever it chose,
+  and a notice on the Source button says so until "Got it" or the first use of Source. A
+  new browser starts on preview and sees no notice.
+
 ## 2026-11-10: caret in pi: a blocking review, its own planning mode, and `ctrl+alt+c`
 
 - **The review blocks.** `caret_review_plan` holds the turn until you decide, as on Claude
@@ -1209,14 +1217,14 @@ type".
   next row's peek replaces it with no dwell and no re-entry.
 - **It closes when the reader turns elsewhere.** That is the pointer leaving the list, the
   list losing focus, a row picked, the query changing, a wheel, a pointer press or a
-  resize. It also closes on any key but a walk key (the arrows, Tab, Home and End) or `p`,
+  resize. It also closes on any key but a walk key (the arrows, Tab, Home and End) or `s`,
   Escape included. Escape still clears the query, closes the filter or closes the float as
   it would, so the peek never adds a step to backing out.
 - **The list or the plan moving on its own leaves it open.** A list scroll carries the
   peek with its row, as when the list keeps a walked row in view. The plan keeping the
   reader's place across a flip between source and Preview does not close it. Closing on
   every scroll had cancelled the dwell whenever a hovered row scrolled itself into view.
-- **`p` keeps it open on the other view.** The user asked for a peek "accurate to the
+- **`s` keeps it open on the other view.** The user asked for a peek "accurate to the
   current view type", and the flip is when that shows. The peek swaps in the new view's
   copy once that view has drawn the section, and closes if that takes more than three
   frames. On the 1,062-line rendering fixture the copy was there on the first frame, both

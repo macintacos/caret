@@ -14,7 +14,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { sourceToggle } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test, untilStill } from "@test/e2e/support/fixtures.ts";
 import {
   lineOf,
@@ -323,7 +323,7 @@ test("the preview frames each block in the same bezel, its tray inside the pane"
   daemon,
 }) => {
   await openBezelPlan(page, daemon);
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   const pres = page.locator(`${PLAN_PREVIEW} [data-source-code] + pre`);
   await expect(pres).toHaveCount(BLOCKS);
   const body = await page.evaluate(() => {

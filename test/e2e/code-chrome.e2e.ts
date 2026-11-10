@@ -26,7 +26,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { sourceToggle } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
 import { PLAN_PREVIEW, planSurface, settledMutations } from "@test/e2e/support/source-view.ts";
 
@@ -385,13 +385,13 @@ test.describe("on the preview", () => {
   }
 
   async function flipToPreview(page: Page): Promise<void> {
-    await previewToggle(page).click();
+    await sourceToggle(page).click();
     await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
     await expect(chromeFor(page, WIDE)).toBeVisible();
   }
 
   async function flipToSource(page: Page): Promise<void> {
-    await previewToggle(page).click();
+    await sourceToggle(page).click();
     await expect(page.locator(PLAN_PREVIEW)).toHaveCount(0);
     await expect.poll(async () => (await blockMetrics(page, WIDE)) !== null).toBe(true);
   }

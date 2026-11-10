@@ -1,6 +1,6 @@
 // Flipping between the source view and the preview fades the arriving view in. The fade is
-// a CSS animation, which only a real browser runs. The toggle's wiring — the button, `p`,
-// and compare mode switching `p` off — is unit-tested in
+// a CSS animation, which only a real browser runs. The toggle's wiring — the button, `s`,
+// and compare mode switching `s` off — is unit-tested in
 // ui/src/components/DiffPlanView.test.ts.
 
 import type { Page } from "@playwright/test";
@@ -31,11 +31,11 @@ test("each flip fades the arriving view in, and the first paint does not", async
   await openPlanForKeys(page, daemon, "# Plan\n\nBody.\n");
   expect(await fades(page)).toBe(0);
 
-  await page.keyboard.press("p");
+  await page.keyboard.press("s");
   await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
   await expect.poll(() => fades(page)).toBe(1);
 
-  await page.keyboard.press("p");
+  await page.keyboard.press("s");
   await expect(page.locator(PLAN_PREVIEW)).toHaveCount(0);
   await expect.poll(() => fades(page)).toBe(2);
 });

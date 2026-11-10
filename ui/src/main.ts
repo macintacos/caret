@@ -5,11 +5,13 @@ import "@/app.css";
 import { appearance } from "@/state/appearance.svelte.ts";
 import { migrateLegacyTheme } from "$lib/appearance.ts";
 import { startLogBridge, uiLog } from "$lib/log.ts";
+import { applyPreviewDefault } from "$lib/previewDefault.ts";
 
 // Carry a pre-mode single-theme pick over to the mode + slots model before
 // anything reads the appearance, so an existing user's explicit choice survives
 // the new `system` default (EXC-773).
 migrateLegacyTheme();
+applyPreviewDefault(() => localStorage);
 
 // Paint the saved appearance before the first paint so there's no flash of the
 // app.css default when the two differ (EXC-730). Instant, not a wipe: every other

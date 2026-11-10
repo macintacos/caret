@@ -194,6 +194,7 @@
   import FilePreview from "@/components/FilePreview.svelte";
   import FolderTree from "@/components/FolderTree.svelte";
   import PlanPreview from "@/components/PlanPreview.svelte";
+  import PreviewDefaultNotice from "@/components/PreviewDefaultNotice.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { memoLast } from "$lib/memoLast.ts";
   import { renderPlanMarkdown, type SourceSpan } from "$lib/planMarkdown.ts";
@@ -208,6 +209,7 @@
     writePlanOutline,
     writePlanView,
   } from "$lib/planView.ts";
+  import { isPreviewNoticeSeen, markPreviewNoticeSeen } from "$lib/previewDefault.ts";
 
   interface Props {
     /** The review whose current plan version is rendered. */
@@ -260,6 +262,10 @@
      * open diff reflows the moment those settings change (they live here, not in a
      * mirror App can resync). */
     settingsRev?: number;
+    /** Whether an App-level modal is open; the preview-default notice waits behind it. */
+    modalOpen?: boolean;
+    /** A counter App bumps when --fresh rewrites stored prefs, to re-read them here. */
+    prefsEpoch?: number;
     /** The review the comment editors compose against, forwarded to every composer
      * this view hosts, on either surface. App builds it, because the adapter id comes
      * from the health probe rather than the review record. */
@@ -282,6 +288,8 @@
     themeId,
     showShortcutHints = true,
     settingsRev = 0,
+    modalOpen = false,
+    prefsEpoch = 0,
     reviewContext,
   }: Props = $props();
 
@@ -350,6 +358,21 @@
   const showDiff = $derived(canCompare && compareStore.comparing);
 
   let planView = $state<PlanView>(readPlanView());
+  // The one-time preview-default notice, anchored to the Source button.
+  let noticeSeen = $state(isPreviewNoticeSeen());
+  let sourceToggleEl = $state<HTMLElement | null>(null);
+  // Skipped on mount (prefsEpoch starts 0; the reads above already ran); a --fresh
+  // rewrite of the stored prefs bumps it.
+  $effect(() => {
+    if (prefsEpoch === 0) return;
+    planView = readPlanView();
+    noticeSeen = isPreviewNoticeSeen();
+  });
+  function dismissNotice(): void {
+    if (noticeSeen) return;
+    noticeSeen = true;
+    markPreviewNoticeSeen();
+  }
   // Gates the flip fade, so a first paint doesn't fade under App's plan hand-off too.
   let viewFlipped = $state(false);
   const surface = $derived<PlanSurface>(showDiff ? "compare" : planView);
@@ -1921,7 +1944,7 @@
   });
   // The view flip keeps an open peek, which swaps in the other view's copy.
   const FLIP_CHORDS =
-    CANONICAL_KEYMAP.find((entry) => entry.id === "actions.togglePreview")?.keys ?? [];
+    CANONICAL_KEYMAP.find((entry) => entry.id === "actions.toggleSource")?.keys ?? [];
   function flipsView(e: KeyboardEvent): boolean {
     return (
       !showDiff &&
@@ -2559,11 +2582,11 @@
     setHeadingSlug(runs("headingTracking") ? slug : null);
   });
 
-  // The compare-toggle, preview-toggle + plan-search shortcuts, live entries over EXC-786's
+  // The compare-toggle, source-toggle + plan-search shortcuts, live entries over EXC-786's
   // reservations. Registered while the single-version view is mounted (i.e. an active
   // review), so they no-op with no review; the enabled guards mirror each control's
   // own availability — `d` toggles compare only when there are versions to compare,
-  // `p` flips the view only off compare, where its button shows,
+  // `s` flips the view only off compare, where its button shows,
   // `/` opens search only on the search surfaces, and n/N cycle only while a
   // search is committed. Mount-once: the closures read compareStore/surface/search*
   // live at dispatch, so a version or view change never churns the registry.
@@ -2579,7 +2602,7 @@
     );
     offs.push(
       shortcuts.register(
-        bind("actions.togglePreview", { run: togglePlanView, enabled: () => !showDiff }),
+        bind("actions.toggleSource", { run: togglePlanView, enabled: () => !showDiff }),
       ),
     );
     // `/` opens the plan search (EXC-832). Plan-content only; not gated on the plan
@@ -2684,6 +2707,7 @@
     writePlanView(next);
   }
   function togglePlanView(): void {
+    dismissNotice();
     setPlanView(planView === "preview" ? "source" : "preview");
   }
   function resumeScratch(key: string): void {
@@ -2962,16 +2986,22 @@
             <Button
               variant="secondary"
               size="sm"
-              class="preview-toggle float-chip"
-              aria-pressed={planView === "preview"}
-              aria-keyshortcuts={ariaKeyshortcutsFor("actions.togglePreview")}
+              bind:ref={sourceToggleEl}
+              class="source-toggle float-chip"
+              aria-pressed={planView === "source"}
+              aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleSource")}
               onclick={togglePlanView}
             >
-              Preview
+              Source
               {#if showShortcutHints}
-                <Kbd class="kbd-sm" aria-hidden="true">p</Kbd>
+                <Kbd class="kbd-sm" aria-hidden="true">s</Kbd>
               {/if}
             </Button>
+            <PreviewDefaultNotice
+              anchor={sourceToggleEl}
+              open={!noticeSeen && !modalOpen}
+              onDismiss={dismissNotice}
+            />
           {/if}
         {/snippet}
       </VersionComparePicker>
@@ -3578,7 +3608,7 @@
   :global(:root[data-pane-move]) .header-bed {
     view-transition-name: header-bed;
   }
-  :global(:root[data-pane-move]) .plan-header :global(.preview-toggle) {
+  :global(:root[data-pane-move]) .plan-header :global(.source-toggle) {
     view-transition-name: preview-key;
   }
 

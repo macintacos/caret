@@ -18,7 +18,7 @@
 // exist only while a real browser runs a real transition. planHandoff.test.ts covers the
 // decision to start one; what it plays is only observable here.
 
-import { alerts, openSettings, previewToggle } from "@test/e2e/support/chrome.ts";
+import { alerts, openSettings, sourceToggle } from "@test/e2e/support/chrome.ts";
 import {
   openApproveGuard,
   openRejectGuard,
@@ -577,7 +577,7 @@ test("a decision hands over from the preview, whose table headers animate on scr
   });
   await page.goto("/");
   await expect(page.locator(".diff-plan")).toBeVisible();
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   await expect(page.locator(".diff-plan th").first()).toBeVisible();
   await waitPastSafeModeGrace(page);
 

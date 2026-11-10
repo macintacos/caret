@@ -1549,7 +1549,7 @@ test("the header's outline key stands as far in from the pane's left as Preview 
       const pane = document.querySelector(".plan-pane")?.getBoundingClientRect();
       const outline = document.querySelector(".plan-header .outline-key")?.getBoundingClientRect();
       const preview = document
-        .querySelector(".plan-header .preview-toggle")
+        .querySelector(".plan-header .source-toggle")
         ?.getBoundingClientRect();
       if (!pane || !outline || !preview) return null;
       return Math.abs(outline.left - pane.left - (pane.right - preview.right));

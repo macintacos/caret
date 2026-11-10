@@ -20,6 +20,16 @@ container whose corner holds another rounded shape rounds at that shape's radius
 inset, so the comment composer, Settings below 640px wide, the popup menus and the Discard
 confirm bubble round wider than these.
 
+## The preview-default notice
+
+**Default:** a popover closes on Escape and on an outside click; Escape means one step
+out.
+
+**caret:** the notice on the Source button
+(`ui/src/components/PreviewDefaultNotice.svelte`) ignores both. Only "Got it" or the first
+use of Source ends it, so a reload before either shows it again. Escape still reaches the
+plan underneath: it closes a search or leaves visual mode as usual. Chosen on 2026-11-10.
+
 ## A key's spring
 
 **Default:** one fast transition with a decelerating curve for every state change, and

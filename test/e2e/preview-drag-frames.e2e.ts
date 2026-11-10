@@ -8,7 +8,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { sourceToggle } from "@test/e2e/support/chrome.ts";
 import { CACHE_TS, openPreview, ROWS_PROSE, WIDE } from "@test/e2e/support/drawer.ts";
 import { makeProject } from "@test/e2e/support/file-refs.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
@@ -86,7 +86,7 @@ test("a drawer drag over a long plan with many comments runs no long app script 
     await waitPastSafeModeGrace(page);
     // The first gesture unlocks audio in one long frame; spend it here, not in the drag.
     await openPreview(page);
-    await previewToggle(page).click();
+    await sourceToggle(page).click();
     await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
 
     const box = await page.getByRole("separator", { name: "Resize file preview" }).boundingBox();

@@ -24,7 +24,7 @@ import {
   commentNavigator,
   commentTally,
   discardConfirm,
-  previewToggle,
+  sourceToggle,
 } from "@test/e2e/support/chrome.ts";
 import { previewCursor } from "@test/e2e/support/cursor.ts";
 import { openApproveGuard, openRequestChangesDialog } from "@test/e2e/support/decision.ts";
@@ -140,7 +140,7 @@ async function seedPreview(
 }
 
 async function showPreview(page: Page): Promise<void> {
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
 }
 
@@ -533,13 +533,13 @@ test("flipping surfaces keeps every anchor and returns an open composer as a scr
     );
   const before = await anchors();
 
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   await expect(page.locator(PLAN_PREVIEW)).toHaveCount(0);
   await showPreview(page);
 
   await page.getByRole("button", { name: "Resume unsent comment" }).click();
   await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   await expect(page.locator(PLAN_PREVIEW)).toHaveCount(0);
 
   await expect.poll(anchors).toEqual(before);
@@ -1023,7 +1023,7 @@ test.describe("commenting from the preview", () => {
     const [fromPreview] = (await notes()) ?? [];
     expect(fromPreview?.lines).toEqual([start, end]);
 
-    await previewToggle(page).click();
+    await sourceToggle(page).click();
     await expect(page.locator(PLAN_PREVIEW)).toHaveCount(0);
     await expect(card(page, fromPreview?.id ?? "")).toBeVisible();
     expect((await notes())?.[0]).toEqual(fromPreview);

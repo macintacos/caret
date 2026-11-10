@@ -18,7 +18,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { sourceToggle } from "@test/e2e/support/chrome.ts";
 import { CACHE_TS, openPreview, ROWS_PROSE, WIDE } from "@test/e2e/support/drawer.ts";
 import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import type { Daemon } from "@test/e2e/support/fixtures.ts";
@@ -990,7 +990,7 @@ async function openPreviewDrawer(
   await page.goto("/");
   await waitPastSafeModeGrace(page);
   await openPreview(page);
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
 }
 

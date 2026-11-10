@@ -20,7 +20,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { openSettings, previewToggle } from "@test/e2e/support/chrome.ts";
+import { openSettings, sourceToggle } from "@test/e2e/support/chrome.ts";
 import { colorDistance } from "@test/e2e/support/color.ts";
 import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import {
@@ -605,7 +605,7 @@ test("the base font size sets the preview's text live, its headings scale with i
   await daemon.seed({ plan: "# Sizes\n\nBody text at the base size.\n" });
   await page.goto("/");
   await planSurface(page);
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   const preview = page.locator(PLAN_PREVIEW);
   const sizes = () =>
     preview.evaluate((root) => {

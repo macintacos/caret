@@ -177,7 +177,7 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - **An outline row peeks at its section.** Resting on a row for 350ms, by the pointer or
   by the keys, opens a peek past the outline's right edge, level with the row and kept
   0.5rem inside the plan pane, clear of an open file. Once open it follows the pointer and
-  the keys to the next row at once. `p` flips it to the other view with the plan, or
+  the keys to the next row at once. `s` flips it to the other view with the plan, or
   closes it if that view has not drawn the section within three frames.
   - A filter query opens it the same way on the row the query selects, 350ms after the
     last keystroke. A query that matches nothing opens none, and neither does emptying the
@@ -201,7 +201,7 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
     3rem; one that fits ends on its text, unfaded. It measures again when its copy grows.
   - It closes on the reader's own input: the pointer leaving the list, the list losing
     focus, a wheel, a pointer press, a resize, a row picked, the query changing, or a key
-    other than a walk key (the arrows, Tab, Home and End) or `p`, Escape included. A list
+    other than a walk key (the arrows, Tab, Home and End) or `s`, Escape included. A list
     scroll carries it with its row, and the plan keeping its place across a flip leaves it
     open.
   - It is `inert`: it takes no pointer and no focus, and screen readers skip it. It

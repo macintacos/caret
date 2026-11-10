@@ -301,7 +301,7 @@ body {
   animation: lead-in var(--dur-state) var(--ease-out) both;
 }
 /* Going into compare, the controls come in where Versions slides out from, so they wait
-   until it has passed, as Preview does coming out. */
+   until it has passed, as Source does coming out. */
 :root[data-pane-move~="exit"]::view-transition-new(compare-controls) {
   animation: lead-in-late var(--dur-state) var(--ease-out) both;
 }

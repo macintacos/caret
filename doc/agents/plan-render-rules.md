@@ -14,8 +14,8 @@ the reviewer sees is drawn over the characters they would copy. Everything up to
 preview renderer is the contract the whole `ui/src/lib/diffview/` layer shares; each
 module's own header carries only what is local to it. The preview is a second surface
 rendered from the same stored text, not an exception to transform-in-place. The reader
-switches between the two with the plan view's **Preview** toggle; compare mode always
-shows source.
+switches between the two with the plan view's **Source** toggle; compare mode always shows
+source.
 
 ## Transform in place (EXC-855)
 
