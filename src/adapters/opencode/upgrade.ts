@@ -33,6 +33,7 @@ import {
   opencodeNpmCacheDir,
   opencodeNpmLocalCacheDir,
 } from "@/adapters/opencode/paths.ts";
+import { NPM_UNREACHABLE, npmUnreadable } from "@/doctor/checks.ts";
 import type { Check } from "@/doctor/report.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
 import { isNewer, parseVersionTriple, type VersionTriple } from "@/lib/semver.ts";
@@ -72,10 +73,10 @@ export function upgradeVerdict(input: {
 }): UpgradeVerdict {
   const { entry, cached, published } = input;
   if (published === null) {
-    return { kind: "unknown", reason: "could not reach npm for the published caret version" };
+    return { kind: "unknown", reason: NPM_UNREACHABLE };
   }
   if (parseVersionTriple(published) === null) {
-    return { kind: "unknown", reason: `npm reported an unreadable version (${published})` };
+    return { kind: "unknown", reason: npmUnreadable(published) };
   }
   if (entry === null) return { kind: "fresh" };
 

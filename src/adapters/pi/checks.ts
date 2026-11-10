@@ -14,6 +14,7 @@ import {
   piRemoveArg,
   readPiSettings,
 } from "@/adapters/pi/install.ts";
+import { NPM_UNREACHABLE, npmUnreadable } from "@/doctor/checks.ts";
 import type { Check } from "@/doctor/report.ts";
 import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
 
@@ -119,9 +120,8 @@ function versionCheck(entry: NpmEntry, published: string | null): Check {
   });
   const { version, source, pinned } = entry;
   if (version === null) return unknown(notInstalled(entry));
-  if (published === null) return unknown("could not reach npm for the published caret version");
-  if (parseVersionTriple(published) === null)
-    return unknown(`npm reported an unreadable version (${published})`);
+  if (published === null) return unknown(NPM_UNREACHABLE);
+  if (parseVersionTriple(published) === null) return unknown(npmUnreadable(published));
   if (parseVersionTriple(version) === null)
     return unknown(`pi's caret has an unreadable version (${version})`);
   if (!isNewer(published, version)) {
