@@ -20,7 +20,7 @@ export function parseVersionTriple(v: string): VersionTriple | null {
 /** True when `latest` is a strictly higher semver than `current`; an unparseable version
  * on either side compares false, so the check never claims staleness it can't read.
  *
- * A deliberate twin of the same function in `opencode/review-bridge.ts`: that file is
+ * A deliberate twin of the same function in `bridge/review-bridge.ts`: that file is
  * shipped source that OpenCode's plugin and pi's extension load straight out of the
  * package, so it cannot import from `src/`. */
 export function isNewer(latest: string, current: string): boolean {

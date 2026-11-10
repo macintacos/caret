@@ -6,12 +6,14 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 import type { InstallProbe } from "@/adapters/adapter.ts";
+import { expandTilde, piNpmPackageDir, piSettingsFile } from "@/adapters/pi/paths.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
 
 const CARET_PACKAGE = "@macintacos/caret";
 /** caret's unpinned npm source, as `pi install` takes it; installing it over a pinned
  * entry unpins it. */
 export const CARET_NPM_SOURCE = `npm:${CARET_PACKAGE}`;
+
 const NPM_SOURCE = /^npm:@macintacos\/caret(@[^/]+)?$/;
 
 /** pi's user `settings.json`; `packages` is the one key caret interprets. */
@@ -20,24 +22,10 @@ export interface PiSettings {
   [key: string]: unknown;
 }
 
-/** pi's agent dir: `PI_CODING_AGENT_DIR`, tilde-expanded as pi does, else
- * `~/.pi/agent`. */
-export function piAgentDir(env: NodeJS.ProcessEnv = process.env, home = homedir()): string {
-  const overrideDir = env.PI_CODING_AGENT_DIR;
-  if (!overrideDir) return join(home, ".pi", "agent");
-  return expandTilde(overrideDir, home);
-}
-
-function expandTilde(path: string, home: string): string {
-  if (path === "~") return home;
-  if (path.startsWith("~/")) return join(home, path.slice(2));
-  return path;
-}
-
 /** pi's user `settings.json` under `agentDir`, or null when unreadable or not a
  * JSON object. */
 export function readPiSettings(agentDir: string): PiSettings | null {
-  const json = readJsonFileSync(join(agentDir, "settings.json"));
+  const json = readJsonFileSync(piSettingsFile(agentDir));
   return json !== null && typeof json === "object" && !Array.isArray(json)
     ? (json as PiSettings)
     : null;
@@ -117,7 +105,7 @@ function caretEntry(
 ): PiCaretEntry | null {
   const npmMatch = NPM_SOURCE.exec(source);
   if (npmMatch) {
-    const dir = join(agentDir, "npm", "node_modules", CARET_PACKAGE);
+    const dir = piNpmPackageDir(agentDir, CARET_PACKAGE);
     const version = manifestVersion(readJsonFileSync(join(dir, "package.json")));
     return { source, dir, version, extensions, form: "npm", pinned: npmMatch[1] !== undefined };
   }

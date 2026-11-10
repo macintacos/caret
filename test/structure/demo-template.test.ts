@@ -8,7 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { DEMO_TEMPLATE as PI_DEMO_TEMPLATE } from "@piext/demo.ts";
+import { DEMO_COMMAND as PI_DEMO_COMMAND, DEMO_TEMPLATE as PI_DEMO_TEMPLATE } from "@piext/demo.ts";
 import pkg from "@root/package.json" with { type: "json" };
 import { MARKDOWN_READ_BY_TESTS } from "@scripts/preflight.ts";
 import { DEMO_TEMPLATE } from "@/adapters/opencode/packaging.ts";
@@ -45,14 +45,13 @@ test(`${OPENCODE_COMMAND} embeds a template the package ships`, () => {
 });
 
 const PI_ENTRY = "pi/caret.ts";
-const piTemplate = relative(
-  REPO_ROOT,
-  fileURLToPath(new URL(PI_DEMO_TEMPLATE, pathToFileURL(join(REPO_ROOT, PI_ENTRY)))),
-);
+const fromPiEntry = (rel: string) =>
+  relative(REPO_ROOT, fileURLToPath(new URL(rel, pathToFileURL(join(REPO_ROOT, PI_ENTRY)))));
+const piPaths = [fromPiEntry(PI_DEMO_COMMAND), fromPiEntry(PI_DEMO_TEMPLATE)];
 
-test(`${PI_ENTRY}'s /caret:demo reads a template the package ships`, () => {
-  expect(missing([piTemplate])).toEqual([]);
-  expect(unshipped([piTemplate])).toEqual([]);
+test(`${PI_ENTRY}'s /caret:demo reads only files the package ships`, () => {
+  expect(missing(piPaths)).toEqual([]);
+  expect(unshipped(piPaths)).toEqual([]);
 });
 
 test("preflight runs this suite when only the Markdown it reads changed", () => {

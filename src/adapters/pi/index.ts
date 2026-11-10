@@ -5,7 +5,8 @@
 import { homedir } from "node:os";
 
 import type { AgentAdapter } from "@/adapters/adapter.ts";
-import { piAgentDir, readPiInstallState } from "@/adapters/pi/install.ts";
+import { readPiInstallState } from "@/adapters/pi/install.ts";
+import { piAgentDir } from "@/adapters/pi/paths.ts";
 import { piSkillRoots, readPiSkillDescription, readPiSkills } from "@/adapters/pi/skills.ts";
 import { flatDecision, flatDenyLine, parseCaretEnvelope } from "@/adapters/wire.ts";
 

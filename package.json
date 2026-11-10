@@ -38,6 +38,7 @@
     "commands/",
     "opencode/",
     "pi/",
+    "bridge/",
     "templates/",
     "mod/hooks/band.tsx",
     "mod/band.d.ts",

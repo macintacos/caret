@@ -84,7 +84,8 @@ check = false
 loads caret but can't review a plan file the agent wrote, so the agent sends the plan text
 instead. See [the OpenCode adapter](doc/ARCHITECTURE.md#the-opencode-adapter) for the
 by-hand equivalents, for pinning a version in OpenCode's plugin array (`plugin` on v1,
-`plugins` on v2), and for what each agent's install touches;
+`plugins` on v2); [`caret install`](doc/ARCHITECTURE.md#installing-with-caret-install)
+covers what each agent's install touches;
 [the Claude Code adapter](doc/ARCHITECTURE.md#the-claude-code-adapter) covers the hooks
 `caret` registers there. `caret install` also installs into pi 1.5.0 or later when `pi` is
 on your PATH; run `/reload` in pi or restart it to pick caret up. `caret install` and
@@ -127,10 +128,8 @@ pi has no plan mode of its own, so `caret` brings a small one:
    task turns planning off. Outside planning, a bare `/caret:plan` plans what you asked
    for earlier in the session.
 2. While a review waits, a notice sits above the editor and the footer reads
-   `^ plan waiting`. `/caret` or `ctrl+alt+c` opens the plan in your browser. On macOS,
-   `ctrl+alt+c` needs your terminal to send Option as Alt (Terminal.app calls it Meta): in
-   Terminal.app turn on **Use Option as Meta key**; in iTerm2 set the Option key to
-   **Esc+**. `/caret` works in every terminal.
+   `^ plan waiting`. `/caret` or `f8` opens the plan in your browser. On a Mac keyboard
+   whose top row is media keys, press `fn`+`f8`.
 3. Approve, and the agent implements. Request changes, and it revises and resubmits. Esc
    in pi cancels a waiting review, and the agent is told not to implement the plan.
 

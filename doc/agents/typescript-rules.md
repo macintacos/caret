@@ -72,19 +72,19 @@ third-party):
   `architecture-rules.md`.
 - **`$lib`** — the UI's `ui/src/lib/` directory, the prefix shadcn-svelte's copied
   components and `components.json` assume. See `svelte-rules.md` / `shadcn-rules.md`.
-- **`@test/*`, `@scripts/*`, `@oc/*`, `@piext/*`, `@ui/*`** — the repo's other roots, so a
-  test never addresses a target by counting `../` hops (EXC-879). `@oc/*` maps
-  `opencode/`, deliberately not `@opencode/*`, because `@opencode` is a real npm scope
-  (`@opencode/plugin`) that a local file could shadow. `@piext/*` maps `pi/`, not `@pi/*`,
-  for the same reason: `@pi` could be a real npm scope. `@test/*` also names *which*
-  harness is meant: `test/support/` (bun) and `test/e2e/support/` (Playwright) are two
-  different directories that a bare `./support/x` could not distinguish. These are
+- **`@test/*`, `@scripts/*`, `@oc/*`, `@piext/*`, `@bridge/*`, `@ui/*`** — the repo's
+  other roots, so a test never addresses a target by counting `../` hops (EXC-879).
+  `@oc/*` maps `opencode/`, deliberately not `@opencode/*`, because `@opencode` is a real
+  npm scope (`@opencode/plugin`) that a local file could shadow. `@piext/*` maps `pi/`,
+  not `@pi/*`, for the same reason: `@pi` could be a real npm scope. `@test/*` also names
+  *which* harness is meant: `test/support/` (bun) and `test/e2e/support/` (Playwright) are
+  two different directories that a bare `./support/x` could not distinguish. These are
   top-level rather than grafted under `@/` deliberately — `@/` means "this program's
   source root", and widening it to "any root" would cost the one alias with a crisp
-  definition. `src/` may import only `@oc/review-bridge.ts` through `@oc/*`: the plugin
-  module would drag `@opencode-ai/plugin` into the bundle. The shared bridge has to live
-  in `opencode/`, the one directory that ships as unbundled source, because the OpenCode
-  plugin can import only relative siblings; `bun build` inlines it into `dist/cli.js`.
+  definition. `src/` reaches the shipped host directories only through
+  `@bridge/review-bridge.ts`: an `@oc/*` or `@piext/*` import would drag a host SDK into
+  the bundle. The bridge ships as unbundled source in `bridge/`, which the OpenCode plugin
+  and pi's extension import by relative path; `bun build` inlines it into `dist/cli.js`.
   `test/structure/dependency-placement.test.ts` enforces the rule.
 - **`@root/package.json`** — exact rather than a `@root/*` wildcard, because the repo root
   is not a source root: `@root/*` would alias the whole tree at once, including every root

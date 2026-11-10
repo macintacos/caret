@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import type { SpawnRunner } from "@oc/review-bridge.ts";
+import type { SpawnRunner } from "@bridge/review-bridge.ts";
 import {
   DOCTOR_ENTRY,
   DOCTOR_TIMEOUT_MS,

@@ -5,10 +5,11 @@ import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { decisionText, REVIEW_TOOL } from "@oc/review-bridge.ts";
+import { decisionText, REVIEW_TOOL } from "@bridge/review-bridge.ts";
 import { DOCTOR_ENTRY, FAILED_VERDICT, PASSED_VERDICT } from "@piext/doctor.ts";
 import { sessionTag } from "@piext/plan.ts";
 import { daemonClient } from "@test/support/daemon.ts";
+import { withEnv } from "@test/support/env.ts";
 import { FAUX_PLAN_TITLE } from "@test/support/pi-faux-provider.ts";
 import {
   type PiRun,
@@ -23,6 +24,7 @@ import {
   waitForReview,
 } from "@test/support/pi-live.ts";
 import { until } from "@test/support/poll.ts";
+import { rumdlBin } from "@/config/paths.ts";
 
 requireNode();
 
@@ -30,9 +32,6 @@ const FEEDBACK = "LIVE-CHECK-FEEDBACK: add a rollback step";
 const REVIEW_WAIT_MS = 20_000;
 const EXIT_WAIT_MS = 15_000;
 const DOCTOR_EXIT_WAIT_MS = 45_000;
-// Well under SUPERVISOR_WINDOW_MS (src/daemon/lifecycle.ts, ~14 s), `caret review`'s retry
-// window against a dead daemon, so the hang case times out while the client is alive.
-const HANG_WAIT_MS = 3_000;
 
 let root: string;
 let pkgDir: string;
@@ -57,6 +56,8 @@ test("a deny's feedback reaches pi's model as the tool result", async () => {
   const review = await waitForReview(sandbox, pi, REVIEW_WAIT_MS);
   expect(review.sessionId).toBe(piSessionId(sandbox));
   expect(review.title).toBe(FAUX_PLAN_TITLE);
+  // The daemon reflowed the plan with the run's own rumdl, so the suite stays offline.
+  expect(existsSync(withEnv({ XDG_STATE_HOME: sandbox.env.XDG_STATE_HOME }, rumdlBin))).toBe(false);
 
   const res = await daemonClient(sandbox.url).resolve(String(review.id), {
     behavior: "deny",
@@ -157,7 +158,11 @@ test("a daemon that never answers fails the wait and leaves nothing running", as
   });
   try {
     pi = runPi(sandbox, "Plan a change");
-    await expect(waitForReview(sandbox, pi, HANG_WAIT_MS)).rejects.toThrow(/^waitFor: timed out$/);
+    // Once the packed `caret review` is up and stuck on the silent port, a single probe
+    // (budget 0) shows the wait fails instead of hanging, and teardown meets a live client.
+    const client = join(pkgDir, "dist", "cli.js review");
+    expect(await until(() => strays(client).length > 0, REVIEW_WAIT_MS)).toBe(true);
+    await expect(waitForReview(sandbox, pi, 0)).rejects.toThrow(/^waitFor: timed out$/);
     await stopPiTree(pi, root);
   } finally {
     silent.stop(true);

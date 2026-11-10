@@ -1,24 +1,24 @@
-// `/caret:demo` for pi: sends the agent caret's demo template, read from beside the
-// package on every run, so a new user sees a review end to end.
+// `/caret:demo` for pi: sends the agent OpenCode's `/caret:demo` prompt with caret's demo
+// template in place of its marker, both read from beside the package on every run, so a
+// new user sees a review end to end.
 
 import { readFile } from "node:fs/promises";
 
-import { REVIEW_TOOL } from "../opencode/review-bridge.ts";
+import { errorMessage } from "../bridge/review-bridge.ts";
 import { sendAndWait } from "./follow-up.ts";
 
-/** The demo template, relative to the extension entry `pi/caret.ts`. */
+/** The demo template and OpenCode's `/caret:demo` command, relative to the extension
+ * entry `pi/caret.ts`. Both hosts submit through the same review tool, so the command's
+ * body is pi's prompt too. */
 export const DEMO_TEMPLATE = "../templates/demo.md";
+export const DEMO_COMMAND = "../opencode/commands/demo.md";
 
-/** The prompt sent ahead of the template. Keep in step with opencode/commands/demo.md,
- * which it mirrors. */
-export const DEMO_INSTRUCTION = [
-  `The demo template is at the end of this message. Follow its leading HTML comment exactly to fill the slots, then call the \`${REVIEW_TOOL}\` tool with everything after that comment as the \`plan\` argument. Do **no** other research and edit **no** file — this is only to exercise caret's plan-review flow.`,
-  "",
-  "caret opens the plan in a local browser UI for inline review. When the user approves or requests changes, the decision returns as the tool result:",
-  "",
-  "- **Approved** → acknowledge that caret approved the demo plan, and stop.",
-  `- **Changes requested** → revise the plan accordingly, keeping it about the same size, and call \`${REVIEW_TOOL}\` again (caret captures it as a new version).`,
-].join("\n");
+const TEMPLATE_MARKER = "__CARET_DEMO_TEMPLATE__";
+const FRONTMATTER = /^---\n[\s\S]*?\n---\n+/;
+
+/** `command`'s body with `template` taken literally in place of its marker. */
+const demoPrompt = (command: string, template: string): string =>
+  command.replace(FRONTMATTER, "").replace(TEMPLATE_MARKER, () => template);
 
 export type DemoCommandContext = {
   ui: { notify(message: string, type?: "info" | "warning" | "error"): void };
@@ -39,13 +39,18 @@ export type DemoApi = {
   sendUserMessage(content: string, options: { deliverAs: "followUp" }): void;
 };
 
-/** Registers `/caret:demo`, which reads the template at `templatePath` on every run and
- * refuses while the session is planning, since approving the demo would end planning. */
+/** Registers `/caret:demo`, which reads the command at `commandPath` and the template at
+ * `templatePath` on every run and refuses while the session is planning, where approving
+ * the demo could end planning for the real task. */
 export function installDemo(
   pi: DemoApi,
-  deps: { templatePath: string; isPlanning: (sessionId: string) => boolean },
+  deps: {
+    commandPath: string;
+    templatePath: string;
+    isPlanning: (sessionId: string) => boolean;
+  },
 ): void {
-  const { templatePath, isPlanning } = deps;
+  const { commandPath, templatePath, isPlanning } = deps;
   pi.registerCommand("caret:demo", {
     description: "Demo caret: review a short plan about this repo",
     handler: async (_args, ctx) => {
@@ -56,18 +61,19 @@ export function installDemo(
         );
         return;
       }
-      let template: string;
+      let prompt: string;
       try {
-        template = await readFile(templatePath, "utf-8");
+        const [command, template] = await Promise.all([
+          readFile(commandPath, "utf-8"),
+          readFile(templatePath, "utf-8"),
+        ]);
+        prompt = demoPrompt(command, template);
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        ctx.ui.notify(
-          `caret couldn't read its demo template at ${templatePath}: ${message}`,
-          "error",
-        );
+        // The error names the file that failed.
+        ctx.ui.notify(`caret couldn't read its demo prompt: ${errorMessage(err)}`, "error");
         return;
       }
-      await sendAndWait(pi, ctx, `${DEMO_INSTRUCTION}\n\n${template}`);
+      await sendAndWait(pi, ctx, prompt);
     },
   });
 }

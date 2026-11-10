@@ -25,7 +25,13 @@ from the mapping rule; prefer the mapping.
   own directory; it never edits `test/core/`. A `src/commands/` module that exists for one
   agent (e.g. `src/commands/mcp.ts`, Claude Code's MCP server) is tested here too, not
   under `test/core/commands/`: its suite carries that agent's vocabulary, and the boundary
-  rule wins over the mapping rule.
+  rule wins over the mapping rule. `test/adapters/fixtures/` holds the shared envelope
+  fixture for caret's own review wire (`review-request-stdin.json`), beside
+  `test/adapters/wire.test.ts`; the OpenCode, pi and Claude MCP wire-contract suites all
+  read it.
+- **`test/bridge/`** — coverage for the repo-root `bridge/` module
+  (`bridge/review-bridge.ts`), the review bridge the OpenCode plugins, the pi extension
+  and `caret mcp` share. It mirrors `bridge/` and imports it through `@bridge/*`.
 - **`test/opencode/`** — coverage for the repo-root `opencode/` program, the package
   entrypoint OpenCode loads. It mirrors `opencode/`, not `src/`, which is why it sits
   outside the core/adapter split — the OpenCode *adapter* is tested under

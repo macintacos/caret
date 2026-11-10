@@ -44,21 +44,42 @@ test("rejects output that is not a version", () => {
   expect(parseOpencodeVersion("opencode 2.0")).toBeNull();
 });
 
-test("reads the version a binary prints", () => {
-  expect(readOpencodeVersion({ bin: shim("echo opencode v2.0.18") })).toEqual([2, 0, 18]);
-  expect(readOpencodeVersion({ bin: shim("echo 1.18.29") })).toEqual([1, 18, 29]);
+test("reads the version a binary prints", async () => {
+  expect(await readOpencodeVersion({ bin: shim("echo opencode v2.0.18") })).toEqual([2, 0, 18]);
+  expect(await readOpencodeVersion({ bin: shim("echo 1.18.29") })).toEqual([1, 18, 29]);
 });
 
-test("a failing binary reads as unknown", () => {
-  expect(readOpencodeVersion({ bin: shim("echo 2.0.18; exit 1") })).toBeNull();
+test("a failing binary reads as unknown", async () => {
+  expect(await readOpencodeVersion({ bin: shim("echo 2.0.18; exit 1") })).toBeNull();
 });
 
-test("a hung binary is killed at the bound, even with a grandchild holding stdout", () => {
+test("a hung binary is killed at the bound, even with a grandchild holding stdout", async () => {
   const bin = shim("sleep 30; echo 2.0.18");
   const start = performance.now();
-  expect(readOpencodeVersion({ bin, timeoutMs: 200 })).toBeNull();
+  expect(await readOpencodeVersion({ bin, timeoutMs: 200 })).toBeNull();
   expect(performance.now() - start).toBeLessThan(1_000);
 });
+
+test("a hung binary's grandchildren die with it at the bound", async () => {
+  const pidFile = join(dir, "grandchild.pid");
+  const bin = shim(`sleep 5 & echo $! > ${pidFile}; wait`);
+  const start = performance.now();
+  expect(await readOpencodeVersion({ bin, timeoutMs: 500 })).toBeNull();
+  expect(performance.now() - start).toBeLessThan(1_500);
+  const grandchild = Number(await Bun.file(pidFile).text());
+  expect(grandchild).toBeGreaterThan(0);
+  await Bun.sleep(100);
+  expect(isAlive(grandchild)).toBe(false);
+});
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 test("v2 loads caret from plugins; v1 and an unknown host from plugin", () => {
   expect(pluginKeyFor([2, 0, 18])).toBe("plugins");
@@ -157,11 +178,14 @@ test("opencodeBinsOnPath skips a missing dir, a non-executable file, and a broke
   expect(opencodeBinsOnPath(path)).toEqual([good]);
 });
 
-test("readOpencodeHosts reads each binary under its own bound, a hung one as unknown", () => {
+test("readOpencodeHosts reads each binary under its own bound, a hung one as unknown", async () => {
   const hung = writeOpencodeShim(join(dir, "hung"), "sleep 30; echo 2.0.18");
   const good = writeOpencodeShim(join(dir, "good"), "echo opencode v2.0.18");
   const start = performance.now();
-  const hosts = readOpencodeHosts([join(dir, "hung"), join(dir, "good")].join(delimiter), 200);
+  const hosts = await readOpencodeHosts(
+    [join(dir, "hung"), join(dir, "good")].join(delimiter),
+    200,
+  );
   expect(performance.now() - start).toBeLessThan(1_000);
   expect(hosts).toEqual([host(null, hung), host([2, 0, 18], good)]);
 });

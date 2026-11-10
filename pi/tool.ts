@@ -15,7 +15,7 @@ import {
   resolvePlanSource,
   runReviewViaCaret,
   type SpawnRunner,
-} from "../opencode/review-bridge.ts";
+} from "../bridge/review-bridge.ts";
 import {
   callLine,
   type PiTheme,
@@ -112,13 +112,13 @@ export function reviewTool(deps: { bin: string; run: SpawnRunner; store: ReviewS
     parameters,
     executionMode: "sequential",
     async execute(_id, params, signal, onUpdate, ctx) {
-      // Models sometimes prefix paths with `@`.
-      const path = params.path?.replace(/^@/, "");
-      const source = resolvePlanSource({ plan: params.plan, path }, ctx.cwd, readRegularFile);
-      if ("error" in source) return toolResult(source.error, { state: "failed" });
       const sessionId = ctx.sessionManager.getSessionId();
       let outcome: ReviewOutcome = "failed";
       try {
+        // Models sometimes prefix paths with `@`.
+        const path = params.path?.replace(/^@/, "");
+        const source = resolvePlanSource({ plan: params.plan, path }, ctx.cwd, readRegularFile);
+        if ("error" in source) return toolResult(source.error, { state: "failed" });
         const decision = await runReviewViaCaret(
           buildEnvelope(source.plan, {
             sessionID: sessionId,

@@ -23,7 +23,7 @@
     // program rather than owning a tsconfig — it is node/bun code tsc checks
     // alongside src and test, not a separate build like ui/.)
     //
-    // The four wildcard entries below cover the other roots this program spans,
+    // The wildcard entries below cover the other roots this program spans,
     // so nothing in test/ has to address a target by counting `../` hops
     // (EXC-879). They are top-level rather than grafted under `@/` on purpose:
     // `@/` means "this program's source root", and widening it to "any root"
@@ -48,6 +48,7 @@
       "@scripts/*": ["./scripts/*"],
       "@oc/*": ["./opencode/*"],
       "@piext/*": ["./pi/*"],
+      "@bridge/*": ["./bridge/*"],
       "@ui/*": ["./ui/*"],
       "@root/package.json": ["./package.json"]
     }
@@ -58,6 +59,7 @@
     "test/**/*.ts",
     "opencode/**/*.ts",
     "pi/**/*.ts",
+    "bridge/**/*.ts",
     "*.ts"
   ],
   "exclude": ["node_modules", "bin", "ui", "spike"]

@@ -13,15 +13,15 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { buildEnvelope, parseDecision } from "@bridge/review-bridge.ts";
 import { APPROVE_AND_BUILD } from "@oc/caret.plugin.v2.ts";
-import { buildEnvelope, parseDecision } from "@oc/review-bridge.ts";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { emitWire as emitWireVia } from "@test/support/wire-contract.ts";
 import { APPROVE_VARIANTS, BUILD_VARIANT } from "@/adapters/opencode/approve.ts";
 import { opencodeAdapter } from "@/adapters/opencode/index.ts";
 import type { Decision } from "@/lib/types.ts";
 
-const FIXTURE = join(import.meta.dir, "fixtures", "review-request-stdin.json");
+const FIXTURE = join(import.meta.dir, "..", "fixtures", "review-request-stdin.json");
 const stdin = readFileSync(FIXTURE, "utf-8");
 
 setupTempStateDir("caret-opencode-wire-contract-");

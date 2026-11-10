@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { runCommand } from "@/service/run.ts";
+import { runCommand } from "@/lib/run.ts";
 
 test("runCommand returns a non-zero exit rather than rejecting", async () => {
   expect(await runCommand(["sh", "-c", "exit 3"])).toEqual({ code: 3, stdout: "", stderr: "" });

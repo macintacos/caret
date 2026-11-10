@@ -2,13 +2,14 @@ import { describe, expect, test } from "bun:test";
 
 import { type Component, type TuiMouseEvent, visibleWidth } from "@earendil-works/pi-tui";
 
-import type { DetachedSpawn } from "@oc/review-bridge.ts";
+import type { DetachedSpawn } from "@bridge/review-bridge.ts";
 import {
   installNotice,
   type NoticeApi,
   type NoticeContext,
   type NoticeTheme,
   noticeLine,
+  OPEN_KEY,
 } from "@piext/notice.ts";
 import { createReviewStore, footerText, type ReviewOutcome } from "@piext/state.ts";
 
@@ -102,7 +103,7 @@ describe("the pending notice in tui mode", () => {
     expect(lines).toHaveLength(1);
     const [line] = lines;
     expect(line).toMatch(
-      /^ <warning>\^<\/warning> <muted>caret<\/muted> {2}<b><text>[^<]+<\/text><\/b> +<dim>ctrl\+alt\+c<\/dim> <muted>[^<]+<\/muted> $/,
+      /^ <warning>\^<\/warning> <muted>caret<\/muted> {2}<b><text>[^<]+<\/text><\/b> +<dim>[^<]+<\/dim> <muted>[^<]+<\/muted> $/,
     );
     expect(line).not.toContain("\u001b");
   });
@@ -209,11 +210,11 @@ describe("noticeLine", () => {
   }
 
   test("shows the key and its verb when there is room", () => {
-    expect(noticeLine(plainTheme, 80)).toContain("ctrl+alt+c open in browser");
+    expect(noticeLine(plainTheme, 80)).toContain(`${OPEN_KEY} open in browser`);
   });
 
   test("drops the key and its verb when there is not", () => {
-    expect(noticeLine(plainTheme, 20)).not.toContain("ctrl+alt+c");
+    expect(noticeLine(plainTheme, 20)).not.toContain(OPEN_KEY);
   });
 });
 
@@ -250,10 +251,16 @@ describe("opening the review", () => {
     expect(s.spawns).toEqual([expected]);
   });
 
-  test("ctrl+alt+c opens the session's review", () => {
+  // macOS terminals send Option as text unless configured, window managers take ctrl+alt
+  // chords globally, and shift or super on a letter needs the kitty keyboard protocol.
+  test("the open key needs no alt, shift or super", () => {
+    expect(OPEN_KEY).not.toMatch(/alt|shift|super/);
+  });
+
+  test("the open key opens the session's review", () => {
     const s = setup();
-    expect(Object.keys(s.shortcuts)).toEqual(["ctrl+alt+c"]);
-    s.shortcuts["ctrl+alt+c"]?.(s.ctx);
+    expect(Object.keys(s.shortcuts)).toEqual([OPEN_KEY]);
+    s.shortcuts[OPEN_KEY]?.(s.ctx);
     expect(s.spawns).toEqual([expected]);
   });
 

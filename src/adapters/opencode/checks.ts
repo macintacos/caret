@@ -22,11 +22,11 @@ import type { Check } from "@/doctor/report.ts";
  * about a local checkout or tarball. Throws when a config exists but cannot be read. */
 export async function readOpencodeChecks(deps: {
   configFiles: readonly string[];
-  opencodeHosts: () => readonly OpencodeHost[];
+  opencodeHosts: () => readonly OpencodeHost[] | Promise<readonly OpencodeHost[]>;
   published?: () => Promise<string | null>;
 }): Promise<Check[]> {
   if (readCaretEntries(deps.configFiles, isCaretCheckout).length === 0) return [];
-  const hosts = deps.opencodeHosts();
+  const hosts = await deps.opencodeHosts();
   // Only a known v2 ignores a file; an unreadable version can't say one is ignored.
   const v2Host = hosts.find((h) => isV2Host(h.version));
   const loadedFiles =

@@ -6,6 +6,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import type { DetachedSpawn } from "@bridge/review-bridge.ts";
 import {
   decisionToast,
   type ReviewOutcome,
@@ -14,7 +15,6 @@ import {
   type ToastSink,
 } from "@oc/caret.core.ts";
 import { createCaretTui, type TuiContext } from "@oc/caret.tui.ts";
-import type { DetachedSpawn } from "@oc/review-bridge.ts";
 
 type Handler = Parameters<TuiContext["data"]["on"]>[1];
 type Toast = Parameters<TuiContext["ui"]["toast"]["show"]>[0];

@@ -13,6 +13,7 @@ import { join } from "node:path";
 
 import type { PluginInput, ToolContext } from "@opencode-ai/plugin";
 
+import { PLAN_TITLE_INSTRUCTION, type SpawnRunner } from "@bridge/review-bridge.ts";
 import {
   isPlanningAgent,
   planningSteer,
@@ -22,7 +23,6 @@ import {
   type WarmRunner,
 } from "@oc/caret.core.ts";
 import { applyCaretConfig, createCaretPlugin } from "@oc/caret.plugin.ts";
-import { PLAN_TITLE_INSTRUCTION, type SpawnRunner } from "@oc/review-bridge.ts";
 import { fakeDistDir } from "@test/support/fs-tree.ts";
 import { recordingClient } from "@test/support/opencode-toast-client.ts";
 import { until } from "@test/support/poll.ts";
@@ -707,9 +707,9 @@ test("the chat.message hook swallows a warm failure (best-effort, never disrupts
 });
 
 // The two below drive the REAL nodeWarmRunner (no injected warm), which delegates to
-// warmCaret, because its contract lives entirely in what the DI seam hides: warmCaret's
-// async 'error' handler and the CARET_AGENT the child inherits. A stubbed runner can
-// pin neither.
+// warmCaret, because its contract lives entirely in what the DI seam hides: the detached
+// spawn's async 'error' handler and the CARET_AGENT the child inherits. A stubbed runner
+// can pin neither.
 
 /** Assemble the plugin against a real binary path, with the production warm runner. */
 async function buildRealWarmHooks(bin: string) {
@@ -718,7 +718,7 @@ async function buildRealWarmHooks(bin: string) {
 
 test("the real warm runner survives a bad caret binary (async spawn error)", async () => {
   // spawn emits 'error' (ENOENT) ASYNCHRONOUSLY, so the hook's synchronous
-  // try/catch cannot see it — without warmCaret's own 'error' handler this
+  // try/catch cannot see it — without the detached spawn's 'error' handler this
   // is an uncaught exception that kills the host process.
   const hooks = await buildRealWarmHooks("/nonexistent/caret-838");
   await hooks["chat.message"]?.(message("plan"), {} as never);

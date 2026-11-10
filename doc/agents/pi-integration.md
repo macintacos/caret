@@ -19,8 +19,8 @@ instead.
 
 ## The bridge: the tool spawns `caret review`
 
-**`caret_review_plan` reuses OpenCode's bridge.** The tool (`pi/tool.ts`) calls
-`runReviewViaCaret` from `opencode/review-bridge.ts` with `agent: "pi"`. The envelope
+**`caret_review_plan` reuses the review bridge.** The tool (`pi/tool.ts`) calls
+`runReviewViaCaret` from `bridge/review-bridge.ts` with `agent: "pi"`. The envelope
 carries the session id, the cwd, and `planFilePath`. The binary comes from
 `resolveCaretBin`, with `CARET_PI_BIN` as the override.
 
@@ -57,7 +57,7 @@ the ones caret imports are devDependencies only.
 **There are no `peerDependencies`.** OpenCode's installer would download them, and pi
 already supplies them.
 
-**`pi/` imports one caret module, `opencode/review-bridge.ts`**, beside node builtins, the
+**`pi/` imports one caret module, `bridge/review-bridge.ts`**, beside node builtins, the
 host packages, and its own siblings. `test/structure/pi-package.test.ts` gates the shipped
 closure: everything reached ships under `files` and uses no Bun API. Keep
 `keywords: ["pi-package"]`: pi's package gallery lists caret by it.
@@ -104,13 +104,15 @@ The summary for readers outside the adapter is in
 - The gate blocks `edit` and `write` outside the plans folder (`pi/gate.ts`). Path
   containment mirrors pi's resolver, resolves real paths, fails closed, and blocks
   `file://`.
-- Planning ends when a review submitted while planning is approved, or when `/caret:plan`
-  runs with no task.
+- Planning ends when a review of a plan in the plans folder, submitted while planning, is
+  approved, or when `/caret:plan` runs with no task.
 - The state is rebuilt from branch entries on `session_start` and `session_tree`, so a
   fork or a jump to before planning began is not planning. The steer is filtered out of
   context once planning ends.
-- `/caret:demo` refuses to run while planning, because approving the demo would end
-  planning for the real task.
+- `/caret:demo` sends the body of `opencode/commands/demo.md`, with `templates/demo.md` in
+  place of its marker. It refuses to run while planning, because the planning steer would
+  have the demo submitted from the plans folder, and approving it would end planning for
+  the real task.
 
 Non-goals:
 
@@ -120,12 +122,14 @@ Non-goals:
 ## The notice and the shortcut
 
 **`pi/notice.ts` shows a pending-plan row above the editor and a `caret` footer status**,
-`^ plan waiting` or `^ planning`. `/caret` and `ctrl+alt+c` open the waiting plan through
-a detached `caret band-link --session <id> --open`. In RPC mode the notice is one plain
-line naming `/caret`.
+`^ plan waiting` or `^ planning`. `/caret` and `f8` open the waiting plan through a
+detached `caret band-link --session <id> --open`. In RPC mode the notice is one plain line
+naming `/caret`.
 
-The shortcut is `ctrl+alt+c`, because pi's plan-mode example and Plannotator both bind
-`ctrl+alt+p`. The look is in [`design/decisions.md`](../../design/decisions.md) and
+The shortcut is `f8`. macOS window managers such as Rectangle and Magnet take
+`ctrl+option+c` globally, and pi binds every `ctrl+letter`. `f8` is one legacy sequence
+every terminal sends, and pi binds no function key. On a Mac laptop it may need `fn`. The
+look is in [`design/decisions.md`](../../design/decisions.md) and
 [`design/patterns.md`](../../design/patterns.md).
 
 ## Esc and a failed run
@@ -140,8 +144,8 @@ The shortcut is `ctrl+alt+c`, because pi's plan-mode example and Plannotator bot
   with `isError: true`, and the text tells the model to tell the user and not implement.
   The row reads `✕ review failed`.
 - An unresolved `path` returns `resolvePlanSource`'s error, telling the model to write the
-  file or pass `plan` inline, with `isError: true`. It returns before the store records an
-  outcome.
+  file or pass `plan` inline, with `isError: true`. The store records the outcome as
+  `failed`.
 
 ## `/caret:doctor`
 
@@ -170,10 +174,10 @@ to the directory holding that binary. Docs under the old `@mariozechner` name ar
 ## Known gaps
 
 - Not covered live: the approve-with-notes rows and `Esc` cancel.
-- `ctrl+alt+c` is hand-checked only; no test drives a real terminal (EXC-2316).
+- `f8` is hand-checked only, with the key injected by `rex send-key`; no test drives a
+  real terminal (EXC-2316).
 - Extension filters in pi's settings aren't evaluated against globs
   (`src/adapters/pi/install.ts`).
 - Print mode `pi -p "/caret:plan …"` can exit before the follow-up runs
   (`pi/follow-up.ts`).
-- `review-bridge.ts` lives under `opencode/` though pi uses it too.
 - There is no update reminder like OpenCode's toast.

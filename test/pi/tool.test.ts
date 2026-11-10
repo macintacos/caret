@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { decisionText, REVIEW_TOOL_DESCRIPTION, type SpawnRunner } from "@oc/review-bridge.ts";
+import { decisionText, REVIEW_TOOL_DESCRIPTION, type SpawnRunner } from "@bridge/review-bridge.ts";
 import { createReviewStore, type ReviewStore } from "@piext/state.ts";
 import { type PiToolResult, reviewTool } from "@piext/tool.ts";
 import { rejectingRunner, streamingRunner, stubRunner } from "@test/support/spawn-runner.ts";
@@ -98,9 +98,15 @@ describe("bad arguments", () => {
       expect(r.details).toEqual({ state: "failed" });
       expect(r.isError).toBe(true);
       expect(called).toBe(false);
-      expect(store.get("s1")).toEqual({ planning: false });
     },
   );
+
+  test("an unresolvable path replaces an earlier approval as the session's last outcome", async () => {
+    await run(stubRunner('{"behavior":"allow"}'), { plan: "# P" });
+    const r = await run(stubRunner('{"behavior":"allow"}'), { path: "missing.md" });
+    expect(r.details).toEqual({ state: "failed" });
+    expect(store.get("s1").lastOutcome).toBe("failed");
+  });
 });
 
 describe("a review that never decided", () => {

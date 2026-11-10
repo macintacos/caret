@@ -8,14 +8,14 @@ import { type PiVersion, piVersionFault, readPiVersion } from "@/adapters/pi/hos
 import {
   CARET_NPM_SOURCE,
   type PiCaretEntry,
-  piAgentDir,
   piRemoveArg,
   readPiCaretEntries,
 } from "@/adapters/pi/install.ts";
+import { piAgentDir } from "@/adapters/pi/paths.ts";
 import type { LocalInstall } from "@/commands/install/local.ts";
 import { type InstallUI, silentUI } from "@/commands/install/ui.ts";
+import { runCommand } from "@/lib/run.ts";
 import { errorMessage } from "@/lib/types.ts";
-import { runCommand } from "@/service/run.ts";
 
 /** Run a `pi` subcommand: ok, or a failure detail. Never rejects. */
 export type PiRunner = (args: string[]) => Promise<{ ok: boolean; detail: string }>;
@@ -194,14 +194,14 @@ export async function runInstallPiTarget(
   opts: { uninstall: boolean; dryRun: boolean; local?: LocalInstall },
   deps: {
     pi?: PiRunner;
-    piVersion?: () => PiVersion;
+    piVersion?: () => PiVersion | Promise<PiVersion>;
     agentDir?: string;
     home?: string;
     ui?: InstallUI;
   } = {},
 ): Promise<boolean> {
   const ui = deps.ui ?? silentUI;
-  const version = (deps.piVersion ?? readPiVersion)();
+  const version = await (deps.piVersion ?? readPiVersion)();
   if (opts.uninstall && version.status === "missing") {
     ui.info("Couldn't run `pi --version` — nothing removed from pi.");
     return true;

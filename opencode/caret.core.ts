@@ -3,8 +3,9 @@
 // metadata keys, and the update check. It re-uses the bridge's tool name, text, binary
 // resolution and version comparison.
 // caret.plugin.ts (v1), caret.plugin.v2.ts and caret.tui.ts are thin host adapters over
-// it. Its imports are node builtins and review-bridge.ts only, so loading it never
-// evaluates either host's SDK; test/structure/dependency-placement.test.ts holds it there.
+// it. Its imports are node builtins and ../bridge/review-bridge.ts only, so loading it
+// never evaluates either host's SDK; test/structure/dependency-placement.test.ts holds it
+// there.
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -23,7 +24,7 @@ import {
   runReviewViaCaret,
   type SpawnRunner,
   warmCaret,
-} from "./review-bridge.ts";
+} from "../bridge/review-bridge.ts";
 
 export {
   isNewer,
@@ -32,7 +33,7 @@ export {
   REVIEW_TOOL_DESCRIPTION,
   resolveCaretBin,
   resolvePlanSource,
-} from "./review-bridge.ts";
+} from "../bridge/review-bridge.ts";
 
 /** The plugin's own caret version, for the update check, read from the package.json
  * shipped beside this module. "unknown" when it is unreadable — deliberately UNPARSEABLE

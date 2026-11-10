@@ -14,6 +14,7 @@ import {
   piRemoveArg,
   readPiSettings,
 } from "@/adapters/pi/install.ts";
+import { NPM_UNREACHABLE, npmUnreadable } from "@/doctor/checks.ts";
 import type { Check } from "@/doctor/report.ts";
 import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
 
@@ -31,7 +32,7 @@ type NpmEntry = Extract<PiCaretEntry, { form: "npm" }>;
 export async function readPiChecks(deps: {
   agentDir: string;
   home: string;
-  piVersion: () => PiVersion;
+  piVersion: () => PiVersion | Promise<PiVersion>;
   published: () => Promise<string | null>;
 }): Promise<Check[]> {
   const settings = readPiSettings(deps.agentDir);
@@ -43,7 +44,7 @@ export async function readPiChecks(deps: {
   const [first, ...rest] = piCaretEntries(settings, deps);
   if (first === undefined) return [];
   const entries: Entries = [first, ...rest];
-  const checks = [hostCheck(deps.piVersion()), entryCheck(entries)];
+  const checks = [hostCheck(await deps.piVersion()), entryCheck(entries)];
   const npmEntry = entries.find((e): e is NpmEntry => e.form === "npm");
   return npmEntry === undefined
     ? checks
@@ -119,9 +120,8 @@ function versionCheck(entry: NpmEntry, published: string | null): Check {
   });
   const { version, source, pinned } = entry;
   if (version === null) return unknown(notInstalled(entry));
-  if (published === null) return unknown("could not reach npm for the published caret version");
-  if (parseVersionTriple(published) === null)
-    return unknown(`npm reported an unreadable version (${published})`);
+  if (published === null) return unknown(NPM_UNREACHABLE);
+  if (parseVersionTriple(published) === null) return unknown(npmUnreadable(published));
   if (parseVersionTriple(version) === null)
     return unknown(`pi's caret has an unreadable version (${version})`);
   if (!isNewer(published, version)) {

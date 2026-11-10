@@ -5,8 +5,8 @@ import { join } from "node:path";
 
 import { setupTempStateDir } from "@test/support/env.ts";
 import { fakeServiceConfig } from "@test/support/service-config.ts";
+import type { CommandResult } from "@/lib/run.ts";
 import { SYSTEMD_UNIT } from "@/service/manager.ts";
-import type { CommandResult } from "@/service/run.ts";
 import { buildSystemdUnit } from "@/service/systemd.ts";
 import { createSystemdManager } from "@/service/systemd-manager.ts";
 

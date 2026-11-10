@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { parseReviewUrl } from "@oc/review-bridge.ts";
+import { parseReviewUrl } from "@bridge/review-bridge.ts";
 import { fakeReviewDeps } from "@test/support/wire-contract.ts";
 import {
   browserOpenCmd,

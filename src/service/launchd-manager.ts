@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { logDebug } from "@/lib/log.ts";
+import { type CommandResult, commandError, runCommand } from "@/lib/run.ts";
 import { buildLaunchdPlist } from "@/service/launchd.ts";
 import {
   LAUNCHD_LABEL,
@@ -14,7 +15,6 @@ import {
   type ServiceManager,
   type ServiceStatus,
 } from "@/service/manager.ts";
-import { type CommandResult, commandError, runCommand } from "@/service/run.ts";
 import { unitUnchanged } from "@/service/unit-file.ts";
 
 export type LaunchctlResult = CommandResult;

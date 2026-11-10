@@ -88,6 +88,11 @@ function daemonReachable(report: Report): Check {
   };
 }
 
+/** The `unknown` reasons every check against npm's published caret gives. */
+export const NPM_UNREACHABLE = "could not reach npm for the published caret version";
+export const npmUnreadable = (published: string) =>
+  `npm reported an unreadable version (${published})`;
+
 /** The running daemon's version against npm's latest. A dev build is never compared, and
  * an unreadable npm is `unknown`, never a `fail`. */
 function daemonVersion(report: Report): Check {
@@ -113,13 +118,7 @@ function daemonVersion(report: Report): Check {
   // Not the daemon's own /api/update verdict: that can be a day old, or off, so npm is read live.
   const latest = daemon.npmLatest;
   if (latest == null) {
-    return {
-      id,
-      title,
-      status: "unknown",
-      detail: v,
-      reason: "npm's latest caret version could not be read",
-    };
+    return { id, title, status: "unknown", detail: v, reason: NPM_UNREACHABLE };
   }
   if (isNewer(latest, v)) {
     return {

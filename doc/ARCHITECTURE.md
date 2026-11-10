@@ -158,9 +158,38 @@ The hooks table and decision-JSON block below, and the behavioral prose in
 `commands/*.md`, describe **Claude-adapter** surface — they are agent-specific, not core
 behavior.
 
+### Installing with `caret install`
+
+`caret install` registers caret with Claude Code through its plugin CLI, with OpenCode
+through its plugin array, and with pi through `pi install`, covering every selected agent
+in a single run. Each adapter section below says what its install touches.
+
+`caret install` picks the agents for you: it detects which agents you have (`claude` on
+your PATH; `opencode` on your PATH or an existing OpenCode config dir; `pi` on your PATH)
+and asks which to install into, with the detected ones pre-checked. Off a terminal — CI, a
+pipe — it never waits on that prompt: it installs into every agent it detected, or into
+Claude Code when it detected none, and says which. `--dry-run` previews that same choice
+rather than asking. `--uninstall` makes no choice at all: it removes caret from every
+agent in the registry, because the machine-wide service it tears down alongside them
+belongs to no one agent. One more flag, `--from-local`, is dev-only: it installs the caret
+checkout the binary was built in rather than the published one — see
+[Development](DEVELOPMENT.md#development). Every install (but not `--uninstall`) finishes
+by acquiring the rumdl plan formatter — it is part of installing caret, not a step of its
+own — see
+[Plan formatting](CONFIGURING.md#plan-formatting-rumdl).
+
+At a terminal the whole run renders as one
+[`@clack/prompts`](https://github.com/bombshell-dev/clack) session: the chooser, then a
+spinner per operation (registering the marketplace, installing the plugin, editing
+OpenCode's plugin array, deploying the command files, fetching rumdl) that settles into a
+line saying what it did, and a closing summary. Off a terminal — piped, `CI=true`,
+`TERM=dumb`, `NO_COLOR` set, or `--no-color` passed — the same run reports as plain
+`caret: …` lines with no escape codes, so CI transcripts and captured logs stay readable.
+
 ### The Claude Code adapter
 
-caret wires into Claude Code through five hooks:
+[`caret install`](#installing-with-caret-install) registers the hooks below. caret wires
+into Claude Code through five hooks:
 
 | Hook                | Matcher         | Command           | Purpose                                                                     |
 | ------------------- | --------------- | ----------------- | --------------------------------------------------------------------------- |
@@ -316,11 +345,10 @@ config-dir manifest and runs no `bun install` itself. The plugin resolves the ca
 and its own version at runtime from the package it ships in (`CARET_OPENCODE_BIN`
 overrides the binary — see [Environment variables](CONFIGURING.md#environment-variables)),
 and on load it checks caret's latest GitHub release and toasts an update nudge when you're
-behind (`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). `caret install` registers caret with
-Claude Code through its plugin CLI and with pi through `pi install` too, and covers every
-selected agent in a single run; `--uninstall` reverses every agent at once, and
-`--dry-run` previews the changes without writing. See
-[`agents/opencode-integration.md`](agents/opencode-integration.md) for the design.
+behind (`CARET_OPENCODE_NO_UPDATE_CHECK` opts out).
+[Installing with `caret install`](#installing-with-caret-install) covers the agent choice
+and flags. See [`agents/opencode-integration.md`](agents/opencode-integration.md) for the
+design.
 
 caret supports OpenCode v1 1.3.4 or later (an older v1 fails to load the plugin) and v2
 2.0.29 or later. `caret doctor`'s `opencode-host` check flags a v1 below 1.3.4, a v2 below
@@ -365,44 +393,23 @@ rm -rf ~/.cache/opencode/npm/@macintacos/caret@*
 > dirs, and all of them have to go. Drop the `*` and the pinned dirs survive, so OpenCode
 > reloads the stale copy from one of them.
 
-`caret install` picks the agents for you: it detects which agents you have (`claude` on
-your PATH; `opencode` on your PATH or an existing OpenCode config dir; `pi` on your PATH)
-and asks which to install into, with the detected ones pre-checked. Off a terminal — CI, a
-pipe — it never waits on that prompt: it installs into every agent it detected, or into
-Claude Code when it detected none, and says which. `--dry-run` previews that same choice
-rather than asking. `--uninstall` makes no choice at all: it removes caret from every
-agent in the registry, because the machine-wide service it tears down alongside them
-belongs to no one agent. One more flag, `--from-local`, is dev-only: it installs the caret
-checkout the binary was built in rather than the published one — see
-[Development](DEVELOPMENT.md#development). Every install (but not `--uninstall`) finishes
-by acquiring the rumdl plan formatter — it is part of installing caret, not a step of its
-own — see
-[Plan formatting](CONFIGURING.md#plan-formatting-rumdl).
-
-At a terminal the whole run renders as one
-[`@clack/prompts`](https://github.com/bombshell-dev/clack) session: the chooser, then a
-spinner per operation (registering the marketplace, installing the plugin, editing
-OpenCode's plugin array, deploying the command files, fetching rumdl) that settles into a
-line saying what it did, and a closing summary. Off a terminal — piped, `CI=true`,
-`TERM=dumb`, `NO_COLOR` set, or `--no-color` passed — the same run reports as plain
-`caret: …` lines with no escape codes, so CI transcripts and captured logs stay readable.
-
 ### The pi adapter
 
 pi has no plan hook and no plan mode, so caret plugs in as an extension, `pi/caret.ts`,
 which pi loads through the `pi` manifest in the `@macintacos/caret` package.
+[`caret install`](#installing-with-caret-install) adds it with `pi install`.
 
 - **The review tool.** The extension registers `caret_review_plan`, which blocks until you
   decide; pi sets no tool timeout, and Esc cancels the review. It returns an approval or a
   change request. A failed run reports a failed review, never a change request. It spawns
   `caret review` with `CARET_AGENT=pi` through the review bridge the OpenCode plugin uses
-  (`opencode/review-bridge.ts`).
+  (`bridge/review-bridge.ts`).
 - **The planning mode.** `/caret:plan` steers the model to write the plan into pi's
   `plans` folder and submit it. Until approval it blocks `edit` and `write` outside that
   folder. It also starts the caret daemon in the background while you plan, so the review
   opens fast.
 - **The notice.** A pending-plan notice and a `caret` footer status show a waiting review.
-  `/caret` or `ctrl+alt+c` opens the waiting review in the browser.
+  `/caret` or `f8` opens the waiting review in the browser.
 - **The commands.** `/caret:demo` presents the demo plan. `/caret:doctor` runs
   `caret doctor` and shows its report in the session.
 
@@ -572,10 +579,11 @@ ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode + UserPromptSubmit, plus the `modules` entry that loads the mod) — Claude-adapter packaging
 mod/                the Claude Code mod — the plan-waiting band's hooks module, its state typings, and its kit tests (`claude plugin test mod`) — Claude-adapter packaging
 commands/           /caret:demo · /caret:doctor · /caret:plan — Claude-adapter packaging (agent-specific behavioral prose)
-opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging; caret.core.ts is the host-neutral core the v1, v2 and TUI modules share; review-bridge.ts, its bridge to caret review, is shared with caret mcp, caret steer and pi's extension
+opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging; caret.core.ts is the host-neutral core the v1, v2 and TUI modules share
 pi/                 the extension pi loads — the caret.ts entry, the caret_review_plan tool, its row rendering, the per-session review state, the pending-plan notice with its /caret command and shortcut, the /caret:plan planning mode and its edit gate, and the /caret:demo and /caret:doctor commands — pi-adapter packaging
+bridge/             review-bridge.ts — the bridge from an agent's review tool to caret review, shipped as source and shared by the OpenCode plugin, pi's extension, caret mcp and caret steer
 templates/          demo.md — the /caret:demo plan the Claude Code, OpenCode and pi commands fill and present
-test/               core/ (tool-agnostic suites) · adapters/<tool>/ (per-adapter suites + fixtures) · opencode/ (the repo-root opencode/ package) · pi/ (the repo-root pi/ extension) · e2e/ (Playwright) · structure/ (repo-shape invariants) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
+test/               core/ (tool-agnostic suites) · adapters/<tool>/ (per-adapter suites + fixtures) · bridge/ (the repo-root bridge/ module) · opencode/ (the repo-root opencode/ package) · pi/ (the repo-root pi/ extension) · e2e/ (Playwright) · structure/ (repo-shape invariants) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
 scripts/            dev and release tooling for the checkout, plus the two committed shims' tests
 bin/                the caret entrypoint shim (bin/caret) and the service launcher (bin/caret-launcher) — the only tracked files here; a local build drops the compiled binary and the UI assets beside them
 ```

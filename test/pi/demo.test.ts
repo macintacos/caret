@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { REVIEW_TOOL } from "@oc/review-bridge.ts";
-import { DEMO_INSTRUCTION, type DemoApi, installDemo } from "@piext/demo.ts";
+import { REVIEW_TOOL } from "@bridge/review-bridge.ts";
+import { type DemoApi, installDemo } from "@piext/demo.ts";
+import { renderPlugin } from "@/adapters/opencode/deploy.ts";
 
 const TEMPLATE = "# A demo plan\n\nSome body.\n";
+const OPENCODE_COMMAND = join(import.meta.dir, "..", "..", "opencode", "commands", "demo.md");
 
 let tmp: string;
 let templatePath: string;
@@ -19,7 +21,7 @@ beforeEach(() => {
 
 afterEach(() => rmSync(tmp, { recursive: true, force: true }));
 
-function fakePi(path: string, planning = false) {
+function fakePi(files: { templatePath?: string; commandPath?: string } = {}, planning = false) {
   const commands: Record<string, (args: string, ctx: unknown) => Promise<void>> = {};
   const sent: { content: string; options: unknown }[] = [];
   const notices: { message: string; type?: string }[] = [];
@@ -37,7 +39,11 @@ function fakePi(path: string, planning = false) {
     },
     sendUserMessage: (content, options) => sent.push({ content, options }),
   };
-  installDemo(pi, { templatePath: path, isPlanning: (id) => planning && id === "s" });
+  installDemo(pi, {
+    templatePath: files.templatePath ?? templatePath,
+    commandPath: files.commandPath ?? OPENCODE_COMMAND,
+    isPlanning: (id) => planning && id === "s",
+  });
   return {
     sent,
     notices,
@@ -46,23 +52,26 @@ function fakePi(path: string, planning = false) {
   };
 }
 
-test("/caret:demo sends the instruction then the template as a follow-up and waits", async () => {
-  const pi = fakePi(templatePath);
+test("/caret:demo sends OpenCode's rendered /caret:demo body as a follow-up and waits", async () => {
+  const pi = fakePi();
   await pi.command();
-  expect(pi.sent).toEqual([
-    { content: `${DEMO_INSTRUCTION}\n\n${TEMPLATE}`, options: { deliverAs: "followUp" } },
-  ]);
+  expect(pi.sent).toHaveLength(1);
+  expect(pi.sent[0]?.options).toEqual({ deliverAs: "followUp" });
+  const content = pi.sent[0]?.content ?? "";
+  const opencode = renderPlugin(readFileSync(OPENCODE_COMMAND, "utf-8"), {
+    version: "",
+    binPath: "",
+    demoTemplate: TEMPLATE,
+  });
+  expect(opencode.endsWith(content)).toBe(true);
+  const frontmatter = opencode.slice(0, opencode.length - content.length);
+  expect(frontmatter).toMatch(/^---\n(?:.*\n)*?---\n+$/);
+  expect(content).toContain(REVIEW_TOOL);
   expect(pi.idle()).toBe(1);
 });
 
-test("the demo instruction submits through the review tool without editing files", () => {
-  expect(DEMO_INSTRUCTION).toContain(REVIEW_TOOL);
-  expect(DEMO_INSTRUCTION).toContain("edit **no** file");
-  expect(DEMO_INSTRUCTION).toContain("**Changes requested**");
-});
-
 test("/caret:demo refuses with one warning while the session is planning", async () => {
-  const pi = fakePi(join(tmp, "absent.md"), true);
+  const pi = fakePi({ templatePath: join(tmp, "absent.md") }, true);
   await pi.command();
   expect(pi.notices).toHaveLength(1);
   expect(pi.notices[0]?.type).toBe("warning");
@@ -70,13 +79,16 @@ test("/caret:demo refuses with one warning while the session is planning", async
   expect(pi.idle()).toBe(0);
 });
 
-test("an unreadable template is reported once and nothing is sent", async () => {
-  const missing = join(tmp, "absent.md");
-  const pi = fakePi(missing);
-  await pi.command();
-  expect(pi.notices).toHaveLength(1);
-  expect(pi.notices[0]?.type).toBe("error");
-  expect(pi.notices[0]?.message).toContain(missing);
-  expect(pi.sent).toEqual([]);
-  expect(pi.idle()).toBe(0);
-});
+test.each(["templatePath", "commandPath"] as const)(
+  "an unreadable %s is reported once and nothing is sent",
+  async (file) => {
+    const missing = join(tmp, "absent.md");
+    const pi = fakePi({ [file]: missing });
+    await pi.command();
+    expect(pi.notices).toHaveLength(1);
+    expect(pi.notices[0]?.type).toBe("error");
+    expect(pi.notices[0]?.message).toContain(missing);
+    expect(pi.sent).toEqual([]);
+    expect(pi.idle()).toBe(0);
+  },
+);

@@ -131,6 +131,9 @@ export function piSandbox(root: string, pkgDir: string): PiSandbox {
     XDG_STATE_HOME: state,
     CARET_CONFIG_FILE: config,
     CARET_PORT: String(port),
+    // The one CARET_* key kept: the daemon formats with test/support/rumdl-preload.ts's
+    // offline rumdl instead of downloading one into each fresh state dir.
+    ...(process.env.CARET_RUMDL_BIN ? { CARET_RUMDL_BIN: process.env.CARET_RUMDL_BIN } : {}),
   };
   run([PI_BIN, "install", pkgDir], { cwd, env });
   return { env, cwd, agentDir, url: `http://127.0.0.1:${port}`, port };
@@ -176,7 +179,7 @@ export function waitForReview(
     // Not daemonClient().listReviews: it has no timeout, so a silent listener hangs it.
     try {
       const res = await fetch(`${sandbox.url}/api/reviews`, {
-        signal: AbortSignal.timeout(1_000),
+        signal: AbortSignal.timeout(250),
       });
       const reviews = (await res.json()) as Array<Record<string, unknown>>;
       return reviews[0];
@@ -213,9 +216,9 @@ export function piSessionEntries(sandbox: PiSandbox): unknown[] {
     .map((line) => JSON.parse(line));
 }
 
-/** PIDs whose command line names `root` (`pgrep -f root`). */
-export function strays(root: string): number[] {
-  const out = Bun.spawnSync(["pgrep", "-f", root]).stdout.toString();
+/** PIDs whose command line matches `pattern` (`pgrep -f`). */
+export function strays(pattern: string): number[] {
+  const out = Bun.spawnSync(["pgrep", "-f", pattern]).stdout.toString();
   return out.split("\n").filter(Boolean).map(Number);
 }
 

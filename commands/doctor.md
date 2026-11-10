@@ -44,6 +44,7 @@ one. What each id means:
 | `daemon-lock` | the lock names a dead pid, or a port caret is not configured to bind | the check's remedy verbatim |
 | `agent-install` | the agent the check names does not have caret enabled | `caret install` |
 | `log-errors` | a live log wrote an NDJSON error record in the last 24h; the detail names which log and when it last erred | step 4 |
+| `opencode-host` | an `opencode` on PATH is below its major's floor (1.3.4 for v1, 2.0.29 for v2), or caret sits in a key or config file that OpenCode doesn't load | the check's remedy verbatim |
 | `opencode-caret-version` | OpenCode would load a caret behind the published one | the check's remedy verbatim |
 | `pi-host` | `pi` can't run, is older than 1.5.0, or is the pre-rename `@mariozechner/pi-coding-agent` | the check's remedy verbatim |
 | `pi-caret-entry` | pi lists caret more than once, filters out its extension, or lists it without its package installed | the check's remedy verbatim |

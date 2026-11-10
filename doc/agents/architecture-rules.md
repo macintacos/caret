@@ -109,14 +109,9 @@ adapters share (stdin → parse → stdout deny line); it needs a different inte
 surface. EXC-339 built that surface — a registered `caret_review_plan` tool that bridges
 to `caret review` rather than a command hook; see
 [`opencode-integration.md`](opencode-integration.md) for the spike and the design. pi's
-extension (`pi/caret.ts`) uses the same shape: a registered `caret_review_plan` tool that
-spawns `caret review` with `CARET_AGENT=pi` through `opencode/review-bridge.ts`, plus a
-`/caret:plan` command whose planning mode steers the model and blocks `edit`/`write`
-outside pi's plans folder until the plan is approved (`pi/plan.ts`, `pi/gate.ts`), a
-pending-plan notice with a `caret` footer status, `/caret` and `ctrl+alt+c`
-(`pi/notice.ts`), and `/caret:demo` and `/caret:doctor` commands (`pi/demo.ts`,
-`pi/doctor.ts`); see [`pi-integration.md`](pi-integration.md) for its design. Note it as
-plugin-shaped before assuming a new tool slots into the command-hook mold.
+extension (`pi/caret.ts`) uses the same tool shape; see
+[`pi-integration.md`](pi-integration.md) for its design. Note it as plugin-shaped before
+assuming a new tool slots into the command-hook mold.
 
 **A registry entry may be composed inline.** `claude-mcp`, set only by `caret mcp` for
 plans submitted through Claude Code's `review_plan` tool, is Claude's adapter with the

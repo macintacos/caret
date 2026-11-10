@@ -47,7 +47,7 @@ function closureViolations(
 const realClosure = relativeClosure(ENTRY, readRepo);
 
 test("the pi entry's closure includes the review bridge and the shared state", () => {
-  expect(realClosure).toContain("opencode/review-bridge.ts");
+  expect(realClosure).toContain("bridge/review-bridge.ts");
   expect(realClosure).toContain("pi/state.ts");
 });
 

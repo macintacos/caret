@@ -1,6 +1,6 @@
 // The claude-mcp adapter: Claude Code reviews submitted through caret's own MCP
 // server. Its wire is the caret-owned envelope and flat decision from src/adapters/wire.ts, driven
-// here through the real parse -> runReview -> emit path over OpenCode's checked-in
+// here through the real parse -> runReview -> emit path over the shared checked-in
 // envelope fixture; everything the daemon publishes or probes stays Claude's.
 
 import { afterEach, expect, test } from "bun:test";
@@ -14,7 +14,7 @@ import { claudeAdapter } from "@/adapters/claude/index.ts";
 import { CLAUDE_MCP_AGENT, fatalDeny, selectAdapter } from "@/adapters/index.ts";
 import type { Decision } from "@/lib/types.ts";
 
-const FIXTURE = join(import.meta.dir, "..", "opencode", "fixtures", "review-request-stdin.json");
+const FIXTURE = join(import.meta.dir, "..", "fixtures", "review-request-stdin.json");
 const stdin = readFileSync(FIXTURE, "utf-8");
 
 setupTempStateDir("caret-claude-mcp-wire-contract-");

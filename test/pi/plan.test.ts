@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { PLAN_TITLE_INSTRUCTION, REVIEW_TOOL } from "@oc/review-bridge.ts";
+import { PLAN_TITLE_INSTRUCTION, REVIEW_TOOL } from "@bridge/review-bridge.ts";
 import {
   type PlanningEntry as Entry,
   installPlanning,
@@ -215,10 +215,14 @@ describe("gate", () => {
 });
 
 describe("leaving on approval", () => {
-  async function review(details: unknown, opts: { planningAtCall?: boolean } = {}) {
+  async function review(
+    details: unknown,
+    opts: { planningAtCall?: boolean; input?: Record<string, unknown> } = {},
+  ) {
     const f = fakePi();
     if (opts.planningAtCall !== false) await f.command("x");
-    f.fire("tool_call", { toolName: REVIEW_TOOL, toolCallId: "r1", input: {} });
+    const input = opts.input ?? { path: join(plansDir, "p.md") };
+    f.fire("tool_call", { toolName: REVIEW_TOOL, toolCallId: "r1", input });
     if (opts.planningAtCall === false) await f.command("x");
     f.fire("tool_result", { toolName: REVIEW_TOOL, toolCallId: "r1", details });
     return f;
@@ -238,9 +242,11 @@ describe("leaving on approval", () => {
     },
   );
 
-  test("a failed call after an earlier approval keeps planning on", async () => {
-    store.update(SID, { lastOutcome: "approved" });
-    await review({ state: "failed" });
+  test.each([
+    ["a file outside the plans folder", () => ({ path: join(tmp, "other.md") })],
+    ["an inline plan", () => ({ plan: "# P" })],
+  ])("approving %s keeps planning on", async (_name, input) => {
+    await review({ state: "approved" }, { input: input() });
     expect(planning()).toBe(true);
   });
 

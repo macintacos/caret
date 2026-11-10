@@ -2,14 +2,14 @@
 // plugin, `caret mcp` and pi's extension: resolve the plan and the caret binary, build
 // caret's review envelope, warm the daemon, spawn the review, and turn the flat decision
 // it prints into the tool's result text; it also holds the detached opener both TUIs use
-// for `band-link --open`. It stays in opencode/ because that directory already ships as
-// unbundled source each host reaches by relative import; moving it would churn OpenCode's
-// packaging for no gain. It imports node builtins only, so bundling it into the CLI pulls
-// in no plugin SDK. It also holds PLAN_TITLE_INSTRUCTION, since this is the one module the
-// hosts, `caret mcp` and `caret steer` can all import.
+// for `band-link --open`. It ships as unbundled source the OpenCode plugin and pi's
+// extension reach by relative import, and the CLI bundles it, so it imports node builtins
+// only: nothing from src/, and no plugin SDK. It also holds PLAN_TITLE_INSTRUCTION, since
+// this is the one module the hosts, `caret mcp` and `caret steer` can all import.
 
 import { spawn } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
+import { constants } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,6 +40,12 @@ export function resolveCaretBin(opts: {
   const override = opts.env[opts.overrideVar]?.trim();
   if (override) return override;
   return fileURLToPath(new URL("../bin/caret", opts.importMetaUrl));
+}
+
+/** `err`'s message, or `err` stringified when it is not an Error. A twin of
+ * `errorMessage` in src/lib/types.ts, which this module cannot import. */
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 /** Semver triple `[major, minor, patch]`, or null when `v` is not `X.Y.Z` (an
@@ -267,7 +273,8 @@ export function parseReviewUrl(stderr: string): string | undefined {
  * the child's stderr chunks as they arrive, so the caller can surface the review URL
  * the core prints there while the review is still pending. An aborted `signal` must
  * terminate the child and settle (reject) promptly: `caret mcp` refuses a new call until
- * the aborted one settles. */
+ * the aborted one settles. A child killed by a signal exits 128 + the signal number, as
+ * in a shell, so it never reads as success. */
 export type SpawnRunner = (
   command: string[],
   env: Record<string, string | undefined>,
@@ -324,25 +331,8 @@ export async function runReviewViaCaret(
     );
     return parseDecision(stdout);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return failsafeDeny(`caret: review failed to run (${message}) — denying to fail safe.`);
+    return failsafeDeny(`caret: review failed to run (${errorMessage(e)}) — denying to fail safe.`);
   }
-}
-
-/** Warms the caret daemon: `caret prewarm`, detached and unref'd so it never holds up
- * the turn. Output is discarded — the child logs to caret.log. CARET_AGENT rides along
- * because this spawn is what stands the daemon up and the daemon picks its adapter
- * from that env; the 'error' handler is mandatory because spawn emits 'error'
- * ASYNCHRONOUSLY (ENOENT on a bad bin), where a caller's synchronous try/catch
- * cannot see it and an unhandled event would take the host's whole process down. */
-export function warmCaret(bin: string, agent: string): void {
-  const child = spawn(bin, ["prewarm"], {
-    stdio: "ignore",
-    detached: true,
-    env: { ...process.env, CARET_AGENT: agent },
-  });
-  child.on("error", () => {});
-  child.unref();
 }
 
 /** Production runner: spawn `command[0]` with the rest of the argv. stderr is
@@ -365,7 +355,9 @@ export const nodeSpawnRunner: SpawnRunner = (command, env, stdin, onStderr, sign
     });
     child.stderr.on("data", (chunk) => onStderr?.(chunk.toString()));
     child.on("error", reject);
-    child.on("close", (code) => resolve({ stdout, exitCode: code ?? 0 }));
+    child.on("close", (code, killedBy) =>
+      resolve({ stdout, exitCode: code ?? 128 + (killedBy ? constants.signals[killedBy] : 0) }),
+    );
     // A child killed before reading stdin EPIPEs the write; unhandled, that crashes the
     // host. The 'error'/'close' handlers above already settle.
     child.stdin.on("error", () => {});
@@ -397,3 +389,10 @@ export const detachedSpawnWith =
   };
 
 export const nodeDetachedSpawn = detachedSpawnWith();
+
+/** Warms the caret daemon: `caret prewarm`, detached and best-effort, so it never holds
+ * up the turn. CARET_AGENT rides along because this spawn is what stands the daemon up
+ * and the daemon picks its adapter from that env. */
+export function warmCaret(bin: string, agent: string): void {
+  detachedSpawnWith({ CARET_AGENT: agent })(bin, ["prewarm"], () => {});
+}

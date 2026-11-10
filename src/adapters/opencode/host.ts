@@ -9,6 +9,7 @@ import { basename, delimiter, isAbsolute, join } from "node:path";
 import type { PluginKey } from "@/adapters/opencode/config-plugin.ts";
 import { CONFIG_FILENAMES, type ConfigFilename } from "@/adapters/opencode/paths.ts";
 import type { Check } from "@/doctor/report.ts";
+import { runBounded } from "@/lib/run.ts";
 import { isNewer, parseVersionTriple, type VersionTriple } from "@/lib/semver.ts";
 
 /** Covers a cold v1 start (npm's node wrapper took 1.6 s) with margin. */
@@ -21,22 +22,16 @@ export function parseOpencodeVersion(stdout: string): VersionTriple | null {
 
 /** Runs `<bin> --version`; null when the exit is non-zero, the output does not parse, or
  * the bound kills it. Never throws. */
-export function readOpencodeVersion({
+export async function readOpencodeVersion({
   bin,
   timeoutMs = OPENCODE_VERSION_TIMEOUT_MS,
 }: {
   bin: string;
   timeoutMs?: number;
-}): VersionTriple | null {
+}): Promise<VersionTriple | null> {
   try {
-    // Synchronous on purpose: async `Bun.spawn`'s timeout kills only the direct child, and
-    // a grandchild holding stdout (npm v1's node wrapper) keeps a pipe read waiting.
-    const res = Bun.spawnSync([bin, "--version"], {
-      timeout: timeoutMs,
-      stdin: "ignore",
-      stderr: "ignore",
-    });
-    return res.exitCode === 0 ? parseOpencodeVersion(res.stdout.toString()) : null;
+    const res = await runBounded([bin, "--version"], timeoutMs);
+    return res.exitCode === 0 ? parseOpencodeVersion(res.stdout) : null;
   } catch {
     return null;
   }
@@ -82,11 +77,13 @@ function executableRealpath(bin: string): string | null {
 export function readOpencodeHosts(
   path = process.env.PATH ?? "",
   timeoutMs?: number,
-): OpencodeHost[] {
-  return opencodeBinsOnPath(path).map((bin) => ({
-    bin,
-    version: readOpencodeVersion({ bin, timeoutMs }),
-  }));
+): Promise<OpencodeHost[]> {
+  return Promise.all(
+    opencodeBinsOnPath(path).map(async (bin) => ({
+      bin,
+      version: await readOpencodeVersion({ bin, timeoutMs }),
+    })),
+  );
 }
 
 /** The first host's version when every host reads and all sit on the same side of v2,
