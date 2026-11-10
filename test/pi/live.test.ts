@@ -5,6 +5,7 @@ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { decisionText, REVIEW_TOOL } from "@oc/review-bridge.ts";
 import { daemonClient } from "@test/support/daemon.ts";
 import { FAUX_PLAN_TITLE } from "@test/support/pi-faux-provider.ts";
 import {
@@ -25,8 +26,8 @@ requireNode();
 const FEEDBACK = "LIVE-CHECK-FEEDBACK: add a rollback step";
 const REVIEW_WAIT_MS = 20_000;
 const EXIT_WAIT_MS = 15_000;
-// Under `caret review`'s own retry window against a dead daemon (~6 s), so the hang
-// case times out while the review client is still alive.
+// Well under SUPERVISOR_WINDOW_MS (src/daemon/lifecycle.ts, ~14 s), `caret review`'s retry
+// window against a dead daemon, so the hang case times out while the client is alive.
 const HANG_WAIT_MS = 3_000;
 
 let root: string;
@@ -34,6 +35,7 @@ let pkgDir: string;
 let pi: PiRun | undefined;
 
 beforeAll(() => {
+  // macOS tmpdir() sits behind the /var symlink; bin/caret resolves it, so strays()' pgrep needs the real path.
   root = realpathSync(mkdtempSync(join(tmpdir(), "caret-pi-live-")));
   pkgDir = packCaret(root);
 }, 60_000);
@@ -64,7 +66,7 @@ test("a deny's feedback reaches pi's model as the tool result", async () => {
   expect(await until(() => pi?.proc.exitCode !== null, EXIT_WAIT_MS)).toBe(true);
   const out = await pi.output;
   expect(out.exit).toBe(0);
-  expect(out.stdout).toContain("caret: the user requested CHANGES to this plan.");
+  expect(out.stdout).toContain(decisionText({ behavior: "deny", feedback: FEEDBACK }, REVIEW_TOOL));
   expect(out.stdout).toContain(FEEDBACK);
 }, 60_000);
 
@@ -77,12 +79,13 @@ test("a daemon that never answers fails the wait and leaves nothing running", as
   });
   try {
     pi = runPi(sandbox, "Plan a change");
-    await expect(waitForReview(sandbox, pi, HANG_WAIT_MS)).rejects.toThrow("timed out");
+    await expect(waitForReview(sandbox, pi, HANG_WAIT_MS)).rejects.toThrow(/^waitFor: timed out$/);
     await stopPiTree(pi, root);
   } finally {
     silent.stop(true);
   }
   // A daemon may win the port once the listener closes.
   await stopPiTree(pi, root);
+  expect(await until(() => pi?.proc.exitCode !== null, 2_000)).toBe(true);
   expect(strays(root)).toEqual([]);
 }, 60_000);

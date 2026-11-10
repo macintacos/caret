@@ -8,16 +8,17 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
-  readFileSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Subprocess } from "bun";
 
+import pkg from "@root/package.json" with { type: "json" };
 import { drainProcess } from "@test/support/cli-process.ts";
 import { freePort } from "@test/support/net.ts";
 import { until, waitFor } from "@test/support/poll.ts";
+import { buildBundleCommand } from "@/tasks/build.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 const PI_BIN = join(REPO_ROOT, "node_modules", ".bin", "pi");
@@ -36,16 +37,27 @@ function run(
   return res.stdout.toString();
 }
 
-/** Throws naming the runtime when pi can't run: its CLI needs `node` (>=22.19), and
- * packing needs `npm`. Call at module load. */
+const NODE_FLOOR = "22.19.0";
+
+/** Throws naming the runtime when `node` or `npm` is missing from PATH, or `node` is
+ * older than pi's floor. Call at module load. */
 export function requireNode(): void {
+  const hint = `pi's CLI runs on Node ${NODE_FLOOR}+ and the package is packed with npm. Install Node, e.g. \`mise use -g node@24\`.`;
   for (const bin of ["node", "npm"]) {
-    if (!Bun.which(bin)) {
-      throw new Error(
-        `pi live check: no \`${bin}\` on PATH — pi's CLI runs on Node (22.19+) and the package is packed with npm. Install Node, e.g. \`mise use -g node@24\`.`,
-      );
-    }
+    if (!Bun.which(bin)) throw new Error(`pi live check: no \`${bin}\` on PATH — ${hint}`);
   }
+  const version = Bun.spawnSync(["node", "--version"]).stdout.toString().trim();
+  if (!Bun.semver.satisfies(version.replace(/^v/, ""), `>=${NODE_FLOOR}`)) {
+    throw new Error(`pi live check: \`node\` is ${version}, below ${NODE_FLOOR} — ${hint}`);
+  }
+}
+
+function bundleArgv(outdir: string): string[] {
+  const argv = buildBundleCommand();
+  argv[0] = process.execPath;
+  argv[argv.indexOf("--outdir") + 1] = outdir;
+  // Keeps a generated UI manifest left by `build bin` out of the bundle, as runBuildBundle does by deleting it.
+  return [...argv, "--external", "@/ui-manifest.generated.ts"];
 }
 
 /** Stage package.json + every `files` entry but dist/ and ui/dist/ under `root`, build
@@ -57,31 +69,16 @@ export function packCaret(root: string): string {
   mkdirSync(stage);
   mkdirSync(packDir);
   mkdirSync(pkgParent);
-  const manifest = join(REPO_ROOT, "package.json");
-  cpSync(manifest, join(stage, "package.json"));
-  const files: string[] = JSON.parse(readFileSync(manifest, "utf8")).files;
-  for (const entry of files.map((f) => f.replace(/\/$/, ""))) {
+  cpSync(join(REPO_ROOT, "package.json"), join(stage, "package.json"));
+  for (const entry of pkg.files.map((f) => f.replace(/\/$/, ""))) {
+    if (entry === "dist" || entry === "ui/dist") continue;
     const src = join(REPO_ROOT, entry);
-    if (entry === "dist" || entry === "ui/dist" || !existsSync(src)) continue;
+    if (!existsSync(src)) throw new Error(`package.json files entry missing on disk: ${entry}`);
     const dst = join(stage, entry);
     mkdirSync(dirname(dst), { recursive: true });
     cpSync(src, dst, { recursive: true });
   }
-  // Keep in sync with scripts/tasks/build.ts buildBundleCommand(); `--external` stands in
-  // for its delete of the generated UI manifest.
-  run(
-    [
-      process.execPath,
-      "build",
-      "--target=bun",
-      "--external",
-      "@/ui-manifest.generated.ts",
-      "--outdir",
-      join(stage, "dist"),
-      "src/cli.ts",
-    ],
-    { cwd: REPO_ROOT },
-  );
+  run(bundleArgv(join(stage, "dist")), { cwd: REPO_ROOT });
   const packed = run(["npm", "pack", "--ignore-scripts", "--json", "--pack-destination", packDir], {
     cwd: stage,
     env: { ...process.env, npm_config_update_notifier: "false" },
@@ -92,6 +89,7 @@ export function packCaret(root: string): string {
 }
 
 export interface PiSandbox {
+  /** The child's complete env, not an overlay on `process.env`. */
   env: Record<string, string>;
   cwd: string;
   agentDir: string;
@@ -116,7 +114,8 @@ export function piSandbox(root: string, pkgDir: string): PiSandbox {
   writeFileSync(config, "[updates]\ncheck = false\n");
   const port = freePort();
   const inherited = Object.entries(process.env).filter(
-    (e): e is [string, string] => e[1] !== undefined && !e[0].startsWith("CARET_"),
+    (e): e is [string, string] =>
+      e[1] !== undefined && !e[0].startsWith("CARET_") && !e[0].startsWith("CMUX_"),
   );
   const env: Record<string, string> = {
     ...Object.fromEntries(inherited),
@@ -134,11 +133,12 @@ export function piSandbox(root: string, pkgDir: string): PiSandbox {
 }
 
 export interface PiRun {
+  /** Leads its own process group. */
   proc: Subprocess<"ignore", "pipe", "pipe">;
   output: Promise<{ stdout: string; stderr: string; exit: number }>;
 }
 
-/** `pi -p --provider faux --model faux-1 -e <faux> <prompt>`, own process group. */
+/** Runs pi under the faux model in its own process group, so stopPiTree can signal the whole tree. */
 export function runPi(sandbox: PiSandbox, prompt: string): PiRun {
   const proc = Bun.spawn(
     [PI_BIN, "-p", "--provider", "faux", "--model", "faux-1", "-e", FAUX_EXTENSION, prompt],
