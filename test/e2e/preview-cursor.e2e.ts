@@ -13,7 +13,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { sourceToggle } from "@test/e2e/support/chrome.ts";
 import {
   expectCursorLine,
   goToTop,
@@ -189,7 +189,7 @@ const setColumnWidth = (page: Page, width: number) =>
 
 async function openPreview(page: Page, daemon: Parameters<typeof openPlanForKeys>[1]) {
   await openPlanForKeys(page, daemon, PLAN);
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
 }
 
@@ -390,7 +390,7 @@ test.describe("preview keyboard cursor", () => {
   test("j visits each table row, list line and code line once", async ({ page, daemon }) => {
     await page.setViewportSize({ width: 420, height: 900 });
     await openPlanForKeys(page, daemon, SHAPES);
-    await previewToggle(page).click();
+    await sourceToggle(page).click();
     await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
     await setColumnWidth(page, 420);
     await press(page, "g", "g");
@@ -425,7 +425,7 @@ test.describe("preview keyboard cursor", () => {
     });
     await page.goto("/");
     await awaitPlanReadyForKeys(page);
-    await previewToggle(page).click();
+    await sourceToggle(page).click();
     await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
 
     await toLongParagraph(page);
@@ -496,7 +496,7 @@ test.describe("preview keyboard cursor", () => {
     await page.emulateMedia({ colorScheme: "dark" });
     await page.setViewportSize({ width: 420, height: 900 });
     await openPlanForKeys(page, daemon, `# ${LONG}\n\nClosing paragraph quokka.\n`);
-    await previewToggle(page).click();
+    await sourceToggle(page).click();
     await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
     await setColumnWidth(page, 420);
 
@@ -520,7 +520,7 @@ test.describe("preview keyboard cursor", () => {
     await stepFrom(page, "j", await bandTop(page));
     const line = await bandLine(page);
 
-    await previewToggle(page).click();
+    await sourceToggle(page).click();
     await expectCursorLine(page, line);
   });
 
@@ -532,7 +532,7 @@ test.describe("preview keyboard cursor", () => {
     for (let i = 1; i < closing; i++) await press(page, "j");
     await expectCursorLine(page, closing);
 
-    await previewToggle(page).click();
+    await sourceToggle(page).click();
     await expect(previewCursor(page)).toHaveAttribute("data-line", String(closing));
     await expect.poll(() => bandCovers(page, "Closing")).toBe(true);
   });

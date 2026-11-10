@@ -14,7 +14,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { openSettings, previewToggle } from "@test/e2e/support/chrome.ts";
+import { openSettings, sourceToggle } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
 import {
   BELOW_COLUMN,
@@ -62,7 +62,7 @@ async function openRows(
   await page.goto("/");
   await planSurface(page);
   await waitPastSafeModeGrace(page);
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
   const start = (prefix: string) => lines.findIndex((l) => l.startsWith(prefix)) + 1;
   return { prose: start("Rows paragraph"), list: start("- item one") };

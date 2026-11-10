@@ -18,7 +18,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { currentCrumb, previewToggle as toggle } from "@test/e2e/support/chrome.ts";
+import { currentCrumb, sourceToggle as toggle } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
 import {
   jumpToHeading,
@@ -54,14 +54,14 @@ test("the toggle flips a fresh origin from source to a laid-out preview", async 
   await page.goto("/");
   await planSurface(page);
   await expect(page.locator(".diffview")).toBeVisible();
-  await expect(toggle(page)).toHaveAttribute("aria-pressed", "false");
+  await expect(toggle(page)).toHaveAttribute("aria-pressed", "true");
 
   await toggle(page).focus();
   await page.keyboard.press("Enter");
 
   const preview = page.locator(PREVIEW);
   await expect(preview).toBeVisible();
-  await expect(toggle(page)).toHaveAttribute("aria-pressed", "true");
+  await expect(toggle(page)).toHaveAttribute("aria-pressed", "false");
   await expect(toggle(page)).toBeFocused();
   const slashed = preview.locator('input[data-task="slashed"]');
   await expect.poll(() => slashed.evaluate((el: HTMLInputElement) => el.indeterminate)).toBe(true);
@@ -80,7 +80,7 @@ test("the preview stays on across a reload", async ({ daemon, page }) => {
   await page.reload();
 
   await expect(page.locator(PREVIEW)).toBeVisible();
-  await expect(toggle(page)).toHaveAttribute("aria-pressed", "true");
+  await expect(toggle(page)).toHaveAttribute("aria-pressed", "false");
 });
 
 test("compare hides the toggle, then hands back the preview and re-arms heading tracking", async ({

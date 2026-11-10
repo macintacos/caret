@@ -15,9 +15,9 @@ export type PlanSurface = PlanView | "compare";
 /** localStorage key holding the remembered plan view. */
 export const PLAN_VIEW_KEY = "caret.planView";
 
-const pref = definePref<PlanView>(PLAN_VIEW_KEY, ["source", "preview"], "source");
+const pref = definePref<PlanView>(PLAN_VIEW_KEY, ["source", "preview"], "preview");
 
-/** Read the remembered view, defaulting to "source" on a missing, unrecognized, or
+/** Read the remembered view, defaulting to "preview" on a missing, unrecognized, or
  * unreadable value. */
 export const readPlanView = pref.read;
 

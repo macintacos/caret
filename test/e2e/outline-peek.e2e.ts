@@ -15,7 +15,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { sourceToggle } from "@test/e2e/support/chrome.ts";
 import { toLab } from "@test/e2e/support/color.ts";
 import { fileRefCount, makeProject, settleDrawer } from "@test/e2e/support/file-refs.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
@@ -72,7 +72,7 @@ async function openAt(
   await page.goto(review === undefined ? "/" : `/?review=${review}`);
   await planSurface(page);
   if (view === "preview") {
-    await previewToggle(page).click();
+    await sourceToggle(page).click();
     await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
   }
 }
@@ -206,7 +206,7 @@ test("flipping the view under an open peek keeps it open, on the new view's copy
   await expect(peekHeading(page, "source")).toHaveText("## Intake");
 
   const closed = await watchForClose(page);
-  await page.keyboard.press("p");
+  await page.keyboard.press("s");
   await expect(page.locator(`.plan-pane ${PLAN_PREVIEW}`)).toBeVisible();
   await expect(peekHeading(page, "preview")).toHaveText("Intake");
   await expect(openPeek(page)).toHaveAttribute("data-view", "preview");

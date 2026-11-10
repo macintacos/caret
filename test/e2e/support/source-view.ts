@@ -25,7 +25,7 @@ import { READING_ZONE_SLOP, SCROLL_OFFSET_TOP } from "@ui/src/lib/layout.ts";
  */
 export const PLAN_SURFACE = ".diff-plan";
 
-/** The rendered preview that replaces the source view when the Preview toggle is on;
+/** The rendered preview that replaces the source view when the Source toggle is off;
  * a role-less container, so its class is the handle. */
 export const PLAN_PREVIEW = ".plan-preview";
 

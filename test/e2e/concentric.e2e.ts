@@ -261,7 +261,7 @@ test("the plan header's bed nests in the pane's top corners, and its end keys in
   await expectConcentric(pane, bed, "tl");
   await expectConcentric(pane, bed, "tr");
   await expectConcentric(bed, pane.getByRole("button", { name: "Outline", exact: true }), "tl");
-  await expectConcentric(bed, pane.locator(".preview-toggle"), "tr");
+  await expectConcentric(bed, pane.locator(".source-toggle"), "tr");
 });
 
 test("the outline column's bed: its filter field and a top-level row's key nest in its corner", async ({

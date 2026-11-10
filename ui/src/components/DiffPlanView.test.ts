@@ -1,5 +1,5 @@
 import "@ui/support/mount.ts";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import type { ClientReview, PlanVersion } from "@core/lib/types";
 import { until } from "@test/support/poll.ts";
@@ -98,6 +98,8 @@ async function renderAndWaitForPre(
   return { target, flush, pre: shadow(target)?.querySelector("pre") };
 }
 
+// Most cases read the source view, which is no longer the default.
+beforeEach(() => localStorage.setItem("caret.planView", "source"));
 afterEach(() => localStorage.clear());
 
 afterEach(() => document.documentElement.style.removeProperty("--caret-test-repaint"));
@@ -263,9 +265,9 @@ describe("DiffPlanView plan header", () => {
   test.each([
     ["with nothing to compare", reviewFixture()],
     ["with versions to compare", multiVersionFixture(3)],
-  ])("Versions and Preview share one tray %s", (_, review) => {
+  ])("Versions and Source share one tray %s", (_, review) => {
     const { target } = render(DiffPlanView, props({ review }));
-    const trays = [".compare-toggle", ".preview-toggle"].map(
+    const trays = [".compare-toggle", ".source-toggle"].map(
       (cap) => target.querySelector(`.plan-header ${cap}`)?.closest(".tray") ?? null,
     );
     expect(trays.every((tray) => tray !== null)).toBe(true);
@@ -637,7 +639,7 @@ describe("DiffPlanView comment-span brackets", () => {
 });
 
 const toggle = (target: HTMLElement) =>
-  target.querySelector<HTMLButtonElement>(".plan-header .preview-toggle");
+  target.querySelector<HTMLButtonElement>(".plan-header .source-toggle");
 
 async function renderOnPreview(over = {}) {
   const mounted = render(DiffPlanView, props(over));
@@ -956,17 +958,18 @@ describe("DiffPlanView plan search (EXC-832)", () => {
 });
 
 describe("DiffPlanView plan view toggle", () => {
-  test("a fresh mount reads the source view with the toggle unpressed", async () => {
+  test("a fresh mount reads the preview with the toggle unpressed", async () => {
+    localStorage.clear();
     const { target } = render(DiffPlanView, props());
-    await until(() => shadow(target)?.textContent?.includes("hello world") ?? false);
+    const opened = await until(() => target.querySelector(".plan-preview") != null);
+    expect(opened).toBe(true);
     expect(toggle(target)?.getAttribute("aria-pressed")).toBe("false");
-    expect(target.querySelector(".plan-preview") != null).toBe(false);
   });
 
   test("the toggle switches to the preview and remembers it", async () => {
     const { target } = await renderOnPreview();
     expect(target.querySelector(".plan-preview")?.textContent).toContain("hello world");
-    expect(toggle(target)?.getAttribute("aria-pressed")).toBe("true");
+    expect(toggle(target)?.getAttribute("aria-pressed")).toBe("false");
     expect(localStorage.getItem("caret.planView")).toBe("preview");
   });
 
@@ -975,36 +978,37 @@ describe("DiffPlanView plan view toggle", () => {
       .list()
       .find((e) => e.id === id)
       ?.enabled?.();
-  const togglePreview = () =>
+  const toggleSource = () =>
     shortcuts
       .list()
-      .find((e) => e.id === "actions.togglePreview")
+      .find((e) => e.id === "actions.toggleSource")
       ?.run?.();
 
-  test("p flips to the preview and back", async () => {
+  test("s flips to the preview and back, pressed while the source shows", async () => {
     const { target } = render(DiffPlanView, props());
     await until(() => toggle(target) != null);
-    togglePreview();
-    await until(() => target.querySelector(".plan-preview") != null);
     expect(toggle(target)?.getAttribute("aria-pressed")).toBe("true");
-    togglePreview();
-    await until(() => target.querySelector(".plan-preview") == null);
+    toggleSource();
+    await until(() => target.querySelector(".plan-preview") != null);
     expect(toggle(target)?.getAttribute("aria-pressed")).toBe("false");
+    toggleSource();
+    await until(() => target.querySelector(".plan-preview") == null);
+    expect(toggle(target)?.getAttribute("aria-pressed")).toBe("true");
   });
 
-  test("the toggle advertises p with a cap", async () => {
+  test("the toggle advertises s with a cap", async () => {
     const { target } = render(DiffPlanView, props());
     await until(() => toggle(target) != null);
-    expect(toggle(target)?.getAttribute("aria-keyshortcuts")).toBe("p");
-    expect(toggle(target)?.querySelector("[data-slot='kbd']")?.textContent).toBe("p");
+    expect(toggle(target)?.getAttribute("aria-keyshortcuts")).toBe("s");
+    expect(toggle(target)?.querySelector("[data-slot='kbd']")?.textContent).toBe("s");
   });
 
-  test("p is off while comparing", async () => {
+  test("s is off while comparing", async () => {
     const { target } = render(DiffPlanView, props({ review: multiVersionFixture(3) }));
     await until(() => toggle(target) != null);
     target.querySelector<HTMLButtonElement>(".compare-toggle")!.click();
     await until(() => toggle(target) == null);
-    expect(enabled("actions.togglePreview")).toBe(false);
+    expect(enabled("actions.toggleSource")).toBe(false);
   });
 
   test("the preview keeps the Search entry and its shortcut", async () => {

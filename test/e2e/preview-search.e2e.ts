@@ -8,7 +8,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { sourceToggle } from "@test/e2e/support/chrome.ts";
 import { PREVIEW_BAND, previewCursor } from "@test/e2e/support/cursor.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import {
@@ -74,7 +74,7 @@ async function dismiss(page: Page): Promise<void> {
 }
 
 async function flip(page: Page, to: "preview" | "source"): Promise<void> {
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   if (to === "preview") await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
   else await awaitPlanReadyForKeys(page);
 }

@@ -10,7 +10,7 @@ import {
   commentNavigator,
   commentTally,
   openSettings,
-  previewToggle,
+  sourceToggle,
 } from "@test/e2e/support/chrome.ts";
 import { openWithPendingAnnotation } from "@test/e2e/support/decision.ts";
 import { makeProject, openFileRefPreview } from "@test/e2e/support/file-refs.ts";
@@ -278,7 +278,7 @@ test("a link in the preview", async ({ daemon, page }) => {
   await daemon.seed({ plan: "# Plan\n\nSee [the docs](https://example.com/docs) first.\n" });
   await page.goto("/");
   await planSurface(page);
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   await expectFocusLooksLikeHover(page, page.locator(".plan-preview a"));
 });
 

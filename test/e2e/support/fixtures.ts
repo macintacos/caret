@@ -123,6 +123,9 @@ export interface E2EOptions {
   /** The GitHub releases GET /api/update/notes selects from, through the daemon's real
    * selection. Null (the default) leaves the route unwired, so it 404s. */
   updateReleases: GitHubRelease[] | null;
+  /** Seed `caret.planView=source` when absent, so a spec starts on the source view
+   * rather than the preview default. On by default; a spec testing the default turns it off. */
+  pinPlanView: boolean;
   /** Boot the daemon with token auth on; harness requests then carry its token. Off by default. */
   auth: boolean;
 }
@@ -264,6 +267,7 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
   updateVersion: ["0.0.0-e2e", { option: true }],
   updateReleases: [null, { option: true }],
   auth: [false, { option: true }],
+  pinPlanView: [true, { option: true }],
   daemon: async (
     {
       bootTimeoutMs,
@@ -438,7 +442,15 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
   // 4.9m back to its 2.3m baseline while covering 441 of the 444 key presses in
   // it; the three that go through `locator.press` instead are written as
   // `focus()` + `page.keyboard.press` so they come through here too.
-  page: async ({ page }, use) => {
+  page: async ({ page, pinPlanView }, use) => {
+    // On the context, not the page: a spec may open a second page in it.
+    if (pinPlanView) {
+      await page.context().addInitScript(() => {
+        if (localStorage.getItem("caret.planView") === null) {
+          localStorage.setItem("caret.planView", "source");
+        }
+      });
+    }
     let ready = false;
     // Any main-frame navigation lands on a renderer whose keyboard has to be
     // re-proven. Sub-frame navigations are irrelevant and must not reset it.

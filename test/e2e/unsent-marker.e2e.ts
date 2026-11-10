@@ -8,7 +8,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { sourceToggle } from "@test/e2e/support/chrome.ts";
 import { openWithPendingScratch } from "@test/e2e/support/decision.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { bundledThemes } from "@test/support/theme.ts";
@@ -95,7 +95,7 @@ for (const theme of bundledThemes().filter(({ scheme }) => scheme === "dark")) {
     await page.mouse.move(0, 0);
     const row = page.getByRole("button", { name: "Resume unsent comment" });
     expect(await sag(page, row), "source").toBeLessThanOrEqual(MAX_SAG);
-    await previewToggle(page).click();
+    await sourceToggle(page).click();
     expect(await sag(page, row), "preview").toBeLessThanOrEqual(MAX_SAG);
   });
 }

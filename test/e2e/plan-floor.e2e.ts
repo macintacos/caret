@@ -4,7 +4,7 @@
 // the screen reads as one even surface. The preview draws its own blocks on the paper.
 import type { Page } from "@playwright/test";
 
-import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { sourceToggle } from "@test/e2e/support/chrome.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { planSurface } from "@test/e2e/support/source-view.ts";
 
@@ -59,7 +59,7 @@ test("the preview's pane lies on the paper", async ({ daemon, page }) => {
   await daemon.seed();
   await page.goto("/");
   await planSurface(page);
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   await expect(page.locator(".plan-preview")).toBeVisible();
 
   const f = await floors(page);

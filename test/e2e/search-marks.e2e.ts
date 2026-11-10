@@ -9,7 +9,7 @@
 
 import type { Page } from "@playwright/test";
 
-import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { sourceToggle } from "@test/e2e/support/chrome.ts";
 import { colorDistance, contrast, highlightPaint, paintOver } from "@test/e2e/support/color.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
 import { openPlanForKeys, PLAN_PREVIEW, PREVIEW_DRAG } from "@test/e2e/support/source-view.ts";
@@ -56,7 +56,7 @@ async function useTheme(page: Page, theme: { scheme: string; id: string }): Prom
 }
 
 async function showPreview(page: Page): Promise<void> {
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
 }
 

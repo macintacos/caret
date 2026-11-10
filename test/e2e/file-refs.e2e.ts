@@ -25,7 +25,7 @@
 // writes a synthetic project dir and seeds a review whose cwd points at it. The
 // content is throwaway, non-identifying scaffolding — never a real plan.
 
-import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { sourceToggle } from "@test/e2e/support/chrome.ts";
 import {
   fileRefCount,
   makeProject,
@@ -1739,7 +1739,7 @@ test.describe("on the preview", () => {
   async function openOnPreview(page: import("@playwright/test").Page, daemon: Daemon) {
     const proj = await makeProject({ "src/cache.ts": CACHE_TS, "src/lib/util.ts": "export {};\n" });
     await seedFileRefs(page, daemon, proj.dir, PREVIEW_PLAN, 4);
-    await previewToggle(page).click();
+    await sourceToggle(page).click();
     await expect(page.locator(`${PLAN_PREVIEW} [data-file-ref]`)).toHaveCount(4);
     return proj;
   }
@@ -1785,7 +1785,7 @@ test.describe("on the preview", () => {
         "",
       ].join("\n");
       await seedFileRefs(page, daemon, proj.dir, plan);
-      await previewToggle(page).click();
+      await sourceToggle(page).click();
       const tag = page.locator(`${PLAN_PREVIEW} span[data-file-ref]`);
       await expect(tag).toHaveCount(1);
 
@@ -1870,7 +1870,7 @@ test.describe("on the preview", () => {
       await page.mouse.move(0, 0);
       let source: Awaited<ReturnType<typeof sourceRef>> = null;
       await expect.poll(async () => (source = await sourceRef(page, "the cache"))).not.toBeNull();
-      await previewToggle(page).click();
+      await sourceToggle(page).click();
       const refs = page.locator(`${PLAN_PREVIEW} [data-file-ref]`);
       await expect(refs).toHaveCount(4);
 

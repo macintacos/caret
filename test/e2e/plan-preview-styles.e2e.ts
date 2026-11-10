@@ -11,7 +11,7 @@
 import type { Page } from "@playwright/test";
 
 import type { ThemeMarkdown } from "@core/theme/schema.ts";
-import { previewToggle } from "@test/e2e/support/chrome.ts";
+import { sourceToggle } from "@test/e2e/support/chrome.ts";
 import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
 import { GONE, GOOD, routeAssets } from "@test/e2e/support/images.ts";
 import {
@@ -31,7 +31,7 @@ import {
 import { caretThemeVariant, selectThemeFile } from "@test/e2e/support/themes.ts";
 
 async function showPreview(page: Page): Promise<void> {
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
 }
 

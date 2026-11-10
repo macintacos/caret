@@ -1921,7 +1921,7 @@
   });
   // The view flip keeps an open peek, which swaps in the other view's copy.
   const FLIP_CHORDS =
-    CANONICAL_KEYMAP.find((entry) => entry.id === "actions.togglePreview")?.keys ?? [];
+    CANONICAL_KEYMAP.find((entry) => entry.id === "actions.toggleSource")?.keys ?? [];
   function flipsView(e: KeyboardEvent): boolean {
     return (
       !showDiff &&
@@ -2559,11 +2559,11 @@
     setHeadingSlug(runs("headingTracking") ? slug : null);
   });
 
-  // The compare-toggle, preview-toggle + plan-search shortcuts, live entries over EXC-786's
+  // The compare-toggle, source-toggle + plan-search shortcuts, live entries over EXC-786's
   // reservations. Registered while the single-version view is mounted (i.e. an active
   // review), so they no-op with no review; the enabled guards mirror each control's
   // own availability — `d` toggles compare only when there are versions to compare,
-  // `p` flips the view only off compare, where its button shows,
+  // `s` flips the view only off compare, where its button shows,
   // `/` opens search only on the search surfaces, and n/N cycle only while a
   // search is committed. Mount-once: the closures read compareStore/surface/search*
   // live at dispatch, so a version or view change never churns the registry.
@@ -2579,7 +2579,7 @@
     );
     offs.push(
       shortcuts.register(
-        bind("actions.togglePreview", { run: togglePlanView, enabled: () => !showDiff }),
+        bind("actions.toggleSource", { run: togglePlanView, enabled: () => !showDiff }),
       ),
     );
     // `/` opens the plan search (EXC-832). Plan-content only; not gated on the plan
@@ -2962,14 +2962,14 @@
             <Button
               variant="secondary"
               size="sm"
-              class="preview-toggle float-chip"
-              aria-pressed={planView === "preview"}
-              aria-keyshortcuts={ariaKeyshortcutsFor("actions.togglePreview")}
+              class="source-toggle float-chip"
+              aria-pressed={planView === "source"}
+              aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleSource")}
               onclick={togglePlanView}
             >
-              Preview
+              Source
               {#if showShortcutHints}
-                <Kbd class="kbd-sm" aria-hidden="true">p</Kbd>
+                <Kbd class="kbd-sm" aria-hidden="true">s</Kbd>
               {/if}
             </Button>
           {/if}
@@ -3578,7 +3578,7 @@
   :global(:root[data-pane-move]) .header-bed {
     view-transition-name: header-bed;
   }
-  :global(:root[data-pane-move]) .plan-header :global(.preview-toggle) {
+  :global(:root[data-pane-move]) .plan-header :global(.source-toggle) {
     view-transition-name: preview-key;
   }
 

@@ -186,7 +186,7 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     group: "actions",
     label: "Toggle compare/diff",
   },
-  { id: "actions.togglePreview", keys: [{ key: "p" }], group: "actions", label: "Toggle preview" },
+  { id: "actions.toggleSource", keys: [{ key: "s" }], group: "actions", label: "Toggle source" },
   {
     // EXC-832: / opens a vim-style full-text search of the plan, repurposed from
     // EXC-789's focus-contents-filter — this ticket owns / at the plan surface. The

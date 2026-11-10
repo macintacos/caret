@@ -4,7 +4,7 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { openSettings, previewToggle } from "@test/e2e/support/chrome.ts";
+import { openSettings, sourceToggle } from "@test/e2e/support/chrome.ts";
 import { colorDistance, toLab } from "@test/e2e/support/color.ts";
 import { openWithPendingScratch } from "@test/e2e/support/decision.ts";
 import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
@@ -119,10 +119,10 @@ async function insetOff(
   return Math.max(Math.abs(got.top - want.top), Math.abs(got.bottom - want.bottom));
 }
 
-/** How far a latched toggle sits inside its tray, read off the control row's Preview. */
+/** How far a latched toggle sits inside its tray, read off the control row's Source,
+ * latched while the source view shows. */
 async function latchedTrayInset(page: Page): Promise<{ top: number; bottom: number }> {
-  const key = previewToggle(page);
-  await key.click();
+  const key = sourceToggle(page);
   await expect(key).toHaveAttribute("aria-pressed", "true");
   await page.mouse.move(0, 0);
   // The latch travels on a transition; an inset read mid-travel is not the latched one.
@@ -419,7 +419,7 @@ test("a press on light paper never lightens the key under the pointer", async ({
     async () => page.getByRole("button", { name: "Request changes" }),
     async () => page.getByRole("button", { name: /^Copy path / }),
     async () => {
-      await previewToggle(page).click();
+      await sourceToggle(page).click();
       await (await planSurface(page)).locator("[data-source-start]").first().hover();
       return page.locator(".preview-plus > button");
     },
@@ -535,7 +535,7 @@ test("the gutter's comment key stands the same side as a top-bar key, in both vi
   const source = await revealGutterPlus(page, 3);
   expect(await shadowGeometry(source)).toBe(want);
 
-  await previewToggle(page).click();
+  await sourceToggle(page).click();
   const line = (await planSurface(page)).locator("[data-source-start]").first();
   await line.hover();
   const preview = page.locator(".preview-plus > button");
