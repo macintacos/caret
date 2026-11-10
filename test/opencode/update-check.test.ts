@@ -13,7 +13,6 @@ import {
   isNewer,
   parseLatestRelease,
   realUpdateChecker,
-  resolveCaretBin,
   resolveCaretVersion,
   shouldCheckForUpdate,
   type ToastBody,
@@ -92,30 +91,6 @@ test("resolveCaretVersion degrades to an unparseable sentinel when the package.j
   // The whole point of the sentinel: an unreadable version must NOT trigger a
   // spurious "update available (you have 0.0.0)" toast.
   expect(updateToastBody(v, { version: "9.9.9", url: "https://x" })).toBeNull();
-});
-
-// --- resolveCaretBin ---
-
-test("resolveCaretBin: env override wins, then the package-relative bin", () => {
-  const importMetaUrl = "file:///pkg/opencode/caret.plugin.ts";
-  const overrideVar = "CARET_OPENCODE_BIN";
-  expect(
-    resolveCaretBin({ env: { CARET_OPENCODE_BIN: "/override" }, importMetaUrl, overrideVar }),
-  ).toBe("/override");
-  expect(resolveCaretBin({ env: {}, importMetaUrl, overrideVar })).toBe("/pkg/bin/caret");
-});
-
-test("resolveCaretBin reads only the override variable it is given", () => {
-  const importMetaUrl = "file:///pkg/pi/caret.ts";
-  const env = { CARET_OPENCODE_BIN: "/opencode", CARET_PI_BIN: "/pi" };
-  expect(resolveCaretBin({ env, importMetaUrl, overrideVar: "CARET_PI_BIN" })).toBe("/pi");
-  expect(
-    resolveCaretBin({
-      env: { CARET_OPENCODE_BIN: "/opencode" },
-      importMetaUrl,
-      overrideVar: "CARET_PI_BIN",
-    }),
-  ).toBe("/pkg/bin/caret");
 });
 
 // --- shouldCheckForUpdate (24h throttle, pure) ---

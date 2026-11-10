@@ -72,10 +72,11 @@ third-party):
   `architecture-rules.md`.
 - **`$lib`** — the UI's `ui/src/lib/` directory, the prefix shadcn-svelte's copied
   components and `components.json` assume. See `svelte-rules.md` / `shadcn-rules.md`.
-- **`@test/*`, `@scripts/*`, `@oc/*`, `@ui/*`** — the repo's other roots, so a test never
-  addresses a target by counting `../` hops (EXC-879). `@oc/*` maps `opencode/`,
-  deliberately not `@opencode/*`, because `@opencode` is a real npm scope
-  (`@opencode/plugin`) that a local file could shadow. `@test/*` also names *which*
+- **`@test/*`, `@scripts/*`, `@oc/*`, `@piext/*`, `@ui/*`** — the repo's other roots, so a
+  test never addresses a target by counting `../` hops (EXC-879). `@oc/*` maps
+  `opencode/`, deliberately not `@opencode/*`, because `@opencode` is a real npm scope
+  (`@opencode/plugin`) that a local file could shadow. `@piext/*` maps `pi/`, not `@pi/*`,
+  for the same reason: `@pi` could be a real npm scope. `@test/*` also names *which*
   harness is meant: `test/support/` (bun) and `test/e2e/support/` (Playwright) are two
   different directories that a bare `./support/x` could not distinguish. These are
   top-level rather than grafted under `@/` deliberately — `@/` means "this program's

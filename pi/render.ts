@@ -22,10 +22,20 @@ export function callLine(args: { plan?: string; path?: string }, theme: PiTheme)
   return `${theme.fg("toolTitle", "caret")} ${theme.fg("muted", planTitle(args))}`;
 }
 
-export function resultLine(details: ReviewDetails, theme: PiTheme): string {
-  switch (details.state) {
-    case "waiting":
-      return `${theme.fg("warning", "^")} ${theme.fg("muted", "waiting for review")} ${theme.fg("dim", hyperlink(details.url, details.url))}`;
+/** A result as pi hands it back. A call that never reached `execute` (bad schema, a
+ * blocking hook, an abort) carries `details: {}` and pi's reason in `content`, and so
+ * does a session written by a caret with another state set. */
+export type RenderedResult = {
+  content?: { type: string; text?: string }[];
+  details?: Partial<ReviewDetails>;
+};
+
+export function resultLine({ content, details }: RenderedResult, theme: PiTheme): string {
+  switch (details?.state) {
+    case "waiting": {
+      const url = details.url ?? "";
+      return `${theme.fg("warning", "^")} ${theme.fg("muted", "waiting for review")} ${theme.fg("dim", hyperlink(url, url))}`;
+    }
     case "approved":
       return theme.fg("success", "✓ approved");
     case "changes":
@@ -34,5 +44,8 @@ export function resultLine(details: ReviewDetails, theme: PiTheme): string {
       return theme.fg("muted", "cancelled");
     case "failed":
       return theme.fg("error", "✕ review failed");
+    default:
+      details?.state satisfies undefined;
+      return theme.fg("error", `✕ ${content?.[0]?.text ?? "review failed"}`);
   }
 }

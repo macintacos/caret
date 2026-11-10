@@ -35,8 +35,8 @@ import { importSpecifiers, runtimeImportSpecifiers } from "@test/support/import-
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 const OPENCODE_DIR = "opencode";
 
-// The scan boundary is the publish boundary: `files` ships each source directory entire, so every
-// module extension a consumer could resolve is read, not just the `.ts` files. A shipped
+// The scan boundary is the publish boundary: `files` ships each source directory entire,
+// so every module extension a consumer could resolve is read, not just the `.ts` files. A shipped
 // file this glob missed would go silently underived — the one failure direction that
 // leaves the gate green while a consumer's install breaks.
 const SHIPPED_GLOB = "**/*.{ts,mts,cts,js,mjs,cjs}";
@@ -60,9 +60,16 @@ function importedPackages(source: string): string[] {
     );
 }
 
-const HOST_PROVIDED_BY_DIR: Record<string, readonly string[]> = {
+const SHIPPED_SOURCE_DIRS = ["opencode", "pi"] as const;
+type ShippedDir = (typeof SHIPPED_SOURCE_DIRS)[number];
+
+// `files` directories that ship bundles, whose package names were resolved at build time.
+const BUNDLE_DIRS = ["dist/", "ui/dist/"];
+
+const HOST_PROVIDED_BY_DIR: Record<ShippedDir, readonly string[]> = {
   opencode: ["@opentui/solid"],
-  // pi maps these to its own copies at load time (pi's docs/extensions.md), so they may be imported statically.
+  // pi maps these to its own copies at load time (pi's docs/extensions.md), so they may
+  // be imported statically.
   pi: [
     "@earendil-works/pi-coding-agent",
     "@earendil-works/pi-tui",
@@ -83,20 +90,32 @@ function scanImports(dir: string): Set<string> {
 
 /** The union over directories of each directory's imports minus that directory's host set. */
 function expectedDependencies(
-  importsByDir: Record<string, Iterable<string>>,
-  hostProvidedByDir: Record<string, readonly string[]>,
+  importsByDir: Partial<Record<ShippedDir, Iterable<string>>>,
+  hostProvidedByDir: Record<ShippedDir, readonly string[]>,
 ): string[] {
   const expected = new Set<string>();
-  for (const [dir, names] of Object.entries(importsByDir)) {
-    const host = hostProvidedByDir[dir] ?? [];
-    for (const name of names) if (!host.includes(name)) expected.add(name);
+  for (const dir of SHIPPED_SOURCE_DIRS) {
+    for (const name of importsByDir[dir] ?? [])
+      if (!hostProvidedByDir[dir].includes(name)) expected.add(name);
   }
   return [...expected].sort();
 }
 
 const importsByDir = Object.fromEntries(
-  Object.keys(HOST_PROVIDED_BY_DIR).map((dir) => [dir, scanImports(dir)]),
-);
+  SHIPPED_SOURCE_DIRS.map((dir) => [dir, scanImports(dir)]),
+) as Record<ShippedDir, Set<string>>;
+
+test("every `files` directory holding source is scanned", () => {
+  const unscanned = pkg.files
+    .filter((f) => f.endsWith("/") && !BUNDLE_DIRS.includes(f))
+    .map((f) => f.slice(0, -1))
+    .filter((dir) => !(SHIPPED_SOURCE_DIRS as readonly string[]).includes(dir))
+    .filter(
+      (dir) =>
+        new Bun.Glob(SHIPPED_GLOB).scanSync({ cwd: join(REPO_ROOT, dir) }).next().done === false,
+    );
+  expect(unscanned).toEqual([]);
+});
 
 test("`dependencies` carries exactly what the shipped source directories make a consumer resolve", () => {
   expect(Object.keys(pkg.dependencies).sort()).toEqual(
@@ -131,7 +150,11 @@ test("every shipped source directory still has imports to derive the expected se
   // Without this the gate passes vacuously the moment a directory is renamed or its
   // imports are inlined — finding nothing would read as "dependencies is empty and
   // correct" rather than as a broken scan.
-  for (const names of Object.values(importsByDir)) expect(names.size).toBeGreaterThan(0);
+  expect(
+    Object.entries(importsByDir)
+      .filter(([, names]) => names.size === 0)
+      .map(([dir]) => dir),
+  ).toEqual([]);
 });
 
 test("review-bridge.ts, which the CLI bundles, imports node builtins only and no sibling module", () => {
@@ -139,6 +162,10 @@ test("review-bridge.ts, which the CLI bundles, imports node builtins only and no
   // dist/cli.js — which the dependencies check above cannot see, since it is declared.
   const source = readFileSync(join(REPO_ROOT, OPENCODE_DIR, "review-bridge.ts"), "utf-8");
   expect(importedPackages(source)).toEqual([]);
+  // isBuiltin() admits `bun` and `bun:*` under bun, but the CLI is not the bridge's only host.
+  expect(
+    runtimeImportSpecifiers(source).filter((s) => s === "bun" || s.startsWith("bun:")),
+  ).toEqual([]);
   expect(source).not.toMatch(/\b(?:from|import)\s*\(?\s*"\.\.?\//);
 });
 

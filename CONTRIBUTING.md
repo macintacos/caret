@@ -40,7 +40,7 @@ The full task catalog (`build`, `test`, `smoke`, `lint`, `format`) is documented
 ## Where tests live
 
 - `test/` — backend suites: `core/` (tool-agnostic, carrying the same domain directories
-  `src/` uses), `adapters/<tool>/` (per-agent), plus `opencode/`, `scripts/`,
+  `src/` uses), `adapters/<tool>/` (per-agent), plus `opencode/`, `pi/`, `scripts/`,
   `structure/`, and `support/`. A suite's path mirrors its module's, so `src/x/y.ts` is
   covered by `test/core/x/y.test.ts`; the full rule is in `doc/agents/test-layout.md`.
 - `ui/src/**/*.test.ts` — Svelte component and UI-logic tests, run with `mise run test`

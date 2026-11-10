@@ -7,17 +7,26 @@ import { fileURLToPath } from "node:url";
 
 import { VERSION } from "@earendil-works/pi-coding-agent";
 
-import { nodeSpawnRunner, resolveCaretBin, type SpawnRunner } from "../opencode/review-bridge.ts";
+import {
+  isNewer,
+  nodeSpawnRunner,
+  parseVersionTriple,
+  resolveCaretBin,
+  type SpawnRunner,
+} from "../opencode/review-bridge.ts";
 import { reviewStore } from "./state.ts";
 import { type PiTool, reviewTool } from "./tool.ts";
 
-/** Keep equal to src/adapters/pi/host.ts's PI_FLOOR (test/pi/caret.test.ts pins it); pi/ can't import src/. */
+/** Keep equal to src/adapters/pi/host.ts's PI_FLOOR (test/pi/caret.test.ts pins it);
+ * pi/ can't import src/. */
 export const PI_FLOOR = "1.5.0";
 
+/** The slice of pi's session context caret calls; pinned by test/pi/sdk-conformance.ts. */
 export type PiNotifyContext = {
   ui: { notify(message: string, type?: "info" | "warning" | "error"): void };
 };
 
+/** The slice of pi's extension API caret calls; pinned by test/pi/sdk-conformance.ts. */
 export type PiApi = {
   registerTool(tool: PiTool): void;
   on(event: "session_start", handler: (event: unknown, ctx: PiNotifyContext) => void): void;
@@ -26,6 +35,8 @@ export type PiApi = {
 
 export interface CaretHost {
   version: string;
+  /** This copy's module URL: its identity against other installed copies, and the base
+   * `../bin/caret` resolves against. */
   entryUrl: string;
   /** globalThis in production: survives `/reload`, which loads a fresh module instance. */
   holder: Record<symbol, unknown>;
@@ -36,22 +47,12 @@ export interface CaretHost {
 const OWNER = Symbol.for("caret.pi.owner");
 const NOTIFIED = Symbol.for("caret.pi.notified");
 
-function parse(version: string): number[] | undefined {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version.split("-")[0] ?? "");
-  return match?.slice(1).map(Number);
-}
-
-/** Whether `version` (major.minor.patch, any prerelease suffix ignored) is at least PI_FLOOR. */
+/** Whether `version` parses and is at least PI_FLOOR. */
 export function meetsFloor(version: string): boolean {
-  const have = parse(version);
-  const floor = parse(PI_FLOOR);
-  if (!have || !floor) return false;
-  for (let i = 0; i < 3; i++) {
-    if (have[i] !== floor[i]) return (have[i] ?? 0) > (floor[i] ?? 0);
-  }
-  return true;
+  return parseVersionTriple(version) !== null && !isNewer(PI_FLOOR, version);
 }
 
+/** One caret warning per process, whichever refusal comes first. */
 function notifyOnce(pi: PiApi, holder: Record<symbol, unknown>, message: string): void {
   pi.on("session_start", (_event, ctx) => {
     if (holder[NOTIFIED]) return;
@@ -60,6 +61,11 @@ function notifyOnce(pi: PiApi, holder: Record<symbol, unknown>, message: string)
   });
 }
 
+/** Registers the review tool unless pi is below PI_FLOOR or another installed copy
+ * already owns `Symbol.for("caret.pi.owner")`. The owner is keyed by `entryUrl`, which
+ * differs between installed copies and is stable across `/reload`. It is released on
+ * `session_shutdown` so a surviving copy takes over after the owner is removed. Either
+ * refusal warns once per process. */
 export function installCaret(pi: PiApi, host: CaretHost): void {
   const { version, entryUrl, holder, env, run } = host;
   if (!meetsFloor(version)) {

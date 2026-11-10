@@ -1,19 +1,20 @@
-/**
- * Per-session review state for the pi extension. The notice (EXC-2316) and
- * `/caret:plan` (EXC-2317) consume this store and never redefine it.
- *
- * The store lives on `globalThis` because `/reload` loads a fresh module
- * instance; pi refuses `/reload` while a tool runs, so a pending review never
- * straddles one.
- */
+// Per-session review state for the pi extension. The notice (EXC-2316) and `/caret:plan`
+// (EXC-2317) consume this store and never redefine it.
+//
+// The data lives on `globalThis` because `/reload` loads a fresh module instance; pi
+// refuses `/reload` while a tool runs, so a pending review never straddles one. Only data
+// is kept there, so each instance runs its own methods over it. That stored shape is a
+// cross-version contract: bump the key when it changes. The listener set outlives
+// `/reload` too, so subscribers must unsubscribe on `session_shutdown`.
 
 export type ReviewOutcome = "approved" | "changes" | "cancelled" | "failed";
 
 export interface SessionReview {
   /** The waiting review's URL; at most one per session, since the tool runs sequentially. */
   pending?: string;
-  /** Set by /caret:plan (EXC-2317). */
+  /** Whether the session is in caret's planning mode. */
   planning: boolean;
+  /** How the session's most recent review ended. */
   lastOutcome?: ReviewOutcome;
 }
 
@@ -26,16 +27,24 @@ export interface ReviewStore {
   subscribe(listener: ReviewListener): () => void;
 }
 
-export function createReviewStore(): ReviewStore {
-  const sessions = new Map<string, SessionReview>();
-  const listeners = new Set<ReviewListener>();
+type ReviewData = { sessions: Map<string, SessionReview>; listeners: Set<ReviewListener> };
+
+const newData = (): ReviewData => ({ sessions: new Map(), listeners: new Set() });
+
+function storeOver({ sessions, listeners }: ReviewData): ReviewStore {
   const get = (sessionId: string): SessionReview => sessions.get(sessionId) ?? { planning: false };
   return {
     get,
     update(sessionId, patch) {
       const next = { ...get(sessionId), ...patch };
       sessions.set(sessionId, next);
-      for (const listener of listeners) listener(sessionId, next);
+      for (const listener of listeners) {
+        try {
+          listener(sessionId, next);
+        } catch {
+          // A footer must never cost the review its decision.
+        }
+      }
     },
     subscribe(listener) {
       listeners.add(listener);
@@ -44,13 +53,17 @@ export function createReviewStore(): ReviewStore {
   };
 }
 
-const STORE_KEY = Symbol.for("caret.pi.reviews");
+export function createReviewStore(): ReviewStore {
+  return storeOver(newData());
+}
 
-/** The process-wide store, kept on `holder` (globalThis in production) under
- * Symbol.for("caret.pi.reviews"). */
+const DATA_KEY = Symbol.for("caret.pi.reviews.v1");
+
+/** The process-wide store over data kept on `holder` (globalThis in production); every
+ * call on one holder shares sessions and listeners. */
 export function reviewStore(holder: Record<symbol, unknown>): ReviewStore {
-  holder[STORE_KEY] ??= createReviewStore();
-  return holder[STORE_KEY] as ReviewStore;
+  holder[DATA_KEY] ??= newData();
+  return storeOver(holder[DATA_KEY] as ReviewData);
 }
 
 /** The text of the `caret` footer status key; undefined clears it. */

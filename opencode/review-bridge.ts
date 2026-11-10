@@ -21,8 +21,8 @@ export type CaretDecision =
 /** The plan-review tool the agent calls. */
 export const REVIEW_TOOL = "caret_review_plan";
 
-// The review tool's model-facing text. Every host's registration reads these, so they stay
-// word-for-word identical (plugin-v2.test.ts pins the refusal texts).
+// The review tool's model-facing text, shared so the hosts' registrations stay
+// word-for-word identical (plugin-v2.test.ts and test/pi/tool.test.ts pin it per host).
 export const REVIEW_TOOL_DESCRIPTION =
   "Submit the current plan to caret for human review in a local browser UI. For plans only: caret presents what it receives as a plan, so do not use it for other documents or questions. Pass exactly one of `path` (preferred: a markdown file you write once and revise with edits) or `plan` (the plan inline). Blocks until the user approves or requests changes. On a change request, follow the result's instructions and call this tool again. Do not implement the plan until a call returns an approval.";
 
@@ -39,6 +39,30 @@ export function resolveCaretBin(opts: {
   const override = opts.env[opts.overrideVar]?.trim();
   if (override) return override;
   return fileURLToPath(new URL("../bin/caret", opts.importMetaUrl));
+}
+
+/** Semver triple `[major, minor, patch]`, or null when `v` is not `X.Y.Z` (an
+ * optional leading `v` is stripped; trailing prerelease/build metadata ignored). */
+export function parseVersionTriple(v: string): [number, number, number] | null {
+  const m = v
+    .trim()
+    .replace(/^v/, "")
+    .match(/^(\d+)\.(\d+)\.(\d+)/);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+
+/** True when `latest` is a strictly higher semver than `current`. Inline (no semver
+ * dep) so the deployed plugin stays self-contained; an unparseable version on
+ * either side compares false, so the check never nags on something it can't read. */
+export function isNewer(latest: string, current: string): boolean {
+  const a = parseVersionTriple(latest);
+  const b = parseVersionTriple(current);
+  if (!a || !b) return false;
+  const [a0, a1, a2] = a;
+  const [b0, b1, b2] = b;
+  if (a0 !== b0) return a0 > b0;
+  if (a1 !== b1) return a1 > b1;
+  return a2 > b2;
 }
 
 type PlanSource = { plan: string; planFilePath?: string };
@@ -76,6 +100,8 @@ export function resolvePlanSource(
   return { plan: text, planFilePath };
 }
 
+/** The file's text, or undefined when `absPath` is not a readable regular file; never
+ * throws. */
 export function readRegularFile(absPath: string): string | undefined {
   try {
     return statSync(absPath).isFile() ? readFileSync(absPath, "utf-8") : undefined;

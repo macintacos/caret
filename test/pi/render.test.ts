@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { hyperlink } from "@earendil-works/pi-tui";
+
 import { callLine, type PiTheme, planTitle, resultLine } from "@piext/render.ts";
 
 const theme: PiTheme = { fg: (color, text) => `<${color}>${text}</${color}>` };
@@ -28,7 +29,7 @@ test("callLine names caret and the plan title", () => {
 
 describe("resultLine", () => {
   test("a waiting review shows the link", () => {
-    const line = resultLine({ state: "waiting", url: "http://x/r/1" }, theme);
+    const line = resultLine({ details: { state: "waiting", url: "http://x/r/1" } }, theme);
     expect(line).toContain("<warning>^</warning>");
     expect(line).toContain("<muted>waiting for review</muted>");
     expect(line).toContain(`<dim>${hyperlink("http://x/r/1", "http://x/r/1")}</dim>`);
@@ -40,6 +41,15 @@ describe("resultLine", () => {
     ["cancelled", "<muted>cancelled</muted>"],
     ["failed", "<error>✕ review failed</error>"],
   ] as const)("a settled %s review", (state, expected) => {
-    expect(resultLine({ state }, theme)).toBe(expected);
+    expect(resultLine({ details: { state } }, theme)).toBe(expected);
+  });
+
+  test("a result pi built without caret's details shows pi's error text", () => {
+    const res = { content: [{ type: "text", text: "Tool execution was blocked" }], details: {} };
+    expect(resultLine(res, theme)).toBe("<error>✕ Tool execution was blocked</error>");
+  });
+
+  test("a result with neither details nor text still reads as a failure", () => {
+    expect(resultLine({}, theme)).toBe("<error>✕ review failed</error>");
   });
 });

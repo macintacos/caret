@@ -31,13 +31,17 @@ function relativeClosure(entry: string, readFile: (rel: string) => string): stri
   return [...seen].sort();
 }
 
+const usesBun = (source: string) =>
+  /\bBun\./.test(source) ||
+  runtimeImportSpecifiers(source).some((s) => s === "bun" || s.startsWith("bun:"));
+
 /** The paths that don't ship under `files` or that reach for Bun's runtime. */
 function closureViolations(
   paths: readonly string[],
   read: (rel: string) => string,
   files: readonly string[],
 ): string[] {
-  return paths.filter((rel) => !ships(rel, files) || /\bBun\./.test(read(rel)));
+  return paths.filter((rel) => !ships(rel, files) || usesBun(read(rel)));
 }
 
 const realClosure = relativeClosure(ENTRY, readRepo);
@@ -66,6 +70,17 @@ test("the closure follows relative imports transitively", () => {
 
 test("a transitive module using Bun's runtime is a violation", () => {
   expect(closureViolations(fixtureClosure, readFixture, ["pi/"])).toEqual(["pi/b.ts"]);
+});
+
+test("a module importing a `bun` or `bun:` specifier is a violation", () => {
+  // Built by concatenation so import-conventions.test.ts doesn't read the fixture as an import.
+  const bunFixture: Record<string, string> = {
+    "pi/a.ts": `import { $ } from "${"bun"}";`,
+    "pi/b.ts": `import { Database } from "${"bun"}:sqlite";`,
+    "pi/x.ts": "export const x = 1;",
+  };
+  const read = (rel: string) => bunFixture[rel] ?? "";
+  expect(closureViolations(Object.keys(bunFixture), read, ["pi/"])).toEqual(["pi/a.ts", "pi/b.ts"]);
 });
 
 test("a module outside `files` is a violation", () => {

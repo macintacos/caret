@@ -34,7 +34,8 @@ load nothing.
   `files`.
 - **`opencode/` and `pi/`** are the directories shipped as unbundled TypeScript, so their
   imports are the only ones a consumer's package manager has to resolve. `pi/` is loaded
-  by pi alone.
+  by pi alone. `package.json`'s `pi.changelogPath` is `""` to turn off pi's changelog
+  view: no `CHANGELOG.md` ships, because release notes live on GitHub.
 
 This is not free to get wrong: OpenCode installs the package
 **and its declared `dependencies`** into its own cache (see
@@ -59,18 +60,19 @@ peer of something that is — a peer obligation has no import site of its own, s
 wherever the package declaring it belongs. Optional peers are not reachable:
 `@opencode-ai/plugin` declares three `@opentui/*` peers as optional, which is why caret
 declares none of them. A package the host's runtime maps to its own copy for every plugin
-of that kind is reachable but undeclared; name it in the gate's `HOST_PROVIDED`, and
-import it only dynamically, from code that host alone runs. Today that is only
-`@opentui/solid`, which `opencode/caret.tui.ts` imports dynamically from `setup`, which
-only v2 calls; declaring it would download OpenTUI to every OpenCode user for nothing.
-pi's five host packages — `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`,
-`@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`, and `typebox` — are
-host-provided too and never go in `dependencies`; unlike `@opentui/solid` they may be
-imported statically, because only pi loads `pi/`. They are devDependencies only, for types
-and tests. A statement TypeScript erases — `import type { X } from` or
-`export type { X } from` — does not count. `import { type X } from` still counts: whether
-it survives depends on the transpiler (caret's `verbatimModuleSyntax` keeps it as
-`import {} from`), so the gate assumes it does.
+of that kind is reachable but undeclared; name it under its directory in the gate's
+`HOST_PROVIDED_BY_DIR`. Under `opencode/` that is only `@opentui/solid`, and it must be
+imported dynamically, from code that host alone runs: `opencode/caret.tui.ts` imports it
+from `setup`, which only v2 calls; declaring it would download OpenTUI to every OpenCode
+user for nothing. Under `pi/`, pi's five host packages —
+`@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, `@earendil-works/pi-ai`,
+`@earendil-works/pi-agent-core`, and `typebox` — are host-provided too and never go in
+`dependencies`; unlike `@opentui/solid` they may be imported statically, because only pi
+loads `pi/`. They are devDependencies only, for types and tests. A statement TypeScript
+erases — `import type { X } from` or `export type { X } from` — does not count.
+`import { type X } from` still counts: whether it survives depends on the transpiler
+(caret's `verbatimModuleSyntax` keeps it as `import {} from`), so the gate assumes it
+does.
 
 [`../../test/structure/dependency-placement.test.ts`](../../test/structure/dependency-placement.test.ts)
 and [`../../test/structure/pi-package.test.ts`](../../test/structure/pi-package.test.ts)

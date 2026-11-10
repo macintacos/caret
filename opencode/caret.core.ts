@@ -1,6 +1,7 @@
-// caret's host-neutral OpenCode core: the review tool's name, model-facing text and
-// runPlanReview, the planning steer, the caret binary/version/plans-dir resolution, the
-// warm runner, the toast bodies and tool-call metadata keys, and the update check.
+// caret's host-neutral OpenCode core: runPlanReview, the planning steer, the caret
+// version and plans-dir resolution, the warm runner, the toast bodies and tool-call
+// metadata keys, and the update check. It re-uses the bridge's tool name, text, binary
+// resolution and version comparison.
 // caret.plugin.ts (v1), caret.plugin.v2.ts and caret.tui.ts are thin host adapters over
 // it. Its imports are node builtins and review-bridge.ts only, so loading it never
 // evaluates either host's SDK; test/structure/dependency-placement.test.ts holds it there.
@@ -15,6 +16,7 @@ import {
   buildEnvelope,
   type CaretDecision,
   decisionText,
+  isNewer,
   PLAN_TITLE_INSTRUCTION,
   REVIEW_TOOL,
   readRegularFile,
@@ -24,6 +26,7 @@ import {
 } from "./review-bridge.ts";
 
 export {
+  isNewer,
   PLAN_ARG_DESCRIPTION,
   REVIEW_TOOL,
   REVIEW_TOOL_DESCRIPTION,
@@ -132,30 +135,6 @@ const UPDATE_TOAST_MS = 5_000;
  * fix, so checking once a day is plenty — and it keeps the network hit off every
  * OpenCode start. */
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60_000;
-
-/** Semver triple `[major, minor, patch]`, or null when `v` is not `X.Y.Z` (an
- * optional leading `v` is stripped; trailing prerelease/build metadata ignored). */
-function parseVersionTriple(v: string): [number, number, number] | null {
-  const m = v
-    .trim()
-    .replace(/^v/, "")
-    .match(/^(\d+)\.(\d+)\.(\d+)/);
-  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
-}
-
-/** True when `latest` is a strictly higher semver than `current`. Inline (no semver
- * dep) so the deployed plugin stays self-contained; an unparseable version on
- * either side compares false, so the check never nags on something it can't read. */
-export function isNewer(latest: string, current: string): boolean {
-  const a = parseVersionTriple(latest);
-  const b = parseVersionTriple(current);
-  if (!a || !b) return false;
-  const [a0, a1, a2] = a;
-  const [b0, b1, b2] = b;
-  if (a0 !== b0) return a0 > b0;
-  if (a1 !== b1) return a1 > b1;
-  return a2 > b2;
-}
 
 /** The version (v-stripped) and release-page URL from GitHub's /releases/latest
  * JSON, or null when the shape is unusable. */

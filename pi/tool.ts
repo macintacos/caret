@@ -16,12 +16,22 @@ import {
   runReviewViaCaret,
   type SpawnRunner,
 } from "../opencode/review-bridge.ts";
-import { callLine, type PiTheme, type ReviewDetails, resultLine } from "./render.ts";
+import {
+  callLine,
+  type PiTheme,
+  type RenderedResult,
+  type ReviewDetails,
+  resultLine,
+} from "./render.ts";
 import type { ReviewOutcome, ReviewStore } from "./state.ts";
 
 export type { ReviewDetails } from "./render.ts";
 export type PiToolContext = { cwd: string; sessionManager: { getSessionId(): string } };
-export type PiToolResult = { content: { type: "text"; text: string }[]; details: ReviewDetails };
+export type PiToolResult = {
+  content: { type: "text"; text: string }[];
+  details: ReviewDetails;
+  isError?: true;
+};
 
 const parameters = Type.Object({
   plan: Type.Optional(Type.String({ description: PLAN_ARG_DESCRIPTION })),
@@ -50,7 +60,7 @@ export interface PiTool {
     ctx: PiToolContext,
   ): Promise<PiToolResult>;
   renderCall(args: Params, theme: PiTheme): Text;
-  renderResult(result: { details: ReviewDetails }, options: unknown, theme: PiTheme): Text;
+  renderResult(result: RenderedResult, options: unknown, theme: PiTheme): Text;
 }
 
 const CANCELLED_TEXT =
@@ -58,20 +68,22 @@ const CANCELLED_TEXT =
 
 function failedText(reason: string): string {
   return [
-    "caret: the review could not run, so the user has not seen this plan.",
+    "caret: the review could not run or ended without a decision, so this plan is not approved.",
     "",
     `Reason: ${reason}`,
     "",
-    `Tell the user caret could not run the review. Do not implement the plan until a call to \`${REVIEW_TOOL}\` returns an approval.`,
+    `Tell the user the review did not complete. Do not implement the plan until a call to \`${REVIEW_TOOL}\` returns an approval.`,
   ].join("\n");
 }
 
 const result = (text: string, details: ReviewDetails): PiToolResult => ({
   content: [{ type: "text", text }],
   details,
+  ...(details.state === "failed" && { isError: true as const }),
 });
 
-/** Pure: the outcome a settled review maps to. */
+/** The outcome a settled review maps to. An abort wins over the decision: a killed
+ * review's deny is no reviewer's. */
 export function outcomeOf(decision: CaretDecision, aborted: boolean): ReviewOutcome {
   if (aborted) return "cancelled";
   if (decision.behavior === "allow") return "approved";
@@ -93,6 +105,8 @@ export function reviewTool(deps: { bin: string; run: SpawnRunner; store: ReviewS
     name: REVIEW_TOOL,
     label: "caret",
     description: REVIEW_TOOL_DESCRIPTION,
+    // No promptGuidelines: pi appends them to every system prompt while the tool is
+    // active, and outside /caret:plan users get no behaviour change they didn't ask for.
     promptSnippet:
       "Submit a plan to caret for the user's review in a browser UI; blocks until they approve or request changes",
     parameters,
@@ -129,6 +143,6 @@ export function reviewTool(deps: { bin: string; run: SpawnRunner; store: ReviewS
       }
     },
     renderCall: (args, theme) => new Text(callLine(args, theme), 0, 0),
-    renderResult: (res, _options, theme) => new Text(resultLine(res.details, theme), 0, 0),
+    renderResult: (res, _options, theme) => new Text(resultLine(res, theme), 0, 0),
   };
 }

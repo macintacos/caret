@@ -10,6 +10,7 @@ import type {
   Theme,
   ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+
 import type caret from "@piext/caret.ts";
 import type { PiApi } from "@piext/caret.ts";
 import type { PiTheme } from "@piext/render.ts";

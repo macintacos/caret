@@ -9,9 +9,9 @@ import caret, {
   type PiNotifyContext,
 } from "@piext/caret.ts";
 import type { PiTool } from "@piext/tool.ts";
-
 import { stubRunner } from "@test/support/spawn-runner.ts";
 import { PI_FLOOR as HOST_FLOOR } from "@/adapters/pi/host.ts";
+import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
 
 type Notice = { message: string; type?: string };
 
@@ -54,6 +54,20 @@ describe("meetsFloor", () => {
   });
   test.each(["1.4.9", "0.73.1", "garbage"])("%s does not", (v) => {
     expect(meetsFloor(v)).toBe(false);
+  });
+  test.each([
+    "1.5.0",
+    "1.5.1",
+    "1.10.0",
+    "2.0.0",
+    "1.4.9",
+    "0.73.1",
+    "garbage",
+    "1.5.0+build.7",
+    "v1.5.0",
+    "1.5.0 ",
+  ])("%p agrees with the adapter's semver", (v) => {
+    expect(meetsFloor(v)).toBe(parseVersionTriple(v) !== null && !isNewer(PI_FLOOR, v));
   });
 });
 
@@ -139,6 +153,9 @@ test("the default export registers caret_review_plan", () => {
     caret(f.pi);
     expect(f.tools.map((t) => t.name)).toEqual(["caret_review_plan"]);
   } finally {
-    delete (globalThis as Record<symbol, unknown>)[Symbol.for("caret.pi.owner")];
+    const g = globalThis as Record<symbol, unknown>;
+    delete g[Symbol.for("caret.pi.owner")];
+    delete g[Symbol.for("caret.pi.reviews.v1")];
+    delete g[Symbol.for("caret.pi.notified")];
   }
 });

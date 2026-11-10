@@ -101,14 +101,16 @@ and not yet live-verified (the live-contract check is a manual follow-up, the sa
 as Claude's EXC-549). It adds **no** packaging: a registry entry plus its module and tests
 are the whole change, which is exactly what the boundary is meant to make possible.
 
-**OpenCode is the next candidate, and it is shaped differently.** OpenCode integrates as a
+**OpenCode and pi are plugin-shaped, not command hooks.** OpenCode integrates as a
 **JS plugin**, not a command hook: it exposes a `tool.execute.before` hook (throwing to
 block a tool) and `permission.asked` events, loaded in-process — with a known subagent
 bypass. So it does not fit the command-hook `AgentAdapter` shape the Claude and Codex
 adapters share (stdin → parse → stdout deny line); it needs a different integration
 surface. EXC-339 built that surface — a registered `caret_review_plan` tool that bridges
 to `caret review` rather than a command hook; see
-[`opencode-integration.md`](opencode-integration.md) for the spike and the design. Note it
+[`opencode-integration.md`](opencode-integration.md) for the spike and the design. pi's
+extension (`pi/caret.ts`) uses the same shape: a registered `caret_review_plan` tool that
+spawns `caret review` with `CARET_AGENT=pi` through `opencode/review-bridge.ts`. Note it
 as plugin-shaped before assuming a new tool slots into the command-hook mold.
 
 **A registry entry may be composed inline.** `claude-mcp`, set only by `caret mcp` for

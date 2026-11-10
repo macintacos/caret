@@ -16,6 +16,7 @@ import {
   nodeSpawnRunner,
   parseDecision,
   parseReviewUrl,
+  resolveCaretBin,
   runReviewViaCaret,
   type SpawnRunner,
 } from "@oc/review-bridge.ts";
@@ -388,4 +389,26 @@ test("nodeSpawnRunner kills the child at once when the signal is already aborted
     const pid = Number(readFileSync(pidFile, "utf-8"));
     expect(await until(() => !isPidAlive(pid))).toBe(true);
   }
+});
+
+test("resolveCaretBin: env override wins, then the package-relative bin", () => {
+  const importMetaUrl = "file:///pkg/opencode/caret.plugin.ts";
+  const overrideVar = "CARET_OPENCODE_BIN";
+  expect(
+    resolveCaretBin({ env: { CARET_OPENCODE_BIN: "/override" }, importMetaUrl, overrideVar }),
+  ).toBe("/override");
+  expect(resolveCaretBin({ env: {}, importMetaUrl, overrideVar })).toBe("/pkg/bin/caret");
+});
+
+test("resolveCaretBin reads only the override variable it is given", () => {
+  const importMetaUrl = "file:///pkg/pi/caret.ts";
+  const env = { CARET_OPENCODE_BIN: "/opencode", CARET_PI_BIN: "/pi" };
+  expect(resolveCaretBin({ env, importMetaUrl, overrideVar: "CARET_PI_BIN" })).toBe("/pi");
+  expect(
+    resolveCaretBin({
+      env: { CARET_OPENCODE_BIN: "/opencode" },
+      importMetaUrl,
+      overrideVar: "CARET_PI_BIN",
+    }),
+  ).toBe("/pkg/bin/caret");
 });

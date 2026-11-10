@@ -1,4 +1,5 @@
-// Stub SpawnRunners for the review-bridge callers' suites: the OpenCode plugin, caret mcp and the pi extension.
+// Stub SpawnRunners for the review-bridge callers' suites: the OpenCode plugin, caret mcp
+// and the pi extension.
 
 import type { SpawnRunner } from "@oc/review-bridge.ts";
 

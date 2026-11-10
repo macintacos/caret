@@ -3,10 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { decisionText, REVIEW_TOOL_DESCRIPTION, type SpawnRunner } from "@oc/review-bridge.ts";
 import { createReviewStore, type ReviewStore } from "@piext/state.ts";
 import { type PiToolResult, reviewTool } from "@piext/tool.ts";
-
-import { decisionText, REVIEW_TOOL_DESCRIPTION, type SpawnRunner } from "@oc/review-bridge.ts";
 import { rejectingRunner, streamingRunner, stubRunner } from "@test/support/spawn-runner.ts";
 
 let dir: string;
@@ -97,7 +96,9 @@ describe("bad arguments", () => {
       );
       expect(text(r)).toStartWith("caret: caret_review_plan ");
       expect(r.details).toEqual({ state: "failed" });
+      expect(r.isError).toBe(true);
       expect(called).toBe(false);
+      expect(store.get("s1")).toEqual({ planning: false });
     },
   );
 });
@@ -125,10 +126,29 @@ describe("a review that never decided", () => {
   ])("%s is a failure", async (_name, runner) => {
     const r = await run(runner, { plan: "# P" });
     expect(r.details).toEqual({ state: "failed" });
+    expect(r.isError).toBe(true);
     expect(text(r)).toContain("Tell the user");
     expect(text(r)).toContain("Do not implement");
     expect(text(r)).not.toContain("requested CHANGES");
+    // A fail-safe deny also covers a timeout on a plan the user did see.
+    expect(text(r)).not.toContain("has not seen");
   });
+});
+
+test.each([
+  ["an approval", '{"behavior":"allow"}'],
+  ["a change request", '{"behavior":"deny","feedback":"x"}'],
+])("%s is not a tool error", async (_name, stdout) => {
+  const r = await run(stubRunner(stdout), { plan: "# P" });
+  expect(r.isError).toBeUndefined();
+});
+
+test("a throwing store subscriber cannot replace the reviewer's decision", async () => {
+  store.subscribe(() => {
+    throw new Error("footer broke");
+  });
+  const r = await run(stubRunner('{"behavior":"allow"}'), { plan: "# P" });
+  expect(r.details).toEqual({ state: "approved" });
 });
 
 test("a waiting review reports its URL and marks the session pending", async () => {
@@ -149,9 +169,11 @@ test("a waiting review reports its URL and marks the session pending", async () 
   expect(updates.map((u) => u.details)).toEqual([
     { state: "waiting", url: "http://127.0.0.1:1/r/1" },
   ]);
+  expect(updates[0]?.isError).toBeUndefined();
   expect(pendingWhileWaiting).toBe("http://127.0.0.1:1/r/1");
+  expect(r.details).toEqual({ state: "approved" });
   expect(store.get("s1").pending).toBeUndefined();
-  expect(store.get("s1").lastOutcome).toBe(r.details.state as "approved");
+  expect(store.get("s1").lastOutcome).toBe("approved");
 });
 
 test("the definition registers a sequential caret_review_plan", () => {
