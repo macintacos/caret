@@ -108,11 +108,11 @@ function caretEntry(
   extensions: unknown,
   { agentDir, home }: PiDirs,
 ): PiCaretEntry | null {
-  const npm = NPM_SOURCE.exec(source);
-  if (npm) {
+  const npmMatch = NPM_SOURCE.exec(source);
+  if (npmMatch) {
     const dir = join(agentDir, "npm", "node_modules", CARET_PACKAGE);
     const version = manifestVersion(readJsonFileSync(join(dir, "package.json")));
-    return { source, dir, version, extensions, form: "npm", pinned: npm[1] !== undefined };
+    return { source, dir, version, extensions, form: "npm", pinned: npmMatch[1] !== undefined };
   }
   const dir = resolve(agentDir, expandTilde(source, home));
   const manifest = readJsonFileSync(join(dir, "package.json")) as { name?: unknown } | null;

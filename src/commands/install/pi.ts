@@ -122,7 +122,7 @@ interface RunContext {
  * failure that must stop the run. */
 async function runPiCommand(command: PiCommand, ctx: RunContext): Promise<boolean> {
   const args = piArgs(command);
-  const exec = async () => {
+  const runOrThrow = async () => {
     const r = await ctx.run(args);
     if (!r.ok) throw new Error(`\`pi ${args.join(" ")}\`: ${r.detail}`);
   };
@@ -130,7 +130,7 @@ async function runPiCommand(command: PiCommand, ctx: RunContext): Promise<boolea
     case "remove": {
       const arg = args[1];
       try {
-        await ctx.ui.step(`Removing ${arg} from pi`, exec, () => `Removed ${arg} from pi`);
+        await ctx.ui.step(`Removing ${arg} from pi`, runOrThrow, () => `Removed ${arg} from pi`);
         return true;
       } catch (e) {
         // The uninstall sweep must not block the service teardown that follows it.
@@ -140,7 +140,7 @@ async function runPiCommand(command: PiCommand, ctx: RunContext): Promise<boolea
       }
     }
     case "install":
-      await ctx.ui.step(`Installing ${command.source} in pi`, exec, () =>
+      await ctx.ui.step(`Installing ${command.source} in pi`, runOrThrow, () =>
         command.source === CARET_NPM_SOURCE
           ? `Installed ${command.source} in pi`
           : `Installed ${command.source} in pi — pi loads the checkout in place, so a rebuild applies after \`/reload\``,
@@ -153,7 +153,7 @@ async function runPiCommand(command: PiCommand, ctx: RunContext): Promise<boolea
         `Updating ${CARET_NPM_SOURCE} in pi`,
         async () => {
           try {
-            await exec();
+            await runOrThrow();
           } catch (e) {
             failure = errorMessage(e);
           }
