@@ -1209,14 +1209,14 @@ type".
   next row's peek replaces it with no dwell and no re-entry.
 - **It closes when the reader turns elsewhere.** That is the pointer leaving the list, the
   list losing focus, a row picked, the query changing, a wheel, a pointer press or a
-  resize. It also closes on any key but a walk key (the arrows, Tab, Home and End) or `p`,
+  resize. It also closes on any key but a walk key (the arrows, Tab, Home and End) or `s`,
   Escape included. Escape still clears the query, closes the filter or closes the float as
   it would, so the peek never adds a step to backing out.
 - **The list or the plan moving on its own leaves it open.** A list scroll carries the
   peek with its row, as when the list keeps a walked row in view. The plan keeping the
   reader's place across a flip between source and Preview does not close it. Closing on
   every scroll had cancelled the dwell whenever a hovered row scrolled itself into view.
-- **`p` keeps it open on the other view.** The user asked for a peek "accurate to the
+- **`s` keeps it open on the other view.** The user asked for a peek "accurate to the
   current view type", and the flip is when that shows. The peek swaps in the new view's
   copy once that view has drawn the section, and closes if that takes more than three
   frames. On the 1,062-line rendering fixture the copy was there on the first frame, both

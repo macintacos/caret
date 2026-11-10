@@ -159,21 +159,21 @@ Caret shows a plan version in one of two views:
   covers. `/` search works in the preview too, over the text as rendered: a phrase wrapped
   across source lines matches, while link addresses and markdown markers do not.
 
-The **Preview** button beside **Versions** switches between them, as does `p`. It is
-pressed while the preview shows. Your browser remembers the choice, so it holds across
-reviews and restarts. Switching views with a comment open keeps its text as a draft, which
-you resume in either view. In the preview, comments and drafts show right under the last
-wrapped line they're on, and hovering or focusing one highlights the text it covers.
-Hovering the preview, anywhere out to its right edge, shades the wrapped line under the
-pointer and shows a **+** beside it. Click the line or its **+** to comment on every
-source line with text on it, as `c` does, or drag across wrapped lines to comment on all
-of theirs; `V` shades its selection the same way, with the **+** on the cursor's line. The
-lines stay shaded while you write the comment. In either view, clicking and dragging pick
-lines, not text: hold Shift to select text, which opens no comment. In a window wide
-enough for the preview's column, each wrapped line keeps its words at any zoom; in a
-narrower window, or beside a file preview, the preview rewraps to the space it has, and
-keeps your place while it does. **Settings → Base font size** sets the preview's body
-text, 15px by default, and its headings and code scale with it.
+A plan opens in the preview. The **Source** button beside **Versions** switches between
+them, as does `s`. It is pressed while the source shows. Your browser remembers the
+choice, so it holds across reviews and restarts. Switching views with a comment open keeps
+its text as a draft, which you resume in either view. In the preview, comments and drafts
+show right under the last wrapped line they're on, and hovering or focusing one highlights
+the text it covers. Hovering the preview, anywhere out to its right edge, shades the
+wrapped line under the pointer and shows a **+** beside it. Click the line or its **+** to
+comment on every source line with text on it, as `c` does, or drag across wrapped lines to
+comment on all of theirs; `V` shades its selection the same way, with the **+** on the
+cursor's line. The lines stay shaded while you write the comment. In either view, clicking
+and dragging pick lines, not text: hold Shift to select text, which opens no comment. In a
+window wide enough for the preview's column, each wrapped line keeps its words at any
+zoom; in a narrower window, or beside a file preview, the preview rewraps to the space it
+has, and keeps your place while it does. **Settings → Base font size** sets the preview's
+body text, 15px by default, and its headings and code scale with it.
 
 Switching keeps your place: the other view opens at the part of the plan you were reading.
 A heading link opens at its heading in either view, and the address bar follows the
@@ -201,12 +201,12 @@ outline's filter, and a peek of its section opens beside the outline. The peek s
 section as the plan's view draws it, source or Preview, cut short with a fade where the
 section runs on. A heading with nothing under it but subheadings shows its subheadings'
 sections. Once open, the peek follows the pointer or the arrow keys from heading to
-heading. Pressing `p` flips it to the other view along with the plan; if that view has not
+heading. Pressing `s` flips it to the other view along with the plan; if that view has not
 drawn the section yet, the peek closes. The peek closes when:
 
 - the pointer leaves the outline, or the outline loses focus;
 - you turn the mouse wheel, or click;
-- you press a key other than the arrows, Tab, Home, End or `p`;
+- you press a key other than the arrows, Tab, Home, End or `s`;
 - you change the filter or pick a heading.
 
 There is no peek while you compare versions.
