@@ -6,6 +6,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { REVIEW_TOOL } from "@oc/caret.core.ts";
+import { installPlanning, type PlanningApi, planningSteer } from "@piext/plan.ts";
+import { createReviewStore } from "@piext/state.ts";
 import pkg from "@root/package.json" with { type: "json" };
 import { MARKDOWN_READ_BY_TESTS } from "@scripts/preflight.ts";
 
@@ -32,6 +34,19 @@ test(`${CLAUDE_COMMAND} routes through ExitPlanMode, the call caret's hook inter
 
 test(`${OPENCODE_COMMAND} calls the plugin's review tool by its current name`, () => {
   expect(read(OPENCODE_COMMAND)).toContain(REVIEW_TOOL);
+});
+
+test("pi's planning mode registers caret:plan and steers to the review tool", () => {
+  const commands: string[] = [];
+  installPlanning(
+    {
+      registerCommand: (name: string) => commands.push(name),
+      on: () => {},
+    } as unknown as PlanningApi,
+    { store: createReviewStore(), plansDir: "/p", warm: () => {} },
+  );
+  expect(commands).toEqual(["caret:plan"]);
+  expect(planningSteer("/p", "s")).toContain(REVIEW_TOOL);
 });
 
 test("preflight runs this suite when only the plan commands changed", () => {

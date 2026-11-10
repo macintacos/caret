@@ -3,9 +3,10 @@
 // pi/ modules, and ../opencode/review-bridge.ts — and nothing it reaches may use bun's
 // runtime API, since pi runs on Node.
 
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { VERSION } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, VERSION } from "@earendil-works/pi-coding-agent";
 
 import {
   isNewer,
@@ -13,7 +14,9 @@ import {
   parseVersionTriple,
   resolveCaretBin,
   type SpawnRunner,
+  warmCaret,
 } from "../opencode/review-bridge.ts";
+import { installPlanning, type PlanningApi } from "./plan.ts";
 import { reviewStore } from "./state.ts";
 import { type PiTool, reviewTool } from "./tool.ts";
 
@@ -27,7 +30,7 @@ export type PiNotifyContext = {
 };
 
 /** The slice of pi's extension API caret calls; pinned by test/pi/sdk-conformance.ts. */
-export type PiApi = {
+export type PiApi = PlanningApi & {
   registerTool(tool: PiTool): void;
   on(event: "session_start", handler: (event: unknown, ctx: PiNotifyContext) => void): void;
   on(event: "session_shutdown", handler: () => void): void;
@@ -42,6 +45,9 @@ export interface CaretHost {
   holder: Record<symbol, unknown>;
   env: Record<string, string | undefined>;
   run: SpawnRunner;
+  /** pi's agent dir; the plans folder sits under it. */
+  agentDir: string;
+  warm: (bin: string) => void;
 }
 
 const OWNER = Symbol.for("caret.pi.owner");
@@ -89,13 +95,14 @@ export function installCaret(pi: PiApi, host: CaretHost): void {
   pi.on("session_shutdown", () => {
     if (holder[OWNER] === entryUrl) delete holder[OWNER];
   });
-  pi.registerTool(
-    reviewTool({
-      bin: resolveCaretBin({ env, importMetaUrl: entryUrl, overrideVar: "CARET_PI_BIN" }),
-      run,
-      store: reviewStore(holder),
-    }),
-  );
+  const bin = resolveCaretBin({ env, importMetaUrl: entryUrl, overrideVar: "CARET_PI_BIN" });
+  const store = reviewStore(holder);
+  pi.registerTool(reviewTool({ bin, run, store }));
+  installPlanning(pi, {
+    store,
+    plansDir: join(host.agentDir, "plans"),
+    warm: () => host.warm(bin),
+  });
 }
 
 export default function caret(pi: PiApi): void {
@@ -105,5 +112,7 @@ export default function caret(pi: PiApi): void {
     holder: globalThis as unknown as Record<symbol, unknown>,
     env: process.env,
     run: nodeSpawnRunner,
+    agentDir: getAgentDir(),
+    warm: (bin) => warmCaret(bin, "pi"),
   });
 }

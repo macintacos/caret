@@ -4,7 +4,10 @@
 
 import type {
   AgentToolResult,
+  CustomEntry,
   ExtensionAPI,
+  ExtensionCommandContext,
+  ExtensionContext,
   ExtensionFactory,
   ExtensionToolContext,
   Theme,
@@ -13,6 +16,7 @@ import type {
 
 import type caret from "@piext/caret.ts";
 import type { PiApi } from "@piext/caret.ts";
+import type { PlanningCommandContext, PlanningContext, PlanningEntry } from "@piext/plan.ts";
 import type { PiTheme } from "@piext/render.ts";
 import type { PiTool, PiToolContext, PiToolResult, ReviewDetails } from "@piext/tool.ts";
 
@@ -24,6 +28,9 @@ export type SdkConformance = [
   Fits<ExtensionAPI, PiApi>,
   Fits<ExtensionToolContext, PiToolContext>,
   Fits<Theme, PiTheme>,
+  Fits<ExtensionContext, PlanningContext>,
+  Fits<ExtensionCommandContext, PlanningCommandContext>,
+  Fits<CustomEntry, PlanningEntry>,
   // What caret hands the host.
   Fits<PiTool, ToolDefinition<PiTool["parameters"], ReviewDetails>>,
   Fits<PiToolResult, AgentToolResult<ReviewDetails>>,
