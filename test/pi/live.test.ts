@@ -9,6 +9,7 @@ import { decisionText, REVIEW_TOOL } from "@bridge/review-bridge.ts";
 import { DOCTOR_ENTRY, FAILED_VERDICT, PASSED_VERDICT } from "@piext/doctor.ts";
 import { sessionTag } from "@piext/plan.ts";
 import { daemonClient } from "@test/support/daemon.ts";
+import { withEnv } from "@test/support/env.ts";
 import { FAUX_PLAN_TITLE } from "@test/support/pi-faux-provider.ts";
 import {
   type PiRun,
@@ -23,6 +24,7 @@ import {
   waitForReview,
 } from "@test/support/pi-live.ts";
 import { until } from "@test/support/poll.ts";
+import { rumdlBin } from "@/config/paths.ts";
 
 requireNode();
 
@@ -57,6 +59,8 @@ test("a deny's feedback reaches pi's model as the tool result", async () => {
   const review = await waitForReview(sandbox, pi, REVIEW_WAIT_MS);
   expect(review.sessionId).toBe(piSessionId(sandbox));
   expect(review.title).toBe(FAUX_PLAN_TITLE);
+  // The daemon reflowed the plan with the run's own rumdl, so the suite stays offline.
+  expect(existsSync(withEnv({ XDG_STATE_HOME: sandbox.env.XDG_STATE_HOME }, rumdlBin))).toBe(false);
 
   const res = await daemonClient(sandbox.url).resolve(String(review.id), {
     behavior: "deny",

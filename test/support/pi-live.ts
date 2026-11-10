@@ -131,6 +131,9 @@ export function piSandbox(root: string, pkgDir: string): PiSandbox {
     XDG_STATE_HOME: state,
     CARET_CONFIG_FILE: config,
     CARET_PORT: String(port),
+    // The one CARET_* key kept: the daemon formats with test/support/rumdl-preload.ts's
+    // offline rumdl instead of downloading one into each fresh state dir.
+    ...(process.env.CARET_RUMDL_BIN ? { CARET_RUMDL_BIN: process.env.CARET_RUMDL_BIN } : {}),
   };
   run([PI_BIN, "install", pkgDir], { cwd, env });
   return { env, cwd, agentDir, url: `http://127.0.0.1:${port}`, port };
