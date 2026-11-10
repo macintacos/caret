@@ -16,8 +16,9 @@ is the full catalog behind it.
 >
 > **`mise run build --install` overwrites your installed build.** It rewrites Claude Code
 > plugin state, writes the checkout into OpenCode's plugin key (`plugins` when every
-> `opencode` is v2, else `plugin`), and takes over the daemon. Reach for it only when you
-> need to exercise the real installed integration — not to look at a UI change.
+> `opencode` is v2, else `plugin`), adds the checkout to pi's packages, and takes over the
+> daemon. Reach for it only when you need to exercise the real installed integration — not
+> to look at a UI change.
 
 ## Build from source
 
@@ -36,9 +37,9 @@ mise run build --install  # …then install THIS local build into your detected 
 ```
 
 `mise run build --install` is the _install_ loop, not the development loop: it registers
-the freshly built checkout with Claude Code (via a private dev marketplace) and OpenCode
-and cycles the daemon — see [`mise run build --install`](#mise-run-build---install) below.
-Day to day, reach for [`mise run dev`](#mise-run-dev) instead.
+the freshly built checkout with Claude Code (via a private dev marketplace), OpenCode, and
+pi, and cycles the daemon — see [`mise run build --install`](#mise-run-build---install)
+below. Day to day, reach for [`mise run dev`](#mise-run-dev) instead.
 
 Prerequisites are [`git`](https://git-scm.com) and [mise](https://mise.jdx.dev); the first
 `mise run` installs [`bun`](https://bun.sh) and the rest of the pinned toolchain. The

@@ -86,8 +86,12 @@ instead. See [the OpenCode adapter](doc/ARCHITECTURE.md#the-opencode-adapter) fo
 by-hand equivalents, for pinning a version in OpenCode's plugin array (`plugin` on v1,
 `plugins` on v2), and for what each agent's install touches;
 [the Claude Code adapter](doc/ARCHITECTURE.md#the-claude-code-adapter) covers the hooks
-`caret` registers there. `caret install` also targets pi 1.5.0 or later when `pi` is on
-your PATH.
+`caret` registers there. `caret install` also installs into pi 1.5.0 or later when `pi` is
+on your PATH; run `/reload` in pi or restart it to pick caret up. `caret install` and
+`caret doctor` manage only pi's user-scope packages and ignore a project-scope install
+(`pi install -l`). OpenCode and pi both load caret from its npm package, which runs on
+bun, so `bun` must be on the PATH they run with. See
+[the pi adapter](doc/ARCHITECTURE.md#the-pi-adapter) for the by-hand equivalents.
 
 ## Using `caret`
 
@@ -105,12 +109,33 @@ your browser instead of the terminal prompt. There you:
 > You don't have to wait to be intercepted: `/caret:plan <what you want done>` asks the
 > agent for a plan and routes it straight to the review UI. In OpenCode it runs on the
 > `plan` agent, so switch to `build` to implement once you approve. A skill of your own
-> can do the same with the plan-review tool `caret` gives both agents — `review_plan` in
-> Claude Code (from the plugin's MCP server) and `caret_review_plan` in OpenCode. The tool
-> is for plans only; see
+> can do the same with the plan-review tool `caret` gives each agent — `review_plan` in
+> Claude Code (from the plugin's MCP server) and `caret_review_plan` in OpenCode and pi.
+> The tool is for plans only; see
 > [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md#calling-the-review-tool-from-your-own-skill).
 > In OpenCode v2, `/caret` or `<leader>p` (`ctrl+x p` by default) opens the plan waiting
 > in the session; rebind the key as `caret.open` under OpenCode's `keybinds`.
+
+### Using `caret` in pi
+
+pi has no plan mode of its own, so `caret` brings a small one:
+
+1. `/caret:plan <what you want done>` turns on planning mode. The agent researches, writes
+   its plan into pi's plans folder (`~/.pi/agent/plans` by default), and sends it to
+   `caret`. Until you approve, `caret` blocks the agent's `edit` and `write` tools outside
+   that folder; shell commands are only discouraged. While planning, `/caret:plan` with no
+   task turns planning off. Outside planning, a bare `/caret:plan` plans what you asked
+   for earlier in the session.
+2. While a review waits, a notice sits above the editor and the footer reads
+   `^ plan waiting`. `/caret` or `ctrl+alt+c` opens the plan in your browser. On macOS,
+   `ctrl+alt+c` needs your terminal to send Option as Alt (Terminal.app calls it Meta): in
+   Terminal.app turn on **Use Option as Meta key**; in iTerm2 set the Option key to
+   **Esc+**. `/caret` works in every terminal.
+3. Approve, and the agent implements. Request changes, and it revises and resubmits. Esc
+   in pi cancels a waiting review, and the agent is told not to implement the plan.
+
+`/caret:demo` presents a demo plan, and `/caret:doctor` runs `caret doctor` and shows its
+report in the session (see [Diagnostics](#diagnostics)).
 
 ## Configuration
 

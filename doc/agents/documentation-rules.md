@@ -27,7 +27,7 @@ which-doc: Edit every doc the change affects
   developing caret: build-from-source, the mise task catalog and dev workflow, the tasks CLI, icons > development
   human contributor onboarding: local setup, the mise workflow, where tests live > contributing
   the code-change routing index, plus the CodeGraph / verifying-changes prose > agents
-  a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, plan rendering, testing, icons, settings, dependencies, OpenCode, rumdl) > edit-a
+  a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, plan rendering, testing, icons, settings, dependencies, OpenCode, pi, rumdl) > edit-a
   the router for the doc/ directory: which page answers a given reader's question > readme-2
   design direction: how caret looks, moves, sounds, or prints, its deliberate exceptions, and the decision log > edit-design
 readme!: Edit README.md
@@ -55,8 +55,8 @@ edit-design!: Edit design/*.md
 - **`doc/RUNNING.md`** — caret in use: desktop notifications, cmux unread marks, and
   logging & debugging. How to edit it: [`references/running.md`](references/running.md).
 - **`doc/ARCHITECTURE.md`** — how caret works: the tool-agnostic core / agent-adapter
-  boundary, the Claude Code and OpenCode adapter internals, calling the review tool, and
-  the source layout. How to edit it:
+  boundary, the Claude Code, OpenCode, and pi adapter internals, calling the review tool,
+  and the source layout. How to edit it:
   [`references/architecture.md`](references/architecture.md).
 - **`doc/DEVELOPMENT.md`** — developing caret: build-from-source, the `mise` task catalog
   and dev workflow, the tasks CLI, and icons. How to edit it:

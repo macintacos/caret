@@ -28,6 +28,7 @@ what-does: Load the file for every area the change touches
   package.json: adding, moving, removing, or pinning a dependency > dependency-rules
   adding or working with vendored icons > icon-rules
   OpenCode adapter, plugin, or install (caret install) > opencode-integration
+  pi adapter, extension, or install (caret install) > pi-integration
   rumdl: bumping its version, touching any of its three configs or invocations (repo hygiene, plan formatting, release notes), or scripts/tasks/dev/fake-plan.md > rumdl-rules
   documentation: which doc to update — README, the doc/ reference pages (CONFIGURING, RUNNING, ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the doc/ router, or the doc map itself > documentation-rules
   how caret looks, moves, sounds, or prints: colour, type, radius, motion, sound, empty/loading/error states, CLI and task output layout > readme
@@ -43,6 +44,7 @@ settings-rules!: Load doc/agents/settings-rules.md
 dependency-rules!: Load doc/agents/dependency-rules.md
 icon-rules!: Load doc/agents/icon-rules.md
 opencode-integration!: Load doc/agents/opencode-integration.md
+pi-integration!: Load doc/agents/pi-integration.md
 rumdl-rules!: Load doc/agents/rumdl-rules.md
 documentation-rules!: Load doc/agents/documentation-rules.md
 readme!: Load design/README.md
