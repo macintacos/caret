@@ -124,7 +124,8 @@ export interface E2EOptions {
    * selection. Null (the default) leaves the route unwired, so it 404s. */
   updateReleases: GitHubRelease[] | null;
   /** Seed `caret.planView=source` when absent, so a spec starts on the source view
-   * rather than the preview default. On by default; a spec testing the default turns it off. */
+   * rather than the preview default, and marks the preview-default move and notice done,
+   * so no spec meets the notice. On by default; a spec testing the default turns it off. */
   pinPlanView: boolean;
   /** Boot the daemon with token auth on; harness requests then carry its token. Off by default. */
   auth: boolean;

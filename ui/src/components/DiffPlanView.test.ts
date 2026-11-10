@@ -98,8 +98,11 @@ async function renderAndWaitForPre(
   return { target, flush, pre: shadow(target)?.querySelector("pre") };
 }
 
-// Most cases read the source view, which is no longer the default.
-beforeEach(() => localStorage.setItem("caret.planView", "source"));
+// Most cases read the source view; preview is the default.
+beforeEach(() => {
+  localStorage.setItem("caret.planView", "source");
+  localStorage.setItem("caret.previewDefault.noticeSeen", "1");
+});
 afterEach(() => localStorage.clear());
 
 afterEach(() => document.documentElement.style.removeProperty("--caret-test-repaint"));

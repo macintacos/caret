@@ -4,7 +4,9 @@
 import { defineFlagPref } from "$lib/definePref.ts";
 import { PLAN_VIEW_KEY } from "$lib/planView.ts";
 
+/** Set once this browser has been through the one-time decision. */
 const MOVED_KEY = "caret.previewDefault.moved";
+/** Set once the notice is done for good. */
 const NOTICE_SEEN_KEY = "caret.previewDefault.noticeSeen";
 
 defineFlagPref(MOVED_KEY);
@@ -17,8 +19,8 @@ export const isPreviewNoticeSeen = noticePref.read;
 /** Records that the reader has seen the preview-default notice. */
 export const markPreviewNoticeSeen = (): void => noticePref.write(true);
 
-// Any caret key at all means this browser used caret before; the scan also catches keys
-// whose module never loaded (the legacy theme key, the caret:diffview:* hints).
+// Any caret key means this browser used caret before. A prefix scan, so a key a past
+// release wrote and this one no longer registers still counts.
 function holdsCaretKey(storage: Storage): boolean {
   for (let i = 0; i < storage.length; i++) {
     const key = storage.key(i);
@@ -27,9 +29,10 @@ function holdsCaretKey(storage: Storage): boolean {
   return false;
 }
 
-/** Runs once per browser: moves a browser that used caret before to preview, and marks a
- * new one as needing no notice. Must run before App mounts, which writes caret keys. A
- * throwing storage makes it a no-op. Takes a getter because reading `localStorage` itself
+/** Acts once per browser: moves a browser that used caret before to preview, and marks a
+ * new one as needing no notice. Call it while storage holds no key this session wrote:
+ * before mount at boot, and straight after clearKnownPrefs() on --fresh. A throwing
+ * storage makes it a no-op. Takes a getter because reading `localStorage` itself
  * throws where the store is blocked. */
 export function applyPreviewDefault(getStorage: () => Storage): void {
   try {

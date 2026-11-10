@@ -358,8 +358,11 @@
   const showDiff = $derived(canCompare && compareStore.comparing);
 
   let planView = $state<PlanView>(readPlanView());
+  // The one-time preview-default notice, anchored to the Source button.
   let noticeSeen = $state(isPreviewNoticeSeen());
   let sourceToggleEl = $state<HTMLElement | null>(null);
+  // Skipped on mount (prefsEpoch starts 0; the reads above already ran); a --fresh
+  // rewrite of the stored prefs bumps it.
   $effect(() => {
     if (prefsEpoch === 0) return;
     planView = readPlanView();

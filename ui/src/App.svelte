@@ -242,17 +242,6 @@
   let settingsRev = $state(0);
   // Bumped when --fresh rewrites stored prefs after DiffPlanView may have mounted.
   let prefsEpoch = $state(0);
-  // Every App-level modal; the preview-default notice must not sit on top of one.
-  const modalOpen = $derived(
-    showHelp ||
-      showSettings ||
-      showWhatsNew ||
-      showUpgrade ||
-      showOnboarding ||
-      showDialog ||
-      pendingApproveMode !== null ||
-      pendingReject,
-  );
   async function applySetting(field: StagedField, value: unknown) {
     try {
       // Awaited: a daemon-backed field's write is a POST (EXC-1206), and a rejected
@@ -388,6 +377,19 @@
   });
   const alerts = createAlerts(alertStore, { sound: sound.play });
   let active = $derived(selection.active);
+  // Every App-level modal; the preview-default notice must not sit on top of one.
+  // Each host below reads its `open` from here.
+  const modals = $derived({
+    approveGuard: pendingApproveMode !== null && active !== null,
+    rejectGuard: pendingReject && active !== null,
+    requestChanges: showDialog && active !== null,
+    settings: showSettings,
+    whatsNew: showWhatsNew && updateReport !== null,
+    upgrade: showUpgrade && !showOnboarding,
+    onboarding: showOnboarding,
+    help: showHelp,
+  });
+  const modalOpen = $derived(Object.values(modals).some(Boolean));
   // Shared by the resolve flow and the Request Changes preview, so the preview shows
   // exactly what is sent.
   let citation = $derived<LineCitation>(active?.agentCopyMatches ? "line" : "line-and-quote");
@@ -580,6 +582,7 @@
         // reload would re-clear the onboarded flag and "Maybe later" would never stick.
         if (h.fresh && !freshResetApplied(h.instanceId)) {
           clearKnownPrefs();
+          // Straight after the clear, while storage holds no caret key: marks this browser new.
           applyPreviewDefault(() => localStorage);
           prefsEpoch++;
           appearance.boot();
@@ -942,7 +945,7 @@
      unmounts. One consequence on the three `active`-gated sites below: `active` can
      go null DURING the exit (confirmApprove resolves the review while the guard is
      still fading), so a site that dereferences it reads it optionally. -->
-<ModalPresence open={pendingApproveMode !== null && active !== null}>
+<ModalPresence open={modals.approveGuard}>
   {#snippet modal({ open, onClosed })}
     <UnsentCommentsDialog
       {open}
@@ -963,7 +966,7 @@
   {/snippet}
 </ModalPresence>
 
-<ModalPresence open={pendingReject && active !== null}>
+<ModalPresence open={modals.rejectGuard}>
   {#snippet modal({ open, onClosed })}
     <UnsentCommentsDialog
       {open}
@@ -979,7 +982,7 @@
   {/snippet}
 </ModalPresence>
 
-<ModalPresence open={showDialog && active !== null}>
+<ModalPresence open={modals.requestChanges}>
   {#snippet modal({ open, onClosed })}
     <RequestChangesDialog
       {open}
@@ -1029,7 +1032,7 @@
 
 <!-- Settings is persistent chrome (theme switching), reachable whether or not a
      review is active — so it renders at the top level, ungated on `active`. -->
-<ModalPresence open={showSettings}>
+<ModalPresence open={modals.settings}>
   {#snippet modal({ open, onClosed })}
     <SettingsDialog
       {open}
@@ -1047,7 +1050,7 @@
 </ModalPresence>
 
 <!-- After Settings, so opened from the Updates pane it stacks above it. -->
-<ModalPresence open={showWhatsNew && updateReport !== null}>
+<ModalPresence open={modals.whatsNew}>
   {#snippet modal({ open, onClosed })}
     {#if updateReport}
       <WhatsNewDialog
@@ -1064,7 +1067,7 @@
 
 <!-- Never over onboarding: a first run records its version silently, so the two only meet
      when the onboarded flag alone was lost, and onboarding goes first. -->
-<ModalPresence open={showUpgrade && !showOnboarding}>
+<ModalPresence open={modals.upgrade}>
   {#snippet modal({ open, onClosed })}
     {#if upgrade}
       {@const { report, releases } = upgrade}
@@ -1082,7 +1085,7 @@
 
 <!-- First-run onboarding: a one-time invite to enable desktop notifications,
      gated on a brand-new user (see showOnboarding above). -->
-<ModalPresence open={showOnboarding}>
+<ModalPresence open={modals.onboarding}>
   {#snippet modal({ open, onClosed })}
     <OnboardingDialog {open} {onClosed} onClose={() => (showOnboarding = false)} />
   {/snippet}
@@ -1091,7 +1094,7 @@
 <!-- Reads the live registry at open, so it grows as later tickets register, then
      narrows (EXC-849) to the shortcuts valid in the current view — over Settings, only
      the settings + global ones, matching what the dispatcher will actually fire. -->
-<ModalPresence open={showHelp}>
+<ModalPresence open={modals.help}>
   {#snippet modal({ open, onClosed })}
     <ShortcutsHelp
       {open}

@@ -1,5 +1,7 @@
 // The one-time move to the preview default and its notice on the Source button. Each
 // browser history is seeded on the first load only, so a reload shows what the app stored.
+// A real browser is needed for reload persistence, the popover's placement, and its
+// stacking under modals; the pure decision lives in ui/src/lib/previewDefault.test.ts.
 
 import type { Page } from "@playwright/test";
 
@@ -27,7 +29,7 @@ async function seedOnce(page: Page, entries: Record<string, string>): Promise<vo
   }, entries);
 }
 
-const notice = (page: Page) => page.locator(".preview-default-notice");
+const notice = (page: Page) => page.getByRole("dialog", { name: "Preview is now the default" });
 const preview = (page: Page) => page.locator(`${PLAN_SURFACE} ${PLAN_PREVIEW}`);
 
 /** Ready for keys on either view; the shared helper waits for source rows. */
@@ -99,6 +101,28 @@ test("pressing s ends the notice for good", async ({ page, daemon }) => {
   await expect(notice(page)).toHaveCount(0);
 });
 
+test("the notice outlasts an outside click and Escape, which still closes a search", async ({
+  page,
+  daemon,
+}) => {
+  await seedOnce(page, { "caret.planView": "source", "caret.onboarded": "1" });
+  await daemon.seed({ plan: PLAN });
+  await open(page);
+  await expect(notice(page)).toBeVisible();
+
+  await preview(page).click();
+  await page.keyboard.press("Escape");
+  await expect(notice(page)).toBeVisible();
+
+  await page.keyboard.press("/");
+  await page.keyboard.type("Body");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("search")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("search")).toHaveCount(0);
+  await expect(notice(page)).toBeVisible();
+});
+
 test("a browser already moved keeps its source choice and sees no notice", async ({
   page,
   daemon,
@@ -117,13 +141,9 @@ test("a browser already moved keeps its source choice and sees no notice", async
 
 test("the notice waits behind the onboarding dialog", async ({ page, daemon }) => {
   await page.addInitScript(() => {
-    (window as { Notification: unknown }).Notification = class {
-      static get permission() {
-        return "default";
-      }
-      static requestPermission() {
-        return Promise.resolve("default");
-      }
+    (window as { Notification: unknown }).Notification = {
+      permission: "default",
+      requestPermission: () => Promise.resolve("default"),
     };
   });
   await seedOnce(page, { "caret.lastSeenVersion": "0.0.1" });

@@ -130,6 +130,14 @@ Open items first, then the log, newest first.
   paints the waiting plan as an inverse `warning` fill with a 🥕 emoji. Either align it
   with the 2026-11-05 OpenCode decision or record why the two hosts differ.
 
+## 2026-11-10: a plan opens in preview, and Source on `s` shows its markdown
+
+- **Preview is the default view.** The header's toggle is Source, bound to `s`; `p` is
+  unbound.
+- **A browser that used caret before moves once.** It lands on preview whatever it chose,
+  and a notice on the Source button says so until "Got it" or the first use of Source. A
+  new browser starts on preview and sees no notice.
+
 ## 2026-11-10: caret in pi: a blocking review, its own planning mode, and `ctrl+alt+c`
 
 - **The review blocks.** `caret_review_plan` holds the turn until you decide, as on Claude

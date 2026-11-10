@@ -1,6 +1,6 @@
-// The plan view's Preview toggle (EXC-2012): a button beside Versions swaps the
-// single-version source view for the rendered preview, the browser remembers the
-// choice, and compare mode hides the toggle and shows source until it hands the
+// The plan view's Source toggle (EXC-2012, EXC-2336): a button beside Versions swaps the
+// rendered preview, which a plan opens in, for the single-version source view; the
+// browser remembers the choice, and compare mode hides the toggle and shows source until it hands the
 // remembered view back.
 //
 // What needs a real browser here: focus staying on the toggle across a flip,
