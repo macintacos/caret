@@ -28,7 +28,7 @@ import { skillCompletion } from "$lib/skillCompletion.ts";
 export interface ReviewContext {
   reviewId: string;
   cwd: string;
-  /** The active adapter's id ("claude" | "opencode" | …), read from the health
+  /** The active adapter's id ("claude" | "opencode" | "pi" | …), read from the health
    * probe. Undefined until the probe lands, or for a daemon predating the field. */
   adapter?: string;
 }

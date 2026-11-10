@@ -160,9 +160,9 @@ review cancelled" toast — on v2 through the TUI half's `session.tool.failed` h
 The export surface).
 
 Because both ends of this wire are caret-owned (the plugin writes the envelope, the
-`opencode` adapter renders the decision the plugin reads), the OpenCode adapter is the
-*least* speculative of the three — there is no foreign agent wire format to model. The
-pure logic (envelope build, fail-safe decision parse, the spawn bridge) lives in
+`opencode` adapter renders the decision the plugin reads), the OpenCode adapter is among
+the *least* speculative — there is no foreign agent wire format to model. The pure logic
+(envelope build, fail-safe decision parse, the spawn bridge) lives in
 `opencode/review-bridge.ts`, which `opencode/caret.plugin.ts` wires behind a
 `createCaretPlugin({ run })` DI seam, and is unit-tested in `test/opencode/`. The bridge
 is shared: `caret mcp` (`src/commands/mcp.ts`) runs Claude Code's `review_plan` tool

@@ -1,5 +1,5 @@
 // The claude-mcp adapter: Claude Code reviews submitted through caret's own MCP
-// server. Its wire is the caret-owned OpenCode envelope and flat decision, driven
+// server. Its wire is the caret-owned envelope and flat decision from src/adapters/wire.ts, driven
 // here through the real parse -> runReview -> emit path over OpenCode's checked-in
 // envelope fixture; everything the daemon publishes or probes stays Claude's.
 

@@ -74,11 +74,15 @@ session mode/variant tokens like `acceptEdits`/`auto` — lives **only** in
 adapter maps a token to a tool permission (`setModeFor` in
 `src/adapters/claude/approve.ts`).
 
-`src/adapters/wire.ts` is the one shelf above the per-tool directories: the pieces every
-PermissionRequest-hook adapter implements identically — the stdin parse, the neutral deny
-text, and the `hookEventName` envelope — with each adapter's own decision payload passed
-in as a parameter. Vocabulary shared by all of them belongs there; vocabulary one of them
-owns still belongs only in its own directory.
+`src/adapters/wire.ts` is the one shelf above the per-tool directories, holding what more
+than one adapter implements identically, with each adapter's own vocabulary passed in as a
+parameter. For the PermissionRequest-hook adapters (Claude, Codex) that is the stdin
+parse, the neutral deny text, and the `hookEventName` envelope. For the hosts whose wire
+caret owns at both ends (OpenCode, pi, `claude-mcp`) it is the caret-owned envelope parse,
+the flat allow/deny with reviewer notes on an allow, and its deny line, each caller
+passing the approve-variant ids it acts on. Vocabulary one adapter owns (OpenCode's
+`build`) stays in its directory. The file imports nothing, because the CLI's fatal handler
+falls back to it.
 
 **Adding a new agent tool:** create `src/adapters/<tool>/`, implement `AgentAdapter`
 (declare its own approve variants with their ids/labels and whether its allow delivers
@@ -107,11 +111,11 @@ to `caret review` rather than a command hook; see
 [`opencode-integration.md`](opencode-integration.md) for the spike and the design. Note it
 as plugin-shaped before assuming a new tool slots into the command-hook mold.
 
-**A registry entry may be composed from two adapters.** `claude-mcp`, set only by
-`caret mcp` for plans submitted through Claude Code's `review_plan` tool, is Claude's
-adapter with OpenCode's envelope parse and flat allow/deny swapped in, built inline in
-`src/adapters/index.ts` rather than in an adapter directory, so no adapter imports
-another.
+**A registry entry may be composed inline.** `claude-mcp`, set only by `caret mcp` for
+plans submitted through Claude Code's `review_plan` tool, is Claude's adapter with the
+caret-owned envelope parse and flat allow/deny from `src/adapters/wire.ts` swapped in,
+built inline in `src/adapters/index.ts` rather than in an adapter directory, so no adapter
+imports another.
 
 **What does NOT move to the adapter directory:** the Claude plugin packaging —
 `hooks/hooks.json`, `.claude-plugin/*` (including `plugin.json`'s `mcpServers` entry for

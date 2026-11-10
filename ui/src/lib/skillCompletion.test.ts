@@ -220,6 +220,21 @@ describe("skillCompletion insertion", () => {
     }
   });
 
+  test("a pi skill inserts as /skill:<name>", async () => {
+    const { view, dispose } = mount(sourceOver([{ name: "skill:deploy", origin: "user" }]));
+    try {
+      type(view, "/skill:d");
+      expect(await until(() => completionStatus(view.state) === "active")).toBe(true);
+      await allowCompletionAccept();
+      view.contentDOM.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+      );
+      expect(view.state.doc.toString()).toBe("/skill:deploy ");
+    } finally {
+      dispose();
+    }
+  });
+
   test("tells two sources of the same bare name apart by their origin", async () => {
     const { view, dispose } = mount(
       sourceOver([

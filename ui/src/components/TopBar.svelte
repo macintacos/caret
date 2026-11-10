@@ -31,7 +31,7 @@
     variants: ApproveVariant[];
     /** True when the daemon runs from source; shows the "local build" badge. */
     isDev?: boolean;
-    /** The active adapter's id ("claude" | "opencode" | …), the environment the
+    /** The active adapter's id ("claude" | "opencode" | "pi" | …), the environment the
      * UI adapts to (EXC-791). Exposed as data-source on the topbar so styling or
      * tooling can key off it; the approve control's shape is driven by the
      * variant count, not this. Absent until the health probe lands. */
