@@ -424,10 +424,12 @@ test("Markdown a test reads from disk keeps `test unit` in the narrowed gate", a
 // would skip exactly the diffs that guard exists for. Either path must reach it,
 // alone or together.
 test("a docs-only diff touching the fake plan or the dev guide still runs `test unit`", async () => {
-  const both = ["lint", "test unit"];
-  expect(await spawnedFor(["doc/DEVELOPMENT.md"])).toEqual(both);
-  expect(await spawnedFor(["scripts/tasks/dev/fake-plan.md"])).toEqual(both);
-  expect(await spawnedFor(["doc/DEVELOPMENT.md", "scripts/tasks/dev/fake-plan.md"])).toEqual(both);
+  const lintAndUnit = ["lint", "test unit"];
+  expect(await spawnedFor(["doc/DEVELOPMENT.md"])).toEqual(lintAndUnit);
+  expect(await spawnedFor(["scripts/tasks/dev/fake-plan.md"])).toEqual(lintAndUnit);
+  expect(await spawnedFor(["doc/DEVELOPMENT.md", "scripts/tasks/dev/fake-plan.md"])).toEqual(
+    lintAndUnit,
+  );
 });
 
 // The other direction, for the one list that grows: test/scripts/dev-driver.test.ts

@@ -15,8 +15,8 @@ type Job = {
   steps: Step[];
 };
 
-const text = await Bun.file(".github/workflows/ci.yml").text();
-const workflow = Bun.YAML.parse(text) as {
+const ciYaml = await Bun.file(".github/workflows/ci.yml").text();
+const workflow = Bun.YAML.parse(ciYaml) as {
   on: Record<string, { branches?: string[] }>;
   permissions: unknown;
   jobs: Record<string, Job>;
@@ -35,8 +35,8 @@ test("runs on pull requests and pushes to trunk only", () => {
 });
 
 test("never runs with the base repository's secrets", () => {
-  expect(text).not.toContain("pull_request_target");
-  expect(text).not.toContain("secrets.");
+  expect(ciYaml).not.toContain("pull_request_target");
+  expect(ciYaml).not.toContain("secrets.");
 });
 
 test("grants no top-level permissions", () => {
@@ -81,9 +81,9 @@ test("each job runs its task's entry point", () => {
 });
 
 test("installs the same claude-code version as the publish workflow", async () => {
-  const publish = await Bun.file(".github/workflows/publish.yml").text();
-  const pin = /claude-code@[\w.-]+/;
-  expect(text.match(pin)?.[0]).toBe(publish.match(pin)?.[0]);
+  const publishYaml = await Bun.file(".github/workflows/publish.yml").text();
+  const claudeCodePin = /claude-code@[\w.-]+/;
+  expect(ciYaml.match(claudeCodePin)?.[0]).toBe(publishYaml.match(claudeCodePin)?.[0]);
 });
 
 test("every action ref is in the actions lockfile", async () => {
