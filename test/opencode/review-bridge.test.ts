@@ -13,6 +13,7 @@ import {
   buildEnvelope,
   decisionText,
   deniedMessage,
+  detachedSpawnWith,
   nodeDetachedSpawn,
   nodeSpawnRunner,
   parseDecision,
@@ -439,7 +440,7 @@ test("the real detached spawn lays a given env over the inherited one", async ()
   const shim = join(mkdtempSync(join(tmp, "detached-")), "shim");
   writeFileSync(shim, '#!/bin/sh\nprintf \'%s\' "$CARET_AGENT" > "$0.agent"\n');
   chmodSync(shim, 0o755);
-  nodeDetachedSpawn(shim, [], () => {}, { CARET_AGENT: "pi" });
+  detachedSpawnWith({ CARET_AGENT: "pi" })(shim, [], () => {});
   expect(await until(() => existsSync(`${shim}.agent`))).toBe(true);
   expect(await until(() => readFileSync(`${shim}.agent`, "utf8") === "pi")).toBe(true);
 });

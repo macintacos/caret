@@ -10,8 +10,8 @@ import { getAgentDir, VERSION } from "@earendil-works/pi-coding-agent";
 
 import {
   type DetachedSpawn,
+  detachedSpawnWith,
   isNewer,
-  nodeDetachedSpawn,
   nodeSpawnRunner,
   parseVersionTriple,
   resolveCaretBin,
@@ -53,7 +53,7 @@ export interface CaretHost {
   agentDir: string;
   /** Spawns `caret prewarm` for `bin`; best-effort. */
   warm: (bin: string) => void;
-  /** Starts `caret band-link` detached; injected so the open action is testable. */
+  /** Starts `caret band-link` detached. */
   spawn: DetachedSpawn;
 }
 
@@ -74,11 +74,11 @@ function notifyOnce(pi: PiApi, holder: Record<symbol, unknown>, message: string)
   });
 }
 
-/** Registers the review tool, the planning mode, and the pending-plan notice unless pi is below PI_FLOOR or another
- * installed copy already owns `Symbol.for("caret.pi.owner")`. The owner is keyed by
- * `entryUrl`, which differs between installed copies and is stable across `/reload`. It
- * is released on `session_shutdown` so a surviving copy takes over after the owner is
- * removed. Either refusal warns once per process. */
+/** Registers the review tool, the planning mode, and the pending-plan notice unless pi is
+ * below PI_FLOOR or another installed copy already owns `Symbol.for("caret.pi.owner")`.
+ * The owner is keyed by `entryUrl`, which differs between installed copies and is stable
+ * across `/reload`. It is released on `session_shutdown` so a surviving copy takes over
+ * after the owner is removed. Either refusal warns once per process. */
 export function installCaret(pi: PiApi, host: CaretHost): void {
   const { version, entryUrl, holder, env, run } = host;
   if (!meetsFloor(version)) {
@@ -122,6 +122,6 @@ export default function caret(pi: PiApi): void {
     run: nodeSpawnRunner,
     agentDir: getAgentDir(),
     warm: (bin) => warmCaret(bin, "pi"),
-    spawn: nodeDetachedSpawn,
+    spawn: detachedSpawnWith({ CARET_AGENT: "pi" }),
   });
 }

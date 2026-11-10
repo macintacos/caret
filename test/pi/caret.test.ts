@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { nodeDetachedSpawn } from "@oc/review-bridge.ts";
 import caret, {
   type CaretHost,
   installCaret,
@@ -13,8 +14,6 @@ import { until } from "@test/support/poll.ts";
 import { stubRunner } from "@test/support/spawn-runner.ts";
 import { PI_FLOOR as HOST_FLOOR } from "@/adapters/pi/host.ts";
 import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
-
-import { nodeDetachedSpawn } from "../../opencode/review-bridge.ts";
 
 type Notice = { message: string; type?: string };
 

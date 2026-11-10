@@ -12,7 +12,7 @@ const NEWS = "plan waiting for your review";
 const VERB = "open in browser";
 const RPC_LINE = `^ caret  ${NEWS}   /caret ${VERB}`;
 
-/** The slice of pi's theme the notice reads. */
+/** The slice of pi's theme the notice reads; pinned by test/pi/sdk-conformance.ts. */
 export type NoticeTheme = {
   fg(color: "warning" | "text" | "muted" | "dim", text: string): string;
   bold(text: string): string;
@@ -20,7 +20,7 @@ export type NoticeTheme = {
 
 type WidgetFactory = (tui: unknown, theme: NoticeTheme) => Component;
 
-/** The slice of pi's session context the notice calls. */
+/** The slice of pi's session context the notice calls; pinned by test/pi/sdk-conformance.ts. */
 export type NoticeContext = {
   mode: "tui" | "rpc" | "json" | "print";
   hasUI: boolean;
@@ -32,7 +32,7 @@ export type NoticeContext = {
   sessionManager: { getSessionId(): string };
 };
 
-/** The slice of pi's extension API the notice calls. */
+/** The slice of pi's extension API the notice calls; pinned by test/pi/sdk-conformance.ts. */
 export type NoticeApi = {
   on(event: "session_start", handler: (event: unknown, ctx: NoticeContext) => void): void;
   on(event: "session_shutdown", handler: () => void): void;
@@ -56,8 +56,10 @@ export function noticeLine(theme: NoticeTheme, width: number): string {
   return ` ${truncateToWidth(left, Math.max(inner, 0))}`;
 }
 
-/** The clickable row; `render()` reads the theme on every call so a theme switch repaints. */
+/** The clickable row. pi runs a widget factory once, so `render()` must call the theme each
+ * time: a cached string would keep the old theme's colours. */
 export function noticeWidget(theme: NoticeTheme, open: () => void): Component {
+  // No OSC 8 link on the row: a link under the cell takes the click before the row does.
   const row: Component = { render: (width) => [noticeLine(theme, width)], invalidate: () => {} };
   // Only `click` opens: pi synthesises it on a still release, and handling `press` would
   // steal the gesture from text selection.
@@ -73,13 +75,13 @@ export function paint(ctx: NoticeContext, state: SessionReview, open: () => void
   if (!ctx.hasUI) return;
   ctx.ui.setStatus("caret", footerText(state));
   if (!state.pending) ctx.ui.setWidget("caret", undefined);
-  // No OSC 8 link on the row: a link under the cell takes the click before the row does.
   else if (ctx.mode === "tui")
     ctx.ui.setWidget("caret", (_tui, theme) => noticeWidget(theme, open));
   else ctx.ui.setWidget("caret", [RPC_LINE]);
 }
 
-/** Paints the notice from the store for each session and registers `/caret` and the shortcut. */
+/** Paints the notice from the store for each session and registers `/caret` and the
+ * shortcut. Call once per pi instance. */
 export function installNotice(
   pi: NoticeApi,
   deps: { store: ReviewStore; bin: string; spawn: DetachedSpawn },
@@ -88,9 +90,16 @@ export function installNotice(
     deps.spawn(
       deps.bin,
       ["band-link", "--session", ctx.sessionManager.getSessionId(), "--open"],
-      (err) =>
-        ctx.ui.notify(`caret: open failed: ${err.message}. Run caret doctor to see why.`, "error"),
-      { CARET_AGENT: "pi" },
+      (err) => {
+        try {
+          ctx.ui.notify(
+            `caret: open failed: ${err.message}. Run caret doctor to see why.`,
+            "error",
+          );
+        } catch {
+          // The session was replaced before the child reported; there is no UI left to tell.
+        }
+      },
     );
 
   let unsubscribe: (() => void) | undefined;

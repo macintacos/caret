@@ -138,14 +138,14 @@ in the browser. The row uses OpenCode's copy word for word, so a user who switch
 reads the same notice.
 
 ```text
- ^ caret  plan waiting for your review              ctrl+alt+c open in browser
- │ │      └ bold `text`                             │          └ muted
- │ └ muted                                          └ dim
+ ^ caret  plan waiting for your review               ctrl+alt+c open in browser
+ │ │      └ bold `text`                              │          └ muted
+ │ └ muted                                           └ dim
  └ warning
 ```
 
-- **RPC mode** (pi driven headless over JSON-RPC)**:** pi has no TUI there, so the notice
-  is one plain line, naming the command instead of the key:
+- **RPC mode:** pi driven headless over JSON-RPC has no TUI, so the notice is one plain
+  line, naming the command instead of the key:
   `^ caret  plan waiting for your review   /caret open in browser`.
 - **Footer status:** `^ plan waiting` while a review waits, `^ planning` in planning mode
   (`/caret:plan`, which gates edits until approval) with nothing waiting, and cleared

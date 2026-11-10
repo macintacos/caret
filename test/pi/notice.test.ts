@@ -57,10 +57,10 @@ function fakeApi() {
 
 function setup(mode?: NoticeContext["mode"], hasUI?: boolean) {
   const store = createReviewStore();
-  const spawns: { bin: string; args: string[]; env?: Record<string, string> }[] = [];
+  const spawns: { bin: string; args: string[] }[] = [];
   let failWith: Error | undefined;
-  const spawn: DetachedSpawn = (bin, args, onError, env) => {
-    spawns.push({ bin, args, env });
+  const spawn: DetachedSpawn = (bin, args, onError) => {
+    spawns.push({ bin, args });
     if (failWith) onError(failWith);
   };
   const api = fakeApi();
@@ -239,7 +239,6 @@ describe("opening the review", () => {
   const expected = {
     bin: "/bin/caret",
     args: ["band-link", "--session", "s1", "--open"],
-    env: { CARET_AGENT: "pi" },
   };
 
   test("/caret opens the session's review", async () => {
@@ -262,5 +261,26 @@ describe("opening the review", () => {
     expect(s.notes).toEqual([
       { message: "caret: open failed: spawn ENOENT. Run caret doctor to see why.", type: "error" },
     ]);
+  });
+
+  test("a failure reported after the session went stale does not throw", async () => {
+    const s = setup();
+    let report: (() => void) | undefined;
+    const api = fakeApi();
+    installNotice(api.api, {
+      store: s.store,
+      bin: "/bin/caret",
+      spawn: (_bin, _args, onError) => {
+        report = () => onError(new Error("exited with status 1"));
+      },
+    });
+    const stale = {
+      ...s.ctx,
+      get ui(): NoticeContext["ui"] {
+        throw new Error("This extension ctx is stale");
+      },
+    };
+    await api.commands.caret?.("", stale);
+    expect(() => report?.()).not.toThrow();
   });
 });
