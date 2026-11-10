@@ -179,7 +179,7 @@ export function waitForReview(
     // Not daemonClient().listReviews: it has no timeout, so a silent listener hangs it.
     try {
       const res = await fetch(`${sandbox.url}/api/reviews`, {
-        signal: AbortSignal.timeout(1_000),
+        signal: AbortSignal.timeout(250),
       });
       const reviews = (await res.json()) as Array<Record<string, unknown>>;
       return reviews[0];
