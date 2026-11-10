@@ -17,7 +17,7 @@ import type { PlanInput } from "@/lib/types.ts";
 import { reviewerNotesSection } from "@/plan/reviewer-notes.ts";
 
 /** Only an existing regular `.md` file counts as the agent's plan file. May throw
- * on an fs race; callers guard it. `resolvePlanSource` (opencode/review-bridge.ts)
+ * on an fs race; callers guard it. `resolvePlanSource` (bridge/review-bridge.ts)
  * repeats this check — keep the two in sync. */
 function isPlanFile(path: string): boolean {
   return path.endsWith(".md") && existsSync(path) && statSync(path).isFile();

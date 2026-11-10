@@ -21,7 +21,7 @@ import {
   resolveCaretBin,
   runReviewViaCaret,
   type SpawnRunner,
-} from "@oc/review-bridge.ts";
+} from "@bridge/review-bridge.ts";
 import { until } from "@test/support/poll.ts";
 import { streamingRunner, stubRunner } from "@test/support/spawn-runner.ts";
 import { isPidAlive } from "@/daemon/lifecycle.ts";

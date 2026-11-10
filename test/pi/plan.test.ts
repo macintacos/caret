@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { PLAN_TITLE_INSTRUCTION, REVIEW_TOOL } from "@oc/review-bridge.ts";
+import { PLAN_TITLE_INSTRUCTION, REVIEW_TOOL } from "@bridge/review-bridge.ts";
 import {
   type PlanningEntry as Entry,
   installPlanning,

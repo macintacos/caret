@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { nodeDetachedSpawn } from "@oc/review-bridge.ts";
+import { nodeDetachedSpawn } from "@bridge/review-bridge.ts";
 import caret, {
   type CaretHost,
   installCaret,

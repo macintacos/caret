@@ -10,6 +10,7 @@
 // toasts. `theme` and `renderer` are optional too: without them the pending row renders in
 // OpenTUI's default colours, or opens on every mouse-up, selection or not.
 
+import { type DetachedSpawn, nodeDetachedSpawn } from "../bridge/review-bridge.ts";
 import {
   CARET_DECISION_KEY,
   CARET_URL_KEY,
@@ -22,7 +23,6 @@ import {
   type ToastSink,
   toastBestEffort,
 } from "./caret.core.ts";
-import { type DetachedSpawn, nodeDetachedSpawn } from "./review-bridge.ts";
 
 type ToolEvent = {
   data: { id: string; sessionID: string; metadata?: Record<string, unknown> };

@@ -15,7 +15,7 @@ import {
   resolvePlanSource,
   runReviewViaCaret,
   type SpawnRunner,
-} from "../opencode/review-bridge.ts";
+} from "../bridge/review-bridge.ts";
 import {
   callLine,
   type PiTheme,

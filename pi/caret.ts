@@ -1,6 +1,6 @@
 // caret's pi extension. pi loads this file through jiti on Node, from `package.json`
 // `pi.extensions`. It may import only node builtins, pi's host-provided packages, its own
-// pi/ modules, and ../opencode/review-bridge.ts — and nothing it reaches may use bun's
+// pi/ modules, and ../bridge/review-bridge.ts — and nothing it reaches may use bun's
 // runtime API, since pi runs on Node.
 
 import { writeSync } from "node:fs";
@@ -18,7 +18,7 @@ import {
   resolveCaretBin,
   type SpawnRunner,
   warmCaret,
-} from "../opencode/review-bridge.ts";
+} from "../bridge/review-bridge.ts";
 import { DEMO_TEMPLATE, type DemoApi, installDemo } from "./demo.ts";
 import { type DoctorApi, installDoctor } from "./doctor.ts";
 import { installNotice, type NoticeApi } from "./notice.ts";

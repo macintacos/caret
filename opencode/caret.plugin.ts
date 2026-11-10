@@ -20,9 +20,9 @@
 // under v1's `plugin` config key or v2's `plugins` key (v2 reads both, legacy `plugin`
 // first). This module is the `server` half of index.ts's dual default: index.ts imports
 // it on v1's first `server` call, so a v2 load never evaluates it. Its imports are node
-// builtins, caret.core.ts, review-bridge.ts, and @opencode-ai/plugin (resolved by
-// OpenCode at runtime). Which ctx/tool/config shapes are live-verified and which are not:
-// doc/agents/opencode-integration.md § Verified vs. follow-up.
+// builtins, caret.core.ts, ../bridge/review-bridge.ts, and @opencode-ai/plugin (resolved
+// by OpenCode at runtime). Which ctx/tool/config shapes are live-verified and which are
+// not: doc/agents/opencode-integration.md § Verified vs. follow-up.
 
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -30,6 +30,7 @@ import { relative } from "node:path";
 
 import { type Hooks, type Plugin, tool } from "@opencode-ai/plugin";
 
+import { nodeSpawnRunner, type SpawnRunner } from "../bridge/review-bridge.ts";
 import {
   decisionToast,
   isPlanningAgent,
@@ -50,7 +51,6 @@ import {
   toastBestEffort,
   type WarmRunner,
 } from "./caret.core.ts";
-import { nodeSpawnRunner, type SpawnRunner } from "./review-bridge.ts";
 
 /** OpenCode's plugin client, structurally narrowed to the calls caret makes.
  * A structural type (rather than importing the SDK client) keeps this robust

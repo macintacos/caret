@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { decisionText, REVIEW_TOOL_DESCRIPTION, type SpawnRunner } from "@oc/review-bridge.ts";
+import { decisionText, REVIEW_TOOL_DESCRIPTION, type SpawnRunner } from "@bridge/review-bridge.ts";
 import { createReviewStore, type ReviewStore } from "@piext/state.ts";
 import { type PiToolResult, reviewTool } from "@piext/tool.ts";
 import { rejectingRunner, streamingRunner, stubRunner } from "@test/support/spawn-runner.ts";

@@ -1,9 +1,9 @@
-// Standing gate for the dependency-placement law (EXC-1086). `opencode/` and `pi/` are
-// the directories caret publishes as unbundled TypeScript, so their imports are the only
-// npm specifiers a consumer's package manager ever has to resolve — `dist/cli.js` and
-// `ui/dist` are bundles with no package names left in them. OpenCode and pi install the
-// package **and its declared `dependencies`**, so a build input filed in `dependencies` is
-// downloaded by every user and loaded by none.
+// Standing gate for the dependency-placement law (EXC-1086). `opencode/`, `pi/` and
+// `bridge/` are the directories caret publishes as unbundled TypeScript, so their imports
+// are the only npm specifiers a consumer's package manager ever has to resolve —
+// `dist/cli.js` and `ui/dist` are bundles with no package names left in them. OpenCode and
+// pi install the package **and its declared `dependencies`**, so a build input filed in
+// `dependencies` is downloaded by every user and loaded by none.
 // `doc/agents/dependency-rules.md` § Where a new package goes states the rule; this suite
 // is what makes it falsifiable, so the next misplacement fails `bun test` on the push that
 // adds it rather than being caught by an audit years later.
@@ -33,7 +33,7 @@ import { importSpecifiers, runtimeImportSpecifiers } from "@test/support/import-
 
 // From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
-const OPENCODE_DIR = "opencode";
+const BRIDGE_DIR = "bridge";
 
 // The scan boundary is the publish boundary: `files` ships each source directory entire,
 // so every module extension a consumer could resolve is read, not just the `.ts` files. A shipped
@@ -79,6 +79,8 @@ const HOST_PROVIDED_BY_DIR: Record<ShippedDir, readonly string[]> = {
   ],
 };
 
+const readShipped = (rel: string) => readFileSync(join(REPO_ROOT, rel), "utf-8");
+
 function scanImports(dir: string): Set<string> {
   const names = new Set<string>();
   for (const file of new Bun.Glob(SHIPPED_GLOB).scanSync({ cwd: join(REPO_ROOT, dir) })) {
@@ -109,7 +111,7 @@ test("every `files` directory holding source is scanned", () => {
   const unscanned = pkg.files
     .filter((f) => f.endsWith("/") && !BUNDLE_DIRS.includes(f))
     .map((f) => f.slice(0, -1))
-    .filter((dir) => !(SHIPPED_SOURCE_DIRS as readonly string[]).includes(dir))
+    .filter((dir) => ![...SHIPPED_SOURCE_DIRS, BRIDGE_DIR].includes(dir))
     .filter(
       (dir) =>
         new Bun.Glob(SHIPPED_GLOB).scanSync({ cwd: join(REPO_ROOT, dir) }).next().done === false,
@@ -157,11 +159,11 @@ test("every shipped source directory still has imports to derive the expected se
   ).toEqual([]);
 });
 
-test("review-bridge.ts, which the CLI bundles, imports node builtins only and no sibling module", () => {
+test("bridge/, which the CLI bundles, imports node builtins only and no relative module", () => {
   // A relative import could reach caret.plugin.ts and inline @opencode-ai/plugin into
   // dist/cli.js — which the dependencies check above cannot see, since it is declared.
-  const source = readFileSync(join(REPO_ROOT, OPENCODE_DIR, "review-bridge.ts"), "utf-8");
-  expect(importedPackages(source)).toEqual([]);
+  expect(scanImports(BRIDGE_DIR)).toEqual(new Set());
+  const source = readShipped(`${BRIDGE_DIR}/review-bridge.ts`);
   // isBuiltin() admits `bun` and `bun:*` under bun, but the CLI is not the bridge's only host.
   expect(
     runtimeImportSpecifiers(source).filter((s) => s === "bun" || s.startsWith("bun:")),
@@ -169,31 +171,31 @@ test("review-bridge.ts, which the CLI bundles, imports node builtins only and no
   expect(source).not.toMatch(/\b(?:from|import)\s*\(?\s*"\.\.?\//);
 });
 
-const readShipped = (file: string) => readFileSync(join(REPO_ROOT, OPENCODE_DIR, file), "utf-8");
-
 // Type-only imports count here, unlike the gates above: tsc still resolves an erased
 // `import type`, so one from caret.plugin.ts re-couples the core to the v1 plugin,
 // and one from @opencode-ai/plugin ties the core back to v1's SDK.
-const nonBuiltinImports = (file: string) =>
-  new Set(importSpecifiers(readShipped(file)).filter((spec) => !isBuiltin(spec)));
+const nonBuiltinImports = (rel: string) =>
+  new Set(importSpecifiers(readShipped(rel)).filter((spec) => !isBuiltin(spec)));
 
-test("caret.core.ts's closure is review-bridge.ts and node builtins, type-only imports included", () => {
-  expect(nonBuiltinImports("caret.core.ts")).toEqual(new Set(["./review-bridge.ts"]));
-  expect(nonBuiltinImports("review-bridge.ts")).toEqual(new Set());
+test("caret.core.ts's closure is the review bridge and node builtins, type-only imports included", () => {
+  expect(nonBuiltinImports("opencode/caret.core.ts")).toEqual(
+    new Set(["../bridge/review-bridge.ts"]),
+  );
+  expect(nonBuiltinImports(`${BRIDGE_DIR}/review-bridge.ts`)).toEqual(new Set());
 });
 
-test("src/ reaches opencode/ only through review-bridge.ts, so the CLI bundle never pulls in the plugin SDK", () => {
+test("src/ reaches the shipped host directories only through the bridge, so the CLI bundle never pulls in a host SDK", () => {
   // `@opencode/` is the real v2 plugin SDK's scope, which src/ must not import either.
   const specifiers = [...new Bun.Glob("**/*.ts").scanSync({ cwd: join(REPO_ROOT, "src") })].flatMap(
     (file) =>
       [
         ...readFileSync(join(REPO_ROOT, "src", file), "utf-8").matchAll(
-          /"((?:@oc|@opencode)\/[^"]+)"/g,
+          /"((?:@oc|@piext|@opencode|@bridge)\/[^"]+)"/g,
         ),
       ].map((match) => match[1]),
   );
   expect(specifiers.length).toBeGreaterThan(0);
-  expect(new Set(specifiers)).toEqual(new Set(["@oc/review-bridge.ts"]));
+  expect(new Set(specifiers)).toEqual(new Set(["@bridge/review-bridge.ts"]));
 });
 
 test("the extractor reduces a subpath to its package name and keeps the scope", () => {

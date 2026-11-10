@@ -6,7 +6,7 @@
 
 import { mkdirSync } from "node:fs";
 
-import { PLAN_TITLE_INSTRUCTION, REVIEW_TOOL } from "../opencode/review-bridge.ts";
+import { PLAN_TITLE_INSTRUCTION, REVIEW_TOOL } from "../bridge/review-bridge.ts";
 import { sendAndWait } from "./follow-up.ts";
 import { landsInside } from "./gate.ts";
 import type { ReviewStore } from "./state.ts";

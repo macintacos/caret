@@ -163,9 +163,9 @@ Because both ends of this wire are caret-owned (the plugin writes the envelope, 
 `opencode` adapter renders the decision the plugin reads), the OpenCode adapter is among
 the *least* speculative — there is no foreign agent wire format to model. The pure logic
 (envelope build, fail-safe decision parse, the spawn bridge, and the detached
-`band-link --open` opener both TUIs use) lives in `opencode/review-bridge.ts`, which
+`band-link --open` opener both TUIs use) lives in `bridge/review-bridge.ts`, which
 `opencode/caret.plugin.ts` wires behind a `createCaretPlugin({ run })` DI seam, and is
-unit-tested in `test/opencode/`. The bridge is shared: `caret mcp` (`src/commands/mcp.ts`)
+unit-tested in `test/bridge/`. The bridge is shared: `caret mcp` (`src/commands/mcp.ts`)
 runs Claude Code's `review_plan` tool through the same module, passing its own argv,
 `CARET_AGENT=claude-mcp`, and tool name, and pi's extension (`pi/caret.ts`, `pi/tool.ts`)
 reaches it the same way with `CARET_AGENT=pi`. Keep `review-bridge.ts` free of anything

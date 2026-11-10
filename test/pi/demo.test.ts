@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { REVIEW_TOOL } from "@oc/review-bridge.ts";
+import { REVIEW_TOOL } from "@bridge/review-bridge.ts";
 import { DEMO_INSTRUCTION, type DemoApi, installDemo } from "@piext/demo.ts";
 
 const TEMPLATE = "# A demo plan\n\nSome body.\n";

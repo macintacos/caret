@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { decisionText, nodeSpawnRunner, type SpawnRunner } from "../bridge/review-bridge.ts";
 import {
   CARET_DECISION_KEY,
   CARET_URL_KEY,
@@ -24,7 +25,6 @@ import {
   type WarmRunner,
 } from "./caret.core.ts";
 import { editChecks, type Rule } from "./permission.ts";
-import { decisionText, nodeSpawnRunner, type SpawnRunner } from "./review-bridge.ts";
 
 /** Appended last, it outranks a config deny-all: v2 disables a tool only when the last
  * rule naming it is a `*` deny. */

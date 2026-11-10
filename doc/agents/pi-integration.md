@@ -19,8 +19,8 @@ instead.
 
 ## The bridge: the tool spawns `caret review`
 
-**`caret_review_plan` reuses OpenCode's bridge.** The tool (`pi/tool.ts`) calls
-`runReviewViaCaret` from `opencode/review-bridge.ts` with `agent: "pi"`. The envelope
+**`caret_review_plan` reuses the review bridge.** The tool (`pi/tool.ts`) calls
+`runReviewViaCaret` from `bridge/review-bridge.ts` with `agent: "pi"`. The envelope
 carries the session id, the cwd, and `planFilePath`. The binary comes from
 `resolveCaretBin`, with `CARET_PI_BIN` as the override.
 
@@ -57,7 +57,7 @@ the ones caret imports are devDependencies only.
 **There are no `peerDependencies`.** OpenCode's installer would download them, and pi
 already supplies them.
 
-**`pi/` imports one caret module, `opencode/review-bridge.ts`**, beside node builtins, the
+**`pi/` imports one caret module, `bridge/review-bridge.ts`**, beside node builtins, the
 host packages, and its own siblings. `test/structure/pi-package.test.ts` gates the shipped
 closure: everything reached ships under `files` and uses no Bun API. Keep
 `keywords: ["pi-package"]`: pi's package gallery lists caret by it.
@@ -175,5 +175,4 @@ to the directory holding that binary. Docs under the old `@mariozechner` name ar
   (`src/adapters/pi/install.ts`).
 - Print mode `pi -p "/caret:plan …"` can exit before the follow-up runs
   (`pi/follow-up.ts`).
-- `review-bridge.ts` lives under `opencode/` though pi uses it too.
 - There is no update reminder like OpenCode's toast.

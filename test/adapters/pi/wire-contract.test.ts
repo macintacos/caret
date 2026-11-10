@@ -7,7 +7,7 @@ import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { buildEnvelope, parseDecision } from "@oc/review-bridge.ts";
+import { buildEnvelope, parseDecision } from "@bridge/review-bridge.ts";
 import { setupTempStateDir } from "@test/support/env.ts";
 import { emitWire as emitWireVia } from "@test/support/wire-contract.ts";
 import { piAdapter } from "@/adapters/pi/index.ts";

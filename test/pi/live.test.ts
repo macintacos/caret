@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { decisionText, REVIEW_TOOL } from "@oc/review-bridge.ts";
+import { decisionText, REVIEW_TOOL } from "@bridge/review-bridge.ts";
 import { DOCTOR_ENTRY, FAILED_VERDICT, PASSED_VERDICT } from "@piext/doctor.ts";
 import { sessionTag } from "@piext/plan.ts";
 import { daemonClient } from "@test/support/daemon.ts";

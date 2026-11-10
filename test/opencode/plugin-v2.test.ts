@@ -12,6 +12,7 @@ import type { Plugin } from "@opencode/plugin";
 import type { ToolContext } from "@opencode/plugin/promise/tool";
 import type { PluginInput, ToolContext as V1ToolContext } from "@opencode-ai/plugin";
 
+import { approvedMessage, type SpawnRunner } from "@bridge/review-bridge.ts";
 import { CARET_DECISION_KEY, CARET_URL_KEY, planningSteer, REVIEW_TOOL } from "@oc/caret.core.ts";
 import { createCaretPlugin } from "@oc/caret.plugin.ts";
 import {
@@ -21,7 +22,6 @@ import {
   withPlanAllow,
 } from "@oc/caret.plugin.v2.ts";
 import type { Rule } from "@oc/permission.ts";
-import { approvedMessage, type SpawnRunner } from "@oc/review-bridge.ts";
 import { fakeDistDir } from "@test/support/fs-tree.ts";
 import { streamingRunner, stubRunner } from "@test/support/spawn-runner.ts";
 

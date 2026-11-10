@@ -3,7 +3,7 @@
 
 import { Text } from "@earendil-works/pi-tui";
 
-import type { SpawnRunner } from "../opencode/review-bridge.ts";
+import type { SpawnRunner } from "../bridge/review-bridge.ts";
 import type { PiTheme } from "./render.ts";
 
 /** The customType of the transcript entry, and the key of the footer status. */

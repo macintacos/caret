@@ -4,7 +4,7 @@
 
 import { type Component, MouseRegion, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
-import type { DetachedSpawn } from "../opencode/review-bridge.ts";
+import type { DetachedSpawn } from "../bridge/review-bridge.ts";
 import { footerText, type ReviewStore, type SessionReview } from "./state.ts";
 
 export const OPEN_KEY = "ctrl+alt+c";

@@ -22,9 +22,9 @@ which requires **exactly one** such line per layout — don't add a second and d
 either. The line-anchor claim in § Calling the review tool from your own skill — the
 sentence beginning "A feedback line reference indexes…" — is pinned verbatim and
 **exactly once** by `test/structure/line-anchor-claim.test.ts`, which requires the same
-sentence in `ui/src/lib/feedback.ts` and `opencode/review-bridge.ts`: reword it in all
-three or in none, and keep emphasis and links out of the sentence, which break the match
-too. And the adapter design detail lives in
+sentence in `ui/src/lib/feedback.ts` and `bridge/review-bridge.ts`: reword it in all three
+or in none, and keep emphasis and links out of the sentence, which break the match too.
+And the adapter design detail lives in
 [`opencode-integration.md`](../opencode-integration.md) and
 [`pi-integration.md`](../pi-integration.md); this page is the human-facing narrative, not
 the rule file.

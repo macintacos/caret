@@ -3,7 +3,7 @@
 
 import { readFile } from "node:fs/promises";
 
-import { REVIEW_TOOL } from "../opencode/review-bridge.ts";
+import { REVIEW_TOOL } from "../bridge/review-bridge.ts";
 import { sendAndWait } from "./follow-up.ts";
 
 /** The demo template, relative to the extension entry `pi/caret.ts`. */

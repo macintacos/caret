@@ -13,6 +13,7 @@ import { join } from "node:path";
 
 import type { PluginInput, ToolContext } from "@opencode-ai/plugin";
 
+import { PLAN_TITLE_INSTRUCTION, type SpawnRunner } from "@bridge/review-bridge.ts";
 import {
   isPlanningAgent,
   planningSteer,
@@ -22,7 +23,6 @@ import {
   type WarmRunner,
 } from "@oc/caret.core.ts";
 import { applyCaretConfig, createCaretPlugin } from "@oc/caret.plugin.ts";
-import { PLAN_TITLE_INSTRUCTION, type SpawnRunner } from "@oc/review-bridge.ts";
 import { fakeDistDir } from "@test/support/fs-tree.ts";
 import { recordingClient } from "@test/support/opencode-toast-client.ts";
 import { until } from "@test/support/poll.ts";

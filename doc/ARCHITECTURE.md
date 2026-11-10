@@ -396,7 +396,7 @@ which pi loads through the `pi` manifest in the `@macintacos/caret` package.
   decide; pi sets no tool timeout, and Esc cancels the review. It returns an approval or a
   change request. A failed run reports a failed review, never a change request. It spawns
   `caret review` with `CARET_AGENT=pi` through the review bridge the OpenCode plugin uses
-  (`opencode/review-bridge.ts`).
+  (`bridge/review-bridge.ts`).
 - **The planning mode.** `/caret:plan` steers the model to write the plan into pi's
   `plans` folder and submit it. Until approval it blocks `edit` and `write` outside that
   folder. It also starts the caret daemon in the background while you plan, so the review
@@ -572,8 +572,9 @@ ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode + UserPromptSubmit, plus the `modules` entry that loads the mod) — Claude-adapter packaging
 mod/                the Claude Code mod — the plan-waiting band's hooks module, its state typings, and its kit tests (`claude plugin test mod`) — Claude-adapter packaging
 commands/           /caret:demo · /caret:doctor · /caret:plan — Claude-adapter packaging (agent-specific behavioral prose)
-opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging; caret.core.ts is the host-neutral core the v1, v2 and TUI modules share; review-bridge.ts, its bridge to caret review, is shared with caret mcp, caret steer and pi's extension
+opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging; caret.core.ts is the host-neutral core the v1, v2 and TUI modules share
 pi/                 the extension pi loads — the caret.ts entry, the caret_review_plan tool, its row rendering, the per-session review state, the pending-plan notice with its /caret command and shortcut, the /caret:plan planning mode and its edit gate, and the /caret:demo and /caret:doctor commands — pi-adapter packaging
+bridge/             review-bridge.ts — the bridge from an agent's review tool to caret review, shipped as source and shared by the OpenCode plugin, pi's extension, caret mcp and caret steer
 templates/          demo.md — the /caret:demo plan the Claude Code, OpenCode and pi commands fill and present
 test/               core/ (tool-agnostic suites) · adapters/<tool>/ (per-adapter suites + fixtures) · opencode/ (the repo-root opencode/ package) · pi/ (the repo-root pi/ extension) · e2e/ (Playwright) · structure/ (repo-shape invariants) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
 scripts/            dev and release tooling for the checkout, plus the two committed shims' tests

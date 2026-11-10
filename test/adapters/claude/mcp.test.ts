@@ -16,7 +16,7 @@ import {
   deniedMessage,
   PLAN_TITLE_INSTRUCTION,
   type SpawnRunner,
-} from "@oc/review-bridge.ts";
+} from "@bridge/review-bridge.ts";
 import { setupTempConfigFile, setupTempStateDir } from "@test/support/env.ts";
 import { until } from "@test/support/poll.ts";
 import { stubRunner } from "@test/support/spawn-runner.ts";

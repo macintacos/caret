@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { type Component, type TuiMouseEvent, visibleWidth } from "@earendil-works/pi-tui";
 
-import type { DetachedSpawn } from "@oc/review-bridge.ts";
+import type { DetachedSpawn } from "@bridge/review-bridge.ts";
 import {
   installNotice,
   type NoticeApi,
