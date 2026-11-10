@@ -45,6 +45,9 @@ one. What each id means:
 | `agent-install` | the agent the check names does not have caret enabled | `caret install` |
 | `log-errors` | a live log wrote an NDJSON error record in the last 24h; the detail names which log and when it last erred | step 4 |
 | `opencode-caret-version` | OpenCode would load a caret behind the published one | the check's remedy verbatim |
+| `pi-host` | `pi` can't run, is older than 1.5.0, or is the pre-rename `@mariozechner/pi-coding-agent` | the check's remedy verbatim |
+| `pi-caret-entry` | pi lists caret more than once, filters out its extension, or lists it without its package installed | the check's remedy verbatim |
+| `pi-caret-version` | pi would load a caret behind the published one | the check's remedy verbatim |
 
 An `unknown` check is not a failure: it names its own `reason` — no network, an unreadable
 config, or a report section that never collected, which also shows as an `error` line

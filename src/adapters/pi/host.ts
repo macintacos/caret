@@ -6,6 +6,9 @@ import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
 /** The first release published as pi (`@earendil-works`) that caret supports. */
 export const PI_FLOOR = "1.5.0";
 
+/** pi's npm package since the rename from `@mariozechner/pi-coding-agent`. */
+export const PI_PACKAGE = "@earendil-works/pi-coding-agent";
+
 /** Runs `argv` and reports its exit code (null when killed) and stdout. May throw. */
 export type VersionSpawn = (argv: readonly string[]) => { exitCode: number | null; stdout: string };
 
@@ -20,6 +23,31 @@ export type PiVersion =
 export function parsePiVersion(stdout: string): string | null {
   const version = stdout.match(/\d+\.\d+\.\d+/)?.[0];
   return version !== undefined && parseVersionTriple(version) !== null ? version : null;
+}
+
+/** What is wrong with `version` and what fixes it; null when pi can take caret. */
+export function piVersionFault(version: PiVersion): { detail: string; remedy: string } | null {
+  switch (version.status) {
+    case "ok":
+      return null;
+    case "missing":
+      return {
+        detail: "Couldn't run `pi --version`",
+        remedy: `install \`${PI_PACKAGE}\` ${PI_FLOOR} or later`,
+      };
+    case "too-old":
+      return {
+        detail: `pi ${version.version} is older than ${PI_FLOOR}`,
+        remedy: `upgrade \`${PI_PACKAGE}\` to ${PI_FLOOR} or later`,
+      };
+    case "pre-rename":
+      return {
+        detail: `pi ${version.version} is the old \`@mariozechner/pi-coding-agent\``,
+        remedy: `install \`${PI_PACKAGE}\` ${PI_FLOOR} or later, pi's package since the rename`,
+      };
+    default:
+      return version satisfies never;
+  }
 }
 
 /** Runs `pi --version` through `spawn`. Never throws. */

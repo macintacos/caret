@@ -3,19 +3,23 @@
 // scrubs the result — a deliberate inversion of the raw-by-default logging posture
 // (EXC-399), since the artifact exists to be pasted into bug reports.
 //
-// The OpenCode checks (`opencode-host`, `opencode-caret-version`) reach the report from
-// the adapter rather than from src/doctor/checks.ts, which is core and imports no
-// adapter: they are the checks that need an adapter's vocabulary, so composition asks for
-// them and the core layer just appends what it is handed.
+// The OpenCode checks (`opencode-host`, `opencode-caret-version`) and pi's (`pi-host`,
+// `pi-caret-entry`, `pi-caret-version`) reach the report from the adapters rather than
+// from src/doctor/checks.ts, which is core and imports no adapter: they are the checks
+// that need an adapter's vocabulary, so composition asks for them and the core layer
+// just appends what it is handed.
 
 import { existsSync } from "node:fs";
-import { release } from "node:os";
+import { homedir, release } from "node:os";
 
 import { selectAdapter } from "@/adapters/index.ts";
 import { readOpencodeChecks } from "@/adapters/opencode/checks.ts";
 import { readOpencodeHosts } from "@/adapters/opencode/host.ts";
 import { existingConfigFiles, opencodeConfigDir } from "@/adapters/opencode/paths.ts";
 import { upgradeCheck } from "@/adapters/opencode/upgrade.ts";
+import { readPiChecks, unknownPiChecks } from "@/adapters/pi/checks.ts";
+import { readPiVersion } from "@/adapters/pi/host.ts";
+import { piAgentDir } from "@/adapters/pi/install.ts";
 import { isTerminal } from "@/commands/install/ui.ts";
 import { prodService } from "@/commands/service-target.ts";
 import {
@@ -106,10 +110,15 @@ function prodDoctorDeps(s: Settings): DoctorDeps {
   };
 }
 
-/** The adapter checks doctor appends to the core ones: OpenCode's two, or nothing when
- * its config carries no caret entry. An unreadable config reports the version check as
- * unknown. */
+/** The adapter checks doctor appends to the core ones: OpenCode's, then pi's — each none
+ * when that host's config carries no caret entry. Each host degrades to unknown on its
+ * own, so one host's unreadable config never hides the other's checks. */
 async function readAdapterChecks(): Promise<Check[]> {
+  const checksByHost = await Promise.all([readOpencodeAdapterChecks(), readPiAdapterChecks()]);
+  return checksByHost.flat();
+}
+
+async function readOpencodeAdapterChecks(): Promise<Check[]> {
   try {
     return await readOpencodeChecks({
       configFiles: existingConfigFiles(opencodeConfigDir()),
@@ -117,6 +126,19 @@ async function readAdapterChecks(): Promise<Check[]> {
     });
   } catch (e) {
     return [upgradeCheck({ kind: "unknown", reason: errorMessage(e) })];
+  }
+}
+
+async function readPiAdapterChecks(): Promise<Check[]> {
+  try {
+    return await readPiChecks({
+      agentDir: piAgentDir(),
+      home: homedir(),
+      piVersion: readPiVersion,
+      published: () => publishedCaretVersion(),
+    });
+  } catch (e) {
+    return unknownPiChecks(errorMessage(e));
   }
 }
 
@@ -174,11 +196,11 @@ export async function runDoctorSubcommand(opts: {
       note.write("caret doctor: it is unredacted — move it over a channel you trust\n");
     }
     const s = loadSettings();
-    // The check's bounded npm read is independent of the local probes, so it runs
-    // alongside them.
-    const [report, adapterChecks] = await Promise.all([
-      collectReport(prodDoctorDeps(s)),
+    // The adapter checks start first: their `--version` probes spawn synchronously and
+    // would block the event loop while the health probe's 500 ms timeout runs.
+    const [adapterChecks, report] = await Promise.all([
       readAdapterChecks(),
+      collectReport(prodDoctorDeps(s)),
     ]);
     const doc: DoctorDocument = { ...report, checks: runChecks(report, adapterChecks) };
     // Deciding it here keeps the renderer a pure function.

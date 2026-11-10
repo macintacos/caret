@@ -4,15 +4,18 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
-import { PI_FLOOR, type PiVersion, readPiVersion } from "@/adapters/pi/host.ts";
-import { type PiCaretEntry, piAgentDir, readPiCaretEntries } from "@/adapters/pi/install.ts";
+import { type PiVersion, piVersionFault, readPiVersion } from "@/adapters/pi/host.ts";
+import {
+  CARET_NPM_SOURCE,
+  type PiCaretEntry,
+  piAgentDir,
+  piRemoveArg,
+  readPiCaretEntries,
+} from "@/adapters/pi/install.ts";
 import type { LocalInstall } from "@/commands/install/local.ts";
 import { type InstallUI, silentUI } from "@/commands/install/ui.ts";
 import { errorMessage } from "@/lib/types.ts";
 import { runCommand } from "@/service/run.ts";
-
-const CARET_NPM_SOURCE = "npm:@macintacos/caret";
-const PI_PACKAGE = "@earendil-works/pi-coding-agent";
 
 /** Run a `pi` subcommand: ok, or a failure detail. Never rejects. */
 export type PiRunner = (args: string[]) => Promise<{ ok: boolean; detail: string }>;
@@ -64,7 +67,7 @@ function planPi(
 function piArgs(command: PiCommand): string[] {
   switch (command.kind) {
     case "remove":
-      return ["remove", removeArg(command.entry)];
+      return ["remove", piRemoveArg(command.entry)];
     case "install":
       return ["install", command.source];
     case "update":
@@ -72,9 +75,6 @@ function piArgs(command: PiCommand): string[] {
       return ["update", CARET_NPM_SOURCE];
   }
 }
-
-// `pi remove` resolves a path against the cwd, so a local entry goes by its resolved dir.
-const removeArg = (entry: PiCaretEntry) => (entry.form === "npm" ? entry.source : entry.dir);
 
 /** The settled line for `pi update`; either version is null when pi lists caret but its
  * package.json can't be read. */
@@ -91,18 +91,10 @@ function piUpdateLine(before: string | null, after: string | null, updated: bool
 
 /** Guidance for a pi that can't take caret; null when it can. */
 function preflightError(version: PiVersion): string | null {
-  switch (version.status) {
-    case "ok":
-      return null;
-    case "missing":
-      return `Couldn't run \`pi --version\`. Install \`${PI_PACKAGE}\` (${PI_FLOOR} or later) and re-run \`caret install\`.`;
-    case "pre-rename":
-      return `pi ${version.version} is the old \`@mariozechner/pi-coding-agent\`. pi is now published as \`${PI_PACKAGE}\` — install that (${PI_FLOOR} or later) and re-run \`caret install\`.`;
-    case "too-old":
-      return `pi ${version.version} is older than ${PI_FLOOR}. Upgrade \`${PI_PACKAGE}\` and re-run \`caret install\`.`;
-    default:
-      return version satisfies never;
-  }
+  const fault = piVersionFault(version);
+  return fault === null
+    ? null
+    : `${fault.detail} — ${fault.remedy}, then re-run \`caret install\`.`;
 }
 
 function previewPlan(plan: PiPlan, ui: InstallUI): void {
@@ -175,7 +167,7 @@ async function runPlan(plan: PiPlan, ctx: RunContext): Promise<boolean> {
   try {
     for (const command of plan.commands) {
       const ok = await runPiCommand(command, ctx);
-      if (ok && command.kind === "remove") removed.push(removeArg(command.entry));
+      if (ok && command.kind === "remove") removed.push(piRemoveArg(command.entry));
     }
   } catch (e) {
     ctx.ui.error(`pi: ${errorMessage(e)}`);

@@ -1,5 +1,6 @@
-// Reads caret's entries in pi's user settings, for the doctor probe and `caret
-// install`'s pi target; strictly read-only, degrades rather than throws.
+// Reads caret's entries in pi's user settings, and names them as pi's package commands
+// take them, for the doctor probe and `caret install`'s pi target; strictly read-only,
+// degrades rather than throws.
 
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -8,6 +9,9 @@ import type { InstallProbe } from "@/adapters/adapter.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
 
 const CARET_PACKAGE = "@macintacos/caret";
+/** caret's unpinned npm source, as `pi install` takes it; installing it over a pinned
+ * entry unpins it. */
+export const CARET_NPM_SOURCE = `npm:${CARET_PACKAGE}`;
 const NPM_SOURCE = /^npm:@macintacos\/caret(@[^/]+)?$/;
 
 /** pi's user `settings.json`; `packages` is the one key caret interprets. */
@@ -50,10 +54,7 @@ export function readPiInstallState(agentDir: string, home = homedir()): InstallP
   const entry = caretEntries(settings.packages, { agentDir, home })[0];
   return {
     pluginVersion: entry?.version ?? "unknown",
-    // ponytail: extension filters (`!glob`, `-path`) aren't evaluated against
-    // caret's extension manifest — any non-empty filter counts as enabled;
-    // evaluate globs if a user hits a false "enabled".
-    pluginEnabled: entry !== undefined && !isEmptyArray(entry.extensions),
+    pluginEnabled: entry !== undefined && !filtersOutExtensions(entry),
     hookInUserSettings: false,
   };
 }
@@ -80,7 +81,7 @@ export type PiCaretEntry = {
   | { form: "local" }
 );
 
-interface PiDirs {
+export interface PiDirs {
   agentDir: string;
   home: string;
 }
@@ -88,7 +89,13 @@ interface PiDirs {
 /** Every caret entry in pi's user settings, in order; empty when settings.json is
  * missing, unreadable, or lists none. */
 export function readPiCaretEntries(agentDir: string, home = homedir()): PiCaretEntry[] {
-  return caretEntries(readPiSettings(agentDir)?.packages, { agentDir, home });
+  const settings = readPiSettings(agentDir);
+  return settings === null ? [] : piCaretEntries(settings, { agentDir, home });
+}
+
+/** Every caret entry in already-read pi `settings`, in order. */
+export function piCaretEntries(settings: PiSettings, dirs: PiDirs): PiCaretEntry[] {
+  return caretEntries(settings.packages, dirs);
 }
 
 function caretEntries(packages: unknown, dirs: PiDirs): PiCaretEntry[] {
@@ -125,6 +132,16 @@ function manifestVersion(manifest: unknown): string | null {
   return typeof version === "string" ? version : null;
 }
 
-function isEmptyArray(value: unknown): boolean {
-  return Array.isArray(value) && value.length === 0;
+/** Whether `entry`'s filter keeps pi from loading caret's extension. */
+export function filtersOutExtensions(entry: PiCaretEntry): boolean {
+  // ponytail: extension filters (`!glob`, `-path`) aren't evaluated against
+  // caret's extension manifest — any non-empty filter counts as enabled;
+  // evaluate globs if a user hits a false "enabled".
+  return Array.isArray(entry.extensions) && entry.extensions.length === 0;
+}
+
+/** The argument `pi remove` takes for `entry`. */
+export function piRemoveArg(entry: PiCaretEntry): string {
+  // `pi remove` resolves a path against the cwd, so a local entry goes by its resolved dir.
+  return entry.form === "npm" ? entry.source : entry.dir;
 }
