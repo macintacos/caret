@@ -13,8 +13,6 @@ const CARET_PACKAGE = "@macintacos/caret";
 /** caret's unpinned npm source, as `pi install` takes it; installing it over a pinned
  * entry unpins it. */
 export const CARET_NPM_SOURCE = `npm:${CARET_PACKAGE}`;
-// TODO: drop once src/commands/doctor.ts imports piAgentDir from paths.ts.
-export { piAgentDir } from "@/adapters/pi/paths.ts";
 
 const NPM_SOURCE = /^npm:@macintacos\/caret(@[^/]+)?$/;
 

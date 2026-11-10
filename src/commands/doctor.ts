@@ -19,7 +19,7 @@ import { existingConfigFiles, opencodeConfigDir } from "@/adapters/opencode/path
 import { upgradeCheck } from "@/adapters/opencode/upgrade.ts";
 import { readPiChecks, unknownPiChecks } from "@/adapters/pi/checks.ts";
 import { readPiVersion } from "@/adapters/pi/host.ts";
-import { piAgentDir } from "@/adapters/pi/install.ts";
+import { piAgentDir } from "@/adapters/pi/paths.ts";
 import { isTerminal } from "@/commands/install/ui.ts";
 import { prodService } from "@/commands/service-target.ts";
 import {
