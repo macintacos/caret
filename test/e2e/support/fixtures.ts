@@ -446,8 +446,13 @@ export const test = base.extend<E2EOptions & { daemon: Daemon }>({
     // On the context, not the page: a spec may open a second page in it.
     if (pinPlanView) {
       await page.context().addInitScript(() => {
-        if (localStorage.getItem("caret.planView") === null) {
-          localStorage.setItem("caret.planView", "source");
+        const pins = {
+          "caret.planView": "source",
+          "caret.previewDefault.moved": "1",
+          "caret.previewDefault.noticeSeen": "1",
+        };
+        for (const [key, value] of Object.entries(pins)) {
+          if (localStorage.getItem(key) === null) localStorage.setItem(key, value);
         }
       });
     }

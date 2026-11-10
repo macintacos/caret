@@ -194,6 +194,7 @@
   import FilePreview from "@/components/FilePreview.svelte";
   import FolderTree from "@/components/FolderTree.svelte";
   import PlanPreview from "@/components/PlanPreview.svelte";
+  import PreviewDefaultNotice from "@/components/PreviewDefaultNotice.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { memoLast } from "$lib/memoLast.ts";
   import { renderPlanMarkdown, type SourceSpan } from "$lib/planMarkdown.ts";
@@ -208,6 +209,7 @@
     writePlanOutline,
     writePlanView,
   } from "$lib/planView.ts";
+  import { isPreviewNoticeSeen, markPreviewNoticeSeen } from "$lib/previewDefault.ts";
 
   interface Props {
     /** The review whose current plan version is rendered. */
@@ -260,6 +262,10 @@
      * open diff reflows the moment those settings change (they live here, not in a
      * mirror App can resync). */
     settingsRev?: number;
+    /** Whether an App-level modal is open; the preview-default notice waits behind it. */
+    modalOpen?: boolean;
+    /** A counter App bumps when --fresh rewrites stored prefs, to re-read them here. */
+    prefsEpoch?: number;
     /** The review the comment editors compose against, forwarded to every composer
      * this view hosts, on either surface. App builds it, because the adapter id comes
      * from the health probe rather than the review record. */
@@ -282,6 +288,8 @@
     themeId,
     showShortcutHints = true,
     settingsRev = 0,
+    modalOpen = false,
+    prefsEpoch = 0,
     reviewContext,
   }: Props = $props();
 
@@ -350,6 +358,18 @@
   const showDiff = $derived(canCompare && compareStore.comparing);
 
   let planView = $state<PlanView>(readPlanView());
+  let noticeSeen = $state(isPreviewNoticeSeen());
+  let sourceToggleEl = $state<HTMLElement | null>(null);
+  $effect(() => {
+    if (prefsEpoch === 0) return;
+    planView = readPlanView();
+    noticeSeen = isPreviewNoticeSeen();
+  });
+  function dismissNotice(): void {
+    if (noticeSeen) return;
+    noticeSeen = true;
+    markPreviewNoticeSeen();
+  }
   // Gates the flip fade, so a first paint doesn't fade under App's plan hand-off too.
   let viewFlipped = $state(false);
   const surface = $derived<PlanSurface>(showDiff ? "compare" : planView);
@@ -2684,6 +2704,7 @@
     writePlanView(next);
   }
   function togglePlanView(): void {
+    dismissNotice();
     setPlanView(planView === "preview" ? "source" : "preview");
   }
   function resumeScratch(key: string): void {
@@ -2962,6 +2983,7 @@
             <Button
               variant="secondary"
               size="sm"
+              bind:ref={sourceToggleEl}
               class="source-toggle float-chip"
               aria-pressed={planView === "source"}
               aria-keyshortcuts={ariaKeyshortcutsFor("actions.toggleSource")}
@@ -2972,6 +2994,11 @@
                 <Kbd class="kbd-sm" aria-hidden="true">s</Kbd>
               {/if}
             </Button>
+            <PreviewDefaultNotice
+              anchor={sourceToggleEl}
+              open={!noticeSeen && !modalOpen}
+              onDismiss={dismissNotice}
+            />
           {/if}
         {/snippet}
       </VersionComparePicker>

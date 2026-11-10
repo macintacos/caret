@@ -215,6 +215,9 @@ async function pinPrefs(context: BrowserContext, shot: Shot): Promise<void> {
       "caret.fileDrawer.width": String(DRAWER_WIDTH),
       "caret.onboarded": "1",
       "caret:diffview:drag-hint-dismissed": "1",
+      "caret.planView": "source",
+      "caret.previewDefault.moved": "1",
+      "caret.previewDefault.noticeSeen": "1",
     },
   );
 }

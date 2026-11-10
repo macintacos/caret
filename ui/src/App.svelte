@@ -64,6 +64,7 @@
     markFreshResetApplied,
     shouldShowOnboarding,
   } from "$lib/prefs.ts";
+  import { applyPreviewDefault } from "$lib/previewDefault.ts";
   import { readShortcutHints } from "$lib/shortcutHintsPref.ts";
   import {
     SETTINGS_REGISTRY,
@@ -239,6 +240,19 @@
   // diff-layout/marker prefs into its compare store, which App cannot resync because
   // those prefs live in the view's own store.
   let settingsRev = $state(0);
+  // Bumped when --fresh rewrites stored prefs after DiffPlanView may have mounted.
+  let prefsEpoch = $state(0);
+  // Every App-level modal; the preview-default notice must not sit on top of one.
+  const modalOpen = $derived(
+    showHelp ||
+      showSettings ||
+      showWhatsNew ||
+      showUpgrade ||
+      showOnboarding ||
+      showDialog ||
+      pendingApproveMode !== null ||
+      pendingReject,
+  );
   async function applySetting(field: StagedField, value: unknown) {
     try {
       // Awaited: a daemon-backed field's write is a POST (EXC-1206), and a rejected
@@ -566,6 +580,8 @@
         // reload would re-clear the onboarded flag and "Maybe later" would never stick.
         if (h.fresh && !freshResetApplied(h.instanceId)) {
           clearKnownPrefs();
+          applyPreviewDefault(() => localStorage);
+          prefsEpoch++;
           appearance.boot();
           resStore.approveMode = null;
           showShortcutHints = readShortcutHints();
@@ -851,6 +867,8 @@
       {reviewContext}
       {showShortcutHints}
       {settingsRev}
+      {modalOpen}
+      {prefsEpoch}
     />
   {:else if polled || !selection.connected}
     <EmptyState connected={selection.connected} />

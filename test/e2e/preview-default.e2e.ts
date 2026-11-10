@@ -1,0 +1,172 @@
+// The one-time move to the preview default and its notice on the Source button. Each
+// browser history is seeded on the first load only, so a reload shows what the app stored.
+
+import type { Page } from "@playwright/test";
+
+import { sourceToggle } from "@test/e2e/support/chrome.ts";
+import { expect, test, waitPastSafeModeGrace } from "@test/e2e/support/fixtures.ts";
+import {
+  composer,
+  PLAN_PREVIEW,
+  PLAN_SURFACE,
+  planSurface,
+} from "@test/e2e/support/source-view.ts";
+
+test.use({ pinPlanView: false });
+
+const PLAN = "# Plan\n\nBody.\n";
+const COPY =
+  "Preview is now the default. Press S or click Source to see the plan's markdown. (P no longer toggles.)";
+
+/** Seed localStorage on the first load of this tab only. */
+async function seedOnce(page: Page, entries: Record<string, string>): Promise<void> {
+  await page.addInitScript((seed) => {
+    if (sessionStorage.getItem("e2e.seeded") !== null) return;
+    sessionStorage.setItem("e2e.seeded", "1");
+    for (const [key, value] of Object.entries(seed)) localStorage.setItem(key, value);
+  }, entries);
+}
+
+const notice = (page: Page) => page.locator(".preview-default-notice");
+const preview = (page: Page) => page.locator(`${PLAN_SURFACE} ${PLAN_PREVIEW}`);
+
+/** Ready for keys on either view; the shared helper waits for source rows. */
+async function ready(page: Page): Promise<void> {
+  await planSurface(page);
+  await waitPastSafeModeGrace(page);
+}
+
+async function open(page: Page): Promise<void> {
+  await page.goto("/");
+  await ready(page);
+}
+
+test("a new browser opens in preview with no notice, before and after a reload", async ({
+  page,
+  daemon,
+}) => {
+  await daemon.seed({ plan: PLAN });
+  await open(page);
+  await expect(preview(page)).toBeVisible();
+  await expect(sourceToggle(page)).toHaveAttribute("aria-pressed", "false");
+  await expect(notice(page)).toHaveCount(0);
+
+  await page.reload();
+  await ready(page);
+  await expect(notice(page)).toHaveCount(0);
+});
+
+test("a browser that chose source is moved to preview and told once", async ({ page, daemon }) => {
+  await seedOnce(page, { "caret.planView": "source", "caret.onboarded": "1" });
+  await daemon.seed({ plan: PLAN });
+  await open(page);
+  await expect(preview(page)).toBeVisible();
+  await expect(notice(page)).toContainText(COPY);
+  const box = await sourceToggle(page).boundingBox();
+  await expect
+    .poll(async () => (await notice(page).boundingBox())?.y ?? 0)
+    .toBeGreaterThan(box?.y ?? Number.POSITIVE_INFINITY);
+
+  await page.reload();
+  await ready(page);
+  await expect(notice(page)).toBeVisible();
+
+  await page.getByRole("button", { name: "Got it" }).click();
+  await expect(notice(page)).toHaveCount(0);
+  await page.reload();
+  await ready(page);
+  await expect(preview(page)).toBeVisible();
+  await expect(notice(page)).toHaveCount(0);
+
+  await sourceToggle(page).click();
+  await expect(preview(page)).toHaveCount(0);
+  await page.reload();
+  await ready(page);
+  await expect(sourceToggle(page)).toHaveAttribute("aria-pressed", "true");
+});
+
+test("pressing s ends the notice for good", async ({ page, daemon }) => {
+  await seedOnce(page, { "caret.planView": "preview", "caret.onboarded": "1" });
+  await daemon.seed({ plan: PLAN });
+  await open(page);
+  await expect(notice(page)).toBeVisible();
+
+  await page.keyboard.press("s");
+  await expect(notice(page)).toHaveCount(0);
+  await expect(sourceToggle(page)).toHaveAttribute("aria-pressed", "true");
+  await page.reload();
+  await ready(page);
+  await expect(notice(page)).toHaveCount(0);
+});
+
+test("a browser already moved keeps its source choice and sees no notice", async ({
+  page,
+  daemon,
+}) => {
+  await seedOnce(page, {
+    "caret.planView": "source",
+    "caret.previewDefault.moved": "1",
+    "caret.previewDefault.noticeSeen": "1",
+    "caret.onboarded": "1",
+  });
+  await daemon.seed({ plan: PLAN });
+  await open(page);
+  await expect(sourceToggle(page)).toHaveAttribute("aria-pressed", "true");
+  await expect(notice(page)).toHaveCount(0);
+});
+
+test("the notice waits behind the onboarding dialog", async ({ page, daemon }) => {
+  await page.addInitScript(() => {
+    (window as { Notification: unknown }).Notification = class {
+      static get permission() {
+        return "default";
+      }
+      static requestPermission() {
+        return Promise.resolve("default");
+      }
+    };
+  });
+  await seedOnce(page, { "caret.lastSeenVersion": "0.0.1" });
+  await daemon.seed({ plan: PLAN });
+  await page.goto("/");
+
+  const later = page.getByRole("button", { name: "Maybe later" });
+  await expect(later).toBeVisible();
+  await expect(notice(page)).toHaveCount(0);
+  await later.click();
+  await expect(notice(page)).toBeVisible();
+});
+
+test("the notice hides while comparing and returns on leaving compare", async ({
+  page,
+  daemon,
+}) => {
+  await seedOnce(page, { "caret.planView": "source", "caret.onboarded": "1" });
+  await daemon.seedVersions(2, ["# Plan\n\nOne.\n", "# Plan\n\nTwo.\n"]);
+  await open(page);
+  await expect(notice(page)).toBeVisible();
+
+  await page.keyboard.press("d");
+  await expect(sourceToggle(page)).toHaveCount(0);
+  await expect(notice(page)).toHaveCount(0);
+  await page.keyboard.press("d");
+  await expect(notice(page)).toBeVisible();
+});
+
+test("s typed in a comment does not flip the view, and p is unbound", async ({ page, daemon }) => {
+  await seedOnce(page, {
+    "caret.planView": "source",
+    "caret.previewDefault.moved": "1",
+    "caret.previewDefault.noticeSeen": "1",
+    "caret.onboarded": "1",
+  });
+  await daemon.seed({ plan: PLAN });
+  await open(page);
+
+  await page.keyboard.press("p");
+  await expect(sourceToggle(page)).toHaveAttribute("aria-pressed", "true");
+
+  const field = await composer(page, 3);
+  await field.pressSequentially("s");
+  await expect(sourceToggle(page)).toHaveAttribute("aria-pressed", "true");
+});

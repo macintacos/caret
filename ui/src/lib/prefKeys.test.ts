@@ -19,6 +19,7 @@ import "$lib/fileDrawer.ts";
 import "$lib/outlineColumn.ts";
 import "$lib/planView.ts";
 import "$lib/prefs.ts";
+import "$lib/previewDefault.ts";
 import "$lib/previewFontSizePref.ts";
 import "$lib/shortcutHintsPref.ts";
 import "$lib/soundPref.ts";
