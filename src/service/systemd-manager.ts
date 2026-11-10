@@ -8,13 +8,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { logDebug, logWarn } from "@/lib/log.ts";
+import { type CommandResult, commandError, runCommand } from "@/lib/run.ts";
 import {
   type ServiceConfig,
   type ServiceManager,
   type ServiceStatus,
   SYSTEMD_UNIT,
 } from "@/service/manager.ts";
-import { type CommandResult, commandError, runCommand } from "@/service/run.ts";
 import { buildSystemdUnit } from "@/service/systemd.ts";
 import { unitUnchanged } from "@/service/unit-file.ts";
 

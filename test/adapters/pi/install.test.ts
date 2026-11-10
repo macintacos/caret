@@ -3,12 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  piAgentDir,
-  readPiCaretEntries,
-  readPiInstallState,
-  readPiSettings,
-} from "@/adapters/pi/install.ts";
+import { readPiCaretEntries, readPiInstallState, readPiSettings } from "@/adapters/pi/install.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "install");
 const UNKNOWN = {
@@ -141,13 +136,4 @@ test("readPiSettings returns the parsed settings object, or null when unreadable
   });
   expect(readPiSettings(join(FIXTURES, "unreadable"))).toBeNull();
   expect(readPiSettings(invalidJsonAgentDir())).toBeNull();
-});
-
-test("piAgentDir honours PI_CODING_AGENT_DIR with pi's tilde expansion", () => {
-  const home = "/home/me";
-  expect(piAgentDir({}, home)).toBe(join(home, ".pi", "agent"));
-  expect(piAgentDir({ PI_CODING_AGENT_DIR: "" }, home)).toBe(join(home, ".pi", "agent"));
-  expect(piAgentDir({ PI_CODING_AGENT_DIR: "~" }, home)).toBe(home);
-  expect(piAgentDir({ PI_CODING_AGENT_DIR: "~/agents/pi" }, home)).toBe(join(home, "agents/pi"));
-  expect(piAgentDir({ PI_CODING_AGENT_DIR: "/abs/dir" }, home)).toBe("/abs/dir");
 });

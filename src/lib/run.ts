@@ -1,5 +1,5 @@
-// Spawn-and-capture for the supervisor CLIs the platform managers drive — launchctl on
-// macOS, systemctl and loginctl on Linux.
+// Spawn-and-capture for the external CLIs caret drives — the service supervisors and
+// pi's package commands.
 
 import { errorMessage } from "@/lib/types.ts";
 
