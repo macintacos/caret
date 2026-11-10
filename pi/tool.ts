@@ -1,0 +1,134 @@
+// caret_review_plan for pi: submits a plan to `caret review` and blocks until the
+// reviewer decides.
+
+import { Text } from "@earendil-works/pi-tui";
+import { type Static, Type } from "typebox";
+
+import {
+  buildEnvelope,
+  type CaretDecision,
+  decisionText,
+  PLAN_ARG_DESCRIPTION,
+  REVIEW_TOOL,
+  REVIEW_TOOL_DESCRIPTION,
+  readRegularFile,
+  resolvePlanSource,
+  runReviewViaCaret,
+  type SpawnRunner,
+} from "../opencode/review-bridge.ts";
+import { callLine, type PiTheme, type ReviewDetails, resultLine } from "./render.ts";
+import type { ReviewOutcome, ReviewStore } from "./state.ts";
+
+export type { ReviewDetails } from "./render.ts";
+export type PiToolContext = { cwd: string; sessionManager: { getSessionId(): string } };
+export type PiToolResult = { content: { type: "text"; text: string }[]; details: ReviewDetails };
+
+const parameters = Type.Object({
+  plan: Type.Optional(Type.String({ description: PLAN_ARG_DESCRIPTION })),
+  path: Type.Optional(
+    Type.String({
+      description:
+        "Preferred. A markdown (.md) file holding the complete plan, absolute or relative to the session directory.",
+    }),
+  ),
+});
+type Params = Static<typeof parameters>;
+
+/** The ToolDefinition slice caret fills. */
+export interface PiTool {
+  name: string;
+  label: string;
+  description: string;
+  promptSnippet: string;
+  parameters: typeof parameters;
+  executionMode: "sequential";
+  execute(
+    toolCallId: string,
+    params: Params,
+    signal: AbortSignal | undefined,
+    onUpdate: ((update: PiToolResult) => void) | undefined,
+    ctx: PiToolContext,
+  ): Promise<PiToolResult>;
+  renderCall(args: Params, theme: PiTheme): Text;
+  renderResult(result: { details: ReviewDetails }, options: unknown, theme: PiTheme): Text;
+}
+
+const CANCELLED_TEXT =
+  "caret: the review was cancelled before the user decided, so this plan is not approved. Do not implement it; wait for the user's direction.";
+
+function failedText(reason: string): string {
+  return [
+    "caret: the review could not run, so the user has not seen this plan.",
+    "",
+    `Reason: ${reason}`,
+    "",
+    `Tell the user caret could not run the review. Do not implement the plan until a call to \`${REVIEW_TOOL}\` returns an approval.`,
+  ].join("\n");
+}
+
+const result = (text: string, details: ReviewDetails): PiToolResult => ({
+  content: [{ type: "text", text }],
+  details,
+});
+
+/** Pure: the outcome a settled review maps to. */
+export function outcomeOf(decision: CaretDecision, aborted: boolean): ReviewOutcome {
+  if (aborted) return "cancelled";
+  if (decision.behavior === "allow") return "approved";
+  return decision.failsafe ? "failed" : "changes";
+}
+
+function outcomeText(
+  outcome: ReviewOutcome,
+  decision: CaretDecision,
+  planFilePath: string | undefined,
+): string {
+  if (outcome === "cancelled") return CANCELLED_TEXT;
+  if (outcome === "failed") return failedText(decision.feedback ?? "");
+  return decisionText(decision, REVIEW_TOOL, planFilePath);
+}
+
+export function reviewTool(deps: { bin: string; run: SpawnRunner; store: ReviewStore }): PiTool {
+  return {
+    name: REVIEW_TOOL,
+    label: "caret",
+    description: REVIEW_TOOL_DESCRIPTION,
+    promptSnippet:
+      "Submit a plan to caret for the user's review in a browser UI; blocks until they approve or request changes",
+    parameters,
+    executionMode: "sequential",
+    async execute(_id, params, signal, onUpdate, ctx) {
+      // Models sometimes prefix paths with `@`.
+      const path = params.path?.replace(/^@/, "");
+      const source = resolvePlanSource({ plan: params.plan, path }, ctx.cwd, readRegularFile);
+      if ("error" in source) return result(source.error, { state: "failed" });
+      const sessionId = ctx.sessionManager.getSessionId();
+      let outcome: ReviewOutcome = "failed";
+      try {
+        const decision = await runReviewViaCaret(
+          buildEnvelope(source.plan, {
+            sessionID: sessionId,
+            directory: ctx.cwd,
+            planFilePath: source.planFilePath,
+          }),
+          {
+            command: [deps.bin, "review"],
+            agent: "pi",
+            run: deps.run,
+            signal,
+            onUrl: (url) => {
+              deps.store.update(sessionId, { pending: url });
+              onUpdate?.(result(`caret: waiting for review at ${url}`, { state: "waiting", url }));
+            },
+          },
+        );
+        outcome = outcomeOf(decision, signal?.aborted ?? false);
+        return result(outcomeText(outcome, decision, source.planFilePath), { state: outcome });
+      } finally {
+        deps.store.update(sessionId, { pending: undefined, lastOutcome: outcome });
+      }
+    },
+    renderCall: (args, theme) => new Text(callLine(args, theme), 0, 0),
+    renderResult: (res, _options, theme) => new Text(resultLine(res.details, theme), 0, 0),
+  };
+}
