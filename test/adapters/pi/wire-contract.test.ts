@@ -76,5 +76,14 @@ test("the fatal deny line is a flat deny with the reason", () => {
   expect(JSON.parse(piAdapter.fatalDenyLine("boom"))).toEqual({
     behavior: "deny",
     feedback: "boom",
+    failsafe: true,
+  });
+});
+
+test("caret's own fail-safe deny reads back marked failsafe", () => {
+  expect(readBack({ behavior: "deny", feedback: "x", failsafe: true, decidedAt: 1 })).toEqual({
+    behavior: "deny",
+    feedback: "x",
+    failsafe: true,
   });
 });

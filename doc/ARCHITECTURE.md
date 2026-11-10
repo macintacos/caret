@@ -142,7 +142,7 @@ the shipped Claude plugin keeps working unchanged.
 | **Claude Code** — `src/adapters/claude/` | `claude` (the default) | Five hooks; the `PermissionRequest`/`ExitPlanMode` one intercepts the plan. The plugin also serves a `review_plan` MCP tool (`caret mcp`) | The `caret@caret` plugin, from caret's own marketplace | Stable (default) |
 | **OpenCode** — `src/adapters/opencode/` | `opencode` | An in-process plugin registering a `caret_review_plan` tool — OpenCode has no plan hook to intercept | The `@macintacos/caret` npm package, plus its own installer | Stable |
 | **Codex CLI** — `src/adapters/codex/` | `codex` | A `PermissionRequest` hook | Nothing — no installer, no hook manifests | Provisional, default-off |
-| **pi** — `src/adapters/pi/` | `pi` | An extension bridging to `caret review` over the caret-owned envelope | Nothing yet — the extension has not shipped | Provisional, default-off |
+| **pi** — `src/adapters/pi/` | `pi` | An extension bridging to `caret review` over the caret-owned envelope | The `@macintacos/caret` npm package's `pi` manifest (`pi install`); no caret installer yet | Provisional, default-off |
 
 > [!WARNING]
 > The Codex adapter's wire contract is modeled from Codex documentation and has never been
@@ -454,9 +454,11 @@ which sits above the highest `review.timeout_s` caret accepts (it must stay belo
 The same **fail-safe = deny** rule holds where it matters, on the review decision itself:
 a spawn failure, an unparseable decision, or a timeout (`review.timeout_s`, 1 hour by
 default — see [Config file](CONFIGURING.md#config-file)) all come back as a change request
-rather than an approval. Cancelling a pending call on Claude Code (Esc), or quitting
-Claude Code, expires its review undecided: it leaves the UI's pending list rather than
-waiting out the timeout, and no agent is waiting on its result.
+rather than an approval. On the caret-owned flat wire, a deny caret made itself carries
+`failsafe: true`; pi reports it as a failed review rather than a change request.
+Cancelling a pending call on Claude Code (Esc), or quitting Claude Code, expires its
+review undecided: it leaves the UI's pending list rather than waiting out the timeout, and
+no agent is waiting on its result.
 
 **Who may call it differs by agent.**
 
@@ -515,9 +517,10 @@ ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode + UserPromptSubmit, plus the `modules` entry that loads the mod) — Claude-adapter packaging
 mod/                the Claude Code mod — the plan-waiting band's hooks module, its state typings, and its kit tests (`claude plugin test mod`) — Claude-adapter packaging
 commands/           /caret:demo · /caret:doctor · /caret:plan — Claude-adapter packaging (agent-specific behavioral prose)
-opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging; caret.core.ts is the host-neutral core the v1, v2 and TUI modules share; review-bridge.ts, its bridge to caret review, is shared with caret mcp and caret steer
+opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, and commands/ (the same three commands, rewritten for OpenCode) — OpenCode-adapter packaging; caret.core.ts is the host-neutral core the v1, v2 and TUI modules share; review-bridge.ts, its bridge to caret review, is shared with caret mcp, caret steer and pi's extension
+pi/                 the extension pi loads — the caret.ts entry, the caret_review_plan tool, its row rendering, and the per-session review state — pi-adapter packaging
 templates/          demo.md — the /caret:demo plan both adapters' commands fill and present
-test/               core/ (tool-agnostic suites) · adapters/<tool>/ (per-adapter suites + fixtures) · opencode/ (the repo-root opencode/ package) · e2e/ (Playwright) · structure/ (repo-shape invariants) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
+test/               core/ (tool-agnostic suites) · adapters/<tool>/ (per-adapter suites + fixtures) · opencode/ (the repo-root opencode/ package) · pi/ (the repo-root pi/ extension) · e2e/ (Playwright) · structure/ (repo-shape invariants) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
 scripts/            dev and release tooling for the checkout, plus the two committed shims' tests
 bin/                the caret entrypoint shim (bin/caret) and the service launcher (bin/caret-launcher) — the only tracked files here; a local build drops the compiled binary and the UI assets beside them
 ```

@@ -91,5 +91,6 @@ test("fatalDenyLine is a dependency-free deny wire line", () => {
   expect(JSON.parse(opencodeAdapter.fatalDenyLine("daemon unreachable"))).toEqual({
     behavior: "deny",
     feedback: "daemon unreachable",
+    failsafe: true,
   });
 });

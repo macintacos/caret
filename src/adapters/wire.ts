@@ -85,17 +85,20 @@ export function parseCaretEnvelope<V = never>(
   };
 }
 
-/** The flat decision a caret-owned wire carries back to the host. */
+/** The flat decision a caret-owned wire carries back to the host. `failsafe` rides
+ * only a deny caret made itself because the review could not run or decide. */
 export interface FlatDecision {
   behavior: "allow" | "deny";
   feedback?: string;
   acceptMode?: string;
+  failsafe?: true;
 }
 
 /** Render a core decision as the flat wire decision. Only an explicit allow allows:
  * reviewer notes ride it, and `acceptModes` lists the approve-variant ids this host
  * acts on — any other is dropped, so a plain approve stays a bare allow. Anything else
- * is a deny carrying `denyMessage(feedback)`. */
+ * is a deny carrying `denyMessage(feedback)`, plus `failsafe` when caret's own
+ * fail-safe made it. */
 export function flatDecision(
   decision: FlatDecision,
   acceptModes: readonly string[] = [],
@@ -112,10 +115,14 @@ export function flatDecision(
       ...(mode && { acceptMode: mode }),
     };
   }
-  return { behavior: "deny", feedback: denyMessage(decision.feedback) };
+  return {
+    behavior: "deny",
+    feedback: denyMessage(decision.feedback),
+    ...(decision.failsafe && { failsafe: true }),
+  };
 }
 
 /** Last-resort flat deny line for the CLI's fatal handler. */
 export function flatDenyLine(reason: string): string {
-  return JSON.stringify({ behavior: "deny", feedback: reason });
+  return JSON.stringify({ behavior: "deny", feedback: reason, failsafe: true });
 }

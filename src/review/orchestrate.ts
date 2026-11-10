@@ -29,9 +29,9 @@ import {
   PLAN_FORMAT_DENY_MESSAGE,
 } from "@/plan/format.ts";
 
-/** A fail-safe deny the core constructs when an unreviewed plan must never ship.
- * The reason rides in `feedback`; the adapter renders it to the tool's deny wire
- * shape at the emission boundary. */
+/** A deny the core makes without a reviewer. The model acts on it as a change; the
+ * fail-safe catch-all adds `failsafe: true` on top. The reason rides in `feedback`;
+ * the adapter renders it to the tool's deny wire shape at the emission boundary. */
 function denyDecision(reason: string): Decision {
   return { behavior: "deny", feedback: reason, decidedAt: Date.now() };
 }
@@ -306,6 +306,9 @@ export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Prom
       }
     }
     const msg = errorMessage(err);
-    return denyDecision(`caret: ${msg} — denying so no unreviewed plan ships. See ${logFile()}.`);
+    return {
+      ...denyDecision(`caret: ${msg} — denying so no unreviewed plan ships. See ${logFile()}.`),
+      failsafe: true,
+    };
   }
 }

@@ -13,7 +13,6 @@ import {
   isNewer,
   parseLatestRelease,
   realUpdateChecker,
-  resolveCaretBin,
   resolveCaretVersion,
   shouldCheckForUpdate,
   type ToastBody,
@@ -92,16 +91,6 @@ test("resolveCaretVersion degrades to an unparseable sentinel when the package.j
   // The whole point of the sentinel: an unreadable version must NOT trigger a
   // spurious "update available (you have 0.0.0)" toast.
   expect(updateToastBody(v, { version: "9.9.9", url: "https://x" })).toBeNull();
-});
-
-// --- resolveCaretBin ---
-
-test("resolveCaretBin: env override wins, then the package-relative bin", () => {
-  const importMetaUrl = "file:///pkg/opencode/caret.plugin.ts";
-  expect(resolveCaretBin({ env: { CARET_OPENCODE_BIN: "/override" }, importMetaUrl })).toBe(
-    "/override",
-  );
-  expect(resolveCaretBin({ env: {}, importMetaUrl })).toBe("/pkg/bin/caret");
 });
 
 // --- shouldCheckForUpdate (24h throttle, pure) ---

@@ -67,5 +67,9 @@ test("lists skills, reads skill descriptions and probes the install as Claude do
 
 test("fatalDeny under CARET_AGENT=claude-mcp ships a flat deny line", () => {
   process.env.CARET_AGENT = CLAUDE_MCP_AGENT;
-  expect(JSON.parse(fatalDeny("boom"))).toEqual({ behavior: "deny", feedback: "boom" });
+  expect(JSON.parse(fatalDeny("boom"))).toEqual({
+    behavior: "deny",
+    feedback: "boom",
+    failsafe: true,
+  });
 });

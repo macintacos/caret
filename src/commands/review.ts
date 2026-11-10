@@ -163,7 +163,12 @@ export async function runReviewSubcommand(): Promise<void> {
     // Emit the deny first (stdout flushes before Claude reads it), then a
     // best-effort expire so caret's UI drops the abandoned pending review rather
     // than keeping a zombie (EXC-482).
-    respond({ behavior: "deny", feedback: `${reason} See ${logFile()}.`, decidedAt: Date.now() });
+    respond({
+      behavior: "deny",
+      feedback: `${reason} See ${logFile()}.`,
+      failsafe: true,
+      decidedAt: Date.now(),
+    });
     await expireAbandoned(expireReview, posted);
     process.exit(0);
   };

@@ -16,6 +16,7 @@ import {
   nodeSpawnRunner,
   parseDecision,
   parseReviewUrl,
+  resolveCaretBin,
   runReviewViaCaret,
   type SpawnRunner,
 } from "@oc/review-bridge.ts";
@@ -251,6 +252,35 @@ test("runReviewViaCaret fails safe to a deny when the spawn throws", async () =>
   const decision = await runReviewViaCaret("{}", { ...REVIEW, run });
   expect(decision.behavior).toBe("deny");
   expect(decision.feedback).toContain("ENOENT");
+  expect(decision).toMatchObject({ failsafe: true });
+});
+
+test("parseDecision keeps a fail-safe mark on a deny line", () => {
+  expect(parseDecision('{"behavior":"deny","feedback":"x","failsafe":true}')).toEqual({
+    behavior: "deny",
+    feedback: "x",
+    failsafe: true,
+  });
+});
+
+test("parseDecision leaves a reviewer's deny unmarked", () => {
+  expect(Object.hasOwn(parseDecision('{"behavior":"deny","feedback":"x"}'), "failsafe")).toBe(
+    false,
+  );
+});
+
+test("parseDecision marks its own fail-safe denies", () => {
+  expect(parseDecision("not json")).toMatchObject({ behavior: "deny", failsafe: true });
+  expect(parseDecision('{"behavior":"maybe"}')).toMatchObject({
+    behavior: "deny",
+    failsafe: true,
+  });
+});
+
+test("decisionText reads the same for a fail-safe deny as for a reviewer's", () => {
+  expect(
+    decisionText({ behavior: "deny", feedback: "x", failsafe: true }, "caret_review_plan"),
+  ).toBe(decisionText({ behavior: "deny", feedback: "x" }, "caret_review_plan"));
 });
 
 test("runReviewViaCaret surfaces the review URL via onUrl when the child streams it on stderr", async () => {
@@ -359,4 +389,26 @@ test("nodeSpawnRunner kills the child at once when the signal is already aborted
     const pid = Number(readFileSync(pidFile, "utf-8"));
     expect(await until(() => !isPidAlive(pid))).toBe(true);
   }
+});
+
+test("resolveCaretBin: env override wins, then the package-relative bin", () => {
+  const importMetaUrl = "file:///pkg/opencode/caret.plugin.ts";
+  const overrideVar = "CARET_OPENCODE_BIN";
+  expect(
+    resolveCaretBin({ env: { CARET_OPENCODE_BIN: "/override" }, importMetaUrl, overrideVar }),
+  ).toBe("/override");
+  expect(resolveCaretBin({ env: {}, importMetaUrl, overrideVar })).toBe("/pkg/bin/caret");
+});
+
+test("resolveCaretBin reads only the override variable it is given", () => {
+  const importMetaUrl = "file:///pkg/pi/caret.ts";
+  const env = { CARET_OPENCODE_BIN: "/opencode", CARET_PI_BIN: "/pi" };
+  expect(resolveCaretBin({ env, importMetaUrl, overrideVar: "CARET_PI_BIN" })).toBe("/pi");
+  expect(
+    resolveCaretBin({
+      env: { CARET_OPENCODE_BIN: "/opencode" },
+      importMetaUrl,
+      overrideVar: "CARET_PI_BIN",
+    }),
+  ).toBe("/pkg/bin/caret");
 });

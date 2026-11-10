@@ -30,6 +30,9 @@ from the mapping rule; prefer the mapping.
   entrypoint OpenCode loads. It mirrors `opencode/`, not `src/`, which is why it sits
   outside the core/adapter split — the OpenCode *adapter* is tested under
   `test/adapters/opencode/`.
+- **`test/pi/`** — coverage for the repo-root `pi/` extension, the entrypoint pi loads. It
+  mirrors `pi/`, not `src/`, and imports it through `@piext/*`; the pi *adapter* is tested
+  under `test/adapters/pi/`.
 - **`test/scripts/`** — coverage for `scripts/` (release tooling, the dev driver,
   preflight). These mirror `scripts/`, not `src/`, so they sit apart from the core/adapter
   split.

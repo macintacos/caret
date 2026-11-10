@@ -1,4 +1,5 @@
-// Stub SpawnRunners for the review-bridge callers' suites: the OpenCode plugin and caret mcp.
+// Stub SpawnRunners for the review-bridge callers' suites: the OpenCode plugin, caret mcp
+// and the pi extension.
 
 import type { SpawnRunner } from "@oc/review-bridge.ts";
 
@@ -11,6 +12,13 @@ export function stubRunner(
   return async (...args) => {
     capture?.(...args);
     return { stdout, exitCode: 0 };
+  };
+}
+
+/** A SpawnRunner that rejects at once, as nodeSpawnRunner does on ENOENT or abort. */
+export function rejectingRunner(error: Error): SpawnRunner {
+  return async () => {
+    throw error;
   };
 }
 

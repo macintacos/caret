@@ -2272,7 +2272,7 @@ test("a poll on an expired review is denied at once and pins no idle shutdown", 
   const res = await fetch(`${base}/api/reviews/${id}/decision?version=1`);
   expect(res.status).toBe(200);
   const decision = (await res.json()) as { behavior: string; feedback?: string };
-  expect(decision.behavior).toBe("deny");
+  expect(decision).toMatchObject({ behavior: "deny", failsafe: true });
   expect(decision.feedback).toBeTruthy();
   timer.fire();
   await sig.shutdown;

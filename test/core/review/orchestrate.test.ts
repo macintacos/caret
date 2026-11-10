@@ -186,6 +186,7 @@ test("deny decision passes the feedback through", async () => {
     }),
   );
   expect(out).toMatchObject({ behavior: "deny", feedback: "tweak X" });
+  expect("failsafe" in out).toBe(false);
 });
 
 test("acceptMode passes through on the decision", async () => {
@@ -261,6 +262,7 @@ test("a superseded review is denied without expiring the newer revision", async 
     }),
   );
   expect(out.behavior).toBe("deny");
+  expect("failsafe" in out).toBe(false);
   expect(polled).toEqual([1]);
   expect(expires).toBe(0);
 });
@@ -435,7 +437,7 @@ test("an unreachable daemon mid-poll fails safe to deny", async () => {
       },
     }),
   );
-  expect(out.behavior).toBe("deny");
+  expect(out).toMatchObject({ behavior: "deny", failsafe: true });
 });
 
 test("a failure logs the step + context to caret.log and surfaces the path", async () => {
@@ -564,6 +566,7 @@ test("a bare-fence plan is denied for format before any daemon work", async () =
     behavior: "deny",
     feedback: PLAN_FORMAT_DENY_MESSAGE,
   });
+  expect("failsafe" in out).toBe(false);
   // The format-deny short-circuits: no daemon spin-up, no review created.
   expect(ensureCalls).toBe(0);
   expect(postCalls).toBe(0);
@@ -590,6 +593,7 @@ test.each<[string, string | undefined]>([
     }),
   );
   expect(out).toMatchObject({ behavior: "deny", feedback: PLAN_EMPTY_DENY_MESSAGE });
+  expect("failsafe" in out).toBe(false);
   expect(ensureCalls).toBe(0);
   expect(postCalls).toBe(0);
 });

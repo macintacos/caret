@@ -112,10 +112,10 @@ caret does **not** re-implement the daemon round-trip inside the plugin. The too
 `execute()` builds a small caret-defined envelope
 (`{ session_id, cwd, tool_input: { plan, planFilePath? } }`) and
 **spawns `caret review` with `CARET_AGENT=opencode`**, piping the envelope on stdin and
-reading the flat decision JSON (`{ behavior, feedback? }`) on stdout. That reuses the
-entire existing daemon/review pipeline unchanged — the OpenCode plugin is the
-OpenCode-side counterpart to Claude Code's `hooks.json`, which likewise spawns
-`caret review`.
+reading the flat decision JSON (`{ behavior, feedback?, acceptMode?, failsafe? }`) on
+stdout. That reuses the entire existing daemon/review pipeline unchanged — the OpenCode
+plugin is the OpenCode-side counterpart to Claude Code's `hooks.json`, which likewise
+spawns `caret review`.
 
 On v2, when the calling agent is a planning agent, the envelope also carries
 `approve_variants: ["build"]`, so the review offers **Approve & build** beside the plain
@@ -166,14 +166,16 @@ the *least* speculative — there is no foreign agent wire format to model. The 
 `opencode/review-bridge.ts`, which `opencode/caret.plugin.ts` wires behind a
 `createCaretPlugin({ run })` DI seam, and is unit-tested in `test/opencode/`. The bridge
 is shared: `caret mcp` (`src/commands/mcp.ts`) runs Claude Code's `review_plan` tool
-through the same module, passing its own argv, `CARET_AGENT=claude-mcp`, and tool name, so
-keep `review-bridge.ts` free of anything OpenCode-specific and of any import but node
-builtins. `caret steer` (`src/adapters/claude/steer.ts`), Claude Code's title-steer hook,
-is a third consumer: it imports only `PLAN_TITLE_INSTRUCTION`, the title steer the plugin
-and `caret mcp` send too. The running-config mutation is `applyCaretConfig` in
-`opencode/caret.plugin.ts`, and it is v1-only: v2 has no `config` hook (§ The subagent
-bypass says what replaces it). `src/adapters/opencode/config-plugin.ts` edits the user's
-config *file* at install time and is covered from `test/adapters/opencode/`.
+through the same module, passing its own argv, `CARET_AGENT=claude-mcp`, and tool name,
+and pi's extension (`pi/caret.ts`, `pi/tool.ts`) reaches it the same way with
+`CARET_AGENT=pi`. Keep `review-bridge.ts` free of anything OpenCode-specific and of any
+import but node builtins. `caret steer` (`src/adapters/claude/steer.ts`), Claude Code's
+title-steer hook, is a third consumer: it imports only `PLAN_TITLE_INSTRUCTION`, the title
+steer the plugin and `caret mcp` send too. The running-config mutation is
+`applyCaretConfig` in `opencode/caret.plugin.ts`, and it is v1-only: v2 has no `config`
+hook (§ The subagent bypass says what replaces it).
+`src/adapters/opencode/config-plugin.ts` edits the user's config *file* at install time
+and is covered from `test/adapters/opencode/`.
 
 ## Daemon warm-up: plan-agent only, not session start (EXC-838)
 
@@ -564,7 +566,8 @@ on v2). A version fault's remedy is to upgrade OpenCode; every other fault's is
 The array install has no marker-substitution step, so the plugin resolves what it needs at
 runtime from the package it ships in:
 
-- **Binary** (`resolveCaretBin`): `CARET_OPENCODE_BIN` env override →
+- **Binary** (`resolveCaretBin`, in `review-bridge.ts`): the env var named by
+  `overrideVar` (`CARET_OPENCODE_BIN` for OpenCode) →
   `new URL("../bin/caret", import.meta.url)` (the `bin/caret` shim shipped beside the
   plugin in the package).
 - **Version** (`resolveCaretVersion`): the sibling `../package.json`'s `version`. Used by
@@ -599,10 +602,11 @@ OpenCode's plugin loader iterates a module's exports (`Object.values(mod)`) and 
 `TypeError("Plugin export is not a function")` on the FIRST export it cannot coerce to a
 Plugin (a function, or a `{ server }` object) — one bad export rejects the whole module.
 caret's plugin modules export more than plugins: `caret.core.ts` exports the constants
-(`REVIEW_TOOL`, `PLANNING_AGENTS`) and helpers the v1, v2 and TUI modules share, and each
-module exports helpers `test/opencode/` unit-tests. None of them can be OpenCode's
-entrypoint directly — the first non-Plugin export would reject it (a live EXC-339 bug, log
-line `failed to load plugin … "Plugin export is not a function"`).
+(`REVIEW_TOOL`, re-exported from `review-bridge.ts`, and `PLANNING_AGENTS`) and helpers
+the v1, v2 and TUI modules share, and each module exports helpers `test/opencode/`
+unit-tests. None of them can be OpenCode's entrypoint directly — the first non-Plugin
+export would reject it (a live EXC-339 bug, log line
+`failed to load plugin … "Plugin export is not a function"`).
 
 So the package's entrypoint is a tiny dedicated module, `opencode/index.ts`, whose
 namespace is exactly `{ default }`, and `package.json` `exports` `.` points at it.
@@ -678,10 +682,10 @@ has both `ui.slot` and `storage`. It renders through `@opentui/solid`, which v2'
 runtime maps to the host's own copy for every TUI plugin. The host rewrites only a bare
 string-literal specifier, so the dynamic `import()` takes no cast or variable; it runs
 only in `setup`, which v1 never calls, and the dependency gate names the specifier in
-`HOST_PROVIDED`. There is no JSX: a `.tsx` needs the three `@opentui`/`solid-js` peers and
-sits outside both tsconfig's `include` and the gate's `SHIPPED_GLOB`. Known gaps: a
-terminal attached after the plan arrived shows no line, and a deleted session or a
-restarted daemon leaves a stale one.
+`HOST_PROVIDED_BY_DIR`'s `opencode` entry. There is no JSX: a `.tsx` needs the three
+`@opentui`/`solid-js` peers and sits outside both tsconfig's `include` and the gate's
+`SHIPPED_GLOB`. Known gaps: a terminal attached after the plan arrived shows no line, and
+a deleted session or a restarted daemon leaves a stale one.
 
 How the row looks is in `design/patterns.md` § Inside a host's TUI. It nests two boxes, as
 the host's queued card does: OpenTUI paints a border cell with its own box's
