@@ -142,7 +142,7 @@ the shipped Claude plugin keeps working unchanged.
 | **Claude Code** — `src/adapters/claude/` | `claude` (the default) | Five hooks; the `PermissionRequest`/`ExitPlanMode` one intercepts the plan. The plugin also serves a `review_plan` MCP tool (`caret mcp`) | The `caret@caret` plugin, from caret's own marketplace | Stable (default) |
 | **OpenCode** — `src/adapters/opencode/` | `opencode` | An in-process plugin registering a `caret_review_plan` tool — OpenCode has no plan hook to intercept | The `@macintacos/caret` npm package, plus its own installer | Stable |
 | **Codex CLI** — `src/adapters/codex/` | `codex` | A `PermissionRequest` hook | Nothing — no installer, no hook manifests | Provisional, default-off |
-| **pi** — `src/adapters/pi/` | `pi` | An extension bridging to `caret review` over the caret-owned envelope | Nothing yet — the extension has not shipped | Provisional, default-off |
+| **pi** — `src/adapters/pi/` | `pi` | An extension bridging to `caret review` over the caret-owned envelope | The extension at `pi/caret.ts` and its `caret_review_plan` tool | Provisional, default-off |
 
 > [!WARNING]
 > The Codex adapter's wire contract is modeled from Codex documentation and has never been

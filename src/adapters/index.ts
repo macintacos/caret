@@ -38,8 +38,8 @@ const REGISTRY: Record<string, AgentAdapter> = {
   // caret-owned.
   opencode: opencodeAdapter,
   // Default-off and selectable via CARET_AGENT=pi; plugin-shaped like OpenCode — pi's
-  // extension (EXC-2315, not yet shipped) bridges to `caret review` over the
-  // caret-owned envelope.
+  // extension (pi/caret.ts) bridges to `caret review` over the caret-owned envelope
+  // and sets CARET_AGENT=pi when it spawns it.
   pi: piAdapter,
   // Set by caret's own MCP server, never by users. It speaks the caret-owned
   // envelope and flat allow/deny from src/adapters/wire.ts, passing no accept modes
