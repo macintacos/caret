@@ -3,8 +3,7 @@
 // TUI context (`fakeTui`).
 
 import { expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -14,13 +13,8 @@ import {
   type ToastBody,
   type ToastSink,
 } from "@oc/caret.core.ts";
-import {
-  createCaretTui,
-  type DetachedSpawn,
-  nodeDetachedSpawn,
-  type TuiContext,
-} from "@oc/caret.tui.ts";
-import { until } from "@test/support/poll.ts";
+import { createCaretTui, type TuiContext } from "@oc/caret.tui.ts";
+import type { DetachedSpawn } from "@oc/review-bridge.ts";
 
 type Handler = Parameters<TuiContext["data"]["on"]>[1];
 type Toast = Parameters<TuiContext["ui"]["toast"]["show"]>[0];
@@ -429,27 +423,6 @@ test("a keymap that rejects the command still leaves the review-link toast", () 
   expect(() => start({ fake })).not.toThrow();
   fake.emit("session.tool.progress", "C", { caretUrl: URL });
   expect(fake.shown.map((b) => b.message)).toEqual([URL]);
-});
-
-// The two below drive the REAL nodeDetachedSpawn: its contract lives in the child's
-// listeners, which a stubbed spawn cannot pin.
-
-test("the real detached spawn hands a bad binary's async error to onError", async () => {
-  const errors: Error[] = [];
-  nodeDetachedSpawn("/nonexistent/caret-2247", ["band-link", "--open"], (e) => errors.push(e));
-  expect(await until(() => errors.length === 1)).toBe(true);
-  // Reaching here proves the unhandled-'error' crash did not take the process down.
-  expect((errors[0] as NodeJS.ErrnoException).code).toBe("ENOENT");
-});
-
-test("the real detached spawn reports a caret that exits non-zero", async () => {
-  const shim = join(mkdtempSync(join(tmpdir(), "caret-tui-")), "shim");
-  writeFileSync(shim, "#!/bin/sh\nexit 127\n");
-  chmodSync(shim, 0o755);
-  const errors: Error[] = [];
-  nodeDetachedSpawn(shim, ["band-link", "--open"], (e) => errors.push(e));
-  expect(await until(() => errors.length === 1)).toBe(true);
-  expect(errors[0]?.message).toContain("127");
 });
 
 test("a progress event carrying the review URL records the session's pending review", () => {

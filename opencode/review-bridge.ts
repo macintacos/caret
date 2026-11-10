@@ -371,3 +371,27 @@ export const nodeSpawnRunner: SpawnRunner = (command, env, stdin, onStderr, sign
     child.stdin.write(stdin);
     child.stdin.end();
   });
+
+/** Spawns `bin args` detached and unwaited; `onError` hears a child that fails to start
+ * or exits non-zero. `env`, when given, is laid over the inherited environment. */
+export type DetachedSpawn = (
+  bin: string,
+  args: string[],
+  onError: (err: Error) => void,
+  env?: Record<string, string>,
+) => void;
+
+export const nodeDetachedSpawn: DetachedSpawn = (bin, args, onError, env) => {
+  // spawn reports ENOENT asynchronously; unhandled, that 'error' takes OpenCode down.
+  const child = spawn(bin, args, {
+    stdio: "ignore",
+    detached: true,
+    env: env && { ...process.env, ...env },
+  });
+  child.on("error", onError);
+  // band-link exits 0 on its own failures, so non-zero means caret never ran.
+  child.on("exit", (code) => {
+    if (code) onError(new Error(`exited with status ${code}`));
+  });
+  child.unref();
+};
