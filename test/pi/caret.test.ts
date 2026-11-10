@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { nodeDetachedSpawn } from "@bridge/review-bridge.ts";
 import caret, {
@@ -8,6 +11,7 @@ import caret, {
   PI_FLOOR,
   type PiApi,
 } from "@piext/caret.ts";
+import { OPEN_KEY } from "@piext/notice.ts";
 import { reviewStore } from "@piext/state.ts";
 import type { PiTool } from "@piext/tool.ts";
 import { until } from "@test/support/poll.ts";
@@ -162,7 +166,7 @@ test("only the owning copy registers caret's commands", () => {
   expect(Object.keys(old.commands)).toEqual([]);
 });
 
-test("only the owning copy registers /caret and ctrl+alt+c", () => {
+test("only the owning copy registers /caret and the open key", () => {
   const holder = {};
   const owner = fakePi();
   installCaret(owner.pi, host(holder));
@@ -171,7 +175,7 @@ test("only the owning copy registers /caret and ctrl+alt+c", () => {
   const old = fakePi();
   installCaret(old.pi, host({}, { version: "1.4.9" }));
   expect(Object.keys(owner.commands)).toContain("caret");
-  expect(Object.keys(owner.shortcuts)).toEqual(["ctrl+alt+c"]);
+  expect(Object.keys(owner.shortcuts)).toEqual([OPEN_KEY]);
   expect(second.commands.caret).toBeUndefined();
   expect(Object.keys(second.shortcuts)).toEqual([]);
   expect(old.commands.caret).toBeUndefined();
@@ -232,15 +236,46 @@ describe("caret binary", () => {
   });
 });
 
+/** Drops what the default export leaves on globalThis, its production holder. */
+function releaseGlobalHolder(): void {
+  const g = globalThis as Record<symbol, unknown>;
+  delete g[Symbol.for("caret.pi.owner")];
+  delete g[Symbol.for("caret.pi.reviews.v1")];
+  delete g[Symbol.for("caret.pi.notified")];
+}
+
 test("the default export registers caret_review_plan", () => {
   const f = fakePi();
   try {
     caret(f.pi);
     expect(f.tools.map((t) => t.name)).toEqual(["caret_review_plan"]);
   } finally {
-    const g = globalThis as Record<symbol, unknown>;
-    delete g[Symbol.for("caret.pi.owner")];
-    delete g[Symbol.for("caret.pi.reviews.v1")];
-    delete g[Symbol.for("caret.pi.notified")];
+    releaseGlobalHolder();
+  }
+});
+
+test("the default export's planning warm runs `caret prewarm` with CARET_AGENT=pi", async () => {
+  // The warm stands the daemon up, and the daemon picks its adapter from CARET_AGENT, so
+  // a warm without it would serve pi's reviews as a Claude daemon.
+  const dir = mkdtempSync(join(tmpdir(), "caret-pi-warm-"));
+  const out = join(dir, "argv");
+  const shim = join(dir, "shim");
+  writeFileSync(shim, `#!/bin/sh\nprintf '%s %s' "$1" "$CARET_AGENT" > ${out}\n`);
+  chmodSync(shim, 0o755);
+  const priorBin = process.env.CARET_PI_BIN;
+  process.env.CARET_PI_BIN = shim;
+  const f = fakePi();
+  try {
+    caret(f.pi);
+    reviewStore(globalThis as Record<symbol, unknown>).update("s", { planning: true });
+    for (const h of f.handlers.before_agent_start ?? []) h({ messageType: "user" }, f.ctx);
+    // The `>` creates the file empty and the lone printf lands in one write, so wait on non-empty.
+    expect(await until(() => existsSync(out) && readFileSync(out, "utf-8") !== "")).toBe(true);
+    expect(readFileSync(out, "utf-8")).toBe("prewarm pi");
+  } finally {
+    if (priorBin === undefined) delete process.env.CARET_PI_BIN;
+    else process.env.CARET_PI_BIN = priorBin;
+    releaseGlobalHolder();
+    rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -330,22 +330,6 @@ export async function runReviewViaCaret(
   }
 }
 
-/** Warms the caret daemon: `caret prewarm`, detached and unref'd so it never holds up
- * the turn. Output is discarded — the child logs to caret.log. CARET_AGENT rides along
- * because this spawn is what stands the daemon up and the daemon picks its adapter
- * from that env; the 'error' handler is mandatory because spawn emits 'error'
- * ASYNCHRONOUSLY (ENOENT on a bad bin), where a caller's synchronous try/catch
- * cannot see it and an unhandled event would take the host's whole process down. */
-export function warmCaret(bin: string, agent: string): void {
-  const child = spawn(bin, ["prewarm"], {
-    stdio: "ignore",
-    detached: true,
-    env: { ...process.env, CARET_AGENT: agent },
-  });
-  child.on("error", () => {});
-  child.unref();
-}
-
 /** Production runner: spawn `command[0]` with the rest of the argv. stderr is
  * PIPED (not inherited) and streamed to `onStderr`: in OpenCode, inheriting it leaked
  * core's "review this plan at <url>" line straight into the TUI scrollback, where the
@@ -400,3 +384,10 @@ export const detachedSpawnWith =
   };
 
 export const nodeDetachedSpawn = detachedSpawnWith();
+
+/** Warms the caret daemon: `caret prewarm`, detached and best-effort, so it never holds
+ * up the turn. CARET_AGENT rides along because this spawn is what stands the daemon up
+ * and the daemon picks its adapter from that env. */
+export function warmCaret(bin: string, agent: string): void {
+  detachedSpawnWith({ CARET_AGENT: agent })(bin, ["prewarm"], () => {});
+}
