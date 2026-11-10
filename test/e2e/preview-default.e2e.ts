@@ -38,7 +38,7 @@ async function ready(page: Page): Promise<void> {
   await waitPastSafeModeGrace(page);
 }
 
-async function open(page: Page): Promise<void> {
+async function openPlan(page: Page): Promise<void> {
   await page.goto("/");
   await ready(page);
 }
@@ -48,7 +48,7 @@ test("a new browser opens in preview with no notice, before and after a reload",
   daemon,
 }) => {
   await daemon.seed({ plan: PLAN });
-  await open(page);
+  await openPlan(page);
   await expect(preview(page)).toBeVisible();
   await expect(sourceToggle(page)).toHaveAttribute("aria-pressed", "false");
   await expect(notice(page)).toHaveCount(0);
@@ -61,13 +61,13 @@ test("a new browser opens in preview with no notice, before and after a reload",
 test("a browser that chose source is moved to preview and told once", async ({ page, daemon }) => {
   await seedOnce(page, { "caret.planView": "source", "caret.onboarded": "1" });
   await daemon.seed({ plan: PLAN });
-  await open(page);
+  await openPlan(page);
   await expect(preview(page)).toBeVisible();
   await expect(notice(page)).toContainText(COPY);
-  const box = await sourceToggle(page).boundingBox();
+  const toggleBox = await sourceToggle(page).boundingBox();
   await expect
     .poll(async () => (await notice(page).boundingBox())?.y ?? 0)
-    .toBeGreaterThan(box?.y ?? Number.POSITIVE_INFINITY);
+    .toBeGreaterThan(toggleBox?.y ?? Number.POSITIVE_INFINITY);
 
   await page.reload();
   await ready(page);
@@ -90,7 +90,7 @@ test("a browser that chose source is moved to preview and told once", async ({ p
 test("pressing s ends the notice for good", async ({ page, daemon }) => {
   await seedOnce(page, { "caret.planView": "preview", "caret.onboarded": "1" });
   await daemon.seed({ plan: PLAN });
-  await open(page);
+  await openPlan(page);
   await expect(notice(page)).toBeVisible();
 
   await page.keyboard.press("s");
@@ -107,7 +107,7 @@ test("the notice outlasts an outside click and Escape, which still closes a sear
 }) => {
   await seedOnce(page, { "caret.planView": "source", "caret.onboarded": "1" });
   await daemon.seed({ plan: PLAN });
-  await open(page);
+  await openPlan(page);
   await expect(notice(page)).toBeVisible();
 
   await preview(page).click();
@@ -134,7 +134,7 @@ test("a browser already moved keeps its source choice and sees no notice", async
     "caret.onboarded": "1",
   });
   await daemon.seed({ plan: PLAN });
-  await open(page);
+  await openPlan(page);
   await expect(sourceToggle(page)).toHaveAttribute("aria-pressed", "true");
   await expect(notice(page)).toHaveCount(0);
 });
@@ -163,7 +163,7 @@ test("the notice hides while comparing and returns on leaving compare", async ({
 }) => {
   await seedOnce(page, { "caret.planView": "source", "caret.onboarded": "1" });
   await daemon.seedVersions(2, ["# Plan\n\nOne.\n", "# Plan\n\nTwo.\n"]);
-  await open(page);
+  await openPlan(page);
   await expect(notice(page)).toBeVisible();
 
   await page.keyboard.press("d");
@@ -181,7 +181,7 @@ test("s typed in a comment does not flip the view, and p is unbound", async ({ p
     "caret.onboarded": "1",
   });
   await daemon.seed({ plan: PLAN });
-  await open(page);
+  await openPlan(page);
 
   await page.keyboard.press("p");
   await expect(sourceToggle(page)).toHaveAttribute("aria-pressed", "true");
