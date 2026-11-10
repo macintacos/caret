@@ -1,8 +1,8 @@
 // `/caret:plan`, caret's planning mode for pi: a hidden steer to write and submit a plan,
-// and a gate on edit/write outside the plans folder until a review submitted while
-// planning is approved. State lives in the review store (which outlives `/reload`) and in
-// session entries, rebuilt from the current branch so a fork or `/tree` jump to before
-// planning began is not planning.
+// and a gate on edit/write outside the plans folder until a review of a plan in that
+// folder, submitted while planning, is approved. State lives in the review store (which
+// outlives `/reload`) and in session entries, rebuilt from the current branch so a fork or
+// `/tree` jump to before planning began is not planning.
 
 import { mkdirSync } from "node:fs";
 
@@ -117,6 +117,8 @@ export function installPlanning(pi: PlanningApi, deps: PlanningDeps): void {
   };
   const restorePlanningFromBranch = (_event: unknown, ctx: PlanningContext) =>
     store.update(sid(ctx), { planning: planningFromBranch(ctx.sessionManager.getBranch()) });
+  const pathInPlansDir = (call: ToolCall, ctx: PlanningContext) =>
+    typeof call.input.path === "string" && landsInside(call.input.path, ctx.cwd, plansDir);
 
   pi.registerCommand("caret:plan", {
     description: "Plan a change and review it in caret before any file is edited",
@@ -157,12 +159,11 @@ export function installPlanning(pi: PlanningApi, deps: PlanningDeps): void {
   pi.on("tool_call", (event, ctx) => {
     if (!isPlanning(ctx)) return undefined;
     if (event.toolName === REVIEW_TOOL) {
-      reviewsWhilePlanning.add(event.toolCallId);
+      if (pathInPlansDir(event, ctx)) reviewsWhilePlanning.add(event.toolCallId);
       return undefined;
     }
     if (event.toolName !== "edit" && event.toolName !== "write") return undefined;
-    const path = event.input.path;
-    if (typeof path === "string" && landsInside(path, ctx.cwd, plansDir)) return undefined;
+    if (pathInPlansDir(event, ctx)) return undefined;
     return {
       block: true,
       reason: `Planning mode: only files in \`${plansDir}/\` can change until the plan is approved. Finish the plan there and submit it with \`${REVIEW_TOOL}\`.`,

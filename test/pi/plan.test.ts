@@ -215,10 +215,14 @@ describe("gate", () => {
 });
 
 describe("leaving on approval", () => {
-  async function review(details: unknown, opts: { planningAtCall?: boolean } = {}) {
+  async function review(
+    details: unknown,
+    opts: { planningAtCall?: boolean; input?: Record<string, unknown> } = {},
+  ) {
     const f = fakePi();
     if (opts.planningAtCall !== false) await f.command("x");
-    f.fire("tool_call", { toolName: REVIEW_TOOL, toolCallId: "r1", input: {} });
+    const input = opts.input ?? { path: join(plansDir, "p.md") };
+    f.fire("tool_call", { toolName: REVIEW_TOOL, toolCallId: "r1", input });
     if (opts.planningAtCall === false) await f.command("x");
     f.fire("tool_result", { toolName: REVIEW_TOOL, toolCallId: "r1", details });
     return f;
@@ -237,6 +241,14 @@ describe("leaving on approval", () => {
       expect(planning()).toBe(true);
     },
   );
+
+  test.each([
+    ["a file outside the plans folder", () => ({ path: join(tmp, "other.md") })],
+    ["an inline plan", () => ({ plan: "# P" })],
+  ])("approving %s keeps planning on", async (_name, input) => {
+    await review({ state: "approved" }, { input: input() });
+    expect(planning()).toBe(true);
+  });
 
   test("approving a review submitted before planning began keeps planning on", async () => {
     await review({ state: "approved" }, { planningAtCall: false });
