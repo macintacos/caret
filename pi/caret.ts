@@ -9,13 +9,16 @@ import { fileURLToPath } from "node:url";
 import { getAgentDir, VERSION } from "@earendil-works/pi-coding-agent";
 
 import {
+  type DetachedSpawn,
   isNewer,
+  nodeDetachedSpawn,
   nodeSpawnRunner,
   parseVersionTriple,
   resolveCaretBin,
   type SpawnRunner,
   warmCaret,
 } from "../opencode/review-bridge.ts";
+import { installNotice, type NoticeApi } from "./notice.ts";
 import { installPlanning, type PlanningApi } from "./plan.ts";
 import { reviewStore } from "./state.ts";
 import { type PiTool, reviewTool } from "./tool.ts";
@@ -30,11 +33,12 @@ export type PiNotifyContext = {
 };
 
 /** The slice of pi's extension API caret calls; pinned by test/pi/sdk-conformance.ts. */
-export type PiApi = PlanningApi & {
-  registerTool(tool: PiTool): void;
-  on(event: "session_start", handler: (event: unknown, ctx: PiNotifyContext) => void): void;
-  on(event: "session_shutdown", handler: () => void): void;
-};
+export type PiApi = PlanningApi &
+  NoticeApi & {
+    registerTool(tool: PiTool): void;
+    on(event: "session_start", handler: (event: unknown, ctx: PiNotifyContext) => void): void;
+    on(event: "session_shutdown", handler: () => void): void;
+  };
 
 export interface CaretHost {
   version: string;
@@ -49,6 +53,8 @@ export interface CaretHost {
   agentDir: string;
   /** Spawns `caret prewarm` for `bin`; best-effort. */
   warm: (bin: string) => void;
+  /** Starts `caret band-link` detached; injected so the open action is testable. */
+  spawn: DetachedSpawn;
 }
 
 const OWNER = Symbol.for("caret.pi.owner");
@@ -68,7 +74,7 @@ function notifyOnce(pi: PiApi, holder: Record<symbol, unknown>, message: string)
   });
 }
 
-/** Registers the review tool and the planning mode unless pi is below PI_FLOOR or another
+/** Registers the review tool, the planning mode, and the pending-plan notice unless pi is below PI_FLOOR or another
  * installed copy already owns `Symbol.for("caret.pi.owner")`. The owner is keyed by
  * `entryUrl`, which differs between installed copies and is stable across `/reload`. It
  * is released on `session_shutdown` so a surviving copy takes over after the owner is
@@ -104,6 +110,7 @@ export function installCaret(pi: PiApi, host: CaretHost): void {
     plansDir: join(host.agentDir, "plans"),
     warm: () => host.warm(bin),
   });
+  installNotice(pi, { store, bin, spawn: host.spawn });
 }
 
 export default function caret(pi: PiApi): void {
@@ -115,5 +122,6 @@ export default function caret(pi: PiApi): void {
     run: nodeSpawnRunner,
     agentDir: getAgentDir(),
     warm: (bin) => warmCaret(bin, "pi"),
+    spawn: nodeDetachedSpawn,
   });
 }
