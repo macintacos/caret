@@ -84,7 +84,8 @@ check = false
 loads caret but can't review a plan file the agent wrote, so the agent sends the plan text
 instead. See [the OpenCode adapter](doc/ARCHITECTURE.md#the-opencode-adapter) for the
 by-hand equivalents, for pinning a version in OpenCode's plugin array (`plugin` on v1,
-`plugins` on v2), and for what each agent's install touches;
+`plugins` on v2); [`caret install`](doc/ARCHITECTURE.md#installing-with-caret-install)
+covers what each agent's install touches;
 [the Claude Code adapter](doc/ARCHITECTURE.md#the-claude-code-adapter) covers the hooks
 `caret` registers there. `caret install` also installs into pi 1.5.0 or later when `pi` is
 on your PATH; run `/reload` in pi or restart it to pick caret up. `caret install` and
