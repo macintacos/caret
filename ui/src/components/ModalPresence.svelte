@@ -23,11 +23,13 @@
 
   const store = $state<PresenceStore>({ present: false, generation: 0 });
   const presence = createModalPresence(store);
+  const wanted = $derived(open);
 
-  // `open` is this effect's only dependency — untrack keeps the generation bump
-  // (a read-then-write) from re-triggering it.
+  // `wanted` is this effect's only dependency, and it changes only when `open` changes
+  // value: a host may read `open` from a record that is rebuilt for unrelated reasons.
+  // untrack keeps the generation bump (a read-then-write) from re-triggering it.
   $effect(() => {
-    const isOpen = open;
+    const isOpen = wanted;
     untrack(() => presence.sync(isOpen));
   });
 </script>
