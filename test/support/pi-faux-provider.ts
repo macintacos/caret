@@ -60,9 +60,10 @@ function planningStep(messages: Message[], plan: string) {
   );
 }
 
-/** `steer check` replies whether the steer reaches the model; a planning run follows
- * planningStep; otherwise the first call submits a plan, and after a tool result the model
- * echoes its text so pi's output shows what it received. */
+/** `steer check` serves driving pi by hand with this provider: it replies whether the
+ * planning steer reaches the model. A planning run follows planningStep; otherwise the
+ * first call submits a plan, and after a tool result the model echoes its text so pi's
+ * output shows what it received. */
 const step: FauxResponseFactory = (context) => {
   const lastUser = context.messages.findLast(
     (m) => m.role === "user" && !textOf(m).includes(STEER_HEADING),
@@ -89,7 +90,8 @@ const step: FauxResponseFactory = (context) => {
 
 export default function (pi: ExtensionAPI): void {
   const faux = fauxProvider({ provider: "faux" });
-  // One step per model call; slack for an interactive session's several prompts.
+  // One step per model call: a planning run makes five; the rest is slack for a
+  // hand-driven interactive session.
   faux.setResponses(Array(32).fill(step));
   pi.registerProvider(faux.provider);
 }

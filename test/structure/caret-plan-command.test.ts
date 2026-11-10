@@ -1,6 +1,7 @@
-// Standing gate for `/caret:plan`. Both agents discover the command by file path, so a
-// dropped or renamed file, or a `files` entry that stops shipping it, fails silently at
-// the user's terminal and never in CI. Nothing but this suite catches it.
+// Standing gate for `/caret:plan`. Claude Code and OpenCode discover the command by file
+// path (pi registers it in code), so a dropped or renamed file, or a `files` entry that
+// stops shipping it, fails silently at the user's terminal and never in CI. Nothing but
+// this suite catches it.
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";

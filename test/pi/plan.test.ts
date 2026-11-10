@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { PLAN_TITLE_INSTRUCTION, REVIEW_TOOL } from "@oc/review-bridge.ts";
 import {
+  type PlanningEntry as Entry,
   installPlanning,
   PLANNING,
   type PlanningApi,
@@ -15,7 +16,6 @@ import { createReviewStore, footerText, type ReviewStore } from "@piext/state.ts
 
 const SID = "0190a1b2-c3d4-7e5f-8a9b-0123456789ab";
 
-type Entry = { type: string; customType?: string; data?: unknown };
 type Handler = (event: unknown, ctx: unknown) => unknown;
 
 let tmp: string;
@@ -38,7 +38,7 @@ const on = (active: boolean): Entry => ({
   data: { active },
 });
 
-function fakePi() {
+function fakePi(warm: () => void = () => warms++) {
   const handlers: Record<string, Handler> = {};
   const commands: Record<string, (args: string, ctx: unknown) => Promise<void>> = {};
   const entries: { customType: string; data: unknown }[] = [];
@@ -67,7 +67,7 @@ function fakePi() {
       handlers[event] = handler;
     },
   } as unknown as PlanningApi;
-  installPlanning(pi, { store, plansDir, warm: () => warms++ });
+  installPlanning(pi, { store, plansDir, warm });
   return {
     entries,
     sent,
@@ -136,6 +136,17 @@ describe("steer", () => {
       expect(result.message.content).toContain(part);
     }
     expect(warms).toBe(1);
+  });
+
+  test("a warm that throws still yields the steer", async () => {
+    const f = fakePi(() => {
+      throw new Error("EAGAIN");
+    });
+    await f.command("x");
+    const result = f.fire("before_agent_start", { messageType: "user" }) as {
+      message: { customType: string };
+    };
+    expect(result.message.customType).toBe(PLANNING);
   });
 
   test("no steer or warm when not planning", () => {

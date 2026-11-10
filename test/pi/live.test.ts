@@ -1,17 +1,19 @@
 // The one suite that runs real pi, on Node, against the packed caret package — what the
 // injected-runner suites beside it cannot show.
 import { afterAll, afterEach, beforeAll, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { decisionText, REVIEW_TOOL } from "@oc/review-bridge.ts";
+import { sessionTag } from "@piext/plan.ts";
 import { daemonClient } from "@test/support/daemon.ts";
 import { FAUX_PLAN_TITLE } from "@test/support/pi-faux-provider.ts";
 import {
   type PiRun,
   packCaret,
   piSandbox,
+  piSessionEntries,
   piSessionId,
   requireNode,
   runPi,
@@ -83,25 +85,19 @@ test("/caret:plan blocks a write outside the plans folder until the plan is appr
   expect(await until(() => pi?.proc.exitCode !== null, EXIT_WAIT_MS)).toBe(true);
   const out = await pi.output;
   expect(out.exit).toBe(0);
-  const tag = piSessionId(sandbox).slice(-8);
+  const tag = sessionTag(piSessionId(sandbox));
   expect(existsSync(join(sandbox.agentDir, "plans", `greeting-${tag}.md`))).toBe(true);
   expect(readFileSync(join(sandbox.cwd, "greeting.txt"), "utf8")).toBe("hello");
   expect(out.stdout).toContain("steer after approval: no");
 
-  const sessions = join(sandbox.agentDir, "sessions");
-  const file = readdirSync(sessions, { recursive: true })
-    .map(String)
-    .find((f) => f.endsWith(".jsonl"));
-  const blocked = readFileSync(join(sessions, String(file)), "utf8")
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line))
-    .some(
-      (e) =>
-        e.message?.role === "toolResult" &&
-        e.message.toolName === "write" &&
-        JSON.stringify(e.message.content).includes(REVIEW_TOOL),
+  const blocked = piSessionEntries(sandbox).some((e) => {
+    const m = (e as { message?: { role?: string; toolName?: string; content?: unknown } }).message;
+    return (
+      m?.role === "toolResult" &&
+      m.toolName === "write" &&
+      JSON.stringify(m.content).includes(REVIEW_TOOL)
     );
+  });
   expect(blocked).toBe(true);
 }, 60_000);
 

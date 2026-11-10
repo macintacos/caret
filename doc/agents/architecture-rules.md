@@ -110,7 +110,9 @@ surface. EXC-339 built that surface — a registered `caret_review_plan` tool th
 to `caret review` rather than a command hook; see
 [`opencode-integration.md`](opencode-integration.md) for the spike and the design. pi's
 extension (`pi/caret.ts`) uses the same shape: a registered `caret_review_plan` tool that
-spawns `caret review` with `CARET_AGENT=pi` through `opencode/review-bridge.ts`. Note it
+spawns `caret review` with `CARET_AGENT=pi` through `opencode/review-bridge.ts`, plus a
+`/caret:plan` command whose planning mode steers the model and blocks `edit`/`write`
+outside pi's plans folder until the plan is approved (`pi/plan.ts`, `pi/gate.ts`). Note it
 as plugin-shaped before assuming a new tool slots into the command-hook mold.
 
 **A registry entry may be composed inline.** `claude-mcp`, set only by `caret mcp` for

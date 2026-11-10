@@ -10,6 +10,7 @@ import { PLAN_TITLE_INSTRUCTION, REVIEW_TOOL } from "../opencode/review-bridge.t
 import { landsInside } from "./gate.ts";
 import type { ReviewStore } from "./state.ts";
 
+/** The customType of both the hidden steer message and the session entry. */
 export const PLANNING = "caret-planning";
 
 const LEAVE_NOTICE = "caret planning is off; edits are no longer blocked.";
@@ -66,6 +67,7 @@ export type PlanningApi = {
 export interface PlanningDeps {
   store: ReviewStore;
   plansDir: string;
+  /** Stands the caret daemon up ahead of the review; best-effort. */
   warm: () => void;
 }
 
@@ -75,6 +77,8 @@ export function sessionTag(sessionId: string): string {
   return sessionId.slice(-8);
 }
 
+/** The hidden message that tells the model to write its plan under `plansDir` and
+ * submit it. */
 export function planningSteer(plansDir: string, sessionId: string): string {
   const file = `${plansDir}/<short-name>-${sessionTag(sessionId)}.md`;
   return [
@@ -98,6 +102,8 @@ export function planningFromBranch(entries: readonly PlanningEntry[]): boolean {
   return (last?.data as { active: boolean } | undefined)?.active === true;
 }
 
+/** Registers `/caret:plan` and its handlers on `pi`. Call once per pi instance: the set
+ * of in-flight review calls is per install. */
 export function installPlanning(pi: PlanningApi, deps: PlanningDeps): void {
   const { store, plansDir, warm } = deps;
   const reviewsWhilePlanning = new Set<string>();
@@ -122,9 +128,10 @@ export function installPlanning(pi: PlanningApi, deps: PlanningDeps): void {
       }
       if (!isPlanning(ctx)) setPlanning(ctx, true);
       pi.sendUserMessage(task || EARLIER_TASK, { deliverAs: "followUp" });
-      // ponytail: one macrotask lets the queued run start before waitForIdle; a run whose
-      // preflight awaits I/O (an OAuth refresh) starts later, so `pi -p "/caret:plan …"` may
-      // exit early. Interactive mode is unaffected.
+      // ponytail: one macrotask lets the queued run start before waitForIdle; a run
+      // whose preflight awaits I/O (an extension's `input` handler, the auth check)
+      // starts later, so `pi -p "/caret:plan …"` may exit early. Fix once pi exposes the
+      // queued run's promise.
       await new Promise((resolve) => setTimeout(resolve, 0));
       await ctx.waitForIdle();
     },
@@ -132,7 +139,11 @@ export function installPlanning(pi: PlanningApi, deps: PlanningDeps): void {
 
   pi.on("before_agent_start", (event, ctx) => {
     if (event.messageType !== "user" || !isPlanning(ctx)) return undefined;
-    warm();
+    try {
+      warm();
+    } catch {
+      /* best-effort */
+    }
     return {
       message: { customType: PLANNING, content: planningSteer(plansDir, sid(ctx)), display: false },
     };
@@ -147,6 +158,7 @@ export function installPlanning(pi: PlanningApi, deps: PlanningDeps): void {
     };
   });
 
+  // Must not throw: pi does not catch a tool_call handler's throw.
   pi.on("tool_call", (event, ctx) => {
     if (!isPlanning(ctx)) return undefined;
     if (event.toolName === REVIEW_TOOL) {
@@ -162,6 +174,8 @@ export function installPlanning(pi: PlanningApi, deps: PlanningDeps): void {
     };
   });
 
+  // Reads the call's own outcome, not the store's lastOutcome: a path that fails to
+  // resolve returns before the tool writes it, leaving an earlier approval there.
   pi.on("tool_result", (event, ctx) => {
     if (event.toolName !== REVIEW_TOOL || !reviewsWhilePlanning.delete(event.toolCallId)) return;
     if ((event.details as { state?: unknown } | undefined)?.state === "approved") {

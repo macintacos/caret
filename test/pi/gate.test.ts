@@ -12,7 +12,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 
-import { landsInside } from "@piext/gate.ts";
+import { landsInside, resolveLikePi } from "@piext/gate.ts";
 
 let tmp: string;
 let plans: string;
@@ -88,6 +88,10 @@ describe("landsInside", () => {
     expect(landsInside(join(plans, "sp\u00A0ce", "a.md"), work, plans)).toBe(false);
   });
 
+  test("rejects a file: URL, which pi's tools resolve as a local path", () => {
+    expect(landsInside("@file:///etc/hosts", plans, plans)).toBe(false);
+  });
+
   describe("on a case-insensitive filesystem", () => {
     const probe = realpathSync.native(mkdtempSync(join(tmpdir(), "caret-gate-case-")));
     mkdirSync(join(probe, "Aa"));
@@ -101,12 +105,35 @@ describe("landsInside", () => {
     });
 
     test.skipIf(!caseInsensitive)("accepts a differently-cased path under Node", () => {
-      const gate = join(import.meta.dir, "..", "..", "pi", "gate.ts");
+      const gate = Bun.resolveSync("@piext/gate.ts", import.meta.dir);
       const args = JSON.stringify([upper(), work, plans]);
       const script = `const { landsInside } = await import(${JSON.stringify(gate)}); console.log(landsInside(...${args}));`;
       const run = spawnSync("node", ["--input-type=module", "-e", script], { encoding: "utf8" });
-      expect(run.stderr).toBe("");
+      expect(run.status, run.stderr).toBe(0);
       expect(run.stdout.trim()).toBe("true");
     });
+  });
+});
+
+const { resolveToCwd } = await import(
+  Bun.resolveSync("@earendil-works/pi-coding-agent/package.json", import.meta.dir).replace(
+    "package.json",
+    "dist/core/tools/path-utils.js",
+  )
+);
+
+describe("resolveLikePi", () => {
+  test.each(["a.md", "@a.md", "~/a.md", "~", "sp\u00A0ce/a.md", "/abs/a.md"])(
+    "resolves %p as pi's tools do",
+    (input) => {
+      expect(resolveLikePi(input, work)).toBe(resolveToCwd(input, work));
+    },
+  );
+
+  // The one known divergence: pi reads a file: URL as a local path; the gate blocks it.
+  test("diverges from pi on a file: URL", () => {
+    expect(resolveLikePi("file:///abs/a.md", work)).not.toBe(
+      resolveToCwd("file:///abs/a.md", work),
+    );
   });
 });

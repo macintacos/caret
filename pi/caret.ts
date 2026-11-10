@@ -47,6 +47,7 @@ export interface CaretHost {
   run: SpawnRunner;
   /** pi's agent dir; the plans folder sits under it. */
   agentDir: string;
+  /** Spawns `caret prewarm` for `bin`; best-effort. */
   warm: (bin: string) => void;
 }
 
@@ -67,11 +68,11 @@ function notifyOnce(pi: PiApi, holder: Record<symbol, unknown>, message: string)
   });
 }
 
-/** Registers the review tool unless pi is below PI_FLOOR or another installed copy
- * already owns `Symbol.for("caret.pi.owner")`. The owner is keyed by `entryUrl`, which
- * differs between installed copies and is stable across `/reload`. It is released on
- * `session_shutdown` so a surviving copy takes over after the owner is removed. Either
- * refusal warns once per process. */
+/** Registers the review tool and the planning mode unless pi is below PI_FLOOR or another
+ * installed copy already owns `Symbol.for("caret.pi.owner")`. The owner is keyed by
+ * `entryUrl`, which differs between installed copies and is stable across `/reload`. It
+ * is released on `session_shutdown` so a surviving copy takes over after the owner is
+ * removed. Either refusal warns once per process. */
 export function installCaret(pi: PiApi, host: CaretHost): void {
   const { version, entryUrl, holder, env, run } = host;
   if (!meetsFloor(version)) {

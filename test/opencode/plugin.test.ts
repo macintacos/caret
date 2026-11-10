@@ -706,9 +706,9 @@ test("the chat.message hook swallows a warm failure (best-effort, never disrupts
   await expect(hooks["chat.message"]?.(message("plan"), {} as never)).resolves.toBeUndefined();
 });
 
-// The two below drive the REAL nodeWarmRunner (no injected warm), because its
-// contract lives entirely in the spawn options the DI seam hides: the async
-// 'error' handler and the CARET_AGENT the child inherits. A stubbed runner can
+// The two below drive the REAL nodeWarmRunner (no injected warm), which delegates to
+// warmCaret, because its contract lives entirely in what the DI seam hides: warmCaret's
+// async 'error' handler and the CARET_AGENT the child inherits. A stubbed runner can
 // pin neither.
 
 /** Assemble the plugin against a real binary path, with the production warm runner. */
@@ -718,7 +718,7 @@ async function buildRealWarmHooks(bin: string) {
 
 test("the real warm runner survives a bad caret binary (async spawn error)", async () => {
   // spawn emits 'error' (ENOENT) ASYNCHRONOUSLY, so the hook's synchronous
-  // try/catch cannot see it — without nodeWarmRunner's own 'error' handler this
+  // try/catch cannot see it — without warmCaret's own 'error' handler this
   // is an uncaught exception that kills the host process.
   const hooks = await buildRealWarmHooks("/nonexistent/caret-838");
   await hooks["chat.message"]?.(message("plan"), {} as never);
