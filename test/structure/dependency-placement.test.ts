@@ -1,9 +1,9 @@
-// Standing gate for the dependency-placement law (EXC-1086). `opencode/` is the one
-// directory caret publishes as unbundled TypeScript, so its imports are the only npm
-// specifiers a consumer's package manager ever has to resolve — `dist/cli.js` and
-// `ui/dist` are bundles with no package names left in them. OpenCode installs the plugin
-// package **and its declared `dependencies`** into its own cache, so a build input filed
-// in `dependencies` is downloaded by every OpenCode user and loaded by none.
+// Standing gate for the dependency-placement law (EXC-1086). `opencode/` and `pi/` are
+// the directories caret publishes as unbundled TypeScript, so their imports are the only
+// npm specifiers a consumer's package manager ever has to resolve — `dist/cli.js` and
+// `ui/dist` are bundles with no package names left in them. OpenCode and pi install the
+// package **and its declared `dependencies`**, so a build input filed in `dependencies` is
+// downloaded by every user and loaded by none.
 // `doc/agents/dependency-rules.md` § Where a new package goes states the rule; this suite
 // is what makes it falsifiable, so the next misplacement fails `bun test` on the push that
 // adds it rather than being caught by an audit years later.
@@ -19,9 +19,10 @@
 //   `opencode/` ships as source, so a consumer has no tsconfig `paths` to resolve it with.
 //   The extractor reads such a specifier as an undeclared package name and the gate reds,
 //   which is the correct outcome.
-// - **A host-provided specifier is imported, only dynamically, but never declared**
-//   (`HOST_PROVIDED`). The v2 host maps it to its own copy for TUI plugins, so a declared
-//   copy would be downloaded by every OpenCode user and loaded by none.
+// - **A host-provided specifier is imported but never declared** (`HOST_PROVIDED_BY_DIR`).
+//   The host maps it to its own copy — OpenCode v2 for TUI plugins, imported only
+//   dynamically; pi for every extension — so a declared copy would be downloaded by every
+//   user and loaded by none.
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { isBuiltin } from "node:module";
@@ -32,9 +33,9 @@ import { importSpecifiers, runtimeImportSpecifiers } from "@test/support/import-
 
 // From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
-const SHIPPED_DIR = "opencode";
+const OPENCODE_DIR = "opencode";
 
-// The scan boundary is the publish boundary: `files` ships `opencode/` entire, so every
+// The scan boundary is the publish boundary: `files` ships each source directory entire, so every
 // module extension a consumer could resolve is read, not just the `.ts` files. A shipped
 // file this glob missed would go silently underived — the one failure direction that
 // leaves the gate green while a consumer's install breaks.
@@ -59,22 +60,62 @@ function importedPackages(source: string): string[] {
     );
 }
 
-const shipped = new Set<string>();
-for (const file of new Bun.Glob(SHIPPED_GLOB).scanSync({ cwd: join(REPO_ROOT, SHIPPED_DIR) })) {
-  const source = readFileSync(join(REPO_ROOT, SHIPPED_DIR, file), "utf-8");
-  for (const name of importedPackages(source)) shipped.add(name);
+const HOST_PROVIDED_BY_DIR: Record<string, readonly string[]> = {
+  opencode: ["@opentui/solid"],
+  // pi maps these to its own copies at load time (pi's docs/extensions.md), so they may be imported statically.
+  pi: [
+    "@earendil-works/pi-coding-agent",
+    "@earendil-works/pi-tui",
+    "@earendil-works/pi-ai",
+    "@earendil-works/pi-agent-core",
+    "typebox",
+  ],
+};
+
+function scanImports(dir: string): Set<string> {
+  const names = new Set<string>();
+  for (const file of new Bun.Glob(SHIPPED_GLOB).scanSync({ cwd: join(REPO_ROOT, dir) })) {
+    for (const name of importedPackages(readFileSync(join(REPO_ROOT, dir, file), "utf-8")))
+      names.add(name);
+  }
+  return names;
 }
 
-const HOST_PROVIDED = new Set(["@opentui/solid"]);
+/** The union over directories of each directory's imports minus that directory's host set. */
+function expectedDependencies(
+  importsByDir: Record<string, Iterable<string>>,
+  hostProvidedByDir: Record<string, readonly string[]>,
+): string[] {
+  const expected = new Set<string>();
+  for (const [dir, names] of Object.entries(importsByDir)) {
+    const host = hostProvidedByDir[dir] ?? [];
+    for (const name of names) if (!host.includes(name)) expected.add(name);
+  }
+  return [...expected].sort();
+}
 
-test("`dependencies` carries exactly what opencode/ makes a consumer resolve", () => {
+const importsByDir = Object.fromEntries(
+  Object.keys(HOST_PROVIDED_BY_DIR).map((dir) => [dir, scanImports(dir)]),
+);
+
+test("`dependencies` carries exactly what the shipped source directories make a consumer resolve", () => {
   expect(Object.keys(pkg.dependencies).sort()).toEqual(
-    [...shipped].filter((name) => !HOST_PROVIDED.has(name)).sort(),
+    expectedDependencies(importsByDir, HOST_PROVIDED_BY_DIR),
   );
 });
 
-test("every host-provided exception is still imported by opencode/", () => {
-  for (const name of HOST_PROVIDED) expect(shipped).toContain(name);
+test("a directory's host set excuses only that directory's imports", () => {
+  expect(expectedDependencies({ pi: ["typebox", "zod"] }, HOST_PROVIDED_BY_DIR)).toEqual(["zod"]);
+  expect(expectedDependencies({ opencode: ["typebox"] }, HOST_PROVIDED_BY_DIR)).toEqual([
+    "typebox",
+  ]);
+  expect(expectedDependencies({ pi: ["@opentui/solid"] }, HOST_PROVIDED_BY_DIR)).toEqual([
+    "@opentui/solid",
+  ]);
+});
+
+test("@opentui/solid, opencode/'s host-provided exception, is still imported by opencode/", () => {
+  expect(importsByDir.opencode).toContain("@opentui/solid");
 });
 
 test("`dependencies` is the only section a consumer's install pulls", () => {
@@ -86,22 +127,22 @@ test("`dependencies` is the only section a consumer's install pulls", () => {
   ]);
 });
 
-test("opencode/ still has imports to derive the expected set from", () => {
-  // Without this the gate passes vacuously the moment the directory is renamed or the
-  // plugin's imports are inlined — finding nothing would read as "dependencies is empty
-  // and correct" rather than as a broken scan.
-  expect(shipped.size).toBeGreaterThan(0);
+test("every shipped source directory still has imports to derive the expected set from", () => {
+  // Without this the gate passes vacuously the moment a directory is renamed or its
+  // imports are inlined — finding nothing would read as "dependencies is empty and
+  // correct" rather than as a broken scan.
+  for (const names of Object.values(importsByDir)) expect(names.size).toBeGreaterThan(0);
 });
 
 test("review-bridge.ts, which the CLI bundles, imports node builtins only and no sibling module", () => {
   // A relative import could reach caret.plugin.ts and inline @opencode-ai/plugin into
   // dist/cli.js — which the dependencies check above cannot see, since it is declared.
-  const source = readFileSync(join(REPO_ROOT, SHIPPED_DIR, "review-bridge.ts"), "utf-8");
+  const source = readFileSync(join(REPO_ROOT, OPENCODE_DIR, "review-bridge.ts"), "utf-8");
   expect(importedPackages(source)).toEqual([]);
   expect(source).not.toMatch(/\b(?:from|import)\s*\(?\s*"\.\.?\//);
 });
 
-const readShipped = (file: string) => readFileSync(join(REPO_ROOT, SHIPPED_DIR, file), "utf-8");
+const readShipped = (file: string) => readFileSync(join(REPO_ROOT, OPENCODE_DIR, file), "utf-8");
 
 // Type-only imports count here, unlike the gates above: tsc still resolves an erased
 // `import type`, so one from caret.plugin.ts re-couples the core to the v1 plugin,
