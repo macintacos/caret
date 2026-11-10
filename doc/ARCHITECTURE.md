@@ -379,9 +379,39 @@ by acquiring the rumdl plan formatter — it is part of installing caret, not a 
 own — see
 [Plan formatting](CONFIGURING.md#plan-formatting-rumdl).
 
-The pi target drives pi only through its own package commands (`pi install`, `pi update`,
-`pi remove`); caret never writes pi's `settings.json`. It needs pi 1.5.0 or later
-(`@earendil-works/pi-coding-agent`): a missing, older, or pre-rename
+At a terminal the whole run renders as one
+[`@clack/prompts`](https://github.com/bombshell-dev/clack) session: the chooser, then a
+spinner per operation (registering the marketplace, installing the plugin, editing
+OpenCode's plugin array, deploying the command files, fetching rumdl) that settles into a
+line saying what it did, and a closing summary. Off a terminal — piped, `CI=true`,
+`TERM=dumb`, `NO_COLOR` set, or `--no-color` passed — the same run reports as plain
+`caret: …` lines with no escape codes, so CI transcripts and captured logs stay readable.
+
+### The pi adapter
+
+pi has no plan hook and no plan mode, so caret plugs in as an extension, `pi/caret.ts`,
+which pi loads through the `pi` manifest in the `@macintacos/caret` package.
+
+- **The review tool.** The extension registers `caret_review_plan`, which blocks until you
+  decide; pi sets no tool timeout, and Esc cancels the review. It returns an approval or a
+  change request. A failed run reports a failed review, never a change request. It spawns
+  `caret review` with `CARET_AGENT=pi` through the review bridge the OpenCode plugin uses
+  (`opencode/review-bridge.ts`).
+- **The planning mode.** `/caret:plan` steers the model to write the plan into pi's
+  `plans` folder and submit it. Until approval it blocks `edit` and `write` outside that
+  folder. It also starts the caret daemon in the background while you plan, so the review
+  opens fast.
+- **The notice.** A pending-plan notice and a `caret` footer status show a waiting review.
+  `/caret` or `ctrl+alt+c` opens the waiting review in the browser.
+- **The commands.** `/caret:demo` presents the demo plan. `/caret:doctor` runs
+  `caret doctor` and shows its report in the session.
+
+`CARET_PI_BIN` overrides the caret binary the extension spawns — see
+[Environment variables](CONFIGURING.md#environment-variables).
+
+`caret install`'s pi target drives pi only through its own package commands (`pi install`,
+`pi update`, `pi remove`); caret never writes pi's `settings.json`. It needs pi 1.5.0 or
+later (`@earendil-works/pi-coding-agent`): a missing, older, or pre-rename
 (`@mariozechner/pi-coding-agent`) pi stops the install with guidance, while `--uninstall`
 just skips a pi it can't run. A plain install adds `npm:@macintacos/caret`, or updates it
 when present (a failed update only warns), then removes any local-checkout caret entry so
@@ -395,17 +425,21 @@ filtered out, or listed without its package; and an npm caret behind the publish
 The installer and doctor honour `PI_CODING_AGENT_DIR`; the service launcher looks only in
 the default `~/.pi/agent`.
 
-At a terminal the whole run renders as one
-[`@clack/prompts`](https://github.com/bombshell-dev/clack) session: the chooser, then a
-spinner per operation (registering the marketplace, installing the plugin, editing
-OpenCode's plugin array, deploying the command files, fetching rumdl) that settles into a
-line saying what it did, and a closing summary. Off a terminal — piped, `CI=true`,
-`TERM=dumb`, `NO_COLOR` set, or `--no-color` passed — the same run reports as plain
-`caret: …` lines with no escape codes, so CI transcripts and captured logs stay readable.
+By hand:
+
+- `pi install npm:@macintacos/caret` installs caret.
+- `pi update npm:@macintacos/caret` updates it. A bare `pi update` updates pi itself.
+- `pi remove npm:@macintacos/caret` removes it.
+
+caret's npm package runs on bun, so pi needs `bun` on its `PATH`. `caret install` and
+`caret doctor` manage only pi's user-scope packages; they ignore a project-scope
+`pi install -l`.
+
+See [`agents/pi-integration.md`](agents/pi-integration.md) for the design.
 
 ### Calling the review tool from your own skill
 
-Both agents have a review tool a skill can call directly, rather than waiting for caret to
+Each agent has a review tool a skill can call directly, rather than waiting for caret to
 intercept a plan. A skill that wants a human decision on its plan before the work proceeds
 can ask for one.
 
@@ -413,16 +447,18 @@ can ask for one.
 | ----------- | ------------------- | ------------------------------------------------------ |
 | Claude Code | `review_plan`       | The plugin's MCP server, `caret mcp`                   |
 | OpenCode    | `caret_review_plan` | The in-process plugin                                  |
+| pi          | `caret_review_plan` | The pi extension                                       |
 
 Claude Code prefixes a plugin's MCP tools with the plugin and server names, so the model
 sees `review_plan` as `mcp__plugin_caret_caret__review_plan`. Claude Code's tool takes a
 single argument, `plan`: the complete plan, as markdown, to put in front of the reviewer.
 OpenCode's tool takes exactly one of `plan` or `path`, and `path` is preferred. `path`
 names a markdown (`.md`) file holding the complete plan, either absolute or relative to
-the session's directory. The agent passes nothing else: the review's session and working
-directory come from the calling session (OpenCode) or from the MCP server (Claude Code).
-caret titles the review from the plan's first `#` heading (else its first `##`, else its
-opening line), so open the plan with `# <title>`.
+the session's directory. pi's tool takes the same `plan` or `path`, `path` preferred, and
+strips a leading `@` from `path`. The agent passes nothing else: the review's session and
+working directory come from the calling session (OpenCode, pi) or from the MCP server
+(Claude Code). caret titles the review from the plan's first `#` heading (else its first
+`##`, else its opening line), so open the plan with `# <title>`.
 
 **It is for plans only.** caret reflows whatever it receives into its own plan layout and
 presents it as a plan, so a checklist, a schema, or a question put through it arrives
@@ -492,6 +528,8 @@ no agent is waiting on its result.
   permitted on the `plan` agent alone, so there is nothing to fall back on.
 - **Claude Code: any agent, subagents included.** The tool grants no permission and gates
   no edit, so there is nothing a subagent could bypass by calling it.
+- **pi: any session may call it.** Only `/caret:plan`'s steer tells the model to use it.
+  Outside planning, the model sees only the tool's one-line description in pi's tool list.
 
 On Claude Code, three more behaviors follow from how the server is built:
 

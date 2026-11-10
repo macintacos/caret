@@ -94,6 +94,9 @@ redefine it.
   project-scope `pi install -l` is ignored.
 - The service launcher (`bin/caret-launcher`) looks only in `~/.pi/agent`.
 
+The summary for readers outside the adapter is in
+[`../ARCHITECTURE.md#the-pi-adapter`](../ARCHITECTURE.md#the-pi-adapter).
+
 ## The planning mode: `/caret:plan`
 
 **caret owns a small planning mode (`pi/plan.ts`), because pi has none.**
