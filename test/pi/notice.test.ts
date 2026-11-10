@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { type Component, type TuiMouseEvent, visibleWidth } from "@earendil-works/pi-tui";
+import {
+  type Component,
+  TUI_KEYBINDINGS,
+  type TuiMouseEvent,
+  visibleWidth,
+} from "@earendil-works/pi-tui";
 
 import type { DetachedSpawn } from "@bridge/review-bridge.ts";
 import {
@@ -251,10 +256,9 @@ describe("opening the review", () => {
     expect(s.spawns).toEqual([expected]);
   });
 
-  // macOS terminals send Option as text unless configured, window managers take ctrl+alt
-  // chords globally, and shift or super on a letter needs the kitty keyboard protocol.
-  test("the open key needs no alt, shift or super", () => {
-    expect(OPEN_KEY).not.toMatch(/alt|shift|super/);
+  test("the open key is not one of pi's default editor bindings", () => {
+    const taken = Object.values(TUI_KEYBINDINGS).flatMap((b) => b.defaultKeys);
+    expect(taken).not.toContain(OPEN_KEY);
   });
 
   test("the open key opens the session's review", () => {

@@ -122,14 +122,14 @@ Non-goals:
 ## The notice and the shortcut
 
 **`pi/notice.ts` shows a pending-plan row above the editor and a `caret` footer status**,
-`^ plan waiting` or `^ planning`. `/caret` and `f8` open the waiting plan through a
-detached `caret band-link --session <id> --open`. In RPC mode the notice is one plain line
-naming `/caret`.
+`^ plan waiting` or `^ planning`. `/caret` and `ctrl+alt+o` open the waiting plan through
+a detached `caret band-link --session <id> --open`. In RPC mode the notice is one plain
+line naming `/caret`.
 
-The shortcut is `f8`. macOS window managers such as Rectangle and Magnet take
-`ctrl+option+c` globally, and pi binds every `ctrl+letter`. `f8` is one legacy sequence
-every terminal sends, and pi binds no function key. On a Mac laptop it may need `fn`. The
-look is in [`design/decisions.md`](../../design/decisions.md) and
+The shortcut is `ctrl+alt+o`, `o` for open. pi binds every `ctrl+letter`, and macOS window
+managers such as Rectangle and Magnet take `ctrl+option+c` for "center window". pi binds
+nothing on `ctrl+alt+o`. Terminal.app and iTerm2 pass it only with Option set to act as
+Meta. The look is in [`design/decisions.md`](../../design/decisions.md) and
 [`design/patterns.md`](../../design/patterns.md).
 
 ## Esc and a failed run
@@ -174,8 +174,8 @@ to the directory holding that binary. Docs under the old `@mariozechner` name ar
 ## Known gaps
 
 - Not covered live: the approve-with-notes rows and `Esc` cancel.
-- `f8` is hand-checked only, with the key injected by `rex send-key`; no test drives a
-  real terminal (EXC-2316).
+- `ctrl+alt+o` is hand-checked only, with the key injected by `rex send-key`; no test
+  drives a real terminal (EXC-2316).
 - Extension filters in pi's settings aren't evaluated against globs
   (`src/adapters/pi/install.ts`).
 - Print mode `pi -p "/caret:plan …"` can exit before the follow-up runs

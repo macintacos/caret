@@ -128,8 +128,8 @@ pi has no plan mode of its own, so `caret` brings a small one:
    task turns planning off. Outside planning, a bare `/caret:plan` plans what you asked
    for earlier in the session.
 2. While a review waits, a notice sits above the editor and the footer reads
-   `^ plan waiting`. `/caret` or `f8` opens the plan in your browser. On a Mac keyboard
-   whose top row is media keys, press `fn`+`f8`.
+   `^ plan waiting`. `/caret` or `ctrl+alt+o` opens the plan in your browser. In
+   Terminal.app or iTerm2, set Option to act as Meta (Esc+) for the shortcut to reach pi.
 3. Approve, and the agent implements. Request changes, and it revises and resubmits. Esc
    in pi cancels a waiting review, and the agent is told not to implement the plan.
 
