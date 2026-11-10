@@ -1,5 +1,5 @@
 // End-to-end pi wire-contract fidelity: pi's extension speaks the same caret-owned
-// envelope and flat allow/deny decision OpenCode's plugin does, so the OpenCode
+// envelope and flat allow/deny decision OpenCode's plugin does, so the shared envelope
 // fixture and review bridge drive pi's real parse/emit code here. pi declares no
 // approve variants, so its wire never carries an acceptMode.
 
@@ -13,7 +13,7 @@ import { emitWire as emitWireVia } from "@test/support/wire-contract.ts";
 import { piAdapter } from "@/adapters/pi/index.ts";
 import type { Decision } from "@/lib/types.ts";
 
-const FIXTURE = join(import.meta.dir, "..", "opencode", "fixtures", "review-request-stdin.json");
+const FIXTURE = join(import.meta.dir, "..", "fixtures", "review-request-stdin.json");
 const stdin = readFileSync(FIXTURE, "utf-8");
 
 setupTempStateDir("caret-pi-wire-contract-");

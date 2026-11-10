@@ -21,7 +21,7 @@ import { APPROVE_VARIANTS, BUILD_VARIANT } from "@/adapters/opencode/approve.ts"
 import { opencodeAdapter } from "@/adapters/opencode/index.ts";
 import type { Decision } from "@/lib/types.ts";
 
-const FIXTURE = join(import.meta.dir, "fixtures", "review-request-stdin.json");
+const FIXTURE = join(import.meta.dir, "..", "fixtures", "review-request-stdin.json");
 const stdin = readFileSync(FIXTURE, "utf-8");
 
 setupTempStateDir("caret-opencode-wire-contract-");
