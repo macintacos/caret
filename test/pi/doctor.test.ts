@@ -162,10 +162,14 @@ test("the entry renderer draws the verdict and report, and skips an entry with n
   expect(text).toContain("✓ daemon");
 });
 
-test.each([{}, "x", { kind: "report", report: 3 }])(
-  "the entry renderer skips persisted data of an unknown shape: %p",
-  (data) => {
-    const render = fakePi(settles(REPORT, 0)).renderers[DOCTOR_ENTRY];
-    expect(render?.({ data }, {}, { fg: (_c: string, s: string) => s })).toBeUndefined();
-  },
-);
+test.each([
+  {},
+  "x",
+  { kind: "report", report: 3 },
+  { kind: "report", report: "x" },
+  { kind: "report", exitCode: 7, report: "x" },
+  { kind: "no-report", exitCode: "1", reason: "x" },
+])("the entry renderer skips persisted data of an unknown shape: %p", (data) => {
+  const render = fakePi(settles(REPORT, 0)).renderers[DOCTOR_ENTRY];
+  expect(render?.({ data }, {}, { fg: (_c: string, s: string) => s })).toBeUndefined();
+});

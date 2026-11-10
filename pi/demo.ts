@@ -23,6 +23,7 @@ export const DEMO_INSTRUCTION = [
 export type DemoCommandContext = {
   ui: { notify(message: string, type?: "info" | "warning" | "error"): void };
   waitForIdle(): Promise<void>;
+  sessionManager: { getSessionId(): string };
 };
 
 /** The slice of pi's extension API `/caret:demo` calls; pinned by
@@ -38,12 +39,23 @@ export type DemoApi = {
   sendUserMessage(content: string, options: { deliverAs: "followUp" }): void;
 };
 
-/** Registers `/caret:demo`, which reads the template at `templatePath` on every run. */
-export function installDemo(pi: DemoApi, deps: { templatePath: string }): void {
-  const { templatePath } = deps;
+/** Registers `/caret:demo`, which reads the template at `templatePath` on every run and
+ * refuses while the session is planning, since approving the demo would end planning. */
+export function installDemo(
+  pi: DemoApi,
+  deps: { templatePath: string; isPlanning: (sessionId: string) => boolean },
+): void {
+  const { templatePath, isPlanning } = deps;
   pi.registerCommand("caret:demo", {
     description: "Demo caret: review a short plan about this repo",
     handler: async (_args, ctx) => {
+      if (isPlanning(ctx.sessionManager.getSessionId())) {
+        ctx.ui.notify(
+          "caret's demo is off while planning; run /caret:plan to leave planning first.",
+          "warning",
+        );
+        return;
+      }
       let template: string;
       try {
         template = await readFile(templatePath, "utf-8");

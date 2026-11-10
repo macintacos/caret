@@ -19,7 +19,7 @@ beforeEach(() => {
 
 afterEach(() => rmSync(tmp, { recursive: true, force: true }));
 
-function fakePi(path: string) {
+function fakePi(path: string, planning = false) {
   const commands: Record<string, (args: string, ctx: unknown) => Promise<void>> = {};
   const sent: { content: string; options: unknown }[] = [];
   const notices: { message: string; type?: string }[] = [];
@@ -29,6 +29,7 @@ function fakePi(path: string) {
     waitForIdle: async () => {
       idleAwaited++;
     },
+    sessionManager: { getSessionId: () => "s" },
   };
   const pi: DemoApi = {
     registerCommand: (name, options) => {
@@ -36,7 +37,7 @@ function fakePi(path: string) {
     },
     sendUserMessage: (content, options) => sent.push({ content, options }),
   };
-  installDemo(pi, { templatePath: path });
+  installDemo(pi, { templatePath: path, isPlanning: (id) => planning && id === "s" });
   return {
     sent,
     notices,
@@ -58,6 +59,15 @@ test("the demo instruction submits through the review tool without editing files
   expect(DEMO_INSTRUCTION).toContain(REVIEW_TOOL);
   expect(DEMO_INSTRUCTION).toContain("edit **no** file");
   expect(DEMO_INSTRUCTION).toContain("**Changes requested**");
+});
+
+test("/caret:demo refuses with one warning while the session is planning", async () => {
+  const pi = fakePi(join(tmp, "absent.md"), true);
+  await pi.command();
+  expect(pi.notices).toHaveLength(1);
+  expect(pi.notices[0]?.type).toBe("warning");
+  expect(pi.sent).toEqual([]);
+  expect(pi.idle()).toBe(0);
 });
 
 test("an unreadable template is reported once and nothing is sent", async () => {

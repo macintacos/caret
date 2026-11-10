@@ -152,9 +152,12 @@ test("only the owning copy registers caret's commands", () => {
   installCaret(second.pi, host(holder, { entryUrl: OTHER_COPY_URL }));
   const old = fakePi();
   installCaret(old.pi, host({}, { version: "1.4.9" }));
-  expect(Object.keys(owner.commands)).toContain("caret:plan");
-  expect(Object.keys(owner.commands)).toContain("caret:demo");
-  expect(Object.keys(owner.commands)).toContain("caret:doctor");
+  expect(Object.keys(owner.commands).sort()).toEqual([
+    "caret",
+    "caret:demo",
+    "caret:doctor",
+    "caret:plan",
+  ]);
   expect(Object.keys(second.commands)).toEqual([]);
   expect(Object.keys(old.commands)).toEqual([]);
 });

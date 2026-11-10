@@ -112,7 +112,7 @@ to `caret review` rather than a command hook; see
 extension (`pi/caret.ts`) uses the same shape: a registered `caret_review_plan` tool that
 spawns `caret review` with `CARET_AGENT=pi` through `opencode/review-bridge.ts`, plus a
 `/caret:plan` command whose planning mode steers the model and blocks `edit`/`write`
-outside pi's plans folder until the plan is approved (`pi/plan.ts`, `pi/gate.ts`), and a
+outside pi's plans folder until the plan is approved (`pi/plan.ts`, `pi/gate.ts`), a
 pending-plan notice with a `caret` footer status, `/caret` and `ctrl+alt+c`
 (`pi/notice.ts`), and `/caret:demo` and `/caret:doctor` commands (`pi/demo.ts`,
 `pi/doctor.ts`). Note it as plugin-shaped before assuming a new tool slots into the

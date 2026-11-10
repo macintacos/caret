@@ -9,6 +9,7 @@ import type { PiTheme } from "./render.ts";
 /** The customType of the transcript entry, and the key of the footer status. */
 export const DOCTOR_ENTRY = "caret-doctor";
 export const DOCTOR_TIMEOUT_MS = 60_000;
+/** Verdict lines without their glyph; doctorText adds it. */
 export const PASSED_VERDICT = "caret doctor: every check passed";
 export const FAILED_VERDICT = "caret doctor: at least one check failed";
 export const NO_REPORT_VERDICT = "caret doctor produced no report";
@@ -38,7 +39,7 @@ export type DoctorApi = {
   registerEntryRenderer(customType: string, renderer: typeof renderDoctorEntry): void;
 };
 
-type DoctorDeps = {
+export type DoctorDeps = {
   bin: string;
   run: SpawnRunner;
   env: Record<string, string | undefined>;
@@ -97,8 +98,20 @@ export function doctorText(outcome: DoctorOutcome, paint: Paint = (_tone, s) => 
 
 function isDoctorOutcome(data: unknown): data is DoctorOutcome {
   if (typeof data !== "object" || data === null || !("kind" in data)) return false;
-  if (data.kind === "report") return "report" in data && typeof data.report === "string";
-  if (data.kind === "no-report") return "reason" in data && typeof data.reason === "string";
+  if (data.kind === "report")
+    return (
+      "exitCode" in data &&
+      (data.exitCode === 0 || data.exitCode === 1) &&
+      "report" in data &&
+      typeof data.report === "string"
+    );
+  if (data.kind === "no-report")
+    return (
+      "exitCode" in data &&
+      (data.exitCode === null || typeof data.exitCode === "number") &&
+      "reason" in data &&
+      typeof data.reason === "string"
+    );
   return false;
 }
 

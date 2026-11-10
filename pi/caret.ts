@@ -48,7 +48,7 @@ export type PiApi = PlanningApi &
 export interface CaretHost {
   version: string;
   /** This copy's module URL: its identity against other installed copies, and the base
-   * `../bin/caret` resolves against. */
+   * `../bin/caret` and the demo template resolve against. */
   entryUrl: string;
   /** globalThis in production: survives `/reload`, which loads a fresh module instance. */
   holder: Record<symbol, unknown>;
@@ -119,7 +119,10 @@ export function installCaret(pi: PiApi, host: CaretHost): void {
     warm: () => host.warm(bin),
   });
   installNotice(pi, { store, bin, spawn: host.spawn });
-  installDemo(pi, { templatePath: fileURLToPath(new URL(DEMO_TEMPLATE, entryUrl)) });
+  installDemo(pi, {
+    templatePath: fileURLToPath(new URL(DEMO_TEMPLATE, entryUrl)),
+    isPlanning: (id) => store.get(id).planning,
+  });
   installDoctor(pi, { bin, run, env, stdout: host.stdout });
 }
 

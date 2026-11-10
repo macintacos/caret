@@ -6,7 +6,7 @@ import { hyperlink } from "@earendil-works/pi-tui";
 
 import type { ReviewOutcome } from "./state.ts";
 
-/** The slice of pi's theme the row reads. */
+/** The slice of pi's theme the review row and the doctor entry read. */
 export type PiTheme = {
   fg(color: "toolTitle" | "muted" | "dim" | "warning" | "success" | "error", text: string): string;
 };

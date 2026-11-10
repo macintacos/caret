@@ -12,7 +12,7 @@ export async function sendAndWait(
   pi.sendUserMessage(content, { deliverAs: "followUp" });
   // ponytail: one macrotask lets the queued run start before waitForIdle; a run whose
   // preflight awaits I/O (an extension's `input` handler, the auth check) starts later, so
-  // `pi -p "/caret:plan …"` or `pi -p "/caret:demo"` may exit early. Fix once pi exposes
+  // a print-mode run of a command that sends a follow-up may exit early. Fix once pi exposes
   // the queued run's promise.
   await new Promise((resolve) => setTimeout(resolve, 0));
   await ctx.waitForIdle();
