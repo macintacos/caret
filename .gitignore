@@ -1,5 +1,7 @@
 # Dependencies
 node_modules/
+# The pi install-probe fixtures model pi's <agent-dir>/npm/node_modules layout.
+!test/adapters/pi/fixtures/**/node_modules/
 
 # Build artifacts. bin/ holds generated output (the compiled bin/caret-native
 # and its bin/ui sibling) EXCEPT the two committed shims every install ships:
