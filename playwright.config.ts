@@ -31,7 +31,7 @@ export default defineConfig<E2EOptions>({
   testDir: "test/e2e",
   testMatch: "**/*.e2e.ts",
   fullyParallel: true,
-  // EXC-1050: no retries — the budgets below absorb gate contention instead.
+  // EXC-1050: no retries — the budgets below absorb host contention instead.
   retries: 0,
   forbidOnly: true,
   // EXC-587: bound the fan-out. Each worker drives a browser tree plus a
@@ -52,7 +52,7 @@ export default defineConfig<E2EOptions>({
   // doc/agents/browser-testing.md § Timeouts are budgets for the loaded host.
   timeout: 60 * 1000,
   expect: { timeout: 15 * 1000, toPass: { timeout: 15 * 1000 } },
-  // Non-interactive reporter so the preflight gate can't hang on a TTY pager.
+  // Non-interactive reporter so an unattended run can't hang on a TTY pager.
   reporter: "list",
   use: {
     // EXC-1058: the fixture's daemon-boot budget, reached through a Playwright

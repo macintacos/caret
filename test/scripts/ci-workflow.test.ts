@@ -2,6 +2,8 @@
 // checks, each running its own `mise run` entry point, with every action ref locked.
 import { expect, test } from "bun:test";
 
+import { selectTasks } from "@scripts/preflight.ts";
+
 type Step = { uses?: string; run?: string; with?: Record<string, unknown> };
 type Job = {
   name: string;
@@ -23,16 +25,8 @@ const jobs = Object.values(workflow.jobs ?? {});
 const jobByName = (name: string) => jobs.find((job) => job.name === name);
 const steps = jobs.flatMap((job) => job.steps);
 
-const TASKS = [
-  "lint",
-  "test unit",
-  "test bats",
-  "test mod",
-  "build ui",
-  "test e2e",
-  "build bin",
-  "smoke",
-];
+// CI is the local gate plus the one suite the local gate leaves out.
+const TASKS = [...selectTasks(null).tasks, "test e2e"];
 
 test("runs on pull requests and pushes to trunk only", () => {
   expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);

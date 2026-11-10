@@ -246,16 +246,16 @@ never reach a production build.
 | `CARET_DEV_LOG_LEVEL` | — | — | The daemon's log level, overriding `[logging].level`. `mise run dev` sets `debug` unless it is already set. |
 | `CARET_DEV_LOG_REVIEW_TEXT` | — | — | Set to `1` by `mise run dev`: the daemon logs the text each review sends the agent at `info`, and each inline comment's stored lines at `debug`. Ignored by any build but a from-source one. |
 | `CARET_FRESH`             | —                        | —       | Set to `1` by `mise run dev --fresh`; surfaced in `/api/health` so the UI resets its saved preferences (theme, first-run onboarding) on boot.                                                                         |
+| `CARET_E2E_WORKERS` | — | `50%` of cores | Playwright e2e worker count for `mise run test e2e` (each drives a browser tree + daemon); a positive int. Unset → half the cores. |
 
 ### Preflight-only
 
-Read by `mise run preflight`; lower either to shrink the gate's footprint on a constrained
-or stacked host.
+Read by `mise run preflight`; lower it to shrink the gate's footprint on a constrained or
+stacked host.
 
 | Env var                | Config key | Default        | Purpose                                                                                                                            |
 | ---------------------- | ---------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `CARET_PREFLIGHT_JOBS` | —          | CPU count      | Max `mise run preflight` tasks in flight; a positive int. Set it to `1` to serialize the gate. Invalid/unset → the host's CPU count. |
-| `CARET_E2E_WORKERS`    | —          | `50%` of cores | Playwright e2e worker count (each drives a browser tree + daemon); a positive int. Unset → half the cores.                           |
 
 ## Theme files
 

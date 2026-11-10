@@ -16,8 +16,8 @@
 // rather than a plan literal of its own. That is the point rather than a convenience: a
 // literal here would be a fifteenth throwaway fixture, and the constructs it exercised
 // would drift away from the ones a human actually looks at. The trade is that a Markdown
-// diff can red this spec, which the preflight gate does not narrow to `test e2e`; that is
-// recorded rather than worked around.
+// diff can red this spec, which the local preflight gate never runs — only the PR checks
+// catch it; that is recorded rather than worked around.
 //
 // Rows are located STRUCTURALLY — by the decoration they carry and by their position
 // relative to each other — with one deliberate exception: the search case types

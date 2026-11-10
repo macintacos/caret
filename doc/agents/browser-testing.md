@@ -139,8 +139,7 @@ inside a spec.
   every spec asserts against.
 - **What stays expensive on purpose.** Per-test isolation is not negotiable (EXC-587), and
   `trace: "retain-on-failure"` costs ~90-180ms per test that is discarded on every pass.
-  It is kept because it is the only failure diagnostic an unattended run — a CI `test e2e`
-  job — leaves behind.
+  It is kept because it is the trace the CI `test e2e` job's failure artifact carries.
 
 ## Timing discipline
 
@@ -171,25 +170,28 @@ The split mirrors the test layers:
 ### Timeouts are budgets for the loaded host
 
 Every deadline the suite runs under lives in `playwright.config.ts` (EXC-1050), and each
-is sized for the machine the suite actually runs on rather than an idle one. Playwright's
-own defaults — 30s per test, 5s per assertion — assume the suite owns the host, and when
-the budgets were sized it ran inside `mise run preflight`, which it did not own: `lint`,
-`test unit`, `test bats` and `test mod` are already running when `test e2e` starts,
-`build bin` and `smoke` land during it, and six e2e workers each driving a browser tree
-plus a spawned daemon saturate the cores before any of that arrives. On a 12-core host the
-unit suite measured 31s standalone against 88s inside the gate — 2.8x. That figure is the
-unit suite's; e2e's own factor was never measured, and 2.8x is the working number the
-budgets are sized against. Under `--parallel` the same pair reads 19s against 73s, but the
-gate caps the lane at four workers where standalone takes every core, so that ratio folds
-the cap into the contention and does not supersede 2.8x.
+is sized for the machine the suite actually runs on rather than an idle one. The budgets
+were measured with e2e inside the eight-task gate on a 12-core host; they are kept
+unchanged for the CI runner, whose contention has not been measured. Playwright's own
+defaults — 30s per test, 5s per assertion — assume the suite owns the host, and the gate
+the budgets were measured in did not give it the host: `lint`, `test unit`, `test bats`
+and `test mod` were already running when `test e2e` started, `build bin` and `smoke`
+landed during it, and six e2e workers each driving a browser tree plus a spawned daemon
+saturated the cores before any of that arrived. On a 12-core host the unit suite measured
+31s standalone against 88s inside the gate — 2.8x. That figure is the unit suite's; e2e's
+own factor was never measured, and 2.8x is the working number the budgets are sized
+against. Under `--parallel` the same pair reads 19s against 73s, but the gate capped the
+lane at four workers where standalone takes every core, so that ratio folds the cap into
+the contention and does not supersede 2.8x.
 
-**The contention is cross-task, landing on top of intra-e2e saturation the worker cap
-deliberately accepts.** Both halves are real and the distinction decides the fix: at the
-shipped 50% cap the suite passes standalone and reds only inside the gate, so the sibling
-tasks are what tips it — but they tip a host the suite had already filled on its own. The
-consequence is that a flake here is never a property of the spec that happened to red. It
-selects whichever test was mid-flight when the host stalled, so the failing set differs
-run to run, and chasing the named spec finds nothing wrong with it.
+**The contention measured was cross-task, landing on top of intra-e2e saturation the
+worker cap deliberately accepts.** Both halves were real and the distinction decides the
+fix: at the shipped 50% cap the suite passed standalone and redded only inside the gate,
+so the sibling tasks were what tipped it — but they tipped a host the suite had already
+filled on its own. The consequence is that a flake here is never a property of the spec
+that happened to red. It selects whichever test was mid-flight when the host stalled, so
+the failing set differs run to run, and chasing the named spec finds nothing wrong with
+it.
 
 The per-test budget is the one that binds, because Playwright ships **no** default
 `actionTimeout`, `navigationTimeout`, or `toPass` budget. `locator.click()`,
@@ -350,12 +352,12 @@ the values live.
 
 **Reproducing load-induced failure on demand.** Two levers, neither needing a code change:
 
-- **Real contention**, closest to the gate: raise the worker cap past the core count, e.g.
-  `CARET_E2E_WORKERS=<2x cores> mise run test e2e`. Faithful, but stochastic — what it
-  turns up depends on what else the host is doing. It is also deliberately the fan-out
-  EXC-587 capped, so don't SIGKILL such a run and do check for stray
-  `chromium`/`webkit`/daemon processes afterwards; an interrupted oversubscribed run is
-  exactly the orphan storm the cap exists to prevent.
+- **Real contention**, closest to the loaded host the budgets were measured on: raise the
+  worker cap past the core count, e.g. `CARET_E2E_WORKERS=<2x cores> mise run test e2e`.
+  Faithful, but stochastic — what it turns up depends on what else the host is doing. It
+  is also deliberately the fan-out EXC-587 capped, so don't SIGKILL such a run and do
+  check for stray `chromium`/`webkit`/daemon processes afterwards; an interrupted
+  oversubscribed run is exactly the orphan storm the cap exists to prevent.
 - **Deterministic**, and the one to reach for when a specific spec is in question: drive
   it from a throwaway `playwright-cli` probe that CPU-throttles the renderer over CDP
   (`Emulation.setCPUThrottlingRate`), which widens every browser-side wait by a fixed

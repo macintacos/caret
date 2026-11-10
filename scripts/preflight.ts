@@ -33,7 +33,7 @@
 // Interruption safety (EXC-587): the real spawner runs each task as a detached
 // process group; SIGINT/SIGTERM tear every group down before exit, and the
 // first failure aborts in-flight siblings, so an interrupted gate can't orphan
-// the mise → bun/vite/tsc/playwright → browser+daemon subtree.
+// the mise → bun/vite/tsc → daemon subtree.
 
 import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
 import { once } from "node:events";
@@ -181,15 +181,16 @@ const DISPLAY_ORDER = [...TASK_ORDER].sort();
  * matches — a flag folded into it would break all three.
  *
  * `test unit`'s worker cap is the gate's share of the host (EXC-1215). The entry point's own
- * `--parallel` takes every core — a 2.5x win standalone, a loss here: it starves the six
- * siblings, and on a 12-core host the median gate went 156s → 163s while lint took 2.6x
- * and `build ui` 2.2x longer. At 4 the gate's wall clock is indistinguishable from serial
- * while the unit lane runs 119s → 72s, which is how
- * much sooner a unit failure trips fail-fast. 2 measured no better a gate and gave the
- * lane back to 117s, so 4 is the floor of the useful range, not a tuned optimum.
+ * `--parallel` takes every core — a 2.5x win standalone, a loss here: it starves the
+ * siblings. These figures were measured when the gate also ran the e2e suite: on a 12-core
+ * host the median gate went 156s → 163s while lint took 2.6x and `build ui` 2.2x longer.
+ * At 4 the gate's wall clock is indistinguishable from serial while the unit lane runs
+ * 119s → 72s, which is how much sooner a unit failure trips fail-fast. 2 measured no
+ * better a gate and gave the lane back to 117s, so 4 is the floor of the useful range, not
+ * a tuned optimum.
  *
- * The UNIT task is never quiet: quiet there is bun's dots reporter, ~4900 characters of
- * terminal animation that says as little on one display line as in a captured log.
+ * No `--quiet` is passed: quiet is bun's dots reporter, ~4900 characters of terminal
+ * animation that says as little on one display line as in a captured log.
  */
 const TASK_ARGS: Readonly<Record<string, readonly string[]>> = {
   "test unit": ["--parallel=4"],

@@ -56,7 +56,7 @@ readme!: Load design/README.md
 and artifact smoke, run concurrently; it never runs e2e. The full gate is the PR checks:
 CI runs all eight tasks, the whole e2e suite included, on every PR. So when you change
 browser behaviour, run the affected spec yourself with `mise run test e2e --json <path>` —
-preflight will not. When **you** (an agent) run it, pass `--json`.
+preflight will not. When **you** (an agent) run preflight, pass `--json`.
 `mise run preflight --json` replaces the live human display with two compact JSON
 documents on stdout, one per line: a `start` document (the planned tasks, why that set,
 plus the filters in effect) and a `result` document carrying each task's status and
