@@ -8,7 +8,7 @@
 // gate, and a lint failure points at `mise run format`.
 //
 // DAG: lint, `test unit`, `build ui`, `test bats` and `test mod` start immediately;
-// `test e2e` and `build bin` start once `build ui` passes; `smoke` starts once
+// `build bin` starts once `build ui` passes; `smoke` starts once
 // `build bin` passes (EXC-914). The build-first ordering + skip mechanism live in the tasks
 // CLI (scripts/tasks/build.ts), so each dependent is spawned with the skips that
 // let it reuse its gate's artifact: CARET_SKIP_BUILD_UI keeps the UI built at
@@ -21,7 +21,7 @@
 //
 // Which of those tasks run is scoped to the diff (EXC-1042): a change confined
 // to Markdown runs `lint` alone, plus `test unit` when it touches Markdown a test
-// reads from disk. Everything else runs all eight, as does a diff that cannot
+// reads from disk. Everything else runs all seven, as does a diff that cannot
 // be read at all.
 //
 // DI mirrors scripts/tasks/release/command.ts: the spawn collaborator is injected so
@@ -90,7 +90,7 @@ export interface PreflightOutcome {
 export interface PreflightStartReport {
   event: "start";
   schemaVersion: number;
-  /** The tasks this run will spawn — a subset of the eight when `selection.narrowed`. */
+  /** The tasks this run will spawn — a subset of the seven when `selection.narrowed`. */
   tasks: string[];
   /**
    * Why this task set (EXC-1042). A scoped run must never read as a full green
@@ -106,7 +106,7 @@ export interface PreflightTaskReport {
   name: string;
   status: TaskStatus;
   /** How long the task ran: 0 when it was skipped before ever spawning, and excluding
-   * time queued behind an upstream gate — so the eight never sum to the gate's wall clock. */
+   * time queued behind an upstream gate — so the seven never sum to the gate's wall clock. */
   durationMs: number;
   /** Captured output, included per the verbosity / --grep / --task selection. */
   output?: string;
@@ -168,17 +168,12 @@ const NEEDS_ON_PATH: Partial<Record<(typeof IMMEDIATE)[number], string>> = { "te
 // otherwise park it in a slot while `build bin`, the gate it awaits, is still
 // queued behind it, and the run would deadlock rather than fail.
 const DEPENDENT: readonly Dependent[] = [
-  { name: "test e2e", after: "build ui", env: SKIP_UI },
   { name: "build bin", after: "build ui", env: SKIP_UI },
   { name: "smoke", after: "build bin", env: { ...SKIP_UI, CARET_SKIP_BUILD_BIN: "1" } },
 ];
 const TASK_ORDER = [...IMMEDIATE, ...DEPENDENT.map((d) => d.name)];
 // How the live display and the summary list tasks. Cosmetic only: they still START in TASK_ORDER.
 const DISPLAY_ORDER = [...TASK_ORDER].sort();
-
-/** How a run renders, which is also what a task's argv has to suit: the live display
- * shows one line of a task's output at a time, `--json` a bounded tail of all of it. */
-export type PreflightDisplay = "live" | "json";
 
 /**
  * Extra argv a task is spawned with (EXC-1146). Separate from the name because
@@ -189,7 +184,7 @@ export type PreflightDisplay = "live" | "json";
  * `--parallel` takes every core — a 2.5x win standalone, a loss here: it starves the six
  * siblings, and on a 12-core host the median gate went 156s → 163s while lint took 2.6x
  * and `build ui` 2.2x longer. At 4 the gate's wall clock is indistinguishable from serial
- * — `test e2e` sets it, not this task — while the unit lane runs 119s → 72s, which is how
+ * while the unit lane runs 119s → 72s, which is how
  * much sooner a unit failure trips fail-fast. 2 measured no better a gate and gave the
  * lane back to 117s, so 4 is the floor of the useful range, not a tuned optimum.
  *
@@ -200,27 +195,14 @@ const TASK_ARGS: Readonly<Record<string, readonly string[]>> = {
   "test unit": ["--parallel=4"],
 };
 
-/**
- * What `--json` adds on top, where the audience is a captured document rather than a
- * watching human. `test e2e` is quiet only there: Playwright's `list` reporter prints a
- * line per spec, and that chatter would push a real failure out of the 20-line tail the
- * result document carries by default. The live display wants exactly that chatter — its
- * single output line per task is the only progress a human gets, and a dot reports
- * nothing but that the gate has not hung.
- */
-const JSON_ONLY_TASK_ARGS: Readonly<Record<string, readonly string[]>> = {
-  "test e2e": ["--quiet"],
-};
-
 /** The `mise` argv the gate spawns for `name`. A multi-word name (`build ui`,
- * `test e2e`) splits into positional targets, which mise routes to the task's
+ * `test unit`) splits into positional targets, which mise routes to the task's
  * own subcommand path (EXC-738); the extra argv follows, since caret's flags stop
  * parsing at the first operand. An entry that is not a caret flag at all —
  * `test unit`'s `--parallel=4` — rides through on the subcommand's `allowUnknownOption()`,
  * so removing that call breaks the gate rather than a test. */
-export function miseTaskCommand(name: string, display: PreflightDisplay): string[] {
-  const extra = display === "json" ? (JSON_ONLY_TASK_ARGS[name] ?? []) : [];
-  return ["run", ...name.split(" "), ...(TASK_ARGS[name] ?? []), ...extra];
+export function miseTaskCommand(name: string): string[] {
+  return ["run", ...name.split(" "), ...(TASK_ARGS[name] ?? [])];
 }
 
 // Bumpable integer so machine consumers detect a breaking shape change,
@@ -233,7 +215,7 @@ const SCHEMA_VERSION = 2;
 // Diff-scoped task selection (EXC-1042) --------------------------------------
 //
 // A change that touches only Markdown cannot be observed by `build ui`,
-// `build bin`, `test e2e`, or `smoke`, so the gate runs only the tasks that
+// `build bin`, or `smoke`, so the gate runs only the tasks that
 // could actually fail on it. The narrowing applies to WHICH TASKS RUN, never to
 // which files a task sees: every task is still spawned as `mise run <task>` with
 // no file arguments. That distinction is load-bearing for `lint`. rumdl resolves
@@ -280,21 +262,6 @@ export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "doc/CONFIGURING.md", // test/core/theme/schema.test.ts parses its example theme file
 ];
 
-/**
- * Markdown files an E2E SPEC reads from disk. The same rule as
- * MARKDOWN_READ_BY_TESTS one list up, for the other suite: a diff confined to
- * Markdown still has to run `test e2e` when it touches one of these. Kept
- * separate rather than folded in because the two suites cost very differently —
- * a doc-only edit should not pay for a browser run it cannot affect.
- *
- * An entry belongs in BOTH lists when both suites read it.
- */
-export const MARKDOWN_READ_BY_E2E: readonly string[] = [
-  // test/e2e/ref-hint.e2e.ts seeds it as a real plan and asserts the reference
-  // hints land on its citations, so removing them would break that spec (EXC-1061).
-  "scripts/tasks/dev/fake-plan.md",
-];
-
 function fullGate(reason: string): TaskSelection {
   return { tasks: TASK_ORDER, narrowed: false, reason };
 }
@@ -323,24 +290,11 @@ export function selectTasks(changed: readonly string[] | null): TaskSelection {
   }
 
   const readByTests = changed.filter((path) => MARKDOWN_READ_BY_TESTS.includes(path));
-  const readByE2e = changed.filter((path) => MARKDOWN_READ_BY_E2E.includes(path));
   // TASK_ORDER decides the running order, so the set is built by filtering it
   // rather than by pushing — a task can never land out of sequence here.
   const suites = new Set<string>(["lint"]);
   if (readByTests.length > 0) suites.add("test unit");
-  if (readByE2e.length > 0) suites.add("test e2e");
-  // Pull in whatever a selected task waits on, transitively. A dependent spawns
-  // only once its gate PASSES, so selecting `test e2e` without `build ui` would
-  // park it forever rather than run it — the narrowing must never produce a set
-  // that cannot finish.
-  for (const dep of [...DEPENDENT].reverse()) {
-    if (suites.has(dep.name)) suites.add(dep.after);
-  }
-  const reads = [
-    readByTests.length > 0 ? `\`test unit\` reads ${readByTests.join(", ")}` : "",
-    readByE2e.length > 0 ? `\`test e2e\` reads ${readByE2e.join(", ")}` : "",
-  ].filter(Boolean);
-  const also = reads.length > 0 ? `, and ${reads.join(", and ")}` : "";
+  const also = readByTests.length > 0 ? `, and \`test unit\` reads ${readByTests.join(", ")}` : "";
   return {
     tasks: TASK_ORDER.filter((t) => suites.has(t)),
     narrowed: true,
@@ -752,13 +706,10 @@ export function createProcessGroupController(graceMs = 2000): ProcessGroupContro
 // Real spawner: `mise run <task>` as a tracked process group. On a fail-fast
 // `signal` abort it reaps its own group and resolves `aborted`, so runPreflight
 // records it `skipped`, not `failed` (EXC-587).
-function makeSpawnMiseTask(
-  controller: ProcessGroupController,
-  display: PreflightDisplay,
-): SpawnTask {
+function makeSpawnMiseTask(controller: ProcessGroupController): SpawnTask {
   return (name, env, onLine, signal) =>
     new Promise<SpawnOutcome>((resolve) => {
-      const child = controller.spawn("mise", miseTaskCommand(name, display), {
+      const child = controller.spawn("mise", miseTaskCommand(name), {
         // Node's spawn accepts `undefined` env values (it drops them), so the
         // parent env passes through as-is with the skips merged on top.
         env: env ? { ...process.env, ...env } : process.env,
@@ -848,7 +799,7 @@ function installSignalHandlers(controller: ProcessGroupController): void {
 export async function runPreflightCli(args: JsonArgs): Promise<void> {
   const controller = createProcessGroupController();
   installSignalHandlers(controller);
-  const spawnTask = makeSpawnMiseTask(controller, args.json ? "json" : "live");
+  const spawnTask = makeSpawnMiseTask(controller);
   const concurrency = parseJobs(process.env.CARET_PREFLIGHT_JOBS);
   // Resolved once, ahead of either output mode, so the human summary and the
   // --json start document always describe the same run (EXC-1042).

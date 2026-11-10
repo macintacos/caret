@@ -24,7 +24,6 @@ import {
   buildStartReport,
   changedPaths,
   createProcessGroupController,
-  MARKDOWN_READ_BY_E2E,
   MARKDOWN_READ_BY_TESTS,
   miseTaskCommand,
   resolveSelection,
@@ -36,16 +35,7 @@ import {
 import { waitFor } from "@test/support/poll.ts";
 import { DEV_FIXTURES } from "@/tasks/dev/protocol.ts";
 
-const ALL_TASKS = [
-  "build bin",
-  "build ui",
-  "lint",
-  "smoke",
-  "test bats",
-  "test e2e",
-  "test mod",
-  "test unit",
-];
+const ALL_TASKS = ["build bin", "build ui", "lint", "smoke", "test bats", "test mod", "test unit"];
 const UNREAD_MARKDOWN = "doc/RUNNING.md";
 
 /** The gate as if `claude` were on PATH, so the suite does not depend on the host's. */
@@ -91,8 +81,7 @@ async function releaseRemainingAndFinish(
   s: ReturnType<typeof gatedSpawner>,
   run: Promise<{ exitCode: number }>,
 ): Promise<void> {
-  for (const name of ["lint", "test unit", "test bats", "test mod", "test e2e", "smoke"])
-    s.release(name);
+  for (const name of ["lint", "test unit", "test bats", "test mod", "smoke"]) s.release(name);
   const r = await run;
   expect(r.exitCode).toBe(0);
 }
@@ -117,8 +106,7 @@ test("the immediate tasks start at once; dependents wait for build ui", async ()
   expect([...s.calls].sort()).toEqual(["build ui", "lint", "test bats", "test mod", "test unit"]);
 
   s.release("build ui");
-  await waitForCond(() => s.calls.length === 7);
-  expect(s.calls).toContain("test e2e");
+  await waitForCond(() => s.calls.length === 6);
   expect(s.calls).toContain("build bin");
 
   s.release("build bin");
@@ -135,7 +123,7 @@ test("smoke waits for build bin, not merely build ui", async () => {
 
   await waitForCond(() => s.calls.length === 5);
   s.release("build ui");
-  await waitForCond(() => s.calls.length === 7);
+  await waitForCond(() => s.calls.length === 6);
   await Bun.sleep(20); // would catch a smoke gated on `build ui`
   expect(s.calls).not.toContain("smoke");
 
@@ -161,7 +149,6 @@ test("concurrency 1: the whole gate still completes, in array order", async () =
     "build ui",
     "test bats",
     "test mod",
-    "test e2e",
     "build bin",
     "smoke",
   ]);
@@ -212,15 +199,12 @@ test("dependents get their gate's skip env; immediate tasks get none", async () 
   await runGate({ spawnTask, renderer: "silent" });
 
   const envByName = new Map(calls.map((c) => [c.name, c.env]));
-  expect(envByName.get("test e2e")?.CARET_SKIP_BUILD_UI).toBe("1");
   expect(envByName.get("build bin")?.CARET_SKIP_BUILD_UI).toBe("1");
   // smoke reuses both upstream artifacts, so it carries both skips; its siblings
   // still build the binary themselves and must not inherit the bin skip.
   expect(envByName.get("smoke")?.CARET_SKIP_BUILD_UI).toBe("1");
   expect(envByName.get("smoke")?.CARET_SKIP_BUILD_BIN).toBe("1");
-  for (const name of ["test e2e", "build bin"]) {
-    expect(envByName.get(name)?.CARET_SKIP_BUILD_BIN).toBeUndefined();
-  }
+  expect(envByName.get("build bin")?.CARET_SKIP_BUILD_BIN).toBeUndefined();
   for (const name of ["lint", "test unit", "build ui"]) {
     expect(envByName.get(name)?.CARET_SKIP_BUILD_UI).toBeUndefined();
   }
@@ -244,7 +228,7 @@ test("lint failure doesn't stop the others, exits 1, surfaces output and the for
 test("preflight's task groups map to real mise task files", async () => {
   // The orchestrator hard-codes its task set (IMMEDIATE/DEPENDENT) and spawns
   // each as `mise run <words…>`, whose FIRST word is the mise task file, so
-  // `build ui`/`test e2e`/`build bin` must resolve to the `build` and `test`
+  // `build ui`/`test unit`/`build bin` must resolve to the `build` and `test`
   // group files.
   const taskFile = (name: string): string => join(import.meta.dir, "../../.mise/tasks", name);
   const firstWords = [...new Set(ALL_TASKS.map((t) => t.split(" ", 1)[0] ?? t))];
@@ -291,13 +275,11 @@ test("build ui failure skips its dependents and reports them as skipped", async 
 
   expect(r.exitCode).toBe(1);
   const names = calls.map((c) => c.name);
-  expect(names).not.toContain("test e2e");
   expect(names).not.toContain("build bin");
   // Transitive: a skipped `build bin` still has to release its own gate, or
   // smoke awaits a promise nobody will ever resolve and the run never returns.
   expect(names).not.toContain("smoke");
   expect(r.results.get("build ui")?.status).toBe("failed");
-  expect(r.results.get("test e2e")?.status).toBe("skipped");
   expect(r.results.get("build bin")?.status).toBe("skipped");
   expect(r.results.get("smoke")?.status).toBe("skipped");
   expect(r.summary).toContain("vite exploded");
@@ -377,7 +359,7 @@ test("a failed task aborts in-flight siblings that honor the signal (recorded sk
     new Promise<SpawnOutcome>((resolve) => {
       if (name === "lint") return resolve({ exitCode: 1, output: "lint boom" });
       if (name === "build ui") return resolve({ exitCode: 0, output: "" });
-      // test unit, test e2e, build bin: stay in-flight until fail-fast aborts them.
+      // test unit, build bin: stay in-flight until fail-fast aborts them.
       const abort = () => resolve({ exitCode: 143, output: "", aborted: true });
       if (signal.aborted) abort();
       else signal.addEventListener("abort", abort, { once: true });
@@ -387,7 +369,6 @@ test("a failed task aborts in-flight siblings that honor the signal (recorded sk
   expect(r.exitCode).toBe(1);
   expect(r.results.get("lint")?.status).toBe("failed");
   expect(r.results.get("test unit")?.status).toBe("skipped");
-  expect(r.results.get("test e2e")?.status).toBe("skipped");
   // `build bin` aborted mid-flight is the third of its four gate exit paths, and
   // the one with no other coverage. Without these two the path is exercised but
   // unasserted: a regression that stopped resolving the gate here would hang the
@@ -421,7 +402,7 @@ test("a Markdown-only diff leaves the shell lane out", async () => {
   expect(selectTasks([UNREAD_MARKDOWN]).tasks).toEqual(["lint"]);
   expect(await spawnedFor([UNREAD_MARKDOWN])).not.toContain("test bats");
   // Even the entries that DO keep a suite in the narrowed gate leave it out.
-  for (const path of [...MARKDOWN_READ_BY_TESTS, ...MARKDOWN_READ_BY_E2E]) {
+  for (const path of MARKDOWN_READ_BY_TESTS) {
     expect(selectTasks([path]).tasks).not.toContain("test bats");
   }
 });
@@ -431,11 +412,7 @@ test("a Markdown-only diff leaves the shell lane out", async () => {
 // path, three separate reasons to exist — looping covers a fourth entry for free.
 test("Markdown a test reads from disk keeps `test unit` in the narrowed gate", async () => {
   for (const path of MARKDOWN_READ_BY_TESTS) {
-    // `test unit` is the claim here; a path an e2e spec ALSO reads brings its own
-    // suite along (asserted below), so this checks membership rather than the
-    // exact set.
-    expect(await spawnedFor([UNREAD_MARKDOWN, path])).toContain("test unit");
-    expect(await spawnedFor([UNREAD_MARKDOWN, path])).toContain("lint");
+    expect(await spawnedFor([UNREAD_MARKDOWN, path])).toEqual(["lint", "test unit"]);
     expect(selectTasks([UNREAD_MARKDOWN, path]).narrowed).toBe(true);
   }
 });
@@ -447,38 +424,10 @@ test("Markdown a test reads from disk keeps `test unit` in the narrowed gate", a
 // would skip exactly the diffs that guard exists for. Either path must reach it,
 // alone or together.
 test("a docs-only diff touching the fake plan or the dev guide still runs `test unit`", async () => {
-  expect(await spawnedFor(["doc/DEVELOPMENT.md"])).toEqual(["lint", "test unit"]);
-  // The fake plan is read by BOTH suites — dev-driver.test.ts asserts on its
-  // content, and ref-hint.e2e.ts seeds it as a real plan — so it pulls `test e2e`
-  // in as well, and `build ui` with it (EXC-1061).
-  const withPlan = ["build ui", "lint", "test e2e", "test unit"];
-  expect(await spawnedFor(["scripts/tasks/dev/fake-plan.md"])).toEqual(withPlan);
-  expect(await spawnedFor(["doc/DEVELOPMENT.md", "scripts/tasks/dev/fake-plan.md"])).toEqual(
-    withPlan,
-  );
-});
-
-// The e2e half of the same rule. `test e2e` is a DEPENDENT task, so selecting it
-// has to drag `build ui` in with it — a dependent spawns only once its gate
-// passes, and a set holding the dependent without the gate would never finish.
-test("Markdown an e2e spec reads keeps `test e2e` and its gate in the narrowed set", async () => {
-  for (const path of MARKDOWN_READ_BY_E2E) {
-    const spawned = await spawnedFor([UNREAD_MARKDOWN, path]);
-    expect(spawned).toContain("test e2e");
-    expect(spawned).toContain("build ui");
-    // Still narrowed — `build bin` and `smoke` have no stake in a Markdown diff.
-    expect(spawned).not.toContain("smoke");
-    expect(selectTasks([UNREAD_MARKDOWN, path]).narrowed).toBe(true);
-  }
-});
-
-// A renamed or deleted fixture would silently orphan its entry, and the gate
-// would quietly stop running `test e2e` for the file that replaced it.
-test("every MARKDOWN_READ_BY_E2E entry still exists on disk", () => {
-  expect(MARKDOWN_READ_BY_E2E.length).toBeGreaterThan(0);
-  for (const path of MARKDOWN_READ_BY_E2E) {
-    expect(existsSync(join(import.meta.dir, "../..", path))).toBe(true);
-  }
+  const both = ["lint", "test unit"];
+  expect(await spawnedFor(["doc/DEVELOPMENT.md"])).toEqual(both);
+  expect(await spawnedFor(["scripts/tasks/dev/fake-plan.md"])).toEqual(both);
+  expect(await spawnedFor(["doc/DEVELOPMENT.md", "scripts/tasks/dev/fake-plan.md"])).toEqual(both);
 });
 
 // The other direction, for the one list that grows: test/scripts/dev-driver.test.ts
@@ -500,7 +449,7 @@ test("every MARKDOWN_READ_BY_TESTS entry still exists on disk", () => {
   }
 });
 
-test("a single non-Markdown path runs the full eight-task gate", async () => {
+test("a single non-Markdown path runs the full seven-task gate", async () => {
   expect(await spawnedFor([UNREAD_MARKDOWN, "src/daemon.ts"])).toEqual(ALL_TASKS);
   expect(selectTasks([UNREAD_MARKDOWN, "src/daemon.ts"]).narrowed).toBe(false);
 });
@@ -523,6 +472,8 @@ test("--full runs the full gate and never reads the diff", async () => {
   await runGate({ spawnTask, renderer: "silent", selection });
 
   expect(calls.map((c) => c.name).sort()).toEqual(ALL_TASKS);
+  // e2e runs in PR CI and through `mise run test e2e`, never as a gate task.
+  expect(selection.tasks).not.toContain("test e2e");
   expect(selection.narrowed).toBe(false);
   expect(reads).toBe(0); // the override short-circuits the git read entirely
 });
@@ -591,7 +542,6 @@ test("buildStartReport echoes the parsed filters and lists planned tasks", () =>
     "build ui",
     "test bats",
     "test mod",
-    "test e2e",
     "build bin",
     "smoke",
   ]);
@@ -632,7 +582,6 @@ test("buildResultReport level 0: passing tasks carry status only", async () => {
     "build ui",
     "test bats",
     "test mod",
-    "test e2e",
     "build bin",
     "smoke",
   ]);
@@ -662,9 +611,9 @@ test("buildResultReport: a task skipped before it spawned reports no duration", 
   const r = await runGate({ spawnTask, renderer: "silent" });
   const report = buildResultReport(r.results);
 
-  const e2e = report.tasks.find((t) => t.name === "test e2e");
-  expect(e2e?.status).toBe("skipped");
-  expect(e2e?.durationMs).toBe(0);
+  const bin = report.tasks.find((t) => t.name === "build bin");
+  expect(bin?.status).toBe("skipped");
+  expect(bin?.durationMs).toBe(0);
 });
 
 test("buildResultReport level 0: a small failed output is shown in full (with lint hint)", async () => {
@@ -860,39 +809,22 @@ test(
 // The argv the gate spawns per task (EXC-1146). A task's name doubles as the map
 // key, the display title, and the `--task` selector, so a flag the gate wants can
 // live only here — never folded into the name.
-test("the e2e task runs quiet for --json and loud for the live display", () => {
-  // Playwright's per-spec list reporter is what the live display wants: its one
-  // output line per task is the whole progress report a human gets, and a dot says
-  // nothing. The same chatter would push a real failure out of the 20-line tail the
-  // result document carries, so --json still asks for dots.
-  expect(miseTaskCommand("test e2e", "live")).toEqual(["run", "test", "e2e"]);
-  expect(miseTaskCommand("test e2e", "json")).toEqual(["run", "test", "e2e", "--quiet"]);
-  // The flag must follow the positional target: `test e2e` is a subcommand path,
-  // and caret's own flags stop parsing at the first operand.
-  expect(miseTaskCommand("test e2e", "json").indexOf("--quiet")).toBe(3);
-});
-
-test("preflight caps the unit suite's worker count in either display", () => {
+test("preflight caps the unit suite's worker count", () => {
   // The entry point's own `--parallel` fans out across every core; inside the gate
-  // that starves the six siblings sharing the host, so a lower count is forwarded
-  // after it and wins. Nothing about that depends on how the gate renders.
-  expect(miseTaskCommand("test unit", "live")).toEqual(["run", "test", "unit", "--parallel=4"]);
-  expect(miseTaskCommand("test unit", "json")).toEqual(["run", "test", "unit", "--parallel=4"]);
+  // that starves the siblings sharing the host, so a lower count is forwarded
+  // after it and wins.
+  expect(miseTaskCommand("test unit")).toEqual(["run", "test", "unit", "--parallel=4"]);
 });
 
 // The shell lane takes neither: bats has no worker count to cap, and its TAP
 // stream is already one line per test, so there is no volume flag to add either.
 test("preflight spawns the shell lane as a bare positional target", () => {
-  for (const display of ["live", "json"] as const) {
-    expect(miseTaskCommand("test bats", display)).toEqual(["run", "test", "bats"]);
-  }
+  expect(miseTaskCommand("test bats")).toEqual(["run", "test", "bats"]);
 });
 
 test("preflight leaves every non-test task's argv untouched", () => {
-  for (const display of ["live", "json"] as const) {
-    expect(miseTaskCommand("lint", display)).toEqual(["run", "lint"]);
-    expect(miseTaskCommand("build ui", display)).toEqual(["run", "build", "ui"]);
-    expect(miseTaskCommand("build bin", display)).toEqual(["run", "build", "bin"]);
-    expect(miseTaskCommand("smoke", display)).toEqual(["run", "smoke"]);
-  }
+  expect(miseTaskCommand("lint")).toEqual(["run", "lint"]);
+  expect(miseTaskCommand("build ui")).toEqual(["run", "build", "ui"]);
+  expect(miseTaskCommand("build bin")).toEqual(["run", "build", "bin"]);
+  expect(miseTaskCommand("smoke")).toEqual(["run", "smoke"]);
 });
