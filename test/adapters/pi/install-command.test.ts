@@ -117,23 +117,51 @@ for (const pinned of [`${NPM}@1.8.1`, `${NPM}@^1.8.0`]) {
   });
 }
 
-test("--from-local over an npm entry removes it, installs the checkout, and summarises", async () => {
+test("an npm entry pi lists but hasn't unpacked reports the update without a version", async () => {
+  const r = await run({ agent: agentDir([NPM]) });
+  expect(r.ok).toBe(true);
+  expect(r.transcript).toContain("Asked pi for the latest caret");
+  expect(r.transcript).not.toContain("null");
+});
+
+test("a failing pi update warns and the run carries on", async () => {
+  const repo = checkout();
+  const r = await run({ agent: agentDir([NPM, repo], "1.8.1"), fail: ["update", NPM] });
+  expect(r.ok).toBe(true);
+  expect(r.calls).toEqual([
+    ["update", NPM],
+    ["remove", repo],
+  ]);
+  expect(r.events.find((e) => e.startsWith("warn:"))).toContain("boom");
+  expect(r.transcript).toContain("caret 1.8.1 in pi — the update did not land");
+});
+
+test("--from-local installs the checkout before removing the npm entry, and summarises", async () => {
   const repo = checkout();
   const r = await run({ agent: agentDir([NPM], "1.8.1"), repoDir: repo });
   expect(r.calls).toEqual([
-    ["remove", NPM],
     ["install", repo],
+    ["remove", NPM],
   ]);
   expect(r.events.some((e) => e.startsWith("settled:") && e.includes(NPM))).toBe(true);
   expect(r.events.some((e) => e.startsWith("info:") && e.includes(NPM))).toBe(true);
 });
 
-test("a plain install over a local entry removes it by its resolved dir", async () => {
+test("a plain install over a local entry installs npm first, then removes it by its resolved dir", async () => {
   const repo = checkout();
   const r = await run({ agent: agentDir([repo]) });
   expect(r.calls).toEqual([
-    ["remove", repo],
     ["install", NPM],
+    ["remove", repo],
+  ]);
+});
+
+test("a plain install over npm and local entries updates npm, then removes the local one", async () => {
+  const repo = checkout();
+  const r = await run({ agent: agentDir([NPM, repo], "1.8.1") });
+  expect(r.calls).toEqual([
+    ["update", NPM],
+    ["remove", repo],
   ]);
 });
 
@@ -142,8 +170,8 @@ test("--from-local replaces another checkout's entry", async () => {
   const repo = checkout();
   const r = await run({ agent: agentDir([other]), repoDir: repo });
   expect(r.calls).toEqual([
-    ["remove", other],
     ["install", repo],
+    ["remove", other],
   ]);
 });
 
@@ -164,6 +192,31 @@ test("--uninstall removes exactly caret's entries", async () => {
     ["remove", NPM],
     ["remove", repo],
   ]);
+});
+
+test("--uninstall attempts every removal even when one fails", async () => {
+  const repo = checkout();
+  const r = await run({
+    agent: agentDir([NPM, repo], "1.8.1"),
+    uninstall: true,
+    fail: ["remove", NPM],
+  });
+  expect(r.ok).toBe(true);
+  expect(r.calls).toEqual([
+    ["remove", NPM],
+    ["remove", repo],
+  ]);
+  expect(r.events.find((e) => e.startsWith("warn:"))).toContain("boom");
+});
+
+test("--uninstall with a too-old pi still removes caret's entries", async () => {
+  const r = await run({
+    agent: agentDir([NPM], "1.8.1"),
+    uninstall: true,
+    version: { status: "too-old", version: "1.4.9" },
+  });
+  expect(r.ok).toBe(true);
+  expect(r.calls).toEqual([["remove", NPM]]);
 });
 
 test("--uninstall without pi on PATH succeeds without running pi", async () => {
@@ -203,11 +256,18 @@ test("--dry-run previews the commands without running them", async () => {
   expect(r.notes.join("\n")).toContain(`pi install ${NPM}`);
 });
 
-test("a failing pi command fails its step and stops the run", async () => {
+test("--dry-run lists a pinned entry as left alone", async () => {
+  const pinned = `${NPM}@1.8.1`;
+  const r = await run({ agent: agentDir([pinned], "1.8.1"), dryRun: true });
+  expect(r.calls).toEqual([]);
+  expect(r.notes.join("\n")).toContain(`(pinned, left alone) ${pinned}`);
+});
+
+test("a failing pi install fails its step and stops the run", async () => {
   const repo = checkout();
-  const r = await run({ agent: agentDir([repo]), fail: ["remove", repo] });
+  const r = await run({ agent: agentDir([repo]), fail: ["install", NPM] });
   expect(r.ok).toBe(false);
-  expect(r.calls).toEqual([["remove", repo]]);
+  expect(r.calls).toEqual([["install", NPM]]);
   expect(r.events.find((e) => e.startsWith("error:"))).toContain("boom");
   expect(r.transcript).not.toContain("Removed");
 });

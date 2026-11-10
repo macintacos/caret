@@ -232,8 +232,8 @@ export function launcherCandidateDirs(): LauncherCandidate[] {
   ];
 }
 
-/** pi's default npm install root for caret. `$HOME` first, as bin/caret-launcher's
- * pi_root reads it; pi's PI_CODING_AGENT_DIR is never followed. */
+/** pi's default npm install root for caret; pi's PI_CODING_AGENT_DIR is never followed.
+ * `$HOME` first because Bun's `homedir()` ignores a `HOME` set after startup. */
 function piRoot(): string {
   return join(process.env.HOME || homedir(), ".pi/agent/npm/node_modules/@macintacos/caret");
 }

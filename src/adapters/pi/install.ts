@@ -1,6 +1,5 @@
-// pi's install probe for the doctor command: a best-effort, strictly read-only
-// read of caret's package entry in pi's user settings. Every field degrades to
-// "unknown" rather than throwing.
+// Reads caret's entries in pi's user settings, for the doctor probe and `caret
+// install`'s pi target; strictly read-only, degrades rather than throws.
 
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -32,7 +31,7 @@ function expandTilde(path: string, home: string): string {
 }
 
 /** pi's user `settings.json` under `agentDir`, or null when unreadable or not a
- * JSON object. Returns the whole object, every key, for install's rewrite. */
+ * JSON object. */
 export function readPiSettings(agentDir: string): PiSettings | null {
   const json = readJsonFileSync(join(agentDir, "settings.json"));
   return json !== null && typeof json === "object" && !Array.isArray(json)
@@ -69,8 +68,17 @@ export type PiCaretEntry = {
   /** `dir`'s package.json version; null when pi lists the entry but the package
    * isn't there to read. */
   version: string | null;
+  /** The entry's raw `extensions` filter, uninterpreted. */
   extensions: unknown;
-} & ({ form: "npm"; pinned: boolean } | { form: "local" });
+} & (
+  | {
+      form: "npm";
+      /** Any `@<spec>` suffix — exact version, range, or tag — counts; all are
+       * hand-written. */
+      pinned: boolean;
+    }
+  | { form: "local" }
+);
 
 interface PiDirs {
   agentDir: string;

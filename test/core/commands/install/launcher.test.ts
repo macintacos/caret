@@ -433,9 +433,9 @@ for (const [name, lines] of cacheCases()) {
   test(`the launcher picks the shared fixture's winner: ${name}`, () => {
     const cacheDir = mkdtempSync(join(tmpdir(), "caret-cache-"));
     const homeDir = mkdtempSync(join(tmpdir(), "caret-home-"));
-    const resolve = (path: string) =>
+    const seedPath = (path: string) =>
       path.startsWith("~/") ? join(homeDir, path.slice(2)) : join(cacheDir, path);
-    for (const { version, path } of lines) runnableRoot(resolve(path), manifest(version));
+    for (const { version, path } of lines) runnableRoot(seedPath(path), manifest(version));
     const env = {
       CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), "caret-claude-")),
       XDG_CACHE_HOME: cacheDir,
@@ -445,6 +445,6 @@ for (const [name, lines] of cacheCases()) {
     const picked = withEnv(env, () => pickLauncherRoot(null, launcherCandidateDirs()));
 
     const winner = lines.find((l) => l.win);
-    expect(picked?.root).toBe(winner && resolve(winner.path));
+    expect(picked?.root).toBe(winner && seedPath(winner.path));
   });
 }

@@ -2,9 +2,9 @@
 #
 # The stable launcher a launchd plist or systemd unit names (EXC-1160). Those
 # units must name an absolute executable path, but caret's runtime lives at a
-# versioned path that changes on every upgrade — and both Claude Code and
-# OpenCode replace their copy on their own schedule, without running
-# `caret install`. So the unit names this file, which caret owns at
+# versioned path that changes on every upgrade — and Claude Code, OpenCode,
+# and pi (`pi update`) each replace their copy on their own schedule, without
+# running `caret install`. So the unit names this file, which caret owns at
 # $XDG_STATE_HOME/caret/bin/caret, and resolution happens here at exec time.
 #
 # Bash rather than TypeScript for the same reason bin/caret is: it has to locate
@@ -110,13 +110,14 @@ live_generation() {
   if [ -n "$newest" ]; then printf '%s' "$1/$newest"; fi
 }
 
-# Every dir an agent's cache, pi's npm folder, or caret's own copies offer, runnable caret or
-# not — the difference between a broken install (terminal) and an empty cache
-# (eviction). OpenCode's cache dir is named exactly `caret` or `caret@<spec>`: v1's
-# holds a two-line npm project with the root one level down; v2's holds numbered
-# generations, of which only the live one is offered. `*` skips dot-prefixed dirs,
-# so a half-copied owned root is never a candidate. Keep in sync with
-# launcherCandidateDirs (src/commands/install/launcher.ts) and opencodeRootPaths
+# Every dir an agent's cache, pi's npm folder, or caret's own copies offer,
+# runnable caret or not — the difference between a broken install (terminal)
+# and an empty cache (eviction). OpenCode's cache dir is named exactly `caret`
+# or `caret@<spec>`: v1's holds a two-line npm project with the root one level
+# down; v2's holds numbered generations, of which only the live one is offered.
+# `*` skips dot-prefixed dirs, so a half-copied owned root is never a
+# candidate. Keep in sync with launcherCandidateDirs
+# (src/commands/install/launcher.ts) and opencodeRootPaths
 # (src/adapters/opencode/paths.ts); both suites pin it through
 # test/core/commands/install/fixtures/launcher-caches.txt.
 candidate_dirs() {

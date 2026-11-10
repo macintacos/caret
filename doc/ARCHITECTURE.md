@@ -317,9 +317,9 @@ and its own version at runtime from the package it ships in (`CARET_OPENCODE_BIN
 overrides the binary — see [Environment variables](CONFIGURING.md#environment-variables)),
 and on load it checks caret's latest GitHub release and toasts an update nudge when you're
 behind (`CARET_OPENCODE_NO_UPDATE_CHECK` opts out). `caret install` registers caret with
-Claude Code through its plugin CLI too, and covers both agents in a single run when both
-are selected; `--uninstall` reverses every agent at once, and `--dry-run` previews the
-changes without writing. See
+Claude Code through its plugin CLI and with pi through `pi install` too, and covers every
+selected agent in a single run; `--uninstall` reverses every agent at once, and
+`--dry-run` previews the changes without writing. See
 [`agents/opencode-integration.md`](agents/opencode-integration.md) for the design.
 
 caret supports OpenCode v1 1.3.4 or later (an older v1 fails to load the plugin) and v2
@@ -378,6 +378,19 @@ checkout the binary was built in rather than the published one — see
 by acquiring the rumdl plan formatter — it is part of installing caret, not a step of its
 own — see
 [Plan formatting](CONFIGURING.md#plan-formatting-rumdl).
+
+The pi target drives pi only through its own package commands (`pi install`, `pi update`,
+`pi remove`); caret never writes pi's `settings.json`. It needs pi 1.5.0 or later
+(`@earendil-works/pi-coding-agent`): a missing, older, or pre-rename
+(`@mariozechner/pi-coding-agent`) pi stops the install with guidance, while `--uninstall`
+just skips a pi it can't run. A plain install adds `npm:@macintacos/caret`, or updates it
+when present (a failed update only warns), then removes any local-checkout caret entry so
+pi loads caret once. A pinned `npm:@macintacos/caret@<spec>` is left alone;
+`pi install npm:@macintacos/caret` unpins it. `--from-local` installs the checkout path,
+which pi loads in place so `/reload` picks up a rebuild, then removes every other caret
+entry. `--uninstall` removes every caret entry, carrying on past a failed removal so the
+service teardown still runs. The installer honours `PI_CODING_AGENT_DIR`; the service
+launcher looks only in the default `~/.pi/agent`.
 
 At a terminal the whole run renders as one
 [`@clack/prompts`](https://github.com/bombshell-dev/clack) session: the chooser, then a

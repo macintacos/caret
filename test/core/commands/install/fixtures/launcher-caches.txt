@@ -1,9 +1,10 @@
-# Caret roots seeded fresh for each case, read by
-# both test/core/commands/install/launcher.test.ts and scripts/caret-launcher.bats. Each
-# asserts its rule picks the case's `win` line. Versions are unique within a case, since
-# bats identifies the pick by the version the exec'd root echoes.
+# Caret roots seeded fresh for each case, read by both
+# test/core/commands/install/launcher.test.ts and scripts/caret-launcher.bats.
+# Each asserts its rule picks the case's `win` line. Versions are unique within
+# a case, since bats identifies the pick by the version the exec'd root echoes.
 #
-# Format: <case> <version> <path> [win]; exactly one `win` per case. A path starting `~/` is seeded under the test's HOME, any other under XDG_CACHE_HOME.
+# Format: <case> <version> <path> [win]; exactly one `win` per case.
+# A path starting `~/` is seeded under the test's HOME, any other under XDG_CACHE_HOME.
 v2-live-generation 0.20.0 opencode/npm/@macintacos/caret@latest/9/node_modules/@macintacos/caret
 v2-live-generation 0.15.0 opencode/npm/@macintacos/caret@latest/10/node_modules/@macintacos/caret win
 v2-beats-lower-v1 0.14.0 opencode/packages/@macintacos/caret/node_modules/@macintacos/caret

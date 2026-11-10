@@ -42,8 +42,8 @@ import { ensureRumdl, RUMDL_VERSION } from "@/plan/rumdl.ts";
 
 /** Injection seam for tests: override detection, the chooser, the service question,
  * TTY-ness, each target runner, and — through ServiceStepDeps — the supervisor, to assert
- * selection and dispatch without touching a real config dir, the `claude` CLI, launchd,
- * or a terminal. */
+ * selection and dispatch without touching a real config dir, the `claude` or `pi` CLI,
+ * launchd, or a terminal. */
 export interface InstallDeps extends ServiceStepDeps {
   /** A runner returns false to report "this target failed" (it has already said why);
    * returning nothing means it got through. */
@@ -74,8 +74,8 @@ interface TargetOpts {
    * so that target always updates and has no prompt to pre-answer. */
   refresh: boolean;
   /** Set by `--from-local`: install this checkout rather than the published caret. Only
-   * the Claude and pi targets read it — OpenCode's command files already resolve to the running
-   * binary, so installing from a local caret is local by construction. */
+   * the Claude and pi targets read it — OpenCode's command files already resolve to the
+   * running binary, so installing from a local caret is local by construction. */
   local?: LocalInstall;
 }
 

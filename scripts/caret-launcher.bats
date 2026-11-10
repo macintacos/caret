@@ -158,7 +158,7 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
     case "$name" in '' | '#'*) continue ;; esac
     case "$seen" in *" $name "*) continue ;; esac
     seen="$seen$name "
-    rm -rf "$home/.cache/opencode" "$home/.pi"
+    rm -rf -- "${home:?}/.cache/opencode" "${home:?}/.pi"
     want="$(seed_cache_case "$name")"
     # </dev/null: the launcher must not read the fixture this loop is consuming
     run launcher </dev/null
