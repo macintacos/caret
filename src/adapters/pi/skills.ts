@@ -28,10 +28,10 @@ export interface PiSkillRoot {
 
 /** `cwd` and each ancestor up to the first holding `.git`, or to the filesystem root. */
 function ancestorsToRepoRoot(cwd: string): string[] {
-  const out: string[] = [];
+  const ancestors: string[] = [];
   for (let dir = cwd; ; dir = dirname(dir)) {
-    out.push(dir);
-    if (existsSync(join(dir, ".git")) || dirname(dir) === dir) return out;
+    ancestors.push(dir);
+    if (existsSync(join(dir, ".git")) || dirname(dir) === dir) return ancestors;
   }
 }
 
@@ -66,10 +66,10 @@ async function skillDirsUnder(root: string, relative = "", depth = 1): Promise<s
   const found = await Promise.all(
     entries.map(async (entry): Promise<string[]> => {
       if (entry.name === "node_modules" || entry.name.startsWith(".")) return [];
-      const rel = join(relative, entry.name);
+      const entryPath = join(relative, entry.name);
       if (!entry.isDirectory() && !entry.isSymbolicLink()) return [];
-      if (await exists(join(root, rel, SKILL_FILE))) return [rel];
-      return entry.isDirectory() ? skillDirsUnder(root, rel, depth + 1) : [];
+      if (await exists(join(root, entryPath, SKILL_FILE))) return [entryPath];
+      return entry.isDirectory() ? skillDirsUnder(root, entryPath, depth + 1) : [];
     }),
   );
   return found.flat();

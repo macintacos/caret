@@ -20,9 +20,9 @@ export interface PiSettings {
 /** pi's agent dir: `PI_CODING_AGENT_DIR`, tilde-expanded as pi does, else
  * `~/.pi/agent`. */
 export function piAgentDir(env: NodeJS.ProcessEnv = process.env, home = homedir()): string {
-  const dir = env.PI_CODING_AGENT_DIR;
-  if (!dir) return join(home, ".pi", "agent");
-  return expandTilde(dir, home);
+  const overrideDir = env.PI_CODING_AGENT_DIR;
+  if (!overrideDir) return join(home, ".pi", "agent");
+  return expandTilde(overrideDir, home);
 }
 
 function expandTilde(path: string, home: string): string {
@@ -91,8 +91,8 @@ function caretPackageJson(source: string, { agentDir, home }: PiDirs): string | 
   const expanded = expandTilde(source, home);
   const dir = isAbsolute(expanded) ? expanded : join(agentDir, expanded);
   const packageJson = join(dir, "package.json");
-  const json = readJsonFileSync(packageJson) as { name?: unknown } | null;
-  return json?.name === CARET_PACKAGE ? packageJson : null;
+  const manifest = readJsonFileSync(packageJson) as { name?: unknown } | null;
+  return manifest?.name === CARET_PACKAGE ? packageJson : null;
 }
 
 function readVersion(packageJson: string): string {
