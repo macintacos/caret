@@ -437,7 +437,8 @@ which:
    reinstalls the caret plugin through Claude Code's native plugin system.
 3. Installs into OpenCode by writing the checkout into its plugin key (`plugins` when
    every `opencode` is v2, else `plugin`) (`file:<checkout>`, which OpenCode symlinks — so
-   later rebuilds need no reinstall).
+   later rebuilds need no reinstall). With pi detected, it runs `pi install <checkout>`,
+   which pi loads in place, so `/reload` in pi picks up a rebuild.
 4. Acquires rumdl, then hands the daemon to the just-built binary. Where caret is
    resident, it pins the service's launcher to this checkout and cycles the service onto
    it. Where there is no service to cycle — you chose to run caret yourself, the host is

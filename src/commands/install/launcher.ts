@@ -20,6 +20,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { z } from "zod";
@@ -217,17 +218,24 @@ export interface LauncherCandidate {
 }
 
 /** Every dir the launcher offers as a candidate, in its order: Claude Code's, OpenCode
- * v1's, OpenCode v2's live generations, then caret's own copies. Keep in sync with
- * candidate_dirs() in bin/caret-launcher. */
+ * v1's, OpenCode v2's live generations, pi's npm root, then caret's own copies. Keep in
+ * sync with candidate_dirs() in bin/caret-launcher. */
 export function launcherCandidateDirs(): LauncherCandidate[] {
   const opencodeRoots = opencodeRootPaths().filter(isDir);
   return [
     ...[
       ...listDirs(join(claudeConfigDir(), "plugins", "cache", "caret", "caret")),
       ...opencodeRoots,
+      ...[piRoot()].filter(isDir),
     ].map((dir) => ({ dir, owned: false })),
     ...listDirs(ownedRootsDir()).map((dir) => ({ dir, owned: true })),
   ];
+}
+
+/** pi's default npm install root for caret; pi's PI_CODING_AGENT_DIR is never followed.
+ * `$HOME` first because Bun's `homedir()` ignores a `HOME` set after startup. */
+function piRoot(): string {
+  return join(process.env.HOME || homedir(), ".pi/agent/npm/node_modules/@macintacos/caret");
 }
 
 /** The first `"version"` value on a line of its own, as candidate_version()'s anchored sed

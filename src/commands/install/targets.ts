@@ -1,7 +1,7 @@
 // The registry of coding agents `caret install` can install into: one descriptor per
 // target, carrying its id, the copy the interactive chooser shows, and how to detect
 // it on this machine: `claude` on PATH for Claude Code, `opencode` on PATH or an
-// existing OpenCode config dir for OpenCode.
+// existing OpenCode config dir for OpenCode, `pi` on PATH for pi.
 //
 // Everything that enumerates targets (the chooser rows, detection, the uninstall sweep)
 // reads this one array, so a future agent is one descriptor, one runner module beside
@@ -14,7 +14,7 @@ import { existsSync } from "node:fs";
 import { opencodeConfigDir } from "@/adapters/opencode/paths.ts";
 
 /** Every installable target id, in the order the chooser lists them. */
-export const INSTALL_TARGET_IDS = ["claude", "opencode"] as const;
+export const INSTALL_TARGET_IDS = ["claude", "opencode", "pi"] as const;
 export type InstallTarget = (typeof INSTALL_TARGET_IDS)[number];
 
 /** The machine probes detection runs against, injected so a test can describe a
@@ -51,6 +51,12 @@ export const INSTALL_TARGETS: readonly InstallTargetDescriptor[] = [
     // An OpenCode config dir counts even without the command: OpenCode may be run
     // through bunx/npx, so its config dir is the durable signal that it is in use.
     detect: (probe) => probe.hasCommand("opencode") || probe.hasPath(opencodeConfigDir()),
+  },
+  {
+    id: "pi",
+    label: "pi",
+    hint: "install caret as a pi package via the pi CLI",
+    detect: (probe) => probe.hasCommand("pi"),
   },
 ];
 

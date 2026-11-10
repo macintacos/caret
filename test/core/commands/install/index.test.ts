@@ -37,10 +37,15 @@ const CLAUDE_ONLY = { detect: (): InstallTarget[] => ["claude"], isInteractive: 
 
 /** Deps that just record which target ran, in order — the recording pair
  * nearly every dispatch test in this file shares. */
-function recordingRunners(calls: string[]): { runOpencode: () => void; runClaude: () => void } {
+function recordingRunners(calls: string[]): {
+  runOpencode: () => void;
+  runClaude: () => void;
+  runPi: () => void;
+} {
   return {
     runOpencode: () => void calls.push("opencode"),
     runClaude: () => void calls.push("claude"),
+    runPi: () => void calls.push("pi"),
   };
 }
 
@@ -214,6 +219,7 @@ test("--uninstall removes caret from every agent in the registry, without asking
       ui: silentUI,
       runOpencode: (o) => void calls.push(`opencode:${o.uninstall}`),
       runClaude: (o) => void calls.push(`claude:${o.uninstall}`),
+      runPi: (o) => void calls.push(`pi:${o.uninstall}`),
     },
   );
   expect(chooser.wasPrompted()).toBe(false);
@@ -300,6 +306,7 @@ test("uninstalling and --dry-run never download rumdl", async () => {
     ...CLAUDE_ONLY,
     runClaude: () => {},
     runOpencode: () => {},
+    runPi: () => {},
     ui: silentUI,
     ensureRumdl: async () => {
       calls.push("rumdl");
@@ -453,6 +460,38 @@ test("the prewarm step reports that prewarm ran, not that the daemon was swapped
   expect(ui.events).toContain("settled:Ran the fresh build's prewarm");
 });
 
+test("an install into pi closes by asking for a pi /reload", async () => {
+  const ui = recordingUI();
+  await runInstallSubcommand(PLAIN_INSTALL, {
+    detect: () => ["pi"],
+    isInteractive: () => false,
+    ui,
+    ...recordingRunners([]),
+    ensureRumdl: noRumdl,
+  });
+  expect(ui.events).toContain("outro:caret is installed in pi. Run /reload in pi, or restart it.");
+});
+
+test("an uninstall names all three agents as a list", async () => {
+  const ui = recordingUI();
+  await runInstallSubcommand({ uninstall: true, dryRun: false }, { ui, ...recordingRunners([]) });
+  expect(ui.events).toContain("outro:caret removed from Claude Code, OpenCode, and pi.");
+});
+
+test("a failing pi target stops the run", async () => {
+  const ui = recordingUI();
+  const outcome = await runInstallSubcommand(PLAIN_INSTALL, {
+    detect: () => ["pi"],
+    isInteractive: () => false,
+    ui,
+    ...recordingRunners([]),
+    runPi: () => false,
+    ensureRumdl: noRumdl,
+  });
+  expect(outcome).toBe("failed");
+  expect(ui.events).toContain("outro:Stopped — pi was not set up. Nothing further was run.");
+});
+
 test("a dry run closes by saying nothing was changed", async () => {
   const ui = recordingUI();
   await runInstallSubcommand({ uninstall: false, dryRun: true }, { ...CLAUDE_ONLY, ui });
@@ -560,6 +599,7 @@ test("--refresh leaves the service a root at the installing caret that outlives 
     CARET_CONFIG_FILE: join(stateHome, "config.toml"),
     CLAUDE_CONFIG_DIR: claudeDir,
     XDG_CACHE_HOME: await mkdtemp(join(tmpdir(), "caret-install-cache-")),
+    HOME: await mkdtemp(join(tmpdir(), "caret-install-home-")),
   };
   const install = (refresh: boolean) => {
     const service = fakeServiceTarget({ status: { installed: true } });

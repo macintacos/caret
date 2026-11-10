@@ -18,6 +18,7 @@ import {
   resolveLocalCheckout,
 } from "@/commands/install/local.ts";
 import { runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
+import { runInstallPiTarget } from "@/commands/install/pi.ts";
 import {
   type AskedServiceChoice,
   promptForServiceChoice,
@@ -41,13 +42,14 @@ import { ensureRumdl, RUMDL_VERSION } from "@/plan/rumdl.ts";
 
 /** Injection seam for tests: override detection, the chooser, the service question,
  * TTY-ness, each target runner, and — through ServiceStepDeps — the supervisor, to assert
- * selection and dispatch without touching a real config dir, the `claude` CLI, launchd,
- * or a terminal. */
+ * selection and dispatch without touching a real config dir, the `claude` or `pi` CLI,
+ * launchd, or a terminal. */
 export interface InstallDeps extends ServiceStepDeps {
   /** A runner returns false to report "this target failed" (it has already said why);
    * returning nothing means it got through. */
   runOpencode?: (opts: TargetOpts, deps: { ui: InstallUI }) => unknown;
   runClaude?: (opts: TargetOpts, deps: { ui: InstallUI }) => unknown;
+  runPi?: (opts: TargetOpts, deps: { ui: InstallUI }) => unknown;
   detect?: () => InstallTarget[];
   prompt?: (detected: InstallTarget[]) => Promise<InstallTarget[] | null>;
   promptService?: () => Promise<AskedServiceChoice | null>;
@@ -72,8 +74,8 @@ interface TargetOpts {
    * so that target always updates and has no prompt to pre-answer. */
   refresh: boolean;
   /** Set by `--from-local`: install this checkout rather than the published caret. Only
-   * the Claude target reads it — OpenCode's command files already resolve to the running
-   * binary, so installing from a local caret is local by construction. */
+   * the Claude and pi targets read it — OpenCode's command files already resolve to the
+   * running binary, so installing from a local caret is local by construction. */
   local?: LocalInstall;
 }
 
@@ -121,6 +123,7 @@ export async function runInstallSubcommand(
 
   const runOpencode = deps.runOpencode ?? runInstallOpencodeTarget;
   const runClaude = deps.runClaude ?? runInstallClaudeTarget;
+  const runPi = deps.runPi ?? runInstallPiTarget;
   const targetOpts = {
     uninstall: opts.uninstall,
     dryRun: opts.dryRun,
@@ -136,6 +139,9 @@ export async function runInstallSubcommand(
           break;
         case "claude":
           ok = await runClaude(targetOpts, { ui });
+          break;
+        case "pi":
+          ok = await runPi(targetOpts, { ui });
           break;
         // Exhaustive on purpose: a new registry descriptor without a runner here is a
         // type error, not a silent install into the wrong agent.
@@ -267,7 +273,7 @@ function closingLine(
   opts: { uninstall: boolean; dryRun: boolean },
   local = false,
 ): string {
-  const names = targets.map(targetLabel).join(" and ");
+  const names = new Intl.ListFormat("en", { type: "conjunction" }).format(targets.map(targetLabel));
   if (opts.dryRun) return `Dry run complete — nothing was changed.`;
   if (opts.uninstall) return `caret removed from ${names}.`;
   const restart = targets.includes("opencode")
@@ -279,7 +285,8 @@ function closingLine(
     local && targets.includes("claude")
       ? " Run /reload-plugins (or restart Claude Code) to pick it up."
       : "";
-  return `caret${local ? " (local build)" : ""} is installed in ${names}.${reload}${restart}`;
+  const piReload = targets.includes("pi") ? " Run /reload in pi, or restart it." : "";
+  return `caret${local ? " (local build)" : ""} is installed in ${names}.${reload}${restart}${piReload}`;
 }
 
 /** Resolve which agents to act on. `null` means "do nothing" — the user cancelled the

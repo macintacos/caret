@@ -37,8 +37,17 @@ test("detectTargets finds OpenCode from an existing config dir with no command",
   expect(detectTargets(probe([], [opencodeConfigDir()]))).toEqual(["opencode"]);
 });
 
-test("detectTargets reports both agents in registry order", () => {
-  expect(detectTargets(probe(["opencode", "claude"]))).toEqual([...INSTALL_TARGET_IDS]);
+test("detectTargets finds pi from the `pi` command", () => {
+  expect(detectTargets(probe(["pi"]))).toEqual(["pi"]);
+});
+
+test("a pi agent dir without the `pi` command doesn't count", () => {
+  const everyPath: DetectProbe = { hasCommand: (n) => n !== "pi", hasPath: () => true };
+  expect(detectTargets(everyPath)).not.toContain("pi");
+});
+
+test("detectTargets reports every agent in registry order", () => {
+  expect(detectTargets(probe(["opencode", "claude", "pi"]))).toEqual([...INSTALL_TARGET_IDS]);
 });
 
 test("detectTargets reports nothing when neither agent is present", () => {
