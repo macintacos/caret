@@ -3,6 +3,7 @@
 // pi/ modules, and ../opencode/review-bridge.ts — and nothing it reaches may use bun's
 // runtime API, since pi runs on Node.
 
+import { writeSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,6 +19,8 @@ import {
   type SpawnRunner,
   warmCaret,
 } from "../opencode/review-bridge.ts";
+import { DEMO_TEMPLATE, type DemoApi, installDemo } from "./demo.ts";
+import { type DoctorApi, installDoctor } from "./doctor.ts";
 import { installNotice, type NoticeApi } from "./notice.ts";
 import { installPlanning, type PlanningApi } from "./plan.ts";
 import { reviewStore } from "./state.ts";
@@ -34,7 +37,9 @@ export type PiNotifyContext = {
 
 /** The slice of pi's extension API caret calls; pinned by test/pi/sdk-conformance.ts. */
 export type PiApi = PlanningApi &
-  NoticeApi & {
+  NoticeApi &
+  DemoApi &
+  DoctorApi & {
     registerTool(tool: PiTool): void;
     on(event: "session_start", handler: (event: unknown, ctx: PiNotifyContext) => void): void;
     on(event: "session_shutdown", handler: () => void): void;
@@ -43,7 +48,7 @@ export type PiApi = PlanningApi &
 export interface CaretHost {
   version: string;
   /** This copy's module URL: its identity against other installed copies, and the base
-   * `../bin/caret` resolves against. */
+   * `../bin/caret` and the demo template resolve against. */
   entryUrl: string;
   /** globalThis in production: survives `/reload`, which loads a fresh module instance. */
   holder: Record<symbol, unknown>;
@@ -55,6 +60,8 @@ export interface CaretHost {
   warm: (bin: string) => void;
   /** Starts `caret band-link` detached. */
   spawn: DetachedSpawn;
+  /** Writes to the real stdout, for print mode's report. */
+  stdout: (text: string) => void;
 }
 
 const OWNER = Symbol.for("caret.pi.owner");
@@ -74,11 +81,12 @@ function notifyOnce(pi: PiApi, holder: Record<symbol, unknown>, message: string)
   });
 }
 
-/** Registers the review tool, the planning mode, and the pending-plan notice unless pi is
- * below PI_FLOOR or another installed copy already owns `Symbol.for("caret.pi.owner")`.
- * The owner is keyed by `entryUrl`, which differs between installed copies and is stable
- * across `/reload`. It is released on `session_shutdown` so a surviving copy takes over
- * after the owner is removed. Either refusal warns once per process. */
+/** Registers the review tool, the planning mode, the pending-plan notice, and the
+ * `/caret:*` commands unless pi is below PI_FLOOR or another installed copy already owns
+ * `Symbol.for("caret.pi.owner")`. The owner is keyed by `entryUrl`, which differs between
+ * installed copies and is stable across `/reload`. It is released on `session_shutdown`
+ * so a surviving copy takes over after the owner is removed. Either refusal warns once
+ * per process. */
 export function installCaret(pi: PiApi, host: CaretHost): void {
   const { version, entryUrl, holder, env, run } = host;
   if (!meetsFloor(version)) {
@@ -111,6 +119,11 @@ export function installCaret(pi: PiApi, host: CaretHost): void {
     warm: () => host.warm(bin),
   });
   installNotice(pi, { store, bin, spawn: host.spawn });
+  installDemo(pi, {
+    templatePath: fileURLToPath(new URL(DEMO_TEMPLATE, entryUrl)),
+    isPlanning: (id) => store.get(id).planning,
+  });
+  installDoctor(pi, { bin, run, env, stdout: host.stdout });
 }
 
 export default function caret(pi: PiApi): void {
@@ -123,5 +136,9 @@ export default function caret(pi: PiApi): void {
     agentDir: getAgentDir(),
     warm: (bin) => warmCaret(bin, "pi"),
     spawn: detachedSpawnWith({ CARET_AGENT: "pi" }),
+    // ponytail: fd 1, not process.stdout, since print mode reroutes process.stdout.write
+    // to stderr. A non-blocking stdout can throw EAGAIN on a report past the pipe buffer;
+    // retry as pi's own raw writer does if reports grow.
+    stdout: (text) => writeSync(1, text),
   });
 }

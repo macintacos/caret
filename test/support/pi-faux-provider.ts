@@ -61,7 +61,8 @@ function planningStep(messages: Message[], plan: string) {
 }
 
 /** `steer check` serves driving pi by hand with this provider: it replies whether the
- * planning steer reaches the model. A planning run follows planningStep; otherwise the
+ * planning steer reaches the model. `doctor check` replies whether any message the model
+ * receives mentions `caret doctor`. A planning run follows planningStep; otherwise the
  * first call submits a plan, and after a tool result the model echoes its text so pi's
  * output shows what it received. */
 const step: FauxResponseFactory = (context) => {
@@ -70,6 +71,13 @@ const step: FauxResponseFactory = (context) => {
   );
   if (lastUser && textOf(lastUser).trim() === "steer check") {
     return fauxAssistantMessage(fauxText(`steer: ${hasSteer(context.messages) ? "yes" : "no"}`));
+  }
+  if (lastUser && textOf(lastUser).trim() === "doctor check") {
+    return fauxAssistantMessage(
+      fauxText(
+        `doctor in context: ${context.messages.some((m) => textOf(m).includes("caret doctor")) ? "yes" : "no"}`,
+      ),
+    );
   }
   const plan = planPath(context.messages);
   if (plan) return planningStep(context.messages, plan);

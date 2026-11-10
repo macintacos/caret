@@ -142,10 +142,11 @@ export interface PiRun {
   output: Promise<{ stdout: string; stderr: string; exit: number }>;
 }
 
-/** Runs pi under the faux model in its own process group, so stopPiTree can signal the whole tree. */
-export function runPi(sandbox: PiSandbox, prompt: string): PiRun {
+/** Runs `prompts` in order, in one pi session under the faux model, in its own process
+ * group, so stopPiTree can signal the whole tree. */
+export function runPi(sandbox: PiSandbox, ...prompts: string[]): PiRun {
   const proc = Bun.spawn(
-    [PI_BIN, "-p", "--provider", "faux", "--model", "faux-1", "-e", FAUX_EXTENSION, prompt],
+    [PI_BIN, "-p", "--provider", "faux", "--model", "faux-1", "-e", FAUX_EXTENSION, ...prompts],
     {
       cwd: sandbox.cwd,
       env: sandbox.env,
