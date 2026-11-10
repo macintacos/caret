@@ -1,5 +1,5 @@
 // The pending-plan notice above pi's editor, the `caret` footer status, and the `/caret`
-// command and ctrl+alt+c shortcut that open the waiting review. Colours come only from
+// command and f8 shortcut that open the waiting review. Colours come only from
 // pi's theme.
 
 import { type Component, MouseRegion, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
@@ -7,7 +7,7 @@ import { type Component, MouseRegion, truncateToWidth, visibleWidth } from "@ear
 import type { DetachedSpawn } from "../bridge/review-bridge.ts";
 import { footerText, type ReviewStore, type SessionReview } from "./state.ts";
 
-export const OPEN_KEY = "ctrl+alt+c";
+export const OPEN_KEY = "f8";
 const NEWS = "plan waiting for your review";
 const VERB = "open in browser";
 const RPC_LINE = `^ caret  ${NEWS}   /caret ${VERB}`;

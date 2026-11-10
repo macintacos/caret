@@ -170,7 +170,8 @@ to the directory holding that binary. Docs under the old `@mariozechner` name ar
 ## Known gaps
 
 - Not covered live: the approve-with-notes rows and `Esc` cancel.
-- `ctrl+alt+c` is hand-checked only; no test drives a real terminal (EXC-2316).
+- `f8` is hand-checked only, with the key injected by `rex send-key`; no test drives a
+  real terminal (EXC-2316).
 - Extension filters in pi's settings aren't evaluated against globs
   (`src/adapters/pi/install.ts`).
 - Print mode `pi -p "/caret:plan …"` can exit before the follow-up runs
