@@ -68,6 +68,14 @@ test("a browser that chose source is moved to preview and told once", async ({ p
   await expect
     .poll(async () => (await notice(page).boundingBox())?.y ?? 0)
     .toBeGreaterThan(toggleBox?.y ?? Number.POSITIVE_INFINITY);
+  const nubBox = await notice(page).locator("[data-slot=popover-arrow]").boundingBox();
+  const panelBox = await notice(page).boundingBox();
+  if (!(toggleBox && nubBox && panelBox)) throw new Error("notice, nub or Source has no box");
+  const nubCentre = nubBox.x + nubBox.width / 2;
+  expect(nubCentre).toBeGreaterThan(toggleBox.x);
+  expect(nubCentre).toBeLessThan(toggleBox.x + toggleBox.width);
+  expect(nubBox.y).toBeGreaterThanOrEqual(toggleBox.y + toggleBox.height);
+  expect(nubBox.y + nubBox.height).toBeLessThanOrEqual(panelBox.y + 0.5);
 
   await page.reload();
   await ready(page);
