@@ -306,6 +306,9 @@ export async function runReview(parsed: ParsedHookInput, deps: ReviewDeps): Prom
       }
     }
     const msg = errorMessage(err);
-    return denyDecision(`caret: ${msg} — denying so no unreviewed plan ships. See ${logFile()}.`);
+    return {
+      ...denyDecision(`caret: ${msg} — denying so no unreviewed plan ships. See ${logFile()}.`),
+      failsafe: true,
+    };
   }
 }

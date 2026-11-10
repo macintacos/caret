@@ -88,7 +88,12 @@ export function fatalDeny(reason: string): string {
   }
   if (adapter) {
     try {
-      return adapter.emitDecision({ behavior: "deny", feedback: reason, decidedAt: Date.now() });
+      return adapter.emitDecision({
+        behavior: "deny",
+        feedback: reason,
+        failsafe: true,
+        decidedAt: Date.now(),
+      });
     } catch {
       // The adapter loaded but emitDecision threw — use its dependency-free line.
     }

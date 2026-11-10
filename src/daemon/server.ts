@@ -420,6 +420,7 @@ function expiredDeny(): Decision {
   return {
     behavior: "deny",
     feedback: "caret: this review expired before a decision; denying so no unreviewed plan ships.",
+    failsafe: true,
     decidedAt: Date.now(),
   };
 }

@@ -146,6 +146,9 @@ export interface Decision {
    * behavior === "allow". The adapter interprets the token; the core stores and
    * transports it verbatim. */
   acceptMode?: ApproveVariantId;
+  /** Set on a deny caret made because the review could not run or reach a decision;
+   * never on a reviewer's decision or a plan rejection. */
+  failsafe?: true;
   decidedAt: number;
 }
 

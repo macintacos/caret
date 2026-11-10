@@ -66,5 +66,9 @@ test("denyDecision produces a deny decision carrying the reason", () => {
 });
 
 test("fatalDenyLine is a dependency-free deny wire line", () => {
-  expect(JSON.parse(fatalDenyLine("boom"))).toEqual({ behavior: "deny", feedback: "boom" });
+  expect(JSON.parse(fatalDenyLine("boom"))).toEqual({
+    behavior: "deny",
+    feedback: "boom",
+    failsafe: true,
+  });
 });
