@@ -407,7 +407,8 @@ Every unit runs `$XDG_STATE_HOME/caret/bin/caret daemon`. That file is
 `bin/caret-launcher`, which chooses what to run each time it starts:
 
 - **caret** — the version a `--from-local` build pinned, else the newest one installed
-  across Claude Code's plugin cache, OpenCode's package cache, and caret's own copy at
+  across Claude Code's plugin cache, OpenCode's package cache, pi's npm folder
+  (`~/.pi/agent/npm`, the default agent dir only), and caret's own copy at
   `~/.local/state/caret/roots/`. A published `caret install` keeps that copy of itself, so
   after `--refresh` the service runs it until something newer is installed — usually
   OpenCode's next start, which re-resolves its cache. An agent's copy wins a version tie.

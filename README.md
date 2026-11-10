@@ -35,7 +35,8 @@ Assuming that you installed it as a long-lived service (the default), you can na
 
 After installing:
 
-1. **Restart the agent.** OpenCode installs the plugin package on its next start.
+1. **Restart the agent.** OpenCode installs the plugin package on its next start; in pi,
+   run `/reload` or restart it.
 2. **Run `/caret:demo`.** It presents a short demo plan that points at files in the repo
    you run it from, so you can exercise the whole flow before a real one arrives.
 3. **Run `/caret:plan <what you want done>`** to plan a real change and review it in
@@ -83,7 +84,8 @@ check = false
 loads caret but can't review a plan file the agent wrote, so the agent sends the plan text
 instead. See [the OpenCode adapter](doc/ARCHITECTURE.md#the-opencode-adapter) for the
 by-hand equivalents, for pinning a version in OpenCode's plugin array (`plugin` on v1,
-`plugins` on v2), and for what each agent's install touches;
+`plugins` on v2), and for what each agent's install touches; `caret install` also targets
+pi 1.5.0 or later when `pi` is on your PATH;
 [the Claude Code adapter](doc/ARCHITECTURE.md#the-claude-code-adapter) covers the hooks
 `caret` registers there.
 

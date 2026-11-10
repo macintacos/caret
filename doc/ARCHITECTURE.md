@@ -62,9 +62,9 @@ What starts a daemon decides how long it stays up. There are three ways:
 The service never names a caret build. Its unit runs the launcher, `bin/caret-launcher`,
 copied to `$XDG_STATE_HOME/caret/bin/caret`, which picks caret each time it starts: the
 checkout a `--from-local` install pinned, else the highest-versioned caret across the
-Claude Code plugin cache, the OpenCode package cache, and caret's own copies under
-`$XDG_STATE_HOME/caret/roots/` (an agent's root wins a tie). Nothing in the unit depends
-on the version, so restarting the service is the upgrade.
+Claude Code plugin cache, the OpenCode package cache, pi's npm folder, and caret's own
+copies under `$XDG_STATE_HOME/caret/roots/` (an agent's root wins a tie). Nothing in the
+unit depends on the version, so restarting the service is the upgrade.
 
 Every review and prewarm hook first makes sure a current daemon holds the port
 (`ensureDaemon`, `src/daemon/lifecycle.ts`):
@@ -142,7 +142,7 @@ the shipped Claude plugin keeps working unchanged.
 | **Claude Code** — `src/adapters/claude/` | `claude` (the default) | Five hooks; the `PermissionRequest`/`ExitPlanMode` one intercepts the plan. The plugin also serves a `review_plan` MCP tool (`caret mcp`) | The `caret@caret` plugin, from caret's own marketplace | Stable (default) |
 | **OpenCode** — `src/adapters/opencode/` | `opencode` | An in-process plugin registering a `caret_review_plan` tool — OpenCode has no plan hook to intercept | The `@macintacos/caret` npm package, plus its own installer | Stable |
 | **Codex CLI** — `src/adapters/codex/` | `codex` | A `PermissionRequest` hook | Nothing — no installer, no hook manifests | Provisional, default-off |
-| **pi** — `src/adapters/pi/` | `pi` | An extension bridging to `caret review` over the caret-owned envelope | The `@macintacos/caret` npm package's `pi` manifest (`pi install`); no caret installer yet | Provisional, default-off |
+| **pi** — `src/adapters/pi/` | `pi` | An extension bridging to `caret review` over the caret-owned envelope | The `@macintacos/caret` npm package's `pi` manifest (`pi install`); `caret install`'s pi target runs `pi install`/`pi update`/`pi remove` | Provisional, default-off |
 
 > [!WARNING]
 > The Codex adapter's wire contract is modeled from Codex documentation and has never been
@@ -366,14 +366,14 @@ rm -rf ~/.cache/opencode/npm/@macintacos/caret@*
 > reloads the stale copy from one of them.
 
 `caret install` picks the agents for you: it detects which agents you have (`claude` on
-your PATH; `opencode` on your PATH or an existing OpenCode config dir) and asks which to
-install into, with the detected ones pre-checked. Off a terminal — CI, a pipe — it never
-waits on that prompt: it installs into every agent it detected, or into Claude Code when
-it detected none, and says which. `--dry-run` previews that same choice rather than
-asking. `--uninstall` makes no choice at all: it removes caret from every agent in the
-registry, because the machine-wide service it tears down alongside them belongs to no one
-agent. One more flag, `--from-local`, is dev-only: it installs the caret checkout the
-binary was built in rather than the published one — see
+your PATH; `opencode` on your PATH or an existing OpenCode config dir; `pi` on your PATH)
+and asks which to install into, with the detected ones pre-checked. Off a terminal — CI, a
+pipe — it never waits on that prompt: it installs into every agent it detected, or into
+Claude Code when it detected none, and says which. `--dry-run` previews that same choice
+rather than asking. `--uninstall` makes no choice at all: it removes caret from every
+agent in the registry, because the machine-wide service it tears down alongside them
+belongs to no one agent. One more flag, `--from-local`, is dev-only: it installs the caret
+checkout the binary was built in rather than the published one — see
 [Development](DEVELOPMENT.md#development). Every install (but not `--uninstall`) finishes
 by acquiring the rumdl plan formatter — it is part of installing caret, not a step of its
 own — see
