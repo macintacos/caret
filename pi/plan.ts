@@ -169,8 +169,6 @@ export function installPlanning(pi: PlanningApi, deps: PlanningDeps): void {
     };
   });
 
-  // Reads the call's own outcome, not the store's lastOutcome: a path that fails to
-  // resolve returns before the tool writes it, leaving an earlier approval there.
   pi.on("tool_result", (event, ctx) => {
     if (event.toolName !== REVIEW_TOOL || !reviewsWhilePlanning.delete(event.toolCallId)) return;
     if ((event.details as { state?: unknown } | undefined)?.state === "approved") {

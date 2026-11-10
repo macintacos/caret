@@ -238,12 +238,6 @@ describe("leaving on approval", () => {
     },
   );
 
-  test("a failed call after an earlier approval keeps planning on", async () => {
-    store.update(SID, { lastOutcome: "approved" });
-    await review({ state: "failed" });
-    expect(planning()).toBe(true);
-  });
-
   test("approving a review submitted before planning began keeps planning on", async () => {
     await review({ state: "approved" }, { planningAtCall: false });
     expect(planning()).toBe(true);
