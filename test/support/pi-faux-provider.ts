@@ -14,9 +14,11 @@ export const FAUX_PLAN_TITLE = "Live check plan";
 /** First call submits a plan; after a tool result, echo its text so pi's output shows
  * what the model received. */
 const step: FauxResponseFactory = (context) => {
-  const last = context.messages.at(-1);
-  if (last?.role === "toolResult") {
-    const text = last.content.flatMap((c) => (c.type === "text" ? [c.text] : [])).join("\n");
+  const lastMessage = context.messages.at(-1);
+  if (lastMessage?.role === "toolResult") {
+    const text = lastMessage.content
+      .flatMap((part) => (part.type === "text" ? [part.text] : []))
+      .join("\n");
     return fauxAssistantMessage(fauxText(text));
   }
   return fauxAssistantMessage(

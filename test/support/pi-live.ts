@@ -65,10 +65,10 @@ function bundleArgv(outdir: string): string[] {
 export function packCaret(root: string): string {
   const stage = join(root, "stage");
   const packDir = join(root, "pack");
-  const pkgParent = join(root, "pkg");
+  const unpackDir = join(root, "pkg");
   mkdirSync(stage);
   mkdirSync(packDir);
-  mkdirSync(pkgParent);
+  mkdirSync(unpackDir);
   cpSync(join(REPO_ROOT, "package.json"), join(stage, "package.json"));
   for (const entry of pkg.files.map((f) => f.replace(/\/$/, ""))) {
     if (entry === "dist" || entry === "ui/dist") continue;
@@ -79,13 +79,16 @@ export function packCaret(root: string): string {
     cpSync(src, dst, { recursive: true });
   }
   run(bundleArgv(join(stage, "dist")), { cwd: REPO_ROOT });
-  const packed = run(["npm", "pack", "--ignore-scripts", "--json", "--pack-destination", packDir], {
-    cwd: stage,
-    env: { ...process.env, npm_config_update_notifier: "false" },
-  });
-  const tgz = join(packDir, JSON.parse(packed)[0].filename);
-  run(["tar", "-xzf", tgz, "-C", pkgParent]);
-  return join(pkgParent, "package");
+  const packReport = run(
+    ["npm", "pack", "--ignore-scripts", "--json", "--pack-destination", packDir],
+    {
+      cwd: stage,
+      env: { ...process.env, npm_config_update_notifier: "false" },
+    },
+  );
+  const tgz = join(packDir, JSON.parse(packReport)[0].filename);
+  run(["tar", "-xzf", tgz, "-C", unpackDir]);
+  return join(unpackDir, "package");
 }
 
 export interface PiSandbox {
