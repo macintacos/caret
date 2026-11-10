@@ -8,6 +8,7 @@ import type { InstallProbe } from "@/adapters/adapter.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
 
 const CARET_PACKAGE = "@macintacos/caret";
+export const CARET_NPM_SOURCE = "npm:@macintacos/caret";
 const NPM_SOURCE = /^npm:@macintacos\/caret(@[^/]+)?$/;
 
 /** pi's user `settings.json`; `packages` is the one key caret interprets. */
@@ -50,10 +51,7 @@ export function readPiInstallState(agentDir: string, home = homedir()): InstallP
   const entry = caretEntries(settings.packages, { agentDir, home })[0];
   return {
     pluginVersion: entry?.version ?? "unknown",
-    // ponytail: extension filters (`!glob`, `-path`) aren't evaluated against
-    // caret's extension manifest — any non-empty filter counts as enabled;
-    // evaluate globs if a user hits a false "enabled".
-    pluginEnabled: entry !== undefined && !isEmptyArray(entry.extensions),
+    pluginEnabled: entry !== undefined && !filtersOutExtensions(entry),
     hookInUserSettings: false,
   };
 }
@@ -125,6 +123,16 @@ function manifestVersion(manifest: unknown): string | null {
   return typeof version === "string" ? version : null;
 }
 
-function isEmptyArray(value: unknown): boolean {
-  return Array.isArray(value) && value.length === 0;
+/** Whether `entry`'s filter keeps pi from loading caret's extension. */
+export function filtersOutExtensions(entry: PiCaretEntry): boolean {
+  // ponytail: extension filters (`!glob`, `-path`) aren't evaluated against
+  // caret's extension manifest — any non-empty filter counts as enabled;
+  // evaluate globs if a user hits a false "enabled".
+  return Array.isArray(entry.extensions) && entry.extensions.length === 0;
+}
+
+/** The argument `pi remove` takes for `entry`. */
+export function piRemoveArg(entry: PiCaretEntry): string {
+  // `pi remove` resolves a path against the cwd, so a local entry goes by its resolved dir.
+  return entry.form === "npm" ? entry.source : entry.dir;
 }

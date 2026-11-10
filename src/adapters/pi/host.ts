@@ -6,6 +6,8 @@ import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
 /** The first release published as pi (`@earendil-works`) that caret supports. */
 export const PI_FLOOR = "1.5.0";
 
+export const PI_PACKAGE = "@earendil-works/pi-coding-agent";
+
 /** Runs `argv` and reports its exit code (null when killed) and stdout. May throw. */
 export type VersionSpawn = (argv: readonly string[]) => { exitCode: number | null; stdout: string };
 
