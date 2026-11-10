@@ -6,8 +6,8 @@ import { render } from "@ui/support/mount.ts";
 import ModalPresenceFixture from "@/components/ModalPresence-fixture.svelte";
 
 const surface = (target: HTMLElement) => target.querySelector(".surface");
-const click = (target: HTMLElement, cls: string) =>
-  target.querySelector<HTMLButtonElement>(cls)?.click();
+const click = (target: HTMLElement, selector: string) =>
+  target.querySelector<HTMLButtonElement>(selector)?.click();
 
 test("an open surface survives a change to an unrelated field of the host's record", () => {
   const { target, flush } = render(ModalPresenceFixture, {});
