@@ -6,7 +6,6 @@
 // it. Its imports are node builtins and review-bridge.ts only, so loading it never
 // evaluates either host's SDK; test/structure/dependency-placement.test.ts holds it there.
 
-import { spawn } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
@@ -23,6 +22,7 @@ import {
   resolvePlanSource,
   runReviewViaCaret,
   type SpawnRunner,
+  warmCaret,
 } from "./review-bridge.ts";
 
 export {
@@ -298,21 +298,8 @@ export function planningSteer(plansDir: string): string {
  * unit-testable without spawning a process. */
 export type WarmRunner = (bin: string) => void;
 
-/** Production warm: `caret prewarm`, detached and unref'd so it never holds up the
- * turn. Output is discarded — the child logs to caret.log. CARET_AGENT rides along
- * because this spawn is what stands the daemon up and the daemon picks its adapter
- * from that env; the 'error' handler is mandatory because spawn emits 'error'
- * ASYNCHRONOUSLY (ENOENT on a bad bin), where the hook's synchronous try/catch
- * cannot see it and an unhandled event would take OpenCode's whole process down. */
-export const nodeWarmRunner: WarmRunner = (bin) => {
-  const child = spawn(bin, ["prewarm"], {
-    stdio: "ignore",
-    detached: true,
-    env: { ...process.env, CARET_AGENT: "opencode" },
-  });
-  child.on("error", () => {});
-  child.unref();
-};
+/** Production warm, as the OpenCode adapter. */
+export const nodeWarmRunner: WarmRunner = (bin) => warmCaret(bin, "opencode");
 
 export function pathArgDescription(plansDir: string): string {
   return `Preferred. A markdown (.md) file holding the complete plan, absolute or relative to the session directory. (OpenCode's plan agent writes its plan files in ${plansDir}/.)`;

@@ -8,6 +8,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -184,12 +185,31 @@ export function waitForReview(
   }, ms);
 }
 
-/** pi's session id: the `<sessionId>` in the one `*.jsonl` under `<agentDir>/sessions`. */
+/** The one `*.jsonl` under `<agentDir>/sessions` and the `<sessionId>` its name carries;
+ * throws with the listing unless there is exactly one. */
+function piSessionFile(sandbox: PiSandbox): { path: string; id: string } {
+  const sessions = join(sandbox.agentDir, "sessions");
+  const files = readdirSync(sessions, { recursive: true }).map(String);
+  const sessionFiles = files.flatMap((f) => {
+    const id = f.match(/_([0-9a-f-]{36})\.jsonl$/)?.[1];
+    return id ? [{ path: join(sessions, f), id }] : [];
+  });
+  if (sessionFiles.length !== 1)
+    throw new Error(`expected one pi session file, found: ${files.join(", ")}`);
+  return sessionFiles[0] as { path: string; id: string };
+}
+
+/** pi's session id. */
 export function piSessionId(sandbox: PiSandbox): string {
-  const files = readdirSync(join(sandbox.agentDir, "sessions"), { recursive: true }).map(String);
-  const ids = files.flatMap((f) => f.match(/_([0-9a-f-]{36})\.jsonl$/)?.[1] ?? []);
-  if (ids.length !== 1) throw new Error(`expected one pi session file, found: ${files.join(", ")}`);
-  return ids[0] as string;
+  return piSessionFile(sandbox).id;
+}
+
+/** The parsed entries of pi's session file, one per JSONL line. */
+export function piSessionEntries(sandbox: PiSandbox): unknown[] {
+  return readFileSync(piSessionFile(sandbox).path, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
 }
 
 /** PIDs whose command line names `root` (`pgrep -f root`). */

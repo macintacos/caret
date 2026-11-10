@@ -1,11 +1,11 @@
 // The bridge from an agent's plan-review tool to `caret review`, shared by the OpenCode
 // plugin, `caret mcp` and pi's extension: resolve the plan and the caret binary, build
-// caret's review envelope, spawn the review, and turn the flat decision it prints into the
-// tool's result text. It stays in opencode/ because that directory already ships as
-// unbundled source each host reaches by relative import; moving it would churn OpenCode's
-// packaging for no gain. It imports node builtins only, so bundling it into the CLI pulls
-// in no plugin SDK. It also holds PLAN_TITLE_INSTRUCTION, since this is the one module the
-// hosts, `caret mcp` and `caret steer` can all import.
+// caret's review envelope, warm the daemon, spawn the review, and turn the flat decision
+// it prints into the tool's result text. It stays in opencode/ because that directory
+// already ships as unbundled source each host reaches by relative import; moving it would
+// churn OpenCode's packaging for no gain. It imports node builtins only, so bundling it
+// into the CLI pulls in no plugin SDK. It also holds PLAN_TITLE_INSTRUCTION, since this is
+// the one module the hosts, `caret mcp` and `caret steer` can all import.
 
 import { spawn } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
@@ -326,6 +326,22 @@ export async function runReviewViaCaret(
     const message = e instanceof Error ? e.message : String(e);
     return failsafeDeny(`caret: review failed to run (${message}) — denying to fail safe.`);
   }
+}
+
+/** Warms the caret daemon: `caret prewarm`, detached and unref'd so it never holds up
+ * the turn. Output is discarded — the child logs to caret.log. CARET_AGENT rides along
+ * because this spawn is what stands the daemon up and the daemon picks its adapter
+ * from that env; the 'error' handler is mandatory because spawn emits 'error'
+ * ASYNCHRONOUSLY (ENOENT on a bad bin), where a caller's synchronous try/catch
+ * cannot see it and an unhandled event would take the host's whole process down. */
+export function warmCaret(bin: string, agent: string): void {
+  const child = spawn(bin, ["prewarm"], {
+    stdio: "ignore",
+    detached: true,
+    env: { ...process.env, CARET_AGENT: agent },
+  });
+  child.on("error", () => {});
+  child.unref();
 }
 
 /** Production runner: spawn `command[0]` with the rest of the argv. stderr is

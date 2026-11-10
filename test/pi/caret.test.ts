@@ -19,21 +19,26 @@ function fakePi() {
   const tools: PiTool[] = [];
   const handlers: Record<string, ((...args: unknown[]) => void)[]> = {};
   const notices: Notice[] = [];
-  const ctx: PiNotifyContext = {
+  const commands: string[] = [];
+  const ctx: PiNotifyContext & { sessionManager: { getSessionId(): string; getBranch(): [] } } = {
     ui: { notify: (message, type) => notices.push({ message, type }) },
+    sessionManager: { getSessionId: () => "s", getBranch: () => [] },
   };
   const pi = {
     registerTool: (tool: PiTool) => tools.push(tool),
+    registerCommand: (name: string) => commands.push(name),
+    appendEntry: () => {},
+    sendUserMessage: () => {},
     on: (event: string, handler: (...args: unknown[]) => void) => {
       const list = handlers[event] ?? [];
       list.push(handler);
       handlers[event] = list;
     },
-  } as PiApi;
+  } as unknown as PiApi;
   const fire = (event: string) => {
     for (const h of handlers[event] ?? []) h({}, ctx);
   };
-  return { pi, tools, handlers, notices, fire };
+  return { pi, tools, commands, handlers, notices, fire };
 }
 
 const THIS_COPY_URL = "file:///a/pi/caret.ts";
@@ -47,6 +52,8 @@ function host(holder: Record<symbol, unknown>, overrides: Partial<CaretHost> = {
     holder,
     env: {},
     run: stubRunner(ALLOW),
+    agentDir: "/tmp/caret-test-agent",
+    warm: () => {},
     ...overrides,
   };
 }
@@ -118,6 +125,19 @@ test("a second copy stays off and names both paths; the owner can reload", () =>
   const reload = fakePi();
   installCaret(reload.pi, host(holder));
   expect(reload.tools.length).toBe(1);
+});
+
+test("only the owning copy registers /caret:plan", () => {
+  const holder = {};
+  const owner = fakePi();
+  installCaret(owner.pi, host(holder));
+  const second = fakePi();
+  installCaret(second.pi, host(holder, { entryUrl: OTHER_COPY_URL }));
+  const old = fakePi();
+  installCaret(old.pi, host({}, { version: "1.4.9" }));
+  expect(owner.commands).toEqual(["caret:plan"]);
+  expect(second.commands).toEqual([]);
+  expect(old.commands).toEqual([]);
 });
 
 test("the owner's session_shutdown frees the slot for another copy", () => {
