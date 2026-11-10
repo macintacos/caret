@@ -72,8 +72,8 @@ function reason(check: Check): string {
 test.each([
   ["no caret entry", () => join(FIXTURES, "no-entry")],
   ["no settings.json", () => join(tmp, "missing")],
-])("settings with %s run no check, spawn no pi, and fetch nothing", async (_, dir) => {
-  const { checks, called } = await run(dir());
+])("settings with %s run no check, spawn no pi, and fetch nothing", async (_, makeDir) => {
+  const { checks, called } = await run(makeDir());
   expect(checks).toEqual([]);
   expect(called).toEqual({ piVersion: false, published: false });
 });
@@ -88,8 +88,8 @@ function malformedDir(): string {
 test.each([
   ["unreadable", () => join(FIXTURES, "unreadable")],
   ["malformed", malformedDir],
-])("%s settings report every pi check unknown without spawning pi", async (_, dir) => {
-  const { checks, called } = await run(dir());
+])("%s settings report every pi check unknown without spawning pi", async (_, makeDir) => {
+  const { checks, called } = await run(makeDir());
   expect(checks.map((c) => c.id)).toEqual(ALL_IDS);
   expect(checks.every((c) => c.status === "unknown")).toBe(true);
   expect(checks.every((c) => reason(c).includes("settings.json"))).toBe(true);
@@ -123,12 +123,12 @@ const HOST_CASES: {
   { version: { status: "ok", version: "1.5.0" }, status: "pass", detail: ["1.5.0"], remedy: [] },
 ];
 
-test.each(HOST_CASES)("pi-host for $version.status is $status", async (c) => {
-  const { checks } = await run(join(FIXTURES, "npm-entry"), { piVersion: c.version });
+test.each(HOST_CASES)("pi-host for $version.status is $status", async (hostCase) => {
+  const { checks } = await run(join(FIXTURES, "npm-entry"), { piVersion: hostCase.version });
   const host = byId(checks, "pi-host");
-  expect(host.status).toBe(c.status);
-  for (const s of c.detail) expect(host.detail).toContain(s);
-  for (const s of c.remedy) expect(remedy(host)).toContain(s);
+  expect(host.status).toBe(hostCase.status);
+  for (const expected of hostCase.detail) expect(host.detail).toContain(expected);
+  for (const expected of hostCase.remedy) expect(remedy(host)).toContain(expected);
 });
 
 test("several entry faults join into one fail with each remedy named once", async () => {

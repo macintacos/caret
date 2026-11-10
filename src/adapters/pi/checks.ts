@@ -44,8 +44,10 @@ export async function readPiChecks(deps: {
   if (first === undefined) return [];
   const entries: Entries = [first, ...rest];
   const checks = [hostCheck(deps.piVersion()), entryCheck(entries)];
-  const npm = entries.find((e): e is NpmEntry => e.form === "npm");
-  return npm === undefined ? checks : [...checks, versionCheck(npm, await deps.published())];
+  const npmEntry = entries.find((e): e is NpmEntry => e.form === "npm");
+  return npmEntry === undefined
+    ? checks
+    : [...checks, versionCheck(npmEntry, await deps.published())];
 }
 
 /** All three pi checks as unknown: `reason` is why none of them could be decided. */
@@ -76,17 +78,17 @@ function entryCheck(entries: Entries): Check {
     faults.push(
       `pi loads caret ${entries.length} times: ${entries.map((e) => `\`${e.source}\``).join(", ")}`,
     );
-    const removes = entries.map((e) => `\`pi remove ${piRemoveArg(e)}\``).join(" or ");
-    remedies.push(`run \`caret install\` to keep one, or drop the extra with ${removes}`);
+    const removeCommands = entries.map((e) => `\`pi remove ${piRemoveArg(e)}\``).join(" or ");
+    remedies.push(`run \`caret install\` to keep one, or drop the extra with ${removeCommands}`);
   }
-  for (const e of entries) {
-    if (filtersOutExtensions(e)) {
-      faults.push(`\`${e.source}\` filters out caret's extension`);
-      remedies.push(`run \`pi remove ${piRemoveArg(e)}\`, then \`caret install\``);
+  for (const entry of entries) {
+    if (filtersOutExtensions(entry)) {
+      faults.push(`\`${entry.source}\` filters out caret's extension`);
+      remedies.push(`run \`pi remove ${piRemoveArg(entry)}\`, then \`caret install\``);
     }
-    if (e.form === "npm" && e.version === null) {
-      faults.push(notInstalled(e));
-      remedies.push(`run \`pi install ${e.source}\``);
+    if (entry.form === "npm" && entry.version === null) {
+      faults.push(notInstalled(entry));
+      remedies.push(`run \`pi install ${entry.source}\``);
     }
   }
   if (faults.length > 0) {
@@ -98,8 +100,12 @@ function entryCheck(entries: Entries): Check {
     };
   }
   const [only] = entries;
-  const version = only.version === null ? "" : ` ${only.version}`;
-  return { ...ENTRY, status: "pass", detail: `pi loads caret${version} from \`${only.source}\`` };
+  const versionSuffix = only.version === null ? "" : ` ${only.version}`;
+  return {
+    ...ENTRY,
+    status: "pass",
+    detail: `pi loads caret${versionSuffix} from \`${only.source}\``,
+  };
 }
 
 /** Unknown, never fail, when either side can't be read; the missing package is named

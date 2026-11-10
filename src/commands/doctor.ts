@@ -114,8 +114,8 @@ function prodDoctorDeps(s: Settings): DoctorDeps {
  * when that host's config carries no caret entry. Each host degrades to unknown on its
  * own, so one host's unreadable config never hides the other's checks. */
 async function readAdapterChecks(): Promise<Check[]> {
-  const hosts = await Promise.all([readOpencodeAdapterChecks(), readPiAdapterChecks()]);
-  return hosts.flat();
+  const checksByHost = await Promise.all([readOpencodeAdapterChecks(), readPiAdapterChecks()]);
+  return checksByHost.flat();
 }
 
 async function readOpencodeAdapterChecks(): Promise<Check[]> {
