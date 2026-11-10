@@ -130,6 +130,19 @@ Open items first, then the log, newest first.
   paints the waiting plan as an inverse `warning` fill with a 🥕 emoji. Either align it
   with the 2026-11-05 OpenCode decision or record why the two hosts differ.
 
+## 2026-11-10: caret in pi: a blocking review, its own planning mode, and `ctrl+alt+c`
+
+- **The review blocks.** `caret_review_plan` holds the turn until you decide, as on Claude
+  Code and OpenCode. Plannotator, a plan-review extension for pi, went non-blocking only
+  so a user could chat with the agent mid-review, which caret doesn't offer. Blocking is
+  safe because pi has no tool timeout. Esc cancels the waiting review.
+- **caret owns a small planning mode.** pi ships no built-in plan mode by design, so
+  `/caret:plan` adds the minimum: a steer, an `edit`/`write` gate outside the plans
+  folder, and the `^ planning` footer status. caret doesn't gate shell commands; the steer
+  asks the agent not to change files with them, as Plannotator does.
+- **The shortcut is `ctrl+alt+c`.** It opens the waiting review. pi's example plan-mode
+  extension and Plannotator both bind `ctrl+alt+p`, so caret avoids it.
+
 ## 2026-11-10: caret inside pi's TUI: the pending-plan notice
 
 While a review waits, pi shows it in OpenCode's layout, without the frame or card: one row

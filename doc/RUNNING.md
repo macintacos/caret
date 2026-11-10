@@ -118,9 +118,9 @@ like `src/lib/api.ts` — is left alone.
 The `/` list is a **reference** aid: the name becomes part of the feedback the agent
 reads, and caret never runs the skill itself. Which skills appear depends on the agent —
 Claude Code contributes your own, the reviewed project's, and each enabled plugin's;
-OpenCode contributes its commands; codex contributes none, so nothing opens there. The
-list is read once when the review opens, so a skill you add mid-review shows up after a
-reload.
+OpenCode contributes its commands; pi contributes its skills; codex contributes none, so
+nothing opens there. The list is read once when the review opens, so a skill you add
+mid-review shows up after a reload.
 
 ### Seeing what you are about to cite
 
