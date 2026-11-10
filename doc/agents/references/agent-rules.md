@@ -4,8 +4,8 @@
 
 `doc/agents/*.md` holds caret's rules-of-the-road — one file per code area (architecture,
 logging, TypeScript, Svelte, shadcn, plan rendering, testing, icons, settings,
-dependencies, OpenCode, rumdl). They are the substance behind `AGENTS.md`'s router; each
-is concise and scoped to its own area.
+dependencies, OpenCode, pi, rumdl). They are the substance behind `AGENTS.md`'s router;
+each is concise and scoped to its own area.
 
 Adding a new rule file:
 
