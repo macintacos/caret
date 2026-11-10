@@ -104,13 +104,15 @@ The summary for readers outside the adapter is in
 - The gate blocks `edit` and `write` outside the plans folder (`pi/gate.ts`). Path
   containment mirrors pi's resolver, resolves real paths, fails closed, and blocks
   `file://`.
-- Planning ends when a review submitted while planning is approved, or when `/caret:plan`
-  runs with no task.
+- Planning ends when a review of a plan in the plans folder, submitted while planning, is
+  approved, or when `/caret:plan` runs with no task.
 - The state is rebuilt from branch entries on `session_start` and `session_tree`, so a
   fork or a jump to before planning began is not planning. The steer is filtered out of
   context once planning ends.
-- `/caret:demo` refuses to run while planning, because approving the demo would end
-  planning for the real task.
+- `/caret:demo` sends the body of `opencode/commands/demo.md`, with `templates/demo.md` in
+  place of its marker. It refuses to run while planning, because the planning steer would
+  have the demo submitted from the plans folder, and approving it would end planning for
+  the real task.
 
 Non-goals:
 
@@ -142,8 +144,8 @@ look is in [`design/decisions.md`](../../design/decisions.md) and
   with `isError: true`, and the text tells the model to tell the user and not implement.
   The row reads `✕ review failed`.
 - An unresolved `path` returns `resolvePlanSource`'s error, telling the model to write the
-  file or pass `plan` inline, with `isError: true`. It returns before the store records an
-  outcome.
+  file or pass `plan` inline, with `isError: true`. The store records the outcome as
+  `failed`.
 
 ## `/caret:doctor`
 
