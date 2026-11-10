@@ -8,7 +8,12 @@ import type { AgentAdapter } from "@/adapters/adapter.ts";
 import { claudeAdapter } from "@/adapters/claude/index.ts";
 import { codexAdapter } from "@/adapters/codex/index.ts";
 import { opencodeAdapter } from "@/adapters/opencode/index.ts";
-import { permissionRequestDenyLine } from "@/adapters/wire.ts";
+import {
+  flatDecision,
+  flatDenyLine,
+  parseCaretEnvelope,
+  permissionRequestDenyLine,
+} from "@/adapters/wire.ts";
 
 /** The adapter selected when no id is given — the Claude adapter, so the existing
  * Claude plugin packaging keeps working unchanged. */
@@ -31,17 +36,18 @@ const REGISTRY: Record<string, AgentAdapter> = {
   // daemon-side review pipeline is reused unchanged. Both ends of its wire are
   // caret-owned.
   opencode: opencodeAdapter,
-  // Set by caret's own MCP server, never by users. It speaks OpenCode's
-  // caret-owned envelope and flat allow/deny, because a tool result can't change
-  // Claude Code's permission mode — an accept-edits or auto choice is dropped. It
-  // keeps Claude's approve variants, skills and install probe, but `source` on
-  // /api/health reads claude-mcp when this path started the daemon (EXC-1338).
+  // Set by caret's own MCP server, never by users. It speaks the caret-owned
+  // envelope and flat allow/deny from src/adapters/wire.ts, passing no accept modes
+  // because a tool result can't change Claude Code's permission mode — an
+  // accept-edits or auto choice is dropped. It keeps Claude's approve variants,
+  // skills and install probe, but `source` on /api/health reads claude-mcp when this
+  // path started the daemon (EXC-1338).
   [CLAUDE_MCP_AGENT]: {
     ...claudeAdapter,
     id: CLAUDE_MCP_AGENT,
-    parseHookInput: opencodeAdapter.parseHookInput,
-    emitDecision: opencodeAdapter.emitDecision,
-    fatalDenyLine: opencodeAdapter.fatalDenyLine,
+    parseHookInput: (stdin) => parseCaretEnvelope(stdin),
+    emitDecision: (decision) => JSON.stringify(flatDecision(decision)),
+    fatalDenyLine: flatDenyLine,
   },
 };
 

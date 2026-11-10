@@ -149,9 +149,9 @@ so the shipped Claude plugin keeps working unchanged.
 > be relied on.
 
 One more id, `claude-mcp`, is not yours to set: caret's own MCP server sets it for plans
-submitted through Claude Code's `review_plan` tool. It reads OpenCode's envelope and
-returns a flat allow or deny, and keeps the Claude adapter's approve variants, skill
-listing, and install probe.
+submitted through Claude Code's `review_plan` tool. It reads the caret-owned envelope
+OpenCode's plugin also sends and returns a flat allow or deny, and keeps the Claude
+adapter's approve variants, skill listing, and install probe.
 
 The hooks table and decision-JSON block below, and the behavioral prose in
 `commands/*.md`, describe **Claude-adapter** surface — they are agent-specific, not core

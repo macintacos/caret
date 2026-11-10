@@ -1,36 +1,21 @@
 // The OpenCode adapter: caret's first plugin-shaped integration. OpenCode is NOT a
 // command-hook agent — it loads an in-process JS plugin (see the opencode/
 // packaging) that registers a plan-review tool and bridges to `caret review` by
-// piping a caret-defined envelope on stdin and reading the decision JSON this
-// adapter emits on stdout. Because both ends of the wire are caret-owned, the
-// envelope and decision shapes are caret's own. Selectable via
-// CARET_AGENT=opencode; Claude stays the default.
+// piping the caret-owned envelope (its shape lives in src/adapters/wire.ts) on stdin
+// and reading the decision JSON this adapter emits on stdout. Only the v2 plugin
+// declares approve variants. Selectable via CARET_AGENT=opencode; Claude stays the
+// default.
 
 import type { AgentAdapter, InstallProbe } from "@/adapters/adapter.ts";
 import { APPROVE_VARIANTS, declaredApproveVariants } from "@/adapters/opencode/approve.ts";
-import { fatalDenyLine, toWireDecision } from "@/adapters/opencode/feedback.ts";
+import { toWireDecision } from "@/adapters/opencode/feedback.ts";
 import { readOpencodeInstallState } from "@/adapters/opencode/install.ts";
 import {
   readOpencodeCommandDescription,
   readOpencodeCommands,
 } from "@/adapters/opencode/skills.ts";
-import { parseHookStdin } from "@/adapters/wire.ts";
+import { flatDenyLine, parseCaretEnvelope } from "@/adapters/wire.ts";
 import type { Decision, PlanInput, SkillRef } from "@/lib/types.ts";
-
-/** The caret-defined review envelope the OpenCode plugin pipes to `caret review`.
- * Mirrors the snake_case session/cwd convention the Claude/Codex parsers use so the
- * three stay structurally parallel; the plugin builds this shape from its tool args,
- * reading the plan file on a `path` call. Every field is optional — a payload missing
- * any of them still parses to a PlanInput, and the downstream guards handle the gaps.
- * planFilePath is set only when the agent submitted a plan file rather than inline
- * text; caret then rewrites that file with the canonical plan. */
-interface HookStdin {
-  session_id?: string;
-  cwd?: string;
-  tool_input?: { plan?: string; planFilePath?: string };
-  /** Ids of optional approve variants the host can honor; only the v2 plugin sends them. */
-  approve_variants?: unknown;
-}
 
 export const opencodeAdapter: AgentAdapter = {
   id: "opencode",
@@ -39,21 +24,14 @@ export const opencodeAdapter: AgentAdapter = {
   restartHint: "Then restart OpenCode.",
 
   parseHookInput(stdin: string): PlanInput {
-    const hook = parseHookStdin<HookStdin>(stdin);
-    return {
-      sessionId: hook.session_id,
-      cwd: hook.cwd,
-      plan: hook.tool_input?.plan,
-      planFilePath: hook.tool_input?.planFilePath,
-      approveVariants: declaredApproveVariants(hook.approve_variants),
-    };
+    return parseCaretEnvelope(stdin, declaredApproveVariants);
   },
 
   emitDecision(decision: Decision): string {
     return JSON.stringify(toWireDecision(decision));
   },
 
-  fatalDenyLine,
+  fatalDenyLine: flatDenyLine,
 
   readInstallState(): InstallProbe {
     return readOpencodeInstallState();
