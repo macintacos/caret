@@ -710,8 +710,9 @@ The local gate never runs `test e2e`; the PR checks are the full gate.
 one job per preflight task, each named after its task (`lint`, `test unit`, `test bats`,
 `test mod`, `build ui`, `test e2e`, `build bin`, `smoke`). `build ui` hands `ui/dist` to
 `test e2e` and `build bin` as an artifact, and `build bin` hands the binary to `smoke`.
-Caches are saved only on `trunk` pushes: a cache saved from a PR is restorable by that PR
-alone and still counts against the repository's cache quota, where it evicts trunk's.
+The `test e2e` job sets `CARET_E2E_WORKERS` to the runner's 4 cores. Caches are saved only
+on `trunk` pushes: a cache saved from a PR is restorable by that PR alone and still counts
+against the repository's cache quota, where it evicts trunk's.
 
 - Job names are what branch protection matches — renaming one drops it from the required
   checks.

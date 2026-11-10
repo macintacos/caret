@@ -32,13 +32,13 @@ jobs:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - run: bun install --frozen-lockfile
-      - run: mise run lint
       # Only trunk pushes save: a PR's cache is restorable by that PR alone yet evicts trunk's from the quota.
       - if: github.event_name == 'push' && steps.bun-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6.1.0
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - run: mise run lint
   test-unit:
     name: test unit
     runs-on: ubuntu-latest
@@ -131,6 +131,7 @@ jobs:
           name: ui-dist
           path: ui/dist
           if-no-files-found: error
+          retention-days: 1
   test-e2e:
     name: test e2e
     needs: build-ui
@@ -161,11 +162,22 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       # Keep in sync with E2E_BROWSERS (scripts/tasks/test.ts). --with-deps: WebKit needs apt packages a browser cache cannot restore.
-      - run: bunx playwright install --with-deps chromium webkit
+      - if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: bunx playwright install --with-deps chromium webkit
+      # The apt packages are not in the browser cache.
+      - if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: bunx playwright install-deps chromium webkit
+      - if: github.event_name == 'push' && steps.pw-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       # The flag replaces the config's reporter, so list is restated; html is what the failure artifact carries.
       - run: mise run test e2e --reporter=list,html
         env:
           CARET_SKIP_BUILD_UI: "1"
+          # The default is half the runner's 4 cores; at 2 workers the suite overruns Playwright's 15-minute globalTimeout.
+          CARET_E2E_WORKERS: "4"
       - if: failure()
         uses: actions/upload-artifact@v7.0.2
         with:
@@ -173,11 +185,6 @@ jobs:
           path: |
             playwright-report/
             test-results/
-      - if: github.event_name == 'push' && steps.pw-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
   build-bin:
     name: build bin
     needs: build-ui
@@ -211,8 +218,8 @@ jobs:
           path: |
             ui/dist
             bin/caret-native
-            bin/ui
           if-no-files-found: error
+          retention-days: 1
   smoke:
     name: smoke
     needs: build-bin
