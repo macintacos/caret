@@ -15,8 +15,3 @@ import { type FlatDecision, flatDecision } from "@/adapters/wire.ts";
 export function toWireDecision(input: FlatDecision): FlatDecision {
   return flatDecision(input, [BUILD_VARIANT.id]);
 }
-
-/** Fail-safe deny: shipping an unreviewed plan is the one outcome we never allow. */
-export function denyDecision(reason: string): FlatDecision {
-  return toWireDecision({ behavior: "deny", feedback: reason });
-}

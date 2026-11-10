@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { denyDecision, toWireDecision } from "@/adapters/opencode/feedback.ts";
+import { toWireDecision } from "@/adapters/opencode/feedback.ts";
 import { flatDenyLine as fatalDenyLine } from "@/adapters/wire.ts";
 
 test("plain approve emits behavior=allow with no extra fields", () => {
@@ -57,12 +57,6 @@ test("deny with whitespace-only feedback falls back to the default", () => {
   expect(toWireDecision({ behavior: "deny", feedback: "   " }).feedback).toBe(
     "Plan changes requested.",
   );
-});
-
-test("denyDecision produces a deny decision carrying the reason", () => {
-  const out = denyDecision("daemon unreachable");
-  expect(out.behavior).toBe("deny");
-  expect(out.feedback).toContain("daemon unreachable");
 });
 
 test("fatalDenyLine is a dependency-free deny wire line", () => {
