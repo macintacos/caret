@@ -5,7 +5,7 @@
 Load this when working on caret's pi support — the adapter (`src/adapters/pi/`), the
 extension (`pi/`), or the install path (`caret install`'s pi target).
 
-## The headline: pi is extension-shaped
+## The headline: pi is plugin-shaped — an in-process extension
 
 **pi loads caret as an in-process extension, not a command hook.** pi loads `pi/caret.ts`
 through jiti on Node, from `package.json`'s `pi.extensions`. pi has no plan hook and, by
@@ -26,8 +26,9 @@ carries the session id, the cwd, and `planFilePath`. The binary comes from
 
 - The tool takes an optional `plan`, or a `path` (preferred): a `.md` file, absolute or
   relative to the session directory. A leading `@` is stripped.
-- The tool sets no `promptGuidelines`, because pi appends them to every system prompt.
-  Outside `/caret:plan`, pi's prompt is untouched.
+- The tool adds only its one-line `promptSnippet` to the `<tools>` section of pi's system
+  prompt. It sets no `promptGuidelines`: pi would add those rule bullets whenever the tool
+  is active, and outside `/caret:plan` users get no behaviour change they didn't ask for.
 - The extension warms the daemon from `before_agent_start`, and only while planning.
 
 **The review blocks.** pi has no tool timeout, and the tool runs with
@@ -36,14 +37,10 @@ non-blocking only so users could chat mid-review, which caret doesn't offer.
 
 ## The pi APIs it uses and the 1.5.0 floor
 
-**`test/pi/sdk-conformance.ts` pins every pi API slice caret calls.** Each module declares
-its slice as a type:
-
-- `pi/caret.ts`: `registerTool` and the session events.
-- `pi/plan.ts`: `registerCommand`, `sendUserMessage`, `appendEntry`, and the
-  `before_agent_start`, `context`, `tool_call`, `tool_result`, and `session_tree` events.
-- `pi/notice.ts`: `registerShortcut`, `ui.setStatus`, and `ui.setWidget`.
-- `pi/doctor.ts`: `registerEntryRenderer`.
+**Each `pi/` module exports the slice of pi's API it calls as a type** (`PlanningApi`,
+`NoticeApi`, `DemoApi`, `DoctorApi`). `PiApi` in `pi/caret.ts` intersects them, and
+`test/pi/sdk-conformance.ts` pins each against the installed SDK. A new pi API goes in its
+module's slice first.
 
 **The floor is pi `1.5.0`.** It is the version tested, and the first release published as
 `@earendil-works/pi-coding-agent` after the rename from `@mariozechner/pi-coding-agent`
@@ -53,9 +50,8 @@ registers nothing and warns once.
 
 ## Packaging
 
-**pi supplies its own packages at load time.** `@earendil-works/pi-coding-agent`,
-`@earendil-works/pi-tui`, `@earendil-works/pi-ai`, `@earendil-works/pi-agent-core`, and
-`typebox` are host-provided, so the ones caret imports are devDependencies only.
+**pi supplies its own packages at load time.** pi's host packages are host-provided, so
+the ones caret imports are devDependencies only.
 [`dependency-rules.md`](dependency-rules.md) holds the gate.
 
 **There are no `peerDependencies`.** OpenCode's installer would download them, and pi
@@ -140,9 +136,12 @@ The shortcut is `ctrl+alt+c`, because pi's plan-mode example and Plannotator bot
   outcome is `cancelled`, and the model is told the plan is not approved and to wait for
   the user. The row reads `cancelled`.
 - A run fails on a caret-made fail-safe deny (`failsafe: true` on the wire), which
-  includes caret not running at all (no `bun` on `PATH`, say), or on an unresolved `path`.
-  The outcome is `failed`, with `isError: true`, and the text tells the model to tell the
-  user and not implement. The row reads `✕ review failed`.
+  includes caret not running at all (no `bun` on `PATH`, say). The outcome is `failed`,
+  with `isError: true`, and the text tells the model to tell the user and not implement.
+  The row reads `✕ review failed`.
+- An unresolved `path` returns `resolvePlanSource`'s error, telling the model to write the
+  file or pass `plan` inline, with `isError: true`. It returns before the store records an
+  outcome.
 
 ## `/caret:doctor`
 
@@ -153,8 +152,8 @@ It shows the report in pi's transcript as a custom entry that never reaches the 
 
 **`test/pi/live.test.ts` runs real pi on Node against the packed package.** With
 `test/support/pi-live.ts`, it installs the `npm pack`ed package into a throwaway agent dir
-and drives pi with pi-ai's faux provider (`test/support/pi-faux-provider.ts`). It needs
-Node 22.19 or later and `npm` on `PATH`. It covers:
+and drives pi with pi-ai's faux provider (`test/support/pi-faux-provider.ts`).
+Requirements and placement are in [`test-layout.md`](test-layout.md). It covers:
 
 - a deny's feedback reaching the model;
 - planning's block-then-approve path;
@@ -162,8 +161,7 @@ Node 22.19 or later and `npm` on `PATH`. It covers:
 - `/caret:doctor` keeping its report out of the model's context;
 - a hung daemon failing inside its bound.
 
-It runs as part of the unit suite. To run it alone:
-`nice -n 10 mise run test --json --parallel=4 test/pi/live.test.ts`.
+To run it alone: `nice -n 10 mise run test --json --parallel=4 test/pi/live.test.ts`.
 
 For pi's own behavior, read the installed pi's `docs/` and `examples/`. Run
 `mise which pi`; they sit in `../node_modules/@earendil-works/pi-coding-agent/` relative
@@ -171,15 +169,11 @@ to the directory holding that binary. Docs under the old `@mariozechner` name ar
 
 ## Known gaps
 
-- Not covered live: `path` submissions, the approve-with-notes rows, and `Esc` cancel.
-- `ctrl+alt+c` in a real terminal is unverified outside the EXC-2316 hand check.
-- The service launcher ignores a non-default `PI_CODING_AGENT_DIR`.
+- Not covered live: the approve-with-notes rows and `Esc` cancel.
+- `ctrl+alt+c` is hand-checked only; no test drives a real terminal (EXC-2316).
 - Extension filters in pi's settings aren't evaluated against globs
   (`src/adapters/pi/install.ts`).
 - Print mode `pi -p "/caret:plan …"` can exit before the follow-up runs
   (`pi/follow-up.ts`).
 - `review-bridge.ts` lives under `opencode/` though pi uses it too.
-- Project-scope installs aren't supported.
 - There is no update reminder like OpenCode's toast.
-- A local install plus an npm install loads caret twice; the owner key keeps one copy on
-  and warns.

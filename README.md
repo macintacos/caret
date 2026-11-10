@@ -122,9 +122,10 @@ pi has no plan mode of its own, so `caret` brings a small one:
 
 1. `/caret:plan <what you want done>` turns on planning mode. The agent researches, writes
    its plan into pi's plans folder (`~/.pi/agent/plans` by default), and sends it to
-   `caret`. Until you approve, pi blocks the agent from editing or writing any file
-   outside that folder. While planning, `/caret:plan` with no task turns planning off.
-   Outside planning, a bare `/caret:plan` plans what you asked for earlier in the session.
+   `caret`. Until you approve, `caret` blocks the agent's `edit` and `write` tools outside
+   that folder; shell commands are only discouraged. While planning, `/caret:plan` with no
+   task turns planning off. Outside planning, a bare `/caret:plan` plans what you asked
+   for earlier in the session.
 2. While a review waits, a notice sits above the editor and the footer reads
    `^ plan waiting`. `/caret` or `ctrl+alt+c` opens the plan in your browser. On macOS,
    `ctrl+alt+c` needs your terminal to send Option as Alt (Terminal.app calls it Meta): in

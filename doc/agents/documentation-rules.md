@@ -55,8 +55,8 @@ edit-design!: Edit design/*.md
 - **`doc/RUNNING.md`** — caret in use: desktop notifications, cmux unread marks, and
   logging & debugging. How to edit it: [`references/running.md`](references/running.md).
 - **`doc/ARCHITECTURE.md`** — how caret works: the tool-agnostic core / agent-adapter
-  boundary, the Claude Code and OpenCode adapter internals, calling the review tool, and
-  the source layout. How to edit it:
+  boundary, the Claude Code, OpenCode, and pi adapter internals, calling the review tool,
+  and the source layout. How to edit it:
   [`references/architecture.md`](references/architecture.md).
 - **`doc/DEVELOPMENT.md`** — developing caret: build-from-source, the `mise` task catalog
   and dev workflow, the tasks CLI, and icons. How to edit it:

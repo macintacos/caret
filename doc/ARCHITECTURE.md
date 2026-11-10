@@ -439,9 +439,9 @@ See [`agents/pi-integration.md`](agents/pi-integration.md) for the design.
 
 ### Calling the review tool from your own skill
 
-Each agent has a review tool a skill can call directly, rather than waiting for caret to
-intercept a plan. A skill that wants a human decision on its plan before the work proceeds
-can ask for one.
+Claude Code, OpenCode, and pi each have a review tool a skill can call directly, rather
+than waiting for caret to intercept a plan. A skill that wants a human decision on its
+plan before the work proceeds can ask for one.
 
 | Agent       | Tool                | Where it comes from                                    |
 | ----------- | ------------------- | ------------------------------------------------------ |
@@ -528,8 +528,9 @@ no agent is waiting on its result.
   permitted on the `plan` agent alone, so there is nothing to fall back on.
 - **Claude Code: any agent, subagents included.** The tool grants no permission and gates
   no edit, so there is nothing a subagent could bypass by calling it.
-- **pi: any session may call it.** Only `/caret:plan`'s steer tells the model to use it.
-  Outside planning, the model sees only the tool's one-line description in pi's tool list.
+- **pi: any session may call it.** Only the steers of `/caret:plan` and `/caret:demo` tell
+  the model to use it. Otherwise the model sees just the tool's schema and its entry in
+  pi's tool list.
 
 On Claude Code, three more behaviors follow from how the server is built:
 
