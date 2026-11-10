@@ -10,8 +10,6 @@
 // toasts. `theme` and `renderer` are optional too: without them the pending row renders in
 // OpenTUI's default colours, or opens on every mouse-up, selection or not.
 
-import { spawn } from "node:child_process";
-
 import {
   CARET_DECISION_KEY,
   CARET_URL_KEY,
@@ -24,6 +22,7 @@ import {
   type ToastSink,
   toastBestEffort,
 } from "./caret.core.ts";
+import { type DetachedSpawn, nodeDetachedSpawn } from "./review-bridge.ts";
 
 type ToolEvent = {
   data: { id: string; sessionID: string; metadata?: Record<string, unknown> };
@@ -92,21 +91,6 @@ type CaretCommand = {
   bind: string;
   suggested: () => boolean;
   run: () => void;
-};
-
-/** Spawns `bin args` detached and unwaited; `onError` hears a child that fails to start
- * or exits non-zero. */
-export type DetachedSpawn = (bin: string, args: string[], onError: (err: Error) => void) => void;
-
-export const nodeDetachedSpawn: DetachedSpawn = (bin, args, onError) => {
-  // spawn reports ENOENT asynchronously; unhandled, that 'error' takes OpenCode down.
-  const child = spawn(bin, args, { stdio: "ignore", detached: true });
-  child.on("error", onError);
-  // band-link exits 0 on its own failures, so non-zero means caret never ran.
-  child.on("exit", (code) => {
-    if (code) onError(new Error(`exited with status ${code}`));
-  });
-  child.unref();
 };
 
 /** The `@opentui/solid` reconciler calls the pending row takes. */

@@ -162,18 +162,18 @@ The export surface).
 Because both ends of this wire are caret-owned (the plugin writes the envelope, the
 `opencode` adapter renders the decision the plugin reads), the OpenCode adapter is among
 the *least* speculative — there is no foreign agent wire format to model. The pure logic
-(envelope build, fail-safe decision parse, the spawn bridge) lives in
-`opencode/review-bridge.ts`, which `opencode/caret.plugin.ts` wires behind a
-`createCaretPlugin({ run })` DI seam, and is unit-tested in `test/opencode/`. The bridge
-is shared: `caret mcp` (`src/commands/mcp.ts`) runs Claude Code's `review_plan` tool
-through the same module, passing its own argv, `CARET_AGENT=claude-mcp`, and tool name,
-and pi's extension (`pi/caret.ts`, `pi/tool.ts`) reaches it the same way with
-`CARET_AGENT=pi`. Keep `review-bridge.ts` free of anything OpenCode-specific and of any
-import but node builtins. `caret steer` (`src/adapters/claude/steer.ts`), Claude Code's
-title-steer hook, is a third consumer: it imports only `PLAN_TITLE_INSTRUCTION`, the title
-steer the plugin and `caret mcp` send too. The running-config mutation is
-`applyCaretConfig` in `opencode/caret.plugin.ts`, and it is v1-only: v2 has no `config`
-hook (§ The subagent bypass says what replaces it).
+(envelope build, fail-safe decision parse, the spawn bridge, and the detached
+`band-link --open` opener both TUIs use) lives in `opencode/review-bridge.ts`, which
+`opencode/caret.plugin.ts` wires behind a `createCaretPlugin({ run })` DI seam, and is
+unit-tested in `test/opencode/`. The bridge is shared: `caret mcp` (`src/commands/mcp.ts`)
+runs Claude Code's `review_plan` tool through the same module, passing its own argv,
+`CARET_AGENT=claude-mcp`, and tool name, and pi's extension (`pi/caret.ts`, `pi/tool.ts`)
+reaches it the same way with `CARET_AGENT=pi`. Keep `review-bridge.ts` free of anything
+OpenCode-specific and of any import but node builtins. `caret steer`
+(`src/adapters/claude/steer.ts`), Claude Code's title-steer hook, is a third consumer: it
+imports only `PLAN_TITLE_INSTRUCTION`, the title steer the plugin and `caret mcp` send
+too. The running-config mutation is `applyCaretConfig` in `opencode/caret.plugin.ts`, and
+it is v1-only: v2 has no `config` hook (§ The subagent bypass says what replaces it).
 `src/adapters/opencode/config-plugin.ts` edits the user's config *file* at install time
 and is covered from `test/adapters/opencode/`.
 

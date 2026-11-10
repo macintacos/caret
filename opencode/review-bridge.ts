@@ -1,11 +1,12 @@
 // The bridge from an agent's plan-review tool to `caret review`, shared by the OpenCode
 // plugin, `caret mcp` and pi's extension: resolve the plan and the caret binary, build
 // caret's review envelope, warm the daemon, spawn the review, and turn the flat decision
-// it prints into the tool's result text. It stays in opencode/ because that directory
-// already ships as unbundled source each host reaches by relative import; moving it would
-// churn OpenCode's packaging for no gain. It imports node builtins only, so bundling it
-// into the CLI pulls in no plugin SDK. It also holds PLAN_TITLE_INSTRUCTION, since this is
-// the one module the hosts, `caret mcp` and `caret steer` can all import.
+// it prints into the tool's result text; it also holds the detached opener both TUIs use
+// for `band-link --open`. It stays in opencode/ because that directory already ships as
+// unbundled source each host reaches by relative import; moving it would churn OpenCode's
+// packaging for no gain. It imports node builtins only, so bundling it into the CLI pulls
+// in no plugin SDK. It also holds PLAN_TITLE_INSTRUCTION, since this is the one module the
+// hosts, `caret mcp` and `caret steer` can all import.
 
 import { spawn } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
@@ -371,3 +372,28 @@ export const nodeSpawnRunner: SpawnRunner = (command, env, stdin, onStderr, sign
     child.stdin.write(stdin);
     child.stdin.end();
   });
+
+/** Spawns `bin args` detached and unwaited; `onError` hears a child that fails to start
+ * or exits non-zero. */
+export type DetachedSpawn = (bin: string, args: string[], onError: (err: Error) => void) => void;
+
+/** A DetachedSpawn over node's `spawn` whose children get `env` laid over the inherited
+ * environment. */
+export const detachedSpawnWith =
+  (env?: Record<string, string>): DetachedSpawn =>
+  (bin, args, onError) => {
+    // spawn reports ENOENT asynchronously; unhandled, that 'error' takes the host down.
+    const child = spawn(bin, args, {
+      stdio: "ignore",
+      detached: true,
+      env: env && { ...process.env, ...env },
+    });
+    child.on("error", onError);
+    // band-link exits 0 on its own failures, so non-zero means caret never ran.
+    child.on("exit", (code) => {
+      if (code) onError(new Error(`exited with status ${code}`));
+    });
+    child.unref();
+  };
+
+export const nodeDetachedSpawn = detachedSpawnWith();

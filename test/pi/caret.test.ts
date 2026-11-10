@@ -1,14 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
+import { nodeDetachedSpawn } from "@oc/review-bridge.ts";
 import caret, {
   type CaretHost,
   installCaret,
   meetsFloor,
   PI_FLOOR,
   type PiApi,
-  type PiNotifyContext,
 } from "@piext/caret.ts";
+import { reviewStore } from "@piext/state.ts";
 import type { PiTool } from "@piext/tool.ts";
+import { until } from "@test/support/poll.ts";
 import { stubRunner } from "@test/support/spawn-runner.ts";
 import { PI_FLOOR as HOST_FLOOR } from "@/adapters/pi/host.ts";
 import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
@@ -19,14 +21,27 @@ function fakePi() {
   const tools: PiTool[] = [];
   const handlers: Record<string, ((...args: unknown[]) => void)[]> = {};
   const notices: Notice[] = [];
-  const commands: string[] = [];
-  const ctx: PiNotifyContext & { sessionManager: { getSessionId(): string; getBranch(): [] } } = {
-    ui: { notify: (message, type) => notices.push({ message, type }) },
+  const commands: Record<string, { handler: (args: string, ctx: unknown) => Promise<void> }> = {};
+  const shortcuts: Record<string, { handler: (ctx: unknown) => void }> = {};
+  const widgets: { key: string; content: unknown }[] = [];
+  const ctx = {
+    mode: "tui" as const,
+    hasUI: true,
+    ui: {
+      notify: (message: string, type?: string) => notices.push({ message, type }),
+      setWidget: (key: string, content: unknown) => widgets.push({ key, content }),
+      setStatus: () => {},
+    },
     sessionManager: { getSessionId: () => "s", getBranch: () => [] },
   };
   const pi = {
     registerTool: (tool: PiTool) => tools.push(tool),
-    registerCommand: (name: string) => commands.push(name),
+    registerCommand: (name: string, options: (typeof commands)[string]) => {
+      commands[name] = options;
+    },
+    registerShortcut: (key: string, options: (typeof shortcuts)[string]) => {
+      shortcuts[key] = options;
+    },
     appendEntry: () => {},
     sendUserMessage: () => {},
     on: (event: string, handler: (...args: unknown[]) => void) => {
@@ -38,7 +53,7 @@ function fakePi() {
   const fire = (event: string) => {
     for (const h of handlers[event] ?? []) h({}, ctx);
   };
-  return { pi, tools, commands, handlers, notices, fire };
+  return { pi, tools, commands, shortcuts, widgets, ctx, handlers, notices, fire };
 }
 
 const THIS_COPY_URL = "file:///a/pi/caret.ts";
@@ -54,6 +69,7 @@ function host(holder: Record<symbol, unknown>, overrides: Partial<CaretHost> = {
     run: stubRunner(ALLOW),
     agentDir: "/tmp/caret-test-agent",
     warm: () => {},
+    spawn: () => {},
     ...overrides,
   };
 }
@@ -85,11 +101,10 @@ describe("meetsFloor", () => {
   });
 });
 
-test("registers caret_review_plan and a session_shutdown handler", () => {
+test("registers caret_review_plan", () => {
   const f = fakePi();
   installCaret(f.pi, host({}));
   expect(f.tools.map((t) => t.name)).toEqual(["caret_review_plan"]);
-  expect(f.handlers.session_shutdown?.length).toBe(1);
 });
 
 test("below the floor: no tool, one warning across session_starts and reloads", () => {
@@ -135,9 +150,45 @@ test("only the owning copy registers /caret:plan", () => {
   installCaret(second.pi, host(holder, { entryUrl: OTHER_COPY_URL }));
   const old = fakePi();
   installCaret(old.pi, host({}, { version: "1.4.9" }));
-  expect(owner.commands).toEqual(["caret:plan"]);
-  expect(second.commands).toEqual([]);
-  expect(old.commands).toEqual([]);
+  expect(Object.keys(owner.commands)).toContain("caret:plan");
+  expect(Object.keys(second.commands)).toEqual([]);
+  expect(Object.keys(old.commands)).toEqual([]);
+});
+
+test("only the owning copy registers /caret and ctrl+alt+c", () => {
+  const holder = {};
+  const owner = fakePi();
+  installCaret(owner.pi, host(holder));
+  const second = fakePi();
+  installCaret(second.pi, host(holder, { entryUrl: OTHER_COPY_URL }));
+  const old = fakePi();
+  installCaret(old.pi, host({}, { version: "1.4.9" }));
+  expect(Object.keys(owner.commands)).toContain("caret");
+  expect(Object.keys(owner.shortcuts)).toEqual(["ctrl+alt+c"]);
+  expect(second.commands.caret).toBeUndefined();
+  expect(Object.keys(second.shortcuts)).toEqual([]);
+  expect(old.commands.caret).toBeUndefined();
+  expect(Object.keys(old.shortcuts)).toEqual([]);
+});
+
+test("a pending review in the tool's store paints the notice", () => {
+  const holder = {};
+  const f = fakePi();
+  installCaret(f.pi, host(holder));
+  f.fire("session_start");
+  reviewStore(holder).update("s", { pending: "http://caret.localhost/r/1" });
+  expect(f.widgets.at(-1)?.key).toBe("caret");
+  expect(typeof f.widgets.at(-1)?.content).toBe("function");
+});
+
+test("/caret with a missing caret binary reports an error instead of throwing", async () => {
+  const f = fakePi();
+  installCaret(
+    f.pi,
+    host({}, { env: { CARET_PI_BIN: "/nonexistent/caret" }, spawn: nodeDetachedSpawn }),
+  );
+  await f.commands.caret?.handler("", f.ctx);
+  expect(await until(() => f.notices.some((n) => n.type === "error"))).toBe(true);
 });
 
 test("the owner's session_shutdown frees the slot for another copy", () => {

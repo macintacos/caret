@@ -112,8 +112,10 @@ to `caret review` rather than a command hook; see
 extension (`pi/caret.ts`) uses the same shape: a registered `caret_review_plan` tool that
 spawns `caret review` with `CARET_AGENT=pi` through `opencode/review-bridge.ts`, plus a
 `/caret:plan` command whose planning mode steers the model and blocks `edit`/`write`
-outside pi's plans folder until the plan is approved (`pi/plan.ts`, `pi/gate.ts`). Note it
-as plugin-shaped before assuming a new tool slots into the command-hook mold.
+outside pi's plans folder until the plan is approved (`pi/plan.ts`, `pi/gate.ts`), and a
+pending-plan notice with a `caret` footer status, `/caret` and `ctrl+alt+c`
+(`pi/notice.ts`). Note it as plugin-shaped before assuming a new tool slots into the
+command-hook mold.
 
 **A registry entry may be composed inline.** `claude-mcp`, set only by `caret mcp` for
 plans submitted through Claude Code's `review_plan` tool, is Claude's adapter with the

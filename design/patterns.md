@@ -825,16 +825,30 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - For progress, show a spinner on a short step, only while work is happening, then a final
   line that states the result. For many items, show a counter like `3 of 50`.
 
-### Inside a host's TUI (OpenCode)
+### Inside a host's TUI (OpenCode, pi)
 
-- Take every colour from the host's theme tokens, read live: the news in bold `text.base`,
-  secondary text in `text.muted`, caret's mark in `text.feedback.warning.base`, the frame
-  in `border.base`, the card in `background.raised.base`.
+These rules hold in both hosts. The settled copy each host prints is in
+`design/decisions.md`, under its own entry: "2026-11-05: caret inside OpenCode's TUI: the
+pending-plan notice" and "2026-11-10: caret inside pi's TUI: the pending-plan notice".
+
+- Take every colour from the host's theme tokens, read live. caret owns no colour inside a
+  host.
+  - OpenCode: the news in bold `text.base`, secondary text in `text.muted`, caret's mark
+    in `text.feedback.warning.base`, the frame in `border.base`, the card in
+    `background.raised.base`.
+  - pi: the news in bold `text`, secondary text in `muted`, the key in `dim`, caret's mark
+    in `warning`. No frame and no card.
 - Align text to the host's composer text column.
 - Keep a notice to one row.
-- Show the key that acts on the notice on the notice itself, read from the host's keymap.
+- Show the key that acts on the notice on the notice itself. OpenCode's key is read from
+  its keymap. pi keeps no keymap entry for an extension's shortcut, so pi shows the key
+  caret registers, `ctrl+alt+c`.
 - Put the key before its verb, as the host's footer does.
 - Make the whole row the click target, and ignore a mouse-up that ends a text selection.
+  pi delivers clicks only in its fullscreen mode. pi's row carries no OSC 8 link (the
+  terminal's hyperlink escape), because a link under the cell would take the click.
+- Where the host has no TUI, as in pi's RPC mode, print the notice as one plain-text line
+  that names the command instead of the key.
 - With nothing waiting, collapse the notice fully: no blank row and no gap.
 
 ### Reports (`caret doctor`)

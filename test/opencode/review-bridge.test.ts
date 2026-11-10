@@ -13,6 +13,8 @@ import {
   buildEnvelope,
   decisionText,
   deniedMessage,
+  detachedSpawnWith,
+  nodeDetachedSpawn,
   nodeSpawnRunner,
   parseDecision,
   parseReviewUrl,
@@ -411,4 +413,34 @@ test("resolveCaretBin reads only the override variable it is given", () => {
       overrideVar: "CARET_PI_BIN",
     }),
   ).toBe("/pkg/bin/caret");
+});
+
+// The three below drive the REAL nodeDetachedSpawn: its contract lives in the child's
+// listeners, which a stubbed spawn cannot pin.
+
+test("the real detached spawn hands a bad binary's async error to onError", async () => {
+  const errors: Error[] = [];
+  nodeDetachedSpawn("/nonexistent/caret-2247", ["band-link", "--open"], (e) => errors.push(e));
+  expect(await until(() => errors.length === 1)).toBe(true);
+  // Reaching here proves the unhandled-'error' crash did not take the process down.
+  expect((errors[0] as NodeJS.ErrnoException).code).toBe("ENOENT");
+});
+
+test("the real detached spawn reports a caret that exits non-zero", async () => {
+  const shim = join(mkdtempSync(join(tmp, "detached-")), "shim");
+  writeFileSync(shim, "#!/bin/sh\nexit 127\n");
+  chmodSync(shim, 0o755);
+  const errors: Error[] = [];
+  nodeDetachedSpawn(shim, ["band-link", "--open"], (e) => errors.push(e));
+  expect(await until(() => errors.length === 1)).toBe(true);
+  expect(errors[0]?.message).toContain("127");
+});
+
+test("the real detached spawn lays a given env over the inherited one", async () => {
+  const shim = join(mkdtempSync(join(tmp, "detached-")), "shim");
+  writeFileSync(shim, '#!/bin/sh\nprintf \'%s\' "$CARET_AGENT" > "$0.agent"\n');
+  chmodSync(shim, 0o755);
+  detachedSpawnWith({ CARET_AGENT: "pi" })(shim, [], () => {});
+  expect(await until(() => existsSync(`${shim}.agent`))).toBe(true);
+  expect(await until(() => readFileSync(`${shim}.agent`, "utf8") === "pi")).toBe(true);
 });

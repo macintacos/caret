@@ -130,6 +130,33 @@ Open items first, then the log, newest first.
   paints the waiting plan as an inverse `warning` fill with a 🥕 emoji. Either align it
   with the 2026-11-05 OpenCode decision or record why the two hosts differ.
 
+## 2026-11-10: caret inside pi's TUI: the pending-plan notice
+
+While a review waits, pi shows it in OpenCode's layout, without the frame or card: one row
+above the editor, a `caret` footer status, and `/caret` or `ctrl+alt+c` to open the review
+in the browser. The row uses OpenCode's copy word for word, so a user who switches hosts
+reads the same notice.
+
+```text
+ ^ caret  plan waiting for your review               ctrl+alt+c open in browser
+ │ │      └ bold `text`                              │          └ muted
+ │ └ muted                                           └ dim
+ └ warning
+```
+
+- **RPC mode:** pi driven headless over JSON-RPC has no TUI, so the notice is one plain
+  line, naming the command instead of the key:
+  `^ caret  plan waiting for your review   /caret open in browser`.
+- **Footer status:** `^ plan waiting` while a review waits, `^ planning` in planning mode
+  (`/caret:plan`, which gates edits until approval) with nothing waiting, and cleared
+  otherwise. It carries no theme colour, because a pre-coloured string keeps the old
+  colour after a theme switch.
+- **Open failure:** an `error` notification reads
+  `caret: open failed: <err.message>. Run caret doctor to see why.`, OpenCode's toast
+  title and message on one line.
+- **No frame or card:** pi's theme has no raised-card token, and the `warning`-coloured
+  `^` alone marks the row.
+
 ## 2026-11-05: caret inside OpenCode's TUI: the pending-plan notice
 
 The user found the line above OpenCode's composer bare: "could probably look a little
