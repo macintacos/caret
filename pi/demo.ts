@@ -1,24 +1,24 @@
-// `/caret:demo` for pi: sends the agent caret's demo template, read from beside the
-// package on every run, so a new user sees a review end to end.
+// `/caret:demo` for pi: sends the agent OpenCode's `/caret:demo` prompt with caret's demo
+// template in place of its marker, both read from beside the package on every run, so a
+// new user sees a review end to end.
 
 import { readFile } from "node:fs/promises";
 
-import { errorMessage, REVIEW_TOOL } from "../bridge/review-bridge.ts";
+import { errorMessage } from "../bridge/review-bridge.ts";
 import { sendAndWait } from "./follow-up.ts";
 
 /** The demo template, relative to the extension entry `pi/caret.ts`. */
 export const DEMO_TEMPLATE = "../templates/demo.md";
 
-/** The prompt sent ahead of the template. Keep in step with opencode/commands/demo.md,
- * which it mirrors. */
-export const DEMO_INSTRUCTION = [
-  `The demo template is at the end of this message. Follow its leading HTML comment exactly to fill the slots, then call the \`${REVIEW_TOOL}\` tool with everything after that comment as the \`plan\` argument. Do **no** other research and edit **no** file — this is only to exercise caret's plan-review flow.`,
-  "",
-  "caret opens the plan in a local browser UI for inline review. When the user approves or requests changes, the decision returns as the tool result:",
-  "",
-  "- **Approved** → acknowledge that caret approved the demo plan, and stop.",
-  `- **Changes requested** → revise the plan accordingly, keeping it about the same size, and call \`${REVIEW_TOOL}\` again (caret captures it as a new version).`,
-].join("\n");
+/** OpenCode's `/caret:demo` command. Both hosts submit through the same review tool, so
+ * its body is pi's prompt too. */
+const DEMO_COMMAND = new URL("../opencode/commands/demo.md", import.meta.url);
+const TEMPLATE_MARKER = "__CARET_DEMO_TEMPLATE__";
+const FRONTMATTER = /^---\n[\s\S]*?\n---\n+/;
+
+/** `command`'s body with `template` taken literally in place of its marker. */
+const demoPrompt = (command: string, template: string): string =>
+  command.replace(FRONTMATTER, "").replace(TEMPLATE_MARKER, () => template);
 
 export type DemoCommandContext = {
   ui: { notify(message: string, type?: "info" | "warning" | "error"): void };
@@ -39,8 +39,9 @@ export type DemoApi = {
   sendUserMessage(content: string, options: { deliverAs: "followUp" }): void;
 };
 
-/** Registers `/caret:demo`, which reads the template at `templatePath` on every run and
- * refuses while the session is planning, since approving the demo would end planning. */
+/** Registers `/caret:demo`, which reads OpenCode's command and the template at
+ * `templatePath` on every run and refuses while the session is planning, where approving
+ * the demo could end planning for the real task. */
 export function installDemo(
   pi: DemoApi,
   deps: { templatePath: string; isPlanning: (sessionId: string) => boolean },
@@ -56,17 +57,19 @@ export function installDemo(
         );
         return;
       }
-      let template: string;
+      let prompt: string;
       try {
-        template = await readFile(templatePath, "utf-8");
+        const [command, template] = await Promise.all([
+          readFile(DEMO_COMMAND, "utf-8"),
+          readFile(templatePath, "utf-8"),
+        ]);
+        prompt = demoPrompt(command, template);
       } catch (err) {
-        ctx.ui.notify(
-          `caret couldn't read its demo template at ${templatePath}: ${errorMessage(err)}`,
-          "error",
-        );
+        // The error names the file that failed.
+        ctx.ui.notify(`caret couldn't read its demo prompt: ${errorMessage(err)}`, "error");
         return;
       }
-      await sendAndWait(pi, ctx, `${DEMO_INSTRUCTION}\n\n${template}`);
+      await sendAndWait(pi, ctx, prompt);
     },
   });
 }

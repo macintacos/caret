@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { REVIEW_TOOL } from "@bridge/review-bridge.ts";
-import { DEMO_INSTRUCTION, type DemoApi, installDemo } from "@piext/demo.ts";
+import { type DemoApi, installDemo } from "@piext/demo.ts";
+import { renderPlugin } from "@/adapters/opencode/deploy.ts";
 
 const TEMPLATE = "# A demo plan\n\nSome body.\n";
 
@@ -46,19 +47,24 @@ function fakePi(path: string, planning = false) {
   };
 }
 
-test("/caret:demo sends the instruction then the template as a follow-up and waits", async () => {
+const OPENCODE_COMMAND = join(import.meta.dir, "..", "..", "opencode", "commands", "demo.md");
+
+test("/caret:demo sends OpenCode's rendered /caret:demo body as a follow-up and waits", async () => {
   const pi = fakePi(templatePath);
   await pi.command();
-  expect(pi.sent).toEqual([
-    { content: `${DEMO_INSTRUCTION}\n\n${TEMPLATE}`, options: { deliverAs: "followUp" } },
-  ]);
+  expect(pi.sent).toHaveLength(1);
+  expect(pi.sent[0]?.options).toEqual({ deliverAs: "followUp" });
+  const content = pi.sent[0]?.content ?? "";
+  const opencode = renderPlugin(readFileSync(OPENCODE_COMMAND, "utf-8"), {
+    version: "",
+    binPath: "",
+    demoTemplate: TEMPLATE,
+  });
+  expect(opencode.endsWith(content)).toBe(true);
+  const frontmatter = opencode.slice(0, opencode.length - content.length);
+  expect(frontmatter).toMatch(/^---\n(?:.*\n)*?---\n+$/);
+  expect(content).toContain(REVIEW_TOOL);
   expect(pi.idle()).toBe(1);
-});
-
-test("the demo instruction submits through the review tool without editing files", () => {
-  expect(DEMO_INSTRUCTION).toContain(REVIEW_TOOL);
-  expect(DEMO_INSTRUCTION).toContain("edit **no** file");
-  expect(DEMO_INSTRUCTION).toContain("**Changes requested**");
 });
 
 test("/caret:demo refuses with one warning while the session is planning", async () => {
