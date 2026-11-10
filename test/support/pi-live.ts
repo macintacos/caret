@@ -216,9 +216,9 @@ export function piSessionEntries(sandbox: PiSandbox): unknown[] {
     .map((line) => JSON.parse(line));
 }
 
-/** PIDs whose command line names `root` (`pgrep -f root`). */
-export function strays(root: string): number[] {
-  const out = Bun.spawnSync(["pgrep", "-f", root]).stdout.toString();
+/** PIDs whose command line matches `pattern` (`pgrep -f`). */
+export function strays(pattern: string): number[] {
+  const out = Bun.spawnSync(["pgrep", "-f", pattern]).stdout.toString();
   return out.split("\n").filter(Boolean).map(Number);
 }
 
