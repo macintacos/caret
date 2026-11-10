@@ -48,12 +48,12 @@ export type NoticeApi = {
 
 /** The row at `width`, with a one-column inset each side as pi's own string widgets have. */
 export function noticeLine(theme: NoticeTheme, width: number): string {
-  const inner = width - 2;
+  const innerWidth = width - 2;
   const left = `${theme.fg("warning", "^")} ${theme.fg("muted", "caret")}  ${theme.bold(theme.fg("text", NEWS))}`;
   const right = `${theme.fg("dim", OPEN_KEY)} ${theme.fg("muted", VERB)}`;
-  const gap = inner - visibleWidth(`^ caret  ${NEWS}`) - visibleWidth(`${OPEN_KEY} ${VERB}`);
+  const gap = innerWidth - visibleWidth(`^ caret  ${NEWS}`) - visibleWidth(`${OPEN_KEY} ${VERB}`);
   if (gap >= 2) return ` ${left}${" ".repeat(gap)}${right} `;
-  return ` ${truncateToWidth(left, Math.max(inner, 0))}`;
+  return ` ${truncateToWidth(left, Math.max(innerWidth, 0))}`;
 }
 
 /** The clickable row. pi runs a widget factory once, so `render()` must call the theme each
@@ -104,12 +104,12 @@ export function installNotice(
 
   let unsubscribe: (() => void) | undefined;
   pi.on("session_start", (_event, ctx) => {
-    const sid = ctx.sessionManager.getSessionId();
+    const sessionId = ctx.sessionManager.getSessionId();
     const openHere = () => open(ctx);
     unsubscribe = deps.store.subscribe((id, state) => {
-      if (id === sid) paint(ctx, state, openHere);
+      if (id === sessionId) paint(ctx, state, openHere);
     });
-    paint(ctx, deps.store.get(sid), openHere);
+    paint(ctx, deps.store.get(sessionId), openHere);
   });
   pi.on("session_shutdown", () => {
     unsubscribe?.();

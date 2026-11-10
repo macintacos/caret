@@ -14,7 +14,7 @@ import { createReviewStore, footerText, type ReviewOutcome } from "@piext/state.
 
 const URL = "http://caret.localhost:42718/review/abc";
 const tagTheme: NoticeTheme = { fg: (c, t) => `<${c}>${t}</${c}>`, bold: (t) => `<b>${t}</b>` };
-const identity: NoticeTheme = { fg: (_c, t) => t, bold: (t) => t };
+const plainTheme: NoticeTheme = { fg: (_c, t) => t, bold: (t) => t };
 
 type WidgetContent = Parameters<NoticeContext["ui"]["setWidget"]>[1];
 type WidgetFactory = (tui: unknown, theme: NoticeTheme) => Component;
@@ -169,11 +169,14 @@ describe("the pending notice in tui mode", () => {
     const s = setup();
     s.start();
     s.store.update("s1", { pending: URL });
-    let current = tagTheme;
-    const live: NoticeTheme = { fg: (c, t) => current.fg(c, t), bold: (t) => current.bold(t) };
-    const row = mount(s.widgets, live);
+    let currentTheme = tagTheme;
+    const liveTheme: NoticeTheme = {
+      fg: (c, t) => currentTheme.fg(c, t),
+      bold: (t) => currentTheme.bold(t),
+    };
+    const row = mount(s.widgets, liveTheme);
     expect(row.render(80)[0]).toContain("<warning>^</warning>");
-    current = { fg: (c, t) => `[${c}]${t}[/${c}]`, bold: (t) => `[b]${t}[/b]` };
+    currentTheme = { fg: (c, t) => `[${c}]${t}[/${c}]`, bold: (t) => `[b]${t}[/b]` };
     row.invalidate();
     expect(row.render(80)[0]).toContain("[warning]^[/warning]");
   });
@@ -201,16 +204,16 @@ describe("the pending notice in tui mode", () => {
 describe("noticeLine", () => {
   for (const width of [20, 40, 80, 120]) {
     test(`fits within ${width} columns`, () => {
-      expect(visibleWidth(noticeLine(identity, width))).toBeLessThanOrEqual(width);
+      expect(visibleWidth(noticeLine(plainTheme, width))).toBeLessThanOrEqual(width);
     });
   }
 
   test("shows the key and its verb when there is room", () => {
-    expect(noticeLine(identity, 80)).toContain("ctrl+alt+c open in browser");
+    expect(noticeLine(plainTheme, 80)).toContain("ctrl+alt+c open in browser");
   });
 
   test("drops the key and its verb when there is not", () => {
-    expect(noticeLine(identity, 20)).not.toContain("ctrl+alt+c");
+    expect(noticeLine(plainTheme, 20)).not.toContain("ctrl+alt+c");
   });
 });
 
