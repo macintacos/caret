@@ -4,7 +4,7 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
-import { PI_FLOOR, PI_PACKAGE, type PiVersion, readPiVersion } from "@/adapters/pi/host.ts";
+import { type PiVersion, piVersionFault, readPiVersion } from "@/adapters/pi/host.ts";
 import {
   CARET_NPM_SOURCE,
   type PiCaretEntry,
@@ -91,18 +91,10 @@ function piUpdateLine(before: string | null, after: string | null, updated: bool
 
 /** Guidance for a pi that can't take caret; null when it can. */
 function preflightError(version: PiVersion): string | null {
-  switch (version.status) {
-    case "ok":
-      return null;
-    case "missing":
-      return `Couldn't run \`pi --version\`. Install \`${PI_PACKAGE}\` (${PI_FLOOR} or later) and re-run \`caret install\`.`;
-    case "pre-rename":
-      return `pi ${version.version} is the old \`@mariozechner/pi-coding-agent\`. pi is now published as \`${PI_PACKAGE}\` — install that (${PI_FLOOR} or later) and re-run \`caret install\`.`;
-    case "too-old":
-      return `pi ${version.version} is older than ${PI_FLOOR}. Upgrade \`${PI_PACKAGE}\` and re-run \`caret install\`.`;
-    default:
-      return version satisfies never;
-  }
+  const fault = piVersionFault(version);
+  return fault === null
+    ? null
+    : `${fault.detail} — ${fault.remedy}, then re-run \`caret install\`.`;
 }
 
 function previewPlan(plan: PiPlan, ui: InstallUI): void {

@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { readPiChecks } from "@/adapters/pi/checks.ts";
-import type { PiVersion } from "@/adapters/pi/host.ts";
+import { PI_FLOOR, PI_PACKAGE, type PiVersion } from "@/adapters/pi/host.ts";
 import type { Check } from "@/doctor/report.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "install");
@@ -69,45 +69,89 @@ function reason(check: Check): string {
   return check.status === "unknown" ? check.reason : "";
 }
 
-test("settings with no caret entry run no check, spawn no pi, and fetch nothing", async () => {
-  for (const dir of [join(FIXTURES, "no-entry"), join(tmp, "missing")]) {
-    const { checks, called } = await run(dir);
-    expect(checks).toEqual([]);
-    expect(called).toEqual({ piVersion: false, published: false });
-  }
+test.each([
+  ["no caret entry", () => join(FIXTURES, "no-entry")],
+  ["no settings.json", () => join(tmp, "missing")],
+])("settings with %s run no check, spawn no pi, and fetch nothing", async (_, dir) => {
+  const { checks, called } = await run(dir());
+  expect(checks).toEqual([]);
+  expect(called).toEqual({ piVersion: false, published: false });
 });
 
-test("unreadable settings report every pi check unknown without spawning pi", async () => {
-  const malformed = join(tmp, "malformed");
-  mkdirSync(malformed);
-  writeFileSync(join(malformed, "settings.json"), "{ not json");
-  for (const dir of [join(FIXTURES, "unreadable"), malformed]) {
-    const { checks, called } = await run(dir);
-    expect(checks.map((c) => c.id)).toEqual(ALL_IDS);
-    expect(checks.every((c) => c.status === "unknown")).toBe(true);
-    expect(checks.every((c) => reason(c).includes("settings.json"))).toBe(true);
-    expect(called.piVersion).toBe(false);
-  }
+function malformedDir(): string {
+  const dir = join(tmp, "malformed");
+  mkdirSync(dir);
+  writeFileSync(join(dir, "settings.json"), "{ not json");
+  return dir;
+}
+
+test.each([
+  ["unreadable", () => join(FIXTURES, "unreadable")],
+  ["malformed", malformedDir],
+])("%s settings report every pi check unknown without spawning pi", async (_, dir) => {
+  const { checks, called } = await run(dir());
+  expect(checks.map((c) => c.id)).toEqual(ALL_IDS);
+  expect(checks.every((c) => c.status === "unknown")).toBe(true);
+  expect(checks.every((c) => reason(c).includes("settings.json"))).toBe(true);
+  expect(called.piVersion).toBe(false);
+});
+
+const HOST_CASES: {
+  version: PiVersion;
+  status: Check["status"];
+  detail: string[];
+  remedy: string[];
+}[] = [
+  {
+    version: { status: "missing" },
+    status: "fail",
+    detail: ["pi --version"],
+    remedy: [PI_PACKAGE],
+  },
+  {
+    version: { status: "too-old", version: "1.4.9" },
+    status: "fail",
+    detail: ["1.4.9", PI_FLOOR],
+    remedy: [PI_PACKAGE],
+  },
+  {
+    version: { status: "pre-rename", version: "0.9.0" },
+    status: "fail",
+    detail: ["@mariozechner/pi-coding-agent"],
+    remedy: [PI_PACKAGE],
+  },
+  { version: { status: "ok", version: "1.5.0" }, status: "pass", detail: ["1.5.0"], remedy: [] },
+];
+
+test.each(HOST_CASES)("pi-host for $version.status is $status", async (c) => {
+  const { checks } = await run(join(FIXTURES, "npm-entry"), { piVersion: c.version });
+  const host = byId(checks, "pi-host");
+  expect(host.status).toBe(c.status);
+  for (const s of c.detail) expect(host.detail).toContain(s);
+  for (const s of c.remedy) expect(remedy(host)).toContain(s);
+});
+
+test("several entry faults join into one fail with each remedy named once", async () => {
+  const dir = agentDir(["npm:@macintacos/caret", "npm:@macintacos/caret"]);
+  const entry = byId((await run(dir)).checks, "pi-caret-entry");
+  expect(entry.status).toBe("fail");
+  expect(entry.detail).toContain("2 times");
+  expect(entry.detail).toContain("isn't installed");
+  expect(remedy(entry).split("pi install npm:@macintacos/caret").length - 1).toBe(1);
 });
 
 test.each([
-  [{ status: "missing" } as PiVersion, "fail", "pi --version", "@earendil-works/pi-coding-agent"],
-  [{ status: "too-old", version: "1.4.9" } as PiVersion, "fail", "1.4.9", "1.5.0"],
-  [
-    { status: "pre-rename", version: "0.9.0" } as PiVersion,
-    "fail",
-    "@mariozechner/pi-coding-agent",
-    "",
-  ],
-  [{ status: "ok", version: "1.5.0" } as PiVersion, "pass", "1.5.0", ""],
-])("pi-host for %o is %s", async (piVersion, status, inDetail, inRemedy) => {
-  const { checks } = await run(join(FIXTURES, "npm-entry"), { piVersion });
-  const host = byId(checks, "pi-host");
-  expect(host.status).toBe(status as Check["status"]);
-  expect(host.detail).toContain(inDetail);
-  if (piVersion.status === "too-old") expect(host.detail).toContain(inRemedy);
-  else expect(remedy(host)).toContain(inRemedy);
-});
+  ["npm's", "garbage", "1.8.1", "npm reported an unreadable version"],
+  ["pi's caret", "1.9.0", "not-a-version", "pi's caret has an unreadable version"],
+])(
+  "an unreadable %s version leaves the version check unknown",
+  async (_, published, installed, why) => {
+    const { checks } = await run(agentDir(["npm:@macintacos/caret"], installed), { published });
+    const version = byId(checks, "pi-caret-version");
+    expect(version.status).toBe("unknown");
+    expect(reason(version)).toContain(why);
+  },
+);
 
 test("one npm entry runs all three checks and passes the entry check", async () => {
   const { checks } = await run(join(FIXTURES, "npm-entry"));

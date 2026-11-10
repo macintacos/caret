@@ -6,8 +6,8 @@
 // The OpenCode checks (`opencode-host`, `opencode-caret-version`) and pi's (`pi-host`,
 // `pi-caret-entry`, `pi-caret-version`) reach the report from the adapters rather than
 // from src/doctor/checks.ts, which is core and imports no adapter: they are the checks
-// that need an adapter's vocabulary, so composition asks for
-// them and the core layer just appends what it is handed.
+// that need an adapter's vocabulary, so composition asks for them and the core layer
+// just appends what it is handed.
 
 import { existsSync } from "node:fs";
 import { homedir, release } from "node:os";
@@ -134,7 +134,7 @@ async function readPiAdapterChecks(): Promise<Check[]> {
     return await readPiChecks({
       agentDir: piAgentDir(),
       home: homedir(),
-      piVersion: () => readPiVersion(),
+      piVersion: readPiVersion,
       published: () => publishedCaretVersion(),
     });
   } catch (e) {
@@ -196,11 +196,11 @@ export async function runDoctorSubcommand(opts: {
       note.write("caret doctor: it is unredacted — move it over a channel you trust\n");
     }
     const s = loadSettings();
-    // The check's bounded npm read is independent of the local probes, so it runs
-    // alongside them.
-    const [report, adapterChecks] = await Promise.all([
-      collectReport(prodDoctorDeps(s)),
+    // The adapter checks start first: their `--version` probes spawn synchronously and
+    // would block the event loop while the health probe's 500 ms timeout runs.
+    const [adapterChecks, report] = await Promise.all([
       readAdapterChecks(),
+      collectReport(prodDoctorDeps(s)),
     ]);
     const doc: DoctorDocument = { ...report, checks: runChecks(report, adapterChecks) };
     // Deciding it here keeps the renderer a pure function.

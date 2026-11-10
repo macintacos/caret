@@ -1,5 +1,6 @@
-// Reads caret's entries in pi's user settings, for the doctor probe and `caret
-// install`'s pi target; strictly read-only, degrades rather than throws.
+// Reads caret's entries in pi's user settings, and names them as pi's package commands
+// take them, for the doctor probe and `caret install`'s pi target; strictly read-only,
+// degrades rather than throws.
 
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -8,7 +9,9 @@ import type { InstallProbe } from "@/adapters/adapter.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
 
 const CARET_PACKAGE = "@macintacos/caret";
-export const CARET_NPM_SOURCE = "npm:@macintacos/caret";
+/** caret's unpinned npm source, as `pi install` takes it; installing it over a pinned
+ * entry unpins it. */
+export const CARET_NPM_SOURCE = `npm:${CARET_PACKAGE}`;
 const NPM_SOURCE = /^npm:@macintacos\/caret(@[^/]+)?$/;
 
 /** pi's user `settings.json`; `packages` is the one key caret interprets. */
@@ -78,7 +81,7 @@ export type PiCaretEntry = {
   | { form: "local" }
 );
 
-interface PiDirs {
+export interface PiDirs {
   agentDir: string;
   home: string;
 }
@@ -86,7 +89,13 @@ interface PiDirs {
 /** Every caret entry in pi's user settings, in order; empty when settings.json is
  * missing, unreadable, or lists none. */
 export function readPiCaretEntries(agentDir: string, home = homedir()): PiCaretEntry[] {
-  return caretEntries(readPiSettings(agentDir)?.packages, { agentDir, home });
+  const settings = readPiSettings(agentDir);
+  return settings === null ? [] : piCaretEntries(settings, { agentDir, home });
+}
+
+/** Every caret entry in already-read pi `settings`, in order. */
+export function piCaretEntries(settings: PiSettings, dirs: PiDirs): PiCaretEntry[] {
+  return caretEntries(settings.packages, dirs);
 }
 
 function caretEntries(packages: unknown, dirs: PiDirs): PiCaretEntry[] {

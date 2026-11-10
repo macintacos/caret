@@ -5,13 +5,13 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { PI_FLOOR, PI_PACKAGE, type PiVersion } from "@/adapters/pi/host.ts";
+import { type PiVersion, piVersionFault } from "@/adapters/pi/host.ts";
 import {
   CARET_NPM_SOURCE,
   filtersOutExtensions,
   type PiCaretEntry,
+  piCaretEntries,
   piRemoveArg,
-  readPiCaretEntries,
   readPiSettings,
 } from "@/adapters/pi/install.ts";
 import type { Check } from "@/doctor/report.ts";
@@ -21,6 +21,7 @@ const HOST = { id: "pi-host", title: "pi host" };
 const ENTRY = { id: "pi-caret-entry", title: "pi's caret entry" };
 const VERSION = { id: "pi-caret-version", title: "pi's caret" };
 
+type Entries = readonly [PiCaretEntry, ...PiCaretEntry[]];
 type NpmEntry = Extract<PiCaretEntry, { form: "npm" }>;
 
 /** The pi checks for pi's user settings under `agentDir`, or none when they list no
@@ -33,18 +34,21 @@ export async function readPiChecks(deps: {
   piVersion: () => PiVersion;
   published: () => Promise<string | null>;
 }): Promise<Check[]> {
-  const settings = join(deps.agentDir, "settings.json");
-  if (existsSync(settings) && readPiSettings(deps.agentDir) === null) {
-    return unknownPiChecks(`couldn't read ${settings}`);
+  const settings = readPiSettings(deps.agentDir);
+  if (settings === null) {
+    // readPiSettings reads a missing file and an unreadable one alike as null.
+    const path = join(deps.agentDir, "settings.json");
+    return existsSync(path) ? unknownPiChecks(`couldn't read ${path}`) : [];
   }
-  const entries = readPiCaretEntries(deps.agentDir, deps.home);
-  if (entries.length === 0) return [];
+  const [first, ...rest] = piCaretEntries(settings, deps);
+  if (first === undefined) return [];
+  const entries: Entries = [first, ...rest];
   const checks = [hostCheck(deps.piVersion()), entryCheck(entries)];
   const npm = entries.find((e): e is NpmEntry => e.form === "npm");
   return npm === undefined ? checks : [...checks, versionCheck(npm, await deps.published())];
 }
 
-/** All three pi checks as unknown, for pi settings that can't be read. */
+/** All three pi checks as unknown: `reason` is why none of them could be decided. */
 export function unknownPiChecks(reason: string): Check[] {
   return [HOST, ENTRY, VERSION].map(
     (base): Check => ({ ...base, status: "unknown", detail: "", reason }),
@@ -52,34 +56,20 @@ export function unknownPiChecks(reason: string): Check[] {
 }
 
 function hostCheck(version: PiVersion): Check {
-  const fail = (detail: string, remedy: string): Check => ({
-    ...HOST,
-    status: "fail",
-    detail,
-    remedy,
-  });
-  switch (version.status) {
-    case "ok":
-      return { ...HOST, status: "pass", detail: `pi ${version.version}` };
-    case "missing":
-      return fail("Couldn't run `pi --version`", `install \`${PI_PACKAGE}\` ${PI_FLOOR} or later`);
-    case "too-old":
-      return fail(
-        `pi ${version.version} is older than ${PI_FLOOR}`,
-        `upgrade \`${PI_PACKAGE}\` to ${PI_FLOOR} or later`,
-      );
-    case "pre-rename":
-      return fail(
-        `pi ${version.version} is the old \`@mariozechner/pi-coding-agent\``,
-        `install \`${PI_PACKAGE}\` ${PI_FLOOR} or later, pi's package since the rename`,
-      );
-    default:
-      return version satisfies never;
+  const fault = piVersionFault(version);
+  if (fault === null) {
+    return {
+      ...HOST,
+      status: "pass",
+      detail: "version" in version ? `pi ${version.version}` : "pi",
+    };
   }
+  // A fail, not unknown: pi's settings list caret, so a pi that can't run is a real fault.
+  return { ...HOST, status: "fail", ...fault };
 }
 
 /** Every fault in pi's caret entries joins into one fail, each with its remedy. */
-function entryCheck(entries: readonly PiCaretEntry[]): Check {
+function entryCheck(entries: Entries): Check {
   const faults: string[] = [];
   const remedies: string[] = [];
   if (entries.length > 1) {
@@ -107,11 +97,13 @@ function entryCheck(entries: readonly PiCaretEntry[]): Check {
       remedy: [...new Set(remedies)].join("; "),
     };
   }
-  const [only] = entries as [PiCaretEntry];
+  const [only] = entries;
   const version = only.version === null ? "" : ` ${only.version}`;
   return { ...ENTRY, status: "pass", detail: `pi loads caret${version} from \`${only.source}\`` };
 }
 
+/** Unknown, never fail, when either side can't be read; the missing package is named
+ * before an unreachable npm because it is the one the user can fix. */
 function versionCheck(entry: NpmEntry, published: string | null): Check {
   const unknown = (reason: string): Check => ({
     ...VERSION,
