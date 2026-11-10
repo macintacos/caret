@@ -9,6 +9,15 @@
     ".": "./opencode/index.ts",
     "./tui": "./opencode/caret.tui.ts"
   },
+  "pi": {
+    "extensions": [
+      "./pi/caret.ts"
+    ],
+    "changelogPath": ""
+  },
+  "keywords": [
+    "pi-package"
+  ],
   "bin": {
     "caret": "./bin/caret"
   },
@@ -28,6 +37,7 @@
     "hooks/",
     "commands/",
     "opencode/",
+    "pi/",
     "templates/",
     "mod/hooks/band.tsx",
     "mod/band.d.ts",
