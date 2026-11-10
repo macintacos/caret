@@ -42,7 +42,9 @@ Day to day, reach for [`mise run dev`](#mise-run-dev) instead.
 
 Prerequisites are [`git`](https://git-scm.com) and [mise](https://mise.jdx.dev); the first
 `mise run` installs [`bun`](https://bun.sh) and the rest of the pinned toolchain. The
-[`claude`](https://claude.com/claude-code) CLI is required only for the Claude target.
+[`claude`](https://claude.com/claude-code) CLI is required only for the Claude target. The
+unit suite also needs Node 22.19+ with `npm` on `PATH`, because `test/pi/live.test.ts`
+runs pi's CLI.
 
 ## Development
 
