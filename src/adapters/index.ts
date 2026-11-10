@@ -37,8 +37,9 @@ const REGISTRY: Record<string, AgentAdapter> = {
   // daemon-side review pipeline is reused unchanged. Both ends of its wire are
   // caret-owned.
   opencode: opencodeAdapter,
-  // Selectable via CARET_AGENT=pi. Plugin-shaped like OpenCode: its extension bridges
-  // to `caret review` over the caret-owned envelope.
+  // Default-off and selectable via CARET_AGENT=pi; plugin-shaped like OpenCode — pi's
+  // extension (EXC-2315, not yet shipped) bridges to `caret review` over the
+  // caret-owned envelope.
   pi: piAdapter,
   // Set by caret's own MCP server, never by users. It speaks the caret-owned
   // envelope and flat allow/deny from src/adapters/wire.ts, passing no accept modes

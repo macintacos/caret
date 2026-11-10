@@ -1,5 +1,5 @@
-// pi's version floor and its `pi --version` reader, shared by install's preflight and
-// doctor's `pi-host` check.
+// pi's version floor and its `pi --version` reader, for the install preflight (EXC-2319)
+// and doctor's `pi-host` check (EXC-2320).
 
 import { isNewer, parseVersionTriple } from "@/lib/semver.ts";
 
@@ -9,6 +9,9 @@ export const PI_FLOOR = "1.5.0";
 /** Runs `argv` and reports its exit code (null when killed) and stdout. May throw. */
 export type VersionSpawn = (argv: readonly string[]) => { exitCode: number | null; stdout: string };
 
+/** pi's install status. missing: the spawn threw, exited non-zero, or printed no
+ * version. pre-rename: major 0 (published as @mariozechner/pi-coding-agent). too-old:
+ * below PI_FLOOR. */
 export type PiVersion =
   | { status: "missing" }
   | { status: "pre-rename" | "too-old" | "ok"; version: string };
@@ -19,9 +22,7 @@ export function parsePiVersion(stdout: string): string | null {
   return version !== undefined && parseVersionTriple(version) !== null ? version : null;
 }
 
-/** Runs `pi --version` through `spawn`. missing: the spawn threw, exited non-zero, or
- * printed no version. pre-rename: major 0 (published as @mariozechner/pi-coding-agent).
- * too-old: below PI_FLOOR. Never throws. */
+/** Runs `pi --version` through `spawn`. Never throws. */
 export function readPiVersion(spawn: VersionSpawn = spawnVersion): PiVersion {
   let version: string | null;
   try {

@@ -76,6 +76,17 @@ test("walks at most MAX_DEPTH directories below a root", async () => {
   expect((await readPiSkills(await rootsForRepo())).map((s) => s.name)).toEqual(["skill:d"]);
 });
 
+test("lists a name once per origin when two skills share a directory name", async () => {
+  await seedSkill(join(agent(), "skills", "a", "deploy"));
+  await seedSkill(join(agent(), "skills", "b", "deploy"));
+  await seedSkill(join(cwd(), ".agents", "skills", "ship"));
+  await seedSkill(join(repo(), ".agents", "skills", "ship"));
+  expect(await readPiSkills(await rootsForRepo())).toEqual([
+    { name: "skill:deploy", origin: "user" },
+    { name: "skill:ship", origin: "project-agents" },
+  ]);
+});
+
 test("returns nothing when no root exists", async () => {
   expect(await readPiSkills(await rootsForRepo())).toEqual([]);
 });

@@ -1,6 +1,7 @@
-// The pi adapter: pi integrates through caret's extension, which bridges to `caret
-// review` by piping the caret-owned envelope (src/adapters/wire.ts) on stdin and
-// reading the flat decision this adapter emits. Selectable via CARET_AGENT=pi.
+// The pi adapter: pi integrates through caret's extension (EXC-2315, not yet shipped),
+// which will bridge to `caret review` over the caret-owned envelope
+// (src/adapters/wire.ts). Default-off, selectable via CARET_AGENT=pi; until the
+// extension lands nothing sets it.
 
 import { homedir } from "node:os";
 

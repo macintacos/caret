@@ -474,7 +474,7 @@ export interface HealthIdentity {
    * rather than retiring its daemon; `caret serve` is resident without it. Absent means
    * the peer predates the field, and `resident` stands in. */
   supervised?: boolean;
-  /** The active adapter's id — "claude" | "opencode" | "codex" | "pi" — the "source"
+  /** The active adapter's id — "claude" | "opencode" | "codex" | "pi" | "claude-mcp" — the "source"
    * the UI adapts to (EXC-791): e.g. an OpenCode session, whose single approve
    * variant renders a plain button rather than a split-button. Optional: a
    * daemon that predates the field, or declares none, omits it. */

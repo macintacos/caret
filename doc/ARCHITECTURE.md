@@ -133,15 +133,16 @@ adapter raw hook stdin and a core decision; the adapter hands back a normalized 
 tool-specific stdout response. The dependency runs one way — an adapter imports core
 types, never the reverse.
 
-caret registers three adapters today. Claude's is the reference implementation the other
-two are measured against. Pick one with `CARET_AGENT`; with no selector caret uses Claude,
-so the shipped Claude plugin keeps working unchanged.
+caret registers four adapters today. Claude's is the reference implementation the others
+are measured against. Pick one with `CARET_AGENT`; with no selector caret uses Claude, so
+the shipped Claude plugin keeps working unchanged.
 
 | Adapter | `CARET_AGENT` | How it wires in | What ships | Status |
 | ------- | ------------- | --------------- | ---------- | ------ |
 | **Claude Code** — `src/adapters/claude/` | `claude` (the default) | Five hooks; the `PermissionRequest`/`ExitPlanMode` one intercepts the plan. The plugin also serves a `review_plan` MCP tool (`caret mcp`) | The `caret@caret` plugin, from caret's own marketplace | Stable (default) |
 | **OpenCode** — `src/adapters/opencode/` | `opencode` | An in-process plugin registering a `caret_review_plan` tool — OpenCode has no plan hook to intercept | The `@macintacos/caret` npm package, plus its own installer | Stable |
 | **Codex CLI** — `src/adapters/codex/` | `codex` | A `PermissionRequest` hook | Nothing — no installer, no hook manifests | Provisional, default-off |
+| **pi** — `src/adapters/pi/` | `pi` | An extension bridging to `caret review` over the caret-owned envelope | Nothing yet — the extension has not shipped | Provisional, default-off |
 
 > [!WARNING]
 > The Codex adapter's wire contract is modeled from Codex documentation and has never been
@@ -509,7 +510,7 @@ src/config/         settings, preferences, resolved paths, and shared constants
 src/theme/          theme files and syntax roles — the theme-file schema and its JSON Schema export, the built-in theme ids, the loader that reads the themes folder, the TextMate scopes each role paints and the fallback each optional role takes, the converter from a VS Code theme's rules onto roles, and the importer `caret convert-theme` runs to turn a VS Code theme file into a theme file
 src/lib/            cross-cutting foundation — wire-contract types, logging, and small shared utilities
 src/commands/       per-subcommand entrypoints (one file per subcommand), plus the wiring they share
-src/adapters/       the coding-agent adapter axis — the AgentAdapter interface and registry, plus one directory per tool (claude · opencode · codex)
+src/adapters/       the coding-agent adapter axis — the AgentAdapter interface and registry, plus one directory per tool (claude · opencode · codex · pi)
 ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs · src/lib/themes/ the built-in theme files · src/code-themes/ the vendored Nightfox shiki themes, the theme comparison's reference rather than a shipped theme
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode + UserPromptSubmit, plus the `modules` entry that loads the mod) — Claude-adapter packaging
 mod/                the Claude Code mod — the plan-waiting band's hooks module, its state typings, and its kit tests (`claude plugin test mod`) — Claude-adapter packaging

@@ -2,11 +2,15 @@
 // feedback editors' `/` completion. Names only, like the Claude enumerator — a
 // SKILL.md is probed for existence and opened only by `readPiSkillDescription`.
 // Unlike Claude's flat roots, pi discovers skills recursively, so the walk here is
-// too. Prompt templates (`/name`) are not listed. Never throws.
+// too — but pi walks unbounded and follows symlinked directories, while this walk
+// stops at MAX_DEPTH and descends no symlink, so a loop or a large tree can't stall
+// the `/` completion; a skill pi reaches only past either bound isn't offered. pi's
+// bare `.md` skill files, its ignore files, and its project-trust gate aren't
+// modelled. Prompt templates (`/name`) are not listed. Never throws.
 
 import { existsSync } from "node:fs";
 import { access, readdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import { compareCodeUnits } from "@/lib/compare.ts";
 import { readDescriptionUnder } from "@/lib/skill-doc.ts";
@@ -31,7 +35,7 @@ function ancestorsToRepoRoot(cwd: string): string[] {
   }
 }
 
-/** pi's skill roots in discovery order, deduplicated by `dir` (first wins). */
+/** pi's skill roots in the order caret lists them, deduplicated by `dir` (first wins). */
 export function piSkillRoots(
   cwd: string,
   { agentDir, home }: { agentDir: string; home: string },
@@ -73,7 +77,7 @@ async function skillDirsUnder(root: string, relative = "", depth = 1): Promise<s
 
 // pi prefers a frontmatter `name` over the directory name, but enumeration reads
 // names only, so a skill whose declared name differs is offered by directory name.
-const skillName = (relative: string): string => `skill:${relative.split("/").at(-1)}`;
+const skillName = (relative: string): string => `skill:${basename(relative)}`;
 
 async function skillsUnder(root: PiSkillRoot): Promise<Array<{ name: string; relative: string }>> {
   const dirs = await skillDirsUnder(root.dir);
@@ -82,14 +86,21 @@ async function skillsUnder(root: PiSkillRoot): Promise<Array<{ name: string; rel
     .sort((a, b) => compareCodeUnits(a.name, b.name));
 }
 
-/** Every skill under `roots`, roots in order, each sorted by name. */
+/** Every skill under `roots`, roots in order, each sorted by name; a name repeated
+ * within one origin is listed once, first wins. */
 export async function readPiSkills(roots: readonly PiSkillRoot[]): Promise<SkillRef[]> {
   const perRoot = await Promise.all(
     roots.map(async (root) =>
       (await skillsUnder(root)).map(({ name }): SkillRef => ({ name, origin: root.origin })),
     ),
   );
-  return perRoot.flat();
+  const seen = new Set<string>();
+  return perRoot.flat().filter(({ name, origin }) => {
+    const key = `${origin}:${name}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /** One skill's frontmatter `description`, from the first root of its origin that

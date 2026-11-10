@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -36,6 +36,42 @@ test("degrades to unknown when settings.json is unreadable, malformed, or absent
   expect(readPiInstallState(join(FIXTURES, "unreadable"))).toEqual(UNKNOWN);
   expect(readPiInstallState(invalidJsonAgentDir())).toEqual(UNKNOWN);
   expect(readPiInstallState(mkdtempSync(join(tmpdir(), "caret-pi-install-")))).toEqual(UNKNOWN);
+});
+
+function localCheckout(root: string): string {
+  const dir = join(root, "checkout");
+  mkdirSync(dir);
+  writeFileSync(
+    join(dir, "package.json"),
+    JSON.stringify({ name: "@macintacos/caret", version: "2.0.0" }),
+  );
+  return dir;
+}
+
+function agentDirWithSource(source: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "caret-pi-agent-"));
+  writeFileSync(join(dir, "settings.json"), JSON.stringify({ packages: [source] }));
+  return dir;
+}
+
+test("resolves a ~-prefixed local entry against the given home", () => {
+  const home = mkdtempSync(join(tmpdir(), "caret-pi-home-"));
+  localCheckout(home);
+  expect(readPiInstallState(agentDirWithSource("~/checkout"), home)).toEqual({
+    pluginVersion: "2.0.0",
+    pluginEnabled: true,
+    hookInUserSettings: false,
+  });
+});
+
+test("resolves an absolute local entry as-is", () => {
+  const checkout = localCheckout(mkdtempSync(join(tmpdir(), "caret-pi-abs-")));
+  const home = mkdtempSync(join(tmpdir(), "caret-pi-home-"));
+  expect(readPiInstallState(agentDirWithSource(checkout), home)).toEqual({
+    pluginVersion: "2.0.0",
+    pluginEnabled: true,
+    hookInUserSettings: false,
+  });
 });
 
 test("readPiSettings returns the parsed settings object, or null when unreadable", () => {

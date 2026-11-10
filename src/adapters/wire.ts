@@ -5,10 +5,10 @@
 // envelope and flat allow/deny that OpenCode's plugin, pi's extension, and
 // `caret mcp` (claude-mcp) share, where caret builds both ends.
 //
-// Runtime-dependency-free by design (literals and JSON.stringify only, no imports),
-// because permissionRequestDenyLine and flatDenyLine are what the CLI's fatal
-// handler falls back to when an adapter fails to load: nothing reachable from here
-// can take that deny down.
+// Imports nothing, because the CLI's fatal handler falls back to
+// permissionRequestDenyLine when no adapter can be selected. The deny lines
+// (permissionRequestDenyLine, flatDenyLine) are literals and JSON.stringify only, as
+// AgentAdapter.fatalDenyLine requires.
 
 /** Parse a tool's raw hook stdin. Throws on input that can't be parsed — the
  * caller turns that into a fail-safe deny. */
@@ -92,26 +92,27 @@ export interface FlatDecision {
   acceptMode?: string;
 }
 
-/** Reviewer notes ride an allow; `acceptModes` lists the approve-variant ids this host
- * acts on — any other is dropped, so a plain approve stays a bare allow. A deny always
- * carries `denyMessage(feedback)`. */
+/** Render a core decision as the flat wire decision. Only an explicit allow allows:
+ * reviewer notes ride it, and `acceptModes` lists the approve-variant ids this host
+ * acts on — any other is dropped, so a plain approve stays a bare allow. Anything else
+ * is a deny carrying `denyMessage(feedback)`. */
 export function flatDecision(
   decision: FlatDecision,
   acceptModes: readonly string[] = [],
 ): FlatDecision {
-  if (decision.behavior === "deny") {
-    return { behavior: "deny", feedback: denyMessage(decision.feedback) };
+  if (decision.behavior === "allow") {
+    const notes = decision.feedback?.trim();
+    const mode =
+      decision.acceptMode && acceptModes.includes(decision.acceptMode)
+        ? decision.acceptMode
+        : undefined;
+    return {
+      behavior: "allow",
+      ...(notes && { feedback: notes }),
+      ...(mode && { acceptMode: mode }),
+    };
   }
-  const notes = decision.feedback?.trim();
-  const mode =
-    decision.acceptMode && acceptModes.includes(decision.acceptMode)
-      ? decision.acceptMode
-      : undefined;
-  return {
-    behavior: "allow",
-    ...(notes && { feedback: notes }),
-    ...(mode && { acceptMode: mode }),
-  };
+  return { behavior: "deny", feedback: denyMessage(decision.feedback) };
 }
 
 /** Last-resort flat deny line for the CLI's fatal handler. */
