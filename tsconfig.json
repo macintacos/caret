@@ -32,7 +32,8 @@
     // test/e2e/support/ (Playwright) — which a bare `./support/x` could not.
     // `@oc/*` maps opencode/ but is not spelled `@opencode/*`: `@opencode` is a
     // real npm scope (`@opencode/plugin`), which that alias would shadow the
-    // moment a matching file landed in opencode/.
+    // moment a matching file landed in opencode/. `@piext/*` maps pi/ and is not
+    // spelled `@pi/*`, which could be a real npm scope.
     //
     // `@root/package.json` is exact rather than a `@root/*` wildcard because the
     // repo root is not a source root: `@root/*` would alias the whole tree at
@@ -46,10 +47,18 @@
       "@test/*": ["./test/*"],
       "@scripts/*": ["./scripts/*"],
       "@oc/*": ["./opencode/*"],
+      "@piext/*": ["./pi/*"],
       "@ui/*": ["./ui/*"],
       "@root/package.json": ["./package.json"]
     }
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "opencode/**/*.ts", "*.ts"],
+  "include": [
+    "src/**/*.ts",
+    "scripts/**/*.ts",
+    "test/**/*.ts",
+    "opencode/**/*.ts",
+    "pi/**/*.ts",
+    "*.ts"
+  ],
   "exclude": ["node_modules", "bin", "ui", "spike"]
 }
