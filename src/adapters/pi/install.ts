@@ -3,7 +3,7 @@
 // "unknown" rather than throwing.
 
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { join, resolve } from "node:path";
 
 import type { InstallProbe } from "@/adapters/adapter.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
@@ -48,56 +48,73 @@ export function readPiInstallState(agentDir: string, home = homedir()): InstallP
   if (!settings) {
     return { pluginVersion: "unknown", pluginEnabled: "unknown", hookInUserSettings: false };
   }
-  const entry = findCaretEntry(settings.packages, { agentDir, home });
+  const entry = caretEntries(settings.packages, { agentDir, home })[0];
   return {
-    pluginVersion: entry ? readVersion(entry.packageJson) : "unknown",
+    pluginVersion: entry?.version ?? "unknown",
     // ponytail: extension filters (`!glob`, `-path`) aren't evaluated against
     // caret's extension manifest — any non-empty filter counts as enabled;
     // evaluate globs if a user hits a false "enabled".
-    pluginEnabled: entry !== null && !isEmptyArray(entry.extensions),
+    pluginEnabled: entry !== undefined && !isEmptyArray(entry.extensions),
     hookInUserSettings: false,
   };
 }
 
-interface CaretEntry {
-  packageJson: string;
+/** One caret entry in pi's `packages`, in settings order. */
+export type PiCaretEntry = {
+  /** The source exactly as settings.json stores it. */
+  source: string;
+  /** The package dir pi loads: the npm install root's copy, or the local path
+   * resolved from the agent dir. */
+  dir: string;
+  /** `dir`'s package.json version; null when pi lists the entry but the package
+   * isn't there to read. */
+  version: string | null;
   extensions: unknown;
-}
+} & ({ form: "npm"; pinned: boolean } | { form: "local" });
 
 interface PiDirs {
   agentDir: string;
   home: string;
 }
 
-function findCaretEntry(packages: unknown, dirs: PiDirs): CaretEntry | null {
-  if (!Array.isArray(packages)) return null;
-  for (const pkg of packages) {
+/** Every caret entry in pi's user settings, in order; empty when settings.json is
+ * missing, unreadable, or lists none. */
+export function readPiCaretEntries(agentDir: string, home = homedir()): PiCaretEntry[] {
+  return caretEntries(readPiSettings(agentDir)?.packages, { agentDir, home });
+}
+
+function caretEntries(packages: unknown, dirs: PiDirs): PiCaretEntry[] {
+  if (!Array.isArray(packages)) return [];
+  return packages.flatMap((pkg) => {
     const source = typeof pkg === "string" ? pkg : (pkg as { source?: unknown } | null)?.source;
-    if (typeof source !== "string") continue;
-    const packageJson = caretPackageJson(source, dirs);
-    if (packageJson) {
-      return { packageJson, extensions: (pkg as { extensions?: unknown }).extensions };
-    }
-  }
-  return null;
+    if (typeof source !== "string") return [];
+    const entry = caretEntry(source, (pkg as { extensions?: unknown }).extensions, dirs);
+    return entry ? [entry] : [];
+  });
 }
 
-/** The `package.json` path of caret's install for `source`, or null when the
- * source isn't caret. pi resolves relative user-settings paths from the agent dir. */
-function caretPackageJson(source: string, { agentDir, home }: PiDirs): string | null {
-  if (NPM_SOURCE.test(source)) {
-    return join(agentDir, "npm", "node_modules", CARET_PACKAGE, "package.json");
+/** The entry `source` describes, or null when it isn't caret. pi resolves relative
+ * user-settings paths from the agent dir. */
+function caretEntry(
+  source: string,
+  extensions: unknown,
+  { agentDir, home }: PiDirs,
+): PiCaretEntry | null {
+  const npm = NPM_SOURCE.exec(source);
+  if (npm) {
+    const dir = join(agentDir, "npm", "node_modules", CARET_PACKAGE);
+    const version = manifestVersion(readJsonFileSync(join(dir, "package.json")));
+    return { source, dir, version, extensions, form: "npm", pinned: npm[1] !== undefined };
   }
-  const expanded = expandTilde(source, home);
-  const dir = isAbsolute(expanded) ? expanded : join(agentDir, expanded);
-  const packageJson = join(dir, "package.json");
-  const manifest = readJsonFileSync(packageJson) as { name?: unknown } | null;
-  return manifest?.name === CARET_PACKAGE ? packageJson : null;
+  const dir = resolve(agentDir, expandTilde(source, home));
+  const manifest = readJsonFileSync(join(dir, "package.json")) as { name?: unknown } | null;
+  if (manifest?.name !== CARET_PACKAGE) return null;
+  return { source, dir, version: manifestVersion(manifest), extensions, form: "local" };
 }
 
-function readVersion(packageJson: string): string {
-  const version = (readJsonFileSync(packageJson) as { version?: unknown } | null)?.version;
-  return typeof version === "string" ? version : "unknown";
+function manifestVersion(manifest: unknown): string | null {
+  const version = (manifest as { version?: unknown } | null)?.version;
+  return typeof version === "string" ? version : null;
 }
 
 function isEmptyArray(value: unknown): boolean {

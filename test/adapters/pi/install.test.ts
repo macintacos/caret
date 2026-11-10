@@ -3,7 +3,12 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { piAgentDir, readPiInstallState, readPiSettings } from "@/adapters/pi/install.ts";
+import {
+  piAgentDir,
+  readPiCaretEntries,
+  readPiInstallState,
+  readPiSettings,
+} from "@/adapters/pi/install.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "install");
 const UNKNOWN = {
@@ -72,6 +77,62 @@ test("resolves an absolute local entry as-is", () => {
     pluginEnabled: true,
     hookInUserSettings: false,
   });
+});
+
+test("readPiCaretEntries reads an unpinned npm entry", () => {
+  const agentDir = join(FIXTURES, "npm-entry");
+  expect(readPiCaretEntries(agentDir)).toEqual([
+    {
+      source: "npm:@macintacos/caret",
+      dir: join(agentDir, "npm", "node_modules", "@macintacos", "caret"),
+      version: "1.8.1",
+      extensions: undefined,
+      form: "npm",
+      pinned: false,
+    },
+  ]);
+});
+
+test("readPiCaretEntries marks a versioned npm source as pinned", () => {
+  expect(readPiCaretEntries(join(FIXTURES, "pinned-entry"))).toMatchObject([
+    { source: "npm:@macintacos/caret@1.8.0", form: "npm", pinned: true, version: "1.8.0" },
+  ]);
+});
+
+test("readPiCaretEntries resolves a relative local entry from the agent dir", () => {
+  const agentDir = join(FIXTURES, "local-entry");
+  expect(readPiCaretEntries(agentDir)).toMatchObject([
+    { source: "./checkout", form: "local", dir: join(agentDir, "checkout"), version: "1.9.0" },
+  ]);
+});
+
+test("readPiCaretEntries lists every caret entry in settings order, skipping others", () => {
+  const checkout = localCheckout(mkdtempSync(join(tmpdir(), "caret-pi-abs-")));
+  const agentDir = mkdtempSync(join(tmpdir(), "caret-pi-agent-"));
+  writeFileSync(
+    join(agentDir, "settings.json"),
+    JSON.stringify({ packages: ["npm:pi-other-tools", "npm:@macintacos/caret", checkout] }),
+  );
+  expect(readPiCaretEntries(agentDir)).toMatchObject([
+    { source: "npm:@macintacos/caret", form: "npm" },
+    { source: checkout, form: "local", dir: checkout, version: "2.0.0" },
+  ]);
+});
+
+test("readPiCaretEntries reports a null version when the listed npm package is missing", () => {
+  const agentDir = agentDirWithSource("npm:@macintacos/caret");
+  expect(readPiCaretEntries(agentDir)).toMatchObject([{ form: "npm", version: null }]);
+  expect(readPiInstallState(agentDir)).toEqual({
+    pluginVersion: "unknown",
+    pluginEnabled: true,
+    hookInUserSettings: false,
+  });
+});
+
+test("readPiCaretEntries is empty when settings list no caret entry or can't be read", () => {
+  expect(readPiCaretEntries(join(FIXTURES, "no-entry"))).toEqual([]);
+  expect(readPiCaretEntries(join(FIXTURES, "unreadable"))).toEqual([]);
+  expect(readPiCaretEntries(mkdtempSync(join(tmpdir(), "caret-pi-install-")))).toEqual([]);
 });
 
 test("readPiSettings returns the parsed settings object, or null when unreadable", () => {
