@@ -3,7 +3,7 @@
 
 import { readFile } from "node:fs/promises";
 
-import { REVIEW_TOOL } from "../bridge/review-bridge.ts";
+import { errorMessage, REVIEW_TOOL } from "../bridge/review-bridge.ts";
 import { sendAndWait } from "./follow-up.ts";
 
 /** The demo template, relative to the extension entry `pi/caret.ts`. */
@@ -60,9 +60,8 @@ export function installDemo(
       try {
         template = await readFile(templatePath, "utf-8");
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
         ctx.ui.notify(
-          `caret couldn't read its demo template at ${templatePath}: ${message}`,
+          `caret couldn't read its demo template at ${templatePath}: ${errorMessage(err)}`,
           "error",
         );
         return;

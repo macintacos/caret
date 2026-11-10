@@ -8,7 +8,12 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { decisionText, nodeSpawnRunner, type SpawnRunner } from "../bridge/review-bridge.ts";
+import {
+  decisionText,
+  errorMessage,
+  nodeSpawnRunner,
+  type SpawnRunner,
+} from "../bridge/review-bridge.ts";
 import {
   CARET_DECISION_KEY,
   CARET_URL_KEY,
@@ -210,12 +215,11 @@ export function createCaretSetup(opts: {
         return { content, metadata: { [CARET_DECISION_KEY]: decision.behavior } };
       } catch (error) {
         if (declined !== undefined && error === declined) throw error;
-        const message = error instanceof Error ? error.message : String(error);
         return {
           content: decisionText(
             {
               behavior: "deny",
-              feedback: `caret: review failed to run (${message}) — denying to fail safe.`,
+              feedback: `caret: review failed to run (${errorMessage(error)}) — denying to fail safe.`,
             },
             REVIEW_TOOL,
           ),

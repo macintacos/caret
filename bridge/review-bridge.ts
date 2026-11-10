@@ -42,6 +42,12 @@ export function resolveCaretBin(opts: {
   return fileURLToPath(new URL("../bin/caret", opts.importMetaUrl));
 }
 
+/** `err`'s message, or `err` stringified when it is not an Error. A twin of
+ * `errorMessage` in src/lib/types.ts, which this module cannot import. */
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /** Semver triple `[major, minor, patch]`, or null when `v` is not `X.Y.Z` (an
  * optional leading `v` is stripped; trailing prerelease/build metadata ignored). */
 export function parseVersionTriple(v: string): [number, number, number] | null {
@@ -325,8 +331,7 @@ export async function runReviewViaCaret(
     );
     return parseDecision(stdout);
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return failsafeDeny(`caret: review failed to run (${message}) — denying to fail safe.`);
+    return failsafeDeny(`caret: review failed to run (${errorMessage(e)}) — denying to fail safe.`);
   }
 }
 

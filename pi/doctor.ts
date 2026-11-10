@@ -3,7 +3,7 @@
 
 import { Text } from "@earendil-works/pi-tui";
 
-import type { SpawnRunner } from "../bridge/review-bridge.ts";
+import { errorMessage, type SpawnRunner } from "../bridge/review-bridge.ts";
 import type { PiTheme } from "./render.ts";
 
 /** The customType of the transcript entry, and the key of the footer status. */
@@ -73,11 +73,10 @@ export async function runDoctor({ bin, run, env }: DoctorDeps): Promise<DoctorOu
         exitCode: null,
         reason: `caret doctor didn't finish within ${DOCTOR_TIMEOUT_MS / 1000} seconds.`,
       };
-    const message = err instanceof Error ? err.message : String(err);
     return {
       kind: "no-report",
       exitCode: null,
-      reason: `Couldn't start caret at ${bin}: ${message}`,
+      reason: `Couldn't start caret at ${bin}: ${errorMessage(err)}`,
     };
   }
 }

@@ -22,6 +22,7 @@ import type { LocalInstall } from "@/commands/install/local.ts";
 import { devMarketplaceDir, writeDevMarketplace } from "@/commands/install/local.ts";
 import type { InstallUI } from "@/commands/install/ui.ts";
 import { silentUI } from "@/commands/install/ui.ts";
+import { errorMessage } from "@/lib/types.ts";
 
 /** caret's public marketplace source, the marketplace's registered name, and the
  * `plugin@marketplace` id Claude uses (both the marketplace and the plugin are named
@@ -54,7 +55,7 @@ const claudeCli: ClaudeRunner = async (args) => {
     return { ok: false, detail: err.trim() || `claude exited ${code}`, stdout: out };
   } catch (e) {
     const missing = e instanceof Error && (e as NodeJS.ErrnoException).code === "ENOENT";
-    return { ok: false, missing, detail: e instanceof Error ? e.message : String(e), stdout: "" };
+    return { ok: false, missing, detail: errorMessage(e), stdout: "" };
   }
 };
 
