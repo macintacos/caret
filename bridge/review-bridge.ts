@@ -9,6 +9,7 @@
 
 import { spawn } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
+import { constants } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -266,7 +267,8 @@ export function parseReviewUrl(stderr: string): string | undefined {
  * the child's stderr chunks as they arrive, so the caller can surface the review URL
  * the core prints there while the review is still pending. An aborted `signal` must
  * terminate the child and settle (reject) promptly: `caret mcp` refuses a new call until
- * the aborted one settles. */
+ * the aborted one settles. A child killed by a signal exits 128 + the signal number, as
+ * in a shell, so it never reads as success. */
 export type SpawnRunner = (
   command: string[],
   env: Record<string, string | undefined>,
@@ -364,7 +366,9 @@ export const nodeSpawnRunner: SpawnRunner = (command, env, stdin, onStderr, sign
     });
     child.stderr.on("data", (chunk) => onStderr?.(chunk.toString()));
     child.on("error", reject);
-    child.on("close", (code) => resolve({ stdout, exitCode: code ?? 0 }));
+    child.on("close", (code, killedBy) =>
+      resolve({ stdout, exitCode: code ?? 128 + (killedBy ? constants.signals[killedBy] : 0) }),
+    );
     // A child killed before reading stdin EPIPEs the write; unhandled, that crashes the
     // host. The 'error'/'close' handlers above already settle.
     child.stdin.on("error", () => {});

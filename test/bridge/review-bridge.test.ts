@@ -353,6 +353,11 @@ test("nodeSpawnRunner spawns the argv's first entry with the rest as its argumen
   expect(stdout).toBe("review|--flag|");
 });
 
+test("nodeSpawnRunner reports a signal-killed child as 128 + the signal number, as a shell does", async () => {
+  const { exitCode } = await nodeSpawnRunner([shim("kill -KILL $$")], process.env, "");
+  expect(exitCode).toBe(128 + 9);
+});
+
 /** Settles with "hung" if `p` has not settled within `ms` — well short of the sleep the
  * shims below would otherwise run to. */
 function settlesWithin(p: Promise<unknown>, ms: number): Promise<"settled" | "hung"> {

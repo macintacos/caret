@@ -59,7 +59,6 @@ export async function runDoctor({ bin, run, env }: DoctorDeps): Promise<DoctorOu
       AbortSignal.timeout(DOCTOR_TIMEOUT_MS),
     );
     const report = stdout.trim();
-    // A signal-killed child reports exit 0 with no output.
     if ((exitCode === 0 || exitCode === 1) && report) return { kind: "report", exitCode, report };
     return {
       kind: "no-report",
