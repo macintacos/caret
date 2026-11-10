@@ -1,16 +1,88 @@
 // The bridge from an agent's plan-review tool to `caret review`, shared by the OpenCode
-// plugin and `caret mcp`: build caret's review envelope, spawn the review, and turn the
-// flat decision it prints into the tool's result text. It sits in opencode/ because that
-// directory ships as unbundled source the plugin can reach only by relative import, and
-// it imports node builtins only, so bundling it into the CLI pulls in no plugin SDK. It
-// also holds PLAN_TITLE_INSTRUCTION, since this is the one module the plugin, `caret mcp`
-// and `caret steer` can all import.
+// plugin, `caret mcp` and pi's extension: resolve the plan and the caret binary, build
+// caret's review envelope, spawn the review, and turn the flat decision it prints into the
+// tool's result text. It stays in opencode/ because that directory already ships as
+// unbundled source each host reaches by relative import; moving it would churn OpenCode's
+// packaging for no gain. It imports node builtins only, so bundling it into the CLI pulls
+// in no plugin SDK. It also holds PLAN_TITLE_INSTRUCTION, since this is the one module the
+// hosts, `caret mcp` and `caret steer` can all import.
 
 import { spawn } from "node:child_process";
+import { readFileSync, statSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
+/** `failsafe` is set only on a deny caret made itself because the review could not run,
+ * never on a reviewer's. */
 export type CaretDecision =
   | { behavior: "allow"; feedback?: string; acceptMode?: string }
-  | { behavior: "deny"; feedback: string };
+  | { behavior: "deny"; feedback: string; failsafe?: true };
+
+/** The plan-review tool the agent calls. */
+export const REVIEW_TOOL = "caret_review_plan";
+
+// The review tool's model-facing text. Every host's registration reads these, so they stay
+// word-for-word identical (plugin-v2.test.ts pins the refusal texts).
+export const REVIEW_TOOL_DESCRIPTION =
+  "Submit the current plan to caret for human review in a local browser UI. For plans only: caret presents what it receives as a plan, so do not use it for other documents or questions. Pass exactly one of `path` (preferred: a markdown file you write once and revise with edits) or `plan` (the plan inline). Blocks until the user approves or requests changes. On a change request, follow the result's instructions and call this tool again. Do not implement the plan until a call returns an approval.";
+
+export const PLAN_ARG_DESCRIPTION =
+  "The complete plan, as markdown, to present for human review. The inline alternative to `path`.";
+
+/** The caret binary a host spawns. The `overrideVar` env override wins; else
+ * `../bin/caret` beside the calling module's `importMetaUrl`. */
+export function resolveCaretBin(opts: {
+  env: Record<string, string | undefined>;
+  importMetaUrl: string;
+  overrideVar: string;
+}): string {
+  const override = opts.env[opts.overrideVar]?.trim();
+  if (override) return override;
+  return fileURLToPath(new URL("../bin/caret", opts.importMetaUrl));
+}
+
+type PlanSource = { plan: string; planFilePath?: string };
+
+/** The plan the review tool submits, from exactly one of its `plan` / `path` args (an
+ * empty string counts as absent). A `path` resolves against the session directory and
+ * must be a readable `.md` file — mirroring the core's `isPlanFile`
+ * (src/plan/canonical-file.ts), repeated here because this module cannot import src/.
+ * `readFile` returns the text, or undefined when absPath is not a readable regular
+ * file. */
+export function resolvePlanSource(
+  args: { plan?: string; path?: string },
+  directory: string,
+  readFile: (absPath: string) => string | undefined,
+): PlanSource | { error: string } {
+  const plan = args.plan || undefined;
+  const path = args.path || undefined;
+  const notExactlyOne = {
+    error: `caret: ${REVIEW_TOOL} takes exactly one of \`plan\` or \`path\`. Pass the plan file as \`path\`, or the plan inline as \`plan\`.`,
+  };
+  if (path === undefined) return plan === undefined ? notExactlyOne : { plan };
+  if (plan !== undefined) return notExactlyOne;
+  const planFilePath = resolve(directory, path);
+  if (!planFilePath.endsWith(".md")) {
+    return {
+      error: `caret: ${REVIEW_TOOL} needs a markdown (.md) file as \`path\`, not ${planFilePath}. Write the plan to a .md file, or pass it inline as \`plan\`.`,
+    };
+  }
+  const text = readFile(planFilePath);
+  if (text === undefined) {
+    return {
+      error: `caret: ${REVIEW_TOOL} could not read ${planFilePath} as a regular file. Write the plan there first, or pass it inline as \`plan\`.`,
+    };
+  }
+  return { plan: text, planFilePath };
+}
+
+export function readRegularFile(absPath: string): string | undefined {
+  try {
+    return statSync(absPath).isFile() ? readFileSync(absPath, "utf-8") : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /** Asks the model to open its plan on a `#` heading, which deriveTitle
  * (src/review/threading.ts) prefers as the review title — keep the two in sync. Sent by
@@ -54,6 +126,7 @@ export function parseDecision(stdout: string): CaretDecision {
       behavior?: unknown;
       feedback?: unknown;
       acceptMode?: unknown;
+      failsafe?: unknown;
     };
     if (parsed.behavior === "allow") {
       // Reviewer notes (EXC-791) ride the allow; surface them to the agent below.
@@ -69,6 +142,7 @@ export function parseDecision(stdout: string): CaretDecision {
       return {
         behavior: "deny",
         feedback: typeof parsed.feedback === "string" ? parsed.feedback : "Plan changes requested.",
+        ...(parsed.failsafe === true && { failsafe: true }),
       };
     }
     return failsafeDeny("caret: unrecognized review decision — denying to fail safe.");
@@ -78,7 +152,7 @@ export function parseDecision(stdout: string): CaretDecision {
 }
 
 function failsafeDeny(feedback: string): CaretDecision {
-  return { behavior: "deny", feedback };
+  return { behavior: "deny", feedback, failsafe: true };
 }
 
 /** Tool result returned to the agent on approval. Optional reviewer notes

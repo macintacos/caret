@@ -163,7 +163,13 @@ export function createCaretPlugin(
     plansDir?: string;
   } = {},
 ): Plugin {
-  const bin = opts.bin ?? resolveCaretBin({ env: process.env, importMetaUrl: import.meta.url });
+  const bin =
+    opts.bin ??
+    resolveCaretBin({
+      env: process.env,
+      importMetaUrl: import.meta.url,
+      overrideVar: "CARET_OPENCODE_BIN",
+    });
   const run = opts.run ?? nodeSpawnRunner;
   const warm = opts.warm ?? nodeWarmRunner;
   const plansDir =

@@ -6,9 +6,9 @@
 // evaluates either host's SDK; test/structure/dependency-placement.test.ts holds it there.
 
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -16,20 +16,20 @@ import {
   type CaretDecision,
   decisionText,
   PLAN_TITLE_INSTRUCTION,
+  REVIEW_TOOL,
+  readRegularFile,
+  resolvePlanSource,
   runReviewViaCaret,
   type SpawnRunner,
 } from "./review-bridge.ts";
 
-/** The caret binary the OpenCode plugin spawns. Env override wins; else the binary that
- * ships beside this module in the npm package. */
-export function resolveCaretBin(opts: {
-  env: Record<string, string | undefined>;
-  importMetaUrl: string;
-}): string {
-  const override = opts.env.CARET_OPENCODE_BIN?.trim();
-  if (override) return override;
-  return fileURLToPath(new URL("../bin/caret", opts.importMetaUrl));
-}
+export {
+  PLAN_ARG_DESCRIPTION,
+  REVIEW_TOOL,
+  REVIEW_TOOL_DESCRIPTION,
+  resolveCaretBin,
+  resolvePlanSource,
+} from "./review-bridge.ts";
 
 /** The plugin's own caret version, for the update check, read from the package.json
  * shipped beside this module. "unknown" when it is unreadable — deliberately UNPARSEABLE
@@ -47,9 +47,6 @@ export function resolveCaretVersion(opts: {
     return "unknown";
   }
 }
-
-/** The plan-review tool the Plan agent calls. */
-export const REVIEW_TOOL = "caret_review_plan";
 
 /** OpenCode's built-in primary planning agent — the one agent caret steers toward
  * the review tool and warms the daemon for. */
@@ -120,49 +117,6 @@ export function decisionToast(outcome: ReviewOutcome): ToastBody {
       return { message: "caret: changes requested", variant: "info", duration: DECISION_TOAST_MS };
     case "cancelled":
       return { message: "caret: review cancelled", variant: "info", duration: DECISION_TOAST_MS };
-  }
-}
-
-type PlanSource = { plan: string; planFilePath?: string };
-
-/** The plan the review tool submits, from exactly one of its `plan` / `path` args (an
- * empty string counts as absent). A `path` resolves against the session directory and
- * must be a readable `.md` file — mirroring the core's `isPlanFile`
- * (src/plan/canonical-file.ts), repeated here because this module cannot import src/.
- * `readFile` returns the text, or undefined when absPath is not a readable regular
- * file. */
-export function resolvePlanSource(
-  args: { plan?: string; path?: string },
-  directory: string,
-  readFile: (absPath: string) => string | undefined,
-): PlanSource | { error: string } {
-  const plan = args.plan || undefined;
-  const path = args.path || undefined;
-  const notExactlyOne = {
-    error: `caret: ${REVIEW_TOOL} takes exactly one of \`plan\` or \`path\`. Pass the plan file as \`path\`, or the plan inline as \`plan\`.`,
-  };
-  if (path === undefined) return plan === undefined ? notExactlyOne : { plan };
-  if (plan !== undefined) return notExactlyOne;
-  const planFilePath = resolve(directory, path);
-  if (!planFilePath.endsWith(".md")) {
-    return {
-      error: `caret: ${REVIEW_TOOL} needs a markdown (.md) file as \`path\`, not ${planFilePath}. Write the plan to a .md file, or pass it inline as \`plan\`.`,
-    };
-  }
-  const text = readFile(planFilePath);
-  if (text === undefined) {
-    return {
-      error: `caret: ${REVIEW_TOOL} could not read ${planFilePath} as a regular file. Write the plan there first, or pass it inline as \`plan\`.`,
-    };
-  }
-  return { plan: text, planFilePath };
-}
-
-function readRegularFile(absPath: string): string | undefined {
-  try {
-    return statSync(absPath).isFile() ? readFileSync(absPath, "utf-8") : undefined;
-  } catch {
-    return undefined;
   }
 }
 
@@ -380,14 +334,6 @@ export const nodeWarmRunner: WarmRunner = (bin) => {
   child.on("error", () => {});
   child.unref();
 };
-
-// The review tool's model-facing text. Both hosts' registrations read these, so v1 and
-// v2 stay word-for-word identical (plugin-v2.test.ts pins the refusal texts).
-export const REVIEW_TOOL_DESCRIPTION =
-  "Submit the current plan to caret for human review in a local browser UI. For plans only: caret presents what it receives as a plan, so do not use it for other documents or questions. Pass exactly one of `path` (preferred: a markdown file you write once and revise with edits) or `plan` (the plan inline). Blocks until the user approves or requests changes. On a change request, follow the result's instructions and call this tool again. Do not implement the plan until a call returns an approval.";
-
-export const PLAN_ARG_DESCRIPTION =
-  "The complete plan, as markdown, to present for human review. The inline alternative to `path`.";
 
 export function pathArgDescription(plansDir: string): string {
   return `Preferred. A markdown (.md) file holding the complete plan, absolute or relative to the session directory. (OpenCode's plan agent writes its plan files in ${plansDir}/.)`;

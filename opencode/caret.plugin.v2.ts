@@ -284,7 +284,11 @@ export function createCaretSetup(opts: {
 
 /** The v2 `setup` OpenCode loads, wired to the production runners. */
 const setup = createCaretSetup({
-  bin: resolveCaretBin({ env: process.env, importMetaUrl: import.meta.url }),
+  bin: resolveCaretBin({
+    env: process.env,
+    importMetaUrl: import.meta.url,
+    overrideVar: "CARET_OPENCODE_BIN",
+  }),
   run: nodeSpawnRunner,
   warm: nodeWarmRunner,
   plansDir: resolvePlansDir({

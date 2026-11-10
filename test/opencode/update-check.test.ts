@@ -98,10 +98,24 @@ test("resolveCaretVersion degrades to an unparseable sentinel when the package.j
 
 test("resolveCaretBin: env override wins, then the package-relative bin", () => {
   const importMetaUrl = "file:///pkg/opencode/caret.plugin.ts";
-  expect(resolveCaretBin({ env: { CARET_OPENCODE_BIN: "/override" }, importMetaUrl })).toBe(
-    "/override",
-  );
-  expect(resolveCaretBin({ env: {}, importMetaUrl })).toBe("/pkg/bin/caret");
+  const overrideVar = "CARET_OPENCODE_BIN";
+  expect(
+    resolveCaretBin({ env: { CARET_OPENCODE_BIN: "/override" }, importMetaUrl, overrideVar }),
+  ).toBe("/override");
+  expect(resolveCaretBin({ env: {}, importMetaUrl, overrideVar })).toBe("/pkg/bin/caret");
+});
+
+test("resolveCaretBin reads only the override variable it is given", () => {
+  const importMetaUrl = "file:///pkg/pi/caret.ts";
+  const env = { CARET_OPENCODE_BIN: "/opencode", CARET_PI_BIN: "/pi" };
+  expect(resolveCaretBin({ env, importMetaUrl, overrideVar: "CARET_PI_BIN" })).toBe("/pi");
+  expect(
+    resolveCaretBin({
+      env: { CARET_OPENCODE_BIN: "/opencode" },
+      importMetaUrl,
+      overrideVar: "CARET_PI_BIN",
+    }),
+  ).toBe("/pkg/bin/caret");
 });
 
 // --- shouldCheckForUpdate (24h throttle, pure) ---

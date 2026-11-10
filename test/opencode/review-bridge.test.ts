@@ -251,6 +251,35 @@ test("runReviewViaCaret fails safe to a deny when the spawn throws", async () =>
   const decision = await runReviewViaCaret("{}", { ...REVIEW, run });
   expect(decision.behavior).toBe("deny");
   expect(decision.feedback).toContain("ENOENT");
+  expect(decision).toMatchObject({ failsafe: true });
+});
+
+test("parseDecision keeps a fail-safe mark on a deny line", () => {
+  expect(parseDecision('{"behavior":"deny","feedback":"x","failsafe":true}')).toEqual({
+    behavior: "deny",
+    feedback: "x",
+    failsafe: true,
+  });
+});
+
+test("parseDecision leaves a reviewer's deny unmarked", () => {
+  expect(Object.hasOwn(parseDecision('{"behavior":"deny","feedback":"x"}'), "failsafe")).toBe(
+    false,
+  );
+});
+
+test("parseDecision marks its own fail-safe denies", () => {
+  expect(parseDecision("not json")).toMatchObject({ behavior: "deny", failsafe: true });
+  expect(parseDecision('{"behavior":"maybe"}')).toMatchObject({
+    behavior: "deny",
+    failsafe: true,
+  });
+});
+
+test("decisionText reads the same for a fail-safe deny as for a reviewer's", () => {
+  expect(
+    decisionText({ behavior: "deny", feedback: "x", failsafe: true }, "caret_review_plan"),
+  ).toBe(decisionText({ behavior: "deny", feedback: "x" }, "caret_review_plan"));
 });
 
 test("runReviewViaCaret surfaces the review URL via onUrl when the child streams it on stderr", async () => {

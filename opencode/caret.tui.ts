@@ -336,7 +336,11 @@ function pendingRow(
 const loadOpenTui = (): Promise<OpenTuiReconciler> => import("@opentui/solid");
 const setup = createCaretTui({
   checkUpdate: productionUpdateCheck,
-  bin: resolveCaretBin({ env: process.env, importMetaUrl: import.meta.url }),
+  bin: resolveCaretBin({
+    env: process.env,
+    importMetaUrl: import.meta.url,
+    overrideVar: "CARET_OPENCODE_BIN",
+  }),
   spawn: nodeDetachedSpawn,
   loadOpenTui,
 });
