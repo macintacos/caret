@@ -1,5 +1,7 @@
 # OpenCode Integration (the spike)
 
+*Audience: coding agents and contributors changing caret's OpenCode support.*
+
 Load this when working on caret's OpenCode support — the adapter
 (`src/adapters/opencode/`), the plugin (`opencode/`), or the install path
 (`caret install`). It records the spike EXC-339 ran (a review of OpenCode's plugin docs +
