@@ -389,8 +389,11 @@ pi loads caret once. A pinned `npm:@macintacos/caret@<spec>` is left alone;
 `pi install npm:@macintacos/caret` unpins it. `--from-local` installs the checkout path,
 which pi loads in place so `/reload` picks up a rebuild, then removes every other caret
 entry. `--uninstall` removes every caret entry, carrying on past a failed removal so the
-service teardown still runs. The installer honours `PI_CODING_AGENT_DIR`; the service
-launcher looks only in the default `~/.pi/agent`.
+service teardown still runs. `caret doctor`'s `pi-host`, `pi-caret-entry`, and
+`pi-caret-version` checks flag a pi below 1.5.0 or missing; caret listed more than once,
+filtered out, or listed without its package; and an npm caret behind the published one.
+The installer and doctor honour `PI_CODING_AGENT_DIR`; the service launcher looks only in
+the default `~/.pi/agent`.
 
 At a terminal the whole run renders as one
 [`@clack/prompts`](https://github.com/bombshell-dev/clack) session: the chooser, then a
