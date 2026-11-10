@@ -94,7 +94,7 @@ export interface InstallOpencodeDeps {
   confirm?: (verdict: StaleVerdict) => Promise<boolean | null>;
   isInteractive?: () => boolean;
   isCheckout?: (dir: string) => boolean;
-  opencodeHosts?: () => readonly OpencodeHost[];
+  opencodeHosts?: () => readonly OpencodeHost[] | Promise<readonly OpencodeHost[]>;
 }
 
 /** Whether an existing caret entry is the same FORM as the one being written, and so may
@@ -238,18 +238,17 @@ export async function runInstallOpencodeTarget(
   return opts.dryRun ? previewInstall(setup, opts, deps) : installOpencode(setup, opts, deps);
 }
 
-/** Probes every `opencode` on PATH, reads every global config and picks the target file, so
- * only the install arms call it; uninstall clears every file and needs neither. */
+/** Reads every global config and picks the target file for the probed `hosts`, so only
+ * the install arms call it; uninstall clears every file and needs neither. */
 function readPlacement(
   setup: Pick<OpencodeSetup, "dir" | "configFiles" | "isCheckout">,
   local: LocalInstall | undefined,
-  probe: () => readonly OpencodeHost[],
+  hosts: readonly OpencodeHost[],
 ): Placement {
   // OpenCode symlinks a `file:` target into its cache, so the plugin it loads is the
   // checkout's own — and the `../bin/caret` that plugin spawns is the binary
   // `mise run build` just produced, picked up on every later rebuild with no reinstall.
   const specifier = local ? localPluginSpecifier(local.repoDir) : CARET_PACKAGE;
-  const hosts = probe();
   const version = sharedHost(hosts);
   const key = pluginKeyFor(version);
   const allEntries = readCaretEntries(setup.configFiles, setup.isCheckout);
@@ -332,7 +331,8 @@ async function previewInstall(
   opts: { local?: LocalInstall },
   deps: InstallOpencodeDeps,
 ): Promise<void> {
-  const placed = readPlacement(setup, opts.local, deps.opencodeHosts ?? readOpencodeHosts);
+  const hosts = await (deps.opencodeHosts ?? readOpencodeHosts)();
+  const placed = readPlacement(setup, opts.local, hosts);
   // The check is read-only, so a preview can still run it and say what it found. A
   // preview has no warning to carry an `unknown`'s reason, so the note carries it.
   const found = checksPublished(opts.local)
@@ -388,7 +388,8 @@ async function installOpencode(
   deps: InstallOpencodeDeps,
 ): Promise<void> {
   const { dir, pkg, ui, legacy } = setup;
-  const placed = readPlacement(setup, opts.local, deps.opencodeHosts ?? readOpencodeHosts);
+  const hosts = await (deps.opencodeHosts ?? readOpencodeHosts)();
+  const placed = readPlacement(setup, opts.local, hosts);
   const { specifier, key, writtenSpec, target } = placed;
   ui.info(hostLine(placed));
   const changed = await ui.step(

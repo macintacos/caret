@@ -31,7 +31,7 @@ type NpmEntry = Extract<PiCaretEntry, { form: "npm" }>;
 export async function readPiChecks(deps: {
   agentDir: string;
   home: string;
-  piVersion: () => PiVersion;
+  piVersion: () => PiVersion | Promise<PiVersion>;
   published: () => Promise<string | null>;
 }): Promise<Check[]> {
   const settings = readPiSettings(deps.agentDir);
@@ -43,7 +43,7 @@ export async function readPiChecks(deps: {
   const [first, ...rest] = piCaretEntries(settings, deps);
   if (first === undefined) return [];
   const entries: Entries = [first, ...rest];
-  const checks = [hostCheck(deps.piVersion()), entryCheck(entries)];
+  const checks = [hostCheck(await deps.piVersion()), entryCheck(entries)];
   const npmEntry = entries.find((e): e is NpmEntry => e.form === "npm");
   return npmEntry === undefined
     ? checks

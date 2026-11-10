@@ -31,6 +31,34 @@ export async function runCommand(argv: string[]): Promise<CommandResult> {
   return { code, stdout, stderr };
 }
 
+/** Runs `argv` with stdin and stderr ignored and returns its exit code and stdout; the
+ * code is null when the bound killed it. At `timeoutMs` the whole process group is
+ * killed — a wrapper's grandchild holding stdout would otherwise keep the read open.
+ * May throw when `argv[0]` cannot be spawned. */
+export async function runBounded(
+  argv: readonly string[],
+  timeoutMs: number,
+): Promise<{ exitCode: number | null; stdout: string }> {
+  const proc = Bun.spawn([...argv], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "ignore",
+    detached: true,
+  });
+  let killed = false;
+  const timer = setTimeout(() => {
+    killed = true;
+    try {
+      process.kill(-proc.pid, "SIGKILL");
+    } catch {
+      // The group already exited between the last read and the bound.
+    }
+  }, timeoutMs);
+  const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+  clearTimeout(timer);
+  return { exitCode: killed ? null : code, stdout };
+}
+
 /** A supervisor CLI's own exit code and stderr, kept because its status is stable where
  * its prose is not — launchctl's 113 and systemd's 4 outlive the wording beside them. */
 export function commandError(tool: string, verb: string, result: CommandResult): Error {

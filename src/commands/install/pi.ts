@@ -194,14 +194,14 @@ export async function runInstallPiTarget(
   opts: { uninstall: boolean; dryRun: boolean; local?: LocalInstall },
   deps: {
     pi?: PiRunner;
-    piVersion?: () => PiVersion;
+    piVersion?: () => PiVersion | Promise<PiVersion>;
     agentDir?: string;
     home?: string;
     ui?: InstallUI;
   } = {},
 ): Promise<boolean> {
   const ui = deps.ui ?? silentUI;
-  const version = (deps.piVersion ?? readPiVersion)();
+  const version = await (deps.piVersion ?? readPiVersion)();
   if (opts.uninstall && version.status === "missing") {
     ui.info("Couldn't run `pi --version` — nothing removed from pi.");
     return true;
