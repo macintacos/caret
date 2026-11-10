@@ -842,7 +842,7 @@ pending-plan notice" and "2026-11-10: caret inside pi's TUI: the pending-plan no
 - Keep a notice to one row.
 - Show the key that acts on the notice on the notice itself. OpenCode's key is read from
   its keymap. pi keeps no keymap entry for an extension's shortcut, so pi shows the key
-  caret registers, `ctrl+alt+c`.
+  caret registers, `f8`.
 - Put the key before its verb, as the host's footer does.
 - Make the whole row the click target, and ignore a mouse-up that ends a text selection.
   pi delivers clicks only in its fullscreen mode. pi's row carries no OSC 8 link (the

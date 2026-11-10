@@ -143,6 +143,13 @@ Open items first, then the log, newest first.
 - **The shortcut is `ctrl+alt+c`.** It opens the waiting review. pi's example plan-mode
   extension and Plannotator both bind `ctrl+alt+p`, so caret avoids it.
 
+## 2026-11-10: pi's shortcut moves from `ctrl+alt+c` to `f8`
+
+- **`ctrl+alt+c` never reached pi on many Macs.** Window managers such as Rectangle and
+  Magnet take `ctrl+option+c` globally, and pi already binds every `ctrl+letter`.
+- **`f8` opens the waiting review.** Every terminal sends it as one legacy sequence, and
+  pi binds no function key. On a Mac laptop it may need `fn`.
+
 ## 2026-11-10: caret inside pi's TUI: the pending-plan notice
 
 While a review waits, pi shows it in OpenCode's layout, without the frame or card: one row
