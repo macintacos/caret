@@ -132,11 +132,15 @@ jobs:
           path: ui/dist
           if-no-files-found: error
           retention-days: 1
-  test-e2e:
-    name: test e2e
+  test-e2e-shard:
+    name: test e2e (${{ matrix.shard }}/4)
     needs: build-ui
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     permissions:
       contents: read
     steps:
@@ -173,18 +177,28 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       # The flag replaces the config's reporter, so list is restated; html is what the failure artifact carries.
-      - run: mise run test e2e --reporter=list,html
+      - run: mise run test e2e --reporter=list,html --shard=${{ matrix.shard }}/4
         env:
           CARET_SKIP_BUILD_UI: "1"
-          # The default is half the runner's 4 cores; at 2 workers the suite overruns Playwright's 15-minute globalTimeout.
-          CARET_E2E_WORKERS: "4"
       - if: failure()
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/
+  test-e2e:
+    name: test e2e
+    needs: test-e2e-shard
+    # Without always() a failed shard skips this job, and branch protection counts a skipped check as passing.
+    if: always()
+    runs-on: ubuntu-latest
+    permissions: {}
+    timeout-minutes: 5
+    steps:
+      - run: test "$SHARDS" = success
+        env:
+          SHARDS: ${{ needs.test-e2e-shard.result }}
   build-bin:
     name: build bin
     needs: build-ui

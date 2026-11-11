@@ -12,6 +12,7 @@ type Job = {
   "timeout-minutes": unknown;
   if?: unknown;
   needs?: string | string[];
+  strategy?: { matrix: { shard: number[] } };
   steps: Step[];
 };
 
@@ -24,6 +25,8 @@ const workflow = Bun.YAML.parse(ciYaml) as {
 const jobs = Object.values(workflow.jobs ?? {});
 const jobByName = (name: string) => jobs.find((job) => job.name === name);
 const steps = jobs.flatMap((job) => job.steps);
+const shardJob = workflow.jobs["test-e2e-shard"];
+const e2eGate = jobByName("test e2e");
 
 // CI is the local gate plus the one suite the local gate leaves out.
 const TASKS = [...selectTasks(null).tasks, "test e2e"];
@@ -43,14 +46,23 @@ test("grants no top-level permissions", () => {
   expect(workflow.permissions).toEqual({});
 });
 
-test("has one unconditional, read-only, time-boxed job per preflight task", () => {
-  expect(jobs.map((job) => job.name).sort()).toEqual([...TASKS].sort());
+test("has one required check per preflight task, and the e2e shards are not one", () => {
+  const checks = jobs.filter((job) => job !== shardJob);
+  expect(checks.map((job) => job.name).sort()).toEqual([...TASKS].sort());
+  expect(TASKS).not.toContain(shardJob?.name);
+});
+
+test("every job is read-only, time-boxed, and unconditional but the e2e gate", () => {
   for (const job of jobs) {
     expect(job["runs-on"]).toBe("ubuntu-latest");
-    expect(job.permissions).toEqual({ contents: "read" });
     expect(typeof job["timeout-minutes"]).toBe("number");
+    if (job === e2eGate) continue;
+    expect(job.permissions).toEqual({ contents: "read" });
     expect(job.if).toBeUndefined();
   }
+  expect(e2eGate?.permissions).toEqual({});
+  expect(e2eGate?.if).toBe("always()");
+  expect(e2eGate?.needs).toBe("test-e2e-shard");
 });
 
 test("checkout never persists the token", () => {
@@ -62,8 +74,9 @@ test("checkout never persists the token", () => {
 test("jobs that consume build output wait for the job that builds it", () => {
   const idOf = (name: string) =>
     Object.entries(workflow.jobs).find(([, job]) => job.name === name)?.[0];
+  expect(shardJob?.needs).toBe(idOf("build ui"));
   const expected: Record<string, string | undefined> = {
-    "test e2e": idOf("build ui"),
+    "test e2e": "test-e2e-shard",
     "build bin": idOf("build ui"),
     smoke: idOf("build bin"),
   };
@@ -72,12 +85,17 @@ test("jobs that consume build output wait for the job that builds it", () => {
 
 test("each job runs its task's entry point", () => {
   for (const name of TASKS) {
+    if (name === "test e2e") continue;
     const runs = jobByName(name)?.steps.map((step) => step.run ?? "") ?? [];
-    const entry = `mise run ${name}`;
-    const found =
-      name === "test e2e" ? runs.some((run) => run.startsWith(entry)) : runs.includes(entry);
-    expect(found).toBe(true);
+    expect(runs).toContain(`mise run ${name}`);
   }
+});
+
+test("the e2e shards together run the whole suite", () => {
+  const shards = shardJob?.strategy?.matrix.shard ?? [];
+  const run = shardJob?.steps.find((step) => step.run?.startsWith("mise run test e2e"))?.run;
+  expect(run).toContain(`--shard=\${{ matrix.shard }}/${shards.length}`);
+  expect(shards).toEqual(shards.map((_, i) => i + 1));
 });
 
 test("installs the same claude-code version as the publish workflow", async () => {
