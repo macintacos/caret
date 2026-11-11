@@ -165,12 +165,15 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('bun.lock') }}
-      # Keep in sync with E2E_BROWSERS (scripts/tasks/test.ts). --with-deps: WebKit needs apt packages a browser cache cannot restore.
+      # Keep both browser lists in sync with E2E_BROWSERS (scripts/tasks/test.ts).
       - if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: bunx playwright install --with-deps chromium webkit
-      # The apt packages are not in the browser cache.
-      - if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: bunx playwright install-deps chromium webkit
+        run: bunx playwright install chromium webkit
+      # WebKit needs apt packages the browser cache cannot restore. --dry-run prints the missing ones indented, and exits 1 whenever any are.
+      - id: pw-deps
+        run: echo "packages=$(bunx playwright install-deps --dry-run chromium webkit | sed -n 's/^  //p' | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+      - uses: awalsh128/cache-apt-pkgs-action@v1.6.3
+        with:
+          packages: ${{ steps.pw-deps.outputs.packages }}
       - if: github.event_name == 'push' && steps.pw-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6.1.0
         with:
