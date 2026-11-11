@@ -169,11 +169,19 @@ jobs:
       - if: steps.pw-cache.outputs.cache-hit != 'true'
         run: bunx playwright install chromium webkit
       # WebKit needs apt packages the browser cache cannot restore. --dry-run prints the missing ones indented, and exits 1 whenever any are.
+      # apt-get update first: the cache action pins the versions the index names, and the image's index names ones the mirror has dropped.
       - id: pw-deps
-        run: echo "packages=$(bunx playwright install-deps --dry-run chromium webkit | sed -n 's/^  //p' | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
-      - uses: awalsh128/cache-apt-pkgs-action@v1.6.3
+        run: |
+          sudo apt-get update
+          echo "packages=$(bunx playwright install-deps --dry-run chromium webkit | sed -n 's/^  //p' | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+      - id: apt-cache
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.3
         with:
           packages: ${{ steps.pw-deps.outputs.packages }}
+      # The action reports success, and saves an empty cache, when its install fails.
+      - run: test -n "$INSTALLED"
+        env:
+          INSTALLED: ${{ steps.apt-cache.outputs.all-package-version-list }}
       - if: github.event_name == 'push' && steps.pw-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6.1.0
         with:
