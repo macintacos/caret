@@ -62,7 +62,7 @@ mise run test bats  # the hermetic shell suites under scripts/; `test mod` the m
 mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-check
 mise run format     # Biome (write)
 mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bundle`
-mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ mod ∥ e2e) + build + smoke, scoped to the diff
+mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ mod) + build + smoke, scoped to the diff
 mise run verify     # check the service unit against a real supervisor: `verify macos` or `verify linux`
                     # macos drives this Mac's own launchctl; linux boots a real systemd in a container
 ```
@@ -667,8 +667,8 @@ changes against its merge base with `origin/HEAD` — the committed, staged and 
 diff, plus untracked files — and picks a task set from them:
 
 - **Every changed path is Markdown, and none is on the exception list below** → `lint`
-  alone. `build ui`, `build bin`, `test e2e` and `smoke` cannot see docs at all, and the
-  remaining Markdown is read by no test.
+  alone. `build ui`, `build bin` and `smoke` cannot see docs at all, and the remaining
+  Markdown is read by no test.
 - **…and one of them is on the exception list** → `lint` and `test unit`. A handful of
   Markdown files really are read from disk at test time, so `test unit` can observe a
   change to them. They are listed as `MARKDOWN_READ_BY_TESTS` in `scripts/preflight.ts`:
@@ -681,12 +681,11 @@ diff, plus untracked files — and picks a task set from them:
   file). **Add to that list whenever a test starts reading a Markdown file at run time** —
   the suite checks that each listed path still exists, but nothing can catch an omission,
   and an omission silently stops running a real check.
-- **Anything else** → all eight, exactly as before. That covers a non-Markdown path, an
-  empty diff, and a diff that could not be read at all (no `origin/HEAD`, a shallow
-  clone). The default is always the full gate; narrowing is an optimisation, never a
-  weakening.
+- **Anything else** → all seven. That covers a non-Markdown path, an empty diff, and a
+  diff that could not be read at all (no `origin/HEAD`, a shallow clone). The default is
+  always the full gate; narrowing is an optimisation, never a weakening.
 
-`mise run preflight --full` forces all eight regardless. Unlike `-v` / `--grep` /
+`mise run preflight --full` forces all seven regardless. Unlike `-v` / `--grep` /
 `--task`, it is not `--json`-only — the human display narrows too, so it needs the same
 escape hatch.
 
@@ -698,11 +697,31 @@ passed".
 
 **Only _which tasks_ run is scoped — never which files a task sees.** Every task is still
 spawned as `mise run <task>` with no file arguments (the gate's only extra argv is
-`--parallel=4` for `test unit` and, under `--json`, `--quiet` for `test e2e`), and `lint`
-in particular must keep scanning the whole tree: `rumdl` resolves an MD051 cross-file link
-fragment only when the file it points into is in the same scan, so a lint handed just the
-changed files would quietly stop checking every cross-file anchor whose target is
-unchanged. `doc/` is held together almost entirely by those links.
+`--parallel=4` for `test unit`), and `lint` in particular must keep scanning the whole
+tree: `rumdl` resolves an MD051 cross-file link fragment only when the file it points into
+is in the same scan, so a lint handed just the changed files would quietly stop checking
+every cross-file anchor whose target is unchanged. `doc/` is held together almost entirely
+by those links.
+
+#### PR checks
+
+The local gate never runs `test e2e`; the PR checks are the full gate.
+`.github/workflows/ci.yml` runs on every PR against `trunk` and on pushes to `trunk`, with
+one job per preflight task, each named after its task (`lint`, `test unit`, `test bats`,
+`test mod`, `build ui`, `test e2e`, `build bin`, `smoke`). `build ui` hands `ui/dist` to
+`test e2e` and `build bin` as an artifact, and `build bin` hands the binary to `smoke`.
+The e2e suite runs as four shard jobs, because one 4-vCPU runner cannot finish it inside
+Playwright's 15-minute global timeout; the `test e2e` check passes only when every shard
+does. Caches are saved only on `trunk` pushes: a cache saved from a PR is restorable by
+that PR alone and still counts against the repository's cache quota, where it evicts
+trunk's.
+
+- Job names are what branch protection matches — renaming one drops it from the required
+  checks.
+- Actions are pinned through `.github/workflows/actions.lock`; whenever an action ref
+  changes, regenerate it with `gh actions-lock --no-interactive .github/workflows/ci.yml`.
+- A stacked PR retargeted to `trunk` gets its checks on the next push, not on the
+  retarget.
 
 #### Adding a task
 

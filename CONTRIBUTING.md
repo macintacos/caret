@@ -20,8 +20,7 @@ before doing its own job, and registers the git hooks along the way. mise asks y
 trust the clone's config the first time — answer yes, or run `mise trust` up front.
 
 `mise run setup` runs those same steps and adds the e2e browsers the bootstrap leaves out;
-run it before the e2e suite — `mise run test e2e`, and `mise run preflight`, which
-includes it.
+run it before the e2e suite, `mise run test e2e`.
 
 `bun install` on its own refreshes JS dependencies if that is all you need.
 
@@ -29,12 +28,15 @@ includes it.
 
 ```sh
 mise run dev        # dev console: isolated daemon + three fake plans + the Vite UI
-mise run preflight  # the pre-push gate: lint + unit/shell/e2e tests + build + artifact smoke
+mise run preflight  # the pre-push gate: lint + unit/shell tests + build + artifact smoke
 ```
 
-`mise run preflight` is the gate to pass before pushing. It scopes itself to your diff, so
-a Markdown-only change runs fewer than the full eight tasks — `--full` forces all of them.
-The full task catalog (`build`, `test`, `smoke`, `lint`, `format`) is documented in
+`mise run preflight` is the fast gate to pass before pushing. It scopes itself to your
+diff, so a Markdown-only change runs fewer than the full seven tasks — `--full` forces all
+of them. It never runs e2e: run a new or changed spec with `mise run test e2e <path>`. The
+full gate is the PR checks, which run all eight tasks, the whole e2e suite included, on
+every PR. The full task catalog (`build`, `test`, `smoke`, `lint`, `format`) is documented
+in
 [`doc/DEVELOPMENT.md`](doc/DEVELOPMENT.md#development).
 
 ## Where tests live

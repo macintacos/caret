@@ -31,19 +31,19 @@ export default defineConfig<E2EOptions>({
   testDir: "test/e2e",
   testMatch: "**/*.e2e.ts",
   fullyParallel: true,
-  // EXC-1050: no retries — the budgets below absorb gate contention instead.
+  // EXC-1050: no retries — the budgets below absorb host contention instead.
   retries: 0,
   forbidOnly: true,
   // EXC-587: bound the fan-out. Each worker drives a browser tree plus a
   // spawned daemon, so an uncapped count is the dominant driver of the orphan
-  // storm when several preflight runs stack; cap it at half the cores
+  // storm when several runs stack; cap it at half the cores
   // (CARET_E2E_WORKERS overrides for a constrained host).
   workers: e2eWorkers,
   // EXC-587: a wedged suite self-aborts instead of needing an external SIGKILL
   // (the path that orphans a browser). Generous so it can't flake a slow or
   // loaded host's normal pass.
   globalTimeout: 15 * 60 * 1000,
-  // EXC-1050: budgets for the LOADED preflight host, not an idle one.
+  // EXC-1050: budgets for a LOADED host, not an idle one.
   // Playwright ships no default actionTimeout, navigationTimeout, or toPass
   // budget, so a starved click/goto/waitForFunction/toPass falls through to
   // whichever deadline is left rather than one of its own — which is why the
@@ -52,7 +52,7 @@ export default defineConfig<E2EOptions>({
   // doc/agents/browser-testing.md § Timeouts are budgets for the loaded host.
   timeout: 60 * 1000,
   expect: { timeout: 15 * 1000, toPass: { timeout: 15 * 1000 } },
-  // Non-interactive reporter so the preflight gate can't hang on a TTY pager.
+  // Non-interactive reporter so an unattended run can't hang on a TTY pager.
   reporter: "list",
   use: {
     // EXC-1058: the fixture's daemon-boot budget, reached through a Playwright
