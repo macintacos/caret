@@ -714,7 +714,8 @@ The e2e suite runs as four shard jobs, because one 4-vCPU runner cannot finish i
 Playwright's 15-minute global timeout; the `test e2e` check passes only when every shard
 does. Caches are saved only on `trunk` pushes: a cache saved from a PR is restorable by
 that PR alone and still counts against the repository's cache quota, where it evicts
-trunk's.
+trunk's. The e2e shards' apt packages are the exception — `cache-apt-pkgs-action` saves on
+any miss, so a PR that changes the package set saves a copy of its own.
 
 - Job names are what branch protection matches — renaming one drops it from the required
   checks.
