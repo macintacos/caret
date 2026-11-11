@@ -638,13 +638,17 @@ test("the column scales with its text, so each row holds its words at another ro
   expect(await starts()).toEqual(base);
 });
 
+/** A window too narrow for a stored line of PROSE to fit one row in Arial. */
+const SPLITS_STORED_LINES = { width: 480, height: 900 };
+
 test("a window narrower than the column rewraps the text to the plan, and the band and + stay on their row", async ({
   daemon,
   page,
 }) => {
   const { prose } = await openRows(daemon, page);
+  await page.addStyleTag({ content: `${PLAN_PREVIEW} { font-family: Arial, sans-serif; }` });
   const base = await rowStarts(page, prose);
-  await page.setViewportSize(BELOW_COLUMN);
+  await page.setViewportSize(SPLITS_STORED_LINES);
   await expect.poll(() => rowStarts(page, prose)).not.toEqual(base);
 
   const scroller = page.locator(PLAN_SURFACE);
@@ -731,8 +735,9 @@ test("a click on a rewrapped row cites every source line with text on it and ope
   daemon,
   page,
 }) => {
-  await page.setViewportSize(BELOW_COLUMN);
+  await page.setViewportSize(SPLITS_STORED_LINES);
   const { prose } = await openRows(daemon, page);
+  await page.addStyleTag({ content: `${PLAN_PREVIEW} { font-family: Arial, sans-serif; }` });
   const y = await mixedRow(page, prose);
   const cited = rowLabel(await linesOnRow(page, y));
 
