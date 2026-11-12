@@ -356,19 +356,19 @@ test("the cleanup unsubscribes every handler", () => {
   expect(unsubscribed()).toBe(3);
 });
 
-test("setup registers the /caret command on <leader>p and in the palette", () => {
+test("setup registers the open command on <leader>p and in the palette", () => {
   const { layers } = start();
   expect(layers).toHaveLength(1);
   expect(layers[0]?.mode).toBe("global");
   expect(layers[0]?.commands).toHaveLength(1);
   const command = layers[0]?.commands[0];
-  expect(command).toMatchObject({
-    id: "caret.open",
-    palette: true,
-    slash: { name: "caret" },
-    bind: "<leader>p",
-  });
+  expect(command).toMatchObject({ id: "caret.open", palette: true, bind: "<leader>p" });
   expect(command?.title).not.toBe("");
+});
+
+test("the TUI claims no slash name: /caret is the deployed command file's", () => {
+  const { layers } = start();
+  expect(layers.flatMap((l) => l.commands).filter((c) => "slash" in c)).toEqual([]);
 });
 
 test("on a session route the command opens that session's plan", () => {

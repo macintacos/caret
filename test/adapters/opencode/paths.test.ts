@@ -9,6 +9,7 @@ import { hostConfigFilenames } from "@/adapters/opencode/host.ts";
 import {
   existingConfigFiles,
   existingOpencodeCachePackageDirs,
+  existingStaleInstallFiles,
   liveGenerationDir,
   opencodeCachePackageDir,
   opencodeNpmCacheDir,
@@ -109,6 +110,19 @@ test("existingConfigFiles lists two names for one file once, under the earlier n
   writeFileSync(join(tmp, "opencode.json"), "{}");
   symlinkSync(join(tmp, "opencode.json"), join(tmp, "config.json"));
   expect(existingConfigFiles(tmp)).toEqual([join(tmp, "opencode.json")]);
+});
+
+test("existingStaleInstallFiles lists caret:-prefixed command files in both command dirs, never caret.md", () => {
+  for (const d of ["commands", "command"]) {
+    mkdirSync(join(tmp, d));
+    for (const name of ["caret:debug.md", "caret.md", "debug.md"]) {
+      writeFileSync(join(tmp, d, name), "");
+    }
+  }
+  expect(existingStaleInstallFiles(tmp)).toEqual([
+    join(tmp, "commands", "caret:debug.md"),
+    join(tmp, "command", "caret:debug.md"),
+  ]);
 });
 
 test("resolveConfigFile on v2 and an unknown host skips a config.json-only dir for a new opencode.json", () => {

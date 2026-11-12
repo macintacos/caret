@@ -1,11 +1,11 @@
 // caret's OpenCode install target. `caret install` makes caret an entry in the host's
 // plugin key (`plugins` when every `opencode` on PATH is v2, else `plugin`) — OpenCode
-// installs it and its deps into its own cache and loads it — and deploys the `/caret:*`
-// command files (which aren't array-installable). `--uninstall` reverses both. Either
-// arm also sweeps the plugin and command FILES an older caret deployed into the config
-// dir: OpenCode still loads them, so a leftover plugin file would register a second
-// review tool beside the array entry. The config-array edit is comment-preserving
-// (config-plugin.ts).
+// installs it and its deps into its own cache and loads it — and deploys the `/caret`
+// command file and its references (which aren't array-installable). `--uninstall`
+// reverses both. Either arm also sweeps the plugin and `caret:*` command FILES an older
+// caret deployed into the config dir: OpenCode still loads them, so a leftover plugin
+// file would register a second review tool beside the array entry. The config-array edit
+// is comment-preserving (config-plugin.ts).
 //
 // caret owns exactly one entry across both keys and every global config file, in one of
 // two forms: the npm package (@macintacos/caret), or `file:<checkout>` under
@@ -14,7 +14,7 @@
 // forever — re-adding the entry, all a re-run would otherwise do, never moves anyone off
 // the version they installed on.
 
-import { writeFileSync } from "node:fs";
+import { rmdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 import {
@@ -54,12 +54,12 @@ import {
   CARET_PACKAGE,
   commandDir,
   existingConfigFiles,
-  existingLegacyInstallFiles,
   existingOpencodeCachePackageDirs,
+  existingStaleInstallFiles,
   isLocalPluginSpecifier,
   localPluginSpecifier,
-  namespacedCommandFilename,
   opencodeConfigDir,
+  referenceDir,
   resolveConfigFile,
 } from "@/adapters/opencode/paths.ts";
 import {
@@ -175,8 +175,8 @@ interface OpencodeSetup {
   ui: InstallUI;
   isCheckout: (dir: string) => boolean;
   configFiles: string[];
-  /** What an older, file-deploying caret left in `dir`. */
-  legacy: string[];
+  /** What an older caret left in `dir`. */
+  stale: string[];
 }
 
 /** Where an install puts caret for the `opencode` binaries on PATH. */
@@ -217,8 +217,8 @@ interface ConfigPlan {
 }
 
 /** Install (or, with `uninstall`, remove) caret into OpenCode: write caret's entry to
- * the key the host loads, or remove it from both, deploy/remove the `/caret:*` command
- * files, and sweep whatever the file-deploy era left in the config dir.
+ * the key the host loads, or remove it from both, deploy/remove the `/caret` command
+ * and its references, and sweep whatever older versions left in the config dir.
  * OpenCode installs the package (and the plugin's deps) itself on its next start, so
  * there is no manifest to write and no `bun install` to run here. */
 export async function runInstallOpencodeTarget(
@@ -232,7 +232,7 @@ export async function runInstallOpencodeTarget(
     ui: deps.ui ?? silentUI,
     isCheckout: deps.isCheckout ?? isCaretCheckout,
     configFiles: existingConfigFiles(dir),
-    legacy: existingLegacyInstallFiles(dir),
+    stale: existingStaleInstallFiles(dir),
   };
   if (opts.uninstall) return opts.dryRun ? previewUninstall(setup) : uninstallOpencode(setup);
   return opts.dryRun ? previewInstall(setup, opts, deps) : installOpencode(setup, opts, deps);
@@ -303,24 +303,47 @@ function ignoredConfigNote(
   return `${host} ignores ${names} — caret goes in ${basename(target)}`;
 }
 
-/** The `/caret:*` command files caret deploys into the config dir. */
-function commandPaths({ dir, pkg }: Pick<OpencodeSetup, "dir" | "pkg">): string[] {
-  return pkg.commands.map((c) => join(commandDir(dir), namespacedCommandFilename(c.name)));
+/** The `/caret` command file and its references, as caret deploys them into the config
+ * dir, their markers filled from the caret running this install. */
+function deployedFiles({ dir, pkg }: Pick<OpencodeSetup, "dir" | "pkg">): DeployFile[] {
+  const references = referenceDir(dir);
+  const render = (contents: string) =>
+    renderPlugin(contents, {
+      version: VERSION,
+      binPath: pkg.binPath,
+      demoTemplate: pkg.demoTemplate,
+      referencesDir: references,
+    });
+  return [
+    ...pkg.commands.map((c) => ({
+      path: join(commandDir(dir), c.name),
+      contents: render(c.contents),
+    })),
+    ...pkg.references.map((r) => ({
+      path: join(references, r.name),
+      contents: render(r.contents),
+    })),
+  ];
 }
 
-/** The dry run's note: the paths an arm touches, `entry` above the legacy sweep, `found`
+const deployedPaths = (setup: Pick<OpencodeSetup, "dir" | "pkg">) =>
+  deployedFiles(setup).map((f) => f.path);
+
+/** The dry run's note: the paths an arm touches, `entry` above the stale sweep, `found`
  * below. */
 function previewNote(
   setup: OpencodeSetup,
   verb: "write" | "remove",
   parts: { configs: string[]; entry: string[]; found: string[] },
 ): void {
-  const { legacy, ui } = setup;
+  const { stale, ui } = setup;
   // Their own labelled section: an install's bare path list is titled "would write", and
   // listing a file caret is about to DELETE under that heading would misread badly.
-  const sweep = legacy.length === 0 ? [] : ["", "pre-array-install files to remove:", ...legacy];
+  const sweep = stale.length === 0 ? [] : ["", "stale caret files to remove:", ...stale];
   ui.note(
-    [...parts.configs, ...commandPaths(setup), ...parts.entry, ...sweep, ...parts.found].join("\n"),
+    [...parts.configs, ...deployedPaths(setup), ...parts.entry, ...sweep, ...parts.found].join(
+      "\n",
+    ),
     `OpenCode — would ${verb}`,
   );
 }
@@ -360,7 +383,7 @@ function previewUninstall(setup: OpencodeSetup): void {
 }
 
 async function uninstallOpencode(setup: OpencodeSetup): Promise<void> {
-  const { ui, dir, legacy } = setup;
+  const { ui, dir, stale } = setup;
   // Planned outside the step: its warnings drawn under a running spinner corrupt the render.
   const { planned, uneditable } = lenientPlan(uninstallEdits(setup), ui);
   await ui.step(
@@ -375,11 +398,25 @@ async function uninstallOpencode(setup: OpencodeSetup): Promise<void> {
     },
   );
   await ui.step(
-    "Removing the /caret:* command files",
-    async () => removeFiles(commandPaths(setup), { dryRun: false }),
-    (removed) => `Removed ${removed.paths.length} command file(s) from ${dir}`,
+    "Removing the /caret command",
+    async () => {
+      const removed = removeFiles(deployedPaths(setup), { dryRun: false });
+      removeIfEmpty(referenceDir(dir));
+      return removed;
+    },
+    (removed) => `Removed ${removed.paths.length} /caret command file(s) from ${dir}`,
   );
-  await sweepLegacy(legacy, dir, ui);
+  await sweepStale(stale, dir, ui);
+}
+
+/** Remove `dir` when it is empty; a dir that is absent, or holds a file caret never
+ * wrote, is left as it is. */
+function removeIfEmpty(dir: string): void {
+  try {
+    rmdirSync(dir);
+  } catch {
+    // ENOENT or ENOTEMPTY: nothing of caret's left to remove.
+  }
 }
 
 async function installOpencode(
@@ -387,7 +424,7 @@ async function installOpencode(
   opts: { refresh: boolean; local?: LocalInstall },
   deps: InstallOpencodeDeps,
 ): Promise<void> {
-  const { dir, pkg, ui, legacy } = setup;
+  const { dir, ui, stale } = setup;
   const hosts = await (deps.opencodeHosts ?? readOpencodeHosts)();
   const placed = readPlacement(setup, opts.local, hosts);
   const { specifier, key, writtenSpec, target } = placed;
@@ -406,33 +443,23 @@ async function installOpencode(
   // dropping the plugin file any earlier could move a user backwards onto an older cached
   // caret. It still sweeps when that refresh is declined — two loaded caret plugins are
   // worse than one stale-but-single plugin, and the user was just given the fix.
-  await sweepLegacy(legacy, dir, ui);
-  const files: DeployFile[] = pkg.commands.map((c) => ({
-    // Namespace the command file (`demo.md` -> `caret:demo.md`) so OpenCode exposes
-    // it as `/caret:demo`. Its markers are filled from the caret running this install.
-    path: join(commandDir(dir), namespacedCommandFilename(c.name)),
-    contents: renderPlugin(c.contents, {
-      version: VERSION,
-      binPath: pkg.binPath,
-      demoTemplate: pkg.demoTemplate,
-    }),
-  }));
+  await sweepStale(stale, dir, ui);
   await ui.step(
-    "Deploying the /caret:* command files",
-    async () => deployFiles(files, { dryRun: false }),
-    (deployed) => `Deployed ${deployed.paths.length} command file(s) to ${dir}`,
+    "Deploying the /caret command",
+    async () => deployFiles(deployedFiles(setup), { dryRun: false }),
+    (deployed) => `Deployed ${deployed.paths.length} /caret command file(s) to ${dir}`,
   );
 }
 
-/** Remove the file-deploy era's leftovers, on both arms. Unlike every other step here it
- * is raised only when there is something to remove: a zero outcome is information for the
+/** Remove what older versions left, on both arms. Unlike every other step here it is
+ * raised only when there is something to remove: a zero outcome is information for the
  * others, while an empty sweep would print into every install transcript forever. */
-async function sweepLegacy(legacy: string[], dir: string, ui: InstallUI): Promise<void> {
-  if (legacy.length === 0) return;
+async function sweepStale(stale: string[], dir: string, ui: InstallUI): Promise<void> {
+  if (stale.length === 0) return;
   await ui.step(
-    "Removing the pre-array-install files",
-    async () => removeFiles(legacy, { dryRun: false }),
-    (removed) => `Removed ${removed.paths.length} pre-array-install file(s) from ${dir}`,
+    "Removing stale caret files",
+    async () => removeFiles(stale, { dryRun: false }),
+    (removed) => `Removed ${removed.paths.length} stale caret file(s) from ${dir}`,
   );
 }
 

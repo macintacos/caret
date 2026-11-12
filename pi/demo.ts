@@ -11,14 +11,13 @@ import { sendAndWait } from "./follow-up.ts";
  * entry `pi/caret.ts`. Both hosts submit through the same review tool, so the command's
  * body is pi's prompt too. */
 export const DEMO_TEMPLATE = "../templates/demo.md";
-export const DEMO_COMMAND = "../opencode/commands/demo.md";
+export const DEMO_COMMAND = "../opencode/references/demo.md";
 
 const TEMPLATE_MARKER = "__CARET_DEMO_TEMPLATE__";
-const FRONTMATTER = /^---\n[\s\S]*?\n---\n+/;
 
-/** `command`'s body with `template` taken literally in place of its marker. */
+/** `command` with `template` taken literally in place of its marker. */
 const demoPrompt = (command: string, template: string): string =>
-  command.replace(FRONTMATTER, "").replace(TEMPLATE_MARKER, () => template);
+  command.replace(TEMPLATE_MARKER, () => template);
 
 export type DemoCommandContext = {
   ui: { notify(message: string, type?: "info" | "warning" | "error"): void };

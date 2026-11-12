@@ -8,7 +8,7 @@ import { type DemoApi, installDemo } from "@piext/demo.ts";
 import { renderPlugin } from "@/adapters/opencode/deploy.ts";
 
 const TEMPLATE = "# A demo plan\n\nSome body.\n";
-const OPENCODE_COMMAND = join(import.meta.dir, "..", "..", "opencode", "commands", "demo.md");
+const OPENCODE_COMMAND = join(import.meta.dir, "..", "..", "opencode", "references", "demo.md");
 
 let tmp: string;
 let templatePath: string;
@@ -62,10 +62,9 @@ test("/caret:demo sends OpenCode's rendered /caret:demo body as a follow-up and 
     version: "",
     binPath: "",
     demoTemplate: TEMPLATE,
+    referencesDir: "",
   });
-  expect(opencode.endsWith(content)).toBe(true);
-  const frontmatter = opencode.slice(0, opencode.length - content.length);
-  expect(frontmatter).toMatch(/^---\n(?:.*\n)*?---\n+$/);
+  expect(content).toBe(opencode);
   expect(content).toContain(REVIEW_TOOL);
   expect(pi.idle()).toBe(1);
 });

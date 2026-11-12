@@ -251,11 +251,12 @@ export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "scripts/tasks/dev/short-plan-b.md", // test/scripts/dev-driver.test.ts resolves its DEV_FIXTURES edits against it
   "scripts/tasks/dev/demo-plan.md", // test/scripts/assets.test.ts pins the anchor the assets task resolves against it
   "skills/caret/references/demo.md", // test/structure/demo-template.test.ts checks every path it reads ships
-  "opencode/commands/demo.md", // test/structure/demo-template.test.ts checks it carries the template marker
+  "opencode/references/demo.md", // test/structure/demo-template.test.ts checks it carries the template marker
   "templates/demo.md", // test/structure/demo-template.test.ts checks it exists and ships
   "skills/caret/SKILL.md", // test/structure/caret-command.test.ts checks its router's stops and exits
   "skills/caret/references/plan.md", // test/structure/caret-command.test.ts checks it names ExitPlanMode
-  "opencode/commands/plan.md", // test/structure/caret-command.test.ts checks it ships and names the review tool
+  "opencode/commands/caret.md", // test/structure/caret-command.test.ts checks its router's stops and exits
+  "opencode/references/plan.md", // test/structure/caret-command.test.ts checks it names the review tool
   // test/adapters/opencode/docs-cache-path.test.ts checks the `rm -rf` path it prints;
   // test/structure/line-anchor-claim.test.ts checks the line-anchor claim it states.
   "doc/ARCHITECTURE.md",

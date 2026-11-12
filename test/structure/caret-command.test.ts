@@ -3,7 +3,7 @@
 // stops shipping it, fails silently at the user's terminal and never in CI. Nothing but
 // this suite catches it.
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { REVIEW_TOOL } from "@oc/caret.core.ts";
@@ -16,7 +16,8 @@ import { MARKDOWN_READ_BY_TESTS } from "@scripts/preflight.ts";
 const REPO_ROOT = join(import.meta.dir, "..", "..");
 const CLAUDE_SKILL = "skills/caret/SKILL.md";
 const CLAUDE_REFERENCES = "skills/caret/references";
-const OPENCODE_COMMAND = "opencode/commands/plan.md";
+const OPENCODE_COMMAND = "opencode/commands/caret.md";
+const OPENCODE_REFERENCES = "opencode/references";
 
 const read = (rel: string) => readFileSync(join(REPO_ROOT, rel), "utf-8");
 const unshipped = (paths: readonly string[]) =>
@@ -50,6 +51,9 @@ function expectDispatchRouter(markdown: string) {
 const claudeReferences = STOPS.filter((s) => s !== "usage").map(
   (s) => `${CLAUDE_REFERENCES}/${s}.md`,
 );
+const opencodeReferences = STOPS.filter((s) => s !== "usage").map(
+  (s) => `${OPENCODE_REFERENCES}/${s}.md`,
+);
 
 test(`${CLAUDE_SKILL} exists and ships`, () => {
   expect(existsSync(join(REPO_ROOT, CLAUDE_SKILL))).toBe(true);
@@ -79,8 +83,30 @@ test("Claude Code finds caret's commands only as the caret skill", () => {
   expect(existsSync(join(REPO_ROOT, "commands"))).toBe(false);
 });
 
-test(`${OPENCODE_COMMAND} calls the plugin's review tool by its current name`, () => {
-  expect(read(OPENCODE_COMMAND)).toContain(REVIEW_TOOL);
+test("opencode/commands/ ships /caret as its only command", () => {
+  expect(readdirSync(join(REPO_ROOT, "opencode", "commands"))).toEqual(["caret.md"]);
+  expect(unshipped([OPENCODE_COMMAND])).toEqual([]);
+});
+
+test(`${OPENCODE_COMMAND} runs on the plan agent and routes every argument to one of its stops`, () => {
+  const command = read(OPENCODE_COMMAND);
+  expect(command).toMatch(/^---\n(?:.*\n)*?agent: plan\n(?:.*\n)*?---\n/);
+  expectDispatchRouter(command);
+  expect(command).toContain("`__CARET_REFERENCES__/`");
+});
+
+test("each reference an OpenCode stop loads exists and ships", () => {
+  expect(opencodeReferences.filter((rel) => !existsSync(join(REPO_ROOT, rel)))).toEqual([]);
+  expect(unshipped(opencodeReferences)).toEqual([]);
+});
+
+test(`${OPENCODE_COMMAND} leaves the review tool to ${OPENCODE_REFERENCES}/plan.md`, () => {
+  expect(read(OPENCODE_COMMAND).includes(REVIEW_TOOL)).toBe(false);
+  expect(read(`${OPENCODE_REFERENCES}/plan.md`)).toContain(REVIEW_TOOL);
+});
+
+test(`${OPENCODE_COMMAND}'s usage hint names the open-review keybinding`, () => {
+  expect(read(OPENCODE_COMMAND).split("## Usage hint")[1]).toContain("<leader>p");
 });
 
 test("pi's planning mode registers caret:plan and steers to the review tool", () => {
@@ -97,6 +123,11 @@ test("pi's planning mode registers caret:plan and steers to the review tool", ()
 });
 
 test("preflight runs this suite when only the Markdown it reads changed", () => {
-  const markdown = [CLAUDE_SKILL, `${CLAUDE_REFERENCES}/plan.md`, OPENCODE_COMMAND];
+  const markdown = [
+    CLAUDE_SKILL,
+    `${CLAUDE_REFERENCES}/plan.md`,
+    OPENCODE_COMMAND,
+    `${OPENCODE_REFERENCES}/plan.md`,
+  ];
   expect(markdown.filter((rel) => !MARKDOWN_READ_BY_TESTS.includes(rel))).toEqual([]);
 });

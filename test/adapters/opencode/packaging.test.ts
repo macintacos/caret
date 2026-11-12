@@ -15,6 +15,9 @@ beforeEach(async () => {
   await writeFile(join(root, "opencode", "caret.plugin.ts"), "// plugin body\n");
   await writeFile(join(root, "opencode", "commands", "demo.md"), "# demo\n");
   await writeFile(join(root, "opencode", "commands", "doctor.md"), "# doctor\n");
+  await mkdir(join(root, "opencode", "references"), { recursive: true });
+  await writeFile(join(root, "opencode", "references", "plan.md"), "# plan\n");
+  await writeFile(join(root, "opencode", "references", "demo.md"), "# demo body\n");
   await mkdir(join(root, "templates"), { recursive: true });
   await writeFile(join(root, DEMO_TEMPLATE), "<!-- fill the slots -->\n# Demo plan\n");
 });
@@ -28,6 +31,13 @@ test("loadOpencodePackaging reads the bin path, demo template, and sorted comman
   expect(pkg.demoTemplate).toBe("<!-- fill the slots -->\n# Demo plan\n");
   expect(pkg.commands.map((c) => c.name)).toEqual(["demo.md", "doctor.md"]);
   expect(pkg.commands[0]?.contents).toContain("demo");
+});
+
+test("loadOpencodePackaging reads the sorted reference files the command loads", () => {
+  expect(loadOpencodePackaging(root).references).toEqual([
+    { name: "demo.md", contents: "# demo body\n" },
+    { name: "plan.md", contents: "# plan\n" },
+  ]);
 });
 
 test("loadOpencodePackaging throws when the demo template is missing", async () => {
