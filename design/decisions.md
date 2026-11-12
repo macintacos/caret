@@ -145,11 +145,12 @@ Open items first, then the log, newest first.
   so a user could chat with the agent mid-review, which caret doesn't offer. Blocking is
   safe because pi has no tool timeout. Esc cancels the waiting review.
 - **caret owns a small planning mode.** pi ships no built-in plan mode by design, so
-  `/caret:plan` adds the minimum: a steer, an `edit`/`write` gate outside the plans
-  folder, and the `^ planning` footer status. caret doesn't gate shell commands; the steer
-  asks the agent not to change files with them, as Plannotator does.
-- **The shortcut is `ctrl+alt+c`.** It opens the waiting review. pi's example plan-mode
-  extension and Plannotator both bind `ctrl+alt+p`, so caret avoids it.
+  `/caret <description>` adds the minimum: a steer, an `edit`/`write` gate outside the
+  plans folder, and the `^ planning` footer status. caret doesn't gate shell commands; the
+  steer asks the agent not to change files with them, as Plannotator does.
+- **The shortcut is `ctrl+alt+c`** (since replaced by `ctrl+alt+o`). It opens the waiting
+  review. pi's example plan-mode extension and Plannotator both bind `ctrl+alt+p`, so
+  caret avoids it.
 
 ## 2026-11-10: pi's shortcut moves from `ctrl+alt+c` to `ctrl+alt+o`
 
@@ -162,24 +163,24 @@ Open items first, then the log, newest first.
 ## 2026-11-10: caret inside pi's TUI: the pending-plan notice
 
 While a review waits, pi shows it in OpenCode's layout, without the frame or card: one row
-above the editor, a `caret` footer status, and `/caret` or `ctrl+alt+c` to open the review
-in the browser. The row uses OpenCode's copy word for word, so a user who switches hosts
-reads the same notice.
+above the editor, a `caret` footer status, and `ctrl+alt+o` to open the review in the
+browser. The row uses OpenCode's copy word for word, so a user who switches hosts reads
+the same notice.
 
 ```text
- ^ caret  plan waiting for your review               ctrl+alt+c open in browser
+ ^ caret  plan waiting for your review               ctrl+alt+o open in browser
  │ │      └ bold `text`                              │          └ muted
  │ └ muted                                           └ dim
  └ warning
 ```
 
 - **RPC mode:** pi driven headless over JSON-RPC has no TUI, so the notice is one plain
-  line, naming the command instead of the key:
-  `^ caret  plan waiting for your review   /caret open in browser`.
+  line with no action, since an RPC client has no keybinding to name:
+  `^ caret  plan waiting for your review`.
 - **Footer status:** `^ plan waiting` while a review waits, `^ planning` in planning mode
-  (`/caret:plan`, which gates edits until approval) with nothing waiting, and cleared
-  otherwise. It carries no theme colour, because a pre-coloured string keeps the old
-  colour after a theme switch.
+  (`/caret <description>`, which gates edits until approval) with nothing waiting, and
+  cleared otherwise. It carries no theme colour, because a pre-coloured string keeps the
+  old colour after a theme switch.
 - **Open failure:** an `error` notification reads
   `caret: open failed: <err.message>. Run caret doctor to see why.`, OpenCode's toast
   title and message on one line.

@@ -134,7 +134,7 @@ export function logArchiveDir(): string {
 }
 
 /** Leveled NDJSON log for the short-lived `caret review` hook process (info
- * default; see log.ts), shared by the writer and `/caret:doctor`. */
+ * default; see log.ts), shared by the writer and `/caret doctor`. */
 export function logFile(): string {
   return `${logsDir()}/caret.log`;
 }

@@ -699,7 +699,7 @@ only genuine failures sit at error.
   code is the verdict: `0` all clear, `1` a check failed, `2` no report — doctor could not
   produce one, or `--bundle` had no terminal to ask consent at and stopped before
   collecting anything.
-- `/caret:doctor` — the slash command that wraps it. In Claude Code and OpenCode it asks
+- `/caret doctor` — the slash command that wraps it. In Claude Code and OpenCode it asks
   whether you want JSON or human-readable output, runs the subcommand, relays each failing
   check's remedy, and ends with the report in a code block ready to share. In pi it runs
   the human-readable report and shows it in the session as an entry the model never sees.
