@@ -15,7 +15,7 @@ import { DEMO_TEMPLATE } from "@/adapters/opencode/packaging.ts";
 
 // From import.meta.dir, not cwd, so the suite reads the real tree wherever it runs.
 const REPO_ROOT = join(import.meta.dir, "..", "..");
-const CLAUDE_COMMAND = "commands/demo.md";
+const CLAUDE_COMMAND = "skills/caret/references/demo.md";
 const OPENCODE_COMMAND = "opencode/commands/demo.md";
 
 const read = (rel: string) => readFileSync(join(REPO_ROOT, rel), "utf-8");

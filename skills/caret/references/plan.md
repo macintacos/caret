@@ -1,13 +1,4 @@
----
-description: Plan a change and route the plan through caret's review UI before implementing it
-argument-hint: [what you want done]
----
-
-Plan this, then implement it once caret approves the plan:
-
-$ARGUMENTS
-
-If that is empty, plan whatever the user asked for earlier in this session.
+Plan the description the router gave you, then implement it once caret approves the plan.
 
 Call `EnterPlanMode` first: `ExitPlanMode` is refused outside plan mode. Research what the
 change needs — read the relevant code, trace the real flow — then write the plan to the

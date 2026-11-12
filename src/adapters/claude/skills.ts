@@ -13,8 +13,8 @@
 // every `/` keystroke would open every skill's file.
 //
 // SCOPE: Claude's SKILLS, not everything its `/` menu lists. Slash commands
-// (`~/.claude/commands/*.md`, and a plugin's `commands/` — caret's own
-// `/caret:demo` among them) and the skills bundled inside the Claude Code client
+// (`~/.claude/commands/*.md`, and a plugin's `commands/`; caret ships a skill,
+// so its own `caret:caret` is listed) and the skills bundled inside the Claude Code client
 // are all absent. The line is that a skill is model-invocable from the plan a
 // reviewer is writing, while a command is a client-side prompt macro the agent
 // cannot reach mid-turn. Worth naming because the OpenCode adapter enumerates

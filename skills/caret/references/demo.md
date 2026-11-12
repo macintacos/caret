@@ -1,7 +1,3 @@
----
-description: Demo caret by presenting a short plan about this repo via ExitPlanMode
----
-
 Call `EnterPlanMode` first: `ExitPlanMode` is refused outside plan mode. Then read
 `${CLAUDE_PLUGIN_ROOT}/templates/demo.md` and follow its leading HTML comment exactly to
 fill the slots. Write everything after that comment to the plan file your plan-mode

@@ -1,7 +1,3 @@
----
-description: Diagnose this caret install — run caret doctor, relay each failing check's remedy, and present the report ready to share
----
-
 caret's `doctor` subcommand renders a verdict over a one-shot, read-only snapshot of the
 local install: the failing checks first, each with the command that fixes it, then the
 passing ones, then the state it read them from — running caret processes, daemon identity,
