@@ -44,7 +44,7 @@ function planPath(messages: Message[]): string | undefined {
 const write = (path: string, content: string) =>
   fauxAssistantMessage(fauxToolCall("write", { path, content }), { stopReason: "toolUse" });
 
-/** /caret:plan's run: write the plan, attempt a blocked write, submit, write again after
+/** `/caret <task>`'s run: write the plan, attempt a blocked write, submit, write again after
  * the review, then report whether the steer still reaches the model. */
 function planningStep(messages: Message[], plan: string) {
   const toolResultCount = messages.filter((m) => m.role === "toolResult").length;

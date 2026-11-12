@@ -4,9 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { PLAN_TITLE_INSTRUCTION, REVIEW_TOOL } from "@bridge/review-bridge.ts";
+import { type CommandApi, installCaretCommand, usageText } from "@piext/command.ts";
 import {
   type PlanningEntry as Entry,
   installPlanning,
+  LEAVE_NOTICE,
   PLANNING,
   type PlanningApi,
   planningSteer,
@@ -67,7 +69,11 @@ function fakePi(warm: () => void = () => warms++) {
       handlers[event] = handler;
     },
   } as unknown as PlanningApi;
-  installPlanning(pi, { store, plansDir, warm });
+  installCaretCommand(pi as unknown as CommandApi, {
+    planning: installPlanning(pi, { store, plansDir, warm }),
+    demo: async () => {},
+    doctor: async () => {},
+  });
   return {
     entries,
     sent,
@@ -77,13 +83,13 @@ function fakePi(warm: () => void = () => warms++) {
       branch = b;
     },
     fire: (event: string, payload: unknown) => handlers[event]?.(payload, ctx),
-    command: (args: string) => commands["caret:plan"]?.(args, ctx),
+    command: (args: string) => commands.caret?.(args, ctx),
   };
 }
 
 const planning = () => store.get(SID).planning;
 
-describe("/caret:plan", () => {
+describe("/caret planning", () => {
   test("with a task, turns planning on and sends the task", async () => {
     const f = fakePi();
     await f.command("  add a cache  ");
@@ -94,23 +100,39 @@ describe("/caret:plan", () => {
     expect(f.idle()).toBe(1);
   });
 
-  test("with no task, turns planning on and plans the earlier request", async () => {
+  test("plan <task> sends the task without the leading plan", async () => {
     const f = fakePi();
-    await f.command("");
-    expect(planning()).toBe(true);
-    expect(f.sent.length).toBe(1);
-    expect(f.sent[0]?.content).not.toBe("");
+    await f.command("plan doctor the tests");
+    expect(f.sent.map((s) => s.content)).toEqual(["doctor the tests"]);
   });
 
-  test("with no task while planning, turns planning off and sends nothing", async () => {
+  test("plan alone while not planning shows the usage hint and stays off", async () => {
+    const f = fakePi();
+    await f.command("plan");
+    expect(planning()).toBe(false);
+    expect(f.entries).toEqual([]);
+    expect(f.sent).toEqual([]);
+    expect(f.notices).toEqual([usageText(false)]);
+  });
+
+  test("plan alone while planning turns planning off and sends nothing", async () => {
     const f = fakePi();
     await f.command("x");
-    await f.command(" ");
+    await f.command("plan");
     expect(planning()).toBe(false);
     expect(f.entries.at(-1)).toEqual({ customType: PLANNING, data: { active: false } });
-    expect(f.notices.length).toBe(1);
+    expect(f.notices).toEqual([LEAVE_NOTICE]);
     expect(f.sent.length).toBe(1);
     expect(footerText(store.get(SID))).toBeUndefined();
+  });
+
+  test("bare /caret while planning hints how to leave and keeps planning", async () => {
+    const f = fakePi();
+    await f.command("x");
+    await f.command("");
+    expect(planning()).toBe(true);
+    expect(f.notices).toEqual([usageText(true)]);
+    expect(usageText(true)).toContain("/caret plan");
   });
 
   test("with a task while planning, stays on without a new entry", async () => {

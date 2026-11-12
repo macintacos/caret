@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import type { SpawnRunner } from "@bridge/review-bridge.ts";
+import { type CommandApi, installCaretCommand } from "@piext/command.ts";
 import {
   DOCTOR_ENTRY,
   DOCTOR_TIMEOUT_MS,
@@ -33,7 +34,7 @@ function fakePi(run: SpawnRunner, mode: DoctorCommandContext["mode"] = "tui") {
   const statuses: (string | undefined)[] = [];
   const printed: string[] = [];
   const ctx = { mode, ui: { setStatus: (_k: string, t: string | undefined) => statuses.push(t) } };
-  const pi: DoctorApi = {
+  const pi: DoctorApi & CommandApi = {
     registerCommand: (name, options) => {
       commands[name] = options.handler as (a: string, c: unknown) => Promise<void>;
     },
@@ -42,18 +43,23 @@ function fakePi(run: SpawnRunner, mode: DoctorCommandContext["mode"] = "tui") {
       renderers[customType] = renderer;
     },
   };
-  installDoctor(pi, {
+  const doctor = installDoctor(pi, {
     bin: BIN,
     run,
     env: { HOST_KEY: "kept" },
     stdout: (t) => printed.push(t),
+  });
+  installCaretCommand(pi, {
+    planning: { plan: async () => {}, leave: () => false, isPlanning: () => false },
+    demo: async () => {},
+    doctor,
   });
   return {
     entries,
     renderers,
     statuses,
     printed,
-    command: () => commands["caret:doctor"]?.("", ctx),
+    command: () => commands.caret?.("doctor", ctx),
     outcome: () => entries[0]?.data as DoctorOutcome,
   };
 }

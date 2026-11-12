@@ -75,9 +75,9 @@ test("a deny's feedback reaches pi's model as the tool result", async () => {
   expect(out.stdout).toContain(FEEDBACK);
 }, 60_000);
 
-test("/caret:plan blocks a write outside the plans folder until the plan is approved", async () => {
+test("/caret <task> blocks a write outside the plans folder until the plan is approved", async () => {
   const sandbox = piSandbox(root, pkgDir);
-  pi = runPi(sandbox, "/caret:plan add a greeting");
+  pi = runPi(sandbox, "/caret add a greeting");
   const review = await waitForReview(sandbox, pi, REVIEW_WAIT_MS);
   const res = await daemonClient(sandbox.url).resolve(String(review.id), {
     behavior: "allow",
@@ -104,9 +104,9 @@ test("/caret:plan blocks a write outside the plans folder until the plan is appr
   expect(blocked).toBe(true);
 }, 60_000);
 
-test("/caret:demo sends the packaged template and opens a review", async () => {
+test("/caret demo sends the packaged template and opens a review", async () => {
   const sandbox = piSandbox(root, pkgDir);
-  pi = runPi(sandbox, "/caret:demo");
+  pi = runPi(sandbox, "/caret demo");
   const review = await waitForReview(sandbox, pi, REVIEW_WAIT_MS);
   expect(review.title).toBe(FAUX_PLAN_TITLE);
   const res = await daemonClient(sandbox.url).resolve(String(review.id), {
@@ -130,9 +130,9 @@ test("/caret:demo sends the packaged template and opens a review", async () => {
   expect(sentTemplate).toBe(true);
 }, 60_000);
 
-test("/caret:doctor prints its report and keeps it out of the model's context", async () => {
+test("/caret doctor prints its report and keeps it out of the model's context", async () => {
   const sandbox = piSandbox(root, pkgDir);
-  pi = runPi(sandbox, "/caret:doctor", "doctor check");
+  pi = runPi(sandbox, "/caret doctor", "doctor check");
   expect(await until(() => pi?.proc.exitCode !== null, DOCTOR_EXIT_WAIT_MS)).toBe(true);
   const out = await pi.output;
   expect(out.exit).toBe(0);

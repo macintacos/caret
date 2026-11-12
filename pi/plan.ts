@@ -1,4 +1,4 @@
-// `/caret:plan`, caret's planning mode for pi: a hidden steer to write and submit a plan,
+// `/caret <task>`, caret's planning mode for pi: a hidden steer to write and submit a plan,
 // and a gate on edit/write outside the plans folder until a review of a plan in that
 // folder, submitted while planning, is approved. State lives in the review store (which
 // outlives `/reload`) and in session entries, rebuilt from the current branch so a fork or
@@ -14,8 +14,7 @@ import type { ReviewStore } from "./state.ts";
 /** The customType of both the hidden steer message and the session entry. */
 export const PLANNING = "caret-planning";
 
-const LEAVE_NOTICE = "caret planning is off; edits are no longer blocked.";
-const EARLIER_TASK = "Plan what I asked for earlier in this session.";
+export const LEAVE_NOTICE = "caret planning is off; edits are no longer blocked.";
 
 type SessionCtx = { sessionManager: { getSessionId(): string } };
 export type PlanningEntry = { type: string; customType?: string; data?: unknown };
@@ -34,13 +33,6 @@ type ToolResult = { toolName: string; toolCallId: string; details?: unknown };
 /** The slice of pi's extension API the planning mode calls; pinned by
  * test/pi/sdk-conformance.ts. */
 export type PlanningApi = {
-  registerCommand(
-    name: string,
-    options: {
-      description: string;
-      handler: (args: string, ctx: PlanningCommandContext) => Promise<void>;
-    },
-  ): void;
   sendUserMessage(content: string, options: { deliverAs: "followUp" }): void;
   appendEntry(customType: string, data: { active: boolean }): void;
   on(
@@ -103,9 +95,18 @@ export function planningFromBranch(entries: readonly PlanningEntry[]): boolean {
   return (lastPlanningEntry?.data as { active: boolean } | undefined)?.active === true;
 }
 
-/** Registers `/caret:plan` and its handlers on `pi`. Call once per pi instance: the set
- * of in-flight review calls is per install. */
-export function installPlanning(pi: PlanningApi, deps: PlanningDeps): void {
+/** What `/caret` calls into the planning mode. */
+export type PlanningHandlers = {
+  /** Turns planning on if it is off and sends `task`. */
+  plan(task: string, ctx: PlanningCommandContext): Promise<void>;
+  /** Turns planning off and says so; false, doing nothing, when it was already off. */
+  leave(ctx: PlanningCommandContext): boolean;
+  isPlanning(ctx: SessionCtx): boolean;
+};
+
+/** Installs the planning mode's handlers on `pi` and returns what `/caret` calls. Call once
+ * per pi instance: the set of in-flight review calls is per install. */
+export function installPlanning(pi: PlanningApi, deps: PlanningDeps): PlanningHandlers {
   const { store, plansDir, warm } = deps;
   const reviewsWhilePlanning = new Set<string>();
   const sid = (ctx: SessionCtx) => ctx.sessionManager.getSessionId();
@@ -119,20 +120,6 @@ export function installPlanning(pi: PlanningApi, deps: PlanningDeps): void {
     store.update(sid(ctx), { planning: planningFromBranch(ctx.sessionManager.getBranch()) });
   const pathInPlansDir = (call: ToolCall, ctx: PlanningContext) =>
     typeof call.input.path === "string" && landsInside(call.input.path, ctx.cwd, plansDir);
-
-  pi.registerCommand("caret:plan", {
-    description: "Plan a change and review it in caret before any file is edited",
-    handler: async (args, ctx) => {
-      const task = args.trim();
-      if (!task && isPlanning(ctx)) {
-        setPlanning(ctx, false);
-        ctx.ui.notify(LEAVE_NOTICE, "info");
-        return;
-      }
-      if (!isPlanning(ctx)) setPlanning(ctx, true);
-      await sendAndWait(pi, ctx, task || EARLIER_TASK);
-    },
-  });
 
   pi.on("before_agent_start", (event, ctx) => {
     if (event.messageType !== "user" || !isPlanning(ctx)) return undefined;
@@ -179,4 +166,18 @@ export function installPlanning(pi: PlanningApi, deps: PlanningDeps): void {
 
   pi.on("session_start", restorePlanningFromBranch);
   pi.on("session_tree", restorePlanningFromBranch);
+
+  return {
+    plan: async (task, ctx) => {
+      if (!isPlanning(ctx)) setPlanning(ctx, true);
+      await sendAndWait(pi, ctx, task);
+    },
+    leave: (ctx) => {
+      if (!isPlanning(ctx)) return false;
+      setPlanning(ctx, false);
+      ctx.ui.notify(LEAVE_NOTICE, "info");
+      return true;
+    },
+    isPlanning,
+  };
 }

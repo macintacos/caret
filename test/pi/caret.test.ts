@@ -148,24 +148,6 @@ test("a second copy stays off and names both paths; the owner can reload", () =>
   expect(reload.tools.length).toBe(1);
 });
 
-test("only the owning copy registers caret's commands", () => {
-  const holder = {};
-  const owner = fakePi();
-  installCaret(owner.pi, host(holder));
-  const second = fakePi();
-  installCaret(second.pi, host(holder, { entryUrl: OTHER_COPY_URL }));
-  const old = fakePi();
-  installCaret(old.pi, host({}, { version: "1.4.9" }));
-  expect(Object.keys(owner.commands).sort()).toEqual([
-    "caret",
-    "caret:demo",
-    "caret:doctor",
-    "caret:plan",
-  ]);
-  expect(Object.keys(second.commands)).toEqual([]);
-  expect(Object.keys(old.commands)).toEqual([]);
-});
-
 test("only the owning copy registers /caret and the open key", () => {
   const holder = {};
   const owner = fakePi();
@@ -174,11 +156,11 @@ test("only the owning copy registers /caret and the open key", () => {
   installCaret(second.pi, host(holder, { entryUrl: OTHER_COPY_URL }));
   const old = fakePi();
   installCaret(old.pi, host({}, { version: "1.4.9" }));
-  expect(Object.keys(owner.commands)).toContain("caret");
+  expect(Object.keys(owner.commands)).toEqual(["caret"]);
   expect(Object.keys(owner.shortcuts)).toEqual([OPEN_KEY]);
-  expect(second.commands.caret).toBeUndefined();
+  expect(Object.keys(second.commands)).toEqual([]);
   expect(Object.keys(second.shortcuts)).toEqual([]);
-  expect(old.commands.caret).toBeUndefined();
+  expect(Object.keys(old.commands)).toEqual([]);
   expect(Object.keys(old.shortcuts)).toEqual([]);
 });
 
@@ -192,13 +174,23 @@ test("a pending review in the tool's store paints the notice", () => {
   expect(typeof f.widgets.at(-1)?.content).toBe("function");
 });
 
-test("/caret with a missing caret binary reports an error instead of throwing", async () => {
+test("bare /caret notifies a hint naming the open key and opens nothing", async () => {
+  const f = fakePi();
+  const spawned: string[][] = [];
+  installCaret(f.pi, host({}, { spawn: (_bin, args) => spawned.push(args) }));
+  await f.commands.caret?.handler("", f.ctx);
+  expect(f.notices).toHaveLength(1);
+  expect(f.notices[0]?.message).toContain(OPEN_KEY);
+  expect(spawned).toEqual([]);
+});
+
+test("the open key with a missing caret binary reports an error instead of throwing", async () => {
   const f = fakePi();
   installCaret(
     f.pi,
     host({}, { env: { CARET_PI_BIN: "/nonexistent/caret" }, spawn: nodeDetachedSpawn }),
   );
-  await f.commands.caret?.handler("", f.ctx);
+  f.shortcuts[OPEN_KEY]?.handler(f.ctx);
   expect(await until(() => f.notices.some((n) => n.type === "error"))).toBe(true);
 });
 

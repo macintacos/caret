@@ -106,7 +106,7 @@ export function reviewTool(deps: { bin: string; run: SpawnRunner; store: ReviewS
     label: "caret",
     description: REVIEW_TOOL_DESCRIPTION,
     // No promptGuidelines: pi appends them to every system prompt while the tool is
-    // active, and outside /caret:plan users get no behaviour change they didn't ask for.
+    // active, and outside caret's planning mode users get no behaviour change they didn't ask for.
     promptSnippet:
       "Submit a plan to caret for the user's review in a browser UI; blocks until they approve or request changes",
     parameters,

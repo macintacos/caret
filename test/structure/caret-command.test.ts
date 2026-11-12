@@ -7,8 +7,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { REVIEW_TOOL } from "@oc/caret.core.ts";
-import { installPlanning, type PlanningApi, planningSteer } from "@piext/plan.ts";
-import { createReviewStore } from "@piext/state.ts";
+import { installCaret, type PiApi } from "@piext/caret.ts";
+import { planningSteer } from "@piext/plan.ts";
 import pkg from "@root/package.json" with { type: "json" };
 import { MARKDOWN_READ_BY_TESTS } from "@scripts/preflight.ts";
 
@@ -109,16 +109,29 @@ test(`${OPENCODE_COMMAND}'s usage hint names the open-review keybinding`, () => 
   expect(read(OPENCODE_COMMAND).split("## Usage hint")[1]).toContain("<leader>p");
 });
 
-test("pi's planning mode registers caret:plan and steers to the review tool", () => {
+test("pi's extension registers /caret as its only command and steers to the review tool", () => {
   const commands: string[] = [];
-  installPlanning(
+  installCaret(
     {
       registerCommand: (name: string) => commands.push(name),
+      registerTool: () => {},
+      registerShortcut: () => {},
+      registerEntryRenderer: () => {},
       on: () => {},
-    } as unknown as PlanningApi,
-    { store: createReviewStore(), plansDir: "/p", warm: () => {} },
+    } as unknown as PiApi,
+    {
+      version: "9.9.9",
+      entryUrl: "file:///pkg/pi/caret.ts",
+      holder: {},
+      env: {},
+      run: async () => ({ stdout: "", exitCode: 0 }),
+      agentDir: "/agent",
+      warm: () => {},
+      spawn: () => {},
+      stdout: () => {},
+    },
   );
-  expect(commands).toEqual(["caret:plan"]);
+  expect(commands).toEqual(["caret"]);
   expect(planningSteer("/p", "s")).toContain(REVIEW_TOOL);
 });
 

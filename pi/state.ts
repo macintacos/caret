@@ -1,4 +1,4 @@
-// Per-session review state for the pi extension. The notice (EXC-2316) and `/caret:plan`
+// Per-session review state for the pi extension. The notice (EXC-2316) and the planning mode
 // (EXC-2317) consume this store and never redefine it.
 //
 // The data lives on `globalThis` because `/reload` loads a fresh module instance; pi

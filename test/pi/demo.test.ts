@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { REVIEW_TOOL } from "@bridge/review-bridge.ts";
+import { type CommandApi, installCaretCommand } from "@piext/command.ts";
 import { type DemoApi, installDemo } from "@piext/demo.ts";
 import { renderPlugin } from "@/adapters/opencode/deploy.ts";
 
@@ -33,26 +34,31 @@ function fakePi(files: { templatePath?: string; commandPath?: string } = {}, pla
     },
     sessionManager: { getSessionId: () => "s" },
   };
-  const pi: DemoApi = {
+  const pi: DemoApi & CommandApi = {
     registerCommand: (name, options) => {
       commands[name] = options.handler as (a: string, c: unknown) => Promise<void>;
     },
     sendUserMessage: (content, options) => sent.push({ content, options }),
   };
-  installDemo(pi, {
+  const demo = installDemo(pi, {
     templatePath: files.templatePath ?? templatePath,
     commandPath: files.commandPath ?? OPENCODE_COMMAND,
     isPlanning: (id) => planning && id === "s",
+  });
+  installCaretCommand(pi, {
+    planning: { plan: async () => {}, leave: () => false, isPlanning: () => planning },
+    demo,
+    doctor: async () => {},
   });
   return {
     sent,
     notices,
     idle: () => idleAwaited,
-    command: () => commands["caret:demo"]?.("", ctx),
+    command: () => commands.caret?.("demo", ctx),
   };
 }
 
-test("/caret:demo sends OpenCode's rendered /caret:demo body as a follow-up and waits", async () => {
+test("/caret demo sends OpenCode's rendered demo body as a follow-up and waits", async () => {
   const pi = fakePi();
   await pi.command();
   expect(pi.sent).toHaveLength(1);
@@ -69,7 +75,7 @@ test("/caret:demo sends OpenCode's rendered /caret:demo body as a follow-up and 
   expect(pi.idle()).toBe(1);
 });
 
-test("/caret:demo refuses with one warning while the session is planning", async () => {
+test("/caret demo refuses with one warning while the session is planning", async () => {
   const pi = fakePi({ templatePath: join(tmp, "absent.md") }, true);
   await pi.command();
   expect(pi.notices).toHaveLength(1);
