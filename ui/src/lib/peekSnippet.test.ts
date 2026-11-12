@@ -139,6 +139,14 @@ describe("sourceSnippet", () => {
     expect(image?.hidden).toBe(true);
   });
 
+  test("gives a copied image that was still loading its room once it loads", () => {
+    const { host, content } = sourceView();
+    content.querySelector('[data-line="5"]')?.append(el("img", { "data-md-image": "" }));
+    const image = sourceSnippet(host, INTAKE)?.shadowRoot?.querySelector("img");
+    image?.dispatchEvent(new Event("load"));
+    expect(image?.hasAttribute("data-md-image-loaded")).toBe(true);
+  });
+
   test("is null when the heading's row is not drawn", () => {
     expect(sourceSnippet(sourceView().host, { from: 42, to: 50 })).toBeNull();
     expect(sourceSnippet(el("div"), INTAKE)).toBeNull();

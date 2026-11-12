@@ -536,9 +536,10 @@ because neither surface virtualizes: the source view is the library's `File`, ne
   slots' gaps (`[data-preview-gap]`), carries `--preview-scale` from the live root, and
   sets `indeterminate` on each `[/]` task box, which no clone carries.
 - **Both.** A clone keeps no event listener, so each copied `<img>` gets the live views'
-  handler that hides an image when it fails to load. Neither copy shows the search's
-  marks. Those are CSS Custom Highlight ranges on the live nodes, and a clone doesn't
-  carry them.
+  handler that hides an image when it fails to load, and a source copy's `<img>` the one
+  that marks it loaded, which is what gives a source-view image room in its row. Neither
+  copy shows the search's marks. Those are CSS Custom Highlight ranges on the live nodes,
+  and a clone doesn't carry them.
 
 `DiffPlanView` keeps one copy per heading in a `peekSnippet` function. It makes a new
 function whenever any of these change: the surface, the version, the theme, the

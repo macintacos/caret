@@ -860,6 +860,12 @@ const CARET_OVERRIDES = `
   [data-content] [data-line] [data-md-image][hidden] {
     display: none;
   }
+  /* Out of flow until loaded (inlineImages.ts). Not display: none, which would keep a
+     lazy image from ever being fetched. */
+  [data-content] [data-line] [data-md-image]:not([data-md-image-loaded]) {
+    position: absolute;
+    visibility: hidden;
+  }
 
   /* EXC-863: blockquote level bars. This is EXC-855's OTHER category — transform-in-place
      rather than keep-and-chip — so nothing here is a chip and nothing here spends a

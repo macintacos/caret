@@ -1419,7 +1419,10 @@ test("an image in a table that fails to load after the composer opens leaves the
 
   await plus.click();
   await expect(page.getByRole("dialog", { name: "Add a comment" })).toBeVisible();
-  await expect(hiddenImage).toHaveCount(0);
+  // In flight: the rebuilt image holds no room, so nothing is left to take back when it
+  // fails. A box here would be laid out and removed in different scroll-anchoring states.
+  await expect(page.locator(".diffview [data-md-image]:not([hidden])")).toHaveCount(1);
+  expect(await rowTop()).toBe(before);
   await expect(hiddenImage).toHaveCount(1);
   await expect.poll(rowTop).toBe(before);
 });

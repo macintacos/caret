@@ -38,6 +38,11 @@ import type { ImageSpan, ImageSpanMap } from "$lib/diffview/links.ts";
 
 const IMAGE_ATTR = "data-md-image";
 
+// Set once an image has loaded. Until then the sheet keeps it out of the row's flow
+// (coreStyles.ts): a pending or broken image's box would arrive and leave in different
+// scroll-anchoring states around a repaint, and move the plan by the difference.
+const LOADED_ATTR = "data-md-image-loaded";
+
 /** The attributes every plan image carries, in the source view and the preview. */
 export const IMAGE_ATTRIBUTES = { referrerpolicy: "no-referrer", loading: "lazy" } as const;
 
@@ -71,7 +76,17 @@ function createImage(doc: Document, image: ImageSpan): HTMLImageElement {
     img.hidden = true;
   });
   img.setAttribute("src", image.url);
+  markWhenLoaded(img);
   return img;
+}
+
+/** Marks a source-view image loaded, now or when it loads, which is what gives it room
+ * in its row. A clone needs this too: it keeps the mark but not the listener. */
+export function markWhenLoaded(img: HTMLImageElement): void {
+  img.addEventListener("load", () => img.setAttribute(LOADED_ATTR, ""));
+  // An image the browser already holds is complete at once; marking it here keeps a
+  // repaint's rebuild from dropping its room until the load event.
+  if (img.complete && img.naturalWidth > 0) img.setAttribute(LOADED_ATTR, "");
 }
 
 /**
