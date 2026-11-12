@@ -847,6 +847,9 @@ pending-plan notice" and "2026-11-10: caret inside pi's TUI: the pending-plan no
 - Make the whole row the click target, and ignore a mouse-up that ends a text selection.
   pi delivers clicks only in its fullscreen mode. pi's row carries no OSC 8 link (the
   terminal's hyperlink escape), because a link under the cell would take the click.
+- Show a hover the way the host's own clickable card does. OpenCode's toast turns its
+  action label bold in `text.action.primary.base`, so the row does the same to its verb.
+  Bold is the cue that does not depend on colour. pi's row has no hover state.
 - Where the host has no TUI, as in pi's RPC mode, print the notice as one plain-text line
   that names the command instead of the key.
 - With nothing waiting, collapse the notice fully: no blank row and no gap.

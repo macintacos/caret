@@ -63,7 +63,12 @@ export type TuiContext = {
 
 /** The host theme's tokens the pending row paints with; each is an opaque OpenTUI colour. */
 type TuiTheme = {
-  text: { base: unknown; muted: unknown; feedback: { warning: { base: unknown } } };
+  text: {
+    base: unknown;
+    muted: unknown;
+    action: { primary: { base: unknown } };
+    feedback: { warning: { base: unknown } };
+  };
   background: { raised: { base: unknown } };
   border: { base: unknown };
 };
@@ -285,7 +290,6 @@ function pendingRow(
   const row = openTui.createElement("box");
   props(row, { border: ["left"], borderStyle: "heavy", marginBottom: 1, onMouseUp: open });
   paint(row, "borderColor", (t) => t.border.base);
-  openTui.effect((prev) => openTui.setProp(row, "visible", isPending(), prev));
 
   const card = openTui.createElement("box");
   props(card, { flexDirection: "row", flexGrow: 1, paddingLeft: 2, paddingRight: 1 });
@@ -302,11 +306,42 @@ function pendingRow(
 
   const hint = openTui.createElement("text");
   props(hint, { flexShrink: 0, wrapMode: "none" });
+  const verb = openTui.createElement("span");
+  openTui.insert(verb, `  ${PENDING_ACTION}`);
   append(
     hint,
     styled("span", openKey, (t) => t.text.base),
-    styled("span", `  ${PENDING_ACTION}`, (t) => t.text.muted),
+    verb,
   );
+
+  // Hover, as the host's toast shows it: the action goes bold in the action colour.
+  let hovered = false;
+  let verbStyle: { fg?: unknown; bold?: true } | undefined;
+  const paintVerb = () => {
+    const t = theme();
+    verbStyle = openTui.setProp(
+      verb,
+      "style",
+      {
+        ...(t && { fg: hovered ? t.text.action.primary.base : t.text.muted }),
+        ...(hovered && { bold: true as const }),
+      },
+      verbStyle,
+    );
+  };
+  const setHovered = (over: boolean) => {
+    hovered = over;
+    paintVerb();
+  };
+  openTui.effect(paintVerb);
+  props(row, { onMouseOver: () => setHovered(true), onMouseOut: () => setHovered(false) });
+
+  openTui.effect((prev) => {
+    const shown = isPending();
+    // A row hidden under the pointer gets no mouse-out.
+    if (!shown && hovered) setHovered(false);
+    return openTui.setProp(row, "visible", shown, prev);
+  });
 
   append(card, label, hint);
   append(row, card);

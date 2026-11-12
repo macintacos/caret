@@ -205,7 +205,12 @@ function onlyClaim(claims: Claim[]): Claim {
 const BIN = "/caret/bin/caret";
 
 const THEME = {
-  text: { base: "fg-base", muted: "fg-muted", feedback: { warning: { base: "fg-warning" } } },
+  text: {
+    base: "fg-base",
+    muted: "fg-muted",
+    action: { primary: { base: "fg-action" } },
+    feedback: { warning: { base: "fg-warning" } },
+  },
   background: { raised: { base: "bg-raised" } },
   border: { base: "border" },
 };
@@ -616,6 +621,7 @@ test("the pending row recolours when the host switches theme", async () => {
     text: {
       base: "fg-base-2",
       muted: "fg-muted-2",
+      action: { primary: { base: "fg-action-2" } },
       feedback: { warning: { base: "fg-warning-2" } },
     },
     background: { raised: { base: "bg-raised-2" } },
@@ -654,6 +660,43 @@ test("the key hint falls back to /caret when the command has no binding", async 
       "/caret  open in browser",
     );
   }
+});
+
+/** The style of the hint's verb, the span a hover repaints. */
+const verbStyle = (row: FakeNode) =>
+  spans((cardOf(row).children as FakeNode[])[1] as FakeNode)[1]?.style;
+
+const hover = (row: FakeNode, over: boolean) =>
+  (row.props[over ? "onMouseOver" : "onMouseOut"] as () => void)();
+
+test("hovering the row turns the hint's verb bold in the host's action colour, as its toast does", async () => {
+  const { row } = await waitingRow();
+  hover(row, true);
+  expect(verbStyle(row)).toEqual({ fg: "fg-action", bold: true });
+  hover(row, false);
+  expect(verbStyle(row)).toEqual({ fg: "fg-muted" });
+});
+
+test("a hovered row follows a theme switch, and stays bold without a theme", async () => {
+  const { row, rerun, setTheme } = await waitingRow();
+  hover(row, true);
+  setTheme({ ...THEME, text: { ...THEME.text, action: { primary: { base: "fg-action-2" } } } });
+  rerun();
+  expect(verbStyle(row)).toEqual({ fg: "fg-action-2", bold: true });
+  const bare = await waitingRow({ keymap: "record", theme: false });
+  hover(bare.row, true);
+  expect(verbStyle(bare.row)).toEqual({ bold: true });
+});
+
+test("a row that hides while hovered comes back unhovered", async () => {
+  const { row, rerun, emit } = await waitingRow();
+  hover(row, true);
+  emit("session.tool.success", "A", { caretDecision: "allow" });
+  rerun();
+  emit("session.tool.progress", "A", { caretUrl: URL });
+  rerun();
+  expect(row.props.visible).toBe(true);
+  expect(verbStyle(row)).toEqual({ fg: "fg-muted" });
 });
 
 test("clicking the row opens the review of the row's own session", async () => {

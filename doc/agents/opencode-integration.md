@@ -711,9 +711,13 @@ nothing pending the row is `visible: false`, which OpenTUI lays out as `display:
 margin included. A mouse-up on the row spawns the same `band-link` for the slot's own
 `sessionID`, not the routed one, and does nothing while `renderer.getSelection()` holds
 text (the host holds an empty selection on every click, so test its text, not its
-presence), so a drag-to-copy across the row opens nothing. `ctx.theme` and `ctx.renderer`
-type as `any` in the installed SDK (their `@opencode/theme` and `@opentui/core` types are
-not installed), so their conformance rows cannot go red.
+presence), so a drag-to-copy across the row opens nothing. While the pointer is over the
+row, the hint's verb is bold in `text.action.primary.base`, which is how the host's toast
+marks its own action label. The row's `onMouseOver` and `onMouseOut` repaint that one
+span, passing the previous style to `setProp` so the reconciler clears the bold attribute.
+A row that hides while hovered resets, because OpenTUI sends a hidden node no mouse-out.
+`ctx.theme` and `ctx.renderer` type as `any` in the installed SDK (their `@opencode/theme`
+and `@opentui/core` types are not installed), so their conformance rows cannot go red.
 
 ## Verified vs. follow-up
 
