@@ -3,6 +3,8 @@
 // in every theme: its fonts, heading sizes and code highlighting are the plan's own. It
 // relies on neither view virtualizing, so every row of a section is in the DOM.
 
+import { markWhenLoaded } from "$lib/diffview/inlineImages.ts";
+
 /** A section's 1-based, inclusive source lines. */
 export interface SnippetLines {
   from: number;
@@ -123,6 +125,7 @@ function settle(pre: HTMLElement): void {
     card.style.setProperty("grid-row", `span ${card.children.length}`);
   }
   hideFailedImages(pre);
+  for (const image of pre.querySelectorAll("img")) markWhenLoaded(image);
 }
 
 // As the live views do (inlineImages.ts, PlanPreview): a clone keeps no listener, and

@@ -99,6 +99,18 @@ test("two images on a line render in source order", () => {
   expect(images(host).map((i) => i.getAttribute("alt"))).toEqual(["a", "b"]);
 });
 
+test("an image is marked loaded only once it loads", () => {
+  // The mark is what gives it room in the row (coreStyles.ts); a pending or failed
+  // image must never carry it.
+  const host = root(row(1, "x"));
+  syncInlineImages(host, map([[1, [span("https://cdn.test/a.png")]]]));
+  expect(images(host)[0]?.hasAttribute("data-md-image-loaded")).toBe(false);
+  images(host)[0]?.dispatchEvent(new Event("error"));
+  expect(images(host)[0]?.hasAttribute("data-md-image-loaded")).toBe(false);
+  images(host)[0]?.dispatchEvent(new Event("load"));
+  expect(images(host)[0]?.hasAttribute("data-md-image-loaded")).toBe(true);
+});
+
 test("a failed load hides the element rather than removing it", () => {
   // Removing it would make the next observer pass re-create it, and remembering
   // the failure would need module state. Hidden keeps the pass idempotent and
