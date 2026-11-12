@@ -130,6 +130,14 @@ Open items first, then the log, newest first.
   paints the waiting plan as an inverse `warning` fill with a 🥕 emoji. Either align it
   with the 2026-11-05 OpenCode decision or record why the two hosts differ.
 
+## 2026-11-12: `/caret` is one command on every host
+
+- **One argument-routed command.** `/caret <description>` plans, `/caret doctor` runs the
+  report, and `/caret demo` runs the demo, on Claude Code, OpenCode and pi alike.
+- **A bare `/caret` prints a usage hint.** It no longer opens the waiting review; the
+  keybindings alone open it.
+- **pi's RPC notice line carries no action.**
+
 ## 2026-11-10: a plan opens in preview, and Source on `s` shows its markdown
 
 - **Preview is the default view.** The header's toggle is Source, bound to `s`; `p` is

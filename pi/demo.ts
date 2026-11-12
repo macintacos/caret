@@ -9,7 +9,8 @@ import { sendAndWait } from "./follow-up.ts";
 
 /** The demo template and OpenCode's demo reference, relative to the extension
  * entry `pi/caret.ts`. Both hosts submit through the same review tool, so the command's
- * body is pi's prompt too. */
+ * body is pi's prompt too. Sent whole: keep that file host-neutral and free of markers
+ * other than the template's. */
 export const DEMO_TEMPLATE = "../templates/demo.md";
 export const DEMO_COMMAND = "../opencode/references/demo.md";
 

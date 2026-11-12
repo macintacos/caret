@@ -33,7 +33,7 @@ function routerLines(markdown: string): string[] {
 
 const STOPS = ["usage", "doctor", "demo", "plan"];
 
-/** The stops a router names, and whether its `argument` node carries every dispatch exit. */
+/** Asserts the router names exactly `STOPS` and its `argument` node carries the five dispatch exits, in order. */
 function expectDispatchRouter(markdown: string) {
   const lines = routerLines(markdown);
   const stops = lines.flatMap((l) => l.match(/^([\w-]+)!:/)?.[1] ?? []);
@@ -73,6 +73,17 @@ test(`${CLAUDE_SKILL} leaves the command bodies to its references`, () => {
   const skill = read(CLAUDE_SKILL);
   expect(skill.includes("ExitPlanMode")).toBe(false);
   expect(skill.includes("doctor --json")).toBe(false);
+});
+
+test(`${CLAUDE_SKILL} names the plugin root its references read as <plugin root>`, () => {
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: Claude Code's variable, written literally
+  expect(read(CLAUDE_SKILL)).toContain("`${CLAUDE_PLUGIN_ROOT}`");
+  expect(read(CLAUDE_SKILL)).toContain("`<plugin root>`");
+});
+
+test(`${CLAUDE_REFERENCES} carry no harness variable, since Claude Code reads them raw`, () => {
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: the harness variable prefix, written literally
+  expect(claudeReferences.filter((rel) => read(rel).includes("${CLAUDE_"))).toEqual([]);
 });
 
 test(`${CLAUDE_REFERENCES}/plan.md routes through ExitPlanMode, the call caret's hook intercepts`, () => {
@@ -139,8 +150,10 @@ test("preflight runs this suite when only the Markdown it reads changed", () => 
   const markdown = [
     CLAUDE_SKILL,
     `${CLAUDE_REFERENCES}/plan.md`,
+    `${CLAUDE_REFERENCES}/doctor.md`,
     OPENCODE_COMMAND,
     `${OPENCODE_REFERENCES}/plan.md`,
+    `${OPENCODE_REFERENCES}/doctor.md`,
   ];
   expect(markdown.filter((rel) => !MARKDOWN_READ_BY_TESTS.includes(rel))).toEqual([]);
 });

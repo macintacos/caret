@@ -41,7 +41,7 @@ async function commandNamesUnder(dir: string): Promise<string[]> {
 /**
  * Every command the OpenCode session can reach, named the way OpenCode names one:
  * its path under the command dir minus the `.md` (`caret.md` → `caret`, a stale
- * `caret:debug.md` → `caret:debug`), which names a nested command by its path.
+ * `caret:debug.md` → `caret:debug`), and names a nested command by its path.
  *
  * Sorted by name so the list is the same on every machine. Never throws: an
  * absent or unreadable command dir yields nothing.

@@ -38,9 +38,9 @@ non-blocking only so users could chat mid-review, which caret doesn't offer.
 ## The pi APIs it uses and the 1.5.0 floor
 
 **Each `pi/` module exports the slice of pi's API it calls as a type** (`PlanningApi`,
-`NoticeApi`, `DemoApi`, `DoctorApi`). `PiApi` in `pi/caret.ts` intersects them, and
-`test/pi/sdk-conformance.ts` pins each against the installed SDK. A new pi API goes in its
-module's slice first.
+`NoticeApi`, `DemoApi`, `DoctorApi`, `CommandApi`). `PiApi` in `pi/caret.ts` intersects
+them, and `test/pi/sdk-conformance.ts` pins each against the installed SDK. A new pi API
+goes in its module's slice first.
 
 **The floor is pi `1.5.0`.** It is the version tested, and the first release published as
 `@earendil-works/pi-coding-agent` after the rename from `@mariozechner/pi-coding-agent`

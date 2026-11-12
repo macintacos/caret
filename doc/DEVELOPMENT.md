@@ -462,7 +462,7 @@ is picked up by the service cycle `--install` performs. If you would rather your
 not carry a login item, answer the install prompt with **I'll run it myself**, then run
 `bin/caret serve` whenever you want the review UI up.
 
-After a `/reload-plugins` (or a Claude Code restart), `/caret:*` resolves to your local
+After a `/reload-plugins` (or a Claude Code restart), `/caret` resolves to your local
 build.
 
 `--install` also leaves Claude Code's `caret` marketplace registered, and declared in its

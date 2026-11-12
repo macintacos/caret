@@ -1,5 +1,5 @@
-// `/caret <task>`, caret's planning mode for pi: a hidden steer to write and submit a plan,
-// and a gate on edit/write outside the plans folder until a review of a plan in that
+// `/caret <description>`, caret's planning mode for pi: a hidden steer to write and submit
+// a plan, and a gate on edit/write outside the plans folder until a review of a plan in that
 // folder, submitted while planning, is approved. State lives in the review store (which
 // outlives `/reload`) and in session entries, rebuilt from the current branch so a fork or
 // `/tree` jump to before planning began is not planning.
@@ -101,6 +101,7 @@ export type PlanningHandlers = {
   plan(task: string, ctx: PlanningCommandContext): Promise<void>;
   /** Turns planning off and says so; false, doing nothing, when it was already off. */
   leave(ctx: PlanningCommandContext): boolean;
+  /** Whether this session is planning. */
   isPlanning(ctx: SessionCtx): boolean;
 };
 

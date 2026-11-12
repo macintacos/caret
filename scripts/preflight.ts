@@ -257,6 +257,8 @@ export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "skills/caret/references/plan.md", // test/structure/caret-command.test.ts checks it names ExitPlanMode
   "opencode/commands/caret.md", // test/structure/caret-command.test.ts checks its router's stops and exits
   "opencode/references/plan.md", // test/structure/caret-command.test.ts checks it names the review tool
+  "skills/caret/references/doctor.md", // test/structure/caret-command.test.ts checks it exists and ships
+  "opencode/references/doctor.md", // test/structure/caret-command.test.ts checks it exists and ships
   // test/adapters/opencode/docs-cache-path.test.ts checks the `rm -rf` path it prints;
   // test/structure/line-anchor-claim.test.ts checks the line-anchor claim it states.
   "doc/ARCHITECTURE.md",

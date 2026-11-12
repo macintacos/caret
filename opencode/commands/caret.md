@@ -21,7 +21,7 @@ argument?: What is the whole argument?
 usage!: Reply with the usage hint below; load no file. Then tell the user this command switched the session to the `plan` agent, and that they can switch back to `build`.
 doctor!: Load doctor.md and follow it. Then tell the user this command switched the session to the `plan` agent, and that they can switch back to `build`.
 demo!: Load demo.md and follow it
-plan!: Load plan.md and follow it; the description is the argument without a leading `plan`
+plan!: Load plan.md and follow it; the description is the whole argument, minus a leading standalone word `plan`
 ```
 
 ## Usage hint

@@ -10,6 +10,9 @@ the `router` fence from `@caret` to the one stop the argument matches, and load 
 file that stop names, from `${CLAUDE_SKILL_DIR}/references/`. Do not read the other
 reference files.
 
+caret's plugin root is `${CLAUDE_PLUGIN_ROOT}`; the reference files write it as
+`<plugin root>`.
+
 ```router
 @caret: /caret with the argument above
   > argument
@@ -22,7 +25,7 @@ argument?: What is the whole argument?
 usage!: Reply with the usage hint below and stop
 doctor!: Load doctor.md and follow it
 demo!: Load demo.md and follow it
-plan!: Load plan.md and follow it; the description is the argument without a leading `plan`
+plan!: Load plan.md and follow it; the description is the whole argument, minus a leading standalone word `plan`
 ```
 
 ## Usage hint

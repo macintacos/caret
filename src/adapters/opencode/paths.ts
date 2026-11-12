@@ -5,8 +5,7 @@
 // (commands/install/opencode.ts) and the doctor probe (install.ts) resolve WHERE those
 // live through this single module, so the reader and the writer can never disagree about
 // a path. It also resolves what older caret versions left in that config dir, which
-// install and uninstall sweep, and both hosts' plugin cache
-// layouts.
+// install and uninstall sweep, and both hosts' plugin cache layouts.
 
 import { type Dirent, existsSync, readdirSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
@@ -46,8 +45,8 @@ export function localSpecifierPath(spec: string): string | undefined {
 export const COMMAND_DIRNAME = "commands";
 
 /** The prefix of every command file past caret versions deployed (`caret:<name>.md`,
- * which OpenCode exposes as `/caret:<name>`). caret now deploys only `caret.md`, so the
- * prefix identifies files to sweep and never matches the live command. */
+ * which OpenCode exposes as `/caret:<name>`), which identifies files to sweep. The live
+ * command is `caret.md`, which the prefix never matches. */
 export const COMMAND_NAMESPACE = "caret:";
 
 /** The dir the `/caret` command loads its references from, under a config dir. */

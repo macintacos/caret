@@ -15,11 +15,12 @@ First ask the user (via `AskUserQuestion`) which format they want:
 - **JSON** — for feeding to tooling.
 - **Human-readable** — for scanning in the conversation.
 
-Then run the matching invocation:
+Then run the matching invocation, with `<plugin root>` replaced by the path the skill
+named:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/bin/caret" doctor --json   # JSON
-"${CLAUDE_PLUGIN_ROOT}/bin/caret" doctor          # human-readable
+"<plugin root>/bin/caret" doctor --json   # JSON
+"<plugin root>/bin/caret" doctor          # human-readable
 ```
 
 The exit code is the verdict: `0` every check passed, `1` at least one failed, `2` no

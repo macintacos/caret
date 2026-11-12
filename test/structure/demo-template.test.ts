@@ -1,7 +1,7 @@
 // Standing gate for the demo template. Claude Code reads it from the plugin root,
 // OpenCode's install embeds it, and pi reads it at run time from beside its extension,
 // so dropping `templates/` from package.json's `files`, or moving the template, breaks
-// every installed `/caret:demo` with no error at install or run time. Nothing but this
+// every installed `/caret demo` with no error at install or run time. Nothing but this
 // suite catches it.
 import { expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
@@ -27,8 +27,7 @@ const unshipped = (paths: readonly string[]) =>
   );
 
 const claudePaths = read(CLAUDE_COMMAND)
-  // biome-ignore lint/suspicious/noTemplateCurlyInString: Claude Code's variable, written literally
-  .split("${CLAUDE_PLUGIN_ROOT}/")
+  .split("<plugin root>/")
   .slice(1)
   .map((s) => s.match(/^[\w./-]+/)?.[0] ?? "");
 
@@ -49,7 +48,7 @@ const fromPiEntry = (rel: string) =>
   relative(REPO_ROOT, fileURLToPath(new URL(rel, pathToFileURL(join(REPO_ROOT, PI_ENTRY)))));
 const piPaths = [fromPiEntry(PI_DEMO_COMMAND), fromPiEntry(PI_DEMO_TEMPLATE)];
 
-test(`${PI_ENTRY}'s /caret:demo reads only files the package ships`, () => {
+test(`${PI_ENTRY}'s /caret demo reads only files the package ships`, () => {
   expect(missing(piPaths)).toEqual([]);
   expect(unshipped(piPaths)).toEqual([]);
 });

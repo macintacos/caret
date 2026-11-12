@@ -701,8 +701,9 @@ only genuine failures sit at error.
   collecting anything.
 - `/caret doctor` — the slash command that wraps it. In Claude Code and OpenCode it asks
   whether you want JSON or human-readable output, runs the subcommand, relays each failing
-  check's remedy, and ends with the report in a code block ready to share. In pi it runs
-  the human-readable report and shows it in the session as an entry the model never sees.
+  check's remedy, and ends with the report in a code block ready to share. On OpenCode it
+  leaves the session on the plan agent. In pi it runs the human-readable report and shows
+  it in the session as an entry the model never sees.
 - `caret doctor --bundle` — when the report isn't enough, a zip of the three live logs and
   up to 5000 review records, written to caret's state dir at `0600`. This archive is the
   one caret artifact that is **not** redacted: it holds your logs in full and complete

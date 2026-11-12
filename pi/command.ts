@@ -13,7 +13,8 @@ export type CaretCommand =
   | { kind: "demo" }
   | { kind: "plan"; task: string };
 
-/** The dispatch rule every host's `/caret` follows, over the raw argument string. */
+/** pi's reading of the `/caret` dispatch rule over the raw argument string; `bare-plan` is
+ * pi's own, since only pi has a planning mode to leave. */
 export function parseCaretArgs(args: string): CaretCommand {
   const arg = args.trim();
   if (!arg) return { kind: "usage" };
@@ -34,6 +35,7 @@ export function usageText(planning: boolean): string {
   ].join("\n");
 }
 
+/** Everything a `/caret` handler may read from pi's command context. */
 export type CaretCommandContext = PlanningCommandContext &
   DemoCommandContext &
   DoctorCommandContext;
@@ -49,6 +51,7 @@ export type CommandApi = {
   ): void;
 };
 
+/** What `/caret` dispatches to; built by the three installers. */
 export type CaretHandlers = {
   planning: PlanningHandlers;
   demo: (ctx: DemoCommandContext) => Promise<void>;

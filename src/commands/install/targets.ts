@@ -47,7 +47,7 @@ export const INSTALL_TARGETS: readonly InstallTargetDescriptor[] = [
   {
     id: "opencode",
     label: "OpenCode",
-    hint: "add caret to OpenCode's plugin list + deploy /caret:* commands",
+    hint: "add caret to OpenCode's plugin list + deploy the /caret command",
     // An OpenCode config dir counts even without the command: OpenCode may be run
     // through bunx/npx, so its config dir is the durable signal that it is in use.
     detect: (probe) => probe.hasCommand("opencode") || probe.hasPath(opencodeConfigDir()),

@@ -566,7 +566,7 @@ test("--from-local never asks npm what is published", async () => {
 // files under `commands/`. OpenCode scans both spellings of both dirs, so every one of
 // those orphans still loads — a leftover plugin file registers a SECOND
 // caret_review_plan alongside the array entry, and a leftover command file exposes
-// `/caret:*` pointed at a binary path nothing writes any more. Install and uninstall
+// `/caret:<name>` pointed at a binary path nothing writes any more. Install and uninstall
 // sweep them. What the sweep must NOT touch is pinned just as hard: other tools' files,
 // the config dir's `package.json`, and the `/caret` command itself.
 

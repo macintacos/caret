@@ -415,7 +415,7 @@ function removeIfEmpty(dir: string): void {
   try {
     rmdirSync(dir);
   } catch {
-    // ENOENT or ENOTEMPTY: nothing of caret's left to remove.
+    // Best-effort: any failure (absent, not empty, unreadable) leaves the dir.
   }
 }
 

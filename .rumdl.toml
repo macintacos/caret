@@ -5,8 +5,8 @@
 [global]
 # Inline HTML (MD033) — the UI sanitizes rendered Markdown with DOMPurify, so this is source
 # hygiene, not a security gate. Bare URLs (MD034) are intentional. MD041 (file must open with an
-# H1) is off because caret's slash-command files (commands/*.md) intentionally lead with
-# frontmatter + prompt prose, not a title heading.
+# H1) is off because skills/caret/SKILL.md, opencode/commands/caret.md and the
+# skills/caret/references/ and opencode/references/ files open with prose, not a heading.
 disable = ["MD033", "MD034", "MD041"]
 
 # Respect .gitignore when scanning directories (rumdl init default).

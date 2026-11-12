@@ -358,7 +358,16 @@ so it wants the live check § Verified vs. follow-up already schedules.
   update check); only the command file and references still carry substituted markers —
   `__CARET_BIN__`, `__CARET_REFERENCES__` (the absolute `<configDir>/caret/` the
   references deploy to) and `__CARET_DEMO_TEMPLATE__`, the template embedded rather than
-  read because under `bunx` the install-time root is a temp dir.
+  read because under `bunx` the install-time root is a temp dir. The references deploy to
+  `<configDir>/caret/` rather than the npm package directory because a user who sets
+  `external_directory` to `ask` typically already allows `~/.config/opencode/**`.
+  Frontmatter `agent:` is per file, and `agent: plan` switches the session to the plan
+  agent and leaves it there. Planning needs the plan agent, which denies edits until the
+  user switches to `build`, so `caret.md` carries `agent: plan`; `/caret doctor` and a
+  bare `/caret` therefore leave the session on the plan agent too. Dropping the key would
+  run planning under `build` with edits allowed. That is why the router's `usage` and
+  `doctor` stops end by telling the user to switch back. The usage hint costs a model
+  turn, here and on Claude Code, because a command file is a prompt.
 - **Install (`caret install`)** — adds caret to the user's OpenCode config
   (comment-preserving, via `jsonc-parser` in `config-plugin.ts`) as either
   `@macintacos/caret` or, under `--from-local`, `file:<checkout>` (§ The local form) and
@@ -662,19 +671,18 @@ this module as a v1 TUI plugin, and v1's TUI loader throws on a default without 
 **The same module registers one `keymap` layer with one command, `caret.open`:** a palette
 entry and the `<leader>p` default bind. It has no slash name: `/caret` belongs to the
 command file. Its `suggested` predicate promotes it in the palette while the routed
-session has a plan waiting. The layer is `mode: "global"`: the palette and slash
-completion list only commands reachable from their own input mode, and a default `base`
-layer is unreachable from both. It spawns `caret band-link [--session <id>] --open` (the
-binary from `resolveCaretBin`, detached and unwaited), because the TUI API has no URL
-opener; `--session` comes from the current route and is omitted off a session route, so
-`band-link` opens the session's waiting review or else caret's home page. The spawn
-carries no `CARET_AGENT`: `band-link` only reads the daemon, never starts one. A child
-that fails to start or exits non-zero shows an error toast that names `caret doctor` as
-the next step; `band-link` exits 0 on its own failures, so non-zero means caret never ran
-(no `bun` on `PATH`, an older caret). The layer sits behind a
-`typeof ctx.keymap?.layer === "function"` guard and a `try`: a context without a keymap,
-or a host that rejects the command shape (v2 throws synchronously on one), still keeps
-caret's toasts.
+session has a plan waiting. The layer is `mode: "global"`: the palette lists only commands
+reachable from its own input mode, and a default `base` layer is unreachable from it. It
+spawns `caret band-link [--session <id>] --open` (the binary from `resolveCaretBin`,
+detached and unwaited), because the TUI API has no URL opener; `--session` comes from the
+current route and is omitted off a session route, so `band-link` opens the session's
+waiting review or else caret's home page. The spawn carries no `CARET_AGENT`: `band-link`
+only reads the daemon, never starts one. A child that fails to start or exits non-zero
+shows an error toast that names `caret doctor` as the next step; `band-link` exits 0 on
+its own failures, so non-zero means caret never ran (no `bun` on `PATH`, an older caret).
+The layer sits behind a `typeof ctx.keymap?.layer === "function"` guard and a `try`: a
+context without a keymap, or a host that rejects the command shape (v2 throws
+synchronously on one), still keeps caret's toasts.
 
 **Known gap, accepted.** On a child (subagent) session `<leader>p` opens caret's home
 page: reviews sit on the root session.
@@ -899,8 +907,9 @@ pointing at an argv-recording shim, no model or provider):
 - **Load.** The TUI half loaded from `exports["./tui"]`; OpenCode's plugin count rose by
   one.
 - **`caret.open`.** On the home route, `/caret` (listed first in slash completion, with
-  its description), the palette entry (searching `caret` shows "Open caret … ctrl+x p"),
-  and `ctrl+x p` each ran the shim with `band-link --open`.
+  its description; the slash name was dropped in EXC-2332), the palette entry (searching
+  `caret` shows "Open caret … ctrl+x p"), and `ctrl+x p` each ran the shim with
+  `band-link --open`.
 - **Spawn failure.** With `CARET_OPENCODE_BIN=/nonexistent/caret`, `ctrl+x p` toasted
   "caret: couldn't start caret (ENOENT: no such file or directory, posix_spawn
   '/nonexistent/caret')" and OpenCode stayed up.
@@ -927,6 +936,23 @@ pointing at an argv-recording shim, no model or provider):
   approving removed it.
 - **Not seen live:** the token colours, a theme switch, truncation, and the selection
   guard. The margin's collapse rests on OpenTUI's source.
+
+**Confirmed live for EXC-2332** (v2.2.7, through `opencode serve` and
+`POST /api/session/<id>/command`):
+
+- **Bare name.** A `commands/caret.md` file runs as `/caret`.
+- **Arguments.** `$ARGUMENTS` carries the full argument string and is empty for a bare
+  call.
+- **Shell under `plan`.** A shell call runs without a prompt: the built-in plan ruleset is
+  `* * allow` with only `edit` denied.
+- **References.** A read of a file under the config dir but outside the project succeeds
+  under both `plan` and `build`.
+- **Not seen live:** the picker showing one `/caret`, `<leader>p` opening the waiting
+  review, and `/caret doctor` running the report after `caret install --from-local`.
+
+**EXC-2332 v1 follow-up.** v1 (1.3.x) was not observed. The command-file format and
+`$ARGUMENTS` are the ones the earlier v1 command files used, and v1 has no `/caret` keymap
+entry to collide with.
 
 ## Sources
 

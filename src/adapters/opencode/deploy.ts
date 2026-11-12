@@ -1,10 +1,10 @@
 // The file-write side of caret's OpenCode install: substitute the deployed files'
-// install-time markers and deploy / uninstall them in OpenCode's command dir. caret
+// install-time markers and deploy / uninstall them under OpenCode's config dir. caret
 // itself installs as a plugin entry (@macintacos/caret, in `plugins` when every
 // `opencode` on PATH is v2, else `plugin`; the edit lives in config-plugin.ts) — OpenCode
 // installs the package + its deps — but the `/caret` command file and the references it
-// loads aren't array-installable, so they still ship as files. Idempotent (re-deploy overwrites in
-// place) and dry-run aware. Pure of any path resolution (callers pass absolute paths via
+// loads aren't array-installable, so they still ship as files. Idempotent (re-deploy
+// overwrites in place) and dry-run aware. Pure of any path resolution (callers pass absolute paths via
 // paths.ts) so it is unit-testable against a temp dir.
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";

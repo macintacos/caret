@@ -33,9 +33,9 @@ export function resolveCaretRoot(): string {
 export const DEMO_TEMPLATE = "templates/demo.md";
 
 export interface OpencodePackaging {
-  /** The caret shim the deployed command files invoke (their `__CARET_BIN__`). */
+  /** The caret shim the deployed files invoke (their `__CARET_BIN__`). */
   binPath: string;
-  /** The demo template's contents — what the command files' `__CARET_DEMO_TEMPLATE__` becomes. */
+  /** The demo template's contents — what the deployed files' `__CARET_DEMO_TEMPLATE__` becomes. */
   demoTemplate: string;
   /** Command files (basename + contents) from opencode/commands/, if any. */
   commands: PackagedFile[];
@@ -43,6 +43,7 @@ export interface OpencodePackaging {
   references: PackagedFile[];
 }
 
+/** One packaged Markdown file: its basename and raw, unrendered contents. */
 export type PackagedFile = { name: string; contents: string };
 
 /** Read caret's OpenCode packaging from the resolved root. */
@@ -57,8 +58,8 @@ export function loadOpencodePackaging(root: string = resolveCaretRoot()): Openco
   };
 }
 
-/** Every `.md` file in `dir`, sorted by name; none when the dir is absent or unreadable,
- * since the array entry alone is a valid install. */
+/** Every `.md` file in `dir`, sorted by name; none when the dir is absent or unreadable.
+ * An absent `commands/` is fine: the array entry alone is a valid install. */
 function readMarkdownFiles(dir: string): PackagedFile[] {
   try {
     return readdirSync(dir)
