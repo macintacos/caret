@@ -82,7 +82,6 @@ test(`${CLAUDE_SKILL} names the plugin root its references read as <plugin root>
 });
 
 test(`${CLAUDE_REFERENCES} carry no harness variable, since Claude Code reads them raw`, () => {
-  // biome-ignore lint/suspicious/noTemplateCurlyInString: the harness variable prefix, written literally
   expect(claudeReferences.filter((rel) => read(rel).includes("${CLAUDE_"))).toEqual([]);
 });
 
