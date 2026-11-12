@@ -676,14 +676,15 @@
     // before this function is ever called and cleared again on an abort. Watching it rather
     // than `animationend` means the level comes back the moment it is revived, and — since a
     // real exit stays inert until the node goes — the held last frame is never swapped back to
-    // full opacity for the frame before removal.
+    // full opacity for the frame before removal. Nothing disconnects the observer on that path:
+    // it goes with the node, and an `animationend` cannot mark the exit's end, since a
+    // descendant's own animation bubbles one up mid-exit.
     const revived = new MutationObserver(() => {
       if (node.hasAttribute("inert")) return;
       node.classList.remove("crumb-leaving");
       revived.disconnect();
     });
     revived.observe(node, { attributeFilter: ["inert"] });
-    node.addEventListener("animationend", () => revived.disconnect(), { once: true });
 
     // No computed animation at all — happy-dom expands no `animation` shorthand — means
     // there is nothing to wait for, so the node goes on the spot rather than leaning on

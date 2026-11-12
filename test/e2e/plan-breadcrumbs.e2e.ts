@@ -1535,6 +1535,11 @@ test("a level that comes back mid-exit leaves no hole where its chevron was", as
         };
         requestAnimationFrame(look);
       });
+      // A child's own animation (crumb-text-in) can end inside the exit window on a slow host,
+      // and `animationend` bubbles up to the leaving node. Sent here so that overlap is certain.
+      for (const node of document.querySelectorAll(".plan-breadcrumbs .crumb-leaving *")) {
+        node.dispatchEvent(new AnimationEvent("animationend", { bubbles: true }));
+      }
       surface.scrollTop = y;
       return leaving;
     },
