@@ -16,12 +16,12 @@ export type CaretCommand =
 /** pi's reading of the `/caret` dispatch rule over the raw argument string; `bare-plan` is
  * pi's own, since only pi has a planning mode to leave. */
 export function parseCaretArgs(args: string): CaretCommand {
-  const arg = args.trim();
-  if (!arg) return { kind: "usage" };
-  if (arg === "plan") return { kind: "bare-plan" };
-  if (arg === "doctor" || arg === "demo") return { kind: arg };
-  const described = /^plan\s+(.+)$/s.exec(arg);
-  return { kind: "plan", task: described?.[1] ?? arg };
+  const argument = args.trim();
+  if (!argument) return { kind: "usage" };
+  if (argument === "plan") return { kind: "bare-plan" };
+  if (argument === "doctor" || argument === "demo") return { kind: argument };
+  const described = /^plan\s+(.+)$/s.exec(argument);
+  return { kind: "plan", task: described?.[1] ?? argument };
 }
 
 /** The hint for a bare `/caret`; `planning` adds how to leave planning. */

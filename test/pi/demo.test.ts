@@ -9,7 +9,14 @@ import { type DemoApi, installDemo } from "@piext/demo.ts";
 import { renderPlugin } from "@/adapters/opencode/deploy.ts";
 
 const TEMPLATE = "# A demo plan\n\nSome body.\n";
-const OPENCODE_COMMAND = join(import.meta.dir, "..", "..", "opencode", "references", "demo.md");
+const OPENCODE_DEMO_REFERENCE = join(
+  import.meta.dir,
+  "..",
+  "..",
+  "opencode",
+  "references",
+  "demo.md",
+);
 
 let tmp: string;
 let templatePath: string;
@@ -42,7 +49,7 @@ function fakePi(files: { templatePath?: string; commandPath?: string } = {}, pla
   };
   const demo = installDemo(pi, {
     templatePath: files.templatePath ?? templatePath,
-    commandPath: files.commandPath ?? OPENCODE_COMMAND,
+    commandPath: files.commandPath ?? OPENCODE_DEMO_REFERENCE,
     isPlanning: (id) => planning && id === "s",
   });
   installCaretCommand(pi, {
@@ -64,7 +71,7 @@ test("/caret demo sends OpenCode's rendered demo body as a follow-up and waits",
   expect(pi.sent).toHaveLength(1);
   expect(pi.sent[0]?.options).toEqual({ deliverAs: "followUp" });
   const content = pi.sent[0]?.content ?? "";
-  const opencode = renderPlugin(readFileSync(OPENCODE_COMMAND, "utf-8"), {
+  const opencode = renderPlugin(readFileSync(OPENCODE_DEMO_REFERENCE, "utf-8"), {
     version: "",
     binPath: "",
     demoTemplate: TEMPLATE,
