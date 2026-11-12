@@ -1,6 +1,8 @@
 // `/caret`, caret's one pi command: routes its argument to planning, `caret doctor`, the
 // demo, or a usage hint.
 
+import type { AutocompleteItem } from "@earendil-works/pi-tui";
+
 import type { DemoCommandContext } from "./demo.ts";
 import type { DoctorCommandContext } from "./doctor.ts";
 import { OPEN_KEY } from "./notice.ts";
@@ -35,6 +37,23 @@ export function usageText(planning: boolean): string {
   ].join("\n");
 }
 
+const SUBCOMMANDS: readonly AutocompleteItem[] = [
+  {
+    value: "plan",
+    label: "plan",
+    description: "Plans a description that starts with doctor or demo",
+  },
+  { value: "doctor", label: "doctor", description: "Diagnoses this caret install" },
+  { value: "demo", label: "demo", description: "Walks a short demo plan through the review UI" },
+];
+
+/** The subcommands `prefix` could still become; `null` once it cannot, so free text gets
+ * no popup. */
+export function caretArgumentCompletions(prefix: string): AutocompleteItem[] | null {
+  const matches = SUBCOMMANDS.filter((item) => item.value.startsWith(prefix));
+  return matches.length ? matches : null;
+}
+
 /** Everything a `/caret` handler may read from pi's command context. */
 export type CaretCommandContext = PlanningCommandContext &
   DemoCommandContext &
@@ -47,6 +66,7 @@ export type CommandApi = {
     options: {
       description: string;
       handler: (args: string, ctx: CaretCommandContext) => Promise<void>;
+      getArgumentCompletions?: (argumentPrefix: string) => AutocompleteItem[] | null;
     },
   ): void;
 };
@@ -65,6 +85,7 @@ export function installCaretCommand(pi: CommandApi, handlers: CaretHandlers): vo
     ctx.ui.notify(usageText(planning.isPlanning(ctx)), "info");
   pi.registerCommand("caret", {
     description: "Plan a change and review it in caret, or run /caret doctor or /caret demo",
+    getArgumentCompletions: caretArgumentCompletions,
     handler: async (args, ctx) => {
       const command = parseCaretArgs(args);
       switch (command.kind) {

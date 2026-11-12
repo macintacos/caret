@@ -164,6 +164,15 @@ test("only the owning copy registers /caret and the open key", () => {
   expect(Object.keys(old.shortcuts)).toEqual([]);
 });
 
+test("/caret completes its subcommands", async () => {
+  const f = fakePi();
+  installCaret(f.pi, host({}));
+  const complete = (f.commands.caret as { getArgumentCompletions?: (prefix: string) => unknown })
+    .getArgumentCompletions;
+  const items = (await complete?.("")) as { value: string }[] | null | undefined;
+  expect(items?.map((item) => item.value)).toEqual(["plan", "doctor", "demo"]);
+});
+
 test("a pending review in the tool's store paints the notice", () => {
   const holder = {};
   const f = fakePi();

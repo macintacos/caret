@@ -98,7 +98,10 @@ The summary for readers outside the adapter is in
 usage hint, exactly `doctor` and `demo` to those handlers, `plan <description>` and any
 other text to planning. Exactly `plan` leaves planning while planning and shows the hint
 otherwise. The planning, demo and doctor installers return their handlers; only
-`pi/command.ts` registers the `/caret` command with pi.
+`pi/command.ts` registers the `/caret` command with pi. `/caret` offers `plan`, `doctor`
+and `demo` as argument completions through `getArgumentCompletions`; pi 1.5.1 gives an
+extension command no hint string, since `argumentHint` serves only built-ins and prompt
+templates.
 
 ## The planning mode: `/caret <description>`
 
