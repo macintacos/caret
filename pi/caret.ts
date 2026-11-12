@@ -19,6 +19,7 @@ import {
   type SpawnRunner,
   warmCaret,
 } from "../bridge/review-bridge.ts";
+import { type CommandApi, installCaretCommand } from "./command.ts";
 import { DEMO_COMMAND, DEMO_TEMPLATE, type DemoApi, installDemo } from "./demo.ts";
 import { type DoctorApi, installDoctor } from "./doctor.ts";
 import { installNotice, type NoticeApi } from "./notice.ts";
@@ -37,6 +38,7 @@ export type PiNotifyContext = {
 
 /** The slice of pi's extension API caret calls; pinned by test/pi/sdk-conformance.ts. */
 export type PiApi = PlanningApi &
+  CommandApi &
   NoticeApi &
   DemoApi &
   DoctorApi & {
@@ -82,7 +84,7 @@ function notifyOnce(pi: PiApi, holder: Record<symbol, unknown>, message: string)
 }
 
 /** Registers the review tool, the planning mode, the pending-plan notice, and the
- * `/caret:*` commands unless pi is below PI_FLOOR or another installed copy already owns
+ * `/caret` command unless pi is below PI_FLOOR or another installed copy already owns
  * `Symbol.for("caret.pi.owner")`. The owner is keyed by `entryUrl`, which differs between
  * installed copies and is stable across `/reload`. It is released on `session_shutdown`
  * so a surviving copy takes over after the owner is removed. Either refusal warns once
@@ -113,18 +115,20 @@ export function installCaret(pi: PiApi, host: CaretHost): void {
   const bin = resolveCaretBin({ env, importMetaUrl: entryUrl, overrideVar: "CARET_PI_BIN" });
   const store = reviewStore(holder);
   pi.registerTool(reviewTool({ bin, run, store }));
-  installPlanning(pi, {
-    store,
-    plansDir: join(host.agentDir, "plans"),
-    warm: () => host.warm(bin),
-  });
   installNotice(pi, { store, bin, spawn: host.spawn });
-  installDemo(pi, {
-    commandPath: fileURLToPath(new URL(DEMO_COMMAND, entryUrl)),
-    templatePath: fileURLToPath(new URL(DEMO_TEMPLATE, entryUrl)),
-    isPlanning: (id) => store.get(id).planning,
+  installCaretCommand(pi, {
+    planning: installPlanning(pi, {
+      store,
+      plansDir: join(host.agentDir, "plans"),
+      warm: () => host.warm(bin),
+    }),
+    demo: installDemo(pi, {
+      commandPath: fileURLToPath(new URL(DEMO_COMMAND, entryUrl)),
+      templatePath: fileURLToPath(new URL(DEMO_TEMPLATE, entryUrl)),
+      isPlanning: (id) => store.get(id).planning,
+    }),
+    doctor: installDoctor(pi, { bin, run, env, stdout: host.stdout }),
   });
-  installDoctor(pi, { bin, run, env, stdout: host.stdout });
 }
 
 export default function caret(pi: PiApi): void {

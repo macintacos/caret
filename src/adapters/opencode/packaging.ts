@@ -1,4 +1,4 @@
-// Locate caret's shipped OpenCode packaging (the plugin source + command files)
+// Locate caret's shipped OpenCode packaging (the plugin source, command and reference files)
 // for the install subcommand. The packaging lives at <caret-root>/opencode/ in
 // every distribution that supports OpenCode install: the local dev build
 // (`caret install --from-local`) and the npm/github bundle (package.json `files`
@@ -33,28 +33,40 @@ export function resolveCaretRoot(): string {
 export const DEMO_TEMPLATE = "templates/demo.md";
 
 export interface OpencodePackaging {
-  /** The caret shim the deployed command files invoke (their `__CARET_BIN__`). */
+  /** The caret shim the deployed files invoke (their `__CARET_BIN__`). */
   binPath: string;
-  /** The demo template's contents — what the command files' `__CARET_DEMO_TEMPLATE__` becomes. */
+  /** The demo template's contents — what the deployed files' `__CARET_DEMO_TEMPLATE__` becomes. */
   demoTemplate: string;
   /** Command files (basename + contents) from opencode/commands/, if any. */
-  commands: { name: string; contents: string }[];
+  commands: PackagedFile[];
+  /** The files the command loads by argument, from opencode/references/, if any. */
+  references: PackagedFile[];
 }
+
+/** One packaged Markdown file: its basename and raw, unrendered contents. */
+export type PackagedFile = { name: string; contents: string };
 
 /** Read caret's OpenCode packaging from the resolved root. */
 export function loadOpencodePackaging(root: string = resolveCaretRoot()): OpencodePackaging {
   const binPath = join(root, "bin", "caret");
   const demoTemplate = readFileSync(join(root, DEMO_TEMPLATE), "utf-8");
-  const commandsDir = join(root, "opencode", "commands");
-  let commands: { name: string; contents: string }[] = [];
+  return {
+    binPath,
+    demoTemplate,
+    commands: readMarkdownFiles(join(root, "opencode", "commands")),
+    references: readMarkdownFiles(join(root, "opencode", "references")),
+  };
+}
+
+/** Every `.md` file in `dir`, sorted by name; none when the dir is absent or unreadable.
+ * An absent `commands/` is fine: the array entry alone is a valid install. */
+function readMarkdownFiles(dir: string): PackagedFile[] {
   try {
-    commands = readdirSync(commandsDir)
+    return readdirSync(dir)
       .filter((f) => f.endsWith(".md"))
       .sort()
-      .map((f) => ({ name: f, contents: readFileSync(join(commandsDir, f), "utf-8") }));
+      .map((f) => ({ name: f, contents: readFileSync(join(dir, f), "utf-8") }));
   } catch {
-    // No command files shipped (or unreadable) — the array entry alone is a valid install.
-    commands = [];
+    return [];
   }
-  return { binPath, demoTemplate, commands };
 }

@@ -37,10 +37,11 @@ After installing:
 
 1. **Restart the agent.** OpenCode installs the plugin package on its next start; in pi,
    run `/reload` or restart it.
-2. **Run `/caret:demo`.** It presents a short demo plan that points at files in the repo
+2. **Run `/caret demo`.** It presents a short demo plan that points at files in the repo
    you run it from, so you can exercise the whole flow before a real one arrives.
-3. **Run `/caret:plan <what you want done>`** to plan a real change and review it in
-   `caret` before the agent implements it.
+3. **Run `/caret <what you want done>`** to plan a real change and review it in `caret`
+   before the agent implements it. Bare `/caret` lists what it takes. In Claude Code, the
+   command is listed as `caret:caret`; a typed `/caret` resolves to it.
 
 ### Running `caret` yourself
 
@@ -107,33 +108,32 @@ your browser instead of the terminal prompt. There you:
   which sends your comments back to the agent to revise and re-present.
 
 > [!TIP]
-> You don't have to wait to be intercepted: `/caret:plan <what you want done>` asks the
-> agent for a plan and routes it straight to the review UI. In OpenCode it runs on the
-> `plan` agent, so switch to `build` to implement once you approve. A skill of your own
-> can do the same with the plan-review tool `caret` gives each agent — `review_plan` in
-> Claude Code (from the plugin's MCP server) and `caret_review_plan` in OpenCode and pi.
-> The tool is for plans only; see
+> You don't have to wait to be intercepted: `/caret <what you want done>` asks the agent
+> for a plan and routes it straight to the review UI. In OpenCode it runs on the `plan`
+> agent, so switch to `build` to implement once you approve. A skill of your own can do
+> the same with the plan-review tool `caret` gives each agent — `review_plan` in Claude
+> Code (from the plugin's MCP server) and `caret_review_plan` in OpenCode and pi. The tool
+> is for plans only; see
 > [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md#calling-the-review-tool-from-your-own-skill).
-> In OpenCode v2, `/caret` or `<leader>p` (`ctrl+x p` by default) opens the plan waiting
-> in the session; rebind the key as `caret.open` under OpenCode's `keybinds`.
+> In OpenCode v2, `<leader>p` (`ctrl+x p` by default) opens the plan waiting in the
+> session; rebind the key as `caret.open` under OpenCode's `keybinds`.
 
 ### Using `caret` in pi
 
 pi has no plan mode of its own, so `caret` brings a small one:
 
-1. `/caret:plan <what you want done>` turns on planning mode. The agent researches, writes
-   its plan into pi's plans folder (`~/.pi/agent/plans` by default), and sends it to
-   `caret`. Until you approve, `caret` blocks the agent's `edit` and `write` tools outside
-   that folder; shell commands are only discouraged. While planning, `/caret:plan` with no
-   task turns planning off. Outside planning, a bare `/caret:plan` plans what you asked
-   for earlier in the session.
+1. `/caret <what you want done>` turns on planning mode. The agent researches, writes its
+   plan into pi's plans folder (`~/.pi/agent/plans` by default), and sends it to `caret`.
+   Until you approve, `caret` blocks the agent's `edit` and `write` tools outside that
+   folder; shell commands are only discouraged. While planning, `/caret plan` on its own
+   turns planning off.
 2. While a review waits, a notice sits above the editor and the footer reads
-   `^ plan waiting`. `/caret` or `ctrl+alt+o` opens the plan in your browser. In
-   Terminal.app or iTerm2, set Option to act as Meta (Esc+) for the shortcut to reach pi.
+   `^ plan waiting`. `ctrl+alt+o` opens the plan in your browser. In Terminal.app or
+   iTerm2, set Option to act as Meta (Esc+) for the shortcut to reach pi.
 3. Approve, and the agent implements. Request changes, and it revises and resubmits. Esc
    in pi cancels a waiting review, and the agent is told not to implement the plan.
 
-`/caret:demo` presents a demo plan, and `/caret:doctor` runs `caret doctor` and shows its
+`/caret demo` presents a demo plan, and `/caret doctor` runs `caret doctor` and shows its
 report in the session (see [Diagnostics](#diagnostics)).
 
 ## Configuration
@@ -163,7 +163,7 @@ Two more live at the repo root:
 
 ## Diagnostics
 
-- `/caret:doctor` runs `caret doctor`: a one-shot, read-only check of your install —
+- `/caret doctor` runs `caret doctor`: a one-shot, read-only check of your install —
   what's wrong, how to fix it, and the state it read that from. Always redacted, and it
   never contains plan, prompt, or feedback bodies, nor any log message, error or stack
   text.

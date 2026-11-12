@@ -28,7 +28,7 @@ carries the session id, the cwd, and `planFilePath`. The binary comes from
   relative to the session directory. A leading `@` is stripped.
 - The tool adds only its one-line `promptSnippet` to the `<tools>` section of pi's system
   prompt. It sets no `promptGuidelines`: pi would add those rule bullets whenever the tool
-  is active, and outside `/caret:plan` users get no behaviour change they didn't ask for.
+  is active, and outside planning mode, users get no behaviour change they didn't ask for.
 - The extension warms the daemon from `before_agent_start`, and only while planning.
 
 **The review blocks.** pi has no tool timeout, and the tool runs with
@@ -38,9 +38,9 @@ non-blocking only so users could chat mid-review, which caret doesn't offer.
 ## The pi APIs it uses and the 1.5.0 floor
 
 **Each `pi/` module exports the slice of pi's API it calls as a type** (`PlanningApi`,
-`NoticeApi`, `DemoApi`, `DoctorApi`). `PiApi` in `pi/caret.ts` intersects them, and
-`test/pi/sdk-conformance.ts` pins each against the installed SDK. A new pi API goes in its
-module's slice first.
+`NoticeApi`, `DemoApi`, `DoctorApi`, `CommandApi`). `PiApi` in `pi/caret.ts` intersects
+them, and `test/pi/sdk-conformance.ts` pins each against the installed SDK. A new pi API
+goes in its module's slice first.
 
 **The floor is pi `1.5.0`.** It is the version tested, and the first release published as
 `@earendil-works/pi-coding-agent` after the rename from `@mariozechner/pi-coding-agent`
@@ -64,10 +64,9 @@ closure: everything reached ships under `files` and uses no Bun API. Keep
 
 ## Shared state: `pi/state.ts`
 
-**One per-session store backs the tool, the notice, and `/caret:plan`.** Per session it
-holds the waiting review's URL, a `planning` flag, and the last outcome (approved,
-changes, cancelled, or failed). The notice and `/caret:plan` consume the store and never
-redefine it.
+**One per-session store backs the tool, the notice, and planning.** Per session it holds
+the waiting review's URL, a `planning` flag, and the last outcome (approved, changes,
+cancelled, or failed). The notice and planning consume the store and never redefine it.
 
 - The data lives on `globalThis` under `Symbol.for("caret.pi.reviews.v1")`, because
   `/reload` loads a fresh module instance. The stored shape is a cross-version contract,
@@ -93,7 +92,18 @@ redefine it.
 The summary for readers outside the adapter is in
 [`../ARCHITECTURE.md#the-pi-adapter`](../ARCHITECTURE.md#the-pi-adapter).
 
-## The planning mode: `/caret:plan`
+## The `/caret` command: `pi/command.ts`
+
+**One `/caret` command routes its trimmed argument.** `parseCaretArgs` maps empty to the
+usage hint, exactly `doctor` and `demo` to those handlers, `plan <description>` and any
+other text to planning. Exactly `plan` leaves planning while planning and shows the hint
+otherwise. The planning, demo and doctor installers return their handlers; only
+`pi/command.ts` registers the `/caret` command with pi. `/caret` offers `plan`, `doctor`
+and `demo` as argument completions through `getArgumentCompletions`; pi 1.5.1 gives an
+extension command no hint string, since `argumentHint` serves only built-ins and prompt
+templates.
+
+## The planning mode: `/caret <description>`
 
 **caret owns a small planning mode (`pi/plan.ts`), because pi has none.**
 
@@ -105,14 +115,14 @@ The summary for readers outside the adapter is in
   containment mirrors pi's resolver, resolves real paths, fails closed, and blocks
   `file://`.
 - Planning ends when a review of a plan in the plans folder, submitted while planning, is
-  approved, or when `/caret:plan` runs with no task.
+  approved, or when `/caret plan` runs with no description.
 - The state is rebuilt from branch entries on `session_start` and `session_tree`, so a
   fork or a jump to before planning began is not planning. The steer is filtered out of
   context once planning ends.
-- `/caret:demo` sends the body of `opencode/commands/demo.md`, with `templates/demo.md` in
-  place of its marker. It refuses to run while planning, because the planning steer would
-  have the demo submitted from the plans folder, and approving it would end planning for
-  the real task.
+- `/caret demo` sends `opencode/references/demo.md`, with `templates/demo.md` in place of
+  its marker. It refuses to run while planning, because the planning steer would have the
+  demo submitted from the plans folder, and approving it would end planning for the real
+  task.
 
 Non-goals:
 
@@ -122,9 +132,9 @@ Non-goals:
 ## The notice and the shortcut
 
 **`pi/notice.ts` shows a pending-plan row above the editor and a `caret` footer status**,
-`^ plan waiting` or `^ planning`. `/caret` and `ctrl+alt+o` open the waiting plan through
-a detached `caret band-link --session <id> --open`. In RPC mode the notice is one plain
-line naming `/caret`.
+`^ plan waiting` or `^ planning`. `ctrl+alt+o` opens the waiting plan through a detached
+`caret band-link --session <id> --open`. In RPC mode the notice is one plain line with no
+action, since an RPC client has no keybinding to name.
 
 The shortcut is `ctrl+alt+o`, `o` for open. pi binds every `ctrl+letter`, and macOS window
 managers such as Rectangle and Magnet take `ctrl+option+c` for "center window". pi binds
@@ -147,9 +157,9 @@ Meta. The look is in [`design/decisions.md`](../../design/decisions.md) and
   file or pass `plan` inline, with `isError: true`. The store records the outcome as
   `failed`.
 
-## `/caret:doctor`
+## `/caret doctor`
 
-**`/caret:doctor` runs `caret doctor` itself** rather than asking the agent to relay it.
+**`/caret doctor` runs `caret doctor` itself** rather than asking the agent to relay it.
 It shows the report in pi's transcript as a custom entry that never reaches the model.
 
 ## The live check
@@ -161,8 +171,8 @@ Requirements and placement are in [`test-layout.md`](test-layout.md). It covers:
 
 - a deny's feedback reaching the model;
 - planning's block-then-approve path;
-- `/caret:demo` opening a review;
-- `/caret:doctor` keeping its report out of the model's context;
+- `/caret demo` opening a review;
+- `/caret doctor` keeping its report out of the model's context;
 - a hung daemon failing inside its bound.
 
 To run it alone: `nice -n 10 mise run test --json --parallel=4 test/pi/live.test.ts`.
@@ -178,6 +188,5 @@ to the directory holding that binary. Docs under the old `@mariozechner` name ar
   drives a real terminal (EXC-2316).
 - Extension filters in pi's settings aren't evaluated against globs
   (`src/adapters/pi/install.ts`).
-- Print mode `pi -p "/caret:plan …"` can exit before the follow-up runs
-  (`pi/follow-up.ts`).
+- Print mode `pi -p "/caret …"` can exit before the follow-up runs (`pi/follow-up.ts`).
 - There is no update reminder like OpenCode's toast.

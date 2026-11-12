@@ -87,7 +87,6 @@ type CaretCommand = {
   title: string;
   description: string;
   palette: true;
-  slash: { name: string };
   bind: string;
   suggested: () => boolean;
   run: () => void;
@@ -148,7 +147,7 @@ export function createCaretTui(opts: {
     if (typeof ctx.keymap?.layer === "function") {
       try {
         ctx.keymap.layer(() => ({
-          // The palette and slash completion list only commands reachable from their own input mode.
+          // The palette lists only commands reachable from its own input mode.
           mode: "global",
           commands: [
             {
@@ -156,7 +155,6 @@ export function createCaretTui(opts: {
               title: "Open caret",
               description: "Open this session's waiting plan in the browser, or caret's home page",
               palette: true,
-              slash: { name: "caret" },
               bind: "<leader>p",
               suggested: () => pending[routedSession() ?? ""] !== undefined,
               run: () => openPlan(routedSession()),

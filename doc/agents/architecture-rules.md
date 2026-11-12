@@ -121,7 +121,7 @@ imports another.
 
 **What does NOT move to the adapter directory:** the Claude plugin packaging —
 `hooks/hooks.json`, `.claude-plugin/*` (including `plugin.json`'s `mcpServers` entry for
-`caret mcp`), `commands/*.md`, and the plan-waiting band's hooks module under `mod/` —
+`caret mcp`), `skills/caret/`, and the plan-waiting band's hooks module under `mod/` —
 sits where Claude Code's plugin system requires it on disk. It is adapter-owned *surface*
 (Claude-contractual file locations), documented as such, but not parameterized for
 hypothetical future tools. The Codex adapter likewise ships no packaging today; Codex hook

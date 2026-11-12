@@ -1,5 +1,5 @@
-// The pending-plan notice above pi's editor, the `caret` footer status, and the `/caret`
-// command and ctrl+alt+o shortcut that open the waiting review. Colours come only from
+// The pending-plan notice above pi's editor, the `caret` footer status, and the
+// ctrl+alt+o shortcut that opens the waiting review. Colours come only from
 // pi's theme.
 
 import { type Component, MouseRegion, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
@@ -10,7 +10,7 @@ import { footerText, type ReviewStore, type SessionReview } from "./state.ts";
 export const OPEN_KEY = "ctrl+alt+o";
 const NEWS = "plan waiting for your review";
 const VERB = "open in browser";
-const RPC_LINE = `^ caret  ${NEWS}   /caret ${VERB}`;
+const RPC_LINE = `^ caret  ${NEWS}`;
 
 /** The slice of pi's theme the notice reads; pinned by test/pi/sdk-conformance.ts. */
 export type NoticeTheme = {
@@ -36,10 +36,6 @@ export type NoticeContext = {
 export type NoticeApi = {
   on(event: "session_start", handler: (event: unknown, ctx: NoticeContext) => void): void;
   on(event: "session_shutdown", handler: () => void): void;
-  registerCommand(
-    name: string,
-    options: { description: string; handler: (args: string, ctx: NoticeContext) => Promise<void> },
-  ): void;
   registerShortcut(
     shortcut: string,
     options: { description: string; handler: (ctx: NoticeContext) => void },
@@ -80,8 +76,8 @@ export function paint(ctx: NoticeContext, state: SessionReview, open: () => void
   else ctx.ui.setWidget("caret", [RPC_LINE]);
 }
 
-/** Paints the notice from the store for each session and registers `/caret` and the
- * shortcut. Call once per pi instance. */
+/** Paints the notice from the store for each session and registers the shortcut. Call
+ * once per pi instance. */
 export function installNotice(
   pi: NoticeApi,
   deps: { store: ReviewStore; bin: string; spawn: DetachedSpawn },
@@ -116,10 +112,6 @@ export function installNotice(
     unsubscribe = undefined;
   });
 
-  pi.registerCommand("caret", {
-    description: "Open the waiting caret review in the browser",
-    handler: async (_args, ctx) => open(ctx),
-  });
   pi.registerShortcut(OPEN_KEY, {
     description: "Open the waiting caret review in the browser",
     handler: (ctx) => open(ctx),

@@ -1,7 +1,3 @@
----
-description: Diagnose this caret install — run caret doctor, relay each failing check's remedy, and present the report ready to share
----
-
 caret's `doctor` subcommand renders a verdict over a one-shot, read-only snapshot of the
 local install: the failing checks first, each with the command that fixes it, then the
 passing ones, then the state it read them from — running caret processes, daemon identity,
@@ -19,11 +15,12 @@ First ask the user (via `AskUserQuestion`) which format they want:
 - **JSON** — for feeding to tooling.
 - **Human-readable** — for scanning in the conversation.
 
-Then run the matching invocation:
+Then run the matching invocation, with `<plugin root>` replaced by the path the skill
+named:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/bin/caret" doctor --json   # JSON
-"${CLAUDE_PLUGIN_ROOT}/bin/caret" doctor          # human-readable
+"<plugin root>/bin/caret" doctor --json   # JSON
+"<plugin root>/bin/caret" doctor          # human-readable
 ```
 
 The exit code is the verdict: `0` every check passed, `1` at least one failed, `2` no

@@ -17,6 +17,7 @@ import type {
 
 import type caret from "@piext/caret.ts";
 import type { PiApi } from "@piext/caret.ts";
+import type { CaretCommandContext } from "@piext/command.ts";
 import type { DemoCommandContext } from "@piext/demo.ts";
 import type { DoctorCommandContext, DoctorOutcome, renderDoctorEntry } from "@piext/doctor.ts";
 import type { NoticeContext, NoticeTheme } from "@piext/notice.ts";
@@ -33,6 +34,7 @@ export type SdkConformance = [
   Fits<ExtensionToolContext, PiToolContext>,
   Fits<Theme, PiTheme>,
   Fits<ExtensionContext, PlanningContext>,
+  Fits<ExtensionCommandContext, CaretCommandContext>,
   Fits<ExtensionCommandContext, PlanningCommandContext>,
   Fits<ExtensionCommandContext, DemoCommandContext>,
   Fits<ExtensionCommandContext, DoctorCommandContext>,

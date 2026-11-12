@@ -21,8 +21,8 @@ it back, without reaching for the mouse.
 | Review UI: plan, comments, approve and request changes, settings | `ui/` | Operate |
 | Plan preview, the rendered plan text | `ui/src/lib/planMarkdown.ts` and its passes | Read |
 | CLI output: `caret doctor`, `caret install`, the other subcommands | `src/commands/` | Operate |
-| OpenCode TUI: the pending line, the toasts, `/caret` | `opencode/caret.tui.ts`, `opencode/caret.core.ts` | Operate |
-| pi TUI: the pending-plan notice, the footer status, the review tool's row, `/caret:doctor`'s report | `pi/notice.ts`, `pi/render.ts`, `pi/doctor.ts` | Operate |
+| OpenCode TUI: the pending line, the toasts, `<leader>p` | `opencode/caret.tui.ts`, `opencode/caret.core.ts` | Operate |
+| pi TUI: the pending-plan notice, the footer status, the review tool's row, `/caret doctor`'s report | `pi/notice.ts`, `pi/render.ts`, `pi/doctor.ts` | Operate |
 | Dev console and task output: `mise run dev`, `mise run preflight` | `scripts/tasks/` | Operate |
 
 ## Direction

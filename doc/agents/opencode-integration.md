@@ -351,49 +351,61 @@ so it wants the live check § Verified vs. follow-up already schedules.
 - **Packaging (`opencode/`)** — the host-neutral core (`caret.core.ts`), the v1 plugin
   (`caret.plugin.ts`), the v2 plugin (`caret.plugin.v2.ts`) and the edit-check resources
   it asserts (`permission.ts`), the v2 TUI module (`caret.tui.ts`, `exports["./tui"]`),
-  their package entrypoint (`index.ts`, see § The export surface), and command files
-  (`commands/*.md`). The plugin ships in the `@macintacos/caret` npm package and resolves
-  its binary and version at runtime from that package (§ Runtime resolution + update
-  check); only the command files still carry substituted markers — `__CARET_BIN__` and
-  `__CARET_DEMO_TEMPLATE__`, the template embedded rather than read because under `bunx`
-  the install-time root is a temp dir.
+  their package entrypoint (`index.ts`, see § The export surface), the one command file
+  (`commands/caret.md`, the `/caret` router) and the plan, doctor and demo bodies it loads
+  (`references/*.md`). The plugin ships in the `@macintacos/caret` npm package and
+  resolves its binary and version at runtime from that package (§ Runtime resolution +
+  update check); only the command file and references still carry substituted markers —
+  `__CARET_BIN__`, `__CARET_REFERENCES__` (the absolute `<configDir>/caret/` the
+  references deploy to) and `__CARET_DEMO_TEMPLATE__`, the template embedded rather than
+  read because under `bunx` the install-time root is a temp dir. The references deploy to
+  `<configDir>/caret/` rather than the npm package directory because a user who sets
+  `external_directory` to `ask` typically already allows `~/.config/opencode/**`.
+  Frontmatter `agent:` is per file, and `agent: plan` switches the session to the plan
+  agent and leaves it there. Planning needs the plan agent, which denies edits until the
+  user switches to `build`, so `caret.md` carries `agent: plan`; `/caret doctor` and a
+  bare `/caret` therefore leave the session on the plan agent too. Dropping the key would
+  run planning under `build` with edits allowed. That is why the router's `usage` and
+  `doctor` stops end by telling the user to switch back. The usage hint costs a model
+  turn, here and on Claude Code, because a command file is a prompt.
 - **Install (`caret install`)** — adds caret to the user's OpenCode config
   (comment-preserving, via `jsonc-parser` in `config-plugin.ts`) as either
   `@macintacos/caret` or, under `--from-local`, `file:<checkout>` (§ The local form) and
-  deploys the `/caret:*` command **files**, which v2's command discovery reads from the
-  same `commands/` dir; `--uninstall` reverses both. The key it writes follows the host (§
-  Which key install writes). Both arms also sweep what the file-deploy era left in the
-  config dir: caret's `caret.ts` in either plugin dir OpenCode scans (`plugins/`, and the
-  singular `plugin/` it keeps as a back-compat alias) and any `caret:`-namespaced file in
-  the singular `command/`. That is not tidiness — OpenCode loads a plugin out of either
-  dir, so a leftover file registers a **second** `caret_review_plan` beside the array
-  entry, and a leftover command file re-exposes `/caret:*` pointed at a substituted binary
-  path nothing writes any more. The command sweep matches caret's namespace rather than
-  the commands the package ships today, so an old install's file for a since-dropped
-  command isn't stranded. The config dir's own `package.json` is deliberately **left**: it
-  is inert, and another of the user's plugins may import `@opencode-ai/plugin` through it.
-  The sweep runs after the upgrade check, so a plugin file is only dropped once the array
-  entry exists and a stale cached copy has been offered a refresh — and it still runs when
-  that refresh is declined, since two loaded caret plugins are worse than one
-  stale-but-single plugin. OpenCode itself installs the package and its deps into its
-  cache on the next start — caret writes no config-dir manifest and runs no `bun install`.
-  Between the two writes it runs an upgrade check: OpenCode resolves an array entry once
-  and caches it forever (§ The cache layout), so re-adding the entry never moves anyone
-  off install-day's version. `upgrade.ts` weighs the entry and that cache against npm's
-  `latest` — npm rather than GitHub releases, because `latest` is what OpenCode would
-  re-resolve to — and a stale result offers to clear the cached copy, or to bump a
-  user-authored pin. That offer is a prompt, since `~/.cache/opencode` is not caret's to
-  delete unasked; `--refresh` pre-answers it, and off a TTY install names the gap and
-  changes nothing. Clearing the cache leaves the service on caret's own copy under
-  `~/.local/state/caret/roots/`, not an older agent root, until OpenCode's next start
-  re-resolves. The same run also registers caret with Claude Code via its plugin CLI when
-  Claude Code is among the selected targets. The command lives in `src/commands/install/`:
-  `index.ts` is the orchestrator (it selects the targets — the chooser or detection — and
-  dispatches), beside the target registry, the chooser, the terminal reporter, and one
-  module per target runner. `paths.ts` is the single source of truth both the probe
-  (reader) and the writer resolve through, and `entries.ts` the single answer to which
-  entries, in either key, are caret's — each returned as a `CaretEntry` carrying its key
-  and spec.
+  deploys the `/caret` command **file**, which v2's command discovery reads from the same
+  `commands/` dir, plus its references under `<configDir>/caret/`; `--uninstall` reverses
+  all of it. The key it writes follows the host (§ Which key install writes). Both arms
+  also sweep what the file-deploy era left in the config dir: caret's `caret.ts` in either
+  plugin dir OpenCode scans (`plugins/`, and the singular `plugin/` it keeps as a
+  back-compat alias) and any `caret:`-prefixed `.md` file in either command dir
+  (`commands/`, and the singular `command/`). That is not tidiness — OpenCode loads a
+  plugin out of either dir, so a leftover file registers a **second** `caret_review_plan`
+  beside the array entry, and a leftover command file re-exposes a `/caret:<name>` pointed
+  at a substituted binary path nothing writes any more. The command sweep matches caret's
+  prefix rather than the commands the package ships today, so an old install's file for a
+  since-dropped command isn't stranded. The config dir's own `package.json` is
+  deliberately **left**: it is inert, and another of the user's plugins may import
+  `@opencode-ai/plugin` through it. The sweep runs after the upgrade check, so a plugin
+  file is only dropped once the array entry exists and a stale cached copy has been
+  offered a refresh — and it still runs when that refresh is declined, since two loaded
+  caret plugins are worse than one stale-but-single plugin. OpenCode itself installs the
+  package and its deps into its cache on the next start — caret writes no config-dir
+  manifest and runs no `bun install`. Between the two writes it runs an upgrade check:
+  OpenCode resolves an array entry once and caches it forever (§ The cache layout), so
+  re-adding the entry never moves anyone off install-day's version. `upgrade.ts` weighs
+  the entry and that cache against npm's `latest` — npm rather than GitHub releases,
+  because `latest` is what OpenCode would re-resolve to — and a stale result offers to
+  clear the cached copy, or to bump a user-authored pin. That offer is a prompt, since
+  `~/.cache/opencode` is not caret's to delete unasked; `--refresh` pre-answers it, and
+  off a TTY install names the gap and changes nothing. Clearing the cache leaves the
+  service on caret's own copy under `~/.local/state/caret/roots/`, not an older agent
+  root, until OpenCode's next start re-resolves. The same run also registers caret with
+  Claude Code via its plugin CLI when Claude Code is among the selected targets. The
+  command lives in `src/commands/install/`: `index.ts` is the orchestrator (it selects the
+  targets — the chooser or detection — and dispatches), beside the target registry, the
+  chooser, the terminal reporter, and one module per target runner. `paths.ts` is the
+  single source of truth both the probe (reader) and the writer resolve through, and
+  `entries.ts` the single answer to which entries, in either key, are caret's — each
+  returned as a `CaretEntry` carrying its key and spec.
 
 ## Distribution choice (amended by EXC-794)
 
@@ -656,24 +668,24 @@ this module as a v1 TUI plugin, and v1's TUI loader throws on a default without 
 `Object.values` rule binds only `index.ts`: both TUI loaders read only `default`, so
 `createCaretTui` stays a named export for tests.
 
-**The same module registers one `keymap` layer with one command, `caret.open`:** the
-`/caret` slash command, a palette entry, and the `<leader>p` default bind. Its `suggested`
-predicate promotes it in the palette while the routed session has a plan waiting. The
-layer is `mode: "global"`: the palette and slash completion list only commands reachable
-from their own input mode, and a default `base` layer is unreachable from both. It spawns
-`caret band-link [--session <id>] --open` (the binary from `resolveCaretBin`, detached and
-unwaited), because the TUI API has no URL opener; `--session` comes from the current route
-and is omitted off a session route, so `band-link` opens the session's waiting review or
-else caret's home page. The spawn carries no `CARET_AGENT`: `band-link` only reads the
-daemon, never starts one. A child that fails to start or exits non-zero shows an error
-toast that names `caret doctor` as the next step; `band-link` exits 0 on its own failures,
-so non-zero means caret never ran (no `bun` on `PATH`, an older caret). The layer sits
-behind a `typeof ctx.keymap?.layer === "function"` guard and a `try`: a context without a
-keymap, or a host that rejects the command shape (v2 throws synchronously on one), still
-keeps caret's toasts.
+**The same module registers one `keymap` layer with one command, `caret.open`:** a palette
+entry and the `<leader>p` default bind. It has no slash name: `/caret` belongs to the
+command file. Its `suggested` predicate promotes it in the palette while the routed
+session has a plan waiting. The layer is `mode: "global"`: the palette lists only commands
+reachable from its own input mode, and a default `base` layer is unreachable from it. It
+spawns `caret band-link [--session <id>] --open` (the binary from `resolveCaretBin`,
+detached and unwaited), because the TUI API has no URL opener; `--session` comes from the
+current route and is omitted off a session route, so `band-link` opens the session's
+waiting review or else caret's home page. The spawn carries no `CARET_AGENT`: `band-link`
+only reads the daemon, never starts one. A child that fails to start or exits non-zero
+shows an error toast that names `caret doctor` as the next step; `band-link` exits 0 on
+its own failures, so non-zero means caret never ran (no `bun` on `PATH`, an older caret).
+The layer sits behind a `typeof ctx.keymap?.layer === "function"` guard and a `try`: a
+context without a keymap, or a host that rejects the command shape (v2 throws
+synchronously on one), still keeps caret's toasts.
 
-**Known gap, accepted.** On a child (subagent) session `/caret` opens caret's home page:
-reviews sit on the root session.
+**Known gap, accepted.** On a child (subagent) session `<leader>p` opens caret's home
+page: reviews sit on the root session.
 
 The same `setup` keeps a pending-plan line above the waiting session's prompt. A
 `storage.memory` map, `sessionID → { callId, url }`, records the review-link event and
@@ -865,7 +877,8 @@ v1.18.15 and v1.18.29 from npm):
   `plugin` entry and a `//` comment, deployed the command files, and left no
   `opencode serve` behind from the probe. A plan-agent round-trip approved in caret's UI;
   no load error or `Duplicate plugin ID`; `opencode plugin list` showed caret once. The
-  TUI offered `/caret:plan`, `/caret:demo`, and `/caret:doctor`.
+  TUI offered the three `caret:`-prefixed commands of that version (plan, demo and
+  doctor).
 - **v2, published.** `plugin: ["@macintacos/caret@1.1.1"]` moved to `plugins` with the
   pin. v2 installed it under `npm/@macintacos/caret@1.1.1/<digits>/`, and the probe read
   `1.1.1`. A bare entry installed under `npm/@macintacos/caret@latest/<digits>/`, and
@@ -894,8 +907,9 @@ pointing at an argv-recording shim, no model or provider):
 - **Load.** The TUI half loaded from `exports["./tui"]`; OpenCode's plugin count rose by
   one.
 - **`caret.open`.** On the home route, `/caret` (listed first in slash completion, with
-  its description), the palette entry (searching `caret` shows "Open caret … ctrl+x p"),
-  and `ctrl+x p` each ran the shim with `band-link --open`.
+  its description; the slash name was dropped in EXC-2332), the palette entry (searching
+  `caret` shows "Open caret … ctrl+x p"), and `ctrl+x p` each ran the shim with
+  `band-link --open`.
 - **Spawn failure.** With `CARET_OPENCODE_BIN=/nonexistent/caret`, `ctrl+x p` toasted
   "caret: couldn't start caret (ENOENT: no such file or directory, posix_spawn
   '/nonexistent/caret')" and OpenCode stayed up.
@@ -922,6 +936,23 @@ pointing at an argv-recording shim, no model or provider):
   approving removed it.
 - **Not seen live:** the token colours, a theme switch, truncation, and the selection
   guard. The margin's collapse rests on OpenTUI's source.
+
+**Confirmed live for EXC-2332** (v2.2.7, through `opencode serve` and
+`POST /api/session/<id>/command`):
+
+- **Bare name.** A `commands/caret.md` file runs as `/caret`.
+- **Arguments.** `$ARGUMENTS` carries the full argument string and is empty for a bare
+  call.
+- **Shell under `plan`.** A shell call runs without a prompt: the built-in plan ruleset is
+  `* * allow` with only `edit` denied.
+- **References.** A read of a file under the config dir but outside the project succeeds
+  under both `plan` and `build`.
+- **Not seen live:** the picker showing one `/caret`, `<leader>p` opening the waiting
+  review, and `/caret doctor` running the report after `caret install --from-local`.
+
+**EXC-2332 v1 follow-up.** v1 (1.3.x) was not observed. The command-file format and
+`$ARGUMENTS` are the ones the earlier v1 command files used, and v1 has no `/caret` keymap
+entry to collide with.
 
 ## Sources
 

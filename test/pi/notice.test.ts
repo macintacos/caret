@@ -45,20 +45,16 @@ function fakeCtx(mode: NoticeContext["mode"] = "tui", hasUI = mode === "tui" || 
 
 function fakeApi() {
   const handlers: Record<string, (...a: unknown[]) => unknown> = {};
-  const commands: Record<string, (args: string, ctx: NoticeContext) => Promise<void>> = {};
   const shortcuts: Record<string, (ctx: NoticeContext) => void> = {};
   const api: NoticeApi = {
     on: ((event: string, handler: (...a: unknown[]) => unknown) => {
       handlers[event] = handler;
     }) as NoticeApi["on"],
-    registerCommand: (name, { handler }) => {
-      commands[name] = handler;
-    },
     registerShortcut: (key, { handler }) => {
       shortcuts[key] = handler;
     },
   };
-  return { api, handlers, commands, shortcuts };
+  return { api, handlers, shortcuts };
 }
 
 function setup(mode?: NoticeContext["mode"], hasUI?: boolean) {
@@ -228,9 +224,7 @@ describe("other modes", () => {
     const s = setup("rpc");
     s.start();
     s.store.update("s1", { pending: URL });
-    expect(lastWidget(s.widgets)).toEqual([
-      "^ caret  plan waiting for your review   /caret open in browser",
-    ]);
+    expect(lastWidget(s.widgets)).toEqual(["^ caret  plan waiting for your review"]);
   });
 
   for (const mode of ["print", "json"] as const) {
@@ -250,12 +244,6 @@ describe("opening the review", () => {
     args: ["band-link", "--session", "s1", "--open"],
   };
 
-  test("/caret opens the session's review", async () => {
-    const s = setup();
-    await s.commands.caret?.("", s.ctx);
-    expect(s.spawns).toEqual([expected]);
-  });
-
   test("the open key is not one of pi's default editor bindings", () => {
     const taken = Object.values(TUI_KEYBINDINGS).flatMap((b) => b.defaultKeys);
     expect(taken).not.toContain(OPEN_KEY);
@@ -268,10 +256,10 @@ describe("opening the review", () => {
     expect(s.spawns).toEqual([expected]);
   });
 
-  test("a failed open notifies with a doctor hint", async () => {
+  test("a failed open notifies with a doctor hint", () => {
     const s = setup();
     s.fail(new Error("spawn ENOENT"));
-    await expect(s.commands.caret?.("", s.ctx)).resolves.toBeUndefined();
+    expect(() => s.shortcuts[OPEN_KEY]?.(s.ctx)).not.toThrow();
     expect(s.notes).toEqual([
       { message: "caret: open failed: spawn ENOENT. Run caret doctor to see why.", type: "error" },
     ]);
@@ -294,7 +282,7 @@ describe("opening the review", () => {
         throw new Error("This extension ctx is stale");
       },
     };
-    await api.commands.caret?.("", stale);
+    api.shortcuts[OPEN_KEY]?.(stale);
     expect(() => report?.()).not.toThrow();
   });
 });

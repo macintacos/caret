@@ -1,27 +1,29 @@
-// The file-write side of caret's OpenCode install: substitute the command files'
-// install-time markers and deploy / uninstall them in OpenCode's command dir. caret
+// The file-write side of caret's OpenCode install: substitute the deployed files'
+// install-time markers and deploy / uninstall them under OpenCode's config dir. caret
 // itself installs as a plugin entry (@macintacos/caret, in `plugins` when every
 // `opencode` on PATH is v2, else `plugin`; the edit lives in config-plugin.ts) — OpenCode
-// installs the package + its deps — but the `/caret:*` command files aren't
-// array-installable, so they still ship as files. Idempotent (re-deploy overwrites in
-// place) and dry-run aware. Pure of any path resolution (callers pass absolute paths via
+// installs the package + its deps — but the `/caret` command file and the references it
+// loads aren't array-installable, so they still ship as files. Idempotent (re-deploy
+// overwrites in place) and dry-run aware. Pure of any path resolution (callers pass absolute paths via
 // paths.ts) so it is unit-testable against a temp dir.
 
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-/** Substitute a command file's install-time markers — `__CARET_BIN__` → `binPath`,
- * `__CARET_DEMO_TEMPLATE__` → `demoTemplate`, `__CARET_VERSION__` → `version`. Pure.
- * Each value is taken LITERALLY (a function replacer): a path or template may contain
- * `$&` / `$$` / `$\``, which `String.replace` would otherwise reinterpret. */
+/** Substitute a deployed file's install-time markers — `__CARET_BIN__` → `binPath`,
+ * `__CARET_DEMO_TEMPLATE__` → `demoTemplate`, `__CARET_VERSION__` → `version`,
+ * `__CARET_REFERENCES__` → `referencesDir`. Pure. Each value is taken LITERALLY (a
+ * function replacer): a path or template may contain `$&` / `$$` / `$\``, which
+ * `String.replace` would otherwise reinterpret. */
 export function renderPlugin(
   source: string,
-  opts: { version: string; binPath: string; demoTemplate: string },
+  opts: { version: string; binPath: string; demoTemplate: string; referencesDir: string },
 ): string {
   return source
     .replaceAll("__CARET_VERSION__", () => opts.version)
     .replaceAll("__CARET_BIN__", () => opts.binPath)
-    .replaceAll("__CARET_DEMO_TEMPLATE__", () => opts.demoTemplate);
+    .replaceAll("__CARET_DEMO_TEMPLATE__", () => opts.demoTemplate)
+    .replaceAll("__CARET_REFERENCES__", () => opts.referencesDir);
 }
 
 export interface DeployFile {

@@ -1,4 +1,4 @@
-// `/caret:doctor` for pi: runs `caret doctor` and shows its report in pi's transcript as
+// `/caret doctor` for pi: runs `caret doctor` and shows its report in pi's transcript as
 // a custom entry, which never reaches the model.
 
 import { Text } from "@earendil-works/pi-tui";
@@ -24,17 +24,10 @@ export type DoctorCommandContext = {
   ui: { setStatus(key: string, text: string | undefined): void };
 };
 
-/** The slice of pi's extension API `/caret:doctor` calls; pinned by
+/** The slice of pi's extension API `/caret doctor` calls; pinned by
  * test/pi/sdk-conformance.ts. It has no send method: the report stays out of model
  * context. */
 export type DoctorApi = {
-  registerCommand(
-    name: string,
-    options: {
-      description: string;
-      handler: (args: string, ctx: DoctorCommandContext) => Promise<void>;
-    },
-  ): void;
   appendEntry(customType: string, data: DoctorOutcome): void;
   registerEntryRenderer(customType: string, renderer: typeof renderDoctorEntry): void;
 };
@@ -128,22 +121,19 @@ export function renderDoctorEntry(
   );
 }
 
-/** Registers `/caret:doctor` and the renderer for its transcript entry. */
+/** Registers the renderer for the transcript entry and returns `/caret doctor`'s handler. */
 export function installDoctor(
   pi: DoctorApi,
   deps: DoctorDeps & { stdout: (text: string) => void },
-): void {
+): (ctx: DoctorCommandContext) => Promise<void> {
   pi.registerEntryRenderer(DOCTOR_ENTRY, renderDoctorEntry);
-  pi.registerCommand("caret:doctor", {
-    description: "Check this caret install and show the report",
-    handler: async (_args, ctx) => {
-      ctx.ui.setStatus(DOCTOR_ENTRY, "running caret doctor…");
-      const outcome = await runDoctor(deps);
-      ctx.ui.setStatus(DOCTOR_ENTRY, undefined);
-      pi.appendEntry(DOCTOR_ENTRY, outcome);
-      // json mode already streams the entry as an `entry_appended` event; raw text there
-      // would corrupt the JSONL stream.
-      if (ctx.mode === "print") deps.stdout(`${doctorText(outcome)}\n`);
-    },
-  });
+  return async (ctx) => {
+    ctx.ui.setStatus(DOCTOR_ENTRY, "running caret doctor…");
+    const outcome = await runDoctor(deps);
+    ctx.ui.setStatus(DOCTOR_ENTRY, undefined);
+    pi.appendEntry(DOCTOR_ENTRY, outcome);
+    // json mode already streams the entry as an `entry_appended` event; raw text there
+    // would corrupt the JSONL stream.
+    if (ctx.mode === "print") deps.stdout(`${doctorText(outcome)}\n`);
+  };
 }

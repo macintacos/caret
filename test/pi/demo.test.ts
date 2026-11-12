@@ -4,11 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { REVIEW_TOOL } from "@bridge/review-bridge.ts";
+import { type CommandApi, installCaretCommand } from "@piext/command.ts";
 import { type DemoApi, installDemo } from "@piext/demo.ts";
 import { renderPlugin } from "@/adapters/opencode/deploy.ts";
 
 const TEMPLATE = "# A demo plan\n\nSome body.\n";
-const OPENCODE_COMMAND = join(import.meta.dir, "..", "..", "opencode", "commands", "demo.md");
+const OPENCODE_DEMO_REFERENCE = join(
+  import.meta.dir,
+  "..",
+  "..",
+  "opencode",
+  "references",
+  "demo.md",
+);
 
 let tmp: string;
 let templatePath: string;
@@ -33,44 +41,48 @@ function fakePi(files: { templatePath?: string; commandPath?: string } = {}, pla
     },
     sessionManager: { getSessionId: () => "s" },
   };
-  const pi: DemoApi = {
+  const pi: DemoApi & CommandApi = {
     registerCommand: (name, options) => {
       commands[name] = options.handler as (a: string, c: unknown) => Promise<void>;
     },
     sendUserMessage: (content, options) => sent.push({ content, options }),
   };
-  installDemo(pi, {
+  const demo = installDemo(pi, {
     templatePath: files.templatePath ?? templatePath,
-    commandPath: files.commandPath ?? OPENCODE_COMMAND,
+    commandPath: files.commandPath ?? OPENCODE_DEMO_REFERENCE,
     isPlanning: (id) => planning && id === "s",
+  });
+  installCaretCommand(pi, {
+    planning: { plan: async () => {}, leave: () => false, isPlanning: () => planning },
+    demo,
+    doctor: async () => {},
   });
   return {
     sent,
     notices,
     idle: () => idleAwaited,
-    command: () => commands["caret:demo"]?.("", ctx),
+    command: () => commands.caret?.("demo", ctx),
   };
 }
 
-test("/caret:demo sends OpenCode's rendered /caret:demo body as a follow-up and waits", async () => {
+test("/caret demo sends OpenCode's rendered demo body as a follow-up and waits", async () => {
   const pi = fakePi();
   await pi.command();
   expect(pi.sent).toHaveLength(1);
   expect(pi.sent[0]?.options).toEqual({ deliverAs: "followUp" });
   const content = pi.sent[0]?.content ?? "";
-  const opencode = renderPlugin(readFileSync(OPENCODE_COMMAND, "utf-8"), {
+  const opencode = renderPlugin(readFileSync(OPENCODE_DEMO_REFERENCE, "utf-8"), {
     version: "",
     binPath: "",
     demoTemplate: TEMPLATE,
+    referencesDir: "",
   });
-  expect(opencode.endsWith(content)).toBe(true);
-  const frontmatter = opencode.slice(0, opencode.length - content.length);
-  expect(frontmatter).toMatch(/^---\n(?:.*\n)*?---\n+$/);
+  expect(content).toBe(opencode);
   expect(content).toContain(REVIEW_TOOL);
   expect(pi.idle()).toBe(1);
 });
 
-test("/caret:demo refuses with one warning while the session is planning", async () => {
+test("/caret demo refuses with one warning while the session is planning", async () => {
   const pi = fakePi({ templatePath: join(tmp, "absent.md") }, true);
   await pi.command();
   expect(pi.notices).toHaveLength(1);

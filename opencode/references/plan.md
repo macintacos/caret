@@ -1,13 +1,4 @@
----
-description: Plan a change and submit the plan to caret's review UI
-agent: plan
----
-
-Plan this:
-
-$ARGUMENTS
-
-If that is empty, plan whatever the user asked for earlier in this session.
+Plan the description the router gave you, then implement it once caret approves the plan.
 
 Research what the change needs — read the relevant code, trace the real flow — then write
 the plan as markdown to a file in the plans directory your system prompt names, and call
