@@ -64,6 +64,14 @@ test(`${CLAUDE_SKILL} routes every argument to one of its stops`, () => {
   expectDispatchRouter(read(CLAUDE_SKILL));
 });
 
+test(`${CLAUDE_SKILL}'s argument hint names every form /caret takes`, () => {
+  const frontmatter = read(CLAUDE_SKILL).match(/^---\n([\s\S]*?)\n---\n/)?.[1] ?? "";
+  const hint = frontmatter.match(/^argument-hint: (.*)$/m)?.[1] ?? "";
+  expect(hint).toContain("what you want done");
+  expect(hint).toContain("doctor");
+  expect(hint).toContain("demo");
+});
+
 test("each reference a Claude Code stop loads exists and ships", () => {
   expect(claudeReferences.filter((rel) => !existsSync(join(REPO_ROOT, rel)))).toEqual([]);
   expect(unshipped(claudeReferences)).toEqual([]);

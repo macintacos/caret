@@ -1,6 +1,7 @@
 ---
 name: caret
 description: Plan a change and review it in caret (`/caret <what you want done>`), or run `/caret doctor` or `/caret demo`
+argument-hint: "[what you want done] | doctor | demo"
 ---
 
 ARGUMENT=[$ARGUMENTS]
