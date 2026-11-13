@@ -8,7 +8,7 @@
 // shadcn-foundation.test.ts recorded for Dialog: poll with flushUntil and query
 // document.body, not the mount target. The real interaction semantics — focus trap,
 // Escape-to-close, outside-click, filtering as you type — are real-browser behaviours
-// and stay e2e per doc/agents/browser-testing.md.
+// and stay e2e per docs/agents/browser-testing.md.
 import "@ui/support/mount.ts";
 
 import { expect, test } from "bun:test";
@@ -122,7 +122,7 @@ test("the icon swap renders vendored SVGs, not the dropped @lucide/svelte compon
 // popup dresses the breadcrumb header in the shared `.form-label` atom — has nowhere to
 // put one. The guard belongs HERE rather than on that surface: it is the PRIMITIVE a
 // re-sync reverts, and a guard on the one consumer disappears the day that consumer
-// restyles (doc/agents/shadcn-rules.md § Edits a re-sync will silently undo).
+// restyles (docs/agents/shadcn-rules.md § Edits a re-sync will silently undo).
 //
 // Asserted on `data-command-group-heading`, which is what bits-ui 2.x actually
 // stamps. The `**:[[cmdk-group-heading]]:…` Tailwind variants the registry source

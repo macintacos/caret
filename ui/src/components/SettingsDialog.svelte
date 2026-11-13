@@ -6,7 +6,7 @@
   // sub-grouped into labelled sections (Diff view lives as a section under
   // Appearance), each a FieldGroup of shadcn Fields.
   //
-  // Two shadcn primitives carry the layout (compose-first, per doc/agents/shadcn-rules):
+  // Two shadcn primitives carry the layout (compose-first, per docs/agents/shadcn-rules):
   //   • Sidebar (collapsible="none") — the static category rail. Its sections sit in one
   //     bed, and the SELECTED one latches down in it in full ink. Below 640px the rail
   //     folds into a bar of a section picker, a search key and a close key.

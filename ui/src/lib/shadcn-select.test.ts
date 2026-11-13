@@ -9,7 +9,7 @@
 // recorded for Dialog: poll with flushUntil and query document.body, not the mount
 // target. The real interaction semantics — keyboard roving, typeahead, outside-click,
 // focus restoration — are real-browser behaviours and stay e2e per
-// doc/agents/browser-testing.md.
+// docs/agents/browser-testing.md.
 import "@ui/support/mount.ts";
 
 import { expect, test } from "bun:test";
@@ -98,7 +98,7 @@ test("the icon swap renders vendored SVGs, not the dropped @lucide/svelte compon
 // The one conforming edit the vendoring makes beyond the icon swap: a Select row
 // wears dropdown-menu-item's radius and cursor so it reads as the same control as the
 // menu row EXC-1111 replaces. Pinned here because a registry re-sync reverts it
-// silently (doc/agents/shadcn-rules.md § Edits a re-sync will silently undo).
+// silently (docs/agents/shadcn-rules.md § Edits a re-sync will silently undo).
 test("select rows carry caret's menu-row geometry", async () => {
   const { target, flush } = render(SelectFixture, { open: true });
   await flushUntil(flush, () => content() !== null);

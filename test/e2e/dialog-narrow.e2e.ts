@@ -5,7 +5,7 @@
 // already did this for itself in .rcd-content; this proves the shared shell does
 // it for EVERY modal (here SettingsDialog, which composes the bare shell). Real
 // scroll + layout geometry is browser behavior, so this is an e2e, not a unit
-// (per doc/agents/browser-testing.md).
+// (per docs/agents/browser-testing.md).
 
 import { openSettings } from "@test/e2e/support/chrome.ts";
 import { openRejectGuard } from "@test/e2e/support/decision.ts";

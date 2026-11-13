@@ -25,7 +25,7 @@
       "!**/*.md",
       // Biome parses SVG, which puts `ui/src/icons/` in scope for a11y rules —
       // noSvgWithoutTitle in particular. Those icons are vendored verbatim from
-      // Lucide (doc/agents/icon-rules.md), so annotating or reformatting them
+      // Lucide (docs/agents/icon-rules.md), so annotating or reformatting them
       // diffs the whole set against upstream on the next re-sync, and the
       // accessible name belongs to ui/src/components/Icon.svelte — `aria-label`
       // from its `label` prop, `aria-hidden` when decorative — not to the shared

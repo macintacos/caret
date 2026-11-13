@@ -1,8 +1,8 @@
-# Editing `doc/ARCHITECTURE.md`
+# Editing `docs/ARCHITECTURE.md`
 
 *Audience: coding agents and contributors editing caret's architecture reference.*
 
-`doc/ARCHITECTURE.md` is the human-facing account of how caret works, behind
+`docs/ARCHITECTURE.md` is the human-facing account of how caret works, behind
 [`README.md`](../../../README.md): the tool-agnostic core / agent-adapter boundary, the
 Claude Code, OpenCode, and pi adapter internals, calling the review tool from your own
 skill, and the source layout.

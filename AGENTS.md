@@ -2,7 +2,7 @@
 
 caret is a tool-agnostic core plus one adapter axis — the coding agent it speaks to. It
 routes that agent's plan to a human for review; a loopback daemon serves a Svelte UI.
-Detailed contributor rules live in [`doc/agents/`](doc/agents/) and load **on demand**.
+Detailed contributor rules live in [`docs/agents/`](docs/agents/) and load **on demand**.
 This file is the router that decides which ones a given change needs.
 
 ## Routing
@@ -30,23 +30,23 @@ what-does: Load the file for every area the change touches
   OpenCode adapter, plugin, or install (caret install) > opencode-integration
   pi adapter, extension, or install (caret install) > pi-integration
   rumdl: bumping its version, touching any of its three configs or invocations (repo hygiene, plan formatting, release notes), or scripts/tasks/dev/fake-plan.md > rumdl-rules
-  documentation: which doc to update — README, the doc/ reference pages (CONFIGURING, RUNNING, ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the doc/ router, or the doc map itself > documentation-rules
+  documentation: which doc to update — README, the docs/ reference pages (CONFIGURING, RUNNING, ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the docs/ router, or the doc map itself > documentation-rules
   how caret looks, moves, sounds, or prints: colour, type, radius, motion, sound, empty/loading/error states, CLI and task output layout > readme
-architecture-rules!: Load doc/agents/architecture-rules.md
-typescript-rules!: Load doc/agents/typescript-rules.md
-svelte-rules!: Load doc/agents/svelte-rules.md
-shadcn-rules!: Load doc/agents/shadcn-rules.md
-plan-render-rules!: Load doc/agents/plan-render-rules.md
-browser-testing!: Load doc/agents/browser-testing.md
-test-layout!: Load doc/agents/test-layout.md
-logging-rules!: Load doc/agents/logging-rules.md
-settings-rules!: Load doc/agents/settings-rules.md
-dependency-rules!: Load doc/agents/dependency-rules.md
-icon-rules!: Load doc/agents/icon-rules.md
-opencode-integration!: Load doc/agents/opencode-integration.md
-pi-integration!: Load doc/agents/pi-integration.md
-rumdl-rules!: Load doc/agents/rumdl-rules.md
-documentation-rules!: Load doc/agents/documentation-rules.md
+architecture-rules!: Load docs/agents/architecture-rules.md
+typescript-rules!: Load docs/agents/typescript-rules.md
+svelte-rules!: Load docs/agents/svelte-rules.md
+shadcn-rules!: Load docs/agents/shadcn-rules.md
+plan-render-rules!: Load docs/agents/plan-render-rules.md
+browser-testing!: Load docs/agents/browser-testing.md
+test-layout!: Load docs/agents/test-layout.md
+logging-rules!: Load docs/agents/logging-rules.md
+settings-rules!: Load docs/agents/settings-rules.md
+dependency-rules!: Load docs/agents/dependency-rules.md
+icon-rules!: Load docs/agents/icon-rules.md
+opencode-integration!: Load docs/agents/opencode-integration.md
+pi-integration!: Load docs/agents/pi-integration.md
+rumdl-rules!: Load docs/agents/rumdl-rules.md
+documentation-rules!: Load docs/agents/documentation-rules.md
 readme!: Load design/README.md
 ```
 
@@ -65,9 +65,9 @@ plus the filters in effect) and a `result` document carrying each task's status 
 **The gate scopes itself to your diff, so `ok` does not always mean all seven tasks ran.**
 A change where every path is Markdown runs `lint` alone — plus `test unit` when it touches
 one of the Markdown files a test reads from disk (`MARKDOWN_READ_BY_TESTS` in
-`scripts/preflight.ts`: `scripts/tasks/dev/fake-plan.md`, `doc/ARCHITECTURE.md`,
-`THIRD_PARTY_LICENSES.md`, `doc/DEVELOPMENT.md`, and `doc/CONFIGURING.md`). Anything else
-runs the full seven, as does an empty or unreadable diff. Read the `start` document's
+`scripts/preflight.ts`: `scripts/tasks/dev/fake-plan.md`, `docs/ARCHITECTURE.md`,
+`THIRD_PARTY_LICENSES.md`, `docs/DEVELOPMENT.md`, and `docs/CONFIGURING.md`). Anything
+else runs the full seven, as does an empty or unreadable diff. Read the `start` document's
 `selection` object before you report a run as green: `{"narrowed": true, "reason": "…"}`
 means you proved less than the whole gate, and `schemaVersion` is `2` precisely because
 `ok` now means "every task that ran passed". `--full` forces all seven — it is the one
@@ -143,4 +143,4 @@ shares one across files, so a file can pass under one form and fail under the ot
 cross-file state. `bun run test` (the `package.json` script) carries both flags and is
 fine; `bun test --conditions browser <path>` is the direct form. Why the flag cannot move
 into `bunfig.toml`, and the guard that raises the actionable error:
-`doc/agents/svelte-rules.md` § One runner.
+`docs/agents/svelte-rules.md` § One runner.

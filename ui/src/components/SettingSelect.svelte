@@ -206,7 +206,7 @@
      does not scope-hash a `class` passed to a COMPONENT, which is also why the panel
      rules below are global. The vendored trigger already carries this control's gap,
      radius, padding and text size; the only thing it has that caret's language forbids
-     is the outline border (doc/agents/shadcn-rules.md § The caret surface language —
+     is the outline border (docs/agents/shadcn-rules.md § The caret surface language —
      the cap is the affordance). */
   :global(.setting-trigger) {
     border: none;

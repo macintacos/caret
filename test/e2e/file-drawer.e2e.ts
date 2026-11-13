@@ -11,7 +11,7 @@
 // in folder-refs.e2e.ts. So is the plan preview rewrapping beside a right-docked
 // drawer that narrows it below the column, live through a drag of the drawer's edge.
 //
-// All of it is layout a browser decides (doc/agents/browser-testing.md): the
+// All of it is layout a browser decides (docs/agents/browser-testing.md): the
 // docking edge comes from a live matchMedia subscription, the sizes from real
 // rects, and the drag from real pointer events. The clamping math itself stays a
 // unit (ui/src/lib/fileDrawer.test.ts).

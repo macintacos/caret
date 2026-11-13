@@ -1,6 +1,6 @@
 // Standing gate for the shared test helpers: a value export under test/support,
 // test/e2e/support or ui/support that nothing imports reds here, and so does a module
-// there that nothing references at all. `doc/agents/test-layout.md` § test/support/ states
+// there that nothing references at all. `docs/agents/test-layout.md` § test/support/ states
 // the rule this keeps falsifiable.
 //
 // Imports are read from the TypeScript AST, as e2e-conventions.test.ts reads them, so a

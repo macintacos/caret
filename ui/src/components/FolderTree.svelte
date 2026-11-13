@@ -833,7 +833,7 @@
   /* The card rises the same 4px onto the surface FilePreview's region does, so
      opening either reference surface reads as one gesture. Reduced motion is not
      handled here — the global kill-switch in styles/base.css collapses every
-     animation under #app, and per doc/agents/svelte-rules.md no component honors
+     animation under #app, and per docs/agents/svelte-rules.md no component honors
      the preference on its own. The tree's own shadow root is out of that rule's
      reach, which is what TREE_REDUCED_MOTION covers. */
   @keyframes ft-in {

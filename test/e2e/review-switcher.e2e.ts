@@ -3,7 +3,7 @@
 // whose items switch the active plan. The open/list/pick interaction is bits-ui
 // overlay behavior (portalled, pointer/keyboard driven), so it is proven here in
 // a real browser rather than in the happy-dom unit suite (per
-// doc/agents/browser-testing.md). Two distinct plans are seeded (distinct
+// docs/agents/browser-testing.md). Two distinct plans are seeded (distinct
 // sessions → two pending reviews) so a switch is observable in the trigger.
 
 import { seedTwoPlansAndOpen } from "@test/e2e/support/decision.ts";

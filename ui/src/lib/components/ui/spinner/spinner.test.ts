@@ -8,7 +8,7 @@ import { flushUntil, render } from "@ui/support/mount.ts";
 
 // Composition guard for the vendored spinner (EXC-1109). Spinner is a plain
 // (non-bits-ui, non-portalled) element, so it gets its suite beside it rather
-// than a lib/shadcn-*.test.ts fixture — the placement doc/agents/shadcn-rules.md
+// than a lib/shadcn-*.test.ts fixture — the placement docs/agents/shadcn-rules.md
 // § Where the test goes prescribes, and the shape switch.test.ts already uses.
 //
 // The assertions that matter here are the ones a type-check cannot make: that

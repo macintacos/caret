@@ -673,14 +673,15 @@ diff, plus untracked files — and picks a task set from them:
   Markdown files really are read from disk at test time, so `test unit` can observe a
   change to them. They are listed as `MARKDOWN_READ_BY_TESTS` in `scripts/preflight.ts`:
   `scripts/tasks/dev/fake-plan.md` (`test/scripts/dev-driver.test.ts` asserts on its
-  content), `doc/ARCHITECTURE.md` (`test/adapters/opencode/docs-cache-path.test.ts` checks
-  the `rm -rf` cache path it prints), `THIRD_PARTY_LICENSES.md`
+  content), `docs/ARCHITECTURE.md` (`test/adapters/opencode/docs-cache-path.test.ts`
+  checks the `rm -rf` cache path it prints), `THIRD_PARTY_LICENSES.md`
   (`ui/src/lib/icons.test.ts` checks its table against the icon registry), this page
   (`test/scripts/dev-driver.test.ts` checks the line citations the fake plan makes into
-  it), and `doc/CONFIGURING.md` (`test/core/theme/schema.test.ts` parses its example theme
-  file). **Add to that list whenever a test starts reading a Markdown file at run time** —
-  the suite checks that each listed path still exists, but nothing can catch an omission,
-  and an omission silently stops running a real check.
+  it), and `docs/CONFIGURING.md` (`test/core/theme/schema.test.ts` parses its example
+  theme file).
+  **Add to that list whenever a test starts reading a Markdown file at run time** — the
+  suite checks that each listed path still exists, but nothing can catch an omission, and
+  an omission silently stops running a real check.
 - **Anything else** → all seven. That covers a non-Markdown path, an empty diff, and a
   diff that could not be read at all (no `origin/HEAD`, a shallow clone). The default is
   always the full gate; narrowing is an optimisation, never a weakening.
@@ -700,8 +701,8 @@ spawned as `mise run <task>` with no file arguments (the gate's only extra argv 
 `--parallel=4` for `test unit`), and `lint` in particular must keep scanning the whole
 tree: `rumdl` resolves an MD051 cross-file link fragment only when the file it points into
 is in the same scan, so a lint handed just the changed files would quietly stop checking
-every cross-file anchor whose target is unchanged. `doc/` is held together almost entirely
-by those links.
+every cross-file anchor whose target is unchanged. `docs/` is held together almost
+entirely by those links.
 
 #### PR checks
 
@@ -778,8 +779,8 @@ Emergency manual publish, when CI can't:
 ### Regenerating the README assets
 
 The README's hero is two screenshots of the review UI, one per appearance:
-`doc/assets/caret-review-ui-light.png` in caret-light and
-`doc/assets/caret-review-ui-dark.png` in caret-dark. The README shows them through a
+`docs/assets/caret-review-ui-light.png` in caret-light and
+`docs/assets/caret-review-ui-dark.png` in caret-dark. The README shows them through a
 `<picture>` element, so a reader sees the one that matches their system appearance.
 
 Run `mise run assets` to regenerate both after the UI changes. The task builds the UI,

@@ -105,7 +105,7 @@
         <span class="tray">
           <button {...props} type="button" class="vpick float-chip" aria-label={ariaLabel}>
             <span class="vpick-label">v{current}</span>
-            <!-- Vendored-icon convention (doc/agents/icon-rules.md): inline the Lucide
+            <!-- Vendored-icon convention (docs/agents/icon-rules.md): inline the Lucide
                  chevron-down glyph so it can carry the rotation class. -->
             <svg
               class="chevron"

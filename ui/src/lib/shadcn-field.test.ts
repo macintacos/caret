@@ -1,6 +1,6 @@
 // Composition guard for the vendored Field tree and the Label tree it pulls in
 // (EXC-1109). Field is meaningless alone, so it takes a fixture plus this suite
-// rather than a file beside the component, per doc/agents/shadcn-rules.md § Where
+// rather than a file beside the component, per docs/agents/shadcn-rules.md § Where
 // the test goes. Field is not portalled — it mounts into the render target, like
 // Switch and unlike Select.
 //

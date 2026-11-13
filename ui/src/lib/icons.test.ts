@@ -46,7 +46,7 @@ describe("vendored icon set", () => {
       expect(stemByIdent.get(ident)).toBe(name);
     }
     expect(entries.map(([name]) => name).sort()).toEqual([...ICON_NAMES].sort());
-    // The wrapper names the glyph it rendered (doc/agents/icon-rules.md § How icons
+    // The wrapper names the glyph it rendered (docs/agents/icon-rules.md § How icons
     // render). Callers select and assert on it, so it is a contract rather than
     // decoration, and the gate belongs where that doc says the wiring is gated rather
     // than only in whichever component happens to read it today.
@@ -54,7 +54,7 @@ describe("vendored icon set", () => {
   });
 
   // The licenses table is the one add-an-icon step nothing else gates
-  // (doc/agents/icon-rules.md step 4): keep its rows in bijection with the registry.
+  // (docs/agents/icon-rules.md step 4): keep its rows in bijection with the registry.
   test("THIRD_PARTY_LICENSES.md itemizes every vendored icon", () => {
     const doc = readFileSync(join(import.meta.dir, "../../../THIRD_PARTY_LICENSES.md"), "utf8");
     const lucide = doc.split(/^## /m).find((section) => section.startsWith("Lucide\n"));

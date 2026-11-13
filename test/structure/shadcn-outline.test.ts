@@ -1,5 +1,5 @@
 // Standing gate over the vendored shadcn tree: keyboard focus wears a control's hover look
-// and never paints a ring (styles/base.css, doc/agents/shadcn-rules.md § Edits a re-sync
+// and never paints a ring (styles/base.css, docs/agents/shadcn-rules.md § Edits a re-sync
 // will silently undo). The registry ships a ring on nearly every focusable component,
 // so a re-sync would quietly bring them back.
 //

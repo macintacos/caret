@@ -18,7 +18,7 @@ import { recognizedRefs, refKey, refRecognition, scanRefTokens } from "./editorR
 // what it owes the editor is a scheduling contract rather than an answer: one
 // request per pause however fast the reviewer types, and a superseded answer
 // dropped rather than painted. Both timers and both gates are injected, so the
-// window is driven rather than slept through (doc/agents/browser-testing.md
+// window is driven rather than slept through (docs/agents/browser-testing.md
 // § Timing discipline, typescript-rules.md § Dependency injection).
 
 const REVIEW: ReviewContext = { reviewId: "rev-1", cwd: "/w/caret", adapter: "claude" };

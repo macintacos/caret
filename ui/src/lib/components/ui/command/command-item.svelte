@@ -28,7 +28,7 @@
 		// Highlighted (hover / keyboard) row. Stock reaches for bg-muted (caret's
 		// recessed --paper-sunk); caret's menu highlight is the neutral --chip-hover
 		// wash behind bg-accent, so a highlighted row matches the topbar's button hover
-		// app-wide (doc/agents/shadcn-rules.md § Menu highlight vs. selection). The
+		// app-wide (docs/agents/shadcn-rules.md § Menu highlight vs. selection). The
 		// sibling command-link-item.svelte already spells it this way upstream.
 		// The glyph rule is a DESCENDANT selector: stock's `*:[svg]` compiles to a direct
 		// child, which Icon.svelte's wrapper <span> puts out of reach (dropdown-menu-item

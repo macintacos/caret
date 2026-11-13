@@ -3,7 +3,7 @@
 // whole middle segments when the bar is too narrow, and a click copies the FULL absolute
 // path and confirms on the pill itself. Clipboard access, layout and transitions are
 // real-browser behaviour, so they are proven here rather than in the happy-dom unit suite
-// (per doc/agents/browser-testing.md).
+// (per docs/agents/browser-testing.md).
 
 import type { Locator, Page } from "@playwright/test";
 
