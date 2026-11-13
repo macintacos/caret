@@ -31,10 +31,10 @@ const e2eGate = jobByName("test e2e");
 // CI is the local gate plus the one suite the local gate leaves out.
 const TASKS = [...selectTasks(null).tasks, "test e2e"];
 
-test("runs on pull requests and pushes to trunk only", () => {
+test("runs on pull requests and pushes to main only", () => {
   expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
-  expect(workflow.on.pull_request?.branches).toEqual(["trunk"]);
-  expect(workflow.on.push?.branches).toEqual(["trunk"]);
+  expect(workflow.on.pull_request?.branches).toEqual(["main"]);
+  expect(workflow.on.push?.branches).toEqual(["main"]);
 });
 
 test("never runs with the base repository's secrets", () => {

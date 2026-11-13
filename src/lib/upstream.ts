@@ -29,8 +29,9 @@ const NPM_LATEST_URL = `https://registry.npmjs.org/${pkg.name}/latest`;
  * therefore cannot import from `src/`. */
 const LATEST_RELEASE_URL = "https://api.github.com/repos/macintacos/caret/releases/latest";
 
-/** GitHub's commit comparison, `<commit>...trunk`: `ahead_by` is how many commits
- * trunk holds that the given commit does not. */
+/** GitHub's commit comparison, `<commit>...HEAD`: `ahead_by` is how many commits
+ * trunk holds that the given commit does not. HEAD, not a branch name: a shipped build
+ * can't follow a rename of the default branch, and GitHub doesn't redirect compares. */
 const COMPARE_URL = "https://api.github.com/repos/macintacos/caret/compare";
 
 /** Every caret release on one page; 100 is GitHub's maximum page size. */
@@ -98,7 +99,7 @@ export async function commitsAheadOfTrunk(
   commit: string,
   fetchImpl: FetchLike = fetch,
 ): Promise<number | null> {
-  const url = `${COMPARE_URL}/${encodeURIComponent(commit)}...trunk`;
+  const url = `${COMPARE_URL}/${encodeURIComponent(commit)}...HEAD`;
   const body = (await readJson(url, fetchImpl, GITHUB_HEADERS)) as { ahead_by?: unknown } | null;
   const ahead = body?.ahead_by;
   return typeof ahead === "number" && Number.isFinite(ahead) ? ahead : null;
@@ -125,7 +126,7 @@ const CompareSchema = z.object({
 export type GitHubRelease = z.infer<typeof ReleaseSchema>;
 /** A GitHub commit, narrowed to the fields caret reads. */
 export type GitHubCommit = z.infer<typeof CommitSchema>;
-/** A `<commit>...trunk` comparison: up to 250 commits (the newest 250 when truncated)
+/** A `<commit>...HEAD` comparison: up to 250 commits (the newest 250 when truncated)
  * oldest first, and the full count. */
 export type TrunkComparison = z.infer<typeof CompareSchema>;
 
@@ -145,7 +146,7 @@ export function compareToTrunk(
   fetchImpl: FetchLike = fetch,
 ): Promise<TrunkComparison | null> {
   return readParsed(
-    `${COMPARE_URL}/${encodeURIComponent(commit)}...trunk`,
+    `${COMPARE_URL}/${encodeURIComponent(commit)}...HEAD`,
     CompareSchema,
     fetchImpl,
   );

@@ -14,7 +14,7 @@ import {
 import caretDark from "../../ui/src/lib/themes/caret-dark.json" with { type: "json" };
 import caretLight from "../../ui/src/lib/themes/caret-light.json" with { type: "json" };
 
-const SCHEMA_URL = "https://raw.githubusercontent.com/macintacos/caret/trunk/doc/theme.schema.json";
+const SCHEMA_URL = "https://raw.githubusercontent.com/macintacos/caret/HEAD/doc/theme.schema.json";
 
 const VS_CODE_TYPES = ["dark", "hcDark", "light", "hcLight"] as const;
 

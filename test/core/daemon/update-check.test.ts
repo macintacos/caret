@@ -420,7 +420,7 @@ test("a bundle asks npm and nothing else", async () => {
   expect(d.calls).toEqual(["npm"]);
 });
 
-// EXC-1207. The Updates pane gives the "cannot compare against trunk" reason its own copy
+// EXC-1207. The Updates pane gives the "cannot compare against main" reason its own copy
 // — that verdict is a developer's normal daily reading, not a fault — and matches on the
 // reason string. The browser cannot import this module (node-only), so `UNCOMPARABLE` in
 // ui/src/lib/updates.ts MIRRORS the constant here, and a mirror without a pin is a comment
@@ -437,7 +437,7 @@ test("the uncomparable-build reason matches the string the Updates pane keys off
   });
   expect(status).toEqual({
     kind: "unknown",
-    reason: "could not compare this build against trunk",
+    reason: "could not compare this build against main",
   });
 });
 

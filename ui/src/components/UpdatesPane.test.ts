@@ -67,7 +67,7 @@ describe("UpdatesPane render", () => {
     for (const status of [
       { kind: "unavailable", reason: "dev" },
       { kind: "unavailable", reason: "disabled" },
-      { kind: "unknown", reason: "could not compare this build against trunk" },
+      { kind: "unknown", reason: "could not compare this build against main" },
     ] as UpdateStatus[]) {
       const { target } = render(UpdatesPane, { report: report(status) });
       expect(text(target, ".update-headline"), status.kind).toBeTruthy();

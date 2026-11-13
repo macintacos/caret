@@ -40,7 +40,7 @@ const QUIET: UpdateStatus[] = [
   { kind: "current" },
   { kind: "unavailable", reason: "dev" },
   { kind: "unavailable", reason: "disabled" },
-  { kind: "unknown", reason: "could not compare this build against trunk" },
+  { kind: "unknown", reason: "could not compare this build against main" },
 ];
 
 describe("isUpdatePending", () => {
@@ -132,7 +132,7 @@ describe("updatePaneCopy", () => {
     // build bakes in an unpushed commit, GitHub's compare 404s, and the verdict settles
     // here. The copy has to say that is normal rather than implying something broke.
     const copy = updatePaneCopy(
-      report({ kind: "unknown", reason: "could not compare this build against trunk" }),
+      report({ kind: "unknown", reason: "could not compare this build against main" }),
     );
     expect(copy.detail.toLowerCase()).toContain("locally");
     expect(copy.command).toBeNull();
@@ -172,15 +172,15 @@ describe("compareUrl", () => {
     );
   });
 
-  test("a binary compares its commit against trunk", () => {
+  test("a binary compares its commit against main", () => {
     expect(compareUrl(report(COMMIT, { commit: SHA }))).toBe(
-      `https://github.com/macintacos/caret/compare/${SHA}...trunk`,
+      `https://github.com/macintacos/caret/compare/${SHA}...HEAD`,
     );
   });
 
   test("a binary on a release verdict still compares its commit", () => {
     expect(compareUrl(report(RELEASE, { commit: "abc1234" }))).toBe(
-      "https://github.com/macintacos/caret/compare/abc1234...trunk",
+      "https://github.com/macintacos/caret/compare/abc1234...HEAD",
     );
   });
 

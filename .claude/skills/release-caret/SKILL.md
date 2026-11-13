@@ -1,6 +1,6 @@
 ---
 name: release-caret
-description: Cut a caret release. Computes the next version with the deterministic release script, confirms it once, composes the GitHub Release notes, then drives the flow end-to-end — phase 1 opens a PR with the version bump, merges it, then phase 2 tags trunk, drafts the GitHub Release, and waits while CI stages the npm version; once the operator approves it with npm 2FA and npm serves it, the Release is published. Triggers on "/release-caret", "release caret", "cut a caret release", "ship a caret version".
+description: Cut a caret release. Computes the next version with the deterministic release script, confirms it once, composes the GitHub Release notes, then drives the flow end-to-end — phase 1 opens a PR with the version bump, merges it, then phase 2 tags main, drafts the GitHub Release, and waits while CI stages the npm version; once the operator approves it with npm 2FA and npm serves it, the Release is published. Triggers on "/release-caret", "release caret", "cut a caret release", "ship a caret version".
 argument-hint: "[patch|minor|major] [dry run]"
 ---
 
@@ -34,18 +34,18 @@ call.
 `/release-caret [patch|minor|major] [dry run]`
 
 - The bump level (`patch`/`minor`/`major`) is required for a phase-1 release; it is
-  ignored in phase 2 (the script derives the finalized version from trunk).
+  ignored in phase 2 (the script derives the finalized version from main).
 - If the user says "dry run" (or passes `--dry-run`), pass `--dry-run` through to every
   mutating call and **never** pass `--yes`. A dry run prints what would happen and changes
   nothing.
 
 ## Which phase am I in?
 
-Releases run in two phases, both started from a clean, **up-to-date** `trunk`. In the
+Releases run in two phases, both started from a clean, **up-to-date** `main`. In the
 normal flow a **single invocation** runs both phases end-to-end — Phase 1 opens the PR,
 the skill merges it (Phase 1 step 5), then Phase 2 tags and publishes — so no second
 invocation is needed. Phase detection still matters for **resuming** an interrupted run:
-`compute` reads local state, so pull trunk before releasing. Detect the phase by running
+`compute` reads local state, so pull main before releasing. Detect the phase by running
 the version oracle once:
 
 ```sh
@@ -56,7 +56,7 @@ bun scripts/tasks/cli.ts release compute <bump>
   **Phase 1**, starting at step 1 (offer to lay down the baseline), then re-run `compute`.
 - **`ok: false` with any other `errorCode`** (`DIRTY_TREE`, `WRONG_BRANCH`,
   `DETACHED_HEAD`, `MANIFEST_DRIFT`, `NO_GH`, `NOT_A_REPO`) → surface `message` and stop;
-  fix the precondition (usually clean or pull trunk) first.
+  fix the precondition (usually clean or pull main) first.
 - **`ok: true` and `currentVersion === previousVersion`** → first run
   `gh release view <previousTag> --json isDraft -q .isDraft`. `true` means that release is
   paused mid-Phase 2: resume at **Phase 2 step 2**, whose `finalize` result decides the
@@ -64,15 +64,15 @@ bun scripts/tasks/cli.ts release compute <bump>
   approved and just says "continue"; `npmLive: true` → step 4). Otherwise the manifests
   still match the latest release tag, so no prepared bump is merged → run **Phase 1**.
 - **`ok: true` and `currentVersion !== previousVersion`** → the manifests are ahead of the
-  latest tag, i.e. a prepared bump is already merged on trunk awaiting its tag → run
+  latest tag, i.e. a prepared bump is already merged on main awaiting its tag → run
   **Phase 2**.
 
-`compute` is the phase oracle, but it needs a clean, up-to-date `trunk` (it guards the
+`compute` is the phase oracle, but it needs a clean, up-to-date `main` (it guards the
 branch and reads local state). When you're **resuming Phase 2** — e.g. still on the
 `release/<tag>` branch Phase 1 left you on — `finalize --dry-run` is a valid alternative
-probe: it tags `origin/trunk` regardless of your local branch, so it reports `NOT_MERGED`
+probe: it tags `origin/main` regardless of your local branch, so it reports `NOT_MERGED`
 while the bump isn't merged yet and `ok: true` (with the concrete `tag`/`taggedSha`) once
-it is. Use it to detect Phase-2 readiness without switching back to trunk first.
+it is. Use it to detect Phase-2 readiness without switching back to main first.
 
 ---
 
@@ -134,7 +134,7 @@ never paraphrase them:
 
 > **Release `<version>`?** Bumping `<currentVersion>` → `<version>` (`<bump>`), covering
 > `<N>` commits since `<previousTag>`. Accepting runs the whole release end-to-end: opens
-> the PR, merges it, tags trunk, drafts the GitHub Release, waits for you to approve the
+> the PR, merges it, tags main, drafts the GitHub Release, waits for you to approve the
 > npm stage with 2FA, then publishes the Release.
 >
 > - **Release `<version>`** (Recommended)
@@ -179,7 +179,7 @@ A subject undersells its change, so read each PR's body
 sees. Then judge each change by what a user of the **published package** gets:
 
 - **Gated work stays out.** A commit can keep shipped code dormant — v1.2.0's #643 kept
-  OpenCode v2 out of the npm package while its code sat on trunk — so look for one before
+  OpenCode v2 out of the npm package while its code sat on main — so look for one before
   writing, and leave out everything it withholds.
 - **A fix to a feature new in this release is not a `Fixed` entry.** Users never saw the
   bug; fold the fixed behavior into the feature's `Added` entry, or drop it.
@@ -231,17 +231,17 @@ gh pr merge <prNumber> --squash --delete-branch
 If GitHub reports the PR's mergeability is still computing, wait briefly and retry once.
 On a real merge failure (merge conflict, branch protection, not mergeable, auth),
 **abort**: surface the `gh` error and work with the operator to resolve — do not force or
-`--admin` around it. The squash lands the bump on `trunk`; Phase 2 picks it up from
-`origin/trunk`. Skip this step entirely on a dry run.
+`--admin` around it. The squash lands the bump on `main`; Phase 2 picks it up from
+`origin/main`. Skip this step entirely on a dry run.
 
 ---
 
 ## Phase 2 — tag, stage on npm, and publish
 
-`finalize` tags `origin/trunk`'s merged HEAD after an unconditional fetch, so it runs from
+`finalize` tags `origin/main`'s merged HEAD after an unconditional fetch, so it runs from
 **any** branch — including the `release/<tag>` branch Phase 1 leaves you on. You don't
-need to switch back to trunk first. The publish-safety gates are a clean working tree and
-the `NOT_MERGED` check that the bump is actually on trunk, not the working branch.
+need to switch back to main first. The publish-safety gates are a clean working tree and
+the `NOT_MERGED` check that the bump is actually on main, not the working branch.
 
 The GitHub Release body is the notes file you composed in Phase 1 step 3, passed through
 `--notes-file` (step 2) and reflowed with `rumdl` to single-line paragraphs (the source is
@@ -261,13 +261,13 @@ reads `releases/latest` and must never announce a version OpenCode can't install
 bun scripts/tasks/cli.ts release finalize --dry-run --notes-file <path>
 ```
 
-This fetches `origin/trunk` and returns the concrete `version`, `tag`, and `taggedSha`
-(trunk's merged HEAD) without mutating anything. Pass the **same** `--notes-file` you will
+This fetches `origin/main` and returns the concrete `version`, `tag`, and `taggedSha`
+(main's merged HEAD) without mutating anything. Pass the **same** `--notes-file` you will
 pass for real, so a mistyped path fails here as `NOTES_MISSING` instead of on the real
 run. It confirms the squash-merge from Phase 1 step 5 actually landed: `ok: true` means
-proceed. If it returns `ok: false` with `NOT_MERGED`, the merge didn't reach
-`origin/trunk` (the `gh pr merge` failed or is still settling) — surface that and work
-with the operator before continuing; do not run `finalize --yes`.
+proceed. If it returns `ok: false` with `NOT_MERGED`, the merge didn't reach `origin/main`
+(the `gh pr merge` failed or is still settling) — surface that and work with the operator
+before continuing; do not run `finalize --yes`.
 
 A skill **dry run stops here**: `publish`'s preview needs the tag, which a dry run never
 pushes.
@@ -345,10 +345,10 @@ bun scripts/tasks/cli.ts release publish --yes
 
 On `NOT_LIVE`, tell the operator the version isn't live on npm yet and wait for "continue"
 again, then re-run. On `ok: true`, report the published `releaseUrl`. The release is live.
-Return the checkout to a clean, updated `trunk`:
+Return the checkout to a clean, updated `main`:
 
 ```sh
-git switch trunk && git pull --ff-only
+git switch main && git pull --ff-only
 ```
 
 ### 5. Close the release's Linear ticket

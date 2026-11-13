@@ -142,7 +142,7 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     .addOption(
       new Option(
         "--update <kind>",
-        "pose as a build behind a newer release or trunk, with mocked What's new content",
+        "pose as a build behind a newer release or main, with mocked What's new content",
       ).choices(["release", "commit"] as const),
     )
     .option(

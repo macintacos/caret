@@ -3,9 +3,9 @@ on:
   pull_request:
     # No "edited": it would re-run all eight jobs on every title or body edit.
     types: [opened, reopened, synchronize]
-    branches: [trunk]
+    branches: [main]
   push:
-    branches: [trunk]
+    branches: [main]
 permissions: {}
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.sha }}
@@ -32,7 +32,7 @@ jobs:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - run: bun install --frozen-lockfile
-      # Only trunk pushes save: a PR's cache is restorable by that PR alone yet evicts trunk's from the quota.
+      # Only main pushes save: a PR's cache is restorable by that PR alone yet evicts main's from the quota.
       - if: github.event_name == 'push' && steps.bun-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6.1.0
         with:

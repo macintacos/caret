@@ -286,12 +286,12 @@ A from-source build has no upstream to be behind, so the update toast, the Updat
 
 - `--update release` poses as an npm install three releases back, the fourth-newest `v*`
   tag in your checkout.
-- `--update commit` poses as a local build of `origin/trunk~60`, enough commits back that
+- `--update commit` poses as a local build of `origin/main~60`, enough commits back that
   the list ends in "…and N more".
 
 Everything past the pose is the real path: the check asks npm and GitHub, What's new lists
-real release notes or trunk commits, and every link opens a real page. That needs the
-network, and the tags and `origin/trunk` fetched; the daemon log says what it posed as, or
+real release notes or main commits, and every link opens a real page. That needs the
+network, and the tags and `origin/main` fetched; the daemon log says what it posed as, or
 that it found nothing to pose as. Only a from-source daemon reads `CARET_DEV_UPDATE`, so
 an installed caret can't be made to pose.
 
@@ -706,23 +706,22 @@ by those links.
 #### PR checks
 
 The local gate never runs `test e2e`; the PR checks are the full gate.
-`.github/workflows/ci.yml` runs on every PR against `trunk` and on pushes to `trunk`, with
+`.github/workflows/ci.yml` runs on every PR against `main` and on pushes to `main`, with
 one job per preflight task, each named after its task (`lint`, `test unit`, `test bats`,
 `test mod`, `build ui`, `test e2e`, `build bin`, `smoke`). `build ui` hands `ui/dist` to
 `test e2e` and `build bin` as an artifact, and `build bin` hands the binary to `smoke`.
 The e2e suite runs as four shard jobs, because one 4-vCPU runner cannot finish it inside
 Playwright's 15-minute global timeout; the `test e2e` check passes only when every shard
-does. Caches are saved only on `trunk` pushes: a cache saved from a PR is restorable by
+does. Caches are saved only on `main` pushes: a cache saved from a PR is restorable by
 that PR alone and still counts against the repository's cache quota, where it evicts
-trunk's. The e2e shards' apt packages are the exception — `cache-apt-pkgs-action` saves on
+main's. The e2e shards' apt packages are the exception — `cache-apt-pkgs-action` saves on
 any miss, so a PR that changes the package set saves a copy of its own.
 
 - Job names are what branch protection matches — renaming one drops it from the required
   checks.
 - Actions are pinned through `.github/workflows/actions.lock`; whenever an action ref
   changes, regenerate it with `gh actions-lock --no-interactive .github/workflows/ci.yml`.
-- A stacked PR retargeted to `trunk` gets its checks on the next push, not on the
-  retarget.
+- A stacked PR retargeted to `main` gets its checks on the next push, not on the retarget.
 
 #### Adding a task
 
@@ -752,11 +751,10 @@ that whole class of footgun.
 
 ### Releasing
 
-`/release-caret` bumps the version, tags trunk, and drafts the GitHub Release; the tag
-push runs `.github/workflows/publish.yml`, which builds, smoke-tests, and stages the
-version on npm over OIDC trusted publishing, with no npm token. The operator approves the
-stage with npm 2FA, and `release publish` makes the Release live once npm serves the
-version.
+`/release-caret` bumps the version, tags main, and drafts the GitHub Release; the tag push
+runs `.github/workflows/publish.yml`, which builds, smoke-tests, and stages the version on
+npm over OIDC trusted publishing, with no npm token. The operator approves the stage with
+npm 2FA, and `release publish` makes the Release live once npm serves the version.
 
 One-time setup, before the first CI release:
 
