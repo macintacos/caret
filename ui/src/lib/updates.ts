@@ -14,11 +14,11 @@
 import { parseVersionTriple } from "@core/lib/semver";
 import type { TrunkCommit, UpdateReport, UpdateStatus } from "@core/lib/types";
 
-/** The daemon's `unknown` reason for a build GitHub cannot compare against trunk —
+/** The daemon's `unknown` reason for a build GitHub cannot compare against main —
  * mirrored from NEEDS_COMPARE in src/daemon/update-check.ts, which is daemon-only and so
  * cannot be imported here. The two are coupled by this constant alone: a drift costs the
  * dedicated copy below and falls back to the generic arm, never a broken render. */
-const UNCOMPARABLE = "could not compare this build against trunk";
+const UNCOMPARABLE = "could not compare this build against main";
 
 /** A verdict that caret is behind — the one kind that carries an upgrade command. */
 export type PendingUpdateStatus = Extract<
@@ -57,7 +57,7 @@ export function updateToast(report: UpdateReport): { title: string; message: str
   if (status.kind === "behind-commit") {
     return {
       title: "Update available",
-      message: `caret is ${commits(status.aheadBy)} behind trunk.`,
+      message: `caret is ${commits(status.aheadBy)} behind main.`,
     };
   }
   return null;
@@ -87,7 +87,7 @@ export function updatePaneCopy(report: UpdateReport): {
       };
     case "behind-commit":
       return {
-        headline: `${commits(status.aheadBy)} behind trunk`,
+        headline: `${commits(status.aheadBy)} behind main`,
         detail: running,
         command: status.command,
       };
@@ -113,7 +113,7 @@ export function updatePaneCopy(report: UpdateReport): {
       return status.reason === UNCOMPARABLE
         ? {
             headline: "Nothing to compare against",
-            detail: `This caret was built locally, so its commit isn't on trunk for GitHub to compare. ${running}`,
+            detail: `This caret was built locally, so its commit isn't on main for GitHub to compare. ${running}`,
             command: null,
           }
         : {
@@ -141,7 +141,7 @@ export function compareUrl(report: UpdateReport): string | null {
     return from && to ? `${REPO_URL}/compare/v${from.join(".")}...v${to.join(".")}` : null;
   }
   if (install === "binary" && COMMIT_SHA.test(report.commit)) {
-    return `${REPO_URL}/compare/${report.commit}...trunk`;
+    return `${REPO_URL}/compare/${report.commit}...HEAD`;
   }
   return null;
 }

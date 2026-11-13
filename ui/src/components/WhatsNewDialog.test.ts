@@ -104,7 +104,7 @@ describe("WhatsNewDialog", () => {
     );
     const more = anchors().find((a) => a.textContent?.includes("4 more"));
     expect(more?.getAttribute("href")).toBe(
-      `https://github.com/macintacos/caret/compare/${SHA}...trunk`,
+      `https://github.com/macintacos/caret/compare/${SHA}...HEAD`,
     );
   });
 

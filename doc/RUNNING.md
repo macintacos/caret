@@ -320,7 +320,7 @@ notice. **What's new** on the toast opens a dialog listing what changed since yo
 version.
 
 The dialog shows the release notes for every release you skipped on an installed caret,
-and the trunk commits since your build on a locally-built one. Its footer links the full
+and the main commits since your build on a locally-built one. Its footer links the full
 comparison on GitHub and repeats the upgrade command. It fetches from GitHub only when you
 open it.
 
@@ -343,7 +343,7 @@ button: caret tells you what to run, and you run it. While an update is waiting,
 Two readings are not problems, and the pane says so rather than reading like a failure:
 
 - **Nothing to compare against.** A caret built locally carries a commit that isn't on
-  trunk, so there is nothing for GitHub to compare it to. On a development machine this is
+  main, so there is nothing for GitHub to compare it to. On a development machine this is
   the normal daily reading.
 - **Update checks are off** — either because caret is running from source, or because you
   turned them off.

@@ -30,7 +30,7 @@ export function devUpdateIdentity(
     return tag ? { install: "bundle", version: tag.replace(/^v/, ""), commit: built.commit } : null;
   }
   if (raw === "commit") {
-    const commit = git(["rev-parse", "--verify", "--quiet", `origin/trunk~${COMMITS_BACK}`]);
+    const commit = git(["rev-parse", "--verify", "--quiet", `origin/main~${COMMITS_BACK}`]);
     return commit ? { install: "binary", version: built.version, commit } : null;
   }
   return null;

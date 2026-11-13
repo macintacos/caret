@@ -33,7 +33,7 @@ const REBUILD_COMMAND = "mise run build --install";
 
 /** The `unknown` reason that means "ask GitHub how far trunk has moved and try again".
  * `gather` matches on it to decide whether the compare call is worth making. */
-const NEEDS_COMPARE = "could not compare this build against trunk";
+const NEEDS_COMPARE = "could not compare this build against main";
 
 /** The verdict for a build no check has settled on yet. Shared by `readCachedStatus`
  * and the up-front stamp so an orphaned record is indistinguishable from no record. */
@@ -97,7 +97,7 @@ export interface UpdateCheckDeps {
  * A dev build has no upstream to be behind. A bundle resolves from npm, so npm's
  * `latest` is the only honest comparison. A binary is judged against the newest
  * release FIRST — that is the bigger news, and it takes precedence over the commit
- * distance — and only then against trunk. A build with no baked commit
+ * distance — and only then against main. A build with no baked commit
  * (resolveCommit's "unknown") has nothing to compare, so the release decides alone
  * rather than degrading a readable verdict to `unknown`. */
 export function updateStatusFor(facts: UpdateFacts): UpdateStatus {

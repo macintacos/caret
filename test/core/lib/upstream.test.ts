@@ -105,10 +105,10 @@ test("an unreadable release response degrades to null", async () => {
 
 // --- how far trunk has moved past a commit ---------------------------------------
 
-test("the commit distance is GitHub's ahead_by for <commit>...trunk", async () => {
+test("the commit distance is GitHub's ahead_by for <commit>...HEAD", async () => {
   const { fetchImpl, urls } = fetching({ ok: true, body: { ahead_by: 12 } });
   expect(await commitsAheadOfTrunk("abc1234", fetchImpl)).toBe(12);
-  expect(urls).toEqual(["https://api.github.com/repos/macintacos/caret/compare/abc1234...trunk"]);
+  expect(urls).toEqual(["https://api.github.com/repos/macintacos/caret/compare/abc1234...HEAD"]);
 });
 
 test("a commit trunk has not moved past reads as zero, not null", async () => {
@@ -152,7 +152,7 @@ test("the trunk comparison lists the commits and their total", async () => {
     total_commits: 1,
     commits: [COMMIT],
   });
-  expect(urls).toEqual(["https://api.github.com/repos/macintacos/caret/compare/abc1234...trunk"]);
+  expect(urls).toEqual(["https://api.github.com/repos/macintacos/caret/compare/abc1234...HEAD"]);
 });
 
 test("each What's new reader degrades to null on a non-200, a malformed body, or no network", async () => {

@@ -242,7 +242,7 @@ never reach a production build.
 | `CARET_DEV_PORT`          | `dev.port`               | —       | Fixed `mise run dev` daemon port; unset → ephemeral. Must differ from `42718`.                                                                                                                                       |
 | `CARET_DEV_STATE_DIR`     | `dev.state_dir`          | —       | Persistent `mise run dev` state dir; unset → ephemeral.                                                                                                                                                              |
 | `CARET_DEV_NEW_REVIEW_MS` | `dev.notify.interval_ms` | —       | Extra-review seeder cadence override (ms); a positive value also arms the seeder. Unset → cadence falls to `[dev.notify].interval_ms` (`15000`), and arming is governed by `--notify` / `[dev.notify].enabled`.       |
-| `CARET_DEV_UPDATE`        | —                        | —       | Set by `mise run dev --update <kind>`: `release` or `commit` makes the daemon judge an older real release or trunk commit in place of itself, so the update surfaces show. Ignored by any build but a from-source one. |
+| `CARET_DEV_UPDATE`        | —                        | —       | Set by `mise run dev --update <kind>`: `release` or `commit` makes the daemon judge an older real release or main commit in place of itself, so the update surfaces show. Ignored by any build but a from-source one. |
 | `CARET_DEV_LOG_LEVEL` | — | — | The daemon's log level, overriding `[logging].level`. `mise run dev` sets `debug` unless it is already set. |
 | `CARET_DEV_LOG_REVIEW_TEXT` | — | — | Set to `1` by `mise run dev`: the daemon logs the text each review sends the agent at `info`, and each inline comment's stored lines at `debug`. Ignored by any build but a from-source one. |
 | `CARET_FRESH`             | —                        | —       | Set to `1` by `mise run dev --fresh`; surfaced in `/api/health` so the UI resets its saved preferences (theme, first-run onboarding) on boot.                                                                         |
@@ -461,7 +461,7 @@ This is caret's own dark theme as a theme file:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/macintacos/caret/trunk/doc/theme.schema.json",
+  "$schema": "https://raw.githubusercontent.com/macintacos/caret/HEAD/doc/theme.schema.json",
   "id": "caret-dark",
   "label": "caret dark",
   "scheme": "dark",
@@ -519,7 +519,7 @@ This is caret's own dark theme as a theme file:
 ### Editor support
 
 Set `$schema` to
-`https://raw.githubusercontent.com/macintacos/caret/trunk/doc/theme.schema.json`, as the
+`https://raw.githubusercontent.com/macintacos/caret/HEAD/doc/theme.schema.json`, as the
 example does. An editor that understands JSON Schema, such as VS Code, then completes
 field names and flags invalid values as you type.
 
