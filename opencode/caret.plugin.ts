@@ -22,7 +22,7 @@
 // it on v1's first `server` call, so a v2 load never evaluates it. Its imports are node
 // builtins, caret.core.ts, ../bridge/review-bridge.ts, and @opencode-ai/plugin (resolved
 // by OpenCode at runtime). Which ctx/tool/config shapes are live-verified and which are
-// not: doc/agents/opencode-integration.md § Verified vs. follow-up.
+// not: docs/agents/opencode-integration.md § Verified vs. follow-up.
 
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -80,7 +80,7 @@ export function showToast(client: ToastClient, body: ToastBody): void {
 /** True when this tool call arrived from a subagent — a `parentID` on the calling
  * session, which OpenCode's `task` tool always sets and an agent-name test cannot
  * see. Failure falls back to ALLOW, deliberately inverting this file's failsafeDeny
- * convention; both choices are argued in `doc/agents/opencode-integration.md` § The
+ * convention; both choices are argued in `docs/agents/opencode-integration.md` § The
  * subagent bypass. Not raced against a timeout: the call is loopback to OpenCode's
  * own server, so a hang is out of scope. Called as `session.get(...)` so the SDK
  * client keeps its `this` binding. */
@@ -109,7 +109,7 @@ type LooseConfig = {
  * subagents cannot call it. Every primary agent may call it — OpenCode's base
  * ruleset permits an unknown tool id, so the absence of a per-agent entry is what
  * makes it available. The mechanism and the reasoning are in
- * `doc/agents/opencode-integration.md` § The subagent bypass.
+ * `docs/agents/opencode-integration.md` § The subagent bypass.
  *
  * Idempotent and preservation-safe: existing primary_tools, agent modes, and other
  * permissions survive, as does a user's own entry for the review tool. */
@@ -189,7 +189,7 @@ export function createCaretPlugin(
     if (opts.checkUpdate) opts.checkUpdate((body) => showToast(client, body));
     // The agent driving each session, recorded by chat.message and read by
     // system.transform, which carries no agent of its own. Why a map is the only
-    // route: `doc/agents/opencode-integration.md` § Why gating the steer needs a
+    // route: `docs/agents/opencode-integration.md` § Why gating the steer needs a
     // session→agent map. One instance per plugin, closed over rather than
     // module-global, so a test constructs a fresh one.
     const sessionAgents = new Map<string, string>();

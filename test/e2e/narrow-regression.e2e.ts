@@ -5,7 +5,7 @@
 // — heading navigation and the TopBar's secondary actions stay reachable, comment
 // cards stay inside the plan column, and no surface pushes the document past the
 // viewport. Width- and layout-driven behavior only a browser can decide
-// (doc/agents/browser-testing.md), so it lives here.
+// (docs/agents/browser-testing.md), so it lives here.
 //
 // Breakpoints are imported from ui/src/lib/layout.ts — the canonical source the
 // @media px literals mirror, and the same node-free constants playwright.config.ts

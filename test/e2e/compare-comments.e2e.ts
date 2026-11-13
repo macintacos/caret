@@ -9,7 +9,7 @@
 // Everything here needs a real browser or a live daemon. Every case is reached by
 // real clicks through the status strip and the portalled version pickers into the
 // docked panel, and the jump asserts scroll geometry inside the library's shadow
-// root — e2e concerns per doc/agents/browser-testing.md. The multi-version state
+// root — e2e concerns per docs/agents/browser-testing.md. The multi-version state
 // under test only exists after real POSTs interleaving addVersion with putDraft,
 // including the general comment retained across a full deny → revision round-trip.
 // ui/src/components/CommentNavigator.test.ts covers the panel's list shaping from

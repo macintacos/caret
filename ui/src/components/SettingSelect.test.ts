@@ -1,6 +1,6 @@
 // SettingSelect composes the vendored Select tree (EXC-1111), so this suite asserts
 // through `data-slot` and the component's own `data-setting-option` hook — never the
-// registry's `cn-*` marker classes, which are inert here (doc/agents/shadcn-rules.md
+// registry's `cn-*` marker classes, which are inert here (docs/agents/shadcn-rules.md
 // § Where the test goes).
 //
 // Three harness facts are inherited from ui/src/lib/shadcn-select.test.ts and are what

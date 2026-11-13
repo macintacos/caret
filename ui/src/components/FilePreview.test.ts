@@ -949,7 +949,7 @@ describe("FilePreview settling", () => {
     // message — a Spinner left at its default role="status" + aria-label
     // ="Loading" would put the word into the accessibility tree twice on one
     // line. data-slot is the vendored tree's own assertion handle
-    // (doc/agents/shadcn-rules.md); the reduced-motion clamp is a media query
+    // (docs/agents/shadcn-rules.md); the reduced-motion clamp is a media query
     // happy-dom cannot evaluate, so it is verified in the browser rather than
     // here.
     const { target, served } = await openLoading(20, 300);

@@ -2,7 +2,7 @@
 // Request-changes buttons collapse into a "More actions" overflow menu; at/below
 // --w-tight the Approve label clips so the primary shrinks to its check icon.
 // These are CSS width-driven swaps plus bits-ui overlay interaction — real
-// browser behavior, not happy-dom units (doc/agents/browser-testing.md). The
+// browser behavior, not happy-dom units (docs/agents/browser-testing.md). The
 // fixture daemon declares no adapter variants, so Approve renders as the
 // split-button (WIRE_FALLBACK set), i.e. .split-primary / .split-toggle.
 //
@@ -10,7 +10,7 @@
 // so no control is ever unmounted. The role queries below still read as absences
 // because a display:none element is out of the accessibility tree; the one class
 // locator, .approve-slot, resolves to the mounted node and so asserts hidden
-// (doc/agents/browser-testing.md § Absence and invisibility).
+// (docs/agents/browser-testing.md § Absence and invisibility).
 
 import { reviewSwitcher } from "@test/e2e/support/chrome.ts";
 import { approveViaVariant, assertResolved } from "@test/e2e/support/decision.ts";

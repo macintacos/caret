@@ -14,7 +14,7 @@
    surfaces that own them. No file outside this rule (and the diffview module)
    references --diffs-*.
 
-   Motionless by design (doc/agents/svelte-rules.md): this rule must never gain
+   Motionless by design (docs/agents/svelte-rules.md): this rule must never gain
    a transition or animation — css-bridge.test.ts pins it.
 
    Berkeley Mono is referenced by name only — no font files ship (commercial

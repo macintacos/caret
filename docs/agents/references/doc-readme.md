@@ -1,9 +1,9 @@
-# Editing `doc/README.md`
+# Editing `docs/README.md`
 
-*Audience: coding agents and contributors editing the `doc/` directory router.*
+*Audience: coding agents and contributors editing the `docs/` directory router.*
 
-`doc/README.md` is the router for the `doc/` directory. It leads with a table mapping what
-a reader wants to do to the page that answers it — the four reference pages
+`docs/README.md` is the router for the `docs/` directory. It leads with a table mapping
+what a reader wants to do to the page that answers it — the four reference pages
 ([`CONFIGURING.md`](../../CONFIGURING.md), [`RUNNING.md`](../../RUNNING.md),
 [`ARCHITECTURE.md`](../../ARCHITECTURE.md), [`DEVELOPMENT.md`](../../DEVELOPMENT.md)),
 [`agents/`](../), and the two repo-root docs (`README.md` for install, `CONTRIBUTING.md`
@@ -13,7 +13,7 @@ directory rather than a page and a bare listing is not a destination.
 
 When to edit it:
 
-- The contents or shape of `doc/` change — a new subdirectory, a new kind of doc, a moved
+- The contents or shape of `docs/` change — a new subdirectory, a new kind of doc, a moved
   file.
 - A page it routes into gains, loses, or renames a section a row points at. A whole-tree
   `mise run lint` catches a fragment that stops resolving — `rumdl`'s MD051 resolves a

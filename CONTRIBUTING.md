@@ -4,8 +4,8 @@
 
 caret is a tool-agnostic core plus an adapter for the coding agent it speaks to; it routes
 that agent's plan to a human for review through a loopback daemon and a Svelte UI. This is
-the short developer front door — `README.md` is the user-facing guide, `doc/` holds the
-deep reference (configuring, running, architecture, development), and `doc/agents/` holds
+the short developer front door — `README.md` is the user-facing guide, `docs/` holds the
+deep reference (configuring, running, architecture, development), and `docs/agents/` holds
 the rules-of-the-road for working in a given area.
 
 ## Setup
@@ -37,18 +37,18 @@ of them. It never runs e2e: run a new or changed spec with `mise run test e2e <p
 full gate is the PR checks, which run all eight tasks, the whole e2e suite included, on
 every PR. The full task catalog (`build`, `test`, `smoke`, `lint`, `format`) is documented
 in
-[`doc/DEVELOPMENT.md`](doc/DEVELOPMENT.md#development).
+[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#development).
 
 ## Where tests live
 
 - `test/` — backend suites: `core/` (tool-agnostic, carrying the same domain directories
   `src/` uses), `adapters/<tool>/` (per-agent), plus `opencode/`, `pi/`, `scripts/`,
   `structure/`, and `support/`. A suite's path mirrors its module's, so `src/x/y.ts` is
-  covered by `test/core/x/y.test.ts`; the full rule is in `doc/agents/test-layout.md`.
+  covered by `test/core/x/y.test.ts`; the full rule is in `docs/agents/test-layout.md`.
 - `ui/src/**/*.test.ts` — Svelte component and UI-logic tests, run with `mise run test`
   from the repo root; `bun test --conditions browser <path>` runs one file directly.
 - `test/e2e/` — Playwright browser end-to-end specs (`mise run test e2e`). When to write
-  an e2e spec versus a unit test is covered in `doc/agents/browser-testing.md`.
+  an e2e spec versus a unit test is covered in `docs/agents/browser-testing.md`.
 - `scripts/*.bats` — hermetic shell suites for the shipped scripts, covering the plugin
   entrypoint shim, the service launcher, and the bootstrap preamble
   (`mise run test bats`).
@@ -61,16 +61,16 @@ in
 
 caret reads a `config.toml` and `CARET_*` environment variables (for example `CARET_PORT`
 and `CARET_AGENT`). The full list of keys, their defaults, and what each one does lives in
-[`doc/CONFIGURING.md`](doc/CONFIGURING.md) — set values there, and never commit secrets.
+[`docs/CONFIGURING.md`](docs/CONFIGURING.md) — set values there, and never commit secrets.
 
 ## Going deeper
 
 - `README.md` — the user-facing front door: what caret is, install, and basic usage.
-- `doc/CONFIGURING.md` — platform support, the config file, the `CARET_*` environment
+- `docs/CONFIGURING.md` — platform support, the config file, the `CARET_*` environment
   variables, and plan formatting.
-- `doc/RUNNING.md` — desktop notifications, cmux unread marks, and logging & debugging.
-- `doc/ARCHITECTURE.md` — the core/adapter boundary, the agent adapters, the review tool,
+- `docs/RUNNING.md` — desktop notifications, cmux unread marks, and logging & debugging.
+- `docs/ARCHITECTURE.md` — the core/adapter boundary, the agent adapters, the review tool,
   and the source layout.
-- `doc/DEVELOPMENT.md` — build from source, the dev workflow, the tasks CLI, and icons.
-- `doc/agents/` — the rules-of-the-road for working in a given area of the code;
+- `docs/DEVELOPMENT.md` — build from source, the dev workflow, the tasks CLI, and icons.
+- `docs/agents/` — the rules-of-the-road for working in a given area of the code;
   `AGENTS.md` routes you to the right one.

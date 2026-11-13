@@ -88,7 +88,7 @@ export interface Daemon {
  *
  * Playwright's `[default, { option: true }]` fixture form is how a custom
  * fixture's knob reaches the config, which is where every other deadline the
- * suite runs under already lives (doc/agents/browser-testing.md § Timeouts are
+ * suite runs under already lives (docs/agents/browser-testing.md § Timeouts are
  * budgets for the loaded host). The config is the one that binds; the default in
  * `test.extend` below only applies to a run that loads this fixture under some
  * other config.
@@ -624,7 +624,7 @@ type BitsLayerRegistry = { bitsDismissableLayers?: Map<BitsLayer, unknown> };
  * on the first attempt against the per-test budget rather than polling against this one.
  *
  * `expect.poll` so the read inherits the assertion budget rather than the per-test one
- * (doc/agents/browser-testing.md § Timing discipline, the "Polled" bullet).
+ * (docs/agents/browser-testing.md § Timing discipline, the "Polled" bullet).
  */
 export async function awaitDismissArmed(layer: Locator): Promise<void> {
   await expect

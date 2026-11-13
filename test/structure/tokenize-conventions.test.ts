@@ -1,5 +1,5 @@
 // Standing gate for the one shiki convention a parser can decide (EXC-1056).
-// `doc/agents/browser-testing.md` states the rule; this suite is what makes it
+// `docs/agents/browser-testing.md` states the rule; this suite is what makes it
 // falsifiable, so drift reds `bun test` on the push that adds it.
 //
 // The rule, in two halves. Every shiki tokenize call in caret's own source carries

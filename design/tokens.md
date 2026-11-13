@@ -13,7 +13,7 @@ Every palette is a theme file under `ui/src/lib/themes/<id>.json`; `caret-dark` 
 onto `:root` as custom properties. `ui/src/lib/appearance.ts` decides which palette is
 live. `ui/src/styles/palette.generated.css` is the generated pre-JS fallback; never edit
 it. User theme files follow
-[`doc/CONFIGURING.md` § Theme files](../doc/CONFIGURING.md#theme-files).
+[`docs/CONFIGURING.md` § Theme files](../docs/CONFIGURING.md#theme-files).
 
 | Role | Tokens |
 | --- | --- |

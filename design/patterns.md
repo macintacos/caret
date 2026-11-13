@@ -4,7 +4,7 @@
 prints.*
 
 How caret builds things. Values live where [`tokens.md`](tokens.md) says; the rules for
-specific code areas live in [`doc/agents/`](../doc/agents/).
+specific code areas live in [`docs/agents/`](../docs/agents/).
 
 ## Review UI
 
@@ -217,8 +217,8 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
   the amber is lightened
   ([`exceptions.md` § The waiting screen](exceptions.md#the-waiting-screen)).
 - Page structure is left-aligned.
-- Compose from shadcn-svelte first ([`shadcn-rules.md`](../doc/agents/shadcn-rules.md));
-  icons are vendored ([`icon-rules.md`](../doc/agents/icon-rules.md)).
+- Compose from shadcn-svelte first ([`shadcn-rules.md`](../docs/agents/shadcn-rules.md));
+  icons are vendored ([`icon-rules.md`](../docs/agents/icon-rules.md)).
 
 ### The tactile kit
 
@@ -758,7 +758,7 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 - Only a link that is itself a chip sinks when pressed in the preview, along with
   reference and citation code. A link wrapping code, a file reference or an image does not
   (`ui/src/components/PlanPreview.svelte`).
-- Rendering rules live in [`plan-render-rules.md`](../doc/agents/plan-render-rules.md).
+- Rendering rules live in [`plan-render-rules.md`](../docs/agents/plan-render-rules.md).
 
 ### Keyboard
 
@@ -781,7 +781,7 @@ specific code areas live in [`doc/agents/`](../doc/agents/).
 ### Sound
 
 - Sound is part of the polish, on by default, with a setting to turn it off
-  ([`RUNNING.md` § Sound](../doc/RUNNING.md#sound)).
+  ([`RUNNING.md` § Sound](../docs/RUNNING.md#sound)).
 - One cue per discrete state change or explicit action (`ui/src/lib/sound.ts`), never on
   scroll, hover, or pointer movement.
 - A cue plays from inside the action it belongs to, so a key press and a click can't drift

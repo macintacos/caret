@@ -9,7 +9,7 @@
 // Everything here needs a real browser. The switcher pick goes through a
 // portalled bits-ui menu, the deep link is a real navigation whose query string
 // the app reads at boot, and the unprompted arrival is the 2s decision poll
-// against a live daemon — all e2e concerns per doc/agents/browser-testing.md, not
+// against a live daemon — all e2e concerns per docs/agents/browser-testing.md, not
 // something a mounted component can show.
 
 import { reviewSwitcher } from "@test/e2e/support/chrome.ts";

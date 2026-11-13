@@ -542,7 +542,7 @@ test("a throwing target is reported and fails the run rather than escaping the c
 
 test("--from-local --dry-run previews from a checkout that was never built", async () => {
   // The artifact guard is what makes a real run fail early; a preview changes nothing, so
-  // it must still render (doc/DEVELOPMENT.md points readers at exactly this command).
+  // it must still render (docs/DEVELOPMENT.md points readers at exactly this command).
   let askedFor: boolean | undefined;
   await runInstallSubcommand(
     { uninstall: false, dryRun: true, fromLocal: true },

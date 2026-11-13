@@ -157,7 +157,7 @@ describe("tableRanges", () => {
 });
 
 // The seed plan is the fixed surface plan-view rendering is compared against
-// (doc/DEVELOPMENT.md § The markdown showcase), so its tables are what a reviewer
+// (docs/DEVELOPMENT.md § The markdown showcase), so its tables are what a reviewer
 // actually sees drawn. Read from disk, like icons.test.ts reads the icon tree, so
 // that editing a showcase row into raggedness fails here rather than silently
 // dropping a table back to raw source in the browser.

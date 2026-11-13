@@ -1,4 +1,4 @@
-// Standing gate for the test/core boundary in `doc/agents/test-layout.md`: a core
+// Standing gate for the test/core boundary in `docs/agents/test-layout.md`: a core
 // suite injects an agent's capabilities rather than importing an adapter, and spells
 // none of the Claude vocabulary the rule lists.
 import { expect, test } from "bun:test";

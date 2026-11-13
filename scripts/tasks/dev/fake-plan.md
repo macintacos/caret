@@ -552,7 +552,7 @@ The list below points at long-lived files, and leans on paths and line numbers t
 - `README.md:3` — a line near the top: the window clamps at line 1, so a bottom strip shows and there is **no** top strip.
 - `mise.toml` — a file shorter than the 60-line opening window: the whole file shows, with **no** strips on either side, and the header reads a plain line count instead of a range.
 - `mise.toml:900` — a line far past the end: the window clamps to the last line rather than opening empty, and **nothing** is marked, since the cited line doesn't exist.
-- `doc/DEVELOPMENT.md:158` — a long file opened mid-way, so both strips carry large counts. Click `↑` and `↓` repeatedly to walk the window out to line 1 and to the last line; each strip disappears when its side runs out, and an upward click should not throw away the line you were reading.
+- `docs/DEVELOPMENT.md:158` — a long file opened mid-way, so both strips carry large counts. Click `↑` and `↓` repeatedly to walk the window out to line 1 and to the last line; each strip disappears when its side runs out, and an upward click should not throw away the line you were reading.
 - `src/cli.ts` — real source rather than config: a line too long for the drawer scrolls sideways inside the excerpt rather than being cut off, and dragging the drawer's inner edge wider brings more of it into view.
 - `src/does-not-exist.ts` — a path deliberately **not** in the repo: it must show **no** icon and **no** preview. If it ever sprouts one, the existence gate has regressed.
 
@@ -563,20 +563,20 @@ EXC-918: a reference that resolves to a **directory** gets a folder glyph rather
 - `src` — the repo's own source root: the folder glyph, and a card whose first level is `src/`'s immediate children. Open `daemon` or `plan` inside it to watch a level arrive; each one is its own round trip.
 - `ui/src/icons` — a directory of nothing but files, so every row in it is inert. Clicking any of them must do nothing at all.
 - `ui` — its level holds `dist`, a directory the daemon declines to enumerate. It is a row like any other, so the card matches what is on disk, but opening it reports `not listed` rather than thousands of build outputs. The same goes for `node_modules` and for any dotted name.
-- `doc/agents` — a small directory, useful beside `src` for seeing the card at its shortest.
+- `docs/agents` — a small directory, useful beside `src` for seeing the card at its shortest.
 - `src/does-not-exist` — a directory deliberately **not** in the repo: **no** glyph, and nothing on click. The same existence gate the missing file above tests, on the other kind.
 
 ### Line ranges
 
 EXC-938: a reference can cite a **span** rather than a single line, and the preview frames the whole of it — every cited line washed, the usual context around it, and the end-line tail inside the click target rather than dangling outside it. Click the last character of each reference below, not its path, to check that half.
 
-- `doc/DEVELOPMENT.md:185-193` — nine cited lines: all nine are washed as one band, and the window reaches 30 lines past the span at each end rather than starting where the citation does.
+- `docs/DEVELOPMENT.md:185-193` — nine cited lines: all nine are washed as one band, and the window reaches 30 lines past the span at each end rather than starting where the citation does.
 - `README.md:3-9` — a span near the file's head: the window clamps at line 1 instead of asking for a line before it, so the preview opens on the file rather than degrading to a head view.
 - `src/cli.ts:10-110` — a span taller than the panel: it opens parked on its **first** line rather than centred, so reading starts where the citation does; the rest is a scroll away.
 - `mise.toml:5-900` — a span running past the end: it clamps to the last line, and only the lines that exist are washed.
 - `README.md:37-37` — a one-line span: identical to writing `README.md:37`.
 - `README.md#L37-L44` and `README.md:L37-L44` — the same span in the `#L` spellings a code host would produce. Both parse; `README.md:37:5` is still a line and a **column**, so it marks one row and no range.
-- `doc/DEVELOPMENT.md:185,193` — the comma spelling of the span the first bullet writes with a dash, and it must open on exactly the same nine washed lines. The separator is the only difference: a comma reads as a selection an editor would hand you, so a plan that pastes one cites a range rather than falling back to the head of the file. `README.md:37,37` collapses to a single line the same way `README.md:37-37` does.
+- `docs/DEVELOPMENT.md:185,193` — the comma spelling of the span the first bullet writes with a dash, and it must open on exactly the same nine washed lines. The separator is the only difference: a comma reads as a selection an editor would hand you, so a plan that pastes one cites a range rather than falling back to the head of the file. `README.md:37,37` collapses to a single line the same way `README.md:37-37` does.
 
 ### As markdown links
 
@@ -589,22 +589,22 @@ Each bullet below carries exactly one link and no other reference, so whatever i
 - [`package.json`](package.json) — a backticked-path label, the citation shape caret's own plans use. It keeps its backticks and their inline-code styling, and shows **exactly one** icon: both detection paths fire on this shape, so a second icon here would be a regression.
 - Mid-sentence, [`README.md`](README.md) still takes its icon, because the backticks give it a token of its own wherever it sits.
 - [README.md](README.md) — a bare-path label. The path shows, plainly styled, and takes the icon exactly as the backticked rows above do: the decoration pass cuts the row at the reference's own columns, so even a collapsed bare label has a token of its own for the glyph to sit on. Clicking the words opens the preview.
-- [the caret dev workflow](doc/DEVELOPMENT.md) — a prose label: the words survive and the path does not appear at all. Hovering reveals the target in a tooltip, the only way to see where the click goes.
-- [the deep middle of a long file](doc/DEVELOPMENT.md:158) — a target carrying a line number: opens centered on line 158 with both strips showing, and the tooltip carries the line as well as the path.
-- [a stretch of the dev guide](doc/DEVELOPMENT.md:258-270) — a target carrying a **range**: the label hides it entirely, so the tooltip is the only place the span is visible before the click, and the preview washes all thirteen lines.
+- [the caret dev workflow](docs/DEVELOPMENT.md) — a prose label: the words survive and the path does not appear at all. Hovering reveals the target in a tooltip, the only way to see where the click goes.
+- [the deep middle of a long file](docs/DEVELOPMENT.md:158) — a target carrying a line number: opens centered on line 158 with both strips showing, and the tooltip carries the line as well as the path.
+- [a stretch of the dev guide](docs/DEVELOPMENT.md:258-270) — a target carrying a **range**: the label hides it entirely, so the tooltip is the only place the span is visible before the click, and the preview washes all thirteen lines.
 - [`mise.toml`](package.json) — a label and target that **disagree**: the click opens the target, never the file the label names. Read the tooltip before clicking. The icon still sits inside the backticks.
-- [a plan that moved](doc/does-not-exist.md) — an unresolved target: the label reads as plain prose with no icon, no chip, and no preview, and its line still opens a comment composer on click.
+- [a plan that moved](docs/does-not-exist.md) — an unresolved target: the label reads as plain prose with no icon, no chip, and no preview, and its line still opens a comment composer on click.
 - [docs](guide) — a single extensionless segment: the brackets come off like any link's, but it is **not a citation** — no icon, no tooltip, no preview. It could be a directory, but nothing in the text says so, and that is decided before anything resolves.
 - [the bundle](ftp://example.com/lib.ts) — a target carrying a scheme: also stays literal. It ends in a known extension, but a URL slot is not a path, and resolving it against the repo would preview an unrelated local file.
 - [the caret repo](https://github.com/macintacos/caret) — an ordinary http link, unchanged: no icon, and clicking it opens a tab.
 
-EXC-956: a link whose target is a **directory** collapses on exactly the same terms, and the click opens the folder tree rather than a file preview. Kind is never read off the target's spelling — `doc/agents` and `doc/agents/` are one citation, and the daemon is what tells a directory from a file. What this layer decides, before anything resolves, is only whether the target is a citable path: made of path characters alone, resolvable in principle, and specific enough to be worth an icon and a preview — which means more than one segment, or one segment naming a file by extension. A path-shaped target that fails that test still collapses; it just reads as an ordinary link rather than a reference.
+EXC-956: a link whose target is a **directory** collapses on exactly the same terms, and the click opens the folder tree rather than a file preview. Kind is never read off the target's spelling — `docs/agents` and `docs/agents/` are one citation, and the daemon is what tells a directory from a file. What this layer decides, before anything resolves, is only whether the target is a citable path: made of path characters alone, resolvable in principle, and specific enough to be worth an icon and a preview — which means more than one segment, or one segment naming a file by extension. A path-shaped target that fails that test still collapses; it just reads as an ordinary link rather than a reference.
 
-- [`doc/agents/`](doc/agents/) — a backticked-path directory label: the **folder** glyph rather than the file one, and a click that opens the tree rooted there. Set it beside the file rows above; nothing differs but the glyph and the surface.
-- [the agent rules](doc/agents) — the same directory behind a prose label and written without the slash: the same card on click, and the path visible only in the tooltip. The **folder** glyph lands here too: the decoration pass cuts the row at the reference's own columns, and for a collapsed label those columns are the label, so the glyph hugs the words and never the sentence around them.
-- [a folder that moved](doc/nowhere/) — an unresolved directory target: the brackets go, and nothing else arrives. The existence gate does not care which kind it was going to be.
+- [`docs/agents/`](docs/agents/) — a backticked-path directory label: the **folder** glyph rather than the file one, and a click that opens the tree rooted there. Set it beside the file rows above; nothing differs but the glyph and the surface.
+- [the agent rules](docs/agents) — the same directory behind a prose label and written without the slash: the same card on click, and the path visible only in the tooltip. The **folder** glyph lands here too: the decoration pass cuts the row at the reference's own columns, and for a collapsed label those columns are the label, so the glyph hugs the words and never the sentence around them.
+- [a folder that moved](docs/nowhere/) — an unresolved directory target: the brackets go, and nothing else arrives. The existence gate does not care which kind it was going to be.
 - [the source root](src) and [the same root](src/) — one bare segment that really is a directory, spelled both ways: neither is **cited**, for the reason `guide` above is not. The slash changes nothing, which is the point; widening far enough to catch either would put an icon and a preview on every prose link whose target happens to be one word.
-- [Setup](doc/DEVELOPMENT.md#setup) — a target carrying a fragment: **not cited** either. That is a link to an anchor within a document, not a citation of the document.
+- [Setup](docs/DEVELOPMENT.md#setup) — a target carrying a fragment: **not cited** either. That is a link to an anchor within a document, not a citation of the document.
 - [the caret repo, again](github.com/macintacos/caret) — a scheme-less URL: **literal**. It reads as a multi-segment path, but collapsing it would leave the label with its destination recorded nowhere — not in the text, and not in a tooltip either, since only a resolved reference gets one.
 
 ## Rendering showcase
@@ -629,7 +629,7 @@ A plain span: `renderPlan(markdown)`. A span holding a path: `ui/src/lib/diffvie
 - [an external link](https://example.com/docs/showcase) — collapses to its label and opens a tab on click.
 - https://example.com/showcase/autolink?q=1&scheme=both — written bare here, but the ingest reflow wraps a bare URL in angle brackets, so what the stored plan carries is an autolink, and what you see is that autolink collapsed back to the URL itself.
 - [the notes](~/notes/plan.md) — a path-shaped target: collapses to bare label text, and is never handed to the browser.
-- [`doc/agents/`](doc/agents/) — a folder target behind a backticked label, so the glyph has a token of its own.
+- [`docs/agents/`](docs/agents/) — a folder target behind a backticked label, so the glyph has a token of its own.
 - [do not run this](javascript:alert(1)) — stays literal, brackets and parens included: a reader has to be able to see what an unsafe scheme would do.
 - [an inline payload](data:text/html,hello) — literal for the same reason.
 - [mail nobody](mailto:nobody@example.com) — literal: neither a web scheme nor a path.
@@ -639,9 +639,9 @@ A plain span: `renderPlan(markdown)`. A span holding a path: `ui/src/lib/diffvie
 ### File and folder references
 
 - `package.json` — a file that resolves: the file glyph, a resting tint over the code chip, and an excerpt on click.
-- `doc/agents` — a directory that resolves: the folder glyph, the same pair of tints, and a tree on click.
+- `docs/agents` — a directory that resolves: the folder glyph, the same pair of tints, and a tree on click.
 - `src/no-such-module.ts` — a path that does not resolve: no glyph, no preview, and no reference tint. It still wears the neutral inline-code chip every span carries, so what separates it from the two rows above is hue rather than the presence of a chip. This is the row that regresses silently, so read it every time.
-- `doc/no-such-folder/` — the directory half of that negative case.
+- `docs/no-such-folder/` — the directory half of that negative case.
 
 ### Paths that look like markup
 
@@ -650,7 +650,7 @@ EXC-1066: a path **is** the markup. When a collapsed link's label carries charac
 - [jobs/shared/zeus/__init__.py](jobs/shared/zeus/__init__.py) — `__init__` is a valid CommonMark `strong` run, and none of it may draw bold. The regression is the reference cut into three tokens: `jobs/shared/zeus/`, a bold `__init__` pill, and `.py`.
 - [src/_a_/b.ts](src/_a_/b.ts) — the same collision through `em` rather than `strong`: `_a_` stays literal, and a slanted middle segment is the regression.
 - [src/_private.py](src/_private.py) — the negative control: the lone `_` can open a run, but nothing on the line ever closes it, so no element is formed and this row was never at risk from either side. It must read identically to the two above.
-- [doc/~snapshot~.md](doc/~snapshot~.md) — GFM reads `~snapshot~` as `del`, which carries no attribute, so it draws nothing here for the same reason `~~…~~` draws nothing under **Emphasis**. It sits under `doc/` deliberately: a target that starts with `~` is unresolvable in principle, so the same filename written alone would not be a citation at all.
+- [docs/~snapshot~.md](docs/~snapshot~.md) — GFM reads `~snapshot~` as `del`, which carries no attribute, so it draws nothing here for the same reason `~~…~~` draws nothing under **Emphasis**. It sits under `docs/` deliberately: a target that starts with `~` is unresolvable in principle, so the same filename written alone would not be a citation at all.
 - `a*b.ts` — written as inline code rather than as a link, because `*` is not one of the characters a citable target may hold: a link pointing here could never be a reference, so a code span is the only spelling of this path the pass ever sees, and its interior stays literal like every other span's.
 
 ### Fenced blocks
@@ -778,7 +778,7 @@ A target caret will not fetch:
 
 Only `http` and `https` draw. Any other scheme is refused before a request exists, so this row is the bottom rung: the same chip and the same literal text, reached without the network being touched at all.
 
-And the syntax is the whole trigger — a filename named in prose, like diagram.png or `doc/arch.svg`, is never turned into a picture. It stays what it is: prose, or a file reference when the path resolves.
+And the syntax is the whole trigger — a filename named in prose, like diagram.png or `docs/arch.svg`, is never turned into a picture. It stays what it is: prose, or a file reference when the path resolves.
 
 ---
 

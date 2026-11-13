@@ -128,8 +128,8 @@ it.
   under `src/service/` or to `bin/caret-launcher` is checked only if you run it yourself.
   The container has no login session and runs a stub caret, so what stays out of its reach
   is written up as a hand checklist in
-  [`doc/DEVELOPMENT.md`](../DEVELOPMENT.md#development): the unit `caret install` actually
-  wrote, self-linger, the `systemctl --user disable` opt-out install reads, the
+  [`docs/DEVELOPMENT.md`](../DEVELOPMENT.md#development): the unit `caret install`
+  actually wrote, self-linger, the `systemctl --user disable` opt-out install reads, the
   `caret install --refresh` cycle, and start at login.
 - **macOS launchd** — `scripts/macos/verify.sh`, run by hand through
   `mise run verify macos`, the same arrangement one platform over: it bootstraps the plist
@@ -141,6 +141,6 @@ it.
   launchctl output it scripts itself — never on what launchd does with any of it. It needs
   a GUI login session rather than a container, so it can never be gated either. What stays
   out of its reach is written up as a hand checklist in
-  [`doc/DEVELOPMENT.md`](../DEVELOPMENT.md#development): the exit timeout on the plist
+  [`docs/DEVELOPMENT.md`](../DEVELOPMENT.md#development): the exit timeout on the plist
   already installed, the Login Items switch `status().disabled` cannot read, the
   `caret install --refresh` cycle, and load-at-login.

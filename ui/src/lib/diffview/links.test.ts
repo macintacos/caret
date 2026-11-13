@@ -345,7 +345,7 @@ describe("buildLinkLayer file-path targets", () => {
   test.each([
     ["an extensionless single segment", "see [docs](guide) for more", "docs"],
     ["the same segment with a trailing slash", "see [docs](guide/) for more", "docs"],
-    ["a fragment target", "see [Setup](doc/guide.md#setup) for more", "Setup"],
+    ["a fragment target", "see [Setup](docs/guide.md#setup) for more", "Setup"],
     ["a query target", "see [the page](docs/index?v=1) for more", "the page"],
     ["a home-relative path", "see [the notes](~/notes/plan.md) for more", "the notes"],
     [
@@ -832,7 +832,7 @@ describe("buildLinkLayer images", () => {
     // excerpt preview — a surface that renders text, and so could only ever show
     // an image file as bytes. What replaces the glyph is the path itself, now
     // visible in the row instead of hidden behind a label.
-    const input = "![the diagram](doc/diagram.png)";
+    const input = "![the diagram](docs/diagram.png)";
     const { text, images, fileRefs } = buildLinkLayer(input);
     expect(text).toBe(input);
     expect(images.size).toBe(0);
@@ -850,7 +850,7 @@ describe("buildLinkLayer images", () => {
     // stays prose — or a file reference when it resolves, which is fileRefs.ts's
     // call and not this layer's — because drawing a picture where the author only
     // named one would be a rewrite rather than a decoration.
-    const input = "see diagram.png and doc/arch.svg for the shape";
+    const input = "see diagram.png and docs/arch.svg for the shape";
     const { text, images } = buildLinkLayer(input);
     expect(text).toBe(input);
     expect(images.size).toBe(0);

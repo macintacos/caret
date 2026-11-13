@@ -138,7 +138,7 @@ test("the approve guard fits its three-button footer without a horizontal scroll
   // compute to auto — so the surplus width became a horizontal scrollbar and the
   // modal read as clipped/cutout. The guard is widened (guard-content) so the row
   // fits; the invariant is that its content never scrolls horizontally. A layout
-  // fact only the browser can decide, so this is an e2e (doc/agents/browser-testing.md).
+  // fact only the browser can decide, so this is an e2e (docs/agents/browser-testing.md).
   await openWithPendingAnnotation(daemon, page, "explain the cold cost");
 
   const guard = await openApproveGuard(page);

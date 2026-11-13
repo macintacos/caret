@@ -4,7 +4,7 @@
 // MARKDOWN_READ_BY_TESTS is what makes that true for a Markdown-only change, which
 // would otherwise narrow the gate to `lint` alone.
 //
-// test/scripts/ mirrors scripts/ (doc/agents/test-layout.md).
+// test/scripts/ mirrors scripts/ (docs/agents/test-layout.md).
 
 import { expect, test } from "bun:test";
 

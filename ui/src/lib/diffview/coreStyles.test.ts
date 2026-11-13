@@ -946,7 +946,7 @@ describe("the list markers (EXC-861)", () => {
     // transparent, so the dot is the only thing left saying "list item here" — WCAG
     // 1.4.11's 3:1 floor binds it, on the surface it really renders on. --ink-faint
     // misses it on the banded diff body in the lightest palettes
-    // (doc/agents/svelte-rules.md § CSS-token discipline); theme.test.ts owns the numbers
+    // (docs/agents/svelte-rules.md § CSS-token discipline); theme.test.ts owns the numbers
     // and reds naming the palette. This pins only that the sheet spends what they chose,
     // and that the drawn glyph and the surviving marker genuinely differ — one shared ink
     // here would mean the rule had been dropped.
@@ -1767,7 +1767,7 @@ test("spends no --rule token anywhere on the diff body", () => {
   // than a note: --rule and --rule-strong draw hairlines on the CHROME surfaces, where
   // they are 10% and 16% ink over --paper / --paper-raised and read correctly. The diff
   // body is --paper-sunk plus 2-8% ink row bands, and over that ground they barely clear
-  // the 1.05 threshold (doc/agents/svelte-rules.md § CSS-token discipline) — a line that
+  // the 1.05 threshold (docs/agents/svelte-rules.md § CSS-token discipline) — a line that
   // is in the DOM and not on the screen. Every mark this epic draws there spends the ink
   // ramp instead. Scanned over the declarations, so the prose above (and this comment)
   // can keep naming the tokens. A card that floats on the body is the one exception: its
@@ -1882,7 +1882,7 @@ describe("thematic breaks (EXC-862)", () => {
 
   test("spends the ink that clears the non-text floor, not a rule token or a chip tint", () => {
     // The rule tokens are 10% and 16% ink and effectively vanish on the sunk diff surface
-    // and --ink-faint is under 3:1 in the lightest palettes (doc/agents/svelte-rules.md
+    // and --ink-faint is under 3:1 in the lightest palettes (docs/agents/svelte-rules.md
     // § CSS-token discipline). theme.test.ts owns those measurements — this pins only
     // that the sheet spends what they chose.
     expect(ruleRule).toMatch(/var\(--ink-soft\)/);

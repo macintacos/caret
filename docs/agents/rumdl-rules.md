@@ -110,7 +110,7 @@ four `ASSETS` checksums — darwin and linux, each arm64 and x64 — with the on
 now carries. mise says `macos` where node says `darwin`, and caret's linux assets are the
 static musl builds, so they mirror the lock's `linux-*-musl` entries rather than the bare
 `linux-*` ones (glibc) — which is why `rumdl-pin.test.ts` writes that mapping out rather
-than deriving it. Update the hard-coded version in `doc/CONFIGURING.md` too — it appears
+than deriving it. Update the hard-coded version in `docs/CONFIGURING.md` too — it appears
 in the `CARET_RUMDL_BIN` row and again in § Plan formatting (rumdl).
 
 Re-run the pin suite until green, then `mise run preflight --json --full`. A rumdl bump
@@ -131,7 +131,7 @@ run also proves the new binary still produces the plan shape `test/core/plan/` p
 | `src/config/paths.ts` | where the downloaded binary and its config live |
 | `src/commands/install/index.ts` | warms the download at install time, off the first plan's critical path |
 | `scripts/tasks/release/rumdl.ts` | the release-notes invocation and its inline config |
-| `doc/CONFIGURING.md` | the user-facing story, including hard-coded version mentions |
+| `docs/CONFIGURING.md` | the user-facing story, including hard-coded version mentions |
 | `test/structure/rumdl-pin.test.ts` | the standing gate on the shared version |
 | `test/support/rumdl-preload.ts` | points unit tests at the mise binary so they run offline |
 | `bunfig.toml` | the `[test] preload` entry that actually runs that preload |

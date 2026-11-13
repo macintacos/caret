@@ -1,7 +1,7 @@
 <script lang="ts">
   // Shows e.g. "v2" once a plan has been revised. The ^ brand glyph keeps caret
   // amber — one of the sanctioned amber spots alongside the wordmark and the primary
-  // action (doc/agents/shadcn-rules.md § amber-scarcity).
+  // action (docs/agents/shadcn-rules.md § amber-scarcity).
   import { Badge } from "$lib/components/ui/badge/index.js";
 
   let { version }: { version: number } = $props();

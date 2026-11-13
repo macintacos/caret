@@ -4,7 +4,7 @@
 // `dist/cli.js` and `ui/dist` are bundles with no package names left in them. OpenCode and
 // pi install the package **and its declared `dependencies`**, so a build input filed in
 // `dependencies` is downloaded by every user and loaded by none.
-// `doc/agents/dependency-rules.md` § Where a new package goes states the rule; this suite
+// `docs/agents/dependency-rules.md` § Where a new package goes states the rule; this suite
 // is what makes it falsifiable, so the next misplacement fails `bun test` on the push that
 // adds it rather than being caught by an audit years later.
 //

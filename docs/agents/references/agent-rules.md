@@ -1,16 +1,16 @@
-# Adding or editing a `doc/agents/*.md` rule file
+# Adding or editing a `docs/agents/*.md` rule file
 
 *Audience: coding agents and contributors adding or editing a rule-of-the-road.*
 
-`doc/agents/*.md` holds caret's rules-of-the-road — one file per code area (architecture,
+`docs/agents/*.md` holds caret's rules-of-the-road — one file per code area (architecture,
 logging, TypeScript, Svelte, shadcn, plan rendering, testing, icons, settings,
 dependencies, OpenCode, pi, rumdl). They are the substance behind `AGENTS.md`'s router;
 each is concise and scoped to its own area.
 
 Adding a new rule file:
 
-1. Create `doc/agents/<area>-rules.md` — follow the existing `*-rules.md` naming (an agent
-   host's record is `<host>-integration.md`) and the concise style of, e.g.,
+1. Create `docs/agents/<area>-rules.md` — follow the existing `*-rules.md` naming (an
+   agent host's record is `<host>-integration.md`) and the concise style of, e.g.,
    [`settings-rules.md`](../settings-rules.md). State its audience at the top.
 2. Add a **stop** that loads it to the `router` fence in `AGENTS.md`, and an exit to it
    labelled with when to read it (see [`agents-md.md`](agents-md.md)).
