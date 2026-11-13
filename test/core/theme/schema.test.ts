@@ -306,9 +306,9 @@ describe("themeFileJsonSchema", () => {
   });
 
   test("the published $schema URL serves the committed schema file", () => {
-    const prefix = "https://raw.githubusercontent.com/macintacos/caret/HEAD/";
-    expect(SCHEMA_URL.startsWith(prefix)).toBe(true);
-    expect(existsSync(join(REPO_ROOT, SCHEMA_URL.slice(prefix.length)))).toBe(true);
+    const repoHeadUrl = "https://raw.githubusercontent.com/macintacos/caret/HEAD/";
+    expect(SCHEMA_URL.startsWith(repoHeadUrl)).toBe(true);
+    expect(existsSync(join(REPO_ROOT, SCHEMA_URL.slice(repoHeadUrl.length)))).toBe(true);
   });
 });
 
