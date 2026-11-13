@@ -4,7 +4,7 @@
   // compiled release, so a dev build is never mistaken for a real review. Driven
   // by /api/health's isDev flag; self-gates so callers pass it unconditionally.
   // Deliberately not the brand amber — that stays reserved for the wordmark and the
-  // primary action (doc/agents/shadcn-rules.md § amber-scarcity).
+  // primary action (docs/agents/shadcn-rules.md § amber-scarcity).
   import { Badge } from "$lib/components/ui/badge/index.js";
 
   let { isDev }: { isDev: boolean } = $props();

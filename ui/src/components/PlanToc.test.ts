@@ -436,7 +436,7 @@ describe("PlanToc surface", () => {
   // The header wears caret's shared section-label atom rather than a treatment of its
   // own. Pinned because the class reaches it through a `headingClass` prop added to the
   // vendored command-group.svelte, which a registry re-sync reverts silently
-  // (doc/agents/shadcn-rules.md § Edits a re-sync will silently undo).
+  // (docs/agents/shadcn-rules.md § Edits a re-sync will silently undo).
   test("dresses the header in the shared section-label atom", async () => {
     const { flush } = await openToc();
     await typeQuery("details", flush);

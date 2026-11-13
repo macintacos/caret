@@ -49,7 +49,7 @@ export default defineConfig<E2EOptions>({
   // whichever deadline is left rather than one of its own — which is why the
   // per-test number binds and why toPass is set explicitly beside expect
   // (expect.timeout does not reach it). Where these numbers come from:
-  // doc/agents/browser-testing.md § Timeouts are budgets for the loaded host.
+  // docs/agents/browser-testing.md § Timeouts are budgets for the loaded host.
   timeout: 60 * 1000,
   expect: { timeout: 15 * 1000, toPass: { timeout: 15 * 1000 } },
   // Non-interactive reporter so an unattended run can't hang on a TTY pager.
@@ -60,7 +60,7 @@ export default defineConfig<E2EOptions>({
     // own knobs governs a spawned child process. This value is the one that
     // binds; the fixture carries the same number as the tuple default the
     // option form requires, and documents how each phase spends it.
-    // doc/agents/browser-testing.md § Timeouts are budgets for the loaded host.
+    // docs/agents/browser-testing.md § Timeouts are budgets for the loaded host.
     bootTimeoutMs: 15 * 1000,
     // Failure artifacts only; they can capture rendered plan text, so they
     // stay gitignored and local (never-log-identifiable-data posture).

@@ -614,7 +614,7 @@ describe("every theme", () => {
   // held back until hover, so its SHAPE and its fill are the whole control and 3:1
   // is the floor that binds. It renders on the preview panel's --paper, and it is
   // the one place the chrome spends --danger on something that is not a semantic
-  // (doc/agents/svelte-rules.md § CSS-token discipline records the carve-out). A
+  // (docs/agents/svelte-rules.md § CSS-token discipline records the carve-out). A
   // palette whose red goes muddy against its page fails here rather than shipping a
   // close control a reader cannot find.
   test("keeps the preview's close circle findable on every palette", () => {
@@ -634,7 +634,7 @@ describe("every theme", () => {
   // surface binds --diffs-bg to --paper-sunk, styles/diffview.css).
   //
   // This is the constraint that sets QUOTE_SUBDUE, and it binds unevenly: `--ink` on sunk
-  // has least headroom on catppuccin-latte (doc/agents/svelte-rules.md § CSS-token
+  // has least headroom on catppuccin-latte (docs/agents/svelte-rules.md § CSS-token
   // discipline), so the fade a roomy palette could carry would push latte under. Adding a palette
   // with a compressed ink ramp fails HERE, which is the point — the alternative is
   // discovering it as unreadable quoted text in that flavor.
@@ -674,7 +674,7 @@ describe("every theme", () => {
   // That gap is why every member spends --ink-soft and not the --ink-faint markers take
   // generally. Falsifiable, and it really does bite: swap MARKER_INK to "--ink-faint" and
   // this reds on the FIRST band it reaches, catppuccin-latte at 2.99.
-  // doc/agents/svelte-rules.md § CSS-token discipline carries the full ranges.
+  // docs/agents/svelte-rules.md § CSS-token discipline carries the full ranges.
   //
   // The membership is closed by a rule rather than by inspection: a marker whose glyph
   // SURVIVES is supplementary and stays on --ink-faint (the fence markers, the ** / _
@@ -725,7 +725,7 @@ describe("every theme", () => {
   // exists. --rule and --rule-strong are 10% and 16% ink; composited over these grounds
   // they sit barely above the 1.05 this epic treats as indistinguishable, so the line
   // renders as nothing at all. --ink-faint, the marker ink, misses the floor on the
-  // lightest palettes (doc/agents/svelte-rules.md § CSS-token discipline). Swap RULE_INK
+  // lightest palettes (docs/agents/svelte-rules.md § CSS-token discipline). Swap RULE_INK
   // to any of the three and this reds naming the palette.
   test("keeps the thematic-break rule above the non-text floor on every palette", () => {
     const RULE_INK = "--ink-soft" as const;
@@ -1237,7 +1237,7 @@ describe("every theme", () => {
   // WCAG AA on the plan surface, as the syntax roles are. An element drawn on a chip is
   // measured on the chip's tint as well: a link chip riding the link's own hue moves the
   // ground toward the text. Which palettes the floor pushes back onto their ink ramp is
-  // in doc/agents/svelte-rules.md § CSS-token discipline.
+  // in docs/agents/svelte-rules.md § CSS-token discipline.
   const MARKDOWN_CHIPS: Partial<Record<MarkdownElement, ColorToken>> = {
     code: "--chip-code",
     link: "--chip-link",
@@ -1403,7 +1403,7 @@ describe("every theme", () => {
     );
 
   /** Whether two of the theme file's colors that clear a heading's floors above sit GLANCE
-   * apart, so its heading levels can step by color. doc/agents/svelte-rules.md
+   * apart, so its heading levels can step by color. docs/agents/svelte-rules.md
    * § CSS-token discipline names the palettes that cannot. */
   async function headingsStepByColor(id: BuiltinThemeId, theme: (typeof THEMES)[BuiltinThemeId]) {
     const clearsHeadingFloors = (color: string) =>

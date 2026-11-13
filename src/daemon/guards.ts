@@ -86,7 +86,7 @@ function isOwnAuthority(authority: string, port: number, names: OwnNames): boole
 /** Reject any request whose Host is not this daemon's own — the DNS-rebinding
  * gate (EXC-1203), applied to safe methods too because rebinding defeats the
  * same-origin policy the read posture rests on, leaving Host the only header
- * that still names the attacker (doc/agents/architecture-rules.md § Daemon trust
+ * that still names the attacker (docs/agents/architecture-rules.md § Daemon trust
  * model). A missing Host is rejected: HTTP/1.1 requires one and every real
  * client sends it. */
 export function isForeignHost(
@@ -116,7 +116,7 @@ function isOwnOrigin(origin: string, port: number, names: OwnNames): boolean {
  * carries no Origin (allowed); the same-origin browser UI carries the daemon's own
  * origin (allowed); a page on another site — or on another local port — carries a
  * foreign Origin (blocked). Safe methods are let through deliberately
- * (doc/agents/architecture-rules.md § Daemon trust model). */
+ * (docs/agents/architecture-rules.md § Daemon trust model). */
 export function isCrossOrigin(
   req: Request,
   port: number,

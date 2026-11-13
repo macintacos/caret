@@ -2,7 +2,7 @@
 // the remembered mode (covered in approve.e2e.ts); the toggle opens a shadcn
 // DropdownMenu of every approve variant. That menu is bits-ui overlay
 // interaction (open on click, pick, Escape), so it is proven here in a real
-// browser rather than in the happy-dom unit suite (doc/agents/browser-testing.md).
+// browser rather than in the happy-dom unit suite (docs/agents/browser-testing.md).
 // The fixture daemon's reviews declare no variants, so they render the
 // WIRE_FALLBACK set (Approve / Approve & accept edits / Approve & auto mode)
 // unless a spec seeds its own. The per-review specs are e2e for the fixture-daemon

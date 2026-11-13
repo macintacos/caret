@@ -14,7 +14,7 @@
 // the same <pre> element changing data-diff-type, and scroll retention as a real
 // offset across that switch; and the colour and collapsed-context cases read
 // computed styles resolved inside the library's shadow root. The config blind
-// spot doc/agents/browser-testing.md names is live here and is answered rather
+// spot docs/agents/browser-testing.md names is live here and is answered rather
 // than inherited: playwright.config.ts pins colorScheme to dark, so the emphasis
 // and separator cases parameterize page.emulateMedia over both schemes, and the
 // badge cases seed the mode into localStorage instead because that palette must

@@ -15,7 +15,7 @@
 		// UNDER its own state props and sets neither, so forwarding them there is a pure
 		// addition. Without this the settings volume slider is keyboard-operable but
 		// anonymous. Guarded by slider.test.ts — put this back if a re-sync drops it
-		// (doc/agents/shadcn-rules.md § Edits a re-sync will silently undo).
+		// (docs/agents/shadcn-rules.md § Edits a re-sync will silently undo).
 		"aria-labelledby": labelledBy,
 		"aria-valuetext": valueText,
 		...restProps

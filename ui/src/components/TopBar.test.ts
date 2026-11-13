@@ -9,7 +9,7 @@ import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
 // This suite covers the synchronous surface — which buttons render, their labels,
 // the pending-count Badge, and callback wiring. The approve split-button's
 // DropdownMenu is bits-ui overlay interaction, so it lives in
-// test/e2e/approve-options.e2e.ts per doc/agents/browser-testing.md.
+// test/e2e/approve-options.e2e.ts per docs/agents/browser-testing.md.
 
 const variants: ApproveVariant[] = [
   { id: "default", label: "Approve", description: "Approve edits manually" },
@@ -279,7 +279,7 @@ describe("TopBar overflow menu (EXC-810)", () => {
   // The overflow trigger stays in the DOM at every width — CSS toggles its
   // visibility — and renders synchronously, unlike DropdownMenu's portalled Content.
   // The menu's items and the width-driven swap are real-browser behavior, covered in
-  // test/e2e/topbar-overflow.e2e.ts per doc/agents/browser-testing.md.
+  // test/e2e/topbar-overflow.e2e.ts per docs/agents/browser-testing.md.
 
   test("renders the overflow trigger with an accessible name when a review is active", () => {
     const { target } = render(TopBar, baseProps);

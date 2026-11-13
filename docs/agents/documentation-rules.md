@@ -28,17 +28,17 @@ which-doc: Edit every doc the change affects
   human contributor onboarding: local setup, the mise workflow, where tests live > contributing
   the code-change routing index, plus the CodeGraph / verifying-changes prose > agents
   a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, plan rendering, testing, icons, settings, dependencies, OpenCode, pi, rumdl) > edit-a
-  the router for the doc/ directory: which page answers a given reader's question > readme-2
+  the router for the docs/ directory: which page answers a given reader's question > readme-2
   design direction: how caret looks, moves, sounds, or prints, its deliberate exceptions, and the decision log > edit-design
 readme!: Edit README.md
-configuring!: Edit doc/CONFIGURING.md
-running!: Edit doc/RUNNING.md
-architecture!: Edit doc/ARCHITECTURE.md
-development!: Edit doc/DEVELOPMENT.md
+configuring!: Edit docs/CONFIGURING.md
+running!: Edit docs/RUNNING.md
+architecture!: Edit docs/ARCHITECTURE.md
+development!: Edit docs/DEVELOPMENT.md
 contributing!: Edit CONTRIBUTING.md
 agents!: Edit AGENTS.md
-edit-a!: Edit a doc/agents/*.md rule file
-readme-2!: Edit doc/README.md
+edit-a!: Edit a docs/agents/*.md rule file
+readme-2!: Edit docs/README.md
 edit-design!: Edit design/*.md
 ```
 
@@ -46,36 +46,36 @@ edit-design!: Edit design/*.md
 
 - **`README.md`** (repo root) — the lean, user-facing front door: what caret is, install,
   basic usage, and pointers onward. It leads with the install audience; the advanced and
-  contributor-facing depth lives in the four `doc/` reference pages below, which it links
-  to directly or reaches through [`doc/README.md`](../README.md). How to edit it:
+  contributor-facing depth lives in the four `docs/` reference pages below, which it links
+  to directly or reaches through [`docs/README.md`](../README.md). How to edit it:
   [`references/readme.md`](references/readme.md).
-- **`doc/CONFIGURING.md`** — the configuration reference behind `README.md`: platform
+- **`docs/CONFIGURING.md`** — the configuration reference behind `README.md`: platform
   support, the `config.toml` file, the full `CARET_*` tables, plan formatting, and theme
   files. How to edit it: [`references/configuring.md`](references/configuring.md).
-- **`doc/RUNNING.md`** — caret in use: desktop notifications, cmux unread marks, and
+- **`docs/RUNNING.md`** — caret in use: desktop notifications, cmux unread marks, and
   logging & debugging. How to edit it: [`references/running.md`](references/running.md).
-- **`doc/ARCHITECTURE.md`** — how caret works: the tool-agnostic core / agent-adapter
+- **`docs/ARCHITECTURE.md`** — how caret works: the tool-agnostic core / agent-adapter
   boundary, the Claude Code, OpenCode, and pi adapter internals, calling the review tool,
   and the source layout. How to edit it:
   [`references/architecture.md`](references/architecture.md).
-- **`doc/DEVELOPMENT.md`** — developing caret: build-from-source, the `mise` task catalog
+- **`docs/DEVELOPMENT.md`** — developing caret: build-from-source, the `mise` task catalog
   and dev workflow, the tasks CLI, and icons. How to edit it:
   [`references/development.md`](references/development.md).
 - **`CONTRIBUTING.md`** (repo root) — the short, human-facing front door for people who
   want to develop caret: `bun install`, the `mise` task workflow, and where tests live. It
-  stays minimal and points at `README.md`, the `doc/` reference pages, and `doc/agents/`
+  stays minimal and points at `README.md`, the `docs/` reference pages, and `docs/agents/`
   for depth. How to edit it: [`references/contributing.md`](references/contributing.md).
 - **`AGENTS.md`** (repo root) — the agent-facing router for **code** changes, plus the
-  CodeGraph and verifying-changes guidance. Adding or moving a `doc/agents/*.md` rule file
-  means adding or updating its exit and stop here. How to edit it:
+  CodeGraph and verifying-changes guidance. Adding or moving a `docs/agents/*.md` rule
+  file means adding or updating its exit and stop here. How to edit it:
   [`references/agents-md.md`](references/agents-md.md).
-- **`doc/agents/*.md`** — the rules-of-the-road: one file per code area, the substance
+- **`docs/agents/*.md`** — the rules-of-the-road: one file per code area, the substance
   behind `AGENTS.md`'s router. This routing reference lives among them. How to add or edit
   one: [`references/agent-rules.md`](references/agent-rules.md).
-- **`doc/README.md`** — the router for the `doc/` directory: a table mapping what a reader
-  wants to do to the page that answers it, across the four reference pages, `doc/agents/`,
-  and the two repo-root docs (`README.md` and `CONTRIBUTING.md`). How to edit it:
-  [`references/doc-readme.md`](references/doc-readme.md).
+- **`docs/README.md`** — the router for the `docs/` directory: a table mapping what a
+  reader wants to do to the page that answers it, across the four reference pages,
+  `docs/agents/`, and the two repo-root docs (`README.md` and `CONTRIBUTING.md`). How to
+  edit it: [`references/doc-readme.md`](references/doc-readme.md).
 - **`design/`** (repo root) — caret's design direction: the brief, where each token lives,
   the patterns, the deliberate exceptions, and the decision log, routed from
   `design/README.md`. Read by contributors and coding agents alike. How to edit it:
@@ -83,10 +83,10 @@ edit-design!: Edit design/*.md
 
 ## Audience, stated at the top of every new doc
 
-`README.md`, `CONTRIBUTING.md`, and everything directly under `doc/` — `doc/README.md`
+`README.md`, `CONTRIBUTING.md`, and everything directly under `docs/` — `docs/README.md`
 plus the four reference pages (`CONFIGURING.md`, `RUNNING.md`, `ARCHITECTURE.md`,
-`DEVELOPMENT.md`) — are **human-facing**. `AGENTS.md` and everything under `doc/agents/` —
-the rule files and this file's `references/` pointers — are **agent-facing**. State the
+`DEVELOPMENT.md`) — are **human-facing**. `AGENTS.md` and everything under `docs/agents/`
+— the rule files and this file's `references/` pointers — are **agent-facing**. State the
 audience explicitly at the top of each new doc so a reader knows in one line whether it is
 written for them.
 
@@ -107,8 +107,8 @@ Documentation drifts when the map and the docs are edited in separate changes. S
 **adding, removing, or renaming a doc updates, in the same change,**
 
 1. **this map** — the router above and the doc-landscape entry, and
-2. **its `AGENTS.md` route**, if the doc is a `doc/agents/*.md` rule file with one, and
-3. **its pointer file** under [`references/`](references/) — for a `doc/agents/*.md` rule
+2. **its `AGENTS.md` route**, if the doc is a `docs/agents/*.md` rule file with one, and
+3. **its pointer file** under [`references/`](references/) — for a `docs/agents/*.md` rule
    file that is the shared [`references/agent-rules.md`](references/agent-rules.md), whose
    area list you extend rather than adding a new pointer, and
 

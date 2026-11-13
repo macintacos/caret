@@ -11,7 +11,7 @@
 // scope behaviour; and the anchored geometry — that the bubble tracks its trigger
 // through a scroll instead of closing, which is the behaviour change this rebuild
 // chose — is layout that happy-dom does not do. Its structure and ARIA stay units
-// in ui/src/components/ConfirmPopover.test.ts, per doc/agents/browser-testing.md.
+// in ui/src/components/ConfirmPopover.test.ts, per docs/agents/browser-testing.md.
 
 import { discardConfirm, inlineRows } from "@test/e2e/support/chrome.ts";
 import { openRequestChangesDialog, openWithPendingAnnotation } from "@test/e2e/support/decision.ts";
@@ -151,7 +151,7 @@ test("inside the scrolling dialog the bubble tracks its trigger and still takes 
   // gap read mid-flight is a few px off the resting one and the comparison below would
   // fail on the animation rather than on the tracking. Awaiting the element's own
   // animations is what bits-ui's presence layer waits on too; a fixed sleep is banned
-  // by doc/agents/browser-testing.md § Timing discipline.
+  // by docs/agents/browser-testing.md § Timing discipline.
   const settle = () =>
     discardConfirm(page).evaluate(async (el) => {
       await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => undefined)));

@@ -734,7 +734,7 @@
      idiom lives. Shape carries it — a filled disc the reader decodes before
      reading anything — with the glyph held back until hover or focus, as the
      platform control does. The RED is a deliberate carve-out from the
-     every-hue-has-a-job rule; doc/agents/svelte-rules.md § CSS-token discipline
+     every-hue-has-a-job rule; docs/agents/svelte-rules.md § CSS-token discipline
      records it and why, and theme.test.ts pins its 3:1 non-text contrast on
      --paper (WCAG 1.4.11, the clause that binds for a control carried by shape
      alone).
@@ -974,7 +974,7 @@
   /* Both halves travel the same 4px in the same direction: contents rise into
      place, and the file being replaced keeps rising as it goes. Reduced motion is
      not handled here — the global kill-switch in styles/base.css collapses every
-     animation under #app, and per doc/agents/svelte-rules.md no component honors
+     animation under #app, and per docs/agents/svelte-rules.md no component honors
      the preference on its own. */
   @keyframes fp-in {
     from {

@@ -188,8 +188,8 @@ describe("collectThemes", () => {
   });
 });
 
-test("doc/CONFIGURING.md names every built-in theme id", () => {
-  const doc = readFileSync(join(REPO_ROOT, "doc/CONFIGURING.md"), "utf8");
+test("docs/CONFIGURING.md names every built-in theme id", () => {
+  const doc = readFileSync(join(REPO_ROOT, "docs/CONFIGURING.md"), "utf8");
   const section = doc.split("\n### Where caret finds theme files\n")[1]?.split("\n### ")[0] ?? "";
   const named = [...section.matchAll(/`([a-z0-9-]+)`/g)].map((m) => m[1]);
   for (const id of BUILTIN_THEME_IDS) expect(named).toContain(id);

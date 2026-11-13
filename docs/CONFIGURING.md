@@ -461,7 +461,7 @@ This is caret's own dark theme as a theme file:
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/macintacos/caret/HEAD/doc/theme.schema.json",
+  "$schema": "https://raw.githubusercontent.com/macintacos/caret/HEAD/docs/theme.schema.json",
   "id": "caret-dark",
   "label": "caret dark",
   "scheme": "dark",
@@ -519,7 +519,7 @@ This is caret's own dark theme as a theme file:
 ### Editor support
 
 Set `$schema` to
-`https://raw.githubusercontent.com/macintacos/caret/HEAD/doc/theme.schema.json`, as the
+`https://raw.githubusercontent.com/macintacos/caret/HEAD/docs/theme.schema.json`, as the
 example does. An editor that understands JSON Schema, such as VS Code, then completes
 field names and flags invalid values as you type.
 

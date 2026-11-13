@@ -3,7 +3,7 @@
 // so buttons and menu actions showed the default arrow. This asserts the hand
 // affordance is universal across caret's light-DOM buttons and the dropdown menu
 // items. Computed cursor is real rendering, so this is an e2e, not a unit
-// (doc/agents/browser-testing.md). querySelectorAll doesn't pierce shadow roots,
+// (docs/agents/browser-testing.md). querySelectorAll doesn't pierce shadow roots,
 // so the diff library's own buttons are naturally out of scope.
 
 import { expect, test } from "@test/e2e/support/fixtures.ts";

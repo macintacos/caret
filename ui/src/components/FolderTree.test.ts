@@ -16,7 +16,7 @@ import { createFolderMemory, type FolderMemory } from "$lib/folderTree.ts";
 // (loading, empty, error). The tree itself is @pierre/trees behind a shadow root
 // and virtualizes against a layout happy-dom does not do, so expanding a level,
 // opening a file row, and the dismissal gestures are e2e — see
-// test/e2e/folder-refs.e2e.ts and doc/agents/browser-testing.md.
+// test/e2e/folder-refs.e2e.ts and docs/agents/browser-testing.md.
 
 const ID = "r1";
 
@@ -139,7 +139,7 @@ test("spins a decorative glyph beside the loading text", async () => {
   // because the "Loading…" beside it is already the accessible message — a
   // Spinner left at its default role="status" + aria-label="Loading" would put
   // the word into the accessibility tree twice on one line. data-slot is the
-  // vendored tree's own assertion handle (doc/agents/shadcn-rules.md); the
+  // vendored tree's own assertion handle (docs/agents/shadcn-rules.md); the
   // reduced-motion clamp is a media query happy-dom cannot evaluate, so it is
   // verified in the browser rather than here.
   let release!: () => void;

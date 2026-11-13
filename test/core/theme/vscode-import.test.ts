@@ -47,7 +47,9 @@ describe("themeFileFromVsCode end to end", () => {
     expect(parseThemeFile(result.text).ok).toBe(true);
     const file = JSON.parse(result.text);
     expect(file.scheme).toBe("dark");
-    expect(file.$schema).toContain("theme.schema.json");
+    expect(file.$schema).toBe(
+      "https://raw.githubusercontent.com/macintacos/caret/HEAD/docs/theme.schema.json",
+    );
     expect(file.syntax).toEqual(syntaxFromVsCodeTheme(dracula as VsCodeTheme));
     expect(Object.keys(file.syntax).sort()).toEqual(Object.keys(ROLE_SCOPES).sort());
     expect(file.id).toBe("dracula-custom");

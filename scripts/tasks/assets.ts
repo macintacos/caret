@@ -51,7 +51,7 @@ const SHOTS = [
 
 type Shot = (typeof SHOTS)[number];
 
-const shotPath = (shot: Shot): string => `doc/assets/caret-review-ui-${shot.scheme}.png`;
+const shotPath = (shot: Shot): string => `docs/assets/caret-review-ui-${shot.scheme}.png`;
 
 /** The cwd the picture shows. The browser is handed this literal in place of the
  * real project directory, which only the daemon sees, so no contributor path,

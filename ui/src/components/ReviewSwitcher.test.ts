@@ -10,7 +10,7 @@ import ReviewSwitcher from "@/components/ReviewSwitcher.svelte";
 // and are unit-asserted here. The menu itself — opening, the
 // option list, active marking, and picking — is bits-ui overlay interaction
 // (portalled, pointer/keyboard driven), so it lives in
-// test/e2e/review-switcher.e2e.ts per doc/agents/browser-testing.md.
+// test/e2e/review-switcher.e2e.ts per docs/agents/browser-testing.md.
 
 const review = (id: string, title: string): ClientReview =>
   ({ id, title, cwd: `/home/u/proj/${id}` }) as ClientReview;
@@ -88,7 +88,7 @@ describe("ReviewSwitcher unread marker (EXC-411)", () => {
   // EXC-411: a plan that arrives or gains a version while another is being read
   // is marked unread, and the trigger carries a dot for it. The dropdown's own
   // per-row markers are portalled bits-ui content, so they are proven in
-  // test/e2e/unread-markers.e2e.ts per doc/agents/browser-testing.md.
+  // test/e2e/unread-markers.e2e.ts per docs/agents/browser-testing.md.
   const reviews = [review("r1", "First"), review("r2", "Second")];
 
   test("shows the trigger dot when a review is unread", () => {

@@ -633,7 +633,7 @@ test("with both open, plan prose dismisses only the card", async ({ daemon, page
   // which the outside-click test above already pins, and which coexistence never
   // put at risk. Re-asserting it would need a wait on an event that must not
   // happen, and the honest form of that is not a clock the app holds no deadline
-  // on (doc/agents/browser-testing.md § Timing discipline).
+  // on (docs/agents/browser-testing.md § Timing discipline).
   const proj = await makeProject(NESTED);
   try {
     await seedBothRefs(daemon, page, proj.dir);

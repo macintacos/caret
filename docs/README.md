@@ -1,6 +1,6 @@
 # caret — Documentation
 
-*Audience: users and contributors looking something up in caret's `doc/` directory.*
+*Audience: users and contributors looking something up in caret's `docs/` directory.*
 
 Find the row that matches what you came here to do, then follow the link.
 

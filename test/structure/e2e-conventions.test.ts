@@ -1,5 +1,5 @@
 // Standing gate for the e2e conventions that a parser can decide (EXC-1054).
-// `doc/agents/browser-testing.md` states the rules; this suite is what makes the
+// `docs/agents/browser-testing.md` states the rules; this suite is what makes the
 // mechanical subset falsifiable, so drift reds `bun test` on the push that adds
 // it rather than waiting for a reviewer to notice.
 //

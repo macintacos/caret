@@ -294,20 +294,20 @@ describe("themeFileJsonSchema", () => {
     expect(schema.additionalProperties).toBe(false);
   });
 
-  test("matches the committed doc/theme.schema.json", () => {
+  test("matches the committed docs/theme.schema.json", () => {
     const committed: unknown = JSON.parse(
-      readFileSync(join(REPO_ROOT, "doc/theme.schema.json"), "utf8"),
+      readFileSync(join(REPO_ROOT, "docs/theme.schema.json"), "utf8"),
     );
     expect(
       committed,
-      "doc/theme.schema.json is stale: run `bun scripts/generate-theme-schema.ts && mise run format`",
+      "docs/theme.schema.json is stale: run `bun scripts/generate-theme-schema.ts && mise run format`",
     ).toEqual(themeFileJsonSchema());
   });
 });
 
-describe("doc/CONFIGURING.md", () => {
+describe("docs/CONFIGURING.md", () => {
   test("its example theme file is valid and is caret-dark", () => {
-    const doc = readFileSync(join(REPO_ROOT, "doc/CONFIGURING.md"), "utf8");
+    const doc = readFileSync(join(REPO_ROOT, "docs/CONFIGURING.md"), "utf8");
     const section = doc.split("\n## Theme files\n")[1]?.split("\n## ")[0] ?? "";
     const exampleJson = section.match(/```json\n([\s\S]*?)\n```/)?.[1] ?? "";
     expect(parseThemeFile(exampleJson).ok).toBe(true);
@@ -319,7 +319,7 @@ describe("doc/CONFIGURING.md", () => {
   });
 
   test("its syntax tables list every role with its scopes and fallback", () => {
-    const doc = readFileSync(join(REPO_ROOT, "doc/CONFIGURING.md"), "utf8");
+    const doc = readFileSync(join(REPO_ROOT, "docs/CONFIGURING.md"), "utf8");
     const section = doc.split("\n### `syntax`\n")[1]?.split("\n### ")[0] ?? "";
     const codeSpan = (s: string) => `\`${s}\``;
     const fallbacks: Record<string, string> = SYNTAX_ROLE_FALLBACKS;

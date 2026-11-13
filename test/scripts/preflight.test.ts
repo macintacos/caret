@@ -36,7 +36,7 @@ import { waitFor } from "@test/support/poll.ts";
 import { DEV_FIXTURES } from "@/tasks/dev/protocol.ts";
 
 const ALL_TASKS = ["build bin", "build ui", "lint", "smoke", "test bats", "test mod", "test unit"];
-const UNREAD_MARKDOWN = "doc/RUNNING.md";
+const UNREAD_MARKDOWN = "docs/RUNNING.md";
 
 /** The gate as if `claude` were on PATH, so the suite does not depend on the host's. */
 const runGate: typeof runPreflight = (deps) =>
@@ -419,15 +419,15 @@ test("Markdown a test reads from disk keeps `test unit` in the narrowed gate", a
 
 // EXC-1045's obligation, named rather than left to the loop above. Its guards in
 // test/scripts/dev-driver.test.ts check that fake-plan.md's line citations into
-// doc/DEVELOPMENT.md still land on real lines — and both files are plain
+// docs/DEVELOPMENT.md still land on real lines — and both files are plain
 // Markdown, so the naive "all changed paths are Markdown → skip `test`" rule
 // would skip exactly the diffs that guard exists for. Either path must reach it,
 // alone or together.
 test("a docs-only diff touching the fake plan or the dev guide still runs `test unit`", async () => {
   const lintAndUnit = ["lint", "test unit"];
-  expect(await spawnedFor(["doc/DEVELOPMENT.md"])).toEqual(lintAndUnit);
+  expect(await spawnedFor(["docs/DEVELOPMENT.md"])).toEqual(lintAndUnit);
   expect(await spawnedFor(["scripts/tasks/dev/fake-plan.md"])).toEqual(lintAndUnit);
-  expect(await spawnedFor(["doc/DEVELOPMENT.md", "scripts/tasks/dev/fake-plan.md"])).toEqual(
+  expect(await spawnedFor(["docs/DEVELOPMENT.md", "scripts/tasks/dev/fake-plan.md"])).toEqual(
     lintAndUnit,
   );
 });
