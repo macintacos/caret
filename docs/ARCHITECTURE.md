@@ -1,10 +1,10 @@
 # caret — Architecture
 
-*Audience: users and contributors who want caret's internals — the core/adapter boundary,
-the agent adapters, the review tool, and the source layout.*
+*Audience: contributors who want caret's internals — the core/adapter boundary, the
+daemon's lifecycle, the agent adapters, and the source layout.*
 
-Part of the deep reference behind [README.md](../README.md). For what caret is, how to
-install it, and basic usage, start there.
+Contributor material, kept off the [docs site](index.md). For how caret works as a user
+sees it, read [How caret works](explanation/how-caret-works.md).
 
 ## How it works
 
@@ -320,8 +320,6 @@ test/               core/ (tool-agnostic suites) · adapters/<tool>/ (per-adapte
 scripts/            dev and release tooling for the checkout, plus the two committed shims' tests
 bin/                the caret entrypoint shim (bin/caret) and the service launcher (bin/caret-launcher) — the only tracked files here; a local build drops the compiled binary and the UI assets beside them
 ```
-
-The polished diff/compare viewer for plan versions is a planned fast-follow.
 
 ## Built-in themes
 
