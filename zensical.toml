@@ -10,8 +10,6 @@ exclude_docs = """
 /agents/
 /README.md
 /DEVELOPMENT.md
-/RUNNING.md
-/CONFIGURING.md
 /ARCHITECTURE.md
 """
 

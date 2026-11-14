@@ -5,9 +5,9 @@
 caret is a tool-agnostic core plus an adapter for the coding agent it speaks to; it routes
 that agent's plan to a human for review through a loopback daemon and a Svelte UI. This is
 the short developer front door — the docs site (https://macintacos.github.io/caret/) is
-the user-facing guide, the reference pages directly under `docs/` hold the deep reference
-(configuring, running, architecture, development), and `docs/agents/` holds the
-rules-of-the-road for working in a given area.
+the user-facing guide, `docs/ARCHITECTURE.md` and `docs/DEVELOPMENT.md` hold the deep
+contributor reference, and `docs/agents/` holds the rules-of-the-road for working in a
+given area.
 
 ## Setup
 
@@ -70,11 +70,11 @@ values there, and never commit secrets.
 
 - `README.md` — the landing page: what caret is, a one-line install, and a link to the
   docs site.
-- `docs/CONFIGURING.md` — platform support, the config file, the `CARET_*` environment
-  variables, and plan formatting.
-- `docs/RUNNING.md` — desktop notifications, cmux unread marks, and logging & debugging.
-- `docs/ARCHITECTURE.md` — the core/adapter boundary, the agent adapters, the review tool,
-  and the source layout.
-- `docs/DEVELOPMENT.md` — build from source, the dev workflow, the tasks CLI, and icons.
+- `docs/` — the docs site's pages: what a user reads, from install to the config file, the
+  `CARET_*` variables, and how caret works.
+- `docs/ARCHITECTURE.md` — the core/adapter boundary, the agent adapters, the daemon's
+  lifecycle, and the source layout.
+- `docs/DEVELOPMENT.md` — build from source, the dev workflow, the tasks CLI, icons, and
+  dev settings.
 - `docs/agents/` — the rules-of-the-road for working in a given area of the code;
   `AGENTS.md` routes you to the right one.

@@ -2,10 +2,9 @@
 
 *Audience: coding agents and contributors editing caret's architecture reference.*
 
-`docs/ARCHITECTURE.md` is the human-facing account of how caret works, behind
-[`README.md`](../../../README.md): the tool-agnostic core / agent-adapter boundary, the
-Claude Code, OpenCode, and pi adapter internals, calling the review tool from your own
-skill, and the source layout.
+`docs/ARCHITECTURE.md` is the contributor account of caret's internals, kept off the docs
+site: the tool-agnostic core / agent-adapter boundary, the daemon's lifecycle, the Claude
+Code, OpenCode, and pi adapter internals, and the source layout.
 
 When to edit it:
 
