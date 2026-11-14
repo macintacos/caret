@@ -67,6 +67,18 @@ export async function assertCleanTree(deps: Deps, allowed: string[] = []): Promi
   }
 }
 
+/**
+ * Reject an unreadable `--notes-file` before anything mutates. finalize reads it
+ * lazily, but a mistyped path must not surface only after the tag has been pushed:
+ * tags are never moved, so that would strand the release.
+ */
+export async function assertNotesFile(deps: Deps, notesFile: string | undefined): Promise<void> {
+  if (notesFile === undefined) return;
+  if (!(await deps.fs.exists(notesFile))) {
+    throw new GuardError("NOTES_MISSING", `Release notes file ${notesFile} does not exist.`);
+  }
+}
+
 /** assertInSync but raising the typed MANIFEST_DRIFT guard on disagreement. */
 export function syncedVersion(entries: { file: string; version: string }[]): string {
   try {

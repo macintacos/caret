@@ -5,6 +5,8 @@
 
 import { $ } from "bun";
 
+import { z } from "zod";
+
 // Each must match .github/workflows/publish.yml; release-workflow.test.ts pins them.
 export const PUBLISH_WORKFLOW = "publish.yml";
 /** The stage job's id. The job must not set `name:`: `stageId` matches
@@ -25,6 +27,13 @@ export interface PublishRun {
 /** The PR states gh reports, uppercase end to end. */
 export type PrState = "OPEN" | "CLOSED" | "MERGED";
 
+/** A published (non-draft) GitHub Release. */
+export interface PublishedRelease {
+  tag: string;
+  publishedAt: Date;
+  notes: string;
+}
+
 export interface PullRequestSummary {
   number: number;
   url: string;
@@ -43,6 +52,8 @@ export interface GitHubOps {
   }): Promise<{ number: number; url: string }>;
   /** Every PR for a head branch, across all states; callers filter on `PrState`. */
   prList(opts: { head: string }): Promise<PullRequestSummary[]>;
+  /** Every published release, drafts left out. */
+  publishedReleases(): Promise<PublishedRelease[]>;
   /** The release for a tag, or null if none exists. */
   releaseView(tag: string): Promise<{ url: string; isDraft: boolean } | null>;
   /** Create the release as a draft; `releasePublish` makes it public. */
@@ -56,6 +67,12 @@ export interface GitHubOps {
   /** The stage id the run's stage job annotated, or null if it has none. */
   stageId(runId: number): Promise<string | null>;
 }
+
+const PublishedReleaseLine = z.object({
+  tag: z.string(),
+  publishedAt: z.coerce.date(),
+  notes: z.string(),
+});
 
 /** PR number from a `.../pull/<n>` URL, or 0 if it can't be parsed. */
 function prNumberFromUrl(url: string): number {
@@ -94,6 +111,15 @@ export function createGitHub(): GitHubOps {
       ).trim();
       if (out === "") return [];
       return JSON.parse(out) as PullRequestSummary[];
+    },
+
+    async publishedReleases() {
+      const out =
+        await $`gh api --paginate ${"repos/{owner}/{repo}/releases?per_page=100"} --jq ${'.[] | select(.draft | not) | {tag: .tag_name, publishedAt: .published_at, notes: (.body // "")}'}`.text();
+      return out
+        .split("\n")
+        .filter((line) => line.trim() !== "")
+        .map((line) => PublishedReleaseLine.parse(JSON.parse(line)));
     },
 
     async releaseView(tag) {

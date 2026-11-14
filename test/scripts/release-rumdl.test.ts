@@ -33,3 +33,15 @@ test(
   },
   RUMDL_TIMEOUT_MS,
 );
+
+test(
+  "formatPage formats the changelog page by the repo's site-page rules",
+  async () => {
+    const item = `- ${"word ".repeat(30).trim()}\n`;
+    const out = await createRumdl().formatPage(item, "docs/changelog.md");
+    // Site pages hold a list item's wrapped line at 4 spaces, the indent Python-Markdown
+    // needs; other files align it to the item's text, 2 spaces in.
+    expect(out.split("\n")[1]).toStartWith("    word");
+  },
+  RUMDL_TIMEOUT_MS,
+);

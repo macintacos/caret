@@ -26,6 +26,7 @@ export { finalize } from "@/tasks/release/steps/finalize.ts";
 export {
   assertBranch,
   assertCleanTree,
+  assertNotesFile,
   assertRepoAndGh,
   GuardError,
   offendingPaths,

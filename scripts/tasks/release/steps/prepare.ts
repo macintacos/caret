@@ -1,10 +1,12 @@
-// prepare (phase 1): bump the manifests, commit them, push the release branch,
-// and open the PR. Every sub-phase is resume-aware so the whole step is safe to
-// re-run after a partial failure: it detects an existing branch, an
-// already-bumped manifest, a committed bump, an up-to-date remote, and an open
-// PR, skipping or no-oping rather than crashing. The body below sequences the
-// sub-phases; each is a named helper so the flow reads as its phases.
+// prepare (phase 1): bump the manifests, regenerate the changelog page with the
+// new release's notes, commit them, push the release branch, and open the PR. Every
+// sub-phase is resume-aware so the whole step is safe to re-run after a partial
+// failure: it detects an existing branch, an already-bumped manifest, a committed
+// bump, an up-to-date remote, and an open PR, skipping or no-oping rather than
+// crashing. The body below sequences the sub-phases; each is a named helper so the
+// flow reads as its phases.
 
+import { CHANGELOG_PAGE, renderChangelog } from "@/tasks/release/changelog.ts";
 import type { PrState } from "@/tasks/release/github.ts";
 import { editVersion, extractVersion } from "@/tasks/release/manifest.ts";
 import {
@@ -17,22 +19,27 @@ import type { Deps } from "@/tasks/release/steps/deps.ts";
 import {
   assertBranch,
   assertCleanTree,
+  assertNotesFile,
   assertRepoAndGh,
   GuardError,
 } from "@/tasks/release/steps/guards.ts";
 import type { BumpLevel } from "@/tasks/release/version.ts";
+
+/** The paths a release commit carries. */
+const RELEASE_SET = [...MANIFESTS, CHANGELOG_PAGE];
 
 /** The release PR body: a "What changed" summary and a "What to test" checklist. */
 function prBody(version: string): string {
   return [
     "## What changed",
     "",
-    `Bumps the version to ${version} across package.json and the two .claude-plugin manifests.`,
+    `Bumps the version to ${version} across package.json and the two .claude-plugin manifests, and adds its notes to the docs site's changelog page.`,
     "",
     "## What to test",
     "",
     "- `mise run preflight` passes on the release branch.",
     "- All three manifests reflect the new version.",
+    `- \`${CHANGELOG_PAGE}\` opens with ${version}'s notes.`,
   ].join("\n");
 }
 
@@ -82,6 +89,24 @@ async function bumpManifests(deps: Deps, ctx: ReleaseContext, apply: boolean): P
   }
 }
 
+/** Regenerate the changelog page from the published releases plus this one, so the
+ * page reaches main before the tag push that deploys the site. Rewriting the whole page
+ * keeps it a mirror of the Releases and a re-run byte-identical. */
+async function writeChangelog(
+  deps: Deps,
+  ctx: ReleaseContext,
+  notesFile: string,
+  apply: boolean,
+): Promise<void> {
+  if (!apply) {
+    deps.io.log(`Would add ${ctx.tag} to ${CHANGELOG_PAGE}.`);
+    return;
+  }
+  const release = { tag: ctx.tag, publishedAt: deps.now(), notes: await deps.fs.read(notesFile) };
+  const page = renderChangelog(ctx.repoSlug, [release, ...(await deps.github.publishedReleases())]);
+  await deps.fs.write(CHANGELOG_PAGE, await deps.rumdl.formatPage(page, CHANGELOG_PAGE));
+}
+
 /** Commit the release set (resume-aware: skip if nothing to commit). */
 async function commitRelease(deps: Deps, title: string, apply: boolean): Promise<boolean> {
   const dirty = await deps.git.porcelainStatus();
@@ -90,7 +115,7 @@ async function commitRelease(deps: Deps, title: string, apply: boolean): Promise
     return false;
   }
   if (apply) {
-    await deps.git.stage(MANIFESTS);
+    await deps.git.stage(RELEASE_SET);
     await deps.git.commit(title);
     return true;
   }
@@ -176,20 +201,23 @@ async function ensurePr(
   return { prNumber: null, prUrl: null };
 }
 
-/** Phase 1: bump the manifests, commit them, push the branch, open a PR. */
+/** Phase 1: bump the manifests, add the release to the changelog page, commit them,
+ * push the branch, open a PR. */
 export async function prepare(
   deps: Deps,
-  opts: { bump: BumpLevel; dryRun: boolean },
+  opts: { bump: BumpLevel; dryRun: boolean; notesFile: string },
 ): Promise<PrepareResult> {
   const apply = !opts.dryRun;
   const { repoSlug, defaultBranch } = await assertRepoAndGh(deps);
   await assertBranch(deps, defaultBranch, { allowPrefixes: ["release/"] });
-  await assertCleanTree(deps, MANIFESTS);
+  await assertCleanTree(deps, RELEASE_SET);
+  await assertNotesFile(deps, opts.notesFile);
   const ctx = await gatherContext(deps, opts.bump, repoSlug, defaultBranch);
 
   const title = ctx.tag;
   await resolveReleaseBranch(deps, ctx, apply);
   await bumpManifests(deps, ctx, apply);
+  await writeChangelog(deps, ctx, opts.notesFile, apply);
   // No preflight gate here: release deliberately does not run `mise run preflight`
   // (verify locally before releasing). Don't re-add it — flaky-test churn was
   // blocking releases for no gain the operator can't get by running it themselves.

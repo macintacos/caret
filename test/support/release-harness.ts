@@ -4,7 +4,12 @@
 // network. Every mutating call, plus the CI reads and sleeps the polls make, is
 // recorded into `calls` so a test can assert exactly what would (or would not) run.
 import type { GitOps, RawCommit } from "@/tasks/release/git.ts";
-import type { GitHubOps, PublishRun, PullRequestSummary } from "@/tasks/release/github.ts";
+import type {
+  GitHubOps,
+  PublishedRelease,
+  PublishRun,
+  PullRequestSummary,
+} from "@/tasks/release/github.ts";
 import type { NpmOps } from "@/tasks/release/npm.ts";
 import type { RumdlOps } from "@/tasks/release/rumdl.ts";
 import type { Deps, FsOps } from "@/tasks/release/steps.ts";
@@ -41,6 +46,8 @@ export interface GitOptions {
 export interface GitHubOptions {
   prs?: PullRequestSummary[];
   releases?: Record<string, { url: string; notes?: string; isDraft?: boolean }>;
+  /** What `publishedReleases` lists; independent of `releases`, which models drafts too. */
+  publishedReleases?: PublishedRelease[];
   available?: boolean;
   /** Publish-run states per commit sha: each `publishRun` read pops the next, the last repeats. */
   runs?: Record<string, PublishRun[]>;
@@ -253,6 +260,9 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
     async prList() {
       return prs;
     },
+    async publishedReleases() {
+      return opts.publishedReleases ?? [];
+    },
     async releaseView(tag) {
       const release = releases.get(tag);
       return release === undefined ? null : { url: release.url, isDraft: release.isDraft ?? false };
@@ -297,13 +307,16 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
     },
   };
 
-  // A passthrough reflow: it records the call and returns the input unchanged, so
-  // a test can assert both that finalize reflowed and what body it handed over
-  // (the notes captured by the release fake equal the composed input). The real
-  // rumdl collapsing is pinned separately in release-rumdl.test.ts.
+  // Passthroughs: each records the call and returns the input unchanged, so a test
+  // can assert both that a step formatted and what it handed over. The real rumdl
+  // output is pinned separately in release-rumdl.test.ts.
   const rumdl: RumdlOps = {
     async reflow(markdown) {
       calls.push("reflow");
+      return markdown;
+    },
+    async formatPage(markdown, path) {
+      calls.push(`formatPage:${path}`);
       return markdown;
     },
   };
@@ -319,6 +332,7 @@ export function makeReleaseHarness(opts: HarnessOptions = {}): ReleaseHarness {
     async sleep(ms) {
       calls.push(`sleep:${ms}`);
     },
+    now: () => new Date("2026-11-14T12:00:00Z"),
   };
   return { deps, calls, logs, files, state, releases };
 }

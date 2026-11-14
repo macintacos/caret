@@ -41,6 +41,11 @@ export function isNewer(version: string, other: string): boolean {
   return semver.gt(version, other);
 }
 
+/** A sort comparator ordering versions newest first by semver order. */
+export function newestFirst(a: string, b: string): number {
+  return semver.rcompare(a, b);
+}
+
 /** The version body of a `vX.Y.Z` tag. Throws if the tag is not `v` + semver. */
 export function versionFromTag(tag: string): string {
   if (!tag.startsWith("v")) {

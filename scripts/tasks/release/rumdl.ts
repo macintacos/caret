@@ -13,6 +13,9 @@ export interface RumdlOps {
    * code and list structure preserved). Returns the input untouched when it is
    * blank, avoiding a pointless subprocess. */
   reflow(markdown: string): Promise<string>;
+  /** Format `markdown` as the repo's own `.rumdl.toml` formats the file at `path`, the
+   * repo-hygiene role, so the result passes the lint a commit of that file runs. */
+  formatPage(markdown: string, path: string): Promise<string>;
 }
 
 /** Constructs the real, rumdl-backed RumdlOps. Pinned via mise (mise.toml,
@@ -28,6 +31,10 @@ export function createRumdl(): RumdlOps {
       const out =
         await $`mise x rumdl -- rumdl fmt - --config MD013.reflow=true --config MD013.line_length=9999999 < ${Buffer.from(markdown)}`.text();
       return out;
+    },
+
+    async formatPage(markdown, path) {
+      return await $`mise x rumdl -- rumdl fmt - --stdin-filename ${path} --silent < ${Buffer.from(markdown)}`.text();
     },
   };
 }

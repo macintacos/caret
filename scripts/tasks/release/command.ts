@@ -48,6 +48,7 @@ function realDeps(): Deps {
     },
     io: { log: (m) => process.stderr.write(`${m}\n`) },
     sleep: (ms) => Bun.sleep(ms),
+    now: () => new Date(),
   };
 }
 
@@ -134,14 +135,23 @@ export function buildReleaseCommand(deps: Deps = realDeps()): Command {
 
   program
     .command("prepare")
-    .description("phase 1: bump manifests, commit, push, open the release PR")
+    .description(
+      "phase 1: bump manifests, add the release to the changelog page, commit, push, open the release PR",
+    )
     .argument("<bump>", "patch | minor | major")
     .option("--dry-run", "preview without mutating")
     .option("--yes", "confirm the mutation")
+    .requiredOption("--notes-file <path>", "markdown file holding the release notes")
     .action(async (bump, opts) => {
       const level = requireBump(bump);
       requireGo("prepare", opts);
-      await emitStep(() => prepare(deps, { bump: level, dryRun: opts.dryRun ?? false }));
+      await emitStep(() =>
+        prepare(deps, {
+          bump: level,
+          dryRun: opts.dryRun ?? false,
+          notesFile: opts.notesFile,
+        }),
+      );
     });
 
   program

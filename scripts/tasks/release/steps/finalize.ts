@@ -18,6 +18,7 @@ import {
 import type { Deps } from "@/tasks/release/steps/deps.ts";
 import {
   assertCleanTree,
+  assertNotesFile,
   assertRepoAndGh,
   GuardError,
   syncedVersion,
@@ -83,18 +84,6 @@ async function resolveTrunkRelease(deps: Deps, defaultBranch: string): Promise<T
   }
 
   return { trunkSha, version, tag, title: tag };
-}
-
-/**
- * Reject an unreadable `--notes-file` before anything mutates. The read itself
- * stays lazy (below), but a mistyped path must not surface only after the tag has
- * been pushed — tags are never moved, so that would strand the release.
- */
-async function assertNotesFile(deps: Deps, notesFile: string | undefined): Promise<void> {
-  if (notesFile === undefined) return;
-  if (!(await deps.fs.exists(notesFile))) {
-    throw new GuardError("NOTES_MISSING", `Release notes file ${notesFile} does not exist.`);
-  }
 }
 
 /**

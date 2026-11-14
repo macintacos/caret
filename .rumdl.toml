@@ -55,6 +55,7 @@ style = "aligned"
 # reads a `!!!` admonition's indented body as indented code once the page has a fence.
 [per-file-flavor]
 "docs/index.md"       = "mkdocs"
+"docs/changelog.md"   = "mkdocs"
 "docs/tutorial/**"    = "mkdocs"
 "docs/how-to/**"      = "mkdocs"
 "docs/reference/**"   = "mkdocs"

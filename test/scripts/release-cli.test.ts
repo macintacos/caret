@@ -185,6 +185,28 @@ describe("release group error discipline (in-process, injected deps)", () => {
     expect(releases.get("v0.1.0")?.notes).toContain("Ships the widget.");
   });
 
+  test("prepare's --notes-file reaches the step and lands on the changelog page", async () => {
+    const NOTES_FILE = "/tmp/caret-release-notes.md";
+    const { deps, files } = makeReleaseHarness({
+      porcelain: [" M package.json"],
+      files: {
+        "package.json": '{ "version": "0.0.1" }',
+        ".claude-plugin/plugin.json": '{ "version": "0.0.1" }',
+        ".claude-plugin/marketplace.json": '{ "version": "0.0.1" }',
+        [NOTES_FILE]: "Ships the widget.\n",
+      },
+    });
+    const { threw } = await runReleaseInProcess(deps, [
+      "prepare",
+      "minor",
+      "--yes",
+      "--notes-file",
+      NOTES_FILE,
+    ]);
+    expect(threw).toBeUndefined();
+    expect(files.get("docs/changelog.md")).toContain("Ships the widget.");
+  });
+
   test("publish refuses to run without --yes or --dry-run", async () => {
     const { deps, calls } = makeReleaseHarness();
     const { stdout, exitCode } = await runReleaseInProcess(deps, ["publish"]);

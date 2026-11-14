@@ -94,10 +94,10 @@ follows:
   repo, before `prepare`.
 - **Plan approval authorizes everything except the npm approval pause.** Once you've
   exited plan mode and written the notes to their temp file, proceed straight through
-  `prepare` → merge the PR → `finalize`, handing `finalize` that file through
-  `--notes-file` and passing `--yes` to the mutating calls. The npm approval pause (Phase
-  2 step 3) and its "continue" always stop the run, plan mode included. Otherwise stop
-  only on a script or `gh` error.
+  `prepare` → merge the PR → `finalize`, handing both `prepare` and `finalize` that file
+  through `--notes-file` and passing `--yes` to the mutating calls. The npm approval pause
+  (Phase 2 step 3) and its "continue" always stop the run, plan mode included. Otherwise
+  stop only on a script or `gh` error.
 
 ---
 
@@ -200,17 +200,20 @@ Write the whole body — theme line on top, then the category sections, then the
 link — to one markdown file **outside the repo**: the session's scratchpad directory when
 it has one, else `/tmp/caret-release-notes-<version>.md`. `finalize` guards on a clean
 working tree with no allowlist, so an untracked notes file inside the repo would trip
-`DIRTY_TREE` and abort the release. Phase 2 step 2 hands that path to `finalize` through
-`--notes-file`.
+`DIRTY_TREE` and abort the release. Step 4 hands that path to `prepare`, and Phase 2 step
+2 hands it to `finalize`, both through `--notes-file`.
 
 ### 4. Run prepare
 
 The version gate (step 2) already authorized this — no separate confirmation. The script
-titles the commit, the PR, the tag, and the GitHub Release `v<version>`.
+titles the commit, the PR, the tag, and the GitHub Release `v<version>`. It also
+regenerates `docs/changelog.md`, the docs site's Changelog tab, from the published
+Releases plus your notes file, and commits it with the bump. The page then reaches main
+before the tag push that deploys the site.
 
 ```sh
-bun scripts/tasks/cli.ts release prepare <bump> --yes      # real
-bun scripts/tasks/cli.ts release prepare <bump> --dry-run  # dry run (no --yes)
+bun scripts/tasks/cli.ts release prepare <bump> --yes --notes-file <path>      # real
+bun scripts/tasks/cli.ts release prepare <bump> --dry-run --notes-file <path>  # dry run (no --yes)
 ```
 
 Parse the result and keep `prNumber` and `prUrl`. Report the `prUrl`, then continue to

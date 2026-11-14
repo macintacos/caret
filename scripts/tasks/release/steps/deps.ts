@@ -27,4 +27,5 @@ export interface Deps {
   fs: FsOps;
   io: Io;
   sleep(ms: number): Promise<void>;
+  now(): Date;
 }

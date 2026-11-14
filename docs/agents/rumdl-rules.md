@@ -19,7 +19,7 @@ for.
 | **Who sees it** | contributors, CI, the pre-commit hook | **end users** — every plan caret renders for review | readers of a GitHub Release |
 | **Binary** | mise-provisioned, on `PATH` | downloaded at runtime into `$XDG_STATE_HOME/caret/rumdl/`, sha256-verified, deliberately **off** `PATH` | mise-provisioned, reached via `mise x rumdl` so it resolves the same binary the format task uses |
 | **Config** | `.rumdl.toml` — lint **and** format | `RUMDL_CONFIG`, a string constant in `src/plan/rumdl.ts`, rewritten into caret's state dir on every `ensureRumdl()` | inline `--config` flags only, no file |
-| **Invocation** | `rumdl fmt {{ files }}` (format) and `rumdl check {{ files }}` (lint), both driven by `hk.pkl` over `**/*.md` and `**/*.markdown` | `rumdl fmt - --config <config>` over stdin | `mise x rumdl -- rumdl fmt - --config MD013.reflow=true --config MD013.line_length=9999999` over stdin |
+| **Invocation** | `rumdl fmt {{ files }}` (format) and `rumdl check {{ files }}` (lint), both driven by `hk.pkl` over `**/*.md` and `**/*.markdown`; `caret-tasks release prepare` also formats the generated `docs/changelog.md` through `mise x rumdl -- rumdl fmt - --stdin-filename docs/changelog.md`, whose filename picks up `.rumdl.toml`'s per-file rules, so the page passes that lint | `rumdl fmt - --config <config>` over stdin | `mise x rumdl -- rumdl fmt - --config MD013.reflow=true --config MD013.line_length=9999999` over stdin |
 | **Owns the detail** | `.rumdl.toml`, `hk.pkl` | `src/plan/rumdl.ts`, [`../explanation/plan-formatting.md`](../explanation/plan-formatting.md) | `scripts/tasks/release/rumdl.ts` |
 
 Each of those files explains its own half well; this one exists for the *relationship*
@@ -131,7 +131,7 @@ run also proves the new binary still produces the plan shape `test/core/plan/` p
 | `src/plan/rumdl.ts` | `RUMDL_VERSION`, the `ASSETS` checksums, `RUMDL_CONFIG`, the download |
 | `src/config/paths.ts` | where the downloaded binary and its config live |
 | `src/commands/install/index.ts` | warms the download at install time, off the first plan's critical path |
-| `scripts/tasks/release/rumdl.ts` | the release-notes invocation and its inline config |
+| `scripts/tasks/release/rumdl.ts` | the release-notes invocation and its inline config, and the changelog page's format under `.rumdl.toml` |
 | `docs/explanation/plan-formatting.md` | the user-facing story, including hard-coded version mentions |
 | `docs/reference/environment-variables.md` | the `CARET_RUMDL_BIN` row's version mention |
 | `test/structure/rumdl-pin.test.ts` | the standing gate on the shared version |

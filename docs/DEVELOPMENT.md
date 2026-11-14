@@ -772,6 +772,12 @@ same `v*` tag runs `.github/workflows/docs.yml`, which rebuilds the docs site an
 it to GitHub Pages; a manual run (Actions → docs → Run workflow) ships an urgent docs fix
 between releases.
 
+The site's Changelog tab, `docs/changelog.md`, mirrors the GitHub Releases.
+`release prepare` regenerates it from the published Releases plus the new release's notes
+file and commits it with the version bump, so the tag's deploy already lists the release.
+Edit an old release's notes on GitHub, not in the page: the next release overwrites the
+page.
+
 One-time setup, before the first CI release:
 
 1. On npmjs.com, add a trusted publisher for `@macintacos/caret`: owner `macintacos`, repo

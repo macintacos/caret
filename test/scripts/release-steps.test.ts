@@ -126,10 +126,22 @@ test("baseline is a no-op when v0.0.1 already exists", async () => {
 
 // --- prepare ---------------------------------------------------------------
 
+/** Where the agent parks the composed release body; read through `deps.fs`. */
+const NOTES_FILE = "/tmp/caret-release-notes.md";
+const NOTES = "Ships the widget.\n\n### Added\n\n- A thing.\n";
+
 // A tree dirtied only by a manifest edit: `prepare` allows the manifests it is about
 // to bump, and `commitRelease` needs a non-empty status to have something to commit.
-// The manifests themselves come from the harness default (all three at 0.0.1).
-const PREPARE_OPTS: HarnessOptions = { porcelain: [" M package.json"] };
+// The manifests sit at the harness default, 0.0.1, beside the composed notes file.
+const PREPARE_OPTS: HarnessOptions = {
+  porcelain: [" M package.json"],
+  files: {
+    "package.json": pkg("0.0.1"),
+    ".claude-plugin/plugin.json": pkg("0.0.1"),
+    ".claude-plugin/marketplace.json": market("0.0.1"),
+    [NOTES_FILE]: NOTES,
+  },
+};
 
 /** PR #3 against `release/v0.1.0` — the fixture every "an existing release PR"
  * case starts from, parametrized by its lifecycle state. */
@@ -154,30 +166,56 @@ const resumedReleaseBranch = (state: PrState): HarnessOptions => ({
     "package.json": pkg("0.1.0"),
     ".claude-plugin/plugin.json": pkg("0.1.0"),
     ".claude-plugin/marketplace.json": market("0.1.0"),
+    [NOTES_FILE]: NOTES,
   },
   prs: releasePr3(state),
 });
 
 test("prepare dry-run writes, commits, pushes, and PRs nothing", async () => {
   const { deps, calls } = makeReleaseHarness(PREPARE_OPTS);
-  const r = await prepare(deps, { bump: "minor", dryRun: true });
+  const r = await prepare(deps, { bump: "minor", dryRun: true, notesFile: NOTES_FILE });
   expect(r.dryRun).toBe(true);
   expect(r.version).toBe("0.1.0");
   expect(r.title).toBe("v0.1.0");
   expect(calls).toEqual([]);
 });
 
-test("prepare stages only the version manifests", async () => {
+test("prepare stages the version manifests and the changelog page", async () => {
   const { deps, calls } = makeReleaseHarness(PREPARE_OPTS);
-  await prepare(deps, { bump: "minor", dryRun: false });
+  await prepare(deps, { bump: "minor", dryRun: false, notesFile: NOTES_FILE });
   expect(calls).toContain(
-    "stage:package.json,.claude-plugin/marketplace.json,.claude-plugin/plugin.json",
+    "stage:package.json,.claude-plugin/marketplace.json,.claude-plugin/plugin.json,docs/changelog.md",
   );
+});
+
+test("prepare puts the new release's notes atop the published releases on the changelog page", async () => {
+  const { deps, files, calls } = makeReleaseHarness({
+    ...PREPARE_OPTS,
+    publishedReleases: [
+      { tag: "v0.0.1", publishedAt: new Date("2026-06-01T12:00:00Z"), notes: "First." },
+    ],
+  });
+  await prepare(deps, { bump: "minor", dryRun: false, notesFile: NOTES_FILE });
+  const page = files.get("docs/changelog.md") ?? "";
+  expect(page.indexOf("## v0.1.0")).toBeGreaterThan(-1);
+  expect(page.indexOf("## v0.1.0")).toBeLessThan(page.indexOf("## v0.0.1"));
+  expect(page).toContain("Ships the widget.");
+  expect(page).toContain("First.");
+  expect(calls).toContain("formatPage:docs/changelog.md");
+});
+
+test("prepare rejects a missing notes file before it changes anything", async () => {
+  const { deps, calls } = makeReleaseHarness(PREPARE_OPTS);
+  await expectGuard(
+    prepare(deps, { bump: "minor", dryRun: false, notesFile: "/tmp/nope.md" }),
+    "NOTES_MISSING",
+  );
+  expect(calls).toEqual([]);
 });
 
 test("prepare bumps manifests, commits, pushes, and opens a PR", async () => {
   const { deps, calls, files } = makeReleaseHarness(PREPARE_OPTS);
-  const r = await prepare(deps, { bump: "minor", dryRun: false });
+  const r = await prepare(deps, { bump: "minor", dryRun: false, notesFile: NOTES_FILE });
   expect(files.get("package.json")).toContain('"version": "0.1.0"');
   expect(files.get(".claude-plugin/marketplace.json")).toContain('"version": "0.1.0"');
   expect(calls).toContain("checkoutNew:release/v0.1.0");
@@ -196,7 +234,7 @@ test("prepare reuses an already-open PR instead of opening a duplicate", async (
     refs: { "origin/trunk": "trunksha", "origin/release/v0.1.0": "x" },
     prs: releasePr3("OPEN"),
   });
-  const r = await prepare(deps, { bump: "minor", dryRun: false });
+  const r = await prepare(deps, { bump: "minor", dryRun: false, notesFile: NOTES_FILE });
   expect(calls).not.toContain("prCreate");
   expect(r.prNumber).toBe(3);
   expect(r.prUrl).toBe("https://github.com/macintacos/caret/pull/3");
@@ -204,7 +242,7 @@ test("prepare reuses an already-open PR instead of opening a duplicate", async (
 
 test("prepare resumes cleanly when the release branch is already bumped", async () => {
   const { deps, calls } = makeReleaseHarness(resumedReleaseBranch("OPEN"));
-  const r = await prepare(deps, { bump: "minor", dryRun: false });
+  const r = await prepare(deps, { bump: "minor", dryRun: false, notesFile: NOTES_FILE });
   expect(r.version).toBe("0.1.0");
   expect(r.prNumber).toBe(3);
   expect(calls).not.toContain("write:package.json"); // bump skipped, no crash
@@ -230,9 +268,13 @@ test("prepare rejects BRANCH_DIVERGED when the remote release branch is not an a
       "package.json": pkg("0.1.0"),
       ".claude-plugin/plugin.json": pkg("0.1.0"),
       ".claude-plugin/marketplace.json": market("0.1.0"),
+      [NOTES_FILE]: NOTES,
     },
   });
-  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "BRANCH_DIVERGED");
+  await expectGuard(
+    prepare(deps, { bump: "minor", dryRun: false, notesFile: NOTES_FILE }),
+    "BRANCH_DIVERGED",
+  );
   expect(calls).not.toContain("pushBranch:release/v0.1.0:false"); // never pushed over the divergence
 });
 
@@ -240,7 +282,10 @@ test("prepare rejects ALREADY_MERGED when the release PR is already merged", asy
   // The bump PR merged but the operator re-ran prepare; it must point them at
   // finalize rather than open a duplicate or push again.
   const { deps, calls } = makeReleaseHarness(resumedReleaseBranch("MERGED"));
-  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "ALREADY_MERGED");
+  await expectGuard(
+    prepare(deps, { bump: "minor", dryRun: false, notesFile: NOTES_FILE }),
+    "ALREADY_MERGED",
+  );
   expect(calls).not.toContain("prCreate");
 });
 
@@ -248,7 +293,10 @@ test("prepare rejects PR_CLOSED when the release PR was closed unmerged", async 
   // A closed-unmerged PR means a human intervened; prepare refuses to silently
   // open a fresh PR over the same branch.
   const { deps, calls } = makeReleaseHarness(resumedReleaseBranch("CLOSED"));
-  await expectGuard(prepare(deps, { bump: "minor", dryRun: false }), "PR_CLOSED");
+  await expectGuard(
+    prepare(deps, { bump: "minor", dryRun: false, notesFile: NOTES_FILE }),
+    "PR_CLOSED",
+  );
   expect(calls).not.toContain("prCreate");
 });
 
@@ -276,10 +324,6 @@ const FINALIZE_OPTS: HarnessOptions = {
     "origin/trunk:.claude-plugin/marketplace.json": market("0.1.0"),
   },
 };
-
-/** Where the agent parks the composed release body; read through `deps.fs`. */
-const NOTES_FILE = "/tmp/caret-release-notes.md";
-const NOTES = "Ships the widget.\n\n### Added\n\n- A thing.\n";
 
 /** FINALIZE_OPTS plus the notes file staged in the fake working tree. */
 const withNotes = (opts: HarnessOptions = FINALIZE_OPTS): HarnessOptions => ({
