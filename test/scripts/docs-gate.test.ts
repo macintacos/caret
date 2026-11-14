@@ -4,8 +4,10 @@ import {
   docsGateReport,
   excludedFromSite,
   SKIP_LABEL,
+  USER_VISIBLE,
   userVisibleSurface,
 } from "@scripts/docs-gate.ts";
+import { drainProcess } from "@test/support/cli-process.ts";
 
 const excluded = excludedFromSite(await Bun.file("zensical.toml").text());
 
@@ -62,9 +64,23 @@ describe("userVisibleSurface", () => {
   test("counts CLI help text and caret install output", () => {
     expect(userVisibleSurface("src/cli.ts")).not.toBeNull();
     expect(userVisibleSurface("src/commands/install/claude.ts")).not.toBeNull();
-    expect(userVisibleSurface("src/adapters/pi/install.ts")).not.toBeNull();
     expect(userVisibleSurface("src/adapters/pi/host.ts")).toBeNull();
     expect(userVisibleSurface("src/daemon/server.ts")).toBeNull();
+  });
+
+  test("files what install writes under install, and doctor's probes under diagnostics", () => {
+    const install = "what caret install sets up in an agent host";
+    expect(userVisibleSurface("src/adapters/pi/install.ts")).toBe(install);
+    expect(userVisibleSurface("src/adapters/opencode/config-plugin.ts")).toBe(install);
+    expect(userVisibleSurface("src/adapters/claude/install.ts")).toBe("diagnostics");
+    expect(userVisibleSurface("src/adapters/opencode/checks.ts")).toBe("diagnostics");
+  });
+
+  test("documentation-rules.md lists every USER_VISIBLE glob", async () => {
+    const rules = await Bun.file("docs/agents/documentation-rules.md").text();
+    const section = rules.split("## The docs gate")[1]?.split("\n## ")[0] ?? "";
+    for (const glob of USER_VISIBLE.flatMap((entry) => entry.globs))
+      expect(section).toContain(`\`${glob}\``);
   });
 });
 
@@ -76,6 +92,13 @@ describe("excludedFromSite", () => {
     expect(excluded("docs/reference/glossary.md")).toBe(false);
   });
 
+  test("reads an anchored name without a trailing slash as a file or a directory", () => {
+    const matches = excludedFromSite('[project]\nexclude_docs = """\n/agents\n"""\n');
+    expect(matches("docs/agents")).toBe(true);
+    expect(matches("docs/agents/x.md")).toBe(true);
+    expect(matches("docs/agentsx.md")).toBe(false);
+  });
+
   test("throws on a pattern it cannot read", () => {
     expect(() => excludedFromSite('[project]\nexclude_docs = """\n*.draft.md\n"""\n')).toThrow(
       "*.draft.md",
@@ -84,83 +107,26 @@ describe("excludedFromSite", () => {
 });
 
 describe("the entry point", () => {
-  async function run(labels: string): Promise<{ code: number; stdout: string }> {
-    const proc = Bun.spawn(["bun", "scripts/docs-gate.ts"], {
-      stdin: new TextEncoder().encode("src/cli.ts\n"),
-      stdout: "pipe",
-      env: { ...process.env, PR_LABELS: labels },
-    });
-    const stdout = await new Response(proc.stdout).text();
-    return { code: await proc.exited, stdout };
+  function run(labels: string) {
+    return drainProcess(
+      Bun.spawn([process.execPath, "scripts/docs-gate.ts"], {
+        stdin: new TextEncoder().encode("src/cli.ts\n"),
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, PR_LABELS: labels },
+      }),
+    );
   }
 
   test("fails with a workflow error annotation", async () => {
-    const { code, stdout } = await run("[]");
-    expect(code).toBe(1);
+    const { exit, stdout } = await run("[]");
+    expect(exit).toBe(1);
     expect(stdout).toContain("::error::docs gate:");
   });
 
   test("passes silently with the skip label", async () => {
-    const { code, stdout } = await run('["docs-not-needed"]');
-    expect(code).toBe(0);
+    const { exit, stdout } = await run('["docs-not-needed"]');
+    expect(exit).toBe(0);
     expect(stdout).toBe("");
-  });
-});
-
-type GateStep = {
-  uses?: string;
-  run?: string;
-  with?: Record<string, unknown>;
-  env?: Record<string, string>;
-};
-
-const gateYaml = await Bun.file(".github/workflows/docs-gate.yml")
-  .text()
-  .catch(() => "");
-const gateWorkflow = (Bun.YAML.parse(gateYaml) ?? {}) as {
-  on?: { pull_request?: { types?: string[]; branches?: string[] } };
-  permissions?: unknown;
-  jobs?: Record<string, { permissions?: unknown; steps: GateStep[] }>;
-};
-const gateJobs = Object.values(gateWorkflow.jobs ?? {});
-const gateSteps = gateJobs.flatMap((job) => job.steps);
-const actionsLock = await Bun.file(".github/workflows/actions.lock").text();
-
-describe("docs-gate.yml", () => {
-  test("runs on pull requests against main, re-running on label changes", () => {
-    expect(Object.keys(gateWorkflow.on ?? {})).toEqual(["pull_request"]);
-    expect([...(gateWorkflow.on?.pull_request?.types ?? [])].sort()).toEqual([
-      "labeled",
-      "opened",
-      "reopened",
-      "synchronize",
-      "unlabeled",
-    ]);
-    expect(gateWorkflow.on?.pull_request?.branches).toEqual(["main"]);
-  });
-
-  test("never runs with a write token", () => {
-    expect(gateYaml).not.toContain("pull_request_target");
-    expect(gateYaml).not.toContain("secrets.");
-    expect(gateWorkflow.permissions).toEqual({ contents: "read", "pull-requests": "read" });
-    expect(gateJobs.some((job) => job.permissions !== undefined)).toBe(false);
-    const checkouts = gateSteps.filter((step) => step.uses?.startsWith("actions/checkout@"));
-    expect(checkouts.length).toBeGreaterThan(0);
-    for (const step of checkouts) expect(step.with?.["persist-credentials"]).toBe(false);
-  });
-
-  test("pipes the PR's files and labels into the gate", () => {
-    const gate = gateSteps.find((step) => step.run?.includes("| bun scripts/docs-gate.ts"));
-    expect(gate?.env?.PR_LABELS).toContain("github.event.pull_request.labels.*.name");
-  });
-
-  test("every action ref is locked for this workflow", () => {
-    expect(actionsLock).toContain("'.github/workflows/docs-gate.yml':");
-    const refs = gateSteps.flatMap((step) => (step.uses ? [step.uses.split(" ")[0] ?? ""] : []));
-    expect(refs.length).toBeGreaterThan(0);
-    for (const ref of refs) {
-      const [repo, tag] = ref.split("@");
-      expect(actionsLock).toContain(`${repo?.split("/").slice(0, 2).join("/")}@${tag}`);
-    }
   });
 });

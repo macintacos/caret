@@ -155,5 +155,8 @@ the theme file format; plan formatting; diagnostics; or the background service. 
 that page in the same change. Apply `docs-not-needed` only when the change leaves every
 page accurate (a refactor, an internal subcommand, a test helper, a typo no page quotes),
 with `gh pr edit <number> --add-label docs-not-needed`, and say in the PR body why no page
-changed. Which paths count:
+changed. To check a branch before pushing, run
+`git diff --name-only origin/main... | bun scripts/docs-gate.ts` (use the PR's base branch
+in place of `main` for a stacked PR; `PR_LABELS` unset means no labels). Which paths
+count:
 [`docs/agents/documentation-rules.md` § The docs gate](docs/agents/documentation-rules.md#the-docs-gate).

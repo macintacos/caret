@@ -30,6 +30,8 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - run: bun install --frozen-lockfile
       - name: A user-visible change updates a site page
+        # Explicit bash runs with -o pipefail: a failed gh api fails the step instead of
+        # feeding the gate a partial list.
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
