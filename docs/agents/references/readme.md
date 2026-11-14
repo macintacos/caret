@@ -2,10 +2,10 @@
 
 *Audience: coding agents and contributors editing caret's top-level README.*
 
-`README.md` is the landing page: what caret is, the screenshot, a one-line install, and
-links to the docs site and `CONTRIBUTING.md`, and the license. User documentation lives on
-the docs site, built from `docs/`; when content gets deep, it lands there, under the rules
-in [`site.md`](site.md), not here.
+`README.md` is the landing page: what caret is, the screenshot, a one-line install, links
+to the docs site and `CONTRIBUTING.md`, and the license. User documentation lives on the
+docs site, built from `docs/`; when content gets deep, it lands there, under the rules in
+[`site.md`](site.md), not here.
 
 When to edit it:
 
