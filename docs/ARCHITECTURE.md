@@ -119,7 +119,7 @@ tick (`src/daemon/upkeep.ts`) does that work instead:
 - `stderr-rotate` rotates `logs/daemon-stderr.log`, for a supervised daemon only.
 
 To check, restart, or stop the service, see
-[The caret service](RUNNING.md#the-caret-service).
+[Run the background service](how-to/background-service.md).
 
 ### Architecture: tool-agnostic core + agent adapter
 

@@ -6,84 +6,13 @@ device, turning caret off, and logging & debugging.*
 Part of the deep reference behind [README.md](../README.md). For what caret is, how to
 install it, and basic usage, start there.
 
-## The caret service
-
-Answer **Keep it running** when `caret install` asks (`mise run build --install` included)
-and the install registers the caret service: a login service that keeps a resident daemon
-— one that stays up until told to stop — on the port, so the review UI it serves is up
-before any plan arrives. Windows has no service, and neither does a Linux host without a
-systemd user session; there, install says so and caret runs on demand.
-
-|  | macOS | Linux |
-| --- | --- | --- |
-| **Service** | launchd agent `dev.excessive.caret`, in `~/Library/LaunchAgents/dev.excessive.caret.plist` | systemd user unit `caret.service`, in `~/.config/systemd/user/` |
-| **Status** | `launchctl print gui/$(id -u)/dev.excessive.caret` | `systemctl --user status caret.service` |
-| **Restart** | `launchctl kickstart -k gui/$(id -u)/dev.excessive.caret` | `systemctl --user restart caret.service` |
-| **Stop** | `launchctl bootout gui/$(id -u)/dev.excessive.caret` — stopped until your next login | `systemctl --user stop caret.service` — stopped until your next login, or with lingering your next boot |
-
-On either platform, the daemon reports whether it is resident and which upkeep tasks it
-runs (`42718` is `[daemon].port`):
-
-```sh
-curl -s http://127.0.0.1:42718/api/diagnostics | jq '{resident, upkeep}'
-```
-
-With token auth on, add
-`-H "Authorization: Bearer $(cat "${XDG_STATE_HOME:-$HOME/.local/state}/caret/daemon.token")"`.
-
-While the service is stopped, the next review starts an on-demand daemon, which exits once
-it has sat idle for `[daemon].idle_ms` with no review pending and no review UI tab open.
-
-The service's daemon never prints its login link; with token auth on (see
-[Reaching caret from another device](#reaching-caret-from-another-device)),
-get it from `caret login-link`.
-
-### What the service runs
-
-Every unit runs `$XDG_STATE_HOME/caret/bin/caret daemon`. That file is
-`bin/caret-launcher`, which chooses what to run each time it starts:
-
-- **caret** — the version a `--from-local` build pinned, else the newest one installed
-  across Claude Code's plugin cache, OpenCode's package cache, pi's npm folder
-  (`~/.pi/agent/npm`, the default agent dir only), and caret's own copy at
-  `~/.local/state/caret/roots/`. A published `caret install` keeps that copy of itself, so
-  after `--refresh` the service runs it until something newer is installed — usually
-  OpenCode's next start, which re-resolves its cache. An agent's copy wins a version tie.
-  A caret missing its executable `bin/caret`, or any UI build (`ui/dist`, or the one a
-  compiled `bin/caret-native` embeds), is skipped.
-- **bun** — the one recorded at install, else the first found in `~/.bun/bin`,
-  `/opt/homebrew/bin`, `/usr/local/bin`, mise's shims and installs, then `~/.asdf/shims`.
-
-So restarting the service is how its daemon takes an upgrade. `caret install --refresh`
-restarts it, and so does the first review from a newer caret unless a local build is
-pinned. After it registers or restarts the service, `caret install` waits up to 30 seconds
-for the service's daemon, at least as new as itself. If none answers, it warns instead of
-announcing the review UI, and names the older version it found, if any, and
-`logs/daemon-stderr.log`. The service's daemon also sees only the environment captured at
-install — see [Environment variables](reference/environment-variables.md).
-
-### When the daemon exits
-
-The supervisor starts it again: launchd after its throttle of about 10 seconds, systemd
-after 5. systemd gives up after five starts inside 60 seconds and parks the unit.
-
-When the launcher cannot run anything — no runnable caret, or no bun — it exits with
-status 78, and the service stops instead of restarting into the same failure. systemd
-honours that status itself; on macOS the launcher boots the agent out, and the plist loads
-again at your next login. `caret install` restores it. The launcher's reason lands in
-`logs/daemon-stderr.log` (see [Find the log files](how-to/logs.md#find-the-log-files)).
-
-On Linux, install also runs `loginctl enable-linger` so the service outlives your logout.
-Some distributions refuse that without admin rights; install then logs
-`lingering not enabled; caret stops at logout` and carries on, and caret stops when you
-log out.
-
 ## Reaching caret from another device
 
 By default the daemon listens on `127.0.0.1` only, with no auth. These steps take a server
-running a resident daemon, [the caret service](#the-caret-service) or `caret serve`, to a
-logged-in browser on a phone, tablet or another computer. They assume a network you trust;
-otherwise see [Plain HTTP and an HTTPS proxy](#plain-http-and-an-https-proxy).
+running a resident daemon, [the caret service](how-to/background-service.md) or
+`caret serve`, to a logged-in browser on a phone, tablet or another computer. They assume
+a network you trust; otherwise see
+[Plain HTTP and an HTTPS proxy](#plain-http-and-an-https-proxy).
 
 1. **Set the address.** In the `[daemon]` table of
    [`config.toml`](reference/config-file.md) (keys in
@@ -112,7 +41,7 @@ otherwise see [Plain HTTP and an HTTPS proxy](#plain-http-and-an-https-proxy).
    server by an IP you listed.
 3. **Restart the daemon.** These keys take effect on the next start. For `caret serve`,
    press Ctrl+C and run it again. For the caret service, use its
-   [Restart command](#the-caret-service):
+   [Restart command](how-to/background-service.md#check-restart-or-stop-it):
    `launchctl kickstart -k gui/$(id -u)/dev.excessive.caret` on macOS,
    `systemctl --user restart caret.service` on Linux. `caret install --refresh` also
    restarts it.
@@ -237,33 +166,3 @@ is set.
   than falling back to no auth. `caret serve` and `caret login-link` then print a link to
   `caret.localhost` instead of your `hostnames` name.
 - **An older caret ignores these keys** and keeps listening on loopback only.
-
-## Turning caret off
-
-Two commands turn caret off, and they turn off different amounts of it:
-
-| Command | What it does |
-| --- | --- |
-| `caret install`, answering **I'll run it myself** | Stops caret being resident: the review UI is no longer up from login onward. Your agent still reaches caret, and caret starts on demand. |
-| `caret install --uninstall` | Removes caret from every agent, and from this machine. |
-
-Answering **I'll run it myself** removes the service, and the install prints how to bring
-the review UI up by hand: `caret serve` keeps it up until you stop it with Ctrl+C (see
-[Run caret yourself](how-to/install.md#run-caret-yourself)). The choice isn't saved
-anywhere. A later `caret install` at a terminal asks again. One off a terminal can't ask,
-so it leaves things as they are: it refreshes a service that is already registered, and
-registers none where there isn't one.
-
-> [!IMPORTANT]
-> On macOS caret also appears under **System Settings › Login Items**, but that switch is
-> neither of these. caret cannot read it, so a later `caret install` that keeps the review
-> UI running registers the service again and reports success while the switch still reads
-> off. Run `caret install` and answer **I'll run it myself**, or use `--uninstall`,
-> instead.
-
-Alongside the agents, `--uninstall` removes the service's unit file, the launcher, and the
-records the launcher reads, and caret's own copy under `~/.local/state/caret/roots/`,
-keeping your reviews. The launcher removes the same things itself when it finds no caret
-anywhere (its own copy counts), after looking twice more, five seconds apart. When caret
-is installed but can't run, it stops the service instead (see
-[When the daemon exits](#when-the-daemon-exits)). `caret install` brings back either.
