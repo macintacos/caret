@@ -52,7 +52,7 @@ copied to `$XDG_STATE_HOME/caret/bin/caret`, which picks caret each time it star
 checkout a `--from-local` install pinned, else the highest-versioned caret across the
 Claude Code plugin cache, the OpenCode package cache, pi's npm folder, and caret's own
 copies under `$XDG_STATE_HOME/caret/roots/` (an agent's root wins a tie). Nothing in the
-unit depends on the version.
+unit depends on the version, so restarting the service is the upgrade.
 
 Every review and prewarm hook first makes sure a current daemon holds the port
 (`ensureDaemon`, `src/daemon/lifecycle.ts`):
@@ -85,6 +85,10 @@ Every review and prewarm hook first makes sure a current daemon holds the port
   still waits for its successor. Nothing answering there denies the review. Every bullet
   above assumes the daemon runs on the hook's machine.
 
+`caret serve` retires an unsupervised daemon on its way in, including one the lock places
+on another address after a `daemon.host` or `daemon.port` edit, and refuses to start when
+the service holds the port or runs that daemon.
+
 A daemon steps down by draining, on `POST /api/retire` or SIGTERM, which is how a
 supervisor stops it. It answers new reviews with `503`, lets in-flight writes land and
 unread decisions reach their hooks, then releases the port and exits 0, within
@@ -98,7 +102,8 @@ tick (`src/daemon/upkeep.ts`) does that work instead:
 - `update-check` re-runs the update check, which its 24-hour stamp still keeps to about
   once a day.
 - `review-sweep` drops reviews unchanged for a week from memory. A starting daemon's
-  reload of unresolved reviews from disk skips those too.
+  reload of unresolved reviews from disk skips those too (user-visible effect:
+  [Housekeeping](explanation/background-service.md#housekeeping)).
 - `stderr-rotate` rotates `logs/daemon-stderr.log`, for a supervised daemon only.
 
 ### Architecture: tool-agnostic core + agent adapter
@@ -232,12 +237,13 @@ reason.
 `plugin install caret@caret --scope user` and `plugin enable`. On every run the
 `marketplace add` is best-effort, but the `marketplace update caret` behind it is
 unconditional, and a third phase runs `plugin update caret@caret --scope user` between two
-`plugin list --json` reads, so the settled line reports the version Claude Code actually
-moved from and to. When Claude's `caret` marketplace is still caret's own dev marketplace
-from a `--from-local` install, the run first hands it back with
-`claude plugin marketplace remove caret`, which also uninstalls `caret@caret`; the install
-that follows puts it back. A `plugin marketplace list --json` read after the add settles
-the line on what Claude actually registered.
+`plugin list --json` reads. Each install operation settles into one line saying what it
+did, so the settled line reports the version Claude Code actually moved from and to. When
+Claude's `caret` marketplace is still caret's own dev marketplace from a `--from-local`
+install, the run first hands it back with `claude plugin marketplace remove caret`, which
+also uninstalls `caret@caret`; the install that follows puts it back. A
+`plugin marketplace list --json` read after the add settles the line on what Claude
+actually registered.
 
 ### The OpenCode adapter
 
@@ -250,29 +256,30 @@ for who may call it and how to call it yourself. The whole daemon/review pipelin
 reused unchanged — the plugin is the OpenCode-side counterpart to Claude's `hooks.json`.
 
 `caret install` probes every `opencode` on `PATH` (each bounded at 5 s) to choose between
-the `plugins` and `plugin` arrays, and edits the config comment-preserving, via
-`jsonc-parser`. Unless every one reads as v1, it writes the first of `opencode.jsonc` and
-`opencode.json` that exists, else a new `opencode.json` — never `config.json`, which v2
-ignores; a `PATH` whose every `opencode` reads as v1 keeps the first of all three. It
-writes nothing when a config file can't be read or parsed, or when an edit to it would not
-re-parse to the intended config. When every `opencode` is v2 it moves an existing `plugin`
-entry into `plugins` in the same write, keeping a pinned version: v2 loads both arrays,
-and two caret entries fail with `Duplicate plugin ID`. It deletes a `plugins` key it
-empties, because v1 below 1.18.16 refuses to start with one. Legacy plugin files in the
-config dir's `commands/` and `command/` must go because OpenCode still loads them, so a
-leftover would register a second review tool beside the array entry. caret writes no
-config-dir manifest and runs no `bun install` itself. The plugin resolves the caret binary
-and its own version at runtime from the package it ships in (`CARET_OPENCODE_BIN`
-overrides the binary — see [Environment variables](reference/environment-variables.md)).
-See [`agents/opencode-integration.md`](agents/opencode-integration.md) for the design.
+the `plugins` and `plugin` arrays (`plugins` only when every one is v2, else `plugin`),
+and edits the config comment-preserving, via `jsonc-parser`. Unless every one reads as v1,
+it writes the first of `opencode.jsonc` and `opencode.json` that exists, else a new
+`opencode.json` — never `config.json`, which v2 ignores; a `PATH` whose every `opencode`
+reads as v1 keeps the first of all three. It writes nothing when a config file can't be
+read or parsed, or when an edit to it would not re-parse to the intended config. When
+every `opencode` is v2 it moves an existing `plugin` entry into `plugins` in the same
+write, keeping a pinned version: v2 loads both arrays, and two caret entries fail with
+`Duplicate plugin ID`. It deletes a `plugins` key it empties, because v1 below 1.18.16
+refuses to start with one. Install and uninstall both delete the plugin and `caret:*.md`
+command files older caret versions left in the config dir's `commands/` and `command/`
+(why: [OpenCode](explanation/caret-install.md#opencode)). caret writes no config-dir
+manifest and runs no `bun install` itself. The plugin resolves the caret binary and its
+own version at runtime from the package it ships in (`CARET_OPENCODE_BIN` overrides the
+binary — see [Environment variables](reference/environment-variables.md)). See
+[`agents/opencode-integration.md`](agents/opencode-integration.md) for the design.
 
-On v2 the same package loads through a dual default export; the toasts, the `caret.open`
-keybinding, and the pending-plan line come from a TUI half under the package's `./tui`
-export. A v2 below 2.0.29 refuses every `path` review (see
+On v2 the same package loads through a dual default export; the review-link and update
+toasts, the `caret.open` keybinding, and the pending-plan line come from a TUI half under
+the package's `./tui` export. A v2 below 2.0.29 refuses every `path` review (see
 [Call the review tool from your own skill](how-to/review-tool.md#revise-a-plan-file-in-place)).
 `caret install --refresh` compares the caret OpenCode would load against npm's published
-one; a pin bump deliberately leaves the cache alone, since the new specifier gets its own
-cache dir.
+one, then either clears the stale cached copy or bumps a stale pin in place; a pin bump
+deliberately leaves the cache alone, since the new specifier gets its own cache dir.
 
 ### The pi adapter
 
