@@ -25,6 +25,12 @@ Links:
 - Link to an excluded page with its GitHub URL. `docs:build` runs zensical with
   `--strict`, which fails a relative link to an excluded page as if the page were missing.
 
+Couplings:
+
+- `docs/explanation/caret-install.md` prints exactly one `rm -rf` per OpenCode cache
+  layout. `test/adapters/opencode/docs-cache-path.test.ts` asserts each against
+  `opencodeCachePackageDir()` / `opencodeNpmCacheDir()`, so don't add or drop one.
+
 Checking:
 
 - `mise run docs:build` fails on a broken link, a broken anchor, or a nav entry that names

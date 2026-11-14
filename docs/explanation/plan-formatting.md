@@ -24,26 +24,26 @@ you installed caret.
 
 !!! note
 
-    caret never uses a `rumdl` on your `PATH`, so which version rewraps your plans does
-    not depend on what your machine has installed.
+    caret never uses a `rumdl` on your PATH, so which version rewraps your plans does not
+    depend on what your machine has installed.
 
 How that plays out:
 
 - **caret keeps its copy only at the pinned version.** caret reuses its copy only when
-  it reports exactly v0.3.2. caret replaces an older copy left by a previous caret, or a
-  file that won't run.
+    it reports exactly the pinned version. caret replaces an older copy left by a previous
+    caret, or a file that won't run.
 - **`caret install` downloads it ahead of time.** Your first plan then does not wait for
-  the download. If that fails, the install still succeeds with a warning, and a later
-  plan retries.
+    the download. If that fails, the install still succeeds with a warning, and a later
+    plan retries.
 - **After a failed download, caret waits ten minutes before retrying.** Retrying on
     every plan would download several megabytes while caret creates your review, and
     likely fail again. Plans sent in those ten minutes are shown unformatted. Fix the
     cause (your connection, a rate limit) and caret tries again on the first plan after
     the ten minutes, or run `caret install` to retry now.
 - **Formatting never loses a plan.** If a plan can't be formatted (no formatter,
-  offline, an unsupported platform, or formatting took longer than two seconds), caret
-  keeps it unchanged and logs one warning.
+    offline, an unsupported platform, or formatting took longer than two seconds), caret
+    keeps it unchanged and logs one warning.
 
 To use a rumdl of your own instead of the download, set `CARET_RUMDL_BIN` (see
 [Environment variables](../reference/environment-variables.md)). caret uses it only when
-it reports v0.3.2; otherwise caret downloads its own copy as usual.
+it reports the pinned version; otherwise caret downloads its own copy as usual.
