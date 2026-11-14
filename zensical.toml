@@ -48,6 +48,7 @@ nav = [
   ] },
   { "Explanation" = [
     "explanation/index.md",
+    { "Plan formatting" = "explanation/plan-formatting.md" },
   ] },
 ]
 

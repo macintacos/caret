@@ -12,7 +12,7 @@ Find the row that matches what you came here to do, then follow the link.
 | See which platforms caret supports, and what differs on each | [`CONFIGURING.md` § Platform support](reference/platform-support.md) |
 | Change the daemon port, the review timeout, or the log level in `config.toml` | [`CONFIGURING.md` § Config file](reference/config-file.md) |
 | Look up a `CARET_*` environment variable | [`CONFIGURING.md` § Environment variables](reference/environment-variables.md) |
-| Understand how caret reformats a plan before you read it | [`CONFIGURING.md` § Plan formatting (rumdl)](CONFIGURING.md#plan-formatting-rumdl) |
+| Understand how caret reformats a plan before you read it | [`CONFIGURING.md` § Plan formatting (rumdl)](explanation/plan-formatting.md) |
 | Write or check a theme file | [`CONFIGURING.md` § Theme files](reference/theme-files.md) |
 | Turn on desktop notifications, or work out why none appear | [Get notified about plans § Turn on desktop notifications](how-to/notifications.md#turn-on-desktop-notifications) |
 | Turn caret's sounds off | [Get notified about plans § Turn the sound off or down](how-to/notifications.md#turn-the-sound-off-or-down) |
