@@ -1,5 +1,5 @@
-// Pins the PR workflow's shape: the eight preflight tasks as separate least-privilege
-// checks, each running its own `mise run` entry point, with every action ref locked.
+// Pins the PR workflow's shape: each preflight task, plus e2e, as a separate least-privilege
+// check running its own `mise run` entry point, with every action ref locked.
 import { expect, test } from "bun:test";
 
 import { selectTasks } from "@scripts/preflight.ts";
