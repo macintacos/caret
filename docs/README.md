@@ -13,7 +13,7 @@ Find the row that matches what you came here to do, then follow the link.
 | Change the daemon port, the review timeout, or the log level in `config.toml` | [`CONFIGURING.md` § Config file](reference/config-file.md) |
 | Look up a `CARET_*` environment variable | [`CONFIGURING.md` § Environment variables](reference/environment-variables.md) |
 | Understand how caret reformats a plan before you read it | [`CONFIGURING.md` § Plan formatting (rumdl)](CONFIGURING.md#plan-formatting-rumdl) |
-| Write or check a theme file | [`CONFIGURING.md` § Theme files](CONFIGURING.md#theme-files) |
+| Write or check a theme file | [`CONFIGURING.md` § Theme files](reference/theme-files.md) |
 | Turn on desktop notifications, or work out why none appear | [Get notified about plans § Turn on desktop notifications](how-to/notifications.md#turn-on-desktop-notifications) |
 | Turn caret's sounds off | [Get notified about plans § Turn the sound off or down](how-to/notifications.md#turn-the-sound-off-or-down) |
 | Switch a plan between its source and a rendered preview | [Read a plan § Switch between the preview and the source view](how-to/read-a-plan.md#switch-between-the-preview-and-the-source-view) |
