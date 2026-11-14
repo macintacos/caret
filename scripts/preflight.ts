@@ -260,8 +260,8 @@ export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "opencode/references/plan.md", // test/structure/caret-command.test.ts checks it names the review tool
   "skills/caret/references/doctor.md", // test/structure/caret-command.test.ts checks it exists and ships
   "opencode/references/doctor.md", // test/structure/caret-command.test.ts checks it exists and ships
-  "docs/ARCHITECTURE.md", // test/adapters/opencode/docs-cache-path.test.ts checks the `rm -rf` path it prints
   "docs/how-to/review-tool.md", // test/structure/line-anchor-claim.test.ts checks the line-anchor claim it states
+  "docs/explanation/caret-install.md", // test/adapters/opencode/docs-cache-path.test.ts checks the `rm -rf` paths it prints
   "THIRD_PARTY_LICENSES.md", // ui/src/lib/icons.test.ts checks its table against the icon registry
   "docs/DEVELOPMENT.md", // test/scripts/dev-driver.test.ts checks fake-plan.md's line citations into it
   "docs/reference/theme-files.md", // test/core/theme/schema.test.ts parses its example theme file and syntax tables

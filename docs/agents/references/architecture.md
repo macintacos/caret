@@ -17,11 +17,10 @@ When to edit it:
   [`site.md`](site.md).
 - A new top-level directory appears, or one changes what it holds (the § Layout block).
 
-Three couplings to respect. The `rm -rf` cache paths in the OpenCode-adapter section are
-asserted against `opencodeCachePackageDir()` (v1's `packages/`) and
-`opencodeNpmCacheDir()` (v2's `npm/`) by `test/adapters/opencode/docs-cache-path.test.ts`,
-which requires **exactly one** such line per layout — don't add a second and don't drop
-either. The line-anchor claim in
+A change a user can see also updates the matching `docs/explanation/` page:
+`caret-install.md`, `background-service.md`, or `how-caret-works.md`.
+
+Two couplings to respect. The line-anchor claim in
 [`docs/how-to/review-tool.md`](../../how-to/review-tool.md) — the sentence beginning "A
 feedback line reference indexes…" — is pinned verbatim and **exactly once** by
 `test/structure/line-anchor-claim.test.ts`, which requires the same sentence in

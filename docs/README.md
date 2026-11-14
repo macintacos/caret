@@ -12,7 +12,7 @@ Find the row that matches what you came here to do, then follow the link.
 | See which platforms caret supports, and what differs on each | [`CONFIGURING.md` § Platform support](reference/platform-support.md) |
 | Change the daemon port, the review timeout, or the log level in `config.toml` | [`CONFIGURING.md` § Config file](reference/config-file.md) |
 | Look up a `CARET_*` environment variable | [`CONFIGURING.md` § Environment variables](reference/environment-variables.md) |
-| Understand how caret reformats a plan before you read it | [`CONFIGURING.md` § Plan formatting (rumdl)](CONFIGURING.md#plan-formatting-rumdl) |
+| Understand how caret reformats a plan before you read it | [`CONFIGURING.md` § Plan formatting (rumdl)](explanation/plan-formatting.md) |
 | Write or check a theme file | [`CONFIGURING.md` § Theme files](reference/theme-files.md) |
 | Turn on desktop notifications, or work out why none appear | [Get notified about plans § Turn on desktop notifications](how-to/notifications.md#turn-on-desktop-notifications) |
 | Turn caret's sounds off | [Get notified about plans § Turn the sound off or down](how-to/notifications.md#turn-the-sound-off-or-down) |
@@ -25,7 +25,7 @@ Find the row that matches what you came here to do, then follow the link.
 | Stop caret starting with your machine, or remove it | [Turn caret off](how-to/turn-off.md) |
 | Find the logs, or scrub them before sharing | [Find caret's logs](how-to/logs.md) |
 | Work out why caret isn't working, or gather a report to share | [Diagnose a problem](how-to/diagnostics.md) |
-| Understand how caret works, and how it hooks into your agent | [`ARCHITECTURE.md` § How it works](ARCHITECTURE.md#how-it-works) |
+| Understand how caret works, and how it hooks into your agent | [`ARCHITECTURE.md` § How it works](explanation/how-caret-works.md) |
 | Call the review tool from a skill of your own | [Call the review tool from your own skill](how-to/review-tool.md) |
 | Find where something lives in the source tree | [`ARCHITECTURE.md` § Layout](ARCHITECTURE.md#layout) |
 | Set up a local checkout for the first time, or find where tests live | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |

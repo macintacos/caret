@@ -1,6 +1,6 @@
-// The doc ↔ cache-path coupling (EXC-910). docs/ARCHITECTURE.md prints an `rm -rf` per
-// OpenCode cache layout for a reader to paste into a shell, and each path must be one the
-// paths.ts helpers produce. The two drifted once already: the docs quoted
+// The doc ↔ cache-path coupling (EXC-910). The install explanation page prints an
+// `rm -rf` per OpenCode cache layout for a reader to paste into a shell, and each path
+// must be one the paths.ts helpers produce. The two drifted once already: the docs quoted
 // ~/.cache/opencode/node_modules/@macintacos/caret, a path caret has never written, so
 // `rm -rf` on it exited 0 and the documented update was a silent no-op. Prose cannot hold
 // that coupling; this suite reads the doc and fails when a printed path stops matching.
@@ -16,7 +16,8 @@ import {
   opencodeNpmCacheDir,
 } from "@/adapters/opencode/paths.ts";
 
-const ARCHITECTURE_MD = join(import.meta.dir, "../../../docs/ARCHITECTURE.md");
+const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
+const DOC = "docs/explanation/caret-install.md";
 
 /** The by-hand cache path the doc prints under `layoutDir` (`packages` or `npm`), minus
  * its trailing glob. Requires exactly one such line per layout, so dropping it or adding a
@@ -28,7 +29,7 @@ function quotedCachePath(text: string, layoutDir: string): string {
   const path = found.length === 1 ? found[0]?.[1] : undefined;
   if (path === undefined) {
     throw new Error(
-      `expected one \`rm -rf <${layoutDir} cache path>*\` in ARCHITECTURE.md, found ${found.length}`,
+      `expected one \`rm -rf <${layoutDir} cache path>*\` in ${DOC}, found ${found.length}`,
     );
   }
   return path;
@@ -44,13 +45,13 @@ function documentedForm(resolve: () => string): string {
   return resolved.replace(homedir(), "~");
 }
 
-test("docs/ARCHITECTURE.md prints the v1 cache path opencodeCachePackageDir() produces", async () => {
-  const quoted = quotedCachePath(await Bun.file(ARCHITECTURE_MD).text(), "packages");
+test(`${DOC} prints the v1 cache path opencodeCachePackageDir() produces`, async () => {
+  const quoted = quotedCachePath(await Bun.file(join(REPO_ROOT, DOC)).text(), "packages");
   expect(quoted).toBe(documentedForm(() => opencodeCachePackageDir()));
 });
 
-test("docs/ARCHITECTURE.md's v2 cache glob matches every opencodeNpmCacheDir() spec dir", async () => {
-  const quoted = quotedCachePath(await Bun.file(ARCHITECTURE_MD).text(), "npm");
+test(`${DOC}'s v2 cache glob matches every opencodeNpmCacheDir() spec dir`, async () => {
+  const quoted = quotedCachePath(await Bun.file(join(REPO_ROOT, DOC)).text(), "npm");
   const bare = documentedForm(() => opencodeNpmCacheDir(CARET_PACKAGE, null));
   const pinned = documentedForm(() => opencodeNpmCacheDir(CARET_PACKAGE, "1.2.3"));
   expect(dirname(quoted)).toBe(dirname(bare));
