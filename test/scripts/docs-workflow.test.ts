@@ -18,12 +18,12 @@ test("deploys on version tags and on manual dispatch", () => {
 test("only the deploy job can write to Pages or mint an OIDC token", () => {
   expect(workflow.permissions).toEqual({});
 
-  const privileged = Object.entries(workflow.jobs)
+  const privilegedJobIds = Object.entries(workflow.jobs)
     .filter(
       ([, job]) => job.permissions?.pages === "write" || job.permissions?.["id-token"] === "write",
     )
     .map(([id]) => id);
-  expect(privileged).toEqual(["deploy"]);
+  expect(privilegedJobIds).toEqual(["deploy"]);
 
   expect(workflow.jobs.deploy?.permissions).toEqual({ pages: "write", "id-token": "write" });
   const deployUses = workflow.jobs.deploy?.steps.map((step) => step.uses ?? "") ?? [];
