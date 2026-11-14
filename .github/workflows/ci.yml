@@ -178,6 +178,8 @@ jobs:
         uses: awalsh128/cache-apt-pkgs-action@v1.6.3
         with:
           packages: ${{ steps.pw-deps.outputs.packages }}
+      # A cache hit untars the packages without apt's ldconfig trigger, and Playwright's WebKit host check reads the ldconfig cache.
+      - run: sudo ldconfig
       # The action reports success, and saves an empty cache, when its install fails.
       - run: test -n "$INSTALLED"
         env:
