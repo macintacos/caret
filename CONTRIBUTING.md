@@ -4,9 +4,10 @@
 
 caret is a tool-agnostic core plus an adapter for the coding agent it speaks to; it routes
 that agent's plan to a human for review through a loopback daemon and a Svelte UI. This is
-the short developer front door — `README.md` is the user-facing guide, `docs/` holds the
-deep reference (configuring, running, architecture, development), and `docs/agents/` holds
-the rules-of-the-road for working in a given area.
+the short developer front door — the docs site (https://macintacos.github.io/caret/, built
+from `docs/`) is the user-facing guide, `docs/` holds the deep reference (configuring,
+running, architecture, development), and `docs/agents/` holds the rules-of-the-road for
+working in a given area.
 
 ## Setup
 
@@ -65,7 +66,8 @@ and `CARET_AGENT`). The full list of keys, their defaults, and what each one doe
 
 ## Going deeper
 
-- `README.md` — the user-facing front door: what caret is, install, and basic usage.
+- `README.md` — the landing page: what caret is, a one-line install, and a link to the
+  docs site.
 - `docs/CONFIGURING.md` — platform support, the config file, the `CARET_*` environment
   variables, and plan formatting.
 - `docs/RUNNING.md` — desktop notifications, cmux unread marks, and logging & debugging.
