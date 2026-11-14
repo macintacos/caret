@@ -176,7 +176,7 @@ checkout the binary was built in rather than the published one — see
 [Development](DEVELOPMENT.md#development). Every install (but not `--uninstall`) finishes
 by acquiring the rumdl plan formatter — it is part of installing caret, not a step of its
 own — see
-[Plan formatting](CONFIGURING.md#plan-formatting-rumdl).
+[Plan formatting](explanation/plan-formatting.md).
 
 At a terminal the whole run renders as one
 [`@clack/prompts`](https://github.com/bombshell-dev/clack) session: the chooser, then a

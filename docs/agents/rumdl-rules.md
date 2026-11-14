@@ -20,7 +20,7 @@ for.
 | **Binary** | mise-provisioned, on `PATH` | downloaded at runtime into `$XDG_STATE_HOME/caret/rumdl/`, sha256-verified, deliberately **off** `PATH` | mise-provisioned, reached via `mise x rumdl` so it resolves the same binary the format task uses |
 | **Config** | `.rumdl.toml` — lint **and** format | `RUMDL_CONFIG`, a string constant in `src/plan/rumdl.ts`, rewritten into caret's state dir on every `ensureRumdl()` | inline `--config` flags only, no file |
 | **Invocation** | `rumdl fmt {{ files }}` (format) and `rumdl check {{ files }}` (lint), both driven by `hk.pkl` over `**/*.md` and `**/*.markdown` | `rumdl fmt - --config <config>` over stdin | `mise x rumdl -- rumdl fmt - --config MD013.reflow=true --config MD013.line_length=9999999` over stdin |
-| **Owns the detail** | `.rumdl.toml`, `hk.pkl` | `src/plan/rumdl.ts`, [`../CONFIGURING.md`](../CONFIGURING.md#plan-formatting-rumdl) | `scripts/tasks/release/rumdl.ts` |
+| **Owns the detail** | `.rumdl.toml`, `hk.pkl` | `src/plan/rumdl.ts`, [`../explanation/plan-formatting.md`](../explanation/plan-formatting.md) | `scripts/tasks/release/rumdl.ts` |
 
 Each of those files explains its own half well; this one exists for the *relationship*
 between them, so read the owner for detail rather than expecting it restated here.
@@ -112,7 +112,7 @@ static musl builds, so they mirror the lock's `linux-*-musl` entries rather than
 `linux-*` ones (glibc) — which is why `rumdl-pin.test.ts` writes that mapping out rather
 than deriving it. Update the hard-coded version in the docs too — it appears in the
 `CARET_RUMDL_BIN` row of `docs/reference/environment-variables.md` and again in
-`docs/CONFIGURING.md` § Plan formatting (rumdl).
+`docs/explanation/plan-formatting.md`.
 
 Re-run the pin suite until green, then `mise run preflight --json --full`. A rumdl bump
 can reformat markdown across the whole tree, and the whole-tree lint is what surfaces
@@ -132,7 +132,7 @@ run also proves the new binary still produces the plan shape `test/core/plan/` p
 | `src/config/paths.ts` | where the downloaded binary and its config live |
 | `src/commands/install/index.ts` | warms the download at install time, off the first plan's critical path |
 | `scripts/tasks/release/rumdl.ts` | the release-notes invocation and its inline config |
-| `docs/CONFIGURING.md` | the user-facing story, including hard-coded version mentions |
+| `docs/explanation/plan-formatting.md` | the user-facing story, including hard-coded version mentions |
 | `docs/reference/environment-variables.md` | the `CARET_RUMDL_BIN` row's version mention |
 | `test/structure/rumdl-pin.test.ts` | the standing gate on the shared version |
 | `test/support/rumdl-preload.ts` | points unit tests at the mise binary so they run offline |
