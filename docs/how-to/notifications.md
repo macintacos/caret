@@ -9,7 +9,7 @@ unread marks.
 ## Turn on desktop notifications
 
 1. Open the [review page](../reference/glossary.md#review-page) at
-   <http://caret.localhost:42718>, where the installed caret opens it.
+    <http://caret.localhost:42718>, where the installed caret opens it.
 2. Click the bell in the top bar while it shows "?".
 3. Allow notifications when your browser asks.
 4. Click the bell again to send a test notification.
@@ -44,7 +44,7 @@ system hid it; the background service's log records it as fired and shown. The s
 gives the page no error when it does this. On macOS, check in order:
 
 1. **System Settings → Notifications →** your browser: **Allow notifications** is on, and
-   the alert style is not **None**.
+    the alert style is not **None**.
 2. macOS Focus or Do Not Disturb.
 3. The "when mirroring or sharing" toggle, if you are sharing a display.
 
@@ -67,8 +67,8 @@ new level.
 caret plays a short sound at these moments:
 
 - News that arrives on its own: a plan arriving, being revised, or expiring; the
-  [background service](../reference/glossary.md#background-service) dropping or coming
-  back; a decision going out; a comment posted; a notice appearing.
+    [background service](../reference/glossary.md#background-service) dropping or coming
+    back; a decision going out; a comment posted; a notice appearing.
 - Things you do while reading: starting, discarding, or dropping a comment; opening the
     outline's filter or a breadcrumb menu; opening, committing, stepping through, and
     closing search; entering or leaving line selection; switching plans; comparing

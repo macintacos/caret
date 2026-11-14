@@ -157,5 +157,5 @@ Three more behaviors follow from how the server is built:
 ## Next steps
 
 - Set `review.timeout_s` and `[opencode] plans_dir` in the
-  [config file](../reference/config-file.md).
+    [config file](../reference/config-file.md).
 - Look up a term in the [glossary](../reference/glossary.md).
