@@ -45,17 +45,17 @@ test("never runs with a write token", () => {
 });
 
 test("pipes the PR's files and labels into the gate", () => {
-  const gate = steps.find((step) => step.run?.includes("| bun scripts/docs-gate.ts"));
-  expect(gate?.env?.PR_LABELS).toContain("github.event.pull_request.labels.*.name");
-  expect(gate?.shell).toBe("bash");
+  const gateStep = steps.find((step) => step.run?.includes("| bun scripts/docs-gate.ts"));
+  expect(gateStep?.env?.PR_LABELS).toContain("github.event.pull_request.labels.*.name");
+  expect(gateStep?.shell).toBe("bash");
 });
 
 test("every action ref is locked for this workflow", () => {
-  const locked = lock.workflows[".github/workflows/docs-gate.yml"] ?? [];
+  const lockedRefs = lock.workflows[".github/workflows/docs-gate.yml"] ?? [];
   const refs = steps.flatMap((step) => (step.uses ? [step.uses] : []));
   expect(refs.length).toBeGreaterThan(0);
   for (const ref of refs) {
     const [repo, tag] = ref.split("@");
-    expect(locked).toContain(`${repo?.split("/").slice(0, 2).join("/")}@${tag}`);
+    expect(lockedRefs).toContain(`${repo?.split("/").slice(0, 2).join("/")}@${tag}`);
   }
 });
