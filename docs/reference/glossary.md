@@ -99,7 +99,7 @@ install prompt still calls it the review UI.
 
 The tool an agent calls to send a plan to caret: `review_plan` in Claude Code, and
 `caret_review_plan` in OpenCode and pi. To call it from your own skill, see
-[Calling the review tool from your own skill](https://github.com/macintacos/caret/blob/main/docs/ARCHITECTURE.md#calling-the-review-tool-from-your-own-skill).
+[Call the review tool from your own skill](../how-to/review-tool.md).
 
 ## Source view
 

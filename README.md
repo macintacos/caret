@@ -27,15 +27,6 @@ agent host, updating, and removing caret.
 
 Want to develop `caret` rather than use it? Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Diagnostics
-
-- `/caret doctor` runs `caret doctor`: a one-shot, read-only check of your install —
-  what's wrong, how to fix it, and the state it read that from. Always redacted, and it
-  never contains plan, prompt, or feedback bodies, nor any log message, error or stack
-  text.
-- `caret doctor --bundle` archives the raw logs and review records when a maintainer needs
-  them. That archive is **not** redacted, so caret asks before writing it.
-
 ## License
 
 MIT — see [LICENSE](LICENSE). Vendored third-party code and assets are itemized, with
