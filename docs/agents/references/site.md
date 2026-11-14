@@ -44,13 +44,15 @@ Writing a page:
 - Lead with the action (a how-to) or the point (an explanation), not the mechanism.
 - Write "caret" in lowercase in prose. Write keys as lowercase code spans: `ctrl+alt+o`,
   `esc`.
-- Name a setting as "the **<label>** switch in **Settings → <pane>**". Check the label
-  against `ui/src/lib/settingsRegistry.ts`.
+- Name a setting by its bold label and its pane: "turn off the **Check for updates**
+  switch in **Settings → Updates**" for a toggle, "set **Base font size** in
+  **Settings → Appearance**" for any other control. Check the label against
+  `ui/src/lib/settingsRegistry.ts`.
 - Use the [glossary](../../reference/glossary.md)'s terms, and link each one on its first
   use on a page. Write "background service", not "daemon" or "caret service", and "review
-  page", not "review UI", except inside a code span that names a config key. "Background
-  service" covers the installed login service, `caret serve`, and an on-demand instance;
-  name which one wherever the difference matters.
+  page", not "review UI", except inside a code span: a config key, a file name, or text
+  caret prints. "Background service" covers the installed login service, `caret serve`,
+  and an on-demand instance; name which one wherever the difference matters.
 
 Markdown the site renders:
 
@@ -72,7 +74,8 @@ Pages a test reads:
 
 Each page below is listed in `MARKDOWN_READ_BY_TESTS` in `scripts/preflight.ts`, so a
 Markdown-only change to it still runs the unit tests. When you add a test that reads a
-site page, add the page to `MARKDOWN_READ_BY_TESTS`.
+site page, add the page to `MARKDOWN_READ_BY_TESTS` and a bullet here naming what the test
+pins.
 
 - `docs/how-to/review-tool.md`: `test/structure/line-anchor-claim.test.ts` requires the
   sentence beginning "A feedback line reference indexes…" verbatim and exactly once,
@@ -81,8 +84,9 @@ site page, add the page to `MARKDOWN_READ_BY_TESTS`.
 - `docs/explanation/caret-install.md` prints exactly one `rm -rf` per OpenCode cache
   layout. `test/adapters/opencode/docs-cache-path.test.ts` asserts each against
   `opencodeCachePackageDir()` / `opencodeNpmCacheDir()`, so don't add or drop one.
-- `docs/reference/theme-files.md`: `test/core/theme/schema.test.ts` parses its § Example
-  theme file and its § `syntax` role tables against the schema.
+- `docs/reference/theme-files.md`: `test/core/theme/schema.test.ts` requires its § Example
+  to equal `ui/src/lib/themes/caret-dark.json` (with `$schema` = `SCHEMA_URL`), and its §
+  `syntax` tables to match `ROLE_SCOPES` and the role fallbacks.
 - `docs/reference/built-in-themes.md`: `test/core/theme/load.test.ts` checks it lists
   exactly the built-in theme ids.
 

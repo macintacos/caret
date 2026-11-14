@@ -97,7 +97,7 @@ Run `/reload` in pi, or restart it. pi has no planning mode of its own, so caret
     `^ plan waiting`. Press `ctrl+alt+o` to open the plan in your browser. In Terminal.app
     or iTerm2, set Option to act as Meta for that key to reach pi.
 3. Approve, and the agent implements the plan. Request changes, and it revises the plan
-    and presents it again. Press Esc in pi to cancel a waiting review; the agent is told
+    and presents it again. Press `esc` in pi to cancel a waiting review; the agent is told
     not to implement the plan.
 
 Run `/caret demo` to try the review page. From
@@ -117,7 +117,7 @@ bunx --no-cache @macintacos/caret@latest serve
 ```
 
 The review page stays up at <http://caret.localhost:42718> until you stop the command with
-Ctrl+C. To go back to starting at login, run the install again and answer
+`ctrl+c`. To go back to starting at login, run the install again and answer
 **Keep it running**.
 
 To turn caret off entirely, see
@@ -198,7 +198,7 @@ copies of caret it installed under `~/.local/state/caret/`. It keeps your settin
 your reviews.
 
 In Claude Code, it uninstalls the `caret@caret` plugin but leaves the `macintacos/caret`
-marketplace registered.
+marketplace registered. To remove that too, run `claude plugin marketplace remove caret`.
 
 ## Next steps
 

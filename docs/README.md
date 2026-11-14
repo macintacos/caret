@@ -10,7 +10,7 @@ Find the row that matches what you came here to do, then follow the link.
 | Install caret | [Install caret](how-to/install.md) |
 | Run caret yourself, instead of having it start at login | [Install caret § Run caret yourself](how-to/install.md#run-caret-yourself) |
 | See which platforms caret supports, and what differs on each | [Platform support](reference/platform-support.md) |
-| Change the daemon port, the review timeout, or the log level in `config.toml` | [Config file](reference/config-file.md) |
+| Change the background service's port, the review timeout, or the log level in `config.toml` | [Config file](reference/config-file.md) |
 | Look up a `CARET_*` environment variable | [Environment variables](reference/environment-variables.md) |
 | Understand how caret reformats a plan before you read it | [Plan formatting](explanation/plan-formatting.md) |
 | Write or check a theme file | [Theme file format](reference/theme-files.md) |
@@ -27,8 +27,8 @@ Find the row that matches what you came here to do, then follow the link.
 | Work out why caret isn't working, or gather a report to share | [Diagnose a problem](how-to/diagnostics.md) |
 | Understand how caret works, and how it hooks into your agent | [How caret works](explanation/how-caret-works.md) |
 | Call the review tool from a skill of your own | [Call the review tool from your own skill](how-to/review-tool.md) |
+| Learn caret's internals before changing them | [`ARCHITECTURE.md` § How it works](ARCHITECTURE.md#how-it-works) |
 | Find where something lives in the source tree | [`ARCHITECTURE.md` § Layout](ARCHITECTURE.md#layout) |
-| Understand caret's internals: the core/adapter boundary, each agent adapter, and the daemon's lifecycle | [`ARCHITECTURE.md` § How it works](ARCHITECTURE.md#how-it-works) |
 | Set up a local checkout for the first time, or find where tests live | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Build caret from source | [`DEVELOPMENT.md` § Build from source](DEVELOPMENT.md#build-from-source) |
 | Run a dev instance, or look up any task in the full `mise` catalog | [`DEVELOPMENT.md` § Development](DEVELOPMENT.md#development) |

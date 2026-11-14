@@ -70,8 +70,8 @@ values there, and never commit secrets.
 
 - `README.md` — the landing page: what caret is, a one-line install, and a link to the
   docs site.
-- `docs/` — the docs site's pages: what a user reads, from install to the config file, the
-  `CARET_*` variables, and how caret works.
+- `docs/README.md` — the map of `docs/`: which page answers what, on the docs site and off
+  it.
 - `docs/ARCHITECTURE.md` — the core/adapter boundary, the agent adapters, the daemon's
   lifecycle, and the source layout.
 - `docs/DEVELOPMENT.md` — build from source, the dev workflow, the tasks CLI, icons, and
