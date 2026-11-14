@@ -17,7 +17,9 @@ When to edit it:
 - The test layout moves.
 
 Environment variables are referenced by **key name only** here; values and the full tables
-live in `docs/CONFIGURING.md`. Never put secrets or secret-shaped values in this file.
+live in `docs/reference/environment-variables.md`, and in `docs/DEVELOPMENT.md` for
+dev-only and preflight-only variables. Never put secrets or secret-shaped values in this
+file.
 
 Use the `/doc-coauthoring` skill for substantive prose passes.
 

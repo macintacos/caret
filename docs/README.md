@@ -9,9 +9,9 @@ Find the row that matches what you came here to do, then follow the link.
 | See what caret does | [the docs home](index.md) |
 | Install caret | [Install caret](how-to/install.md) |
 | Run caret yourself, instead of having it start at login | [Install caret § Run caret yourself](how-to/install.md#run-caret-yourself) |
-| See which platforms caret supports, and what differs on each | [`CONFIGURING.md` § Platform support](CONFIGURING.md#platform-support) |
-| Change the daemon port, the review timeout, or the log level in `config.toml` | [`CONFIGURING.md` § Config file](CONFIGURING.md#config-file) |
-| Look up a `CARET_*` environment variable | [`CONFIGURING.md` § Environment variables](CONFIGURING.md#environment-variables) |
+| See which platforms caret supports, and what differs on each | [`CONFIGURING.md` § Platform support](reference/platform-support.md) |
+| Change the daemon port, the review timeout, or the log level in `config.toml` | [`CONFIGURING.md` § Config file](reference/config-file.md) |
+| Look up a `CARET_*` environment variable | [`CONFIGURING.md` § Environment variables](reference/environment-variables.md) |
 | Understand how caret reformats a plan before you read it | [`CONFIGURING.md` § Plan formatting (rumdl)](CONFIGURING.md#plan-formatting-rumdl) |
 | Write or check a theme file | [`CONFIGURING.md` § Theme files](CONFIGURING.md#theme-files) |
 | Turn on desktop notifications, or work out why none appear | [Get notified about plans § Turn on desktop notifications](how-to/notifications.md#turn-on-desktop-notifications) |

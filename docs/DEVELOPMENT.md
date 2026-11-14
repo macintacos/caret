@@ -214,7 +214,7 @@ daemon port, and `--port` below does not pin it.
 
 The isolation is total. The dev daemon never reads or writes a globally-installed caret's
 reviews or config: it reads `config.dev.toml`, not your production `config.toml` (see
-[Config file](CONFIGURING.md#config-file)).
+[The dev config file](#the-dev-config-file)).
 
 The daemon is seeded with three fake pending plans, and a driver plays the agent's side
 through the real review hook path — **Request changes** appends a revision section quoting
@@ -227,9 +227,9 @@ Where a knob has more than one source they resolve in order: a **flag** beats an
 **environment variable**, which beats **`config.dev.toml`**, which beats the built-in
 **default**. Arming the seeder is the exception — `--notify`, `[dev.notify].enabled`, and
 a positive `CARET_DEV_NEW_REVIEW_MS` each arm it on their own, and none of them can turn
-it off. The config keys are documented in full under
-[The `[dev]` table](CONFIGURING.md#the-dev-table), and the environment variables under
-[Dev-only](CONFIGURING.md#dev-only).
+it off. The config keys are documented in full under [The `[dev]` table](#the-dev-table),
+and the environment variables under
+[Dev-only](#dev-only-environment-variables).
 
 | Flag                | Env var                 | `config.dev.toml`        | Default   | Effect                                                                                    |
 | ------------------- | ----------------------- | ------------------------ | --------- | ----------------------------------------------------------------------------------------- |
@@ -820,3 +820,85 @@ caret's icons are [Lucide](https://lucide.dev) SVGs vendored verbatim at a pinne
 under `ui/src/icons/`, rendered by `ui/src/components/Icon.svelte`. Adding one means
 following the checklist in [`agents/icon-rules.md`](agents/icon-rules.md) and adding a row
 to [THIRD_PARTY_LICENSES.md](../THIRD_PARTY_LICENSES.md).
+
+### Dev and preflight settings
+
+#### The dev config file
+
+`mise run dev` takes the first of those: it points `CARET_CONFIG_FILE` at a separate
+`config.dev.toml` beside your `config.toml`.
+
+> [!NOTE]
+> A dev instance never reads or writes your production config, and its state and logs are
+> already isolated under an ephemeral `XDG_STATE_HOME`.
+
+`mise run dev` sets `CARET_CONFIG_FILE` to `config.dev.toml`; `--fresh` sets it into that
+run's own ephemeral state dir, which starts empty so dev boots from built-in defaults.
+
+`mise run dev` also sets `CARET_SUPERVISED=1`.
+
+[Environment variables](reference/environment-variables.md) has the precedence rule and
+the runtime variables, and [Config file](reference/config-file.md#which-file-caret-reads)
+the file-lookup order "the first of those" refers to.
+
+#### The `[dev]` table
+
+Dev-only settings for `mise run dev`: a fixed daemon port, a persistent state dir, and the
+recurring extra-review notification seeder.
+
+> [!WARNING]
+> `[dev]` is **ignored in a production build**. Its only consumers are the dev tooling
+> (`mise run dev`, `scripts/tasks/dev/*`), which never ships in the compiled binary, and
+> the settings layer build-gates it so `[dev]` resolves to inert defaults in a prod build
+> regardless of `config.toml`.
+
+| Key                      | Default | Purpose                                                                                   |
+| ------------------------ | ------- | ----------------------------------------------------------------------------------------- |
+| `dev.port`               | _unset_ | Fixed dev daemon port; unset → an OS-assigned ephemeral port. Must differ from `42718`.   |
+| `dev.state_dir`          | _unset_ | Persistent dev state dir; unset → an ephemeral dir wiped on exit.                          |
+| `dev.notify.enabled`     | `false` | When `true`, the extra-review seeder runs without `mise run dev --notify` (persist it on). |
+| `dev.notify.interval_ms` | `15000` | Seeder cadence in milliseconds — a genuinely-new review every interval.                   |
+| `dev.notify.max_pending` | `3`     | Cap on unresolved extra reviews; the seeder pauses while at the cap.                       |
+
+> [!IMPORTANT]
+> Put `[dev]` in `config.dev.toml` — the config `mise run dev` reads (see
+> [The dev config file](#the-dev-config-file)) — not in the production `config.toml`.
+
+These keys are **captured at startup** when `mise run dev` boots (not hot-reloaded); the
+matching `CARET_DEV_*` environment variables override them.
+
+```toml
+[dev]
+port = 4000
+state_dir = "/path/to/persistent/dev-state"
+
+[dev.notify]
+enabled = true
+interval_ms = 15000
+max_pending = 3
+```
+
+#### Dev-only environment variables
+
+Set by `mise run dev` and its tooling. The `CARET_DEV_*` vars shadow `[dev]` keys, which
+never reach a production build.
+
+| Env var                   | Config key               | Default | Purpose                                                                                                                                                                                                              |
+| ------------------------- | ------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CARET_DEV_PORT`          | `dev.port`               | —       | Fixed `mise run dev` daemon port; unset → ephemeral. Must differ from `42718`.                                                                                                                                       |
+| `CARET_DEV_STATE_DIR`     | `dev.state_dir`          | —       | Persistent `mise run dev` state dir; unset → ephemeral.                                                                                                                                                              |
+| `CARET_DEV_NEW_REVIEW_MS` | `dev.notify.interval_ms` | —       | Extra-review seeder cadence override (ms); a positive value also arms the seeder. Unset → cadence falls to `[dev.notify].interval_ms` (`15000`), and arming is governed by `--notify` / `[dev.notify].enabled`.       |
+| `CARET_DEV_UPDATE`        | —                        | —       | Set by `mise run dev --update <kind>`: `release` or `commit` makes the daemon judge an older real release or main commit in place of itself, so the update surfaces show. Ignored by any build but a from-source one. |
+| `CARET_DEV_LOG_LEVEL` | — | — | The daemon's log level, overriding `[logging].level`. `mise run dev` sets `debug` unless it is already set. |
+| `CARET_DEV_LOG_REVIEW_TEXT` | — | — | Set to `1` by `mise run dev`: the daemon logs the text each review sends the agent at `info`, and each inline comment's stored lines at `debug`. Ignored by any build but a from-source one. |
+| `CARET_FRESH`             | —                        | —       | Set to `1` by `mise run dev --fresh`; surfaced in `/api/health` so the UI resets its saved preferences (theme, first-run onboarding) on boot.                                                                         |
+| `CARET_E2E_WORKERS` | — | `50%` of cores | Playwright e2e worker count for `mise run test e2e` (each drives a browser tree + daemon); a positive int. Unset → half the cores. |
+
+#### Preflight-only environment variables
+
+Read by `mise run preflight`; lower it to shrink the gate's footprint on a constrained or
+stacked host.
+
+| Env var                | Config key | Default        | Purpose                                                                                                                            |
+| ---------------------- | ---------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `CARET_PREFLIGHT_JOBS` | —          | CPU count      | Max `mise run preflight` tasks in flight; a positive int. Set it to `1` to serialize the gate. Invalid/unset → the host's CPU count. |

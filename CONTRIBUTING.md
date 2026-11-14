@@ -62,7 +62,9 @@ is documented in
 
 caret reads a `config.toml` and `CARET_*` environment variables (for example `CARET_PORT`
 and `CARET_AGENT`). The full list of keys, their defaults, and what each one does lives in
-[`docs/CONFIGURING.md`](docs/CONFIGURING.md) — set values there, and never commit secrets.
+[`docs/reference/config-file.md`](docs/reference/config-file.md) and
+[`docs/reference/environment-variables.md`](docs/reference/environment-variables.md) — set
+values there, and never commit secrets.
 
 ## Going deeper
 
