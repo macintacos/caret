@@ -46,10 +46,9 @@ site!: Edit the docs/ page and its zensical.toml nav entry
 
 ## The doc landscape
 
-- **`README.md`** (repo root) — the lean, user-facing front door: what caret is, install,
-  basic usage, and pointers onward. It leads with the install audience; the advanced and
-  contributor-facing depth lives in the four `docs/` reference pages below, which it links
-  to directly or reaches through [`docs/README.md`](../README.md). How to edit it:
+- **`README.md`** (repo root) — the landing page: what caret is, the screenshot, a
+  one-line install, and links to the docs site and `CONTRIBUTING.md`, plus diagnostics and
+  the license. User documentation lives on the docs site. How to edit it:
   [`references/readme.md`](references/readme.md).
 - **`docs/CONFIGURING.md`** — the configuration reference behind `README.md`: platform
   support, the `config.toml` file, the full `CARET_*` tables, plan formatting, and theme
