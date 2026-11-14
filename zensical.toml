@@ -13,15 +13,12 @@ exclude_docs = """
 /ARCHITECTURE.md
 """
 
-# Each section leads with its index.md: a section with no page renders a dead link.
 nav = [
   { "Home" = "index.md" },
   { "Tutorial" = [
-    "tutorial/index.md",
     { "Review your first plan" = "tutorial/first-plan.md" },
   ] },
   { "How-to guides" = [
-    "how-to/index.md",
     { "Install caret" = "how-to/install.md" },
     { "Read a plan" = "how-to/read-a-plan.md" },
     { "Write feedback" = "how-to/write-feedback.md" },
@@ -36,7 +33,6 @@ nav = [
     { "Call the review tool from your own skill" = "how-to/review-tool.md" },
   ] },
   { "Reference" = [
-    "reference/index.md",
     { "Glossary" = "reference/glossary.md" },
     { "Config file" = "reference/config-file.md" },
     { "Environment variables" = "reference/environment-variables.md" },
@@ -45,7 +41,6 @@ nav = [
     { "Built-in themes" = "reference/built-in-themes.md" },
   ] },
   { "Explanation" = [
-    "explanation/index.md",
     { "How caret works" = "explanation/how-caret-works.md" },
     { "The background service" = "explanation/background-service.md" },
     { "What caret install adds" = "explanation/caret-install.md" },
@@ -55,7 +50,8 @@ nav = [
 ]
 
 [project.theme]
-features = ["content.code.copy", "navigation.sections"]
+logo     = "assets/carrot.svg"
+features = ["content.code.copy", "navigation.sections", "navigation.tabs"]
 
 [[project.theme.palette]]
 media       = "(prefers-color-scheme: light)"

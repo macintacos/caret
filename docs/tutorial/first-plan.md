@@ -111,4 +111,4 @@ Because this was the demo plan, nothing in your project changes.
 - To set caret up for OpenCode or pi, update it, or remove it, see
     [Install caret](../how-to/install.md).
 - To look up a word this site uses, see the [Glossary](../reference/glossary.md).
-- For tasks beyond this tutorial, see the [How-to guides](../how-to/index.md).
+- For tasks beyond this tutorial, see the **How-to guides** tab.
