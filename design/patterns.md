@@ -781,7 +781,7 @@ specific code areas live in [`docs/agents/`](../docs/agents/).
 ### Sound
 
 - Sound is part of the polish, on by default, with a setting to turn it off
-  ([`RUNNING.md` § Sound](../docs/RUNNING.md#sound)).
+  ([Get notified about plans § Turn the sound off or down](../docs/how-to/notifications.md#turn-the-sound-off-or-down)).
 - One cue per discrete state change or explicit action (`ui/src/lib/sound.ts`), never on
   scroll, hover, or pointer movement.
 - A cue plays from inside the action it belongs to, so a key press and a click can't drift
