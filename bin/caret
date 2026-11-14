@@ -11,7 +11,7 @@
 #      compiles this; running it needs no `bun` at hook time.
 #   2. the run-from-source bundle (dist/cli.js) — the GitHub/npm plugin install
 #      ships this plus a sibling ui/dist; it runs on `bun`. REQUIRES `bun` on
-#      PATH (documented in the README).
+#      PATH (documented in docs/how-to/install.md § Before you install).
 #   3. raw source (src/cli.ts) — a dev checkout that built neither artifact.
 #
 # Resolution is by the shim's own on-disk location (resolved through symlinks,

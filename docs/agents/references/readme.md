@@ -2,23 +2,22 @@
 
 *Audience: coding agents and contributors editing caret's top-level README.*
 
-`README.md` is the lean, user-facing front door and the project's front page. It leads
-with the install/usage audience and stays focused — what caret is, install, basic usage,
-and pointers onward. The advanced and contributor-facing depth lives in the `docs/`
-reference pages — [`CONFIGURING.md`](../../CONFIGURING.md),
-[`RUNNING.md`](../../RUNNING.md), [`ARCHITECTURE.md`](../../ARCHITECTURE.md), and
-[`DEVELOPMENT.md`](../../DEVELOPMENT.md) — which the README links to directly or reaches
-through [`docs/README.md`](../../README.md); when content gets deep, it lands there, not
-here.
+`README.md` is the landing page: what caret is, the screenshot, a one-line install, and
+links to the docs site and `CONTRIBUTING.md`, plus diagnostics and the license. User
+documentation lives on the docs site, built from `docs/`; when content gets deep, it lands
+there, under the rules in [`site.md`](site.md), not here.
 
 When to edit it:
 
-- A user-visible change to the front door: a new or changed install path, a new top-level
-  command, basic-usage behavior, or a pointer that needs updating. Deep configuration,
-  architecture, and dev-workflow detail belong in the matching `docs/` reference page —
-  and new `config.toml` / `CARET_*` rows land in
-  [`CONFIGURING.md`](../../CONFIGURING.md)'s tables (see
-  [`settings-rules.md`](../settings-rules.md)).
+- A user-visible change to the landing page: a changed one-line install command or a
+  pointer that needs updating. The same install command also appears in
+  [`docs/how-to/install.md`](../../how-to/install.md) § Install and
+  [`docs/tutorial/first-plan.md`](../../tutorial/first-plan.md) § Install caret; change
+  all three together. Install details belong in
+  [`docs/how-to/install.md`](../../how-to/install.md). Deep configuration, architecture,
+  and dev-workflow detail belong in the matching `docs/` reference page — and new
+  `config.toml` / `CARET_*` rows land in [`CONFIGURING.md`](../../CONFIGURING.md)'s tables
+  (see [`settings-rules.md`](../settings-rules.md)).
 - Route human-onboarding basics to `CONTRIBUTING.md` rather than duplicating them here.
 
 Use the `/doc-coauthoring` skill for any substantive prose pass — it keeps the section

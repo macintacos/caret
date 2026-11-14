@@ -21,7 +21,7 @@
   "bin": {
     "caret": "./bin/caret"
   },
-  "homepage": "https://github.com/macintacos/caret",
+  "homepage": "https://macintacos.github.io/caret/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/macintacos/caret.git"
