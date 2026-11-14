@@ -114,11 +114,14 @@ this call-out per doc.
 Documentation drifts when the map and the docs are edited in separate changes. So:
 **adding, removing, or renaming a doc updates, in the same change,**
 
-1. **this map** — the router above and the doc-landscape entry, and
+1. **this map** — the router above and the doc-landscape entry (a docs-site page is
+   covered by the site's entry), and
 2. **its `AGENTS.md` route**, if the doc is a `docs/agents/*.md` rule file with one, and
 3. **its pointer file** under [`references/`](references/) — for a `docs/agents/*.md` rule
    file that is the shared [`references/agent-rules.md`](references/agent-rules.md), whose
-   area list you extend rather than adding a new pointer, and
-4. **its `zensical.toml` nav entry**, if the doc is a page on the docs site.
+   area list you extend rather than adding a new pointer, and for a page on the docs site,
+   the shared [`references/site.md`](references/site.md), and
+4. **its `zensical.toml` entry**: a nav entry if the doc is a page on the docs site, or an
+   `exclude_docs` line if it is any other Markdown file under `docs/`.
 
 A doc that exists without a place on this map is a doc no one will find.

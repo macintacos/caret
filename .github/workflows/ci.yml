@@ -1,7 +1,7 @@
 name: ci
 on:
   pull_request:
-    # No "edited": it would re-run all nine jobs on every title or body edit.
+    # No "edited": it would re-run every job on each title or body edit.
     types: [opened, reopened, synchronize]
     branches: [main]
   push:

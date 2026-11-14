@@ -62,7 +62,7 @@ mise run test bats  # the hermetic shell suites under scripts/; `test mod` the m
 mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-check
 mise run format     # Biome (write)
 mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bundle`
-mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ mod) + build + smoke, scoped to the diff
+mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ mod) + build + docs build + smoke, scoped to the diff
 mise run verify     # check the service unit against a real supervisor: `verify macos` or `verify linux`
                     # macos drives this Mac's own launchctl; linux boots a real systemd in a container
 ```

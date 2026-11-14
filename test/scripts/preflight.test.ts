@@ -45,6 +45,7 @@ const ALL_TASKS = [
   "test mod",
   "test unit",
 ];
+// Markdown outside docs/ that no test reads, so it alone narrows the gate to lint.
 const UNREAD_MARKDOWN = "CONTRIBUTING.md";
 
 /** The gate as if `claude` were on PATH, so the suite does not depend on the host's. */

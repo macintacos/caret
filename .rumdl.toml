@@ -12,7 +12,7 @@ disable = ["MD033", "MD034", "MD041"]
 # Respect .gitignore when scanning directories (rumdl init default).
 respect-gitignore = true
 
-# Paths rumdl never scans — `rumdl init`'s defaults, plus the dev plan fixture.
+# Paths rumdl never scans — `rumdl init`'s defaults, the docs build's git-ignored output, and the dev plan fixture.
 #
 # scripts/tasks/dev/fake-plan.md is the one file in the repo that must stay
 # un-rumdl'd. It stands in for a plan as an agent actually writes one — paragraphs

@@ -7,9 +7,9 @@
 // it). `lint`'s `hk check` step is the read-only one — it is the formatting
 // gate, and a lint failure points at `mise run format`.
 //
-// DAG: lint, `test unit`, `build ui`, `docs:build`, `test bats` and `test mod` start immediately;
-// `build bin` starts once `build ui` passes; `smoke` starts once
-// `build bin` passes (EXC-914). The build-first ordering + skip mechanism live in the tasks
+// DAG: lint, `test unit`, `build ui`, `docs:build`, `test bats` and `test mod`
+// start immediately; `build bin` starts once `build ui` passes; `smoke` starts
+// once `build bin` passes (EXC-914). The build-first ordering + skip mechanism live in the tasks
 // CLI (scripts/tasks/build.ts), so each dependent is spawned with the skips that
 // let it reuse its gate's artifact: CARET_SKIP_BUILD_UI keeps the UI built at
 // exactly one run per gate (two concurrent Vite builds would otherwise race on
@@ -22,8 +22,7 @@
 // Which of those tasks run is scoped to the diff (EXC-1042): a change confined
 // to Markdown runs `lint` alone, plus `test unit` when it touches Markdown a test
 // reads from disk, plus `docs:build` when it touches `docs/`. Everything else
-// runs all eight, as does a diff that cannot
-// be read at all.
+// runs all eight, as does a diff that cannot be read at all.
 //
 // DI mirrors scripts/tasks/release/command.ts: the spawn collaborator is injected so
 // test/scripts/preflight.test.ts can drive the DAG without running real tasks.
@@ -300,11 +299,11 @@ export function selectTasks(changed: readonly string[] | null): TaskSelection {
   // rather than by pushing — a task can never land out of sequence here.
   const suites = new Set<string>(["lint"]);
   if (readByTests.length > 0) suites.add("test unit");
-  const siteDocs = changed.filter((path) => path.startsWith("docs/"));
-  if (siteDocs.length > 0) suites.add("docs:build");
+  const underDocs = changed.filter((path) => path.startsWith("docs/"));
+  if (underDocs.length > 0) suites.add("docs:build");
   const also =
     (readByTests.length > 0 ? `, and \`test unit\` reads ${readByTests.join(", ")}` : "") +
-    (siteDocs.length > 0 ? `, and \`docs:build\` builds ${siteDocs.join(", ")}` : "");
+    (underDocs.length > 0 ? `, and \`docs:build\` runs for ${underDocs.join(", ")}` : "");
   return {
     tasks: TASK_ORDER.filter((t) => suites.has(t)),
     narrowed: true,
