@@ -31,6 +31,7 @@ what-does: Load the file for every area the change touches
   pi adapter, extension, or install (caret install) > pi-integration
   rumdl: bumping its version, touching any of its three configs or invocations (repo hygiene, plan formatting, release notes), or scripts/tasks/dev/fake-plan.md > rumdl-rules
   documentation: which doc to update — README, the docs site's pages and nav (`zensical.toml`), the contributor pages (ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the docs/ router, or the doc map itself; whether a change needs a site page, and the docs-not-needed label > documentation-rules
+  any change a user can see, new features included: a command, flag, setting, host, output, or review-page behaviour > documentation-rules
   how caret looks, moves, sounds, or prints: colour, type, radius, motion, sound, empty/loading/error states, CLI and task output layout > readme
 architecture-rules!: Load docs/agents/architecture-rules.md
 typescript-rules!: Load docs/agents/typescript-rules.md
@@ -149,12 +150,20 @@ into `bunfig.toml`, and the guard that raises the actionable error:
 
 The `docs gate` PR check fails a PR that changes a user-visible path but no page the docs
 site publishes. A change needs a site page when it changes something a page describes: a
-CLI command, flag, help text, or output; what `caret install` sets up; a config key,
-default, or `CARET_*` variable; the review page; the `/caret` command or a host plugin;
-the theme file format; plan formatting; diagnostics; or the background service. Update
-that page in the same change. Apply `docs-not-needed` only when the change leaves every
-page accurate (a refactor, an internal subcommand, a test helper, a typo no page quotes),
-with `gh pr edit <number> --add-label docs-not-needed`, and say in the PR body why no page
+CLI command, flag, help text, or output; what `caret install` sets up, or the host
+versions it supports; a config key, default, or `CARET_*` variable; the review page; what
+a review sends the agent; the `/caret` command or a host plugin; the theme file format;
+plan formatting; diagnostics, logs, or notifications; update checks; remote access; or the
+background service. Update that page in the same change.
+
+A change that adds something no page covers yet, such as a command, setting, host, or
+feature, adds a page or a section, with its nav entry; `docs/agents/references/site.md`
+says where. Never add your change to `docs/changelog.md`: the release flow regenerates it
+from the GitHub Release notes, and the gate ignores it.
+
+Apply `docs-not-needed` only when the change leaves every page accurate (a refactor, an
+internal subcommand, a test helper, a typo no page quotes), with
+`gh pr edit <number> --add-label docs-not-needed`, and say in the PR body why no page
 changed. To check a branch before pushing, run
 `git diff --name-only origin/main... | bun scripts/docs-gate.ts` (use the PR's base branch
 in place of `main` for a stacked PR; `PR_LABELS` unset means no labels). Which paths

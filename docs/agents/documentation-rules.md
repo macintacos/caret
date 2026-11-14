@@ -75,12 +75,12 @@ site!: Edit the docs/ page and its zensical.toml nav entry
   the patterns, the deliberate exceptions, and the decision log, routed from
   `design/README.md`. Read by contributors and coding agents alike. How to edit it:
   [`references/design.md`](references/design.md).
-- **The docs site** — `zensical.toml`, `docs/index.md`, and the `docs/tutorial/`,
-  `docs/how-to/`, `docs/reference/`, and `docs/explanation/` sections. It is the
-  user-facing site, published to https://macintacos.github.io/caret/ on each `v*` release
-  tag. Its nav in `zensical.toml` decides what a reader can reach, and `exclude_docs`
-  keeps repo-only pages off it. How to edit it:
-  [`references/site.md`](references/site.md).
+- **The docs site** — `zensical.toml`, `docs/index.md`, the `docs/tutorial/`,
+  `docs/how-to/`, `docs/reference/`, and `docs/explanation/` sections, and
+  `docs/changelog.md`, which the release flow generates. It is the user-facing site,
+  published to https://macintacos.github.io/caret/ on each `v*` release tag. Its nav in
+  `zensical.toml` decides what a reader can reach, and `exclude_docs` keeps repo-only
+  pages off it. How to edit it: [`references/site.md`](references/site.md).
 
 ## Audience, stated at the top of every new doc
 
@@ -112,27 +112,45 @@ wins. It gates:
 - what `caret install` sets up in an agent host: `src/adapters/pi/install.ts`,
   `src/adapters/opencode/config-plugin.ts`, `src/adapters/opencode/deploy.ts`,
   `src/adapters/opencode/entries.ts`, `src/adapters/opencode/packaging.ts`,
-  `src/adapters/opencode/upgrade.ts`
+  `src/adapters/opencode/upgrade.ts`, plus each host's version floor and detection
+  (`src/adapters/*/host.ts`) and the host paths install writes to
+  (`src/adapters/*/paths.ts`)
 - config keys, defaults, and `CARET_*` variables: `src/config/**`
-- the review page: `ui/src/**`
+- the review page: `ui/src/**`, plus each host's approve options
+  (`src/adapters/*/approve.ts`), its skills in `/` completion (`src/adapters/*/skills.ts`,
+  `src/lib/skill-doc.ts`), and when a plan becomes a new version
+  (`src/review/threading.ts`)
+- what a review sends the agent: `bridge/**`, `src/adapters/*/feedback.ts`
 - the `/caret` command and the host plugins: `skills/**`, `opencode/**`, `pi/**`,
-  `mod/hooks/**`
+  `mod/hooks/**`, Claude Code's plugin hooks (`hooks/**`, `src/adapters/*/steer.ts`), and
+  the demo plan (`templates/**`)
 - theme files: `src/theme/**`
 - plan formatting and file previews: `src/plan/**`
 - diagnostics: `src/doctor/**`, `src/adapters/*/install.ts`, `src/adapters/*/checks.ts`
-  (doctor's per-adapter probes and checks)
-- the background service: `src/service/**`
+  (doctor's per-adapter probes and checks), `src/daemon/diagnostics.ts`
+- logs and what they redact: `src/lib/log.ts`, `src/lib/log-rotate.ts`, `src/redact/**`
+- notifications: `src/lib/cmux.ts` (the unread mark on the cmux terminal pane the agent
+  runs in; browser notifications are in `ui/src/**`)
+- update checks and the What's new dialog: `src/daemon/update-check.ts`,
+  `src/daemon/update-changes.ts`, `src/lib/upstream.ts`
+- remote access: `src/daemon/address.ts`, `src/daemon/auth.ts`, `src/daemon/token.ts`
+- the background service: `src/service/**`, `src/daemon/lifecycle.ts`,
+  `src/daemon/liveness.ts`, `bin/caret-launcher`
 
 CLI help text and `caret install` output count. `*.test.ts` files never count. A
 dependency-only bump (`package.json`, `bun.lock`, `mise.lock`, `uv.lock`) passes on its
 own; when a bump changes what a user sees, update the page anyway.
 
 A published page is any `docs/**/*.md` that `zensical.toml`'s `exclude_docs` does not
-list, so `docs/DEVELOPMENT.md` or a `docs/agents/` file does not satisfy the gate.
+list, so `docs/DEVELOPMENT.md` or a `docs/agents/` file does not satisfy the gate. Nor
+does `docs/changelog.md`, which mirrors the GitHub Releases rather than documenting a
+change.
 
 - **When a change needs a site page:** it changes something a page describes;
   [`references/site.md`](references/site.md) says which page covers what. Update it in the
   same PR.
+- **When no page covers it yet:** a new command, setting, host, or feature gets a page or
+  a section, with its nav entry, in the same PR. `references/site.md` says where.
 - **When to apply `docs-not-needed`:** the change touches a gated path but every page
   stays accurate. Adding the label re-runs the check, which then passes. Say in the PR
   body why no page changed. Never apply it to skip a page you know is now wrong.

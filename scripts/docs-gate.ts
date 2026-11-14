@@ -9,6 +9,8 @@ import { join } from "node:path";
 import { parse as parseToml } from "smol-toml";
 import { z } from "zod";
 
+import { CHANGELOG_PAGE } from "@/tasks/release/changelog.ts";
+
 export const SKIP_LABEL = "docs-not-needed";
 
 /** What a user sees, and the paths that define it. First match wins. Keep in sync with
@@ -27,21 +29,70 @@ export const USER_VISIBLE: readonly { surface: string; globs: readonly string[] 
       "src/adapters/opencode/entries.ts",
       "src/adapters/opencode/packaging.ts",
       "src/adapters/opencode/upgrade.ts",
+      "src/adapters/*/host.ts",
+      "src/adapters/*/paths.ts",
     ],
   },
   { surface: "config keys, defaults, and CARET_* variables", globs: ["src/config/**"] },
-  { surface: "the review page", globs: ["ui/src/**"] },
+  {
+    surface: "the review page",
+    globs: [
+      "ui/src/**",
+      "src/adapters/*/approve.ts",
+      "src/adapters/*/skills.ts",
+      "src/lib/skill-doc.ts",
+      "src/review/threading.ts",
+    ],
+  },
+  {
+    surface: "what a review sends the agent",
+    globs: ["bridge/**", "src/adapters/*/feedback.ts"],
+  },
   {
     surface: "the /caret command and the host plugins",
-    globs: ["skills/**", "opencode/**", "pi/**", "mod/hooks/**"],
+    globs: [
+      "skills/**",
+      "opencode/**",
+      "pi/**",
+      "mod/hooks/**",
+      "hooks/**",
+      "src/adapters/*/steer.ts",
+      "templates/**",
+    ],
   },
   { surface: "theme files", globs: ["src/theme/**"] },
   { surface: "plan formatting and file previews", globs: ["src/plan/**"] },
   {
     surface: "diagnostics",
-    globs: ["src/doctor/**", "src/adapters/*/install.ts", "src/adapters/*/checks.ts"],
+    globs: [
+      "src/doctor/**",
+      "src/adapters/*/install.ts",
+      "src/adapters/*/checks.ts",
+      "src/daemon/diagnostics.ts",
+    ],
   },
-  { surface: "the background service", globs: ["src/service/**"] },
+  {
+    surface: "logs and what they redact",
+    globs: ["src/lib/log.ts", "src/lib/log-rotate.ts", "src/redact/**"],
+  },
+  { surface: "notifications", globs: ["src/lib/cmux.ts"] },
+  {
+    surface: "update checks and What's new",
+    globs: ["src/daemon/update-check.ts", "src/daemon/update-changes.ts", "src/lib/upstream.ts"],
+  },
+  {
+    surface: "remote access",
+    globs: ["src/daemon/address.ts", "src/daemon/auth.ts", "src/daemon/token.ts"],
+  },
+  {
+    surface: "the background service",
+    globs: [
+      "src/service/**",
+      "src/daemon/lifecycle.ts",
+      "src/daemon/liveness.ts",
+      "bin/caret-launcher",
+    ],
+  },
 ];
 
 const TEST_FILE = new Bun.Glob("**/*.test.ts");
@@ -98,8 +149,10 @@ export function docsGateReport(
   });
   if (visibleChanges.length === 0) return null;
 
-  if (changed.some((path) => path.startsWith("docs/") && path.endsWith(".md") && !excluded(path)))
-    return null;
+  // The changelog mirrors the GitHub Releases, so editing it documents no change.
+  const documents = (path: string) =>
+    path.startsWith("docs/") && path.endsWith(".md") && !excluded(path) && path !== CHANGELOG_PAGE;
+  if (changed.some(documents)) return null;
 
   return `${visibleChanges.join(", ")} changed, but no page the docs site publishes did. Update the page that describes it (docs/agents/references/site.md says which), or add the docs-not-needed label if every page is still accurate.`;
 }

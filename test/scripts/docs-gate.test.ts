@@ -53,6 +53,10 @@ describe("docsGateReport", () => {
     expect(docsGateReport(["ui/src/App.svelte"], ["bug", SKIP_LABEL], excluded)).toBeNull();
   });
 
+  test("the changelog page is not a page change: the release flow regenerates it", () => {
+    expect(docsGateReport(["src/cli.ts", "docs/changelog.md"], [], excluded)).not.toBeNull();
+  });
+
   test("a published asset is not a page", () => {
     expect(
       docsGateReport(["src/theme/schema.ts", "docs/theme.schema.json"], [], excluded),
@@ -64,8 +68,34 @@ describe("userVisibleSurface", () => {
   test("counts CLI help text and caret install output", () => {
     expect(userVisibleSurface("src/cli.ts")).not.toBeNull();
     expect(userVisibleSurface("src/commands/install/claude.ts")).not.toBeNull();
-    expect(userVisibleSurface("src/adapters/pi/host.ts")).toBeNull();
+    expect(userVisibleSurface("src/adapters/pi/index.ts")).toBeNull();
     expect(userVisibleSurface("src/daemon/server.ts")).toBeNull();
+  });
+
+  test("counts what reaches the agent and what the core shows a user outside the CLI", () => {
+    const visible = [
+      "bridge/review-bridge.ts",
+      "src/adapters/claude/feedback.ts",
+      "src/adapters/opencode/approve.ts",
+      "src/adapters/pi/skills.ts",
+      "src/adapters/pi/host.ts",
+      "src/adapters/opencode/paths.ts",
+      "src/adapters/claude/steer.ts",
+      "hooks/hooks.json",
+      "templates/demo.md",
+      "src/review/threading.ts",
+      "src/daemon/auth.ts",
+      "src/daemon/update-check.ts",
+      "src/daemon/liveness.ts",
+      "src/daemon/diagnostics.ts",
+      "bin/caret-launcher",
+      "src/lib/cmux.ts",
+      "src/lib/log-rotate.ts",
+      "src/redact/core.ts",
+    ];
+    for (const path of visible) expect([path, userVisibleSurface(path)]).not.toEqual([path, null]);
+    for (const path of ["src/daemon/review-text-log.ts", "src/review/store.ts", "src/lib/run.ts"])
+      expect(userVisibleSurface(path)).toBeNull();
   });
 
   test("files what install writes under install, and doctor's probes under diagnostics", () => {

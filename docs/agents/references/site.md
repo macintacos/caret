@@ -11,12 +11,33 @@ Where a page goes:
 
 - Put it in its Diátaxis section's directory: `docs/tutorial/`, `docs/how-to/`,
   `docs/reference/`, or `docs/explanation/`.
-- Add its nav entry in `zensical.toml` under that section, after the section's `index.md`.
-  A page with no nav entry is unreachable from the site's menu.
+- Add its nav entry in `zensical.toml` under that section. A page with no nav entry is
+  unreachable from the site's menu.
 - Never reorder the four sections.
 - A new section directory also needs a line in `.rumdl.toml`'s `[per-file-flavor]` table
   setting it to `mkdocs`.
-- A section's `index.md` introduces the section. It does not list the section's pages.
+- A section has no `index.md`. It shows as a tab, and the tab opens its first page.
+
+When no page covers it yet, add a page or a section, with its nav entry, in the same
+change:
+
+- A new task a user performs, such as running a new command, gets a how-to page, or a
+  section of the how-to page whose task it extends.
+- A new review-page feature gets a section in the how-to page for the task it serves:
+  `docs/how-to/read-a-plan.md` for reading a plan, `docs/how-to/write-feedback.md` for
+  commenting and deciding.
+- A new setting gets its row in `docs/reference/config-file.md` or
+  `docs/reference/environment-variables.md`.
+- A new agent host gets a section in `docs/how-to/install.md`, a row in
+  `docs/reference/platform-support.md`, and what install adds for it in
+  `docs/explanation/caret-install.md`.
+- A new concept a user has to understand gets an explanation page or a section of one, and
+  each new term its entry in `docs/reference/glossary.md`.
+
+The Changelog tab, `docs/changelog.md`, mirrors the GitHub Releases.
+`caret-tasks release prepare` regenerates the whole page from the published Releases plus
+the new release's notes, so never edit it by hand. To fix an old release's entry, edit its
+notes on GitHub; the next release carries the fix. Keep its nav entry last.
 
 What stays off the site: a repo-only page, such as `docs/agents/`, `docs/README.md`,
 `docs/ARCHITECTURE.md`, or `docs/DEVELOPMENT.md`, is listed in `zensical.toml`'s
@@ -47,9 +68,16 @@ When a change updates a page:
   Finish setting up your agent host and `docs/explanation/caret-install.md`.
 - A background-service change goes in `docs/how-to/background-service.md`, and its why in
   `docs/explanation/background-service.md`.
+- A change to what a review sends the agent goes in `docs/how-to/review-tool.md`, and in
+  `docs/how-to/write-feedback.md` when it changes how a comment reaches the agent.
+- A change to the update check, or to the What's new dialog that lists the releases a user
+  is behind, goes in `docs/how-to/install.md`.
+- A remote-access change (sign-in, the token, the `host` and `hostnames` settings) goes in
+  `docs/how-to/remote-access.md`.
+- A change to a host's minimum version goes in `docs/reference/platform-support.md`.
 - Runtime behaviour a user sees (notifications, cmux unread marks, what a log record
-  carries, a diagnostics subcommand) goes in the matching how-to page. Logging conventions
-  for contributors belong in [`logging-rules.md`](../logging-rules.md).
+  carries or redacts, a diagnostics subcommand) goes in the matching how-to page. Logging
+  conventions for contributors belong in [`logging-rules.md`](../logging-rules.md).
 
 Writing a page:
 
@@ -78,7 +106,7 @@ Markdown the site renders:
 
 Links:
 
-- Link between site pages with a relative path, such as `../how-to/index.md`.
+- Link between site pages with a relative path, such as `../how-to/install.md`.
 - Link to an excluded page with its GitHub URL. `docs:build` runs zensical with
   `--strict`, which fails a relative link to an excluded page as if the page were missing.
 
