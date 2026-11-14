@@ -5,7 +5,8 @@
 Every plan makes the same round trip: from your
 [agent host](../reference/glossary.md#agent-host) to caret, to you on the
 [review page](../reference/glossary.md#review-page), and back to the agent as its answer.
-By default, the whole trip stays on your own machine.
+By default, the whole trip stays on your own machine. To reach it from another device, see
+[Open caret from another device](../how-to/remote-access.md).
 
 ## The round trip
 
@@ -39,7 +40,7 @@ your decision in the form that agent host expects. See
 In every agent host, caret waits for your decision for up to `review.timeout_s`, one hour
 by default (see
 [The `[daemon]` and `[review]` tables](../reference/config-file.md#the-daemon-and-review-tables)),
-then turns the plan down. In Claude Code that limit also has to stay below 3900 seconds:
-Claude Code ends the wait itself after 3900 seconds and lets the plan through unreviewed,
-so caret must answer first. For a longer window, raise `review.timeout_s`, in Claude Code
-to anything under 3900 seconds.
+then turns the plan down. The limit exists because of Claude Code, which ends the wait
+itself after 3900 seconds and lets the plan through unreviewed, so caret must answer
+first. For a longer window, raise `review.timeout_s` to anything under 3900 seconds; caret
+rejects a higher value.

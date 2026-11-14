@@ -50,4 +50,4 @@ opens without waiting for it to start:
 - pi: while [`/caret`](../reference/glossary.md#caret-command) plans.
 
 To check, restart, or stop the installed service, see
-[Running caret](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#the-caret-service).
+[Run the background service](../how-to/background-service.md#check-restart-or-stop-it).

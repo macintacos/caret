@@ -46,7 +46,7 @@ marketplace. The plugin adds:
 - A band above the prompt while a plan waits for you.
 - The `review_plan` [review tool](../reference/glossary.md#review-tool), which a skill
     can call to show you a plan outside plan mode (see
-    [Calling the review tool from your own skill](https://github.com/macintacos/caret/blob/main/docs/ARCHITECTURE.md#calling-the-review-tool-from-your-own-skill)).
+    [Call the review tool from your own skill](../how-to/review-tool.md)).
 
 Every `caret install` run updates the plugin, with or without `--refresh`. Restart Claude
 Code to load the new version. To update by hand, run `claude plugin update caret@caret`,

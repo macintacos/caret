@@ -5,7 +5,7 @@
 caret rewraps every plan to 90 columns before you see it, so every plan reads the same
 whichever [agent host](../reference/glossary.md#agent-host) sent it. Line numbers on the
 [review page](../reference/glossary.md#review-page) count lines of that formatted plan;
-[Calling the review tool from your own skill](https://github.com/macintacos/caret/blob/main/docs/ARCHITECTURE.md#calling-the-review-tool-from-your-own-skill)
+[Call the review tool from your own skill](../how-to/review-tool.md#wait-for-the-decision)
 covers what the agent receives.
 
 ## Why some lines run wider
