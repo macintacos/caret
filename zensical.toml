@@ -20,6 +20,7 @@ nav = [
   { "Home" = "index.md" },
   { "Tutorial" = [
     "tutorial/index.md",
+    { "Review your first plan" = "tutorial/first-plan.md" },
   ] },
   { "How-to guides" = [
     "how-to/index.md",
