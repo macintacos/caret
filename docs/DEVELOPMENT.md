@@ -3,10 +3,10 @@
 *Audience: contributors hacking on caret — building from source, the dev workflow, the
 tasks CLI, icons, and dev settings.*
 
-Part of the deep reference behind [README.md](../README.md). For what caret is, how to
-install it, and basic usage, start there. [CONTRIBUTING.md](../CONTRIBUTING.md) is the
-one-page front door — prerequisites, the everyday tasks, and where tests live. This page
-is the full catalog behind it.
+Contributor material, kept off the [docs site](https://macintacos.github.io/caret/). For
+what caret is, how to install it, and how to use it, start there.
+[CONTRIBUTING.md](../CONTRIBUTING.md) is the one-page front door — prerequisites, the
+everyday tasks, and where tests live. This page is the full catalog behind it.
 
 > [!TIP]
 > **`mise run dev` is the local development loop.** It runs the daemon and the UI straight

@@ -45,9 +45,14 @@ tables      = false
 reflow      = true
 reflow-mode = "normalize"
 
+# Hold site pages' list continuations at 4 spaces, the indent Python-Markdown needs for a
+# second paragraph or code block; the mkdocs default also accepts 2. Other files already
+# align continuations to the item's text by default.
+[MD077]
+style = "aligned"
+
 # Site pages are rendered by zensical (Python-Markdown). Under the standard flavor MD046
 # reads a `!!!` admonition's indented body as indented code once the page has a fence.
-# This flavor also wraps list-item continuation lines at a 4-space indent.
 [per-file-flavor]
 "docs/index.md"       = "mkdocs"
 "docs/tutorial/**"    = "mkdocs"

@@ -12,12 +12,12 @@ Run `caret doctor`. It reads your install, changes nothing, and prints a report.
 The report opens with its checks:
 
 - Whether the [background service](../reference/glossary.md#background-service) answers,
-  and whether it is older than the latest on npm.
+    and whether it is older than the latest on npm.
 - The background service's lock file.
 - Whether your [agent host](../reference/glossary.md#agent-host) has caret enabled.
 - Recent error records in the live logs.
 - Whether OpenCode would load an older caret in place of the published one, checked only
-  when OpenCode's config names caret.
+    when OpenCode's config names caret.
 - Whether `pi` is 1.5.0 or later, lists caret exactly once with its extension loaded,
     and loads the published caret, checked only when pi's settings list caret.
 
@@ -43,7 +43,7 @@ Below the checks is the state doctor read:
 - Whether caret is installed in your agent host.
 - Log sizes, with error and warning counts.
 - The last 24 hours' failures, grouped by [review](../reference/glossary.md#review) with
-  their error codes.
+    their error codes.
 - Install and system details.
 
 The last line says what to run next.
@@ -78,7 +78,7 @@ block, ready to share.
 
 `/caret doctor` works as in Claude Code: it asks for JSON or human-readable output,
 repeats each failing check's fix, and ends with the report in a code block. It leaves the
-session on the plan agent.
+session on the `plan` agent.
 
 ### pi
 

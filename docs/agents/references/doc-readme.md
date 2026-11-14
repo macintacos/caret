@@ -3,13 +3,13 @@
 *Audience: coding agents and contributors editing the `docs/` directory router.*
 
 `docs/README.md` is the router for the `docs/` directory. It leads with a table mapping
-what a reader wants to do to the page that answers it — the four reference pages
-([`CONFIGURING.md`](../../CONFIGURING.md), [`RUNNING.md`](../../RUNNING.md),
-[`ARCHITECTURE.md`](../../ARCHITECTURE.md), [`DEVELOPMENT.md`](../../DEVELOPMENT.md)),
-[`agents/`](../), and the two repo-root docs (`README.md` for install, `CONTRIBUTING.md`
-for first-time local setup). The table says nothing more about a page than the row that
-gets a reader there; only the `agents/` section below it expands, because `agents/` is a
-directory rather than a page and a bare listing is not a destination.
+what a reader wants to do to the page that answers it — a docs-site page, the contributor
+pages [`ARCHITECTURE.md`](../../ARCHITECTURE.md) and
+[`DEVELOPMENT.md`](../../DEVELOPMENT.md), [`agents/`](../), and the two repo-root docs
+(`README.md`, the landing page; `CONTRIBUTING.md`, for first-time local setup). The table
+says nothing more about a page than the row that gets a reader there; only the `agents/`
+section below it expands, because `agents/` is a directory rather than a page and a bare
+listing is not a destination.
 
 When to edit it:
 

@@ -28,7 +28,7 @@ bunx --no-cache @macintacos/caret@latest install
 ```
 
 The command first asks which agent hosts to add caret to. Claude Code is already selected,
-so press Enter. When it asks how to run the
+so press `enter`. When it asks how to run the
 [background service](../reference/glossary.md#background-service), answer
 **Keep it running**. The background service starts now and at every login.
 
@@ -102,13 +102,13 @@ Because this was the demo plan, nothing in your project changes.
 ## What's next
 
 - Type `/caret <what you want done>` in Claude Code to plan real work. When you approve,
-  Claude starts the work.
+    Claude starts the work.
 - When Claude Code's plan mode presents a plan, that plan opens in caret too.
 - The arrow beside **Approve** offers two more ways to
     [approve](../reference/glossary.md#approve). **Approve & accept edits** also lets
     Claude edit files without asking for the rest of the session. **Approve & auto mode**
     switches the session to auto mode.
 - To set caret up for OpenCode or pi, update it, or remove it, see
-  [Install caret](../how-to/install.md).
+    [Install caret](../how-to/install.md).
 - To look up a word this site uses, see the [Glossary](../reference/glossary.md).
 - For tasks beyond this tutorial, see the [How-to guides](../how-to/index.md).
