@@ -14,11 +14,11 @@ Find the row that matches what you came here to do, then follow the link.
 | Look up a `CARET_*` environment variable | [`CONFIGURING.md` § Environment variables](CONFIGURING.md#environment-variables) |
 | Understand how caret reformats a plan before you read it | [`CONFIGURING.md` § Plan formatting (rumdl)](CONFIGURING.md#plan-formatting-rumdl) |
 | Write or check a theme file | [`CONFIGURING.md` § Theme files](CONFIGURING.md#theme-files) |
-| Turn on desktop notifications, or work out why none appear | [`RUNNING.md` § Desktop notifications](RUNNING.md#desktop-notifications) |
-| Turn caret's sounds off | [`RUNNING.md` § Sound](RUNNING.md#sound) |
+| Turn on desktop notifications, or work out why none appear | [Get notified about plans § Turn on desktop notifications](how-to/notifications.md#turn-on-desktop-notifications) |
+| Turn caret's sounds off | [Get notified about plans § Turn the sound off or down](how-to/notifications.md#turn-the-sound-off-or-down) |
 | Switch a plan between its source and a rendered preview | [Read a plan § Switch between the preview and the source view](how-to/read-a-plan.md#switch-between-the-preview-and-the-source-view) |
-| Tell which plans arrived while you were reading another one | [`RUNNING.md` § Unread plans](RUNNING.md#unread-plans) |
-| Clear a cmux pane's unread mark from a review | [`RUNNING.md` § cmux unread marks](RUNNING.md#cmux-unread-marks) |
+| Tell which plans arrived while you were reading another one | [Get notified about plans § Find plans you have not read](how-to/notifications.md#find-plans-you-have-not-read) |
+| Clear a cmux pane's unread mark from a review | [Get notified about plans § Clear cmux unread marks](how-to/notifications.md#clear-cmux-unread-marks) |
 | Find out what the mark on the settings button means, or stop update notices | [`RUNNING.md` § Update notices](RUNNING.md#update-notices) |
 | Open the review UI from another device, or log every device out | [`RUNNING.md` § Reaching caret from another device](RUNNING.md#reaching-caret-from-another-device) |
 | Have an agent on another computer send its plans to the server's caret | [`RUNNING.md` § Reviewing on the server from another device](RUNNING.md#reviewing-on-the-server-from-another-device) |
