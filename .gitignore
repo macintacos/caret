@@ -60,3 +60,8 @@ playwright/.cache/
 
 # Ad-hoc playwright-cli exploration output (browser-testing.md: never committed)
 .playwright-cli/
+
+# The docs site (`mise run docs:build`): Zensical's output and cache, and uv's virtualenv.
+/site/
+/.cache/
+/.venv/
