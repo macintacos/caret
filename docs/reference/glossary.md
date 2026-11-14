@@ -13,6 +13,7 @@ What you type in an agent host: `/caret <what you want done>`, `/caret demo`, or
 ## Agent
 
 The AI model working in an agent host. It writes the plan and acts on your decision.
+OpenCode also calls its modes agents, such as `plan` and `build`.
 
 ## Agent host
 
@@ -21,16 +22,18 @@ harness or the host.
 
 ## Approve
 
-Accepts the plan, and the agent starts work. Any comments you left go to the agent with
-it. In Claude Code, **Approve & accept edits** also switches the session to accept edits,
-and **Approve & auto mode** switches it to auto mode. In OpenCode v2, approving can switch
-to OpenCode's `build` agent, its mode for editing files.
+Accepts the plan. Any comments you left go to the agent with it. In Claude Code,
+**Approve & accept edits** also switches the session to accept edits, and
+**Approve & auto mode** switches it to auto mode. In OpenCode v2, **Approve & build**
+switches to OpenCode's `build` agent, its mode for editing files.
 
 ## Background service
 
 The caret program that serves the review page and passes your decision back to the agent.
 By default `caret install` sets it to start at login, and `caret serve` runs it by hand.
-Older pages call it the daemon, the server, or the background process.
+Without it running, caret still starts when your agent sends a plan. Older pages call it
+the daemon, the server, the background process, or the caret service, and caret's install
+messages still say caret service.
 
 ## Comment
 
@@ -42,7 +45,9 @@ The short sample plan that `/caret demo` shows. Approving it changes nothing.
 
 ## Feedback
 
-Everything caret sends the agent with your decision: your comments and any note.
+Everything caret sends the agent with your decision: your comments, plus the
+**General comment** you can add when you request changes, or the **Notes for the agent**
+you can add when you approve.
 
 ## File preview
 
@@ -86,8 +91,9 @@ decide.
 
 ## Review page
 
-caret's page in your browser, at http://caret.localhost:42718 by default, where you review
-plans. Older pages call it the review UI, the web UI, or the caret UI.
+caret's page in your browser, at <http://caret.localhost:42718> by default, where you
+review plans. Older pages call it the review UI, the web UI, or the caret UI, and caret's
+install prompt still calls it the review UI.
 
 ## Review tool
 

@@ -93,8 +93,8 @@ only apply with `--json`:
   when you know which task you're debugging.
 
 An invalid `--grep` pattern emits an `{"event":"error"}` document and exits `2` without
-running. Plain `mise run preflight`, the human-readable form, is the one documented in the
-README.
+running. Plain `mise run preflight`, the human-readable form, is the one documented in
+`CONTRIBUTING.md`.
 
 ### Running a suite on its own
 

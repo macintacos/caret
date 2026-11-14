@@ -10,7 +10,10 @@ there, under the rules in [`site.md`](site.md), not here.
 When to edit it:
 
 - A user-visible change to the landing page: a changed one-line install command or a
-  pointer that needs updating. Install details belong in
+  pointer that needs updating. The same install command also appears in
+  [`docs/how-to/install.md`](../../how-to/install.md) § Install and
+  [`docs/tutorial/first-plan.md`](../../tutorial/first-plan.md) § Install caret; change
+  all three together. Install details belong in
   [`docs/how-to/install.md`](../../how-to/install.md). Deep configuration, architecture,
   and dev-workflow detail belong in the matching `docs/` reference page — and new
   `config.toml` / `CARET_*` rows land in [`CONFIGURING.md`](../../CONFIGURING.md)'s tables

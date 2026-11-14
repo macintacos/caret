@@ -13,8 +13,8 @@ you review several plans from one browser tab.
 
 [Watch a short demo video](https://youtu.be/zesv5AunUW4).
 
-Start here: [Review your first plan](tutorial/first-plan.md), or
-[install caret](how-to/install.md) for another agent host.
+Using Claude Code? Start with [Review your first plan](tutorial/first-plan.md). On
+OpenCode or pi, start with [Install caret](how-to/install.md).
 
 - [Tutorial](tutorial/index.md): learn caret by using it, start to finish.
 - [How-to guides](how-to/index.md): the steps for one task.

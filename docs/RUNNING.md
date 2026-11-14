@@ -308,10 +308,12 @@ Three details worth knowing:
 
 ## Update notices
 
-The daemon asks whether a newer caret is out (see the README for what that call sends and
-how to turn it off in `config.toml`). An on-demand daemon asks when it starts, a resident
-one asks again on an hourly tick, and a 24-hour stamp keeps either to about once a day.
-This is what you see when the answer is yes.
+The daemon asks whether a newer caret is out (see
+[`CONFIGURING.md` § The `[updates]` table](CONFIGURING.md#the-updates-table) for what it
+asks, and [Install caret § Update caret](how-to/install.md#update-caret) for how to turn
+it off). An on-demand daemon asks when it starts, a resident one asks again on an hourly
+tick, and a 24-hour stamp keeps either to about once a day. This is what you see when the
+answer is yes.
 
 A toast arrives on your next page load, and it names the version rather than just saying
 one exists. It waits until you read or dismiss it instead of fading, and it appears
@@ -348,11 +350,12 @@ Two readings are not problems, and the pane says so rather than reading like a f
 - **Update checks are off** — either because caret is running from source, or because you
   turned them off.
 
-The **Check for updates** switch in that pane is the same `updates.check` setting the
-README describes, without the file edit. The daemon reads it on every request rather than
-only at startup, so turning it off stops the toast and both marks immediately. Turning it
-back on asks again on the spot — subject to the same once-a-day throttle as any other
-check — and reports the answer on your next load.
+The **Check for updates** switch in that pane is the same `updates.check` setting
+[`CONFIGURING.md` § The `[updates]` table](CONFIGURING.md#the-updates-table) describes,
+without the file edit. The daemon reads it on every request rather than only at startup,
+so turning it off stops the toast and both marks immediately. Turning it back on asks
+again on the spot — subject to the same once-a-day throttle as any other check — and
+reports the answer on your next load.
 
 ## The plan-waiting band
 

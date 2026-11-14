@@ -1,9 +1,9 @@
 # 🥕 `caret`
 
-`caret` replaces your agent host's (Claude Code, OpenCode, or pi) plan-approval prompt
-with a review page in your browser. When the agent presents a plan, you read it there,
-comment on the lines that matter, then approve it or request changes. caret sends your
-feedback back to the agent.
+`caret` works with your agent host: Claude Code, OpenCode, or pi. It replaces the host's
+plan-approval prompt with a review page in your browser. When the agent presents a plan,
+you read it there, comment on the lines that matter, then approve it or request changes.
+caret sends your feedback back to the agent.
 
 One background service serves every session, so you review several plans from one browser
 tab.
@@ -15,7 +15,7 @@ tab.
 
 ## Install
 
-It needs [Bun](https://bun.sh) and macOS or Linux.
+It needs [`bun`](https://bun.sh) on your PATH, and macOS or Linux.
 
 ```sh
 bunx --no-cache @macintacos/caret@latest install

@@ -27,7 +27,8 @@ In a terminal, run:
 bunx --no-cache @macintacos/caret@latest install
 ```
 
-The command adds caret to Claude Code. When it asks how to run the
+The command first asks which agent hosts to add caret to. Claude Code is already selected,
+so press Enter. When it asks how to run the
 [background service](../reference/glossary.md#background-service), answer
 **Keep it running**. The background service starts now and at every login.
 
@@ -35,6 +36,9 @@ The command adds caret to Claude Code. When it asks how to run the
 
 Open <http://caret.localhost:42718> in your browser. This is the
 [review page](../reference/glossary.md#review-page), where you review plans.
+
+The first time, a **Welcome to caret** dialog offers desktop notifications, with
+**Maybe later** and **Enable notifications**. Either button works for this tutorial.
 
 With no plan waiting, it shows **No plans awaiting review**, the line "When an agent
 proposes a plan, it opens here.", and a **listening** badge. Leave the tab open.
@@ -57,9 +61,10 @@ In Claude Code, type:
 /caret demo
 ```
 
-Claude enters plan mode, where it proposes a plan before it edits anything, and writes a
-short [plan](../reference/glossary.md#plan) that cites files in your project. When Claude
-presents the plan, it appears in the review page tab you left open, without a reload.
+If Claude Code asks to enter plan mode, accept. Claude enters plan mode, where it proposes
+a plan before it edits anything, and writes a short [plan](../reference/glossary.md#plan)
+that cites files in your project. When Claude presents the plan, it appears in the review
+page tab you left open, without a reload.
 
 ## Read the plan
 
