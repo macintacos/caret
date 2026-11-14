@@ -6,7 +6,8 @@ Find the row that matches what you came here to do, then follow the link.
 
 | What you want to do | Where it is |
 | --- | --- |
-| Install caret, or see what it does | [Install caret](how-to/install.md) |
+| See what caret does | [the docs home](index.md) |
+| Install caret | [Install caret](how-to/install.md) |
 | Run caret yourself, instead of having it start at login | [Install caret § Run caret yourself](how-to/install.md#run-caret-yourself) |
 | See which platforms caret supports, and what differs on each | [`CONFIGURING.md` § Platform support](CONFIGURING.md#platform-support) |
 | Change the daemon port, the review timeout, or the log level in `config.toml` | [`CONFIGURING.md` § Config file](CONFIGURING.md#config-file) |

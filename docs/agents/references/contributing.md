@@ -4,10 +4,11 @@
 
 `CONTRIBUTING.md` is the short, human-facing front door for developing caret:
 `bun install`, the `mise` task workflow (`mise run dev`, `mise run preflight`), and where
-tests live. Keep it **minimal** — it orients a new contributor and then points at
-`README.md` (the user-facing guide), the `docs/` reference pages (`CONFIGURING.md`,
-`RUNNING.md`, `ARCHITECTURE.md`, `DEVELOPMENT.md`), and `docs/agents/` (the
-rules-of-the-road) for depth. Don't let it grow into a second README.
+tests live. Keep it **minimal** — it orients a new contributor and then points at the docs
+site (the user-facing guide, built from `docs/`; `README.md` is the landing page), the
+`docs/` reference pages (`CONFIGURING.md`, `RUNNING.md`, `ARCHITECTURE.md`,
+`DEVELOPMENT.md`), and `docs/agents/` (the rules-of-the-road) for depth. Don't let it grow
+into a second README.
 
 When to edit it:
 

@@ -14,7 +14,7 @@ You need:
   for what differs.
 - [`bun`](https://bun.sh) on your PATH.
 - At least one [agent host](../reference/glossary.md#agent-host) at its minimum version:
-  - Claude Code, any version.
+  - Claude Code.
   - OpenCode v1 1.3.4 or later, or v2 2.0.29 or later.
   - pi 1.5.0 or later.
 
@@ -26,15 +26,15 @@ Run:
 bunx --no-cache @macintacos/caret@latest install
 ```
 
-The command adds caret to each agent host it finds on your machine. It also installs the
-[plan formatter](../reference/glossary.md#plan-formatter).
+The command asks which agent hosts to add caret to, with the ones it found already
+selected. It also installs the [plan formatter](../reference/glossary.md#plan-formatter).
 
 It then asks how to run the
 [background service](../reference/glossary.md#background-service):
 
 - **Keep it running** (recommended): the background service starts at login.
-- **I'll run it myself**: you start it by hand when you want it. See
-  [Run caret yourself](#run-caret-yourself).
+- **I'll run it myself**: you start it by hand when you want it. Without it, caret still
+  starts when your agent sends a plan. See [Run caret yourself](#run-caret-yourself).
 
 While the background service runs, the [review page](../reference/glossary.md#review-page)
 is at <http://caret.localhost:42718>.
@@ -48,13 +48,16 @@ Each agent host needs a restart before it picks caret up. In every agent host,
 ### Claude Code
 
 The install adds caret through the `claude` command: the `macintacos/caret` marketplace
-and the `caret@caret` plugin. If `claude` is not on your PATH, run this inside Claude Code
-instead:
+and the `caret@caret` plugin. If `claude` is not on your PATH, the install stops before it
+sets up the plan formatter and the background service. Either install Claude Code's
+`claude` command and run the install again, or add the plugin inside Claude Code:
 
 ```text
 /plugin marketplace add macintacos/caret
 /plugin install caret@caret
 ```
+
+Then run the install again with Claude Code unselected, so it finishes setting up.
 
 Restart Claude Code. Claude Code lists the
 [`/caret` command](../reference/glossary.md#caret-command) as `caret:caret`, and typing
@@ -67,11 +70,14 @@ New to caret? Follow [Review your first plan](../tutorial/first-plan.md).
 Restart OpenCode. It installs the caret plugin on its next start, so `bun` must be on the
 PATH that OpenCode runs with.
 
-`/caret …` runs on OpenCode's `plan` agent, so switch to `build` once you approve. On
-OpenCode v2, `ctrl+x p` (`<leader>p`) opens the plan waiting in the session. To change
-that key, rebind `caret.open` under OpenCode's `keybinds`.
+`/caret …` runs on OpenCode's `plan` agent, its planning mode that doesn't edit files. On
+OpenCode v1, switch to `build` once you approve. On v2, the **Approve & build** option
+switches for you. On OpenCode v2, `ctrl+x p` (`<leader>p`) opens the plan waiting in the
+session. To change that key, rebind `caret.open` under OpenCode's `keybinds`.
 
-New to caret? Follow [Review your first plan](../tutorial/first-plan.md).
+Run `/caret demo` to try the review page. From
+[Read the plan](../tutorial/first-plan.md#read-the-plan) on, the tutorial applies as
+written.
 
 ### pi
 
@@ -82,18 +88,24 @@ Run `/reload` in pi, or restart it. pi has no planning mode of its own, so caret
 
 1. `/caret <what you want done>` turns on planning mode. The agent writes its plan into
    `~/.pi/agent/plans`, and caret blocks its `edit` and `write` tools outside that folder
-   until you approve.
+   until you approve. Shell commands are only discouraged while planning, not blocked.
+   `/caret plan` on its own turns planning mode off.
 2. While a plan waits, a notice shows above the editor and the footer reads
    `^ plan waiting`. Press `ctrl+alt+o` to open the plan in your browser. In Terminal.app
    or iTerm2, set Option to act as Meta for that key to reach pi.
-3. Press Esc in pi to cancel a waiting review.
+3. Approve, and the agent implements the plan. Request changes, and it revises the plan
+   and presents it again. Press Esc in pi to cancel a waiting review; the agent is told
+   not to implement the plan.
 
-New to caret? Follow [Review your first plan](../tutorial/first-plan.md).
+Run `/caret demo` to try the review page. From
+[Read the plan](../tutorial/first-plan.md#read-the-plan) on, the tutorial applies as
+written.
 
 ## Run caret yourself
 
 To keep caret from starting at login, run the install and answer **I'll run it myself**.
-That removes the background service if one is registered.
+That removes the background service if one is registered. caret still starts when your
+agent sends a plan.
 
 Then, whenever you want the review page up, run:
 
@@ -116,9 +128,9 @@ Run:
 bunx --no-cache @macintacos/caret@latest install --refresh
 ```
 
-The command installs the newest caret into every agent host without asking which ones. It
-asks the background-service question again, then restarts the background service if you
-keep it running.
+The command asks the same two questions as the install. It then takes the newest caret in
+each agent host you pick, without asking whether to replace a cached or pinned OpenCode
+copy, and restarts the background service if you keep it running.
 
 caret checks for a newer version once a day. When one is out, the review page shows:
 
@@ -144,9 +156,9 @@ Run:
 bunx --no-cache @macintacos/caret@latest install --uninstall
 ```
 
-The command removes caret from every agent host, along with the background service, the
-launcher, and the installed versions under `~/.local/state/caret/roots/`. It keeps your
-reviews.
+The command removes caret from every agent host, along with the background service and the
+copies of caret it installed under `~/.local/state/caret/`. It keeps your settings and
+your reviews.
 
 In Claude Code, it uninstalls the `caret@caret` plugin but leaves the `macintacos/caret`
 marketplace registered.
