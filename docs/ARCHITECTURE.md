@@ -119,7 +119,7 @@ tick (`src/daemon/upkeep.ts`) does that work instead:
 - `stderr-rotate` rotates `logs/daemon-stderr.log`, for a supervised daemon only.
 
 To check, restart, or stop the service, see
-[Run the background service](how-to/background-service.md).
+[Run the background service](how-to/background-service.md#check-restart-or-stop-it).
 
 ### Architecture: tool-agnostic core + agent adapter
 
@@ -227,7 +227,7 @@ and login token, and it never holds up the review.
 Beside the hooks, the plugin starts a stdio MCP server, `caret mcp`, declared in
 `.claude-plugin/plugin.json`. It serves one tool, `review_plan`, which a skill can call to
 put a plan in front of you without going through plan mode — see
-[Calling the review tool from your own skill](how-to/review-tool.md).
+[Call the review tool from your own skill](how-to/review-tool.md).
 
 The reviewer's approve choice is an opaque variant id the core stores and the UI renders;
 the Claude adapter declares its variants (`default` / `acceptEdits` / `auto`), and
@@ -312,7 +312,7 @@ agent to call it; the tool's `execute()` spawns `caret review` (`CARET_AGENT=ope
 with the plan on its stdin — the same entry point Claude's hook uses — blocks on your
 decision in the browser, and returns an approval or a change request (the reviewer
 feedback, without the plan echoed back) the agent revises and resubmits — see
-[Calling the review tool from your own skill](how-to/review-tool.md)
+[Call the review tool from your own skill](how-to/review-tool.md)
 for who may call it and how to call it yourself. The whole daemon/review pipeline is
 reused unchanged — the plugin is the OpenCode-side counterpart to Claude's `hooks.json`.
 On OpenCode v2 a review called from the plan agent also offers **Approve & build**, which
@@ -361,7 +361,7 @@ they need an attached terminal UI (web and desktop show none). The same TUI half
 `caret.open` keybinding (`<leader>p`) and palette entry, which open the session's waiting
 plan. It also shows a pending-plan line above the prompt of a session whose plan waits.
 Prewarm runs per prompt, and a v2 below 2.0.29 refuses every `path` review (see
-[Calling the review tool from your own skill](how-to/review-tool.md)).
+[Call the review tool from your own skill](how-to/review-tool.md#revise-a-plan-file-in-place)).
 
 `caret install --refresh` takes an update: it compares the caret OpenCode would load
 against npm's published one, then either clears the stale cached copy so OpenCode

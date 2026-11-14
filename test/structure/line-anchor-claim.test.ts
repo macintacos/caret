@@ -1,9 +1,9 @@
 // Standing gate for the line-anchor feedback claim (EXC-940). Three surfaces tell a
 // reader how line-anchored feedback resolves — the module header of ui/src/lib/feedback.ts,
 // `deniedMessage` in bridge/review-bridge.ts, and docs/how-to/review-tool.md. EXC-939
-// found the causality inverted in two of them:
-// a wrong docstring had already propagated into a docs draft. It corrected the prose but
-// added no mechanism, so this suite is the mechanism.
+// found the causality inverted in two of them: a wrong docstring had already propagated
+// into a docs draft. It corrected the prose but added no mechanism, so this suite is the
+// mechanism.
 //
 // What is pinned is only the half that is TRUE ON EVERY REVIEW PATH — the one sentence in
 // CLAIM below. The path-specific half around it (whether the numbers line up with the

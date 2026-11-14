@@ -16,8 +16,8 @@ Logs live under `$XDG_STATE_HOME/caret/logs` when that variable is set, otherwis
 | ------------------- | ------------ |
 | `caret.log`         | Records from the short-lived `caret review` process your agent host starts for each plan. |
 | `daemon.log`        | The [background service](../reference/glossary.md#background-service)'s records, in the same shape, tagged with `pid`. |
-| `daemon-stderr.log` | Whatever the background service writes outside its logger, such as raw crash output, plus the launcher's own failures when a supervised start cannot find caret or bun. |
-| `archive/`          | Gzipped old logs, named `<log>-<stamp>.log.gz`. A log past `[logging].max_size` is archived here and emptied; the newest `[logging].keep` per log are kept. |
+| `daemon-stderr.log` | Whatever the background service writes outside its logger, such as raw crash output, plus the [launcher](background-service.md#upgrade-the-background-service)'s own failures when a supervised start cannot find caret or bun. |
+| `archive/`          | Gzipped old logs, named `<log>-<stamp>.log.gz`. A log past `logging.max_size` is archived here and emptied; the newest `logging.keep` per log are kept. |
 
 Events from the [review page](../reference/glossary.md#review-page) reach the background
 service in batches and land in `daemon.log` tagged `source: "ui"`. The same `[logging]`
@@ -25,7 +25,7 @@ level and redact settings apply to them.
 
 ## Read a log record
 
-Each line of a log is one JSON object:
+Each line of `caret.log` and `daemon.log` is one JSON object:
 
 | Field                    | Value |
 | ------------------------ | ----- |
@@ -44,7 +44,7 @@ only failures log at error.
 
 !!! note
 
-    To log more detail, set `level = "debug"` in `config.toml`'s `[logging]` table (see
+    Set `level = "debug"` in `config.toml`'s `[logging]` table (see
     [The `[logging]` table](../reference/config-file.md#the-logging-table)). The change
     applies at once, with no restart.
 

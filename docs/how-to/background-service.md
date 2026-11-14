@@ -10,10 +10,9 @@ fixing one that keeps stopping. One background service serves every
 
 ## Keep caret running
 
-Answer **Keep it running** when `caret install` asks (`mise run build --install`
-included). The install then registers a login service that starts the background service
-at login and keeps it up until told to stop, so the
-[review page](../reference/glossary.md#review-page) is up before any plan arrives.
+Answer **Keep it running** when `caret install` asks. The install then registers a login
+service that starts the background service at login and keeps it up until told to stop, so
+the [review page](../reference/glossary.md#review-page) is up before any plan arrives.
 
 Windows has no login service, and neither does a Linux machine where systemd doesn't run
 for your user. There, the install says so, and caret starts on demand when your agent
@@ -32,28 +31,29 @@ Linux:
 | **Stop** | `launchctl bootout gui/$(id -u)/dev.excessive.caret` — stopped until your next login | `systemctl --user stop caret.service` — stopped until your next login, or, if it [keeps running after you log out](#keep-it-running-after-you-log-out), your next boot |
 
 On either platform, ask the background service whether it is resident and which upkeep
-tasks it runs (`42718` is `[daemon].port`):
+tasks it runs (`42718` is `daemon.port`):
 
 ```sh
 curl -s http://127.0.0.1:42718/api/diagnostics | jq '{resident, upkeep}'
 ```
 
-With token auth on, add
+With token login on, add
 `-H "Authorization: Bearer $(cat "${XDG_STATE_HOME:-$HOME/.local/state}/caret/daemon.token")"`.
 
 While the service is stopped, the next review starts a background service on demand. That
-one exits once it has sat idle for `[daemon].idle_ms` with no review pending and no review
+one exits once it has sat idle for `daemon.idle_ms` with no review pending and no review
 page tab open.
 
-To open the review page from another device with token auth on (see
+To open the review page from another device with token login on (see
 [Open caret from another device](remote-access.md)),
 get the login link from `caret login-link`. The service `caret install` sets up never
 prints one.
 
 ## Upgrade the background service
 
-Restart the service `caret install` sets up to upgrade it: each time it starts, it picks
-which caret and which bun to run.
+Restart the service `caret install` sets up to upgrade it: each time it starts, a launcher
+script caret installs (`$XDG_STATE_HOME/caret/bin/caret`) picks which caret and which bun
+to run.
 
 - **caret**: the version a `--from-local` build pinned, else the newest one installed
     across Claude Code's plugin cache, OpenCode's package cache, pi's npm folder
@@ -70,9 +70,9 @@ after `--refresh` the service runs that copy until something newer is installed.
 that is OpenCode's next start, which re-resolves its package cache.
 
 After it registers or restarts the service, `caret install` waits up to 30 seconds for the
-service to answer. The service must run this caret version or newer. If none answers, the
-install warns instead of announcing the review page. The warning names the older version
-it found, if any, and `logs/daemon-stderr.log` (see
+service to answer with this caret version or newer. If none does, the install warns
+instead of announcing the review page. The warning names the older version it found, if
+any, and `logs/daemon-stderr.log` (see
 [Find the log files](logs.md#find-the-log-files)).
 
 The service `caret install` sets up sees only the environment captured at install; see
@@ -80,9 +80,9 @@ The service `caret install` sets up sees only the environment captured at instal
 
 ## Fix a background service that keeps stopping
 
-When the background service exits, launchd starts it again after about 10 seconds and
-systemd after 5. systemd gives up after five starts inside 60 seconds and stops trying to
-restart it.
+When the service `caret install` sets up exits, launchd starts it again after about 10
+seconds and systemd after 5. systemd gives up after five starts inside 60 seconds and
+stops trying to restart it.
 
 When there is nothing to run, no runnable caret or no bun, the service stops with exit
 status 78 instead of restarting into the same failure. systemd honours that status itself.

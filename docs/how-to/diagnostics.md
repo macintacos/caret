@@ -12,7 +12,7 @@ Run `caret doctor`. It reads your install, changes nothing, and prints a report.
 The report opens with its checks:
 
 - Whether the [background service](../reference/glossary.md#background-service) answers,
-  and whether its version matches the latest on npm.
+  and whether it is older than the latest on npm.
 - The background service's lock file.
 - Whether your [agent host](../reference/glossary.md#agent-host) has caret enabled.
 - Recent error records in the live logs.
@@ -29,16 +29,18 @@ has stopped failing turns green on its own.
 Three checks read caret's latest version from npm, and each shows `unknown` when you are
 offline:
 
-- The version check, run only when a published caret answers as the background service.
+- The version check, which reads npm only when a published caret answers as the
+    background service.
 - The OpenCode check.
 - The pi check, run only when pi installs caret from npm.
 
 Below the checks is the state doctor read:
 
 - Running caret processes.
-- The background service's version and build.
+- The background service's version, build, and startup commit.
 - Lock and port state.
 - Effective settings and review counts.
+- Whether caret is installed in your agent host.
 - Log sizes, with error and warning counts.
 - The last 24 hours' failures, grouped by [review](../reference/glossary.md#review) with
   their error codes.
