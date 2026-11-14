@@ -1,0 +1,40 @@
+name: docs-gate
+on:
+  pull_request:
+    # labeled and unlabeled re-run the gate when docs-not-needed is added or removed.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    branches: [main]
+permissions:
+  contents: read
+  pull-requests: read
+concurrency:
+  group: docs-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  docs-gate:
+    name: docs gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5.2.1
+        with:
+          version: 2026.11.3
+          install_args: bun
+          cache_save: false
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - run: bun install --frozen-lockfile
+      - name: A user-visible change updates a site page
+        # Explicit bash runs with -o pipefail: a failed gh api fails the step instead of
+        # feeding the gate a partial list.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files?per_page=100" --jq '.[].filename' | bun scripts/docs-gate.ts

@@ -266,6 +266,7 @@ export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "docs/DEVELOPMENT.md", // test/scripts/dev-driver.test.ts checks fake-plan.md's line citations into it
   "docs/reference/theme-files.md", // test/core/theme/schema.test.ts parses its example theme file and syntax tables
   "docs/reference/built-in-themes.md", // test/core/theme/load.test.ts checks it names every built-in theme id
+  "docs/agents/documentation-rules.md", // test/scripts/docs-gate.test.ts checks it lists every USER_VISIBLE glob
 ];
 
 function fullGate(reason: string): TaskSelection {

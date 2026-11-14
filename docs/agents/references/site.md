@@ -35,6 +35,18 @@ When a change updates a page:
 - A plan-formatting change (the pinned rumdl version, the reflow shape, the opt-out) goes
   in `docs/explanation/plan-formatting.md`. [`rumdl-rules.md`](../rumdl-rules.md) says
   how.
+- A CLI change (a command, flag, help text, or output) goes in the how-to page that walks
+  through that command: `docs/how-to/install.md` for `caret install` and updating,
+  `docs/how-to/diagnostics.md` for `caret doctor`. There is no CLI reference page.
+- A change to what `caret install` sets up in an agent host goes in
+  `docs/explanation/caret-install.md`, and in `docs/how-to/install.md` when the steps a
+  user follows change.
+- A review-page change goes in `docs/how-to/read-a-plan.md` for reading a plan, or
+  `docs/how-to/write-feedback.md` for commenting and deciding.
+- A change to the `/caret` command or a host plugin goes in `docs/how-to/install.md` §
+  Finish setting up your agent host and `docs/explanation/caret-install.md`.
+- A background-service change goes in `docs/how-to/background-service.md`, and its why in
+  `docs/explanation/background-service.md`.
 - Runtime behaviour a user sees (notifications, cmux unread marks, what a log record
   carries, a diagnostics subcommand) goes in the matching how-to page. Logging conventions
   for contributors belong in [`logging-rules.md`](../logging-rules.md).

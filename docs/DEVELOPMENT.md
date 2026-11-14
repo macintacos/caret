@@ -718,8 +718,21 @@ saves on any miss, so a PR that changes the package set saves a copy of its own.
 - Job names are what branch protection matches — renaming one drops it from the required
   checks.
 - Actions are pinned through `.github/workflows/actions.lock`; whenever an action ref
-  changes, regenerate it with `gh actions-lock --no-interactive .github/workflows/ci.yml`.
+  changes, regenerate it with
+  `gh actions-lock --no-interactive .github/workflows/ci.yml .github/workflows/docs-gate.yml`.
 - A stacked PR retargeted to `main` gets its checks on the next push, not on the retarget.
+
+The docs gate is a separate workflow, `.github/workflows/docs-gate.yml`, whose one job is
+the `docs gate` check. It runs on every PR against `main` when the PR opens, gets new
+commits, reopens, or gains or loses a label. It reads the PR's changed paths from the
+GitHub API and pipes them to `scripts/docs-gate.ts`, which fails when a path is
+user-visible (listed in the script's `USER_VISIBLE` table) and no page the docs site
+publishes changed. A published page is a `docs/**/*.md` that `zensical.toml`'s
+`exclude_docs` does not list, read from `zensical.toml` itself. Adding the
+`docs-not-needed` label re-runs the check, which then passes. The `pull_request` trigger
+and read-only permissions mean a fork's PR never runs with a write token. Its cases live
+in `test/scripts/docs-gate.test.ts` (the script) and
+`test/scripts/docs-gate-workflow.test.ts` (the workflow), which `test unit` runs.
 
 #### Adding a task
 
