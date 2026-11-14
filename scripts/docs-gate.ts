@@ -92,16 +92,16 @@ export function docsGateReport(
     return "read no changed paths; a pull request always changes at least one.";
   if (labels.includes(SKIP_LABEL)) return null;
 
-  const visible = changed.flatMap((path) => {
+  const visibleChanges = changed.flatMap((path) => {
     const surface = userVisibleSurface(path);
     return surface === null ? [] : [`${path} (${surface})`];
   });
-  if (visible.length === 0) return null;
+  if (visibleChanges.length === 0) return null;
 
   if (changed.some((path) => path.startsWith("docs/") && path.endsWith(".md") && !excluded(path)))
     return null;
 
-  return `${visible.join(", ")} changed, but no page the docs site publishes did. Update the page that describes it (docs/agents/references/site.md says which), or add the docs-not-needed label if every page is still accurate.`;
+  return `${visibleChanges.join(", ")} changed, but no page the docs site publishes did. Update the page that describes it (docs/agents/references/site.md says which), or add the docs-not-needed label if every page is still accurate.`;
 }
 
 if (import.meta.main) {

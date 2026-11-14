@@ -93,10 +93,10 @@ describe("excludedFromSite", () => {
   });
 
   test("reads an anchored name without a trailing slash as a file or a directory", () => {
-    const matches = excludedFromSite('[project]\nexclude_docs = """\n/agents\n"""\n');
-    expect(matches("docs/agents")).toBe(true);
-    expect(matches("docs/agents/x.md")).toBe(true);
-    expect(matches("docs/agentsx.md")).toBe(false);
+    const isExcluded = excludedFromSite('[project]\nexclude_docs = """\n/agents\n"""\n');
+    expect(isExcluded("docs/agents")).toBe(true);
+    expect(isExcluded("docs/agents/x.md")).toBe(true);
+    expect(isExcluded("docs/agentsx.md")).toBe(false);
   });
 
   test("throws on a pattern it cannot read", () => {
@@ -107,7 +107,7 @@ describe("excludedFromSite", () => {
 });
 
 describe("the entry point", () => {
-  function run(labels: string) {
+  function runGate(labels: string) {
     return drainProcess(
       Bun.spawn([process.execPath, "scripts/docs-gate.ts"], {
         stdin: new TextEncoder().encode("src/cli.ts\n"),
@@ -119,13 +119,13 @@ describe("the entry point", () => {
   }
 
   test("fails with a workflow error annotation", async () => {
-    const { exit, stdout } = await run("[]");
+    const { exit, stdout } = await runGate("[]");
     expect(exit).toBe(1);
     expect(stdout).toContain("::error::docs gate:");
   });
 
   test("passes silently with the skip label", async () => {
-    const { exit, stdout } = await run('["docs-not-needed"]');
+    const { exit, stdout } = await runGate('["docs-not-needed"]');
     expect(exit).toBe(0);
     expect(stdout).toBe("");
   });
