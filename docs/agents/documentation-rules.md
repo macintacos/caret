@@ -20,20 +20,16 @@ all at once.
 @changing-documentation: Changing documentation
   > which-doc
 which-doc: Edit every doc the change affects
-  user-facing front door: what caret is, install, basic usage, pointers onward > readme
-  configuration reference: platform support, config.toml, the CARET_* tables, plan formatting, theme files > configuring
-  runtime behavior a user sees: desktop notifications, cmux unread marks, logging and debugging > running
-  how caret works: the core/adapter boundary, adapter internals, the review tool, the source layout > architecture
-  developing caret: build-from-source, the mise task catalog and dev workflow, the tasks CLI, icons > development
+  user-facing front door: what caret is, the screenshot, the one-line install, pointers to the docs site > readme
+  caret's internals, for contributors: the core/adapter boundary, the daemon's lifecycle, adapter internals, the source layout > architecture
+  developing caret: build-from-source, the mise task catalog and dev workflow, the tasks CLI, icons, dev and preflight settings > development
   human contributor onboarding: local setup, the mise workflow, where tests live > contributing
   the code-change routing index, plus the CodeGraph / verifying-changes prose > agents
   a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, plan rendering, testing, icons, settings, dependencies, OpenCode, pi, rumdl) > edit-a
   the router for the docs/ directory: which page answers a given reader's question > readme-2
   design direction: how caret looks, moves, sounds, or prints, its deliberate exceptions, and the decision log > edit-design
-  a user-facing page on the docs site (tutorial, how-to guide, reference, explanation) or its place in the site's nav > site
+  a user-facing page on the docs site, or its place in the site's nav: a tutorial, how-to guide, reference, or explanation page, such as install, notifications, logs and diagnostics, the config file and user-facing CARET_* variables, the theme file format, platform support, how caret works, or plan formatting > site
 readme!: Edit README.md
-configuring!: Edit docs/CONFIGURING.md
-running!: Edit docs/RUNNING.md
 architecture!: Edit docs/ARCHITECTURE.md
 development!: Edit docs/DEVELOPMENT.md
 contributing!: Edit CONTRIBUTING.md
@@ -47,25 +43,22 @@ site!: Edit the docs/ page and its zensical.toml nav entry
 ## The doc landscape
 
 - **`README.md`** (repo root) — the landing page: what caret is, the screenshot, a
-  one-line install, and links to the docs site and `CONTRIBUTING.md`, plus diagnostics and
-  the license. User documentation lives on the docs site. How to edit it:
+  one-line install, links to the docs site and `CONTRIBUTING.md`, and the license. User
+  documentation lives on the docs site. How to edit it:
   [`references/readme.md`](references/readme.md).
-- **`docs/CONFIGURING.md`** — the configuration reference behind `README.md`: platform
-  support, the `config.toml` file, the full `CARET_*` tables, plan formatting, and theme
-  files. How to edit it: [`references/configuring.md`](references/configuring.md).
-- **`docs/RUNNING.md`** — caret in use: desktop notifications, cmux unread marks, and
-  logging & debugging. How to edit it: [`references/running.md`](references/running.md).
-- **`docs/ARCHITECTURE.md`** — how caret works: the tool-agnostic core / agent-adapter
-  boundary, the Claude Code, OpenCode, and pi adapter internals, calling the review tool,
-  and the source layout. How to edit it:
+- **`docs/ARCHITECTURE.md`** — caret's internals, for contributors and kept off the docs
+  site: the tool-agnostic core / agent-adapter boundary, the daemon's lifecycle, the
+  Claude Code, OpenCode, and pi adapter internals, the source layout, and where the
+  built-in theme files live. How to edit it:
   [`references/architecture.md`](references/architecture.md).
-- **`docs/DEVELOPMENT.md`** — developing caret: build-from-source, the `mise` task catalog
-  and dev workflow, the tasks CLI, and icons. How to edit it:
-  [`references/development.md`](references/development.md).
+- **`docs/DEVELOPMENT.md`** — developing caret, kept off the docs site: build-from-source,
+  the `mise` task catalog and dev workflow, the tasks CLI, icons, and dev and preflight
+  settings. How to edit it: [`references/development.md`](references/development.md).
 - **`CONTRIBUTING.md`** (repo root) — the short, human-facing front door for people who
   want to develop caret: `bun install`, the `mise` task workflow, and where tests live. It
-  stays minimal and points at `README.md`, the `docs/` reference pages, and `docs/agents/`
-  for depth. How to edit it: [`references/contributing.md`](references/contributing.md).
+  stays minimal and points at the docs site, `docs/ARCHITECTURE.md`,
+  `docs/DEVELOPMENT.md`, and `docs/agents/` for depth. How to edit it:
+  [`references/contributing.md`](references/contributing.md).
 - **`AGENTS.md`** (repo root) — the agent-facing router for **code** changes, plus the
   CodeGraph and verifying-changes guidance. Adding or moving a `docs/agents/*.md` rule
   file means adding or updating its exit and stop here. How to edit it:
@@ -74,9 +67,10 @@ site!: Edit the docs/ page and its zensical.toml nav entry
   behind `AGENTS.md`'s router. This routing reference lives among them. How to add or edit
   one: [`references/agent-rules.md`](references/agent-rules.md).
 - **`docs/README.md`** — the router for the `docs/` directory: a table mapping what a
-  reader wants to do to the page that answers it, across the four reference pages,
-  `docs/agents/`, and the two repo-root docs (`README.md` and `CONTRIBUTING.md`). How to
-  edit it: [`references/doc-readme.md`](references/doc-readme.md).
+  reader wants to do to the page that answers it, across the docs site's pages,
+  `ARCHITECTURE.md`, `DEVELOPMENT.md`, `docs/agents/`, and the two repo-root docs
+  (`README.md` and `CONTRIBUTING.md`). How to edit it:
+  [`references/doc-readme.md`](references/doc-readme.md).
 - **`design/`** (repo root) — caret's design direction: the brief, where each token lives,
   the patterns, the deliberate exceptions, and the decision log, routed from
   `design/README.md`. Read by contributors and coding agents alike. How to edit it:
@@ -90,12 +84,11 @@ site!: Edit the docs/ page and its zensical.toml nav entry
 
 ## Audience, stated at the top of every new doc
 
-`README.md`, `CONTRIBUTING.md`, and everything directly under `docs/` — `docs/README.md`
-plus the four reference pages (`CONFIGURING.md`, `RUNNING.md`, `ARCHITECTURE.md`,
-`DEVELOPMENT.md`) — are **human-facing**, as are the docs site's pages. `AGENTS.md` and
-everything under `docs/agents/` — the rule files and this file's `references/` pointers —
-are **agent-facing**. State the audience explicitly at the top of each new doc so a reader
-knows in one line whether it is written for them.
+`README.md`, `CONTRIBUTING.md`, and everything directly under `docs/` — `docs/README.md`,
+`ARCHITECTURE.md`, and `DEVELOPMENT.md` — are **human-facing**, as are the docs site's
+pages. `AGENTS.md` and everything under `docs/agents/` — the rule files and this file's
+`references/` pointers — are **agent-facing**. State the audience explicitly at the top of
+each new doc so a reader knows in one line whether it is written for them.
 
 Diagrams follow the same split, **deliberately**: human-facing docs use **mermaid**, which
 GitHub renders inline, and agent-facing docs use **graphviz**, which agents read as text.

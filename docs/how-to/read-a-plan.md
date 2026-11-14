@@ -11,10 +11,10 @@ caret shows each [version](../reference/glossary.md#version) of a plan on the
 [review page](../reference/glossary.md#review-page) in one of two views:
 
 - The [preview](../reference/glossary.md#preview) renders the plan as a document, with
-  headings, lists, tables, and links as they would appear on a page. Code blocks are
-  highlighted and keep the source view's copy and wrap buttons.
+    headings, lists, tables, and links as they would appear on a page. Code blocks are
+    highlighted and keep the source view's copy and wrap buttons.
 - The [source view](../reference/glossary.md#source-view) shows the plan's Markdown as
-  stored, with a line number on every row.
+    stored, with a line number on every row.
 
 A plan opens in the preview. To switch, press `s` or click the **Source** button beside
 **Versions**. The button shows as pressed while the source view is on screen. Your browser
@@ -29,7 +29,7 @@ These also work in the preview:
 - Cited files open, and the outline and breadcrumbs work.
 - The keyboard cursor moves one wrapped line at a time.
 - `/` search runs over the text as rendered, so a phrase wrapped across source lines
-  matches, while link addresses and Markdown markers do not.
+    matches, while link addresses and Markdown markers do not.
 
 When you compare two versions to see what changed, caret always shows the source view and
 hides the **Source** button. Leaving compare mode returns to the view you chose.
@@ -63,7 +63,7 @@ plan, when:
 
 - the window is under 960px wide;
 - a file opened beside the plan would leave the plan too narrow to read at the outline's
-  current width;
+    current width;
 - you compare versions, so the comparison has the width.
 
 While you compare, the opened outline lists only the sections that changed, each with its

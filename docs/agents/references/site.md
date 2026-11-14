@@ -14,10 +14,55 @@ Where a page goes:
 - Add its nav entry in `zensical.toml` under that section, after the section's `index.md`.
   A page with no nav entry is unreachable from the site's menu.
 - Never reorder the four sections.
+- A new section directory also needs a line in `.rumdl.toml`'s `[per-file-flavor]` table
+  setting it to `mkdocs`.
+- A section's `index.md` introduces the section. It does not list the section's pages.
 
-What stays off the site: a repo-only page, such as `docs/agents/`, `docs/README.md`, or
-the four reference pages, is listed in `zensical.toml`'s `exclude_docs`. Leaving a page
-out of `nav` is not enough, because zensical still builds it and indexes it for search.
+What stays off the site: a repo-only page, such as `docs/agents/`, `docs/README.md`,
+`docs/ARCHITECTURE.md`, or `docs/DEVELOPMENT.md`, is listed in `zensical.toml`'s
+`exclude_docs`. Leaving a page out of `nav` is not enough, because zensical still builds
+it and indexes it for search.
+
+When a change updates a page:
+
+- A new or changed `config.toml` key adds its row to `docs/reference/config-file.md`, and
+  a `CARET_*` variable adds its row to `docs/reference/environment-variables.md`, in the
+  same change, per [`settings-rules.md`](../settings-rules.md). A `[dev]` key, or a
+  dev-only or preflight-only variable, goes in `docs/DEVELOPMENT.md` § Dev and preflight
+  settings instead.
+- A theme-format change (fields, roles, validation, how caret loads theme files) goes in
+  `docs/reference/theme-files.md` with its schema change.
+- A plan-formatting change (the pinned rumdl version, the reflow shape, the opt-out) goes
+  in `docs/explanation/plan-formatting.md`. [`rumdl-rules.md`](../rumdl-rules.md) says
+  how.
+- Runtime behaviour a user sees (notifications, cmux unread marks, what a log record
+  carries, a diagnostics subcommand) goes in the matching how-to page. Logging conventions
+  for contributors belong in [`logging-rules.md`](../logging-rules.md).
+
+Writing a page:
+
+- Lead with the action (a how-to) or the point (an explanation), not the mechanism.
+- Write "caret" in lowercase in prose. Write keys as lowercase code spans: `ctrl+alt+o`,
+  `esc`.
+- Name a setting by its bold label and its pane: "turn off the **Check for updates**
+  switch in **Settings → Updates**" for a toggle, "set **Base font size** in
+  **Settings → Appearance**" for any other control. Check the label against
+  `ui/src/lib/settingsRegistry.ts`.
+- Use the [glossary](../../reference/glossary.md)'s terms, and link each one on its first
+  use on a page. Write "background service", not "daemon" or "caret service", and "review
+  page", not "review UI", except inside a code span: a config key, a file name, or text
+  caret prints. "Background service" covers the installed login service, `caret serve`,
+  and an on-demand instance; name which one wherever the difference matters.
+
+Markdown the site renders:
+
+- Use `!!! note` and `!!! warning` admonitions with a 4-space-indented body. Never use
+  GitHub's `> [!NOTE]`, which the site renders as a plain quote.
+- On site pages, indent every list continuation (a wrapped line, a second paragraph, a
+  code block) 4 spaces. `rumdl`'s MD077 enforces it.
+- Nest a list only under a numbered item, 4 spaces in. Never nest a bullet under a bullet:
+  `rumdl`'s MD007 re-indents the child to 2 spaces, which the site renders flat. Split it
+  into separate lists instead.
 
 Links:
 
@@ -25,11 +70,25 @@ Links:
 - Link to an excluded page with its GitHub URL. `docs:build` runs zensical with
   `--strict`, which fails a relative link to an excluded page as if the page were missing.
 
-Couplings:
+Pages a test reads:
 
+Each page below is listed in `MARKDOWN_READ_BY_TESTS` in `scripts/preflight.ts`, so a
+Markdown-only change to it still runs the unit tests. When you add a test that reads a
+site page, add the page to `MARKDOWN_READ_BY_TESTS` and a bullet here naming what the test
+pins.
+
+- `docs/how-to/review-tool.md`: `test/structure/line-anchor-claim.test.ts` requires the
+  sentence beginning "A feedback line reference indexes…" verbatim and exactly once,
+  matching `ui/src/lib/feedback.ts` and `bridge/review-bridge.ts`. Reword all three or
+  none, and keep emphasis and links out of it.
 - `docs/explanation/caret-install.md` prints exactly one `rm -rf` per OpenCode cache
   layout. `test/adapters/opencode/docs-cache-path.test.ts` asserts each against
   `opencodeCachePackageDir()` / `opencodeNpmCacheDir()`, so don't add or drop one.
+- `docs/reference/theme-files.md`: `test/core/theme/schema.test.ts` requires its § Example
+  to equal `ui/src/lib/themes/caret-dark.json` (with `$schema` = `SCHEMA_URL`), and its §
+  `syntax` tables to match `ROLE_SCOPES` and the role fallbacks.
+- `docs/reference/built-in-themes.md`: `test/core/theme/load.test.ts` checks it lists
+  exactly the built-in theme ids.
 
 Checking:
 
