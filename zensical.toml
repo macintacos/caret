@@ -48,6 +48,10 @@ nav = [
   ] },
   { "Explanation" = [
     "explanation/index.md",
+    { "How caret works" = "explanation/how-caret-works.md" },
+    { "The background service" = "explanation/background-service.md" },
+    { "What caret install adds" = "explanation/caret-install.md" },
+    { "Plan formatting" = "explanation/plan-formatting.md" },
   ] },
 ]
 

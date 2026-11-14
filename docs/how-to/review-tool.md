@@ -53,7 +53,7 @@ A feedback line reference indexes the plan version caret stored, and an abbrevia
 rides with it only when the agent may not hold that version line for line. That stored
 [version](../reference/glossary.md#version) is reflowed to caret's 90-column shape by the
 [plan formatter](../reference/glossary.md#plan-formatter) (see
-[Plan formatting](https://github.com/macintacos/caret/blob/main/docs/CONFIGURING.md#plan-formatting-rumdl)),
+[Plan formatting](../explanation/plan-formatting.md)),
 so the line numbers are caret's, not yours, and the quote is what to match against your
 own text. A plan sent by `path` is the exception: caret writes the reflowed text back onto
 the file, so the numbers match once the agent re-reads it, and no quote is sent.

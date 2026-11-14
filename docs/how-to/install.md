@@ -208,4 +208,4 @@ marketplace registered.
 - Open the review page from another device with
   [Open caret from another device](remote-access.md).
 - See what the install changes in each agent host in
-  [Installing with `caret install`](https://github.com/macintacos/caret/blob/main/docs/ARCHITECTURE.md#installing-with-caret-install).
+  [What `caret install` adds](../explanation/caret-install.md).
