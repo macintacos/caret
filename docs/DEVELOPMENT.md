@@ -731,7 +731,8 @@ publishes changed. A published page is a `docs/**/*.md` that `zensical.toml`'s
 `exclude_docs` does not list, read from `zensical.toml` itself. Adding the
 `docs-not-needed` label re-runs the check, which then passes. The `pull_request` trigger
 and read-only permissions mean a fork's PR never runs with a write token. Its cases live
-in `test/scripts/docs-gate.test.ts`, which `test unit` runs.
+in `test/scripts/docs-gate.test.ts` (the script) and
+`test/scripts/docs-gate-workflow.test.ts` (the workflow), which `test unit` runs.
 
 #### Adding a task
 

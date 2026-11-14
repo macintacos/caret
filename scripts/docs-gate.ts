@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 // Reads a pull request's changed paths on stdin and fails when one is user-visible
 // but no page the docs site publishes changed. Run by .github/workflows/docs-gate.yml.
+// PR_LABELS holds the PR's label names as a JSON array (unset = none); a report prints as a
+// ::error:: annotation and exits 1.
 
 import { join } from "node:path";
 
@@ -9,14 +11,24 @@ import { z } from "zod";
 
 export const SKIP_LABEL = "docs-not-needed";
 
-/** What a user sees, and the paths that define it. Keep in sync with
- * docs/agents/documentation-rules.md § The docs gate. */
+/** What a user sees, and the paths that define it. First match wins. Keep in sync with
+ * docs/agents/documentation-rules.md and AGENTS.md § The docs gate. */
 export const USER_VISIBLE: readonly { surface: string; globs: readonly string[] }[] = [
   {
     surface: "CLI commands, flags, help text, and output",
     globs: ["src/cli.ts", "src/commands/**"],
   },
-  { surface: "what caret install sets up in an agent host", globs: ["src/adapters/*/install.ts"] },
+  {
+    surface: "what caret install sets up in an agent host",
+    globs: [
+      "src/adapters/pi/install.ts",
+      "src/adapters/opencode/config-plugin.ts",
+      "src/adapters/opencode/deploy.ts",
+      "src/adapters/opencode/entries.ts",
+      "src/adapters/opencode/packaging.ts",
+      "src/adapters/opencode/upgrade.ts",
+    ],
+  },
   { surface: "config keys, defaults, and CARET_* variables", globs: ["src/config/**"] },
   { surface: "the review page", globs: ["ui/src/**"] },
   {
@@ -25,7 +37,10 @@ export const USER_VISIBLE: readonly { surface: string; globs: readonly string[] 
   },
   { surface: "theme files", globs: ["src/theme/**"] },
   { surface: "plan formatting and file previews", globs: ["src/plan/**"] },
-  { surface: "diagnostics", globs: ["src/doctor/**"] },
+  {
+    surface: "diagnostics",
+    globs: ["src/doctor/**", "src/adapters/*/install.ts", "src/adapters/*/checks.ts"],
+  },
   { surface: "the background service", globs: ["src/service/**"] },
 ];
 
@@ -42,8 +57,9 @@ export function userVisibleSurface(path: string): string | null {
   );
 }
 
-/** True for a path zensical.toml's exclude_docs keeps off the site. Reads only the
- * anchored `/dir/` and `/file` forms and throws on any other pattern. */
+/** Builds the predicate that is true for a path zensical.toml's exclude_docs keeps off the
+ * site. Reads only the anchored `/dir/` and `/name` forms, where `/name` matches that file
+ * or everything under that directory, as gitignore does; throws on any other pattern. */
 export function excludedFromSite(zensicalToml: string): (path: string) => boolean {
   const patterns = ZensicalToml.parse(parseToml(zensicalToml))
     .project.exclude_docs.split("\n")
@@ -57,7 +73,9 @@ export function excludedFromSite(zensicalToml: string): (path: string) => boolea
       );
     }
     const target = `docs${pattern}`;
-    return pattern.endsWith("/") ? (path) => path.startsWith(target) : (path) => path === target;
+    return pattern.endsWith("/")
+      ? (path) => path.startsWith(target)
+      : (path) => path === target || path.startsWith(`${target}/`);
   });
 
   return (path) => matchers.some((matches) => matches(path));
@@ -69,6 +87,7 @@ export function docsGateReport(
   labels: readonly string[],
   excluded: (path: string) => boolean,
 ): string | null {
+  // Before the label: empty input means the pipe broke, which a label must not mask.
   if (changed.length === 0)
     return "read no changed paths; a pull request always changes at least one.";
   if (labels.includes(SKIP_LABEL)) return null;
