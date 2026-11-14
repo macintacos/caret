@@ -71,7 +71,7 @@ When the launcher cannot run anything — no runnable caret, or no bun — it ex
 status 78, and the service stops instead of restarting into the same failure. systemd
 honours that status itself; on macOS the launcher boots the agent out, and the plist loads
 again at your next login. `caret install` restores it. The launcher's reason lands in
-`logs/daemon-stderr.log` (see [Where the logs live](#where-the-logs-live)).
+`logs/daemon-stderr.log` (see [Find the log files](how-to/logs.md#find-the-log-files)).
 
 On Linux, install also runs `loginctl enable-linger` so the service outlives your logout.
 Some distributions refuse that without admin rights; install then logs
@@ -267,91 +267,3 @@ keeping your reviews. The launcher removes the same things itself when it finds 
 anywhere (its own copy counts), after looking twice more, five seconds apart. When caret
 is installed but can't run, it stops the service instead (see
 [When the daemon exits](#when-the-daemon-exits)). `caret install` brings back either.
-
-## Logging & Debugging
-
-### Where the logs live
-
-Logs live under `$XDG_STATE_HOME/caret/logs` when set, otherwise
-`~/.local/state/caret/logs`:
-
-| File                | What's in it                                                                                                                        |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `caret.log`         | NDJSON records from the short-lived `caret review` hook process.                                                                    |
-| `daemon.log`        | The daemon's records: the same NDJSON shape, tagged with `pid`.                                                            |
-| `daemon-stderr.log` | Whatever the daemon writes outside its logger — raw non-JSON crash output — plus `bin/caret-launcher`'s own failures when a supervised start cannot resolve caret or bun. |
-| `archive/`          | Gzipped rotations, named `<log>-<stamp>.log.gz`. A log past `[logging].max_size` is archived here and emptied; the newest `[logging].keep` per log are kept. |
-
-Browser-UI events ship to the daemon in batches (`POST /api/logs`) and land in
-`daemon.log` tagged `source: "ui"`, subject to the same `[logging]` level and redact
-settings as everything else.
-
-### What a record carries
-
-Each record is one JSON object per line (pino):
-
-| Field                    | Value                                                                                                                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `level`                  | Numeric — 20 debug, 30 info, 40 warn, 50 error.                                                                                                                          |
-| `time`                   | ISO 8601 UTC, e.g. `2026-06-04T21:25:40.038Z`.                                                                                                                           |
-| `step`                   | A short fixed token.                                                                                                                                                     |
-| `source`                 | The emitting process — `"hook"`, `"daemon"`, or `"ui"`.                                                                                                                  |
-| `caller`                 | The `file:line` of the emitting call site. On hook and daemon records only; bridged UI records omit it.                                                                  |
-| `code`                   | On error records only: a stable failure code (`review-timeout`, `request-failed`, …). A shipped code is never renamed.                                                   |
-| `reviewId` / `sessionId` | On a review's records in both logs: they stitch one review across `caret.log` and `daemon.log`. Records written before the daemon assigns an id carry `sessionId` alone. |
-
-Every record also carries `msg`, plus structured extras. Normal operation logs at info;
-only genuine failures sit at error.
-
-> [!TIP]
-> To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table (see
-> [Config file](reference/config-file.md)). It hot-reloads — no restart needed.
-
-### Diagnostics
-
-- `caret doctor` — a one-shot, read-only diagnosis of the local install. It opens with its
-  checks — the daemon's reachability, the running daemon's version against npm's latest,
-  the daemon lock, whether your agent has caret enabled, recent NDJSON error records in
-  the live logs, whether OpenCode would load a caret behind the published one, and — only
-  when pi's settings list caret — whether `pi` is 1.5.0 or later, lists caret exactly once
-  with its extension loaded, and loads the published caret. Failing checks come first, in
-  one block that counts them, and each names the remedy that closes it; the rest follow,
-  marked `✓` passed or `?` undecided. Color appears only when stdout is a terminal, so a
-  pipe, `TERM=dumb`, `NO_COLOR`, CI, or `--no-color` gets plain text. The log check weighs
-  only the last 24 hours and reports when each noisy log last erred: an install that has
-  stopped failing goes green on its own rather than waiting for the record to rotate away.
-  Three checks read npm's published caret version, each degrading to `unknown` offline:
-  the daemon-version check, only when a published caret daemon answers, the OpenCode
-  check, only when OpenCode's config names caret, and the pi check, only when pi installs
-  caret from npm. Under that sits the state it read those from: running caret processes,
-  daemon identity (version, build, startup commit), lock/port state, effective settings,
-  review counts, the agent adapter's install-state probe, log sizes and error/warn counts,
-  the last 24 hours' failures from both logs grouped by review with their error codes,
-  install and runtime info, and system basics. The last line says what to run next.
-
-  Human-readable by default; `caret doctor --json` prints the same document as one JSON
-  object (schema marker `caret-doctor/1`). Unlike the logs, it is **always redacted** — it
-  exists to be shared — and never contains plan/prompt/feedback bodies or any log message,
-  error or stack text. Probes are individually bounded and degrade per-section. The exit
-  code is the verdict: `0` all clear, `1` a check failed, `2` no report — doctor could not
-  produce one, or `--bundle` had no terminal to ask consent at and stopped before
-  collecting anything.
-- `/caret doctor` — the slash command that wraps it. In Claude Code and OpenCode it asks
-  whether you want JSON or human-readable output, runs the subcommand, relays each failing
-  check's remedy, and ends with the report in a code block ready to share. On OpenCode it
-  leaves the session on the plan agent. In pi it runs the human-readable report and shows
-  it in the session as an entry the model never sees.
-- `caret doctor --bundle` — when the report isn't enough, a zip of the three live logs and
-  up to 5000 review records, written to caret's state dir at `0600`. This archive is the
-  one caret artifact that is **not** redacted: it holds your logs in full and complete
-  plan bodies. caret asks before writing it, refuses outright when there is no terminal to
-  ask at (pass `--yes` to confirm in a script), and never includes the rotated
-  `logs/archive/` segments. Move it over a channel you trust.
-- `caret redact` — scrubs the three live logs, not the archives, into shareable
-  `*.redacted.log` siblings (home paths become `~`, usernames in foreign home paths are
-  censored). For always-on scrubbing at write time, set `redact = true` in `[logging]`.
-  Plan, prompt, and review-feedback bodies, and the names in `daemon.hostnames`, are never
-  written to logs regardless of the toggle.
-
-Contributors should see `agents/logging-rules.md` for the logging conventions — when to
-log, levels, and message style.

@@ -52,7 +52,7 @@ keep = 10
 ```
 
 Logs are raw by default. `caret redact` makes shareable copies after the fact (see
-[Logging & Debugging](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#logging--debugging)).
+[Scrub the logs before sharing](../how-to/logs.md#scrub-the-logs-before-sharing)).
 
 ## The `[daemon]` and `[review]` tables
 
