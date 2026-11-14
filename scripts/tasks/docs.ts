@@ -32,11 +32,11 @@ export function unbuiltPageReport(pages: Iterable<{ page: string; html: string }
   }
   if (scanned === 0) return "docs:build: site/ holds no HTML pages, so nothing was checked.";
 
-  const [first, ...rest] = offenders;
-  if (first === undefined) return null;
+  const [firstOffender, ...otherOffenders] = offenders;
+  if (firstOffender === undefined) return null;
   return (
-    `docs:build: site/${first.page} links pages the build did not produce: ${first.links.join(", ")}` +
-    (rest.length > 0 ? ` (and ${rest.length} more pages do too)` : "") +
+    `docs:build: site/${firstOffender.page} links pages the build did not produce: ${firstOffender.links.join(", ")}` +
+    (otherOffenders.length > 0 ? ` (and ${otherOffenders.length} more pages do too)` : "") +
     ". Check zensical.toml's nav for a missing or excluded page."
   );
 }
