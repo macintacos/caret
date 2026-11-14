@@ -2,10 +2,10 @@
 
 *Audience: coding agents and contributors editing caret's development guide.*
 
-`docs/DEVELOPMENT.md` is the human-facing development reference behind
-[`README.md`](../../../README.md): building from source, the `mise` task catalog and dev
-workflow (`mise run build --install`, `mise run dev`, `mise run preflight`), the tasks
-CLI, and vendored icons.
+`docs/DEVELOPMENT.md` is the contributor development reference, kept off the docs site:
+building from source, the `mise` task catalog and dev workflow
+(`mise run build --install`, `mise run dev`, `mise run preflight`), the tasks CLI, and
+vendored icons.
 
 When to edit it:
 

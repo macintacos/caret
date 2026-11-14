@@ -30,7 +30,7 @@ what-does: Load the file for every area the change touches
   OpenCode adapter, plugin, or install (caret install) > opencode-integration
   pi adapter, extension, or install (caret install) > pi-integration
   rumdl: bumping its version, touching any of its three configs or invocations (repo hygiene, plan formatting, release notes), or scripts/tasks/dev/fake-plan.md > rumdl-rules
-  documentation: which doc to update — README, the docs/ reference pages (CONFIGURING, RUNNING, ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the docs/ router, the docs site's pages and nav (`zensical.toml`), or the doc map itself > documentation-rules
+  documentation: which doc to update — README, the docs site's pages and nav (`zensical.toml`), the contributor pages (ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the docs/ router, or the doc map itself > documentation-rules
   how caret looks, moves, sounds, or prints: colour, type, radius, motion, sound, empty/loading/error states, CLI and task output layout > readme
 architecture-rules!: Load docs/agents/architecture-rules.md
 typescript-rules!: Load docs/agents/typescript-rules.md
