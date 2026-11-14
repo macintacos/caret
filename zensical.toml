@@ -20,12 +20,15 @@ nav = [
   { "Home" = "index.md" },
   { "Tutorial" = [
     "tutorial/index.md",
+    { "Review your first plan" = "tutorial/first-plan.md" },
   ] },
   { "How-to guides" = [
     "how-to/index.md",
+    { "Install caret" = "how-to/install.md" },
   ] },
   { "Reference" = [
     "reference/index.md",
+    { "Glossary" = "reference/glossary.md" },
   ] },
   { "Explanation" = [
     "explanation/index.md",

@@ -547,9 +547,9 @@ EXC-687: a filename written in **inline code** that resolves to a real file unde
 The list below points at long-lived files, and leans on paths and line numbers that stay meaningful as their contents drift, so the check keeps working as the tree around it changes. Every path needs a known extension to be tagged at all, which is why extensionless files like `LICENSE` are absent. Click each to verify:
 
 - `package.json` — a real file: shows the icon; the preview opens on the head of the file.
-- `README.md` — another real file, for a second icon to eyeball beside the first.
-- `README.md:37` — the same file with a line: the excerpt is centered on line 37 (a ±30-line window) instead of the head, and that line is marked and already in view — no scrolling to find it.
-- `README.md:3` — a line near the top: the window clamps at line 1, so a bottom strip shows and there is **no** top strip.
+- `AGENTS.md` — another real file, for a second icon to eyeball beside the first.
+- `AGENTS.md:37` — the same file with a line: the excerpt is centered on line 37 (a ±30-line window) instead of the head, and that line is marked and already in view — no scrolling to find it.
+- `AGENTS.md:3` — a line near the top: the window clamps at line 1, so a bottom strip shows and there is **no** top strip.
 - `mise.toml` — a file shorter than the 60-line opening window: the whole file shows, with **no** strips on either side, and the header reads a plain line count instead of a range.
 - `mise.toml:900` — a line far past the end: the window clamps to the last line rather than opening empty, and **nothing** is marked, since the cited line doesn't exist.
 - `docs/DEVELOPMENT.md:158` — a long file opened mid-way, so both strips carry large counts. Click `↑` and `↓` repeatedly to walk the window out to line 1 and to the last line; each strip disappears when its side runs out, and an upward click should not throw away the line you were reading.
@@ -571,12 +571,12 @@ EXC-918: a reference that resolves to a **directory** gets a folder glyph rather
 EXC-938: a reference can cite a **span** rather than a single line, and the preview frames the whole of it — every cited line washed, the usual context around it, and the end-line tail inside the click target rather than dangling outside it. Click the last character of each reference below, not its path, to check that half.
 
 - `docs/DEVELOPMENT.md:185-193` — nine cited lines: all nine are washed as one band, and the window reaches 30 lines past the span at each end rather than starting where the citation does.
-- `README.md:3-9` — a span near the file's head: the window clamps at line 1 instead of asking for a line before it, so the preview opens on the file rather than degrading to a head view.
+- `AGENTS.md:3-9` — a span near the file's head: the window clamps at line 1 instead of asking for a line before it, so the preview opens on the file rather than degrading to a head view.
 - `src/cli.ts:10-110` — a span taller than the panel: it opens parked on its **first** line rather than centred, so reading starts where the citation does; the rest is a scroll away.
 - `mise.toml:5-900` — a span running past the end: it clamps to the last line, and only the lines that exist are washed.
-- `README.md:37-37` — a one-line span: identical to writing `README.md:37`.
-- `README.md#L37-L44` and `README.md:L37-L44` — the same span in the `#L` spellings a code host would produce. Both parse; `README.md:37:5` is still a line and a **column**, so it marks one row and no range.
-- `docs/DEVELOPMENT.md:185,193` — the comma spelling of the span the first bullet writes with a dash, and it must open on exactly the same nine washed lines. The separator is the only difference: a comma reads as a selection an editor would hand you, so a plan that pastes one cites a range rather than falling back to the head of the file. `README.md:37,37` collapses to a single line the same way `README.md:37-37` does.
+- `AGENTS.md:37-37` — a one-line span: identical to writing `AGENTS.md:37`.
+- `AGENTS.md#L37-L44` and `AGENTS.md:L37-L44` — the same span in the `#L` spellings a code host would produce. Both parse; `AGENTS.md:37:5` is still a line and a **column**, so it marks one row and no range.
+- `docs/DEVELOPMENT.md:185,193` — the comma spelling of the span the first bullet writes with a dash, and it must open on exactly the same nine washed lines. The separator is the only difference: a comma reads as a selection an editor would hand you, so a plan that pastes one cites a range rather than falling back to the head of the file. `AGENTS.md:37,37` collapses to a single line the same way `AGENTS.md:37-37` does.
 
 ### As markdown links
 
