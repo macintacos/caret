@@ -13,10 +13,14 @@ You need:
   [Platform support](https://github.com/macintacos/caret/blob/main/docs/CONFIGURING.md#platform-support)
   for what differs.
 - [`bun`](https://bun.sh) on your PATH.
-- At least one [agent host](../reference/glossary.md#agent-host) at its minimum version:
-  - Claude Code.
-  - OpenCode v1 1.3.4 or later, or v2 2.0.29 or later.
-  - pi 1.5.0 or later.
+- At least one [agent host](../reference/glossary.md#agent-host) at its minimum version,
+  listed below.
+
+Agent host minimums:
+
+- Claude Code.
+- OpenCode v1 1.3.4 or later, or v2 2.0.29 or later.
+- pi 1.5.0 or later.
 
 ## Install
 
