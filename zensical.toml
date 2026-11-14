@@ -29,6 +29,8 @@ nav = [
     { "Write feedback" = "how-to/write-feedback.md" },
     { "Get notified about plans" = "how-to/notifications.md" },
     { "Make your own theme" = "how-to/make-a-theme.md" },
+    { "Find caret's logs" = "how-to/logs.md" },
+    { "Diagnose a problem" = "how-to/diagnostics.md" },
   ] },
   { "Reference" = [
     "reference/index.md",

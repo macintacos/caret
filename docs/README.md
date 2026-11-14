@@ -23,8 +23,8 @@ Find the row that matches what you came here to do, then follow the link.
 | Open the review UI from another device, or log every device out | [`RUNNING.md` § Reaching caret from another device](RUNNING.md#reaching-caret-from-another-device) |
 | Have an agent on another computer send its plans to the server's caret | [`RUNNING.md` § Reviewing on the server from another device](RUNNING.md#reviewing-on-the-server-from-another-device) |
 | Stop caret starting with your machine, or remove it | [`RUNNING.md` § Turning caret off](RUNNING.md#turning-caret-off) |
-| Find the logs, or scrub them before sharing | [`RUNNING.md` § Logging & Debugging](RUNNING.md#logging--debugging) |
-| Work out why caret isn't working, or gather a report to share | [`RUNNING.md` § Diagnostics](RUNNING.md#diagnostics) |
+| Find the logs, or scrub them before sharing | [Find caret's logs](how-to/logs.md) |
+| Work out why caret isn't working, or gather a report to share | [Diagnose a problem](how-to/diagnostics.md) |
 | Understand how caret works, and how it hooks into your agent | [`ARCHITECTURE.md` § How it works](ARCHITECTURE.md#how-it-works) |
 | Call the review tool from a skill of your own | [`ARCHITECTURE.md` § Calling the review tool from your own skill](ARCHITECTURE.md#calling-the-review-tool-from-your-own-skill) |
 | Find where something lives in the source tree | [`ARCHITECTURE.md` § Layout](ARCHITECTURE.md#layout) |

@@ -50,7 +50,7 @@ gives the page no error when it does this. On macOS, check in order:
 
 While permission is undecided, each new plan writes
 `plan notification skipped (permission)` to the
-[background service's log](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#where-the-logs-live),
+[background service's log](logs.md#find-the-log-files),
 so a missing grant shows there without turning on debug logging.
 
 In Chrome, a notification for a tab hidden for over 5 minutes can arrive up to a minute
