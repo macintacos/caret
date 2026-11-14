@@ -2,19 +2,20 @@
 
 *Audience: anyone who wants caret's review page on a phone, tablet, or another computer.*
 
-This page logs a browser on another device in to the review page a server serves. The
-server runs a [background service](../reference/glossary.md#background-service): either
-the one `caret install` keeps running, or one `caret serve` runs. Do the first four
-sections in order. It works the same in every
+This page logs a browser on another device in to the
+[review page](../reference/glossary.md#review-page) a server serves. The server runs a
+[background service](../reference/glossary.md#background-service): either the one
+`caret install` keeps running, or one `caret serve` runs. Do the first four sections in
+order. It works the same in every
 [agent host](../reference/glossary.md#agent-host).
 
-By default, caret listens on `127.0.0.1` only, with no auth. These steps assume a network
+By default, caret listens on `127.0.0.1` only, with no login. These steps assume a network
 you trust. On any other network, read [Use an HTTPS proxy](#use-an-https-proxy) first.
 
 ## Set the address
 
 In the `[daemon]` table of [`config.toml`](../reference/config-file.md) (keys in
-[The daemon and review tables](../reference/config-file.md#the-daemon-and-review-tables)),
+[The `[daemon]` and `[review]` tables](../reference/config-file.md#the-daemon-and-review-tables)),
 bind caret to the network and give it a name:
 
 ```toml
@@ -24,8 +25,8 @@ hostnames = ["caret.home.lan"]
 port = 42718
 ```
 
-An exposed `host`, any address outside loopback (`127.0.0.1`, `::1`, `localhost`), turns
-token auth on: devices then need the login link below.
+An exposed `host`, one outside loopback, turns token login on: devices then need the login
+link below.
 
 caret answers only to the `hostnames` entries, and to `host` when it is a specific
 address. It refuses any other name with `403 host not recognized`. So with a wildcard bind
@@ -53,6 +54,7 @@ Skip this step if devices reach the server by an IP you listed.
 These keys take effect on the next start. For `caret serve`, press `ctrl+c` and run it
 again. For the service `caret install` sets up, use its
 [restart command](background-service.md#check-restart-or-stop-it).
+`caret install --refresh` also restarts it.
 
 ## Open the login link on each device
 
@@ -72,14 +74,14 @@ service. So its link works only once the background service has restarted.
 
 ## Set up the other devices
 
-A device that only opens the [review page](../reference/glossary.md#review-page) needs a
-browser and the login link, not caret. Only the server runs caret as a service.
+A device that only opens the review page needs a browser and the login link, not caret.
+Only the server runs caret as a service.
 
 If another device runs caret for its own agent, answer **I'll run it myself** when
-`caret install` asks. Keep the server's `host` and `hostnames` out of that device's
-`config.toml`. Otherwise its background service also listens on the network and prints
-links to the server's name. Those links open the server, so you never see the device's own
-reviews.
+`caret install` asks. Unless it sends its plans to the server (below), keep the server's
+`host` and `hostnames` out of that device's `config.toml`. Otherwise its background
+service also listens on the network and prints links to the server's name. Those links
+open the server, so you never see the device's own reviews.
 
 By default, an agent on another device reviews its plans on that device's own background
 service, at `caret.localhost`. To review them on the server instead, see
@@ -104,7 +106,8 @@ and the cookie included. On a network you don't trust, put caret behind an HTTPS
 proxy rather than exposing the bind.
 
 Run the proxy on the same machine and keep `host` on loopback. List the proxy's name in
-`hostnames`, and set `auth = "token"`, since a loopback bind leaves auth off otherwise:
+`hostnames`, and set `auth = "token"`, since a loopback bind leaves the login off
+otherwise:
 
 ```toml
 [daemon]
@@ -138,8 +141,8 @@ link.
 
 ## If caret stays on loopback
 
-- **An invalid `config.toml`** leaves caret on loopback with token auth on, rather than
-    falling back to no auth. `caret serve` and `caret login-link` then print a link to
+- **An invalid `config.toml`** leaves caret on loopback with token login on, rather than
+    falling back to no login. `caret serve` and `caret login-link` then print a link to
     `caret.localhost` instead of your `hostnames` name.
 - **An older caret ignores these keys** and keeps listening on loopback only.
 

@@ -28,9 +28,10 @@ refreshes the service if one is registered, and adds none otherwise.
 
 Run the command in [Remove caret](install.md#remove-caret).
 
-Alongside the agent hosts, `--uninstall` removes the service's unit file, the launcher
-that starts it, and the records the launcher reads, and caret's own copy under
-`~/.local/state/caret/roots/`. It keeps your reviews.
+Alongside the agent hosts, `--uninstall` removes the service's unit file, the
+[launcher](background-service.md#upgrade-the-background-service) that starts it, and the
+records the launcher reads, and caret's own copy under `~/.local/state/caret/roots/`. It
+keeps your reviews.
 
 The launcher removes the same things itself when it finds no caret anywhere (its own copy
 counts), after looking twice more, five seconds apart. When caret is installed but can't
@@ -43,10 +44,10 @@ Either way, `caret install` brings caret back.
 !!! warning
 
     On macOS caret also appears under **System Settings › Login Items**, but that switch
-    is neither of these commands. caret cannot read it, so a later `caret install` that
-    keeps caret running registers the service again and reports success while the switch
-    still reads off. Run `caret install` and answer **I'll run it myself**, or use
-    `--uninstall`, instead.
+    is neither `caret install` nor `--uninstall`. caret cannot read it, so a later
+    `caret install` that keeps caret running registers the service again and reports
+    success while the switch still reads off. Run `caret install` and answer
+    **I'll run it myself**, or use `--uninstall`, instead.
 
 ## Next steps
 

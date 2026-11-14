@@ -12,8 +12,10 @@ reviewed there instead of on a caret of its own. It works the same in every
 
 Set the server up first with [Open caret from another device](remote-access.md).
 
-The device sends the token with every request over plain HTTP. caret on the device cannot
-reach the server through an HTTPS proxy. Use this only on a network you trust.
+!!! warning
+
+    The device sends the token with every request over plain HTTP. caret on the device
+    cannot reach the server through an HTTPS proxy. Use this only on a network you trust.
 
 ## Install caret on the device
 
@@ -22,10 +24,10 @@ Install caret on the device for its agent, and answer **I'll run it myself** whe
 
 ## Point the device at the server
 
-In the device's `config.toml`, set `[daemon]` `host` to the server's IP address, not a
-name. The server must answer to that IP: list it in the server's `hostnames`, or bind the
-server to it. Set `port` and `hostnames` to the server's, so the links the device prints
-use the server's name:
+In the device's `config.toml`, set `daemon.host` to the server's IP address, not a name.
+The server must answer to that IP: list it in the server's `daemon.hostnames`, or bind the
+server to it. Set `daemon.port` and `daemon.hostnames` to the server's, so the links the
+device prints use the server's name:
 
 ```toml
 [daemon]
@@ -68,6 +70,6 @@ cmux. That, and how the device recognizes the server, set these limits:
 
 ## Next steps
 
-- Open the server's review page in a browser with
-    [Open caret from another device](remote-access.md).
+- Open the server's [review page](../reference/glossary.md#review-page) in a browser
+    with [Open caret from another device](remote-access.md).
 - Read what the device's hooks logged with [Find caret's logs](logs.md).

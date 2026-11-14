@@ -93,8 +93,8 @@ carries `failsafe: true` on caret's own wire format, and pi reports it as a fail
 instead.
 
 Cancelling a pending call on Claude Code (`esc`), or quitting Claude Code, expires its
-review undecided: it leaves the review page's pending list rather than waiting out the
-timeout, and no agent is waiting on its result.
+review undecided: it leaves the [review page](../reference/glossary.md#review-page)'s
+pending list rather than waiting out the timeout, and no agent is waiting on its result.
 
 ## Who may call it
 
@@ -106,8 +106,8 @@ plugin hooks for subagent tool calls, caret marks the review tool primary-only t
 session; on v2 it removes the tool from every subagent request. Either way it re-checks in
 the tool body that the call didn't come from a subagent's child session.
 
-Only the Plan agent is steered toward the tool; every other primary agent has to reach for
-it deliberately. On v1 the permission rescue is a `plan`-agent permission, so a global
+Only the `plan` agent is steered toward the tool; every other primary agent has to reach
+for it deliberately. On v1 the permission rescue is a `plan`-agent permission, so a global
 deny-all keeps the tool there and loses it everywhere else. On v2 it is a rule on each
 plan session, a default `plan` agent's included, which stays with the session if it
 switches agent. If your skill is pinned to a non-plan agent, `caret_review_plan` is the
@@ -156,6 +156,6 @@ Three more behaviors follow from how the server is built:
 
 ## Next steps
 
-- [Config file](../reference/config-file.md) sets `review.timeout_s` and
-  `[opencode] plans_dir`.
-- The [glossary](../reference/glossary.md) defines the terms this page uses.
+- Set `review.timeout_s` and `[opencode] plans_dir` in the
+  [config file](../reference/config-file.md).
+- Look up a term in the [glossary](../reference/glossary.md).
