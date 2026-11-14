@@ -1,4 +1,4 @@
-/* Values mirror ui/src/lib/themes/caret-light.json and caret-dark.json; keep in sync. */
+/* caret's theme palettes by role; test/structure/docs-palette.test.ts enforces it. */
 
 [data-md-color-scheme="default"] {
   --md-default-bg-color: #fefcf8;
@@ -8,6 +8,7 @@
   --md-primary-fg-color: #fefcf8;
   --md-primary-bg-color: #191310;
   --md-accent-fg-color: #9f3c0b;
+  --md-accent-bg-color: #fff6ec;
   --md-accent-fg-color--transparent: color-mix(in srgb, #c2490d 10%, transparent);
   --md-typeset-a-color: #c2490d;
   --md-code-bg-color: #faf6ec;
@@ -21,6 +22,7 @@
   --md-primary-fg-color: #0a0806;
   --md-primary-bg-color: #f7f2ea;
   --md-accent-fg-color: #ffb277;
+  --md-accent-bg-color: #0a0806;
   --md-accent-fg-color--transparent: color-mix(in srgb, #ff8f3d 12%, transparent);
   --md-typeset-a-color: #ff8f3d;
   --md-code-bg-color: #15110d;
