@@ -25,7 +25,7 @@ point at where each value lives.
 - **Code that catches up with a decision:** remove its line from the open list in
   `decisions.md`.
 - **A new page:** add a row to the table above, and add the page to the doc map in
-  [`doc/agents/documentation-rules.md`](../doc/agents/documentation-rules.md).
+  [`docs/agents/documentation-rules.md`](../docs/agents/documentation-rules.md).
 
 The floors (contrast, focus, target size, reduced motion, 200% zoom, colour never the only
 signal) are not design choices and never appear in `exceptions.md`. A floor the code

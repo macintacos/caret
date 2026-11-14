@@ -131,7 +131,7 @@ export function completionListPainted(view: EditorView): boolean {
 /** @codemirror/autocomplete's own activation delay plus its view-update sync
  * window — the two deadlines a list has to clear before it can paint. Named
  * because a bare number here would be a fixed sleep with nothing in `ui/` holding
- * it (doc/agents/browser-testing.md § Timing discipline); these are the library's
+ * it (docs/agents/browser-testing.md § Timing discipline); these are the library's
  * numbers, and they are what would have to change to invalidate the waits below. */
 export const COMPLETION_PAINT_MS = 100 + 100;
 

@@ -2,7 +2,7 @@
 // for the running build, daemon liveness, system, and the parsed config. The
 // values come from /api/health and /api/diagnostics — real browser fetch, plus the
 // clipboard a copy writes and the layout that decides whether a block can wrap — so
-// this is real-browser behavior, not a unit (per doc/agents/browser-testing.md). The block VALUES are the
+// this is real-browser behavior, not a unit (per docs/agents/browser-testing.md). The block VALUES are the
 // synthetic build identity + diagnostics wired in support/daemon-entry.ts; the two
 // are kept in sync deliberately.
 

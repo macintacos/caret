@@ -24,7 +24,7 @@
 	class={cn(
 		// Radius and cursor are matched to dropdown-menu-item / command-item so a Select
 		// row reads as the same control as the menu row it stands beside — stock ships
-		// rounded-md + cursor-default (doc/agents/shadcn-rules.md § The caret surface
+		// rounded-md + cursor-default (docs/agents/shadcn-rules.md § The caret surface
 		// language). Everything else on this line is registry source.
 		"gap-1.5 rounded-lg py-1 pr-8 pl-1.5 text-sm focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2 relative flex w-full cursor-pointer items-center outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
 		className

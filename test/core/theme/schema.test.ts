@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { ROLE_SCOPES, SYNTAX_ROLE_FALLBACKS } from "@/theme/role-scopes.ts";
@@ -9,6 +9,7 @@ import {
   type ThemeMarkdown,
   themeFileJsonSchema,
 } from "@/theme/schema.ts";
+import { SCHEMA_URL } from "@/theme/vscode-import.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
 
@@ -294,32 +295,38 @@ describe("themeFileJsonSchema", () => {
     expect(schema.additionalProperties).toBe(false);
   });
 
-  test("matches the committed doc/theme.schema.json", () => {
+  test("matches the committed docs/theme.schema.json", () => {
     const committed: unknown = JSON.parse(
-      readFileSync(join(REPO_ROOT, "doc/theme.schema.json"), "utf8"),
+      readFileSync(join(REPO_ROOT, "docs/theme.schema.json"), "utf8"),
     );
     expect(
       committed,
-      "doc/theme.schema.json is stale: run `bun scripts/generate-theme-schema.ts && mise run format`",
+      "docs/theme.schema.json is stale: run `bun scripts/generate-theme-schema.ts && mise run format`",
     ).toEqual(themeFileJsonSchema());
+  });
+
+  test("the published $schema URL serves the committed schema file", () => {
+    const repoHeadUrl = "https://raw.githubusercontent.com/macintacos/caret/HEAD/";
+    expect(SCHEMA_URL.startsWith(repoHeadUrl)).toBe(true);
+    expect(existsSync(join(REPO_ROOT, SCHEMA_URL.slice(repoHeadUrl.length)))).toBe(true);
   });
 });
 
-describe("doc/CONFIGURING.md", () => {
+describe("docs/CONFIGURING.md", () => {
   test("its example theme file is valid and is caret-dark", () => {
-    const doc = readFileSync(join(REPO_ROOT, "doc/CONFIGURING.md"), "utf8");
+    const doc = readFileSync(join(REPO_ROOT, "docs/CONFIGURING.md"), "utf8");
     const section = doc.split("\n## Theme files\n")[1]?.split("\n## ")[0] ?? "";
     const exampleJson = section.match(/```json\n([\s\S]*?)\n```/)?.[1] ?? "";
     expect(parseThemeFile(exampleJson).ok).toBe(true);
-    const example = JSON.parse(exampleJson);
-    delete example.$schema;
+    const { $schema, ...example } = JSON.parse(exampleJson);
+    expect($schema).toBe(SCHEMA_URL);
     expect(example).toEqual(
       JSON.parse(readFileSync(join(REPO_ROOT, "ui/src/lib/themes/caret-dark.json"), "utf8")),
     );
   });
 
   test("its syntax tables list every role with its scopes and fallback", () => {
-    const doc = readFileSync(join(REPO_ROOT, "doc/CONFIGURING.md"), "utf8");
+    const doc = readFileSync(join(REPO_ROOT, "docs/CONFIGURING.md"), "utf8");
     const section = doc.split("\n### `syntax`\n")[1]?.split("\n### ")[0] ?? "";
     const codeSpan = (s: string) => `\`${s}\``;
     const fallbacks: Record<string, string> = SYNTAX_ROLE_FALLBACKS;

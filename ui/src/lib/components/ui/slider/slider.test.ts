@@ -1,5 +1,5 @@
 // The guard for caret's two edits to the vendored Slider (EXC-1101). Both are the
-// kind doc/agents/shadcn-rules.md § Edits a re-sync will silently undo warns about:
+// kind docs/agents/shadcn-rules.md § Edits a re-sync will silently undo warns about:
 // re-running `shadcn-svelte add slider` reverts the file wholesale, and neither loss
 // changes the markup enough for anything else to notice.
 //

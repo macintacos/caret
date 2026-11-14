@@ -132,11 +132,11 @@ inside a spec.
   overhead was ~520ms per test, spent acquiring `rumdl` from scratch into each ephemeral
   state dir (roughly 1.7GB of downloads per suite run), and it went unlooked-for while
   boot was the only number anyone had (EXC-1053). What closed it is handing the daemon a
-  pre-resolved binary through `CARET_RUMDL_BIN` (see `doc/CONFIGURING.md`; the variable is
-  version-gated, so a bare command name is no longer resolved through `PATH`). The fixture
-  **hard-fails** when no `rumdl` reporting `RUMDL_VERSION` is available — deliberately,
-  because a bad binary degrades silently to storing plans raw, changing the canonical text
-  every spec asserts against.
+  pre-resolved binary through `CARET_RUMDL_BIN` (see `docs/CONFIGURING.md`; the variable
+  is version-gated, so a bare command name is no longer resolved through `PATH`). The
+  fixture **hard-fails** when no `rumdl` reporting `RUMDL_VERSION` is available —
+  deliberately, because a bad binary degrades silently to storing plans raw, changing the
+  canonical text every spec asserts against.
 - **What stays expensive on purpose.** Per-test isolation is not negotiable (EXC-587), and
   `trace: "retain-on-failure"` costs ~90-180ms per test that is discarded on every pass.
   It is kept because it is the trace the CI `test e2e` job's failure artifact carries.

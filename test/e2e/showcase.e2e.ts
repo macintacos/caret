@@ -56,7 +56,7 @@ const SHOWCASE_PLAN = readFileSync(
 );
 
 /** The repo root, seeded as the review's cwd. The fixture cites REAL repo paths —
- * `package.json`, `doc/agents`, `ui/src/lib/markdown.ts` — and the daemon resolves a
+ * `package.json`, `docs/agents`, `ui/src/lib/markdown.ts` — and the daemon resolves a
  * reference against the review's cwd, so a throwaway project directory would leave every
  * file reference unresolved and quietly drop a whole construct from the surface. This is
  * the same cwd `mise run dev` gives the fixture. */

@@ -3,7 +3,7 @@
 // value writes it, retints/reflows the app live, and confirms with a bottom-right
 // toast. Navigation, live apply, persistence across reload, and Esc-dismiss are all
 // real-browser behavior (focus, portalled menus, keyboard, localStorage across
-// reload), so this lives here, not in a unit (per doc/agents/browser-testing.md). A
+// reload), so this lives here, not in a unit (per docs/agents/browser-testing.md). A
 // palette pick uses a mouse CLICK on the portalled option, sidestepping the
 // keyboard-focus race that quarantined the old live-preview picker (EXC-796).
 //

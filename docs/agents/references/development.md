@@ -1,8 +1,8 @@
-# Editing `doc/DEVELOPMENT.md`
+# Editing `docs/DEVELOPMENT.md`
 
 *Audience: coding agents and contributors editing caret's development guide.*
 
-`doc/DEVELOPMENT.md` is the human-facing development reference behind
+`docs/DEVELOPMENT.md` is the human-facing development reference behind
 [`README.md`](../../../README.md): building from source, the `mise` task catalog and dev
 workflow (`mise run build --install`, `mise run dev`, `mise run preflight`), the tasks
 CLI, and vendored icons.
@@ -19,7 +19,7 @@ Two couplings to respect.
 
 `## Development` is load-bearing as an anchor:
 [`CONTRIBUTING.md`](../../../CONTRIBUTING.md), [`ARCHITECTURE.md`](../../ARCHITECTURE.md),
-and the router in [`doc/README.md`](../../README.md) all link
+and the router in [`docs/README.md`](../../README.md) all link
 `DEVELOPMENT.md#development`; the router also points at `### The tasks CLI`. `rumdl`'s
 MD051 resolves a cross-file fragment only when the file it points into is in the same
 scan, so a whole-tree `mise run lint` catches the break but the pre-commit hook — staged

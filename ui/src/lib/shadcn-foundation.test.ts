@@ -13,7 +13,7 @@
 // Takeaway: bits-ui surfaces are unit-mountable for STRUCTURE /
 // ARIA assertions (with an async flush), but their real interaction semantics —
 // focus trap, Escape-to-close, outside-click, focus restoration, scroll lock —
-// are real-browser behaviors that stay e2e per doc/agents/browser-testing.md.
+// are real-browser behaviors that stay e2e per docs/agents/browser-testing.md.
 import "@ui/support/setup.ts";
 import { expect, test } from "bun:test";
 

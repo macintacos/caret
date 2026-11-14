@@ -1,8 +1,8 @@
-# Editing `doc/RUNNING.md`
+# Editing `docs/RUNNING.md`
 
 *Audience: coding agents and contributors editing caret's runtime-behavior reference.*
 
-`doc/RUNNING.md` is the human-facing guide to caret in use, behind
+`docs/RUNNING.md` is the human-facing guide to caret in use, behind
 [`README.md`](../../../README.md): desktop notifications and their per-origin permission
 model, cmux unread marks, and logging & debugging (the log files, the record shape,
 `caret redact`, and `caret doctor`).

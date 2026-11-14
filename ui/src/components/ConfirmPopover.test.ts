@@ -7,7 +7,7 @@
 // The interaction semantics are bits-ui's now and are real-browser behaviours, so
 // Escape-to-cancel, outside-click-to-cancel, initial focus on the confirm button and
 // focus restoration to the trigger all live in test/e2e/confirm-popover.e2e.ts, per
-// doc/agents/browser-testing.md. Asserting them here would be asserting happy-dom.
+// docs/agents/browser-testing.md. Asserting them here would be asserting happy-dom.
 import "@ui/support/mount.ts";
 
 import { expect, test } from "bun:test";

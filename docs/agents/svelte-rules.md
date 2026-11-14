@@ -332,7 +332,7 @@ imports it — stays green under any invocation.
   them.** Write "every palette" or "the lightest palettes"; a count goes stale with each
   new palette. Cross-palette ratios, ranges and lists of which palettes miss a floor live
   in this section alone: a code comment states the claim and points at
-  `doc/agents/svelte-rules.md § CSS-token discipline`. `theme.test.ts`, the suite that
+  `docs/agents/svelte-rules.md § CSS-token discipline`. `theme.test.ts`, the suite that
   measures, may keep a pin's own falsifiability note — the palette and value it reds on.
   Design constants (a 12% step, the 1.05 threshold) and one palette's facts in its own
   module are not covered.

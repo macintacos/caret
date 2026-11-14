@@ -14,8 +14,8 @@ Want to develop `caret` rather than use it? Start with [CONTRIBUTING.md](CONTRIB
 [Check out a short demo here!](https://youtu.be/zesv5AunUW4)
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="doc/assets/caret-review-ui-dark.png">
-  <img src="doc/assets/caret-review-ui-light.png" alt="caret's review UI: a plan with two inline comments, the file it cites open in a preview, and the comment list open">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/caret-review-ui-dark.png">
+  <img src="docs/assets/caret-review-ui-light.png" alt="caret's review UI: a plan with two inline comments, the file it cites open in a preview, and the comment list open">
 </picture>
 
 ## Install
@@ -27,7 +27,7 @@ bunx --no-cache @macintacos/caret@latest install
 > [!NOTE]
 > `caret` supports macOS and Linux, where the review UI can run as a long-lived login
 > service. Windows is best-effort and runs `caret` on demand only. See
-> [`doc/CONFIGURING.md`](doc/CONFIGURING.md#platform-support) for what differs on each
+> [`docs/CONFIGURING.md`](docs/CONFIGURING.md#platform-support) for what differs on each
 > platform and what to fall back on.
 
 Assuming that you installed it as a long-lived service (the default), you can navigate to
@@ -74,7 +74,7 @@ release notes or main commits), a mark on the settings button, and a
 **Settings → Updates** pane naming the version and the exact command to take it.
 
 Turn the check off from that same pane, or by hand in
-[`config.toml`](doc/CONFIGURING.md#the-updates-table):
+[`config.toml`](docs/CONFIGURING.md#the-updates-table):
 
 ```toml
 [updates]
@@ -83,17 +83,17 @@ check = false
 
 `caret` supports OpenCode v1 1.3.4 or later and v2 2.0.29 or later; an older v2 still
 loads caret but can't review a plan file the agent wrote, so the agent sends the plan text
-instead. See [the OpenCode adapter](doc/ARCHITECTURE.md#the-opencode-adapter) for the
+instead. See [the OpenCode adapter](docs/ARCHITECTURE.md#the-opencode-adapter) for the
 by-hand equivalents, for pinning a version in OpenCode's plugin array (`plugin` on v1,
-`plugins` on v2); [`caret install`](doc/ARCHITECTURE.md#installing-with-caret-install)
+`plugins` on v2); [`caret install`](docs/ARCHITECTURE.md#installing-with-caret-install)
 covers what each agent's install touches;
-[the Claude Code adapter](doc/ARCHITECTURE.md#the-claude-code-adapter) covers the hooks
+[the Claude Code adapter](docs/ARCHITECTURE.md#the-claude-code-adapter) covers the hooks
 `caret` registers there. `caret install` also installs into pi 1.5.0 or later when `pi` is
 on your PATH; run `/reload` in pi or restart it to pick caret up. `caret install` and
 `caret doctor` manage only pi's user-scope packages and ignore a project-scope install
 (`pi install -l`). OpenCode and pi both load caret from its npm package, which runs on
 bun, so `bun` must be on the PATH they run with. See
-[the pi adapter](doc/ARCHITECTURE.md#the-pi-adapter) for the by-hand equivalents.
+[the pi adapter](docs/ARCHITECTURE.md#the-pi-adapter) for the by-hand equivalents.
 
 ## Using `caret`
 
@@ -114,7 +114,7 @@ your browser instead of the terminal prompt. There you:
 > the same with the plan-review tool `caret` gives each agent — `review_plan` in Claude
 > Code (from the plugin's MCP server) and `caret_review_plan` in OpenCode and pi. The tool
 > is for plans only; see
-> [`doc/ARCHITECTURE.md`](doc/ARCHITECTURE.md#calling-the-review-tool-from-your-own-skill).
+> [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#calling-the-review-tool-from-your-own-skill).
 > In OpenCode v2, `<leader>p` (`ctrl+x p` by default) opens the plan waiting in the
 > session; rebind the key as `caret.open` under OpenCode's `keybinds`.
 
@@ -141,17 +141,17 @@ report in the session (see [Diagnostics](#diagnostics)).
 `caret` runs with sensible defaults and needs no configuration. To tune it — the daemon
 port, the review timeout, the log level — it reads an optional `config.toml` and `CARET_*`
 environment variables. Every key, every variable, and their defaults are in
-[`doc/CONFIGURING.md`](doc/CONFIGURING.md).
+[`docs/CONFIGURING.md`](docs/CONFIGURING.md).
 To open the review UI from another device, such as a phone or a laptop, see
-[Reaching caret from another device](doc/RUNNING.md#reaching-caret-from-another-device).
+[Reaching caret from another device](docs/RUNNING.md#reaching-caret-from-another-device).
 Only the machine that serves the review UI runs caret as a service;
-[the other devices](doc/RUNNING.md#on-the-other-devices) need only a browser and the login
-link.
+[the other devices](docs/RUNNING.md#on-the-other-devices) need only a browser and the
+login link.
 
 ## Documentation
 
-[`doc/README.md`](doc/README.md) maps the `doc/` directory — start there and it routes you
-to the reference page that answers your question.
+[`docs/README.md`](docs/README.md) maps the `docs/` directory — start there and it routes
+you to the reference page that answers your question.
 
 Two more live at the repo root:
 

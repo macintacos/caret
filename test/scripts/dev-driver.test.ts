@@ -347,13 +347,13 @@ test("demoAnnotations drops the anchors a plan does not carry, keeping ids dense
   expect(demoAnnotations("\n\n", 1)).toEqual([]);
 });
 
-// ---- citation guard: fake-plan.md → doc/DEVELOPMENT.md (EXC-1045) ----
+// ---- citation guard: fake-plan.md → docs/DEVELOPMENT.md (EXC-1045) ----
 
-// The fixture cites doc/DEVELOPMENT.md by line, and the bullets around those
+// The fixture cites docs/DEVELOPMENT.md by line, and the bullets around those
 // citations assert what the preview does with them. Read the page the way the
 // excerpt reader counts it — splitLines in src/plan/excerpt.ts drops the phantom
 // element a trailing newline leaves — so a line number here means the editor's line.
-const DEV_GUIDE = "doc/DEVELOPMENT.md";
+const DEV_GUIDE = "docs/DEVELOPMENT.md";
 const DEV_GUIDE_LINES = (await Bun.file(`${import.meta.dir}/../../${DEV_GUIDE}`).text())
   .replace(/\n$/, "")
   .split("\n");
@@ -363,14 +363,14 @@ const DEV_GUIDE_LINES = (await Bun.file(`${import.meta.dir}/../../${DEV_GUIDE}`)
 // LINE_SUFFIX in ui/src/lib/diffview/fileRefs.ts — the one definition of a line
 // citation — so a spelling the renderer accepts cannot quietly fall out of this scan,
 // and one it refuses cannot sneak in. A bare `#` before the digits is refused there
-// and here: `doc/DEVELOPMENT.md#3-setup` links to a numbered anchor rather than citing
+// and here: `docs/DEVELOPMENT.md#3-setup` links to a numbered anchor rather than citing
 // line 3. Scoped to this one page on purpose — `mise.toml:900` is cited past the end
 // deliberately, to demonstrate the clamp.
 const DEV_GUIDE_CITATIONS = [
-  ...PLAN_V1.matchAll(/doc\/DEVELOPMENT\.md(?::L?|:?#L)(\d+)(?:[-–,]L?(\d+)|:\d+)?/g),
+  ...PLAN_V1.matchAll(/docs\/DEVELOPMENT\.md(?::L?|:?#L)(\d+)(?:[-–,]L?(\d+)|:\d+)?/g),
 ].map((m) => ({ text: m[0], start: Number(m[1]), end: Number(m[2] ?? m[1]) }));
 
-test("every doc/DEVELOPMENT.md citation in the fixture lands on a real, non-blank line", () => {
+test("every docs/DEVELOPMENT.md citation in the fixture lands on a real, non-blank line", () => {
   // A fixture that stopped citing the page would otherwise satisfy the loop below
   // vacuously — the guard has to have something to guard.
   expect(DEV_GUIDE_CITATIONS.length).toBeGreaterThan(0);
@@ -389,7 +389,7 @@ test("every doc/DEVELOPMENT.md citation in the fixture lands on a real, non-blan
   expect(broken).toEqual([]);
 });
 
-test("doc/DEVELOPMENT.md is long enough for the fixture's citation windows", () => {
+test("docs/DEVELOPMENT.md is long enough for the fixture's citation windows", () => {
   // Every citation is fetched with EXCERPT_RADIUS lines of context past its end —
   // padded by the panel for a range (ui/src/components/FilePreview.svelte), by the
   // daemon for a bare line (readFileExcerpt in src/plan/excerpt.ts) — bounded by

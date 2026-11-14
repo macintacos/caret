@@ -21,7 +21,7 @@ export const FOLDER_ICON_MASK = `url("data:image/svg+xml,${encodeURIComponent(fo
  * reviewer has to read, so this is bounded by contrast rather than by taste: it is
  * the deepest fade that keeps `--ink` over `--paper-sunk` at WCAG AA on EVERY
  * palette, and the palettes differ enormously in how much room they have to give
- * (doc/agents/svelte-rules.md § CSS-token discipline), so the tightest one sets it for
+ * (docs/agents/svelte-rules.md § CSS-token discipline), so the tightest one sets it for
  * all. Exported because a bare number in the sheet is invisible to the palette
  * suite — `theme.test.ts` composites against this and fails if a new palette, or a
  * deeper fade, drops quoted text below the floor.
@@ -613,7 +613,7 @@ const CARET_OVERRIDES = `
      REPLACES it, so the dot is the only thing left saying "list item here" — that is
      1.4.11's test for a graphical object required to understand the content, and
      --ink-faint fails its 3:1 floor on the surface this actually renders on, in the
-     lightest palettes; --ink-soft clears it everywhere (doc/agents/svelte-rules.md
+     lightest palettes; --ink-soft clears it everywhere (docs/agents/svelte-rules.md
      § CSS-token discipline), and theme.test.ts pins the whole replacement family there.
 
      THE GLYPH IS A PSEUDO-ELEMENT, not an appended node, and that is a correctness
@@ -731,7 +731,7 @@ const CARET_OVERRIDES = `
      the pocket alone cannot carry that: a floor a step off the paper measures barely above
      1:1. So the pocket's contact edge and the marks spend --ink-soft, which theme.test.ts
      pins above 3:1 on the surface the box renders on; --ink-faint falls under it there in
-     the lightest palettes (doc/agents/svelte-rules.md § CSS-token discipline). The three
+     the lightest palettes (docs/agents/svelte-rules.md § CSS-token discipline). The three
      states differ by shape on one ink, never by hue or opacity, so a colour-blind reader
      loses nothing.
 
@@ -891,7 +891,7 @@ const CARET_OVERRIDES = `
      carrying "this is quoted, and this deep", which is exactly WCAG 1.4.11's test for a
      graphical object required to understand the content. On that surface --ink-faint
      misses the 3:1 floor in the lightest palettes and --ink-soft clears it
-     (doc/agents/svelte-rules.md § CSS-token discipline). theme.test.ts pins the whole
+     (docs/agents/svelte-rules.md § CSS-token discipline). theme.test.ts pins the whole
      replacement family — this bar, the list bullet, the task checkbox, a table's column
      and header rules — on that surface, and it reds naming the palette if any of them is
      stepped back down.
@@ -999,7 +999,7 @@ const CARET_OVERRIDES = `
      2-8% bands both sit barely above the 1.05 this epic treats as indistinguishable: the
      line is in the DOM and not on the screen. --ink-faint, the marker ink the chip family
      prescribes, is the other candidate and misses WCAG 1.4.11's 3:1 floor in the lightest
-     palettes, the gap EXC-860 measured for the checkbox (doc/agents/svelte-rules.md
+     palettes, the gap EXC-860 measured for the checkbox (docs/agents/svelte-rules.md
      § CSS-token discipline).
 
      That floor binds here, which is the part worth being explicit about rather than

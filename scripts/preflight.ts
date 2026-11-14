@@ -222,7 +222,7 @@ const SCHEMA_VERSION = 2;
 // no file arguments. That distinction is load-bearing for `lint`. rumdl resolves
 // an MD051 cross-file link fragment only when the file it points into is in the
 // same scan, so a lint handed just the changed files would silently stop checking
-// every cross-file anchor whose target is unchanged — and doc/ is held together
+// every cross-file anchor whose target is unchanged — and docs/ is held together
 // almost entirely by those.
 
 /** Which tasks this run will spawn, and why that set. */
@@ -261,10 +261,10 @@ export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "opencode/references/doctor.md", // test/structure/caret-command.test.ts checks it exists and ships
   // test/adapters/opencode/docs-cache-path.test.ts checks the `rm -rf` path it prints;
   // test/structure/line-anchor-claim.test.ts checks the line-anchor claim it states.
-  "doc/ARCHITECTURE.md",
+  "docs/ARCHITECTURE.md",
   "THIRD_PARTY_LICENSES.md", // ui/src/lib/icons.test.ts checks its table against the icon registry
-  "doc/DEVELOPMENT.md", // test/scripts/dev-driver.test.ts checks fake-plan.md's line citations into it
-  "doc/CONFIGURING.md", // test/core/theme/schema.test.ts parses its example theme file
+  "docs/DEVELOPMENT.md", // test/scripts/dev-driver.test.ts checks fake-plan.md's line citations into it
+  "docs/CONFIGURING.md", // test/core/theme/schema.test.ts parses its example theme file
 ];
 
 function fullGate(reason: string): TaskSelection {

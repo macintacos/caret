@@ -28,7 +28,7 @@ const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const REFRESH_COMMAND = "bunx --no-cache @macintacos/caret@latest install --refresh";
 
 /** What takes a local build to trunk's tip. `mise run build --install` is the real task
- * name (doc/DEVELOPMENT.md); `mise build --install` does not exist. */
+ * name (docs/DEVELOPMENT.md); `mise build --install` does not exist. */
 const REBUILD_COMMAND = "mise run build --install";
 
 /** The `unknown` reason that means "ask GitHub how far trunk has moved and try again".

@@ -1,4 +1,4 @@
-// The doc ↔ cache-path coupling (EXC-910). doc/ARCHITECTURE.md prints an `rm -rf` per
+// The doc ↔ cache-path coupling (EXC-910). docs/ARCHITECTURE.md prints an `rm -rf` per
 // OpenCode cache layout for a reader to paste into a shell, and each path must be one the
 // paths.ts helpers produce. The two drifted once already: the docs quoted
 // ~/.cache/opencode/node_modules/@macintacos/caret, a path caret has never written, so
@@ -16,7 +16,7 @@ import {
   opencodeNpmCacheDir,
 } from "@/adapters/opencode/paths.ts";
 
-const ARCHITECTURE_MD = join(import.meta.dir, "../../../doc/ARCHITECTURE.md");
+const ARCHITECTURE_MD = join(import.meta.dir, "../../../docs/ARCHITECTURE.md");
 
 /** The by-hand cache path the doc prints under `layoutDir` (`packages` or `npm`), minus
  * its trailing glob. Requires exactly one such line per layout, so dropping it or adding a
@@ -44,12 +44,12 @@ function documentedForm(resolve: () => string): string {
   return resolved.replace(homedir(), "~");
 }
 
-test("doc/ARCHITECTURE.md prints the v1 cache path opencodeCachePackageDir() produces", async () => {
+test("docs/ARCHITECTURE.md prints the v1 cache path opencodeCachePackageDir() produces", async () => {
   const quoted = quotedCachePath(await Bun.file(ARCHITECTURE_MD).text(), "packages");
   expect(quoted).toBe(documentedForm(() => opencodeCachePackageDir()));
 });
 
-test("doc/ARCHITECTURE.md's v2 cache glob matches every opencodeNpmCacheDir() spec dir", async () => {
+test("docs/ARCHITECTURE.md's v2 cache glob matches every opencodeNpmCacheDir() spec dir", async () => {
   const quoted = quotedCachePath(await Bun.file(ARCHITECTURE_MD).text(), "npm");
   const bare = documentedForm(() => opencodeNpmCacheDir(CARET_PACKAGE, null));
   const pinned = documentedForm(() => opencodeNpmCacheDir(CARET_PACKAGE, "1.2.3"));

@@ -16,7 +16,7 @@ When to edit it:
 - A token moves to a new home: update `tokens.md`. A token's value changes at its source,
   never here.
 - Code-area rules (how a Svelte component is shaped, how the plan renders) belong in
-  [`doc/agents/`](../), not here; `design/` says what the result should look and feel
+  [`docs/agents/`](../), not here; `design/` says what the result should look and feel
   like.
 
 `design/README.md` says how each page is kept. `/taste document` re-extracts the direction
