@@ -35,6 +35,7 @@ nav = [
     { "Turn caret off" = "how-to/turn-off.md" },
     { "Find caret's logs" = "how-to/logs.md" },
     { "Diagnose a problem" = "how-to/diagnostics.md" },
+    { "Call the review tool from your own skill" = "how-to/review-tool.md" },
   ] },
   { "Reference" = [
     "reference/index.md",
