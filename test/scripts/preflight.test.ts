@@ -35,8 +35,18 @@ import {
 import { waitFor } from "@test/support/poll.ts";
 import { DEV_FIXTURES } from "@/tasks/dev/protocol.ts";
 
-const ALL_TASKS = ["build bin", "build ui", "lint", "smoke", "test bats", "test mod", "test unit"];
-const UNREAD_MARKDOWN = "docs/RUNNING.md";
+const ALL_TASKS = [
+  "build bin",
+  "build ui",
+  "docs:build",
+  "lint",
+  "smoke",
+  "test bats",
+  "test mod",
+  "test unit",
+];
+// Markdown outside docs/ that no test reads, so it alone narrows the gate to lint.
+const UNREAD_MARKDOWN = "CONTRIBUTING.md";
 
 /** The gate as if `claude` were on PATH, so the suite does not depend on the host's. */
 const runGate: typeof runPreflight = (deps) =>
@@ -81,7 +91,9 @@ async function releaseRemainingAndFinish(
   s: ReturnType<typeof gatedSpawner>,
   run: Promise<{ exitCode: number }>,
 ): Promise<void> {
-  for (const name of ["lint", "test unit", "test bats", "test mod", "smoke"]) s.release(name);
+  for (const name of ["lint", "test unit", "docs:build", "test bats", "test mod", "smoke"]) {
+    s.release(name);
+  }
   const r = await run;
   expect(r.exitCode).toBe(0);
 }
@@ -101,12 +113,19 @@ test("the immediate tasks start at once; dependents wait for build ui", async ()
   const s = gatedSpawner();
   const run = runGate({ spawnTask: s.spawnTask, renderer: "silent" });
 
-  await waitForCond(() => s.calls.length === 5);
+  await waitForCond(() => s.calls.length === 6);
   await Bun.sleep(20); // would catch eagerly-spawned dependents
-  expect([...s.calls].sort()).toEqual(["build ui", "lint", "test bats", "test mod", "test unit"]);
+  expect([...s.calls].sort()).toEqual([
+    "build ui",
+    "docs:build",
+    "lint",
+    "test bats",
+    "test mod",
+    "test unit",
+  ]);
 
   s.release("build ui");
-  await waitForCond(() => s.calls.length === 6);
+  await waitForCond(() => s.calls.length === 7);
   expect(s.calls).toContain("build bin");
 
   s.release("build bin");
@@ -121,9 +140,9 @@ test("smoke waits for build bin, not merely build ui", async () => {
   const s = gatedSpawner();
   const run = runGate({ spawnTask: s.spawnTask, renderer: "silent" });
 
-  await waitForCond(() => s.calls.length === 5);
-  s.release("build ui");
   await waitForCond(() => s.calls.length === 6);
+  s.release("build ui");
+  await waitForCond(() => s.calls.length === 7);
   await Bun.sleep(20); // would catch a smoke gated on `build ui`
   expect(s.calls).not.toContain("smoke");
 
@@ -147,6 +166,7 @@ test("concurrency 1: the whole gate still completes, in array order", async () =
     "lint",
     "test unit",
     "build ui",
+    "docs:build",
     "test bats",
     "test mod",
     "build bin",
@@ -229,8 +249,10 @@ test("preflight's task groups map to real mise task files", async () => {
   // The orchestrator hard-codes its task set (IMMEDIATE/DEPENDENT) and spawns
   // each as `mise run <words…>`, whose FIRST word is the mise task file, so
   // `build ui`/`test unit`/`build bin` must resolve to the `build` and `test`
-  // group files.
-  const taskFile = (name: string): string => join(import.meta.dir, "../../.mise/tasks", name);
+  // group files. A namespaced name lives in a subdirectory: `docs:build` is
+  // `.mise/tasks/docs/build`.
+  const taskFile = (name: string): string =>
+    join(import.meta.dir, "../../.mise/tasks", name.replaceAll(":", "/"));
   const firstWords = [...new Set(ALL_TASKS.map((t) => t.split(" ", 1)[0] ?? t))];
   for (const group of firstWords) expect(existsSync(taskFile(group))).toBe(true);
 });
@@ -254,11 +276,13 @@ test("every `.mise/tasks/*` forwarder to the tasks CLI sets `#MISE raw_args=true
   // loses the directive. preflight is one too (EXC-737): it execs
   // `caret-tasks preflight`, whose commander tree owns its --json flags.
   const tasksDir = join(import.meta.dir, "../../.mise/tasks");
-  const forwarders = readdirSync(tasksDir, { withFileTypes: true })
-    // Skip any namespaced-task subdirectory (mise supports `foo:bar` dirs) so the
-    // readFileSync below can't hit EISDIR; only plain task files can be forwarders.
+  const forwarders = readdirSync(tasksDir, { withFileTypes: true, recursive: true })
+    // Namespaced tasks (`docs:build`) live in subdirectories.
     .filter((entry) => entry.isFile())
-    .map((entry) => ({ name: entry.name, body: readFileSync(join(tasksDir, entry.name), "utf8") }))
+    .map((entry) => ({
+      name: entry.name,
+      body: readFileSync(join(entry.parentPath, entry.name), "utf8"),
+    }))
     .filter((task) => task.body.includes("scripts/tasks/cli.ts"));
   // Guard against a glob/path bug making the loop vacuously pass.
   expect(forwarders.length).toBeGreaterThanOrEqual(8);
@@ -412,7 +436,10 @@ test("a Markdown-only diff leaves the shell lane out", async () => {
 // path, three separate reasons to exist — looping covers a fourth entry for free.
 test("Markdown a test reads from disk keeps `test unit` in the narrowed gate", async () => {
   for (const path of MARKDOWN_READ_BY_TESTS) {
-    expect(await spawnedFor([UNREAD_MARKDOWN, path])).toEqual(["lint", "test unit"]);
+    const expected = path.startsWith("docs/")
+      ? ["docs:build", "lint", "test unit"]
+      : ["lint", "test unit"];
+    expect(await spawnedFor([UNREAD_MARKDOWN, path])).toEqual(expected);
     expect(selectTasks([UNREAD_MARKDOWN, path]).narrowed).toBe(true);
   }
 });
@@ -424,11 +451,11 @@ test("Markdown a test reads from disk keeps `test unit` in the narrowed gate", a
 // would skip exactly the diffs that guard exists for. Either path must reach it,
 // alone or together.
 test("a docs-only diff touching the fake plan or the dev guide still runs `test unit`", async () => {
-  const lintAndUnit = ["lint", "test unit"];
-  expect(await spawnedFor(["docs/DEVELOPMENT.md"])).toEqual(lintAndUnit);
-  expect(await spawnedFor(["scripts/tasks/dev/fake-plan.md"])).toEqual(lintAndUnit);
+  const withDocs = ["docs:build", "lint", "test unit"];
+  expect(await spawnedFor(["docs/DEVELOPMENT.md"])).toEqual(withDocs);
+  expect(await spawnedFor(["scripts/tasks/dev/fake-plan.md"])).toEqual(["lint", "test unit"]);
   expect(await spawnedFor(["docs/DEVELOPMENT.md", "scripts/tasks/dev/fake-plan.md"])).toEqual(
-    lintAndUnit,
+    withDocs,
   );
 });
 
@@ -451,7 +478,18 @@ test("every MARKDOWN_READ_BY_TESTS entry still exists on disk", () => {
   }
 });
 
-test("a single non-Markdown path runs the full seven-task gate", async () => {
+test("a Markdown-only diff under docs/ adds the docs build to the narrowed gate", async () => {
+  expect(await spawnedFor(["docs/index.md"])).toEqual(["docs:build", "lint"]);
+  expect(selectTasks(["docs/index.md"]).narrowed).toBe(true);
+});
+
+test("the site config and the Python lockfiles run the full gate, docs build included", async () => {
+  for (const path of ["zensical.toml", "pyproject.toml", "uv.lock"]) {
+    expect(await spawnedFor([path])).toEqual(ALL_TASKS);
+  }
+});
+
+test("a single non-Markdown path runs the full eight-task gate", async () => {
   expect(await spawnedFor([UNREAD_MARKDOWN, "src/daemon.ts"])).toEqual(ALL_TASKS);
   expect(selectTasks([UNREAD_MARKDOWN, "src/daemon.ts"]).narrowed).toBe(false);
 });
@@ -542,6 +580,7 @@ test("buildStartReport echoes the parsed filters and lists planned tasks", () =>
     "lint",
     "test unit",
     "build ui",
+    "docs:build",
     "test bats",
     "test mod",
     "build bin",
@@ -582,6 +621,7 @@ test("buildResultReport level 0: passing tasks carry status only", async () => {
     "lint",
     "test unit",
     "build ui",
+    "docs:build",
     "test bats",
     "test mod",
     "build bin",

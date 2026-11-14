@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Build the docs site into site/, failing on a broken link, anchor, or nav entry"
+#MISE raw_args=true
+# Fresh-clone guard (scripts/bootstrap.sh); `|| exit 1` is its caller contract.
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/../../../scripts/bootstrap.sh" || exit 1
+exec bun scripts/tasks/cli.ts docs build "$@"

@@ -156,7 +156,7 @@ you to the reference page that answers your question.
 Two more live at the repo root:
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — develop `caret` locally: setup, the `mise`
-  workflow, and where tests live. PRs run the full eight-check gate in CI;
+  workflow, and where tests live. PRs run the full nine-check gate in CI;
   `mise run preflight` is the fast local one.
 - [AGENTS.md](AGENTS.md) — for coding agents: routes a change to the rules-of-the-road
   that govern it.

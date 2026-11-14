@@ -40,6 +40,10 @@ shfmt       = "3.14"   # aqua:mvdan/sh
 "npm:jscpd" = "5"      # copy-paste detector; npm is the only distribution
 "npm:bats"  = "1"      # bash test runner
 
+# The docs site: uv runs Zensical from pyproject.toml and uv.lock (`mise run docs:build`).
+python = "3.14"
+uv     = "0"    # aqua:astral-sh/uv
+
 # (Re)register git hooks whenever tools are installed or updated.
 [hooks]
 postinstall = "hk install --mise"

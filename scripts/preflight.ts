@@ -7,13 +7,14 @@
 // it). `lint`'s `hk check` step is the read-only one — it is the formatting
 // gate, and a lint failure points at `mise run format`.
 //
-// DAG: lint, `test unit`, `build ui`, `test bats` and `test mod` start immediately;
-// `build bin` starts once `build ui` passes; `smoke` starts once
-// `build bin` passes (EXC-914). The build-first ordering + skip mechanism live in the tasks
-// CLI (scripts/tasks/build.ts), so each dependent is spawned with the skips that
-// let it reuse its gate's artifact: CARET_SKIP_BUILD_UI keeps the UI built at
-// exactly one run per gate (two concurrent Vite builds would otherwise race on
-// ui/dist), and CARET_SKIP_BUILD_BIN keeps smoke from paying a second compile.
+// DAG: lint, `test unit`, `build ui`, `docs:build`, `test bats` and `test mod`
+// start immediately; `build bin` starts once `build ui` passes; `smoke` starts
+// once `build bin` passes (EXC-914). The build-first ordering + skip mechanism
+// live in the tasks CLI (scripts/tasks/build.ts), so each dependent is spawned
+// with the skips that let it reuse its gate's artifact: CARET_SKIP_BUILD_UI
+// keeps the UI built at exactly one run per gate (two concurrent Vite builds
+// would otherwise race on ui/dist), and CARET_SKIP_BUILD_BIN keeps smoke from
+// paying a second compile.
 //
 // smoke is here because it is the only task that exercises the artifacts users
 // receive rather than the source tree: preflight proves the source works, smoke
@@ -21,8 +22,8 @@
 //
 // Which of those tasks run is scoped to the diff (EXC-1042): a change confined
 // to Markdown runs `lint` alone, plus `test unit` when it touches Markdown a test
-// reads from disk. Everything else runs all seven, as does a diff that cannot
-// be read at all.
+// reads from disk, plus `docs:build` when it touches `docs/`. Everything else
+// runs all eight, as does a diff that cannot be read at all.
 //
 // DI mirrors scripts/tasks/release/command.ts: the spawn collaborator is injected so
 // test/scripts/preflight.test.ts can drive the DAG without running real tasks.
@@ -90,7 +91,7 @@ export interface PreflightOutcome {
 export interface PreflightStartReport {
   event: "start";
   schemaVersion: number;
-  /** The tasks this run will spawn — a subset of the seven when `selection.narrowed`. */
+  /** The tasks this run will spawn — a subset of the eight when `selection.narrowed`. */
   tasks: string[];
   /**
    * Why this task set (EXC-1042). A scoped run must never read as a full green
@@ -106,7 +107,7 @@ export interface PreflightTaskReport {
   name: string;
   status: TaskStatus;
   /** How long the task ran: 0 when it was skipped before ever spawning, and excluding
-   * time queued behind an upstream gate — so the seven never sum to the gate's wall clock. */
+   * time queued behind an upstream gate — so the eight never sum to the gate's wall clock. */
   durationMs: number;
   /** Captured output, included per the verbosity / --grep / --task selection. */
   output?: string;
@@ -157,9 +158,9 @@ interface Dependent {
 
 const SKIP_UI = { CARET_SKIP_BUILD_UI: "1" } as const;
 
-// `test bats` and `test mod` are last within IMMEDIATE: both gate nothing, and
-// `build ui` gates the dependents below.
-const IMMEDIATE = ["lint", "test unit", "build ui", "test bats", "test mod"] as const;
+// `docs:build`, `test bats` and `test mod` are last within IMMEDIATE: they gate
+// nothing, and `build ui` gates the dependents below.
+const IMMEDIATE = ["lint", "test unit", "build ui", "docs:build", "test bats", "test mod"] as const;
 /** An immediate task that needs a binary on PATH, skipped rather than failed without it. */
 const NEEDS_ON_PATH: Partial<Record<(typeof IMMEDIATE)[number], string>> = { "test mod": "claude" };
 // ORDER IS LOAD-BEARING: listr2 fills its concurrency slots in array order, so a
@@ -299,7 +300,11 @@ export function selectTasks(changed: readonly string[] | null): TaskSelection {
   // rather than by pushing — a task can never land out of sequence here.
   const suites = new Set<string>(["lint"]);
   if (readByTests.length > 0) suites.add("test unit");
-  const also = readByTests.length > 0 ? `, and \`test unit\` reads ${readByTests.join(", ")}` : "";
+  const underDocs = changed.filter((path) => path.startsWith("docs/"));
+  if (underDocs.length > 0) suites.add("docs:build");
+  const also =
+    (readByTests.length > 0 ? `, and \`test unit\` reads ${readByTests.join(", ")}` : "") +
+    (underDocs.length > 0 ? `, and \`docs:build\` runs for ${underDocs.join(", ")}` : "");
   return {
     tasks: TASK_ORDER.filter((t) => suites.has(t)),
     narrowed: true,
