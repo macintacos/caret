@@ -101,6 +101,45 @@ drafting. It walks the audience, the reader's goal, structure, and a readability
 which is exactly what keeps these docs scannable and on-audience. The pointer files repeat
 this call-out per doc.
 
+## The docs gate
+
+The `docs gate` PR check keeps the site in step with the code. `scripts/docs-gate.ts`
+reads the PR's changed paths and fails when one is user-visible and no published page
+changed. Its `USER_VISIBLE` table is the source of truth, and the first matching entry
+wins. It gates:
+
+- CLI commands, flags, help text, and output: `src/cli.ts`, `src/commands/**`
+- what `caret install` sets up in an agent host: `src/adapters/pi/install.ts`,
+  `src/adapters/opencode/config-plugin.ts`, `src/adapters/opencode/deploy.ts`,
+  `src/adapters/opencode/entries.ts`, `src/adapters/opencode/packaging.ts`,
+  `src/adapters/opencode/upgrade.ts`
+- config keys, defaults, and `CARET_*` variables: `src/config/**`
+- the review page: `ui/src/**`
+- the `/caret` command and the host plugins: `skills/**`, `opencode/**`, `pi/**`,
+  `mod/hooks/**`
+- theme files: `src/theme/**`
+- plan formatting and file previews: `src/plan/**`
+- diagnostics: `src/doctor/**`, `src/adapters/*/install.ts`, `src/adapters/*/checks.ts`
+  (doctor's per-adapter probes and checks)
+- the background service: `src/service/**`
+
+CLI help text and `caret install` output count. `*.test.ts` files never count. A
+dependency-only bump (`package.json`, `bun.lock`, `mise.lock`, `uv.lock`) passes on its
+own; when a bump changes what a user sees, update the page anyway.
+
+A published page is any `docs/**/*.md` that `zensical.toml`'s `exclude_docs` does not
+list, so `docs/DEVELOPMENT.md` or a `docs/agents/` file does not satisfy the gate.
+
+- **When a change needs a site page:** it changes something a page describes;
+  [`references/site.md`](references/site.md) says which page covers what. Update it in the
+  same PR.
+- **When to apply `docs-not-needed`:** the change touches a gated path but every page
+  stays accurate. Adding the label re-runs the check, which then passes. Say in the PR
+  body why no page changed. Never apply it to skip a page you know is now wrong.
+
+A new user-visible surface outside these paths is added to `USER_VISIBLE`, to this list,
+and to `AGENTS.md` § The docs gate in the same change.
+
 ## The maintenance rule
 
 Documentation drifts when the map and the docs are edited in separate changes. So:
