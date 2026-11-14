@@ -24,7 +24,7 @@ The file and every key in it are optional:
     never been one, the defaults with token login on, where the
     [review page](glossary.md#review-page) opens only through a login link caret gives you
     (see
-    [If the background service stays on loopback](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#if-the-daemon-stays-on-loopback)).
+    [If caret stays on loopback](../how-to/remote-access.md#if-caret-stays-on-loopback)).
 - Settings reload on their own: caret re-reads the file when it changes, so you don't
     restart the [background service](glossary.md#background-service). The `[daemon]`,
     `[review]`, and `[opencode]` settings are the exceptions; see below.
@@ -67,7 +67,7 @@ The `CARET_*` environment variables also cover these settings (see
 | `daemon.port`         | `42718`       | The port the background service listens on. |
 | `daemon.idle_ms`      | `60000`       | Idle delay (ms) before the background service shuts itself down when no reviews are open. Ignored when the background service stays resident — under a supervisor (`CARET_SUPERVISED=1`) or `caret serve`. |
 | `daemon.heartbeat_ms` | `8000`        | How long (ms) the hook waits on one request for your decision before it asks again: the decision long-poll heartbeat window. The background service derives its socket's idle timeout from it (heartbeat seconds plus headroom), so it must stay below `250000`; values at or above that are rejected. |
-| `daemon.host`         | `"127.0.0.1"` | Address the background service listens on: an IP literal or `localhost`, IPv6 unbracketed (`"::"`); `localhost` means `127.0.0.1`. Any address outside loopback (`127.0.0.0/8`, `::1`, `localhost`) exposes the review page to other devices and turns token login on unless `daemon.auth` says otherwise. Takes effect when the background service restarts. On a device where `host` is not one of its own addresses, it is instead where hooks send reviews: read on each hook, never listened on, and no background service starts (see [Reviewing on the server from another device](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#reviewing-on-the-server-from-another-device)). See [Reaching caret from another device](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#reaching-caret-from-another-device). |
+| `daemon.host`         | `"127.0.0.1"` | Address the background service listens on: an IP literal or `localhost`, IPv6 unbracketed (`"::"`); `localhost` means `127.0.0.1`. Any address outside loopback (`127.0.0.0/8`, `::1`, `localhost`) exposes the review page to other devices and turns token login on unless `daemon.auth` says otherwise. Takes effect when the background service restarts. On a device where `host` is not one of its own addresses, it is instead where hooks send reviews: read on each hook, never listened on, and no background service starts (see [Send plans to caret on a server](../how-to/remote-review.md)). See [Open caret from another device](../how-to/remote-access.md). |
 | `daemon.hostnames`    | `[]`          | Extra names the background service answers to, such as `"caret.home.lan"` or `"192.168.1.5"` (IPv6 bracketed). Matched case-insensitively on any port, over `http` or `https`. The first entry is the name review links and login links use. Takes effect when the background service restarts. |
 | `daemon.auth`         | *unset*       | `"token"` or `"none"`. Unset, token login is on exactly when `daemon.host` is exposed. Takes effect when the background service restarts. |
 | `review.timeout_s`    | `3600`        | Review window in seconds before the hook denies the plan to fail safe (default 1 hour). Values at or above `3900`, the hook's own time limit, are rejected. |
@@ -81,7 +81,7 @@ The `CARET_*` environment variables also cover these settings (see
     login off: anyone who can reach the port can then read plans, read files under a
     review's working directory, and approve a plan. `caret serve` and `caret login-link`
     warn while it is set. See
-    [Reaching caret from another device](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#reaching-caret-from-another-device).
+    [Open caret from another device](../how-to/remote-access.md).
 
 !!! note
 

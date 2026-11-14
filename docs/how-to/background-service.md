@@ -46,7 +46,7 @@ one exits once it has sat idle for `[daemon].idle_ms` with no review pending and
 page tab open.
 
 To open the review page from another device with token auth on (see
-[Reaching caret from another device](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#reaching-caret-from-another-device)),
+[Open caret from another device](remote-access.md)),
 get the login link from `caret login-link`. The service `caret install` sets up never
 prints one.
 
