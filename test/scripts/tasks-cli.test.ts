@@ -584,6 +584,28 @@ describe("tasks CLI: smoke commands", () => {
   });
 });
 
+describe("tasks CLI: docs commands", () => {
+  test("docs build subcommand invokes its action", async () => {
+    let called = false;
+    await buildProgram({
+      docsBuild: async () => {
+        called = true;
+      },
+    }).parseAsync(["docs", "build"], { from: "user" });
+    expect(called).toBe(true);
+  });
+
+  test("docs serve forwards its args", async () => {
+    let captured: string[] | undefined;
+    await buildProgram({
+      docsServe: async (args) => {
+        captured = args;
+      },
+    }).parseAsync(["docs", "serve", "--open"], { from: "user" });
+    expect(captured).toEqual(["--open"]);
+  });
+});
+
 // `assets` (EXC-805) regenerates the README's hero image.
 describe("tasks CLI: assets command", () => {
   test("assets invokes its action", async () => {

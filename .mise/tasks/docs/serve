@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Preview the docs site at http://localhost:2273/caret/, rebuilding on change"
+#MISE raw_args=true
+# Fresh-clone guard (scripts/bootstrap.sh); `|| exit 1` is its caller contract.
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/../../../scripts/bootstrap.sh" || exit 1
+exec bun scripts/tasks/cli.ts docs serve "$@"
