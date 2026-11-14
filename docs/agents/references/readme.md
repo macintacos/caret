@@ -16,8 +16,10 @@ When to edit it:
   all three together. Install details belong in
   [`docs/how-to/install.md`](../../how-to/install.md). Deep configuration, architecture,
   and dev-workflow detail belong in the matching `docs/` reference page — and new
-  `config.toml` / `CARET_*` rows land in [`CONFIGURING.md`](../../CONFIGURING.md)'s tables
-  (see [`settings-rules.md`](../settings-rules.md)).
+  `config.toml` / `CARET_*` rows land in
+  [`config-file.md`](../../reference/config-file.md) and
+  [`environment-variables.md`](../../reference/environment-variables.md) (see
+  [`settings-rules.md`](../settings-rules.md)).
 - Route human-onboarding basics to `CONTRIBUTING.md` rather than duplicating them here.
 
 Use the `/doc-coauthoring` skill for any substantive prose pass — it keeps the section

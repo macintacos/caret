@@ -11,13 +11,13 @@ something real.
 Pick the lines a comment is about, then type it. In either view of the plan:
 
 - Click a line to comment on it. In the [preview](../reference/glossary.md#preview),
-  hovering anywhere out to the plan's right edge shades the wrapped line under the pointer
-  and shows a **+** beside it. Clicking the line or its **+** comments on every source
-  line with text on it.
+    hovering anywhere out to the plan's right edge shades the wrapped line under the
+    pointer and shows a **+** beside it. Clicking the line or its **+** comments on every
+    source line with text on it.
 - Drag across lines to comment on all of them.
-- With the keyboard, press `V` to select whole lines, then `c` to comment on the lines the
-  cursor or selection covers. In the preview, `V` shades its selection the same way, with
-  the **+** on the cursor's line.
+- With the keyboard, press `V` to select whole lines, then `c` to comment on the lines
+    the cursor or selection covers. In the preview, `V` shades its selection the same way,
+    with the **+** on the cursor's line.
 
 The lines stay shaded while you write. Clicking and dragging pick lines, not text, so hold
 `shift` to select text instead. Selecting text opens no comment.
@@ -60,8 +60,8 @@ full, the list says how much of the result it shows.
 To use either list:
 
 - Move through it with the arrow keys, or with `tab` and `shift+tab`.
-- Press `enter` to take the highlighted row. caret leaves a space after it, ready for the
-  next word.
+- Press `enter` to take the highlighted row. caret leaves a space after it, ready for
+    the next word.
 - Press `esc` to close the list without closing the dialog around it.
 
 A `/` inside ordinary text, such as the path `src/lib/api.ts`, opens no list.

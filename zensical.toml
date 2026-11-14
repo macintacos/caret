@@ -28,10 +28,16 @@ nav = [
     { "Read a plan" = "how-to/read-a-plan.md" },
     { "Write feedback" = "how-to/write-feedback.md" },
     { "Get notified about plans" = "how-to/notifications.md" },
+    { "Make your own theme" = "how-to/make-a-theme.md" },
   ] },
   { "Reference" = [
     "reference/index.md",
     { "Glossary" = "reference/glossary.md" },
+    { "Config file" = "reference/config-file.md" },
+    { "Environment variables" = "reference/environment-variables.md" },
+    { "Platform support" = "reference/platform-support.md" },
+    { "Theme file format" = "reference/theme-files.md" },
+    { "Built-in themes" = "reference/built-in-themes.md" },
   ] },
   { "Explanation" = [
     "explanation/index.md",

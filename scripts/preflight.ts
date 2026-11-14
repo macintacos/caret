@@ -265,7 +265,8 @@ export const MARKDOWN_READ_BY_TESTS: readonly string[] = [
   "docs/ARCHITECTURE.md",
   "THIRD_PARTY_LICENSES.md", // ui/src/lib/icons.test.ts checks its table against the icon registry
   "docs/DEVELOPMENT.md", // test/scripts/dev-driver.test.ts checks fake-plan.md's line citations into it
-  "docs/CONFIGURING.md", // test/core/theme/schema.test.ts parses its example theme file
+  "docs/reference/theme-files.md", // test/core/theme/schema.test.ts parses its example theme file and syntax tables
+  "docs/reference/built-in-themes.md", // test/core/theme/load.test.ts checks it names every built-in theme id
 ];
 
 function fullGate(reason: string): TaskSelection {
