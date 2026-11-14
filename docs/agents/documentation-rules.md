@@ -30,6 +30,7 @@ which-doc: Edit every doc the change affects
   a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, plan rendering, testing, icons, settings, dependencies, OpenCode, pi, rumdl) > edit-a
   the router for the docs/ directory: which page answers a given reader's question > readme-2
   design direction: how caret looks, moves, sounds, or prints, its deliberate exceptions, and the decision log > edit-design
+  a user-facing page on the docs site (tutorial, how-to guide, reference, explanation) or its place in the site's nav > site
 readme!: Edit README.md
 configuring!: Edit docs/CONFIGURING.md
 running!: Edit docs/RUNNING.md
@@ -40,6 +41,7 @@ agents!: Edit AGENTS.md
 edit-a!: Edit a docs/agents/*.md rule file
 readme-2!: Edit docs/README.md
 edit-design!: Edit design/*.md
+site!: Edit the docs/ page and its zensical.toml nav entry
 ```
 
 ## The doc landscape
@@ -80,15 +82,21 @@ edit-design!: Edit design/*.md
   the patterns, the deliberate exceptions, and the decision log, routed from
   `design/README.md`. Read by contributors and coding agents alike. How to edit it:
   [`references/design.md`](references/design.md).
+- **The docs site** — `zensical.toml`, `docs/index.md`, and the `docs/tutorial/`,
+  `docs/how-to/`, `docs/reference/`, and `docs/explanation/` sections. It is the
+  user-facing site, published to https://macintacos.github.io/caret/ on each `v*` release
+  tag. Its nav in `zensical.toml` decides what a reader can reach, and `exclude_docs`
+  keeps repo-only pages off it. How to edit it:
+  [`references/site.md`](references/site.md).
 
 ## Audience, stated at the top of every new doc
 
 `README.md`, `CONTRIBUTING.md`, and everything directly under `docs/` — `docs/README.md`
 plus the four reference pages (`CONFIGURING.md`, `RUNNING.md`, `ARCHITECTURE.md`,
-`DEVELOPMENT.md`) — are **human-facing**. `AGENTS.md` and everything under `docs/agents/`
-— the rule files and this file's `references/` pointers — are **agent-facing**. State the
-audience explicitly at the top of each new doc so a reader knows in one line whether it is
-written for them.
+`DEVELOPMENT.md`) — are **human-facing**, as are the docs site's pages. `AGENTS.md` and
+everything under `docs/agents/` — the rule files and this file's `references/` pointers —
+are **agent-facing**. State the audience explicitly at the top of each new doc so a reader
+knows in one line whether it is written for them.
 
 Diagrams follow the same split, **deliberately**: human-facing docs use **mermaid**, which
 GitHub renders inline, and agent-facing docs use **graphviz**, which agents read as text.
@@ -106,10 +114,14 @@ this call-out per doc.
 Documentation drifts when the map and the docs are edited in separate changes. So:
 **adding, removing, or renaming a doc updates, in the same change,**
 
-1. **this map** — the router above and the doc-landscape entry, and
+1. **this map** — the router above and the doc-landscape entry (a docs-site page is
+   covered by the site's entry), and
 2. **its `AGENTS.md` route**, if the doc is a `docs/agents/*.md` rule file with one, and
 3. **its pointer file** under [`references/`](references/) — for a `docs/agents/*.md` rule
    file that is the shared [`references/agent-rules.md`](references/agent-rules.md), whose
-   area list you extend rather than adding a new pointer, and
+   area list you extend rather than adding a new pointer, and for a page on the docs site,
+   the shared [`references/site.md`](references/site.md), and
+4. **its `zensical.toml` entry**: a nav entry if the doc is a page on the docs site, or an
+   `exclude_docs` line if it is any other Markdown file under `docs/`.
 
 A doc that exists without a place on this map is a doc no one will find.

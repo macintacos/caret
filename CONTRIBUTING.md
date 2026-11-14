@@ -28,15 +28,15 @@ run it before the e2e suite, `mise run test e2e`.
 
 ```sh
 mise run dev        # dev console: isolated daemon + three fake plans + the Vite UI
-mise run preflight  # the pre-push gate: lint + unit/shell tests + build + artifact smoke
+mise run preflight  # the pre-push gate: lint + unit/shell tests + build + docs build + artifact smoke
 ```
 
 `mise run preflight` is the fast gate to pass before pushing. It scopes itself to your
-diff, so a Markdown-only change runs fewer than the full seven tasks — `--full` forces all
+diff, so a Markdown-only change runs fewer than the full eight tasks — `--full` forces all
 of them. It never runs e2e: run a new or changed spec with `mise run test e2e <path>`. The
-full gate is the PR checks, which run all eight tasks, the whole e2e suite included, on
-every PR. The full task catalog (`build`, `test`, `smoke`, `lint`, `format`) is documented
-in
+full gate is the PR checks, which run all nine tasks, the whole e2e suite included, on
+every PR. The full task catalog (`build`, `test`, `smoke`, `lint`, `format`, `docs:build`)
+is documented in
 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#development).
 
 ## Where tests live

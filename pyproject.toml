@@ -1,0 +1,9 @@
+[project]
+name            = "caret-docs"
+version         = "0.1.0"
+description     = "Builds caret's documentation site with Zensical."
+requires-python = ">=3.14"
+# Exact pin: pre-1.0 zensical changes its build output between releases. docs:build's
+# nav check (scripts/tasks/docs.ts) relies on this version rendering a nav entry for an
+# unbuilt page as a raw .md href; re-probe it on a bump with a nav entry for a missing page.
+dependencies = ["zensical==0.0.73"]

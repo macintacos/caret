@@ -30,7 +30,7 @@ what-does: Load the file for every area the change touches
   OpenCode adapter, plugin, or install (caret install) > opencode-integration
   pi adapter, extension, or install (caret install) > pi-integration
   rumdl: bumping its version, touching any of its three configs or invocations (repo hygiene, plan formatting, release notes), or scripts/tasks/dev/fake-plan.md > rumdl-rules
-  documentation: which doc to update — README, the docs/ reference pages (CONFIGURING, RUNNING, ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the docs/ router, or the doc map itself > documentation-rules
+  documentation: which doc to update — README, the docs/ reference pages (CONFIGURING, RUNNING, ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the docs/ router, the docs site's pages and nav (`zensical.toml`), or the doc map itself > documentation-rules
   how caret looks, moves, sounds, or prints: colour, type, radius, motion, sound, empty/loading/error states, CLI and task output layout > readme
 architecture-rules!: Load docs/agents/architecture-rules.md
 typescript-rules!: Load docs/agents/typescript-rules.md
@@ -53,24 +53,24 @@ readme!: Load design/README.md
 ## Verifying changes
 
 `mise run preflight` is the fast local pre-push gate — lint, unit + shell tests, build,
-and artifact smoke, run concurrently; it never runs e2e. The full gate is the PR checks:
-CI runs all eight tasks, the whole e2e suite included, on every PR. So when you change
-browser behaviour, run the affected spec yourself with `mise run test e2e --json <path>` —
-preflight will not. When **you** (an agent) run preflight, pass `--json`.
-`mise run preflight --json` replaces the live human display with two compact JSON
-documents on stdout, one per line: a `start` document (the planned tasks, why that set,
-plus the filters in effect) and a `result` document carrying each task's status and
-`durationMs` and an overall `ok` boolean. The exit code is unchanged (`0` pass, `1` fail).
+the docs site build, and artifact smoke, run concurrently; it never runs e2e. The full
+gate is the PR checks: CI runs all nine tasks, the whole e2e suite included, on every PR.
+So when you change browser behaviour, run the affected spec yourself with
+`mise run test e2e --json <path>` — preflight will not. When **you** (an agent) run
+preflight, pass `--json`. `mise run preflight --json` replaces the live human display with
+two compact JSON documents on stdout, one per line: a `start` document (the planned tasks,
+why that set, plus the filters in effect) and a `result` document carrying each task's
+status and `durationMs` and an overall `ok` boolean. The exit code is unchanged (`0` pass,
+`1` fail).
 
-**The gate scopes itself to your diff, so `ok` does not always mean all seven tasks ran.**
+**The gate scopes itself to your diff, so `ok` does not always mean all eight tasks ran.**
 A change where every path is Markdown runs `lint` alone — plus `test unit` when it touches
-one of the Markdown files a test reads from disk (`MARKDOWN_READ_BY_TESTS` in
-`scripts/preflight.ts`: `scripts/tasks/dev/fake-plan.md`, `docs/ARCHITECTURE.md`,
-`THIRD_PARTY_LICENSES.md`, `docs/DEVELOPMENT.md`, and `docs/CONFIGURING.md`). Anything
-else runs the full seven, as does an empty or unreadable diff. Read the `start` document's
+one of the Markdown files a test reads from disk (listed in `MARKDOWN_READ_BY_TESTS` in
+`scripts/preflight.ts`), and `docs:build` when it touches anything under `docs/`. Anything
+else runs the full eight, as does an empty or unreadable diff. Read the `start` document's
 `selection` object before you report a run as green: `{"narrowed": true, "reason": "…"}`
 means you proved less than the whole gate, and `schemaVersion` is `2` precisely because
-`ok` now means "every task that ran passed". `--full` forces all seven — it is the one
+`ok` now means "every task that ran passed". `--full` forces all eight — it is the one
 preflight flag that works without `--json` too. Note that `lint` always scans the whole
 tree even when the gate narrows, so cross-file link fragments stay checked.
 

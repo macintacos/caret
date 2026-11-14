@@ -62,7 +62,7 @@ mise run test bats  # the hermetic shell suites under scripts/; `test mod` the m
 mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-check
 mise run format     # Biome (write)
 mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bundle`
-mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ mod) + build + smoke, scoped to the diff
+mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ mod) + build + docs build + smoke, scoped to the diff
 mise run verify     # check the service unit against a real supervisor: `verify macos` or `verify linux`
                     # macos drives this Mac's own launchctl; linux boots a real systemd in a container
 ```
@@ -603,6 +603,7 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 | `build` — bare, `ui`, `bin`, `bundle`               | `scripts/tasks/build.ts`        | Bare is the umbrella; `mise run build bin` reaches a target.                      |
 | `test` — bare / `unit`, `e2e`, `bats`, `mod`        | `scripts/tasks/test.ts`         | Bare and `unit` are the same bun target; `e2e` is Playwright; `bats` is the shell suites under `scripts/`; `mod` is `claude plugin test mod`. The first two carry `--quiet`, `--verbose`, and `--json` ahead of their forwarded args; `bats` and `mod` carry `--json` alone. |
 | `smoke` — bare, `bin`, `bundle`                     | `scripts/tasks/smoke.ts`        | Bare smokes both artifacts.                                                       |
+| `docs` — `build`, `serve`                           | `scripts/tasks/docs.ts`         | `build` writes `site/` and fails on a broken link, anchor, or nav entry; `serve` previews at http://localhost:2273/caret/ and forwards its args to `zensical serve`. |
 | `assets`                                            | `scripts/tasks/assets.ts`       | Regenerates the README hero images, one per appearance.                           |
 | `lint`, `format`, `caret`                           | `scripts/tasks/lint.ts` et al.  | Passthroughs: operands and flags reach the underlying tool. Only `caret` forwards a bare `--help`. |
 | `setup`                                             | `scripts/tasks/setup.ts`        | The bootstrap's three steps, plus the e2e browsers (Chromium and WebKit).         |
@@ -671,22 +672,18 @@ diff, plus untracked files — and picks a task set from them:
   Markdown is read by no test.
 - **…and one of them is on the exception list** → `lint` and `test unit`. A handful of
   Markdown files really are read from disk at test time, so `test unit` can observe a
-  change to them. They are listed as `MARKDOWN_READ_BY_TESTS` in `scripts/preflight.ts`:
-  `scripts/tasks/dev/fake-plan.md` (`test/scripts/dev-driver.test.ts` asserts on its
-  content), `docs/ARCHITECTURE.md` (`test/adapters/opencode/docs-cache-path.test.ts`
-  checks the `rm -rf` cache path it prints), `THIRD_PARTY_LICENSES.md`
-  (`ui/src/lib/icons.test.ts` checks its table against the icon registry), this page
-  (`test/scripts/dev-driver.test.ts` checks the line citations the fake plan makes into
-  it), and `docs/CONFIGURING.md` (`test/core/theme/schema.test.ts` parses its example
-  theme file).
+  change to them. They are listed as `MARKDOWN_READ_BY_TESTS` in `scripts/preflight.ts`,
+  where each entry names the test that reads it.
   **Add to that list whenever a test starts reading a Markdown file at run time** — the
   suite checks that each listed path still exists, but nothing can catch an omission, and
   an omission silently stops running a real check.
-- **Anything else** → all seven. That covers a non-Markdown path, an empty diff, and a
+- **…and any of them is under `docs/`** → `docs:build` joins either set above, so a broken
+  site link or nav entry fails before push.
+- **Anything else** → all eight. That covers a non-Markdown path, an empty diff, and a
   diff that could not be read at all (no `origin/HEAD`, a shallow clone). The default is
   always the full gate; narrowing is an optimisation, never a weakening.
 
-`mise run preflight --full` forces all seven regardless. Unlike `-v` / `--grep` /
+`mise run preflight --full` forces all eight regardless. Unlike `-v` / `--grep` /
 `--task`, it is not `--json`-only — the human display narrows too, so it needs the same
 escape hatch.
 
@@ -709,14 +706,14 @@ entirely by those links.
 The local gate never runs `test e2e`; the PR checks are the full gate.
 `.github/workflows/ci.yml` runs on every PR against `main` and on pushes to `main`, with
 one job per preflight task, each named after its task (`lint`, `test unit`, `test bats`,
-`test mod`, `build ui`, `test e2e`, `build bin`, `smoke`). `build ui` hands `ui/dist` to
-`test e2e` and `build bin` as an artifact, and `build bin` hands the binary to `smoke`.
-The e2e suite runs as four shard jobs, because one 4-vCPU runner cannot finish it inside
-Playwright's 15-minute global timeout; the `test e2e` check passes only when every shard
-does. Caches are saved only on `main` pushes: a cache saved from a PR is restorable by
-that PR alone and still counts against the repository's cache quota, where it evicts
-main's. The e2e shards' apt packages are the exception — `cache-apt-pkgs-action` saves on
-any miss, so a PR that changes the package set saves a copy of its own.
+`test mod`, `build ui`, `test e2e`, `build bin`, `smoke`, `docs:build`). `build ui` hands
+`ui/dist` to `test e2e` and `build bin` as an artifact, and `build bin` hands the binary
+to `smoke`. The e2e suite runs as four shard jobs, because one 4-vCPU runner cannot finish
+it inside Playwright's 15-minute global timeout; the `test e2e` check passes only when
+every shard does. Caches are saved only on `main` pushes: a cache saved from a PR is
+restorable by that PR alone and still counts against the repository's cache quota, where
+it evicts main's. The e2e shards' apt packages are the exception — `cache-apt-pkgs-action`
+saves on any miss, so a PR that changes the package set saves a copy of its own.
 
 - Job names are what branch protection matches — renaming one drops it from the required
   checks.
@@ -733,6 +730,8 @@ any miss, so a PR that changes the package set saves a copy of its own.
    guard (`source .../scripts/bootstrap.sh || exit 1`) above
    `exec bun scripts/tasks/cli.ts <name> "$@"`, carrying `#MISE raw_args=true` so the CLI
    owns `--help`, plus any `#MISE description=` and `#MISE depends=[...]` the task needs.
+   A namespaced task (`docs:build`) lives one directory down, as `.mise/tasks/docs/build`,
+   and sources bootstrap one `../` further up.
 4. Cover its parsing contract in `test/scripts/tasks-cli.test.ts`, alongside every other
    subcommand's.
 
@@ -755,7 +754,10 @@ that whole class of footgun.
 `/release-caret` bumps the version, tags main, and drafts the GitHub Release; the tag push
 runs `.github/workflows/publish.yml`, which builds, smoke-tests, and stages the version on
 npm over OIDC trusted publishing, with no npm token. The operator approves the stage with
-npm 2FA, and `release publish` makes the Release live once npm serves the version.
+npm 2FA, and `release publish` makes the Release live once npm serves the version. The
+same `v*` tag runs `.github/workflows/docs.yml`, which rebuilds the docs site and deploys
+it to GitHub Pages; a manual run (Actions → docs → Run workflow) ships an urgent docs fix
+between releases.
 
 One-time setup, before the first CI release:
 
