@@ -63,4 +63,4 @@ logs, whatever this setting says.
 
 - Check your install with [Diagnose a problem](diagnostics.md).
 - See every logging setting in
-  [The `[logging]` table](../reference/config-file.md#the-logging-table).
+    [The `[logging]` table](../reference/config-file.md#the-logging-table).

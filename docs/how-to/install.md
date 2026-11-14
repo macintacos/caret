@@ -10,10 +10,10 @@ pi. It also covers running caret yourself instead of having it start at login.
 You need:
 
 - macOS or Linux. Windows is best-effort and runs caret on demand only; see
-  [Platform support](../reference/platform-support.md) for what differs.
+    [Platform support](../reference/platform-support.md) for what differs.
 - [`bun`](https://bun.sh) on your PATH.
 - At least one [agent host](../reference/glossary.md#agent-host) at its minimum version,
-  listed below.
+    listed below.
 
 Agent host minimums:
 
@@ -37,7 +37,7 @@ It then asks how to run the
 
 - **Keep it running** (recommended): the background service starts at login.
 - **I'll run it myself**: you start it by hand when you want it. Without it, caret still
-  starts when your agent sends a plan. See [Run caret yourself](#run-caret-yourself).
+    starts when your agent sends a plan. See [Run caret yourself](#run-caret-yourself).
 
 While the background service runs, the [review page](../reference/glossary.md#review-page)
 is at <http://caret.localhost:42718>.
@@ -90,15 +90,15 @@ and ignores a project-scope install (`pi install -l`).
 Run `/reload` in pi, or restart it. pi has no planning mode of its own, so caret adds one:
 
 1. `/caret <what you want done>` turns on planning mode. The agent writes its plan into
-   `~/.pi/agent/plans`, and caret blocks its `edit` and `write` tools outside that folder
-   until you approve. Shell commands are only discouraged while planning, not blocked.
-   `/caret plan` on its own turns planning mode off.
+    `~/.pi/agent/plans`, and caret blocks its `edit` and `write` tools outside that folder
+    until you approve. Shell commands are only discouraged while planning, not blocked.
+    `/caret plan` on its own turns planning mode off.
 2. While a plan waits, a notice shows above the editor and the footer reads
-   `^ plan waiting`. Press `ctrl+alt+o` to open the plan in your browser. In Terminal.app
-   or iTerm2, set Option to act as Meta for that key to reach pi.
+    `^ plan waiting`. Press `ctrl+alt+o` to open the plan in your browser. In Terminal.app
+    or iTerm2, set Option to act as Meta for that key to reach pi.
 3. Approve, and the agent implements the plan. Request changes, and it revises the plan
-   and presents it again. Press Esc in pi to cancel a waiting review; the agent is told
-   not to implement the plan.
+    and presents it again. Press Esc in pi to cancel a waiting review; the agent is told
+    not to implement the plan.
 
 Run `/caret demo` to try the review page. From
 [Read the plan](../tutorial/first-plan.md#read-the-plan) on, the tutorial applies as
@@ -203,9 +203,9 @@ marketplace registered.
 ## Next steps
 
 - Review a plan from start to finish in
-  [Review your first plan](../tutorial/first-plan.md).
+    [Review your first plan](../tutorial/first-plan.md).
 - Change caret's settings in the [config file](../reference/config-file.md).
 - Open the review page from another device with
-  [Open caret from another device](remote-access.md).
+    [Open caret from another device](remote-access.md).
 - See what the install changes in each agent host in
-  [What `caret install` adds](../explanation/caret-install.md).
+    [What `caret install` adds](../explanation/caret-install.md).

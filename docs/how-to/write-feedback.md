@@ -117,4 +117,4 @@ chip or not.
 
 - Read the plan you are commenting on with [Read a plan](read-a-plan.md).
 - Send your comments and decide on a plan in
-  [Review your first plan](../tutorial/first-plan.md#request-changes).
+    [Review your first plan](../tutorial/first-plan.md#request-changes).
