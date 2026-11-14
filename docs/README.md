@@ -20,8 +20,8 @@ Find the row that matches what you came here to do, then follow the link.
 | Tell which plans arrived while you were reading another one | [Get notified about plans § Find plans you have not read](how-to/notifications.md#find-plans-you-have-not-read) |
 | Clear a cmux pane's unread mark from a review | [Get notified about plans § Clear cmux unread marks](how-to/notifications.md#clear-cmux-unread-marks) |
 | Find out what the mark on the settings button means, or stop update notices | [Install caret § When an update is out](how-to/install.md#when-an-update-is-out) |
-| Open the review UI from another device, or log every device out | [`RUNNING.md` § Reaching caret from another device](RUNNING.md#reaching-caret-from-another-device) |
-| Have an agent on another computer send its plans to the server's caret | [`RUNNING.md` § Reviewing on the server from another device](RUNNING.md#reviewing-on-the-server-from-another-device) |
+| Open the review UI from another device, or log every device out | [Open caret from another device](how-to/remote-access.md) |
+| Have an agent on another computer send its plans to the server's caret | [Send plans to caret on a server](how-to/remote-review.md) |
 | Stop caret starting with your machine, or remove it | [Turn caret off](how-to/turn-off.md) |
 | Find the logs, or scrub them before sharing | [Find caret's logs](how-to/logs.md) |
 | Work out why caret isn't working, or gather a report to share | [Diagnose a problem](how-to/diagnostics.md) |

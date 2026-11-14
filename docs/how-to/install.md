@@ -206,6 +206,6 @@ marketplace registered.
   [Review your first plan](../tutorial/first-plan.md).
 - Change caret's settings in the [config file](../reference/config-file.md).
 - Open the review page from another device with
-  [Reaching caret from another device](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#reaching-caret-from-another-device).
+  [Open caret from another device](remote-access.md).
 - See what the install changes in each agent host in
   [Installing with `caret install`](https://github.com/macintacos/caret/blob/main/docs/ARCHITECTURE.md#installing-with-caret-install).
