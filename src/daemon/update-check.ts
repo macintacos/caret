@@ -23,8 +23,8 @@ import { type BuildKind, errorMessage, type UpdateReport, type UpdateStatus } fr
  * and this stamp is what keeps both to roughly one call a day. */
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-/** What takes a published install to the newest release — the same command the README
- * documents for updating. */
+/** What takes a published install to the newest release — the same command
+ * `docs/how-to/install.md` § Update caret documents. */
 const REFRESH_COMMAND = "bunx --no-cache @macintacos/caret@latest install --refresh";
 
 /** What takes a local build to trunk's tip. `mise run build --install` is the real task

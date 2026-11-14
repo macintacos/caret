@@ -23,6 +23,7 @@ nav = [
   ] },
   { "How-to guides" = [
     "how-to/index.md",
+    { "Install caret" = "how-to/install.md" },
   ] },
   { "Reference" = [
     "reference/index.md",
