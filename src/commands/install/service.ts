@@ -223,8 +223,8 @@ export async function uninstallService(
  * nobody was asked — the machine left as found. */
 export type ServiceChoice = "always-on" | "run-yourself" | "as-found";
 
-/** `caret serve` from the published package — the same command README § Running caret
- * yourself documents. */
+/** `caret serve` from the published package — the same command
+ * `docs/how-to/install.md` § Run caret yourself documents. */
 const SERVE_COMMAND = "bunx --no-cache @macintacos/caret@latest serve";
 
 /** Bring the caret service in line with this install's choice, reporting through `ui`. */

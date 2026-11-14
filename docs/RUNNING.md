@@ -612,7 +612,7 @@ Two commands turn caret off, and they turn off different amounts of it:
 
 Answering **I'll run it myself** removes the service, and the install prints how to bring
 the review UI up by hand: `caret serve` keeps it up until you stop it with Ctrl+C (see
-[Running caret yourself](../README.md#running-caret-yourself)). The choice isn't saved
+[Run caret yourself](how-to/install.md#run-caret-yourself)). The choice isn't saved
 anywhere. A later `caret install` at a terminal asks again. One off a terminal can't ask,
 so it leaves things as they are: it refreshes a service that is already registered, and
 registers none where there isn't one.
