@@ -8,9 +8,8 @@ install it, and basic usage, start there.
 
 ## How it works
 
-Every plan makes the same round trip: your coding agent hands it to caret, caret serves it
-to you in your browser from an HTTP daemon on your own machine (loopback-only unless you
-expose it), and your decision goes back to the agent as its answer.
+The user-level round trip is on [How caret works](explanation/how-caret-works.md); the
+diagram below is the wire-level view.
 
 ```mermaid
 sequenceDiagram
@@ -34,11 +33,6 @@ sequenceDiagram
     end
 ```
 
-> [!IMPORTANT]
-> **Fail-safe = deny.** On a bad payload, an unreachable daemon, a timeout, a signal, or
-> daemon death, caret emits `deny` with an explanation — it never auto-approves an
-> unreviewed plan.
-
 Your agent reaches caret through `bin/caret`, a small entrypoint shim that runs caret's
 subcommands: Claude Code fires it as a hook, OpenCode's plugin spawns it from a tool. The
 shim execs the platform-native compiled binary (`bin/caret-native`) when a
@@ -47,24 +41,18 @@ the marketplace and npm installs ship.
 
 ### The daemon's lifecycle
 
-What starts a daemon decides how long it stays up. There are three ways:
-
-- **The caret service.** `caret install`, answered **Keep it running**, registers a
-  launchd agent on macOS or a systemd user unit on Linux. The supervisor starts the daemon
-  at login and restarts it when it exits. That daemon is **resident**: it stays up until
-  told to stop.
-- **`caret serve`.** Also resident, but in your terminal's foreground with no supervisor
-  behind it.
-- **On demand.** When nothing holds the port and no service will, the hook spawns a daemon
-  itself. That **on-demand daemon** exits after `daemon.idle_ms` with no pending review,
-  no open long-poll, and no live UI tab.
+A daemon the service (a launchd agent on macOS, a systemd user unit on Linux) or
+`caret serve` started is **resident**, and the service's is **supervised**; one a hook
+spawned is **on-demand** and exits after `daemon.idle_ms` with no pending review, no open
+long-poll, and no live UI tab. [The background service](explanation/background-service.md)
+covers what each means for a user.
 
 The service never names a caret build. Its unit runs the launcher, `bin/caret-launcher`,
 copied to `$XDG_STATE_HOME/caret/bin/caret`, which picks caret each time it starts: the
 checkout a `--from-local` install pinned, else the highest-versioned caret across the
 Claude Code plugin cache, the OpenCode package cache, pi's npm folder, and caret's own
 copies under `$XDG_STATE_HOME/caret/roots/` (an agent's root wins a tie). Nothing in the
-unit depends on the version, so restarting the service is the upgrade.
+unit depends on the version.
 
 Every review and prewarm hook first makes sure a current daemon holds the port
 (`ensureDaemon`, `src/daemon/lifecycle.ts`):
@@ -97,10 +85,6 @@ Every review and prewarm hook first makes sure a current daemon holds the port
   still waits for its successor. Nothing answering there denies the review. Every bullet
   above assumes the daemon runs on the hook's machine.
 
-`caret serve` retires an unsupervised daemon on its way in, including one the lock places
-on another address after a `daemon.host` or `daemon.port` edit, and refuses to start when
-the service holds the port or runs that daemon.
-
 A daemon steps down by draining, on `POST /api/retire` or SIGTERM, which is how a
 supervisor stops it. It answers new reviews with `503`, lets in-flight writes land and
 unread decisions reach their hooks, then releases the port and exits 0, within
@@ -114,12 +98,8 @@ tick (`src/daemon/upkeep.ts`) does that work instead:
 - `update-check` re-runs the update check, which its 24-hour stamp still keeps to about
   once a day.
 - `review-sweep` drops reviews unchanged for a week from memory. A starting daemon's
-  reload of unresolved reviews from disk skips those too, so a revision that arrives more
-  than a week after a rejection opens a new review.
+  reload of unresolved reviews from disk skips those too.
 - `stderr-rotate` rotates `logs/daemon-stderr.log`, for a supervised daemon only.
-
-To check, restart, or stop the service, see
-[Run the background service](how-to/background-service.md#check-restart-or-stop-it).
 
 ### Architecture: tool-agnostic core + agent adapter
 
@@ -269,16 +249,11 @@ session `setMode` permission and emits the resulting
   "decision": { "behavior": "deny", "message": "<formatted annotations + comment>" } } }
 ```
 
-**Why the review has a timeout.** The `caret review` hook long-polls the daemon for the
-reviewer's decision, but Claude Code kills any hook that outruns its `timeout` budget —
-and a killed `PermissionRequest` hook fails _open_, letting the plan proceed unreviewed.
-So caret bounds its own wait with `review.timeout_s` (default 1 hour) and fail-safe-denies
-when it elapses — a controlled deny that lands before Claude Code would kill the hook. To
-guarantee that ordering, `review.timeout_s` is pinned strictly below the hook's `timeout`
-(`3900` s in `hooks/hooks.json`); the schema rejects any value at or above it, and a
-coupling test keeps the two numbers from drifting into the unsafe direction. The timeout
-is therefore a requirement of the hook model — not a limit on how long you may take — so
-raise `review.timeout_s` (up to just under 3900 s) if you want a longer window.
+`review.timeout_s` is pinned strictly below the hook's `timeout` (`3900` s in
+`hooks/hooks.json`): the schema rejects any value at or above it, and a coupling test
+keeps the two from drifting.
+[Why a review times out](explanation/how-caret-works.md#why-a-review-times-out) gives the
+reason.
 
 caret ships to Claude Code as the `caret@caret` plugin from its GitHub-based marketplace,
 `macintacos/caret`. `caret install` drives Claude's own CLI to register and install it —

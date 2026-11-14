@@ -25,7 +25,7 @@ Find the row that matches what you came here to do, then follow the link.
 | Stop caret starting with your machine, or remove it | [Turn caret off](how-to/turn-off.md) |
 | Find the logs, or scrub them before sharing | [Find caret's logs](how-to/logs.md) |
 | Work out why caret isn't working, or gather a report to share | [Diagnose a problem](how-to/diagnostics.md) |
-| Understand how caret works, and how it hooks into your agent | [`ARCHITECTURE.md` § How it works](ARCHITECTURE.md#how-it-works) |
+| Understand how caret works, and how it hooks into your agent | [`ARCHITECTURE.md` § How it works](explanation/how-caret-works.md) |
 | Call the review tool from a skill of your own | [Call the review tool from your own skill](how-to/review-tool.md) |
 | Find where something lives in the source tree | [`ARCHITECTURE.md` § Layout](ARCHITECTURE.md#layout) |
 | Set up a local checkout for the first time, or find where tests live | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
