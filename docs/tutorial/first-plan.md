@@ -28,7 +28,7 @@ bunx --no-cache @macintacos/caret@latest install
 ```
 
 The command first asks which agent hosts to add caret to. Claude Code is already selected,
-so press Enter. When it asks how to run the
+so press `enter`. When it asks how to run the
 [background service](../reference/glossary.md#background-service), answer
 **Keep it running**. The background service starts now and at every login.
 

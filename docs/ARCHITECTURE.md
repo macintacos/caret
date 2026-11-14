@@ -3,8 +3,7 @@
 *Audience: contributors who want caret's internals — the core/adapter boundary, the
 daemon's lifecycle, the agent adapters, and the source layout.*
 
-Contributor material, kept off the [docs site](index.md). For how caret works as a user
-sees it, read [How caret works](explanation/how-caret-works.md).
+For caret as a user sees it, read the [docs site](https://macintacos.github.io/caret/).
 
 ## How it works
 

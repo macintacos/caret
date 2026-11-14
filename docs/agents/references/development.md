@@ -4,8 +4,8 @@
 
 `docs/DEVELOPMENT.md` is the contributor development reference, kept off the docs site:
 building from source, the `mise` task catalog and dev workflow
-(`mise run build --install`, `mise run dev`, `mise run preflight`), the tasks CLI, and
-vendored icons.
+(`mise run build --install`, `mise run dev`, `mise run preflight`), the tasks CLI,
+vendored icons, and dev and preflight settings.
 
 When to edit it:
 
@@ -20,12 +20,12 @@ When to edit it:
 Two couplings to respect.
 
 `## Development` is load-bearing as an anchor:
-[`CONTRIBUTING.md`](../../../CONTRIBUTING.md), [`ARCHITECTURE.md`](../../ARCHITECTURE.md),
-and the router in [`docs/README.md`](../../README.md) all link
-`DEVELOPMENT.md#development`; the router also points at `### The tasks CLI`. `rumdl`'s
-MD051 resolves a cross-file fragment only when the file it points into is in the same
-scan, so a whole-tree `mise run lint` catches the break but the pre-commit hook — staged
-files only — does not. Rename one of these and run the full gate, not just the hook.
+[`CONTRIBUTING.md`](../../../CONTRIBUTING.md), [`test-layout.md`](../test-layout.md), and
+the router in [`docs/README.md`](../../README.md) all link `DEVELOPMENT.md#development`;
+the router also points at `### The tasks CLI`. `rumdl`'s MD051 resolves a cross-file
+fragment only when the file it points into is in the same scan, so a whole-tree
+`mise run lint` catches the break but the pre-commit hook — staged files only — does not.
+Rename one of these and run the full gate, not just the hook.
 
 `scripts/tasks/dev/fake-plan.md` cites this file **by line**, in several places, and its
 bullets assert what the preview does with them.

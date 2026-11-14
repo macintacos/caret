@@ -4,7 +4,8 @@
 
 `docs/ARCHITECTURE.md` is the contributor account of caret's internals, kept off the docs
 site: the tool-agnostic core / agent-adapter boundary, the daemon's lifecycle, the Claude
-Code, OpenCode, and pi adapter internals, and the source layout.
+Code, OpenCode, and pi adapter internals, the source layout, and where the built-in theme
+files live.
 
 When to edit it:
 
@@ -19,15 +20,9 @@ When to edit it:
 A change a user can see also updates the matching `docs/explanation/` page:
 `caret-install.md`, `background-service.md`, or `how-caret-works.md`.
 
-Two couplings to respect. The line-anchor claim in
-[`docs/how-to/review-tool.md`](../../how-to/review-tool.md) — the sentence beginning "A
-feedback line reference indexes…" — is pinned verbatim and **exactly once** by
-`test/structure/line-anchor-claim.test.ts`, which requires the same sentence in
-`ui/src/lib/feedback.ts` and `bridge/review-bridge.ts`: reword it in all three or in none,
-and keep emphasis and links out of the sentence, which break the match too. And the
-adapter design detail lives in [`opencode-integration.md`](../opencode-integration.md) and
-[`pi-integration.md`](../pi-integration.md); this page is the human-facing narrative, not
-the rule file.
+The adapter design detail lives in [`opencode-integration.md`](../opencode-integration.md)
+and [`pi-integration.md`](../pi-integration.md); this page is the human-facing narrative,
+not the rule file.
 
 Use the `/doc-coauthoring` skill for any substantive prose pass — it keeps the section
 on-audience and scannable.

@@ -78,7 +78,7 @@ block, ready to share.
 
 `/caret doctor` works as in Claude Code: it asks for JSON or human-readable output,
 repeats each failing check's fix, and ends with the report in a code block. It leaves the
-session on the plan agent.
+session on the `plan` agent.
 
 ### pi
 

@@ -28,7 +28,7 @@ which-doc: Edit every doc the change affects
   a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, plan rendering, testing, icons, settings, dependencies, OpenCode, pi, rumdl) > edit-a
   the router for the docs/ directory: which page answers a given reader's question > readme-2
   design direction: how caret looks, moves, sounds, or prints, its deliberate exceptions, and the decision log > edit-design
-  a user-facing page on the docs site (tutorial, how-to guide, reference, explanation), such as install, notifications, logs and diagnostics, the config file and user-facing CARET_* variables, the theme file format, platform support, how caret works, or plan formatting, or its place in the site's nav > site
+  a user-facing page on the docs site, or its place in the site's nav: a tutorial, how-to guide, reference, or explanation page, such as install, notifications, logs and diagnostics, the config file and user-facing CARET_* variables, the theme file format, platform support, how caret works, or plan formatting > site
 readme!: Edit README.md
 architecture!: Edit docs/ARCHITECTURE.md
 development!: Edit docs/DEVELOPMENT.md
