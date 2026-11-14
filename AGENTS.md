@@ -30,7 +30,7 @@ what-does: Load the file for every area the change touches
   OpenCode adapter, plugin, or install (caret install) > opencode-integration
   pi adapter, extension, or install (caret install) > pi-integration
   rumdl: bumping its version, touching any of its three configs or invocations (repo hygiene, plan formatting, release notes), or scripts/tasks/dev/fake-plan.md > rumdl-rules
-  documentation: which doc to update — README, the docs site's pages and nav (`zensical.toml`), the contributor pages (ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the docs/ router, or the doc map itself > documentation-rules
+  documentation: which doc to update — README, the docs site's pages and nav (`zensical.toml`), the contributor pages (ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the docs/ router, or the doc map itself; whether a change needs a site page, and the docs-not-needed label > documentation-rules
   how caret looks, moves, sounds, or prints: colour, type, radius, motion, sound, empty/loading/error states, CLI and task output layout > readme
 architecture-rules!: Load docs/agents/architecture-rules.md
 typescript-rules!: Load docs/agents/typescript-rules.md
@@ -144,3 +144,16 @@ cross-file state. `bun run test` (the `package.json` script) carries both flags 
 fine; `bun test --conditions browser <path>` is the direct form. Why the flag cannot move
 into `bunfig.toml`, and the guard that raises the actionable error:
 `docs/agents/svelte-rules.md` § One runner.
+
+### The docs gate
+
+The `docs gate` PR check fails a PR that changes a user-visible path but no page the docs
+site publishes. A change needs a site page when it changes something a page describes: a
+CLI command, flag, help text, or output; what `caret install` sets up; a config key,
+default, or `CARET_*` variable; the review page; the `/caret` command or a host plugin;
+the theme file format; plan formatting; diagnostics; or the background service. Update
+that page in the same change. Apply `docs-not-needed` only when the change leaves every
+page accurate (a refactor, an internal subcommand, a test helper, a typo no page quotes),
+with `gh pr edit <number> --add-label docs-not-needed`, and say in the PR body why no page
+changed. Which paths count:
+[`docs/agents/documentation-rules.md` § The docs gate](docs/agents/documentation-rules.md#the-docs-gate).
