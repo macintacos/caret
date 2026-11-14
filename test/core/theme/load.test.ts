@@ -188,9 +188,8 @@ describe("collectThemes", () => {
   });
 });
 
-test("docs/CONFIGURING.md names every built-in theme id", () => {
-  const doc = readFileSync(join(REPO_ROOT, "docs/CONFIGURING.md"), "utf8");
-  const section = doc.split("\n### Where caret finds theme files\n")[1]?.split("\n### ")[0] ?? "";
-  const named = [...section.matchAll(/`([a-z0-9-]+)`/g)].map((m) => m[1]);
+test("docs/reference/built-in-themes.md names every built-in theme id", () => {
+  const doc = readFileSync(join(REPO_ROOT, "docs/reference/built-in-themes.md"), "utf8");
+  const named = [...doc.matchAll(/`([a-z0-9-]+)`/g)].map((m) => m[1]);
   for (const id of BUILTIN_THEME_IDS) expect(named).toContain(id);
 });

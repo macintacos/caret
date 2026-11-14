@@ -312,10 +312,10 @@ describe("themeFileJsonSchema", () => {
   });
 });
 
-describe("docs/CONFIGURING.md", () => {
+describe("docs/reference/theme-files.md", () => {
   test("its example theme file is valid and is caret-dark", () => {
-    const doc = readFileSync(join(REPO_ROOT, "docs/CONFIGURING.md"), "utf8");
-    const section = doc.split("\n## Theme files\n")[1]?.split("\n## ")[0] ?? "";
+    const doc = readFileSync(join(REPO_ROOT, "docs/reference/theme-files.md"), "utf8");
+    const section = doc.split("\n## Example\n")[1]?.split("\n## ")[0] ?? "";
     const exampleJson = section.match(/```json\n([\s\S]*?)\n```/)?.[1] ?? "";
     expect(parseThemeFile(exampleJson).ok).toBe(true);
     const { $schema, ...example } = JSON.parse(exampleJson);
@@ -326,8 +326,8 @@ describe("docs/CONFIGURING.md", () => {
   });
 
   test("its syntax tables list every role with its scopes and fallback", () => {
-    const doc = readFileSync(join(REPO_ROOT, "docs/CONFIGURING.md"), "utf8");
-    const section = doc.split("\n### `syntax`\n")[1]?.split("\n### ")[0] ?? "";
+    const doc = readFileSync(join(REPO_ROOT, "docs/reference/theme-files.md"), "utf8");
+    const section = doc.split("\n## `syntax`\n")[1]?.split("\n## ")[0] ?? "";
     const codeSpan = (s: string) => `\`${s}\``;
     const fallbacks: Record<string, string> = SYNTAX_ROLE_FALLBACKS;
     const documented = section
