@@ -136,14 +136,48 @@ The command asks the same two questions as the install. It then takes the newest
 each agent host you pick, without asking whether to replace a cached or pinned OpenCode
 copy, and restarts the background service if you keep it running.
 
-caret checks for a newer version once a day. When one is out, the review page shows:
+### When an update is out
 
-- a notice that opens **What's new**;
-- a mark on the settings button;
-- **Settings → Updates**, which names the version and the command to take it.
+caret checks for a newer version about once a day. When one is out, the review page shows
+a notice the next time you open or reload it. The notice names the version. It stays until
+you read or dismiss it. It appears once per version, so a newer release gets its own
+notice.
 
-To turn the check off, use that same pane. Or set this in `~/.config/caret/config.toml`,
-as
+**What's new** on the notice opens a dialog listing what changed since your version. On an
+installed caret, it shows the release notes for each release you skipped. On a caret you
+built from a clone of its repository, it shows the commits on caret's main branch since
+your build. Its footer links the full comparison on GitHub and repeats the upgrade
+command. The dialog contacts GitHub only when it opens.
+
+After you upgrade, the first page load opens the dialog by itself, with the notes for each
+release since the version this browser last saw. Closing it marks the new version seen;
+until then, a reload opens it again. The first time you open caret in a browser, caret
+records the version without opening the dialog. With update checks off, the dialog stays
+shut.
+
+While an update waits, a small mark sits on the settings button and on the **Updates** row
+in **Settings**, so you can find the update again after you dismiss the notice.
+
+**Settings → Updates** shows the version you run, the version available, and the exact
+command that installs it. The command matches how this caret was installed. caret has no
+update button: you run the command yourself. While an update waits, a **What's new**
+button in the pane opens the same dialog.
+
+The pane can show two messages that are not errors:
+
+- **Nothing to compare against.** A caret built from a commit that is not on caret's main
+  branch has nothing for GitHub to compare it to.
+- **Update checks are off.** Either caret runs straight from a clone of its repository, or
+  you turned the checks off.
+
+### Turn update checks off
+
+Turn off the **Check for updates** switch in **Settings → Updates**. It takes effect at
+once: the notice and both marks go away. Turning it back on checks right away, unless
+caret already checked in the last day, and shows the answer the next time you open or
+reload the review page.
+
+Or set this in `~/.config/caret/config.toml`, as
 [the `[updates]` table](https://github.com/macintacos/caret/blob/main/docs/CONFIGURING.md#the-updates-table)
 describes:
 

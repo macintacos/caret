@@ -1,61 +1,10 @@
 # caret — Running
 
-*Audience: users running caret day to day — reading a plan, desktop notifications, sound,
-cmux unread marks, and logging & debugging.*
+*Audience: users running caret day to day — the caret service, reaching caret from another
+device, turning caret off, and logging & debugging.*
 
 Part of the deep reference behind [README.md](../README.md). For what caret is, how to
 install it, and basic usage, start there.
-
-## Update notices
-
-The daemon asks whether a newer caret is out (see
-[`CONFIGURING.md` § The `[updates]` table](CONFIGURING.md#the-updates-table) for what it
-asks, and [Install caret § Update caret](how-to/install.md#update-caret) for how to turn
-it off). An on-demand daemon asks when it starts, a resident one asks again on an hourly
-tick, and a 24-hour stamp keeps either to about once a day. This is what you see when the
-answer is yes.
-
-A toast arrives on your next page load, and it names the version rather than just saying
-one exists. It waits until you read or dismiss it instead of fading, and it appears
-**once per version** — the same release never nags you twice, but a newer one gets its own
-notice. **What's new** on the toast opens a dialog listing what changed since your
-version.
-
-The dialog shows the release notes for every release you skipped on an installed caret,
-and the main commits since your build on a locally-built one. Its footer links the full
-comparison on GitHub and repeats the upgrade command. It fetches from GitHub only when you
-open it.
-
-After you upgrade, the first page load opens the dialog by itself, with the notes for
-every release since the version this browser last saw. Closing it marks the new version
-seen; until then a reload opens it again. A browser meeting caret for the first time
-records the version quietly instead, and with update checks off it never asks GitHub, so
-it stays shut.
-
-While an update is waiting, a small mark sits on the settings button in the top bar and on
-the **Updates** row in the settings rail, so the notice is findable again after you
-dismiss it.
-
-The **Updates** pane says which version you are running, which is available, and the exact
-command that installs it — the command matches how *this* caret was installed, so a
-published install and a locally-built one are told apart for you. There is no update
-button: caret tells you what to run, and you run it. While an update is waiting, a
-**What's new** button there opens the same dialog.
-
-Two readings are not problems, and the pane says so rather than reading like a failure:
-
-- **Nothing to compare against.** A caret built locally carries a commit that isn't on
-  main, so there is nothing for GitHub to compare it to. On a development machine this is
-  the normal daily reading.
-- **Update checks are off** — either because caret is running from source, or because you
-  turned them off.
-
-The **Check for updates** switch in that pane is the same `updates.check` setting
-[`CONFIGURING.md` § The `[updates]` table](CONFIGURING.md#the-updates-table) describes,
-without the file edit. The daemon reads it on every request rather than only at startup,
-so turning it off stops the toast and both marks immediately. Turning it back on asks
-again on the spot — subject to the same once-a-day throttle as any other check — and
-reports the answer on your next load.
 
 ## The caret service
 
