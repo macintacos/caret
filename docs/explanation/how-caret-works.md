@@ -31,7 +31,8 @@ The whole trip happens on your own machine.
 
 caret's review works the same whichever agent host you use. caret has a small connector
 for each agent host. The connector hands caret the plan and gives the agent your decision
-in the form that agent host expects.
+in the form that agent host expects. See
+[What `caret install` adds](caret-install.md).
 
 ## Why a review times out
 

@@ -90,7 +90,7 @@ cancelled, or failed). The notice and planning consume the store and never redef
 - The service launcher (`bin/caret-launcher`) looks only in `~/.pi/agent`.
 
 The summary for readers outside the adapter is in
-[`../ARCHITECTURE.md#the-pi-adapter`](../ARCHITECTURE.md#the-pi-adapter).
+[What `caret install` adds](../explanation/caret-install.md#pi).
 
 ## The `/caret` command: `pi/command.ts`
 
