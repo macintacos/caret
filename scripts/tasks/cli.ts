@@ -33,6 +33,7 @@ import { runBuild, runBuildBin, runBuildBundle, runBuildUi } from "@/tasks/build
 import { runCaret } from "@/tasks/caret.ts";
 import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "@/tasks/dev/protocol.ts";
 import { type RunDevOptions, runDev } from "@/tasks/dev/run.ts";
+import { runDocsBuild, runDocsServe } from "@/tasks/docs.ts";
 import { runFormat } from "@/tasks/format.ts";
 import { runLint } from "@/tasks/lint.ts";
 import { buildReleaseCommand } from "@/tasks/release/command.ts";
@@ -63,6 +64,8 @@ export interface TaskActions {
   smokeBin: () => Promise<unknown>;
   smokeBundle: () => Promise<unknown>;
   assets: () => Promise<unknown>;
+  docsBuild: () => Promise<unknown>;
+  docsServe: (args: string[]) => Promise<unknown>;
   preflight: (args: JsonArgs) => Promise<unknown>;
 }
 
@@ -84,6 +87,8 @@ const realActions: TaskActions = {
   smokeBin: runSmokeBin,
   smokeBundle: runSmokeBundle,
   assets: runAssets,
+  docsBuild: runDocsBuild,
+  docsServe: runDocsServe,
   preflight: runPreflightCli,
 };
 
@@ -336,6 +341,25 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     .description("Regenerate the README hero images: the review UI in caret-light and caret-dark")
     .action(async () => {
       await actions.assets();
+    });
+
+  const docs = program
+    .command("docs")
+    .description("Build or preview the docs site: a `build`/`serve` target");
+  docs
+    .command("build")
+    .description("Build the docs site into site/, failing on a broken link, anchor, or nav entry")
+    .action(async () => {
+      await actions.docsBuild();
+    });
+  docs
+    .command("serve")
+    .description("Preview the docs site at http://localhost:2273/caret/, rebuilding on change")
+    .allowUnknownOption()
+    .passThroughOptions()
+    .argument("[args...]", "forwarded to zensical serve")
+    .action(async (args: string[]) => {
+      await actions.docsServe(args);
     });
 
   // `preflight`: the pre-push gate. Its --json output flags are real commander
