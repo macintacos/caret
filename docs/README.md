@@ -19,7 +19,7 @@ Find the row that matches what you came here to do, then follow the link.
 | Switch a plan between its source and a rendered preview | [Read a plan § Switch between the preview and the source view](how-to/read-a-plan.md#switch-between-the-preview-and-the-source-view) |
 | Tell which plans arrived while you were reading another one | [Get notified about plans § Find plans you have not read](how-to/notifications.md#find-plans-you-have-not-read) |
 | Clear a cmux pane's unread mark from a review | [Get notified about plans § Clear cmux unread marks](how-to/notifications.md#clear-cmux-unread-marks) |
-| Find out what the mark on the settings button means, or stop update notices | [`RUNNING.md` § Update notices](RUNNING.md#update-notices) |
+| Find out what the mark on the settings button means, or stop update notices | [Install caret § When an update is out](how-to/install.md#when-an-update-is-out) |
 | Open the review UI from another device, or log every device out | [`RUNNING.md` § Reaching caret from another device](RUNNING.md#reaching-caret-from-another-device) |
 | Have an agent on another computer send its plans to the server's caret | [`RUNNING.md` § Reviewing on the server from another device](RUNNING.md#reviewing-on-the-server-from-another-device) |
 | Stop caret starting with your machine, or remove it | [`RUNNING.md` § Turning caret off](RUNNING.md#turning-caret-off) |
