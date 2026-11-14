@@ -21,14 +21,44 @@ runs.
 
 ## Which caret it runs
 
-Each agent host has its own copy of caret, and the copies can be at different versions.
-Each time the installed service starts, it runs the newest caret installed for any
-[agent host](../reference/glossary.md#agent-host), or the copy `caret install` keeps for
-itself, so restarting it is how it upgrades. When a plan comes from a newer caret than the
-installed service runs, caret restarts the installed service (unless you pinned a local
-build). A plan from a caret of any other version replaces an on-demand service or a
-`caret serve` with its own. `caret serve` replaces an on-demand service, and refuses to
-start while the installed service runs.
+Each [agent host](../reference/glossary.md#agent-host) has its own copy of caret, and the
+copies can be at different versions. How the background service runs decides which copy it
+runs and what replaces it:
+
+- **The installed service** runs the newest caret installed for any agent host, or the
+    copy `caret install` keeps for itself, chosen each time it starts. Restarting it is
+    how it upgrades. When a plan comes from a newer caret than it runs, caret restarts it,
+    unless you pinned a local build with `caret install --from-local`.
+- **`caret serve`** runs the caret you started it with. A plan from a caret of any other
+    version replaces it. It refuses to start while the installed service runs.
+- **An on-demand service** runs the caret your agent ran. A plan from a caret of any
+    other version replaces it, and so does `caret serve`.
+
+The installed service starts through a launcher script that caret installs at
+`~/.local/state/caret/bin/caret`, under `$XDG_STATE_HOME` when that is set. Each time the
+service starts, the launcher picks which caret and which bun to run:
+
+- **caret**: the pinned local build, if any. Otherwise, the newest version found in
+    Claude Code's plugin cache, OpenCode's package cache, pi's npm folder
+    (`~/.pi/agent/npm`, the default agent dir only), and caret's own copies under
+    `~/.local/state/caret/roots/`. An agent host's copy wins a version tie. The launcher
+    skips a caret missing its executable `bin/caret` or its review page build.
+- **bun**: the one recorded at install, else the first found in `~/.bun/bin`,
+    `/opt/homebrew/bin`, `/usr/local/bin`, mise's shims and installs, then
+    `~/.asdf/shims`.
+
+caret keeps its own copy whenever `caret install` runs from npm. So after
+`caret install --refresh`, the service runs that copy until a newer caret is installed for
+an agent host. That usually happens at OpenCode's next start, when OpenCode re-resolves
+its package cache.
+
+When the launcher finds no caret anywhere, its own copies included, it looks twice more,
+five seconds apart. If it still finds none, it removes the service's unit file, itself,
+the records it reads (the bun path, the pinned build, and the service's name), and caret's
+own copies. It keeps your reviews. When caret is installed but can't run, the launcher
+stops the service instead (see
+[Fix a background service that keeps stopping](../how-to/background-service.md#fix-a-background-service-that-keeps-stopping)).
+Either way, `caret install` brings the service back.
 
 ## Housekeeping
 

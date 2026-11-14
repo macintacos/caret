@@ -2,27 +2,25 @@
 
 *Audience: anyone writing or checking a caret theme file.*
 
-A theme file is a JSON file that describes one caret theme: its name, whether it is light
-or dark, the colors of the [review page](glossary.md#review-page), and the colors used to
-highlight code and, optionally, the plan's markdown. A theme file is self-contained. caret
-derives everything else it needs, such as hairline rules, selection washes, and chip
-tints, from the colors the file names. A theme reaches caret either from its
-[themes folder](#where-caret-finds-theme-files) or by
-[uploading it](../how-to/make-a-theme.md#upload-a-theme) in **Settings → Appearance**,
-which writes it into the folder. Each theme appears in the theme picker there for its
-scheme: a dropped file after a page reload, an uploaded one straight away. When the theme
-selected for light or dark stops loading, caret shows its own theme for that scheme and
-keeps the selection, so restoring the file brings it back.
+A theme file is a JSON file that defines one caret theme: its name, its scheme (light or
+dark), the colors of the [review page](glossary.md#review-page), and the colors that
+highlight code and, optionally, the plan's Markdown. caret derives every other color it
+needs, such as hairline rules, selection washes, and chip tints, from the colors the file
+names. To make one, see [Make your own theme](../how-to/make-a-theme.md).
 
 ## Where caret finds theme files
 
 caret reads theme files from `$XDG_CONFIG_HOME/caret/themes`, or `~/.config/caret/themes`
-when `XDG_CONFIG_HOME` is unset. caret rereads the folder each time the review page loads,
-so adding, editing, or deleting a file takes effect on the next page load, without a
-restart. A missing or empty folder is fine.
+when `XDG_CONFIG_HOME` is unset. A missing or empty folder is fine.
+[Uploading a theme](../how-to/make-a-theme.md#upload-a-theme) in **Settings → Appearance**
+writes it into this folder.
+
+caret rereads the folder each time the review page loads, so a file you add, edit, or
+delete takes effect on the next page load, without a restart. An uploaded theme appears
+straight away. Each theme appears in the theme picker for its scheme.
 
 caret reads only the `*.json` files directly in the folder, including symlinks to files.
-It ignores everything else: subfolders, other extensions, and names that start with `.`.
+It ignores subfolders, other extensions, and names that start with `.`.
 
 caret skips a file, and reports an error that names it, when the file:
 
@@ -33,7 +31,8 @@ caret skips a file, and reports an error that names it, when the file:
 - shares its `id` with another file. caret skips every file with that `id`.
 
 **Settings → Appearance** lists each file that didn't load, with its errors, under the
-theme pickers.
+theme pickers. When the theme you selected for a scheme stops loading, caret shows its own
+theme for that scheme but keeps your selection, so restoring the file brings it back.
 
 ## Top-level fields
 
@@ -122,10 +121,11 @@ to, so add one only to set it apart.
 
 ## `markdown`
 
-The plan's source view renders it as markdown source, and these optional styles color its
-elements. Each is an object with a `color` and an optional `fontStyle`, the same shape as
-a syntax role. A file that omits an element, or the whole `markdown` object, paints it as
-caret does by default.
+These optional styles color Markdown elements in the
+[source view](glossary.md#source-view), the [preview](glossary.md#preview), and the
+comment editor. Each is an object with a `color` and an optional `fontStyle`, the same
+shape as a syntax role. An element the file omits, or the whole `markdown` object, keeps
+caret's default look.
 
 | Element                  | What it colors                               | Source view default         | Comment editor default |
 | ------------------------ | -------------------------------------------- | --------------------------- | ---------------------- |
@@ -158,14 +158,14 @@ A few elements keep part of their look whatever the style says:
 The chip tint behind bold, italic, inline code, and link text comes from the `chip*Hue`
 [palette](#palette) overrides, not from these styles.
 
-The plan's preview applies these styles too. Unstyled, it differs from the source view
-default in three ways: a heading is semibold, a quote is `inkSoft` rather than faded, and
-a link or emphasis draws no chip. It leaves a fenced block's body to its own highlighting,
-so `code` colors only inline code there.
+In the preview, an unstyled element differs from the source view default in three ways: a
+heading is semibold, a quote is `inkSoft` rather than faded, and a link or emphasis draws
+no chip. The preview leaves a fenced block's body to its own highlighting, so `code`
+colors only inline code there.
 
-The comment editor applies these styles too. There, text nested in a heading, link, or
-quote takes that element's color, and in a heading its weight too. A fenced block that
-names its language takes the editor's own code colors rather than `code`.
+In the comment editor, text nested in a heading, link, or quote takes that element's
+color, and in a heading its weight too. A fenced block that names its language takes the
+editor's own code colors rather than `code`.
 
 ## Colors and errors
 

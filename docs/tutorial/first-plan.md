@@ -14,7 +14,7 @@ You need:
 - macOS or Linux.
 - Claude Code, with the `claude` command on your PATH.
 - [`bun`](https://bun.sh) on your PATH.
-- A project folder to work in. Any folder with a few files in it will do.
+- A project folder with a few files in it.
 
 To use caret with OpenCode or pi, or to set it up another way, see
 [Install caret](../how-to/install.md).
@@ -40,7 +40,7 @@ Open <http://caret.localhost:42718> in your browser. This is the
 The first time, a **Welcome to caret** dialog offers desktop notifications, with
 **Maybe later** and **Enable notifications**. Either button works for this tutorial.
 
-With no plan waiting, it shows **No plans awaiting review**, the line "When an agent
+With no plan waiting, the page shows **No plans awaiting review**, the line "When an agent
 proposes a plan, it opens here.", and a **listening** badge. Leave the tab open.
 
 ## Restart Claude Code
@@ -61,10 +61,10 @@ In Claude Code, type:
 /caret demo
 ```
 
-If Claude Code asks to enter plan mode, accept. Claude enters plan mode, where it proposes
-a plan before it edits anything, and writes a short [plan](../reference/glossary.md#plan)
-that cites files in your project. When Claude presents the plan, it appears in the review
-page tab you left open, without a reload.
+Claude enters plan mode, where it proposes a plan before it edits anything. If Claude Code
+asks to enter plan mode, accept. Claude writes a short
+[plan](../reference/glossary.md#plan) that cites files in your project. When Claude
+presents it, the plan appears in the review page tab you left open, without a reload.
 
 ## Read the plan
 

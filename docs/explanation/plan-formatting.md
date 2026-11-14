@@ -19,8 +19,8 @@ therefore run wider than 90 columns and scroll sideways on the review page.
 caret formats plans with [rumdl](https://github.com/rvben/rumdl), its
 [plan formatter](../reference/glossary.md#plan-formatter). You do not install rumdl
 yourself: caret downloads its own copy, pinned to v0.3.2, into
-`~/.local/state/caret/rumdl/` and checks its checksum. Formatting behaves the same however
-you installed caret.
+`$XDG_STATE_HOME/caret/rumdl/` (`~/.local/state/caret/rumdl/` by default) and checks its
+checksum. Formatting behaves the same however you installed caret.
 
 !!! note
 
@@ -29,9 +29,8 @@ you installed caret.
 
 How that plays out:
 
-- **caret keeps its copy only at the pinned version.** caret reuses its copy only when
-    it reports exactly the pinned version. caret replaces an older copy left by a previous
-    caret, or a file that won't run.
+- **caret keeps its copy at the pinned version.** It replaces an older copy left by a
+    previous caret, or a file that won't run.
 - **`caret install` downloads it ahead of time.** Your first plan then does not wait for
     the download. If that fails, the install still succeeds with a warning, and a later
     plan retries.
@@ -41,8 +40,8 @@ How that plays out:
     cause (your connection, a rate limit) and caret tries again on the first plan after
     the ten minutes, or run `caret install` to retry now.
 - **Formatting never loses a plan.** If a plan can't be formatted (no formatter,
-    offline, an unsupported platform, or formatting took longer than two seconds), caret
-    keeps it unchanged and logs one warning.
+    offline, a platform with no rumdl build such as Windows, or formatting took longer
+    than two seconds), caret keeps it unchanged and logs one warning.
 
 To use a rumdl of your own instead of the download, set `CARET_RUMDL_BIN` (see
 [Environment variables](../reference/environment-variables.md)). caret uses it only when

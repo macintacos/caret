@@ -30,9 +30,11 @@ switches to OpenCode's `build` agent, its mode for editing files.
 ## Background service
 
 The caret program that serves the review page and passes your decision back to the agent.
-By default `caret install` sets it to start at login, and `caret serve` runs it by hand.
-Without it running, caret still starts when your agent sends a plan. Older pages call it
-the daemon, the server, the background process, or the caret service, and caret's install
+It runs one of three ways: as the installed service, which starts at login when you choose
+**Keep it running** in `caret install`; by hand with `caret serve`; or on demand, started
+by caret when your agent sends a plan and neither of the others is running. See
+[The background service](../explanation/background-service.md). Older pages call it the
+daemon, the server, the background process, or the caret service, and caret's install
 messages still say caret service.
 
 ## Comment
@@ -64,8 +66,9 @@ What the agent proposes to do before it changes your files.
 
 ## Plan formatter
 
-The tool, rumdl, that caret uses to rewrap a plan's lines before showing it.
-`caret install` installs it.
+The tool, rumdl, that caret uses to rewrap a plan's lines before showing it. caret
+downloads its own copy, and `caret install` fetches it ahead of time. See
+[Plan formatting](../explanation/plan-formatting.md).
 
 ## Plan switcher
 
@@ -78,7 +81,8 @@ rendered preview.
 
 ## Reject
 
-Stops the plan without sending feedback. The agent waits for you.
+Turns the plan down without sending your comments to the agent, and tells it to wait for
+your next message.
 
 ## Request changes
 

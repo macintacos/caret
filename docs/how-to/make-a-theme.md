@@ -12,15 +12,16 @@ every field.
 
 caret's [built-in themes](../reference/built-in-themes.md) ship as theme files in
 [`ui/src/lib/themes/`](https://github.com/macintacos/caret/tree/main/ui/src/lib/themes).
-Copy one and give the copy its own `id`. Then change any field the
-[theme file format](../reference/theme-files.md) describes.
+Copy one, give the copy its own `id`, then change any field the theme file format
+describes.
 
 ## Start from a VS Code theme
 
-`caret convert-theme <file> [-o, --out <file>]` turns a VS Code color theme JSON into a
-caret theme file. It prints the theme file to stdout unless `--out` names a file, and
-writes into the [themes folder](../reference/theme-files.md#where-caret-finds-theme-files)
-only when `--out` points there. `--out` must name a file, not a folder:
+Run `caret convert-theme <file>` to turn a VS Code color theme JSON into a caret theme
+file. It prints the theme file to stdout. To write a file instead, pass `-o` or `--out`
+with a file path, not a folder. The command writes into the
+[themes folder](../reference/theme-files.md#where-caret-finds-theme-files) only when
+`--out` points there:
 
 ```sh
 caret convert-theme dracula.json --out ~/.config/caret/themes/dracula-custom.json
@@ -43,10 +44,14 @@ The input may contain comments and trailing commas (JSONC). The command maps:
     that matches a built-in theme gets `-custom` appended, with a note.
 
 Notes go to stderr as `caret convert-theme: <note>` and leave the exit code 0. The command
-refuses a theme that uses `include`, a `tokenColors` that names a `.tmTheme` file, a theme
-with no recognized `type`, or a theme it can't map (it says why); it prints the reason and
-exits 1 without writing anything. Treat the output as a starting point: check the noted
-colors and tweak what you like.
+prints the reason, exits 1, and writes nothing when the theme:
+
+- uses `include`;
+- has a `tokenColors` that names a `.tmTheme` file;
+- has no recognized `type`;
+- can't be mapped for another reason, which it names.
+
+Treat the output as a starting point: check the noted colors and tweak what you like.
 
 ## Get editor support
 
@@ -57,15 +62,15 @@ Schema, such as VS Code, then completes field names and flags invalid values as 
 
 ## Add the theme to caret
 
-Save the file in the
-[themes folder](../reference/theme-files.md#where-caret-finds-theme-files), then reload
-the review page. The theme appears in the theme picker in **Settings → Appearance** for
-its scheme. **Settings → Appearance** lists each file that didn't load, with its errors,
-under the theme pickers.
+Save the file in the themes folder, `~/.config/caret/themes` (or
+`$XDG_CONFIG_HOME/caret/themes` when that is set), then reload the review page. The theme
+appears in the theme picker for its scheme in **Settings → Appearance**. Each file that
+didn't load is listed there with its errors, under the theme pickers.
 
 ## Upload a theme
 
-The upload control in **Settings → Appearance** checks a file against the same
+Click **Upload theme file…** in **Settings → Appearance**. caret checks the file against
+the same
 [rules as the themes folder](../reference/theme-files.md#where-caret-finds-theme-files)
 and saves it into the themes folder as `<id>.json`, named from its `id`, never from the
 uploaded file's name. A file that fails shows its errors, and caret saves nothing. caret
@@ -82,4 +87,4 @@ declares it too, the upload replaces it.
 
 ## Remove a theme
 
-There is no delete control. To remove a theme, delete its file from the themes folder.
+Delete its file from the themes folder. There is no delete control.

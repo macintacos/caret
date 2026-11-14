@@ -26,10 +26,6 @@ choice without changing anything.
 background service with it. All your agent hosts share that one service, so `--uninstall`
 can't remove caret from just one of them.
 
-At a terminal, the install shows a step for each change it makes. Piped, in CI, or with
-color off (`NO_COLOR`, `TERM=dumb`, or `--no-color`), it prints plain `caret: …` lines
-instead.
-
 ## Claude Code
 
 caret reaches Claude Code as the `caret@caret` plugin, from the `macintacos/caret`
@@ -48,9 +44,8 @@ marketplace. The plugin adds:
     can call to show you a plan outside plan mode (see
     [Call the review tool from your own skill](../how-to/review-tool.md)).
 
-Every `caret install` run updates the plugin, with or without `--refresh`. Restart Claude
-Code to load the new version. To update by hand, run `claude plugin update caret@caret`,
-or in Claude Code run `/plugin marketplace update caret` then `/reload-plugins`.
+Every `caret install` run updates the plugin, with or without `--refresh`. To update it
+another way, see [Update caret](../how-to/install.md#update-caret).
 
 If one of Claude Code's settings files declares a `caret` marketplace that points
 somewhere other than `macintacos/caret`, Claude Code keeps that one, and the install warns
@@ -92,10 +87,9 @@ On its next start, OpenCode installs caret into its own cache (see
 On v2, the toasts, the key, and the line come from caret's terminal-UI half, so they need
 OpenCode's terminal UI; the web and desktop apps show none of them.
 
-`caret doctor`'s `opencode-host` check flags an OpenCode too old for caret, and caret
-listed where your OpenCode won't load it. An OpenCode v1 older than 1.3.4 fails to load
-the plugin. For supported versions, see
-[OpenCode versions](../reference/platform-support.md#opencode-versions).
+`caret doctor`'s `opencode-host` check flags an OpenCode too old for caret (see
+[Agent host versions](../reference/platform-support.md#agent-host-versions)). It also
+flags caret listed where your OpenCode won't load it.
 
 ### When OpenCode loads an old caret
 
@@ -146,10 +140,10 @@ adds with `pi install`. The extension adds:
 `CARET_PI_BIN` changes which caret the extension runs (see
 [Environment variables](../reference/environment-variables.md)).
 
-caret needs pi 1.5.0 or later. It changes pi only through pi's own package commands, and
-never writes pi's `settings.json`. A plain install adds `npm:@macintacos/caret`, or
-updates it when it's there. It leaves a pinned entry alone;
-`pi install npm:@macintacos/caret` unpins it. `--uninstall` removes every caret entry.
+The install changes pi only through pi's own package commands, and never writes pi's
+`settings.json`. A plain install adds `npm:@macintacos/caret`, or updates it when it's
+there. It leaves a pinned entry alone; run `pi install npm:@macintacos/caret` yourself to
+unpin it. `--uninstall` removes every caret entry.
 
 `caret doctor` has three pi checks. They flag:
 
@@ -162,10 +156,7 @@ The install and `caret doctor` honor `PI_CODING_AGENT_DIR`, but the installed ba
 service looks only in `~/.pi/agent`. If you set it, the background service won't find the
 caret you installed for pi.
 
-By hand:
-
-- `pi install npm:@macintacos/caret` installs caret.
-- `pi update npm:@macintacos/caret` updates it. A bare `pi update` updates pi itself.
-- `pi remove npm:@macintacos/caret` removes it.
-
-For what pi needs to run caret, see [Install caret § pi](../how-to/install.md#pi).
+To update or remove caret in pi by hand, see
+[Update caret](../how-to/install.md#update-caret) and
+[Remove caret](../how-to/install.md#remove-caret). For what pi needs to run caret, see
+[Install caret § pi](../how-to/install.md#pi).

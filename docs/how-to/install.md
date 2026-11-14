@@ -2,9 +2,6 @@
 
 *Audience: anyone installing, updating, or removing caret on macOS or Linux.*
 
-This page covers installing, updating, and removing caret for Claude Code, OpenCode, and
-pi. It also covers running caret yourself instead of having it start at login.
-
 ## Before you install
 
 You need:
@@ -12,57 +9,60 @@ You need:
 - macOS or Linux. Windows is best-effort and runs caret on demand only; see
     [Platform support](../reference/platform-support.md) for what differs.
 - [`bun`](https://bun.sh) on your PATH.
-- At least one [agent host](../reference/glossary.md#agent-host) at its minimum version,
-    listed below.
-
-Agent host minimums:
-
-- Claude Code.
-- OpenCode v1 1.3.4 or later, or v2 2.0.29 or later.
-- pi 1.5.0 or later.
+- At least one [agent host](../reference/glossary.md#agent-host) at its minimum version:
+    Claude Code at any version, OpenCode v1 1.3.4 or v2 2.0.29 or later, or pi 1.5.0 or
+    later.
 
 ## Install
 
-Run:
+1. Run:
 
-```sh
-bunx --no-cache @macintacos/caret@latest install
-```
+    ```sh
+    bunx --no-cache @macintacos/caret@latest install
+    ```
 
-The command asks which agent hosts to add caret to, with the ones it found already
-selected. It also installs the [plan formatter](../reference/glossary.md#plan-formatter).
+2. Pick the agent hosts to add caret to. The ones the command found are already selected.
+3. Pick how to run the [background service](../reference/glossary.md#background-service):
 
-It then asks how to run the
-[background service](../reference/glossary.md#background-service):
+    - **Keep it running** (recommended): the background service starts at login.
+    - **I'll run it myself**: you start it by hand when you want it. Without it, caret
+        still starts when your agent sends a plan. See
+        [Run caret yourself](#run-caret-yourself).
 
-- **Keep it running** (recommended): the background service starts at login.
-- **I'll run it myself**: you start it by hand when you want it. Without it, caret still
-    starts when your agent sends a plan. See [Run caret yourself](#run-caret-yourself).
-
+The command also installs the [plan formatter](../reference/glossary.md#plan-formatter).
 While the background service runs, the [review page](../reference/glossary.md#review-page)
 is at <http://caret.localhost:42718>.
 
+At a terminal, the install shows a step for each change it makes. Piped, in CI, or with
+color off (`NO_COLOR`, `TERM=dumb`, or `--no-color`), it prints plain `caret: …` lines
+instead.
+
+Other pages write caret's commands as `caret <command>`, such as `caret doctor`. If
+`caret` is not on your PATH, run `bunx --no-cache @macintacos/caret@latest <command>`
+instead.
+
 ## Finish setting up your agent host
 
-Each agent host needs a restart before it picks caret up. In every agent host,
-`/caret demo` shows the [demo plan](../reference/glossary.md#demo-plan) and
-`/caret doctor` checks your install.
+Restart each agent host so it picks caret up. In every agent host, `/caret demo` shows the
+[demo plan](../reference/glossary.md#demo-plan) and `/caret doctor` checks your install.
 
 ### Claude Code
 
-The install adds caret through the `claude` command: the `macintacos/caret` marketplace
-and the `caret@caret` plugin. If `claude` is not on your PATH, the install stops before it
-sets up the plan formatter and the background service. Either install Claude Code's
-`claude` command and run the install again, or add the plugin inside Claude Code:
+The install adds caret through the `claude` command: it registers the `macintacos/caret`
+marketplace and installs the `caret@caret` plugin. If `claude` is not on your PATH, the
+install stops before it sets up the plan formatter and the background service. Install
+Claude Code's `claude` command and run the install again, or:
 
-```text
-/plugin marketplace add macintacos/caret
-/plugin install caret@caret
-```
+1. Add the plugin inside Claude Code:
 
-Then run the install again with Claude Code unselected, so it finishes setting up.
+    ```text
+    /plugin marketplace add macintacos/caret
+    /plugin install caret@caret
+    ```
 
-Restart Claude Code. Claude Code lists the
+2. Run the install again with Claude Code unselected, so it finishes setting up.
+
+Restart Claude Code. It lists the
 [`/caret` command](../reference/glossary.md#caret-command) as `caret:caret`, and typing
 `/caret` runs it.
 
@@ -71,12 +71,14 @@ New to caret? Follow [Review your first plan](../tutorial/first-plan.md).
 ### OpenCode
 
 Restart OpenCode. It installs the caret plugin on its next start, so `bun` must be on the
-PATH that OpenCode runs with.
+PATH OpenCode runs with.
 
 `/caret …` runs on OpenCode's `plan` agent, its planning mode that doesn't edit files. On
-OpenCode v1, switch to `build` once you approve. On v2, the **Approve & build** option
-switches for you. On OpenCode v2, `ctrl+x p` (`<leader>p`) opens the plan waiting in the
-session. To change that key, rebind `caret.open` under OpenCode's `keybinds`.
+OpenCode v1, switch to the `build` agent, its editing mode, once you approve. On v2, the
+**Approve & build** option switches for you.
+
+On OpenCode v2, `ctrl+x p` (`<leader>p`) opens the plan waiting in the session. To change
+that key, rebind `caret.open` under OpenCode's `keybinds`.
 
 Run `/caret demo` to try the review page. From
 [Read the plan](../tutorial/first-plan.md#read-the-plan) on, the tutorial applies as
@@ -89,16 +91,16 @@ and ignores a project-scope install (`pi install -l`).
 
 Run `/reload` in pi, or restart it. pi has no planning mode of its own, so caret adds one:
 
-1. `/caret <what you want done>` turns on planning mode. The agent writes its plan into
-    `~/.pi/agent/plans`, and caret blocks its `edit` and `write` tools outside that folder
-    until you approve. Shell commands are only discouraged while planning, not blocked.
+1. Run `/caret <what you want done>` to turn planning mode on. The agent writes its plan
+    into `~/.pi/agent/plans`, and caret blocks its `edit` and `write` tools outside that
+    folder until you approve. Shell commands are discouraged while planning, not blocked.
     `/caret plan` on its own turns planning mode off.
 2. While a plan waits, a notice shows above the editor and the footer reads
     `^ plan waiting`. Press `ctrl+alt+o` to open the plan in your browser. In Terminal.app
-    or iTerm2, set Option to act as Meta for that key to reach pi.
+    or iTerm2, set Option to act as Meta so that key reaches pi.
 3. Approve, and the agent implements the plan. Request changes, and it revises the plan
-    and presents it again. Press `esc` in pi to cancel a waiting review; the agent is told
-    not to implement the plan.
+    and presents it again. To cancel a waiting review, press `esc` in pi; the agent is
+    told not to implement the plan.
 
 Run `/caret demo` to try the review page. From
 [Read the plan](../tutorial/first-plan.md#read-the-plan) on, the tutorial applies as
@@ -106,22 +108,21 @@ written.
 
 ## Run caret yourself
 
-To keep caret from starting at login, run the install and answer **I'll run it myself**.
-That removes the background service if one is registered. caret still starts when your
-agent sends a plan.
+To keep caret from starting at login:
 
-Then, whenever you want the review page up, run:
+1. Run the install and answer **I'll run it myself**. That removes the background service
+    if one is registered. caret still starts when your agent sends a plan.
+2. Whenever you want the review page up, run:
 
-```sh
-bunx --no-cache @macintacos/caret@latest serve
-```
+    ```sh
+    bunx --no-cache @macintacos/caret@latest serve
+    ```
 
-The review page stays up at <http://caret.localhost:42718> until you stop the command with
-`ctrl+c`. To go back to starting at login, run the install again and answer
-**Keep it running**.
+    The review page stays up at <http://caret.localhost:42718> until you stop the command
+    with `ctrl+c`.
 
-To turn caret off entirely, see
-[Turn caret off](turn-off.md).
+To go back to starting at login, run the install again and answer **Keep it running**. To
+turn caret off entirely, see [Turn caret off](turn-off.md).
 
 ## Update caret
 
@@ -132,21 +133,29 @@ bunx --no-cache @macintacos/caret@latest install --refresh
 ```
 
 The command asks the same two questions as the install. It then takes the newest caret in
-each agent host you pick, without asking whether to replace a cached or pinned OpenCode
-copy, and restarts the background service if you keep it running.
+each agent host you pick, replacing a cached or pinned OpenCode copy without asking. If
+you keep the background service running, the command restarts it. Restart each agent host
+afterward so it loads the new caret.
+
+To update one agent host by hand:
+
+- Claude Code: run `claude plugin update caret@caret`, or in Claude Code run
+    `/plugin marketplace update caret` then `/reload-plugins`.
+- OpenCode: see
+    [When OpenCode loads an old caret](../explanation/caret-install.md#when-opencode-loads-an-old-caret).
+- pi: run `pi update npm:@macintacos/caret`. A bare `pi update` updates pi itself.
 
 ### When an update is out
 
 caret checks for a newer version about once a day. When one is out, the review page shows
-a notice the next time you open or reload it. The notice names the version. It stays until
-you read or dismiss it. It appears once per version, so a newer release gets its own
-notice.
+a notice naming it the next time you open or reload the page. The notice stays until you
+read or dismiss it. Each version gets one notice, so a newer release gets its own.
 
-**What's new** on the notice opens a dialog listing what changed since your version. On an
-installed caret, it shows the release notes for each release you skipped. On a caret you
-built from a clone of its repository, it shows the commits on caret's main branch since
-your build. Its footer links the full comparison on GitHub and repeats the upgrade
-command. The dialog contacts GitHub only when it opens.
+**What's new** on the notice opens a dialog listing what changed since your version: the
+release notes for each release you skipped, or, on a caret you built from a clone of its
+repository, the commits on caret's main branch since your build. Its footer links the full
+comparison on GitHub and repeats the upgrade command. The dialog contacts GitHub only when
+it opens. The [Changelog](../changelog.md) lists every release's notes.
 
 After you upgrade, the first page load opens the dialog by itself, with the notes for each
 release since the version this browser last saw. Closing it marks the new version seen;
@@ -155,19 +164,20 @@ records the version without opening the dialog. With update checks off, the dial
 shut.
 
 While an update waits, a small mark sits on the settings button and on the **Updates** row
-in **Settings**, so you can find the update again after you dismiss the notice.
+in **Settings**, so you can find the update after you dismiss the notice.
 
-**Settings → Updates** shows the version you run, the version available, and the exact
-command that installs it. The command matches how this caret was installed. caret has no
-update button: you run the command yourself. While an update waits, a **What's new**
-button in the pane opens the same dialog.
+**Settings → Updates** shows the version you run, the version available, and the command
+that installs it, matched to how this caret was installed. caret has no update button: you
+run the command yourself. While an update waits, a **What's new** button in the pane opens
+the same dialog.
 
-The pane can show two messages that are not errors:
+These messages in the pane are not errors:
 
-- **Nothing to compare against.** A caret built from a commit that is not on caret's
-    main branch has nothing for GitHub to compare it to.
-- **Update checks are off.** Either caret runs straight from a clone of its repository,
-    or you turned the checks off.
+- **Nothing to compare against.** This caret was built from a commit that is not on
+    caret's main branch, so GitHub has nothing to compare it to.
+- **Update checks are off for dev builds.** caret runs straight from a clone of its
+    repository.
+- **Update checks are off.** You turned the checks off.
 
 ### Turn update checks off
 
@@ -177,8 +187,7 @@ caret already checked in the last day, and shows the answer the next time you op
 reload the review page.
 
 Or set this in `~/.config/caret/config.toml`, as
-[the `[updates]` table](../reference/config-file.md#the-updates-table)
-describes:
+[the `[updates]` table](../reference/config-file.md#the-updates-table) describes:
 
 ```toml
 [updates]
@@ -199,6 +208,8 @@ your reviews.
 
 In Claude Code, it uninstalls the `caret@caret` plugin but leaves the `macintacos/caret`
 marketplace registered. To remove that too, run `claude plugin marketplace remove caret`.
+
+To remove caret from pi alone, run `pi remove npm:@macintacos/caret`.
 
 ## Next steps
 

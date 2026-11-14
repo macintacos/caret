@@ -2,13 +2,12 @@
 
 *Audience: anyone choosing a caret theme, or reusing a built-in one as a starting point.*
 
-caret ships these themes. Pick one per scheme in **Settings → Appearance**. No theme file
-may reuse their ids; caret skips a file that does (see
-[Where caret finds theme files](theme-files.md#where-caret-finds-theme-files)). Their
-files, in
-[ui/src/lib/themes/](https://github.com/macintacos/caret/tree/main/ui/src/lib/themes), are
-a starting point for
-[your own theme](../how-to/make-a-theme.md#start-from-a-built-in-theme).
+caret ships these themes. Pick one per scheme in **Settings → Appearance**. Their files,
+in [ui/src/lib/themes/](https://github.com/macintacos/caret/tree/main/ui/src/lib/themes),
+are a starting point for
+[your own theme](../how-to/make-a-theme.md#start-from-a-built-in-theme). caret skips a
+theme file that reuses one of their ids (see
+[Where caret finds theme files](theme-files.md#where-caret-finds-theme-files)).
 
 ## The themes
 

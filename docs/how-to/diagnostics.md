@@ -2,9 +2,6 @@
 
 *Audience: anyone whose caret is misbehaving, or who needs to send a maintainer a report.*
 
-This page covers running `caret doctor` to find what is wrong and how to fix it, running
-it from your agent host, and sharing a full bundle of logs when the report is not enough.
-
 ## Run caret doctor
 
 Run `caret doctor`. It reads your install, changes nothing, and prints a report.
@@ -52,8 +49,10 @@ Color appears only when the output is a terminal. A pipe, `TERM=dumb`, `NO_COLOR
 `--no-color` gets plain text.
 
 `caret doctor --json` prints the same report as one JSON object, with the schema marker
-`caret-doctor/1`. The report is **always redacted**, because it exists to be shared. It
-never contains plan, prompt, or feedback bodies, or any log message, error, or stack text.
+`caret-doctor/1`. Both forms of the report are **always redacted**, because the report
+exists to be shared. Neither contains [plan](../reference/glossary.md#plan), prompt, or
+[feedback](../reference/glossary.md#feedback) bodies, or any log message, error, or stack
+text.
 
 The exit code is the verdict:
 
@@ -66,39 +65,30 @@ The exit code is the verdict:
 ## Run it from your agent host
 
 The [`/caret` command](../reference/glossary.md#caret-command) runs `caret doctor` for
-you. What it does with the report depends on your agent host.
+you:
 
-### Claude Code
-
-`/caret doctor` asks whether you want JSON or human-readable output, then runs
-`caret doctor`. It repeats each failing check's fix and ends with the report in a code
-block, ready to share.
-
-### OpenCode
-
-`/caret doctor` works as in Claude Code: it asks for JSON or human-readable output,
-repeats each failing check's fix, and ends with the report in a code block. It leaves the
-session on the `plan` agent.
-
-### pi
-
-`/caret doctor` runs the human-readable report and shows it in the session as an entry the
-model never sees.
+- In Claude Code and OpenCode, `/caret doctor` asks whether you want JSON or
+    human-readable output, then runs `caret doctor`. It repeats each failing check's fix
+    and ends with the report in a code block, ready to share. On OpenCode it leaves the
+    session on the `plan` agent.
+- In pi, `/caret doctor` runs the human-readable report and shows it in the session as
+    an entry the model never sees.
 
 ## Share a full bundle
 
-When a maintainer needs more than the report, run `caret doctor --bundle`. It writes a zip
-of the three live logs and up to 5000 review records to caret's state directory
-(`$XDG_STATE_HOME/caret` when that variable is set, otherwise `~/.local/state/caret`),
-readable only by you (`0600`). It never includes the old logs in `logs/archive/`.
+When a maintainer needs more than the report, run `caret doctor --bundle`. caret asks
+before writing the bundle. With no terminal to ask at, it refuses; pass `--yes` to confirm
+from a script.
+
+The bundle is a zip of the three live logs and up to 5000 review records, written to
+caret's state directory (`$XDG_STATE_HOME/caret` when that variable is set, otherwise
+`~/.local/state/caret`) and readable only by you (`0600`). It never includes the old logs
+in `logs/archive/`.
 
 !!! warning
 
     The bundle is the one caret file that is **not** redacted. It holds your logs in full
     and complete plan bodies. Move it over a channel you trust.
-
-caret asks before writing the bundle. With no terminal to ask at, it refuses; pass `--yes`
-to confirm from a script.
 
 To share only the logs, with home paths scrubbed, use
 [Scrub the logs before sharing](logs.md#scrub-the-logs-before-sharing) instead.

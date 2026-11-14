@@ -2,22 +2,18 @@
 
 *Audience: anyone tracking down what caret did, or preparing logs to share.*
 
-This page covers where caret writes its logs, how to read a log record, how to log more
-detail, and how to scrub the logs before you share them. The logs are the same in every
-[agent host](../reference/glossary.md#agent-host): Claude Code's hook, OpenCode's plugin,
-and pi's tool all hand a plan to `caret review`, which writes `caret.log`.
-
 ## Find the log files
 
 Logs live under `$XDG_STATE_HOME/caret/logs` when that variable is set, otherwise under
-`~/.local/state/caret/logs`:
+`~/.local/state/caret/logs`. They are the same in every
+[agent host](../reference/glossary.md#agent-host):
 
 | File                | What's in it |
 | ------------------- | ------------ |
-| `caret.log`         | Records from the short-lived `caret review` process your agent host starts for each plan. |
+| `caret.log`         | Records from the short-lived `caret review` process your agent host starts for each [plan](../reference/glossary.md#plan): Claude Code's hook, OpenCode's plugin, or pi's tool. |
 | `daemon.log`        | The [background service](../reference/glossary.md#background-service)'s records, in the same shape, tagged with `pid`. |
-| `daemon-stderr.log` | Whatever the background service writes outside its logger, such as raw crash output, plus the [launcher](background-service.md#upgrade-the-background-service)'s own failures when a supervised start cannot find caret or bun. |
-| `archive/`          | Gzipped old logs, named `<log>-<stamp>.log.gz`. A log past `logging.max_size` is archived here and emptied; the newest `logging.keep` per log are kept. |
+| `daemon-stderr.log` | Whatever the background service writes outside its logger, such as raw crash output, plus the [launcher](../explanation/background-service.md#which-caret-it-runs)'s own failures when a supervised start cannot find caret or bun. |
+| `archive/`          | Gzipped old logs, named `<log>-<stamp>.log.gz`. A log past [`logging.max_size`](../reference/config-file.md#the-logging-table) is archived here and emptied; the newest `logging.keep` per log are kept. |
 
 Events from the [review page](../reference/glossary.md#review-page) reach the background
 service in batches and land in `daemon.log` tagged `source: "ui"`. The same `[logging]`
@@ -42,17 +38,15 @@ only failures log at error.
 
 ## Log more detail
 
-!!! note
-
-    Set `level = "debug"` in `config.toml`'s `[logging]` table (see
-    [The `[logging]` table](../reference/config-file.md#the-logging-table)). The change
-    applies at once, with no restart.
+Set `level = "debug"` in `config.toml`'s `[logging]` table (see
+[The `[logging]` table](../reference/config-file.md#the-logging-table)). The change
+applies at once, with no restart.
 
 ## Scrub the logs before sharing
 
-Run `caret redact` to write scrubbed copies of the three live logs, as `*.redacted.log`
-files beside them. It turns home paths into `~` and hides usernames in other users' home
-paths. It does not touch `archive/`.
+Run `caret redact`. It writes scrubbed copies of the three live logs beside them, as
+`*.redacted.log` files, with home paths turned into `~` and usernames in other users' home
+paths hidden. It does not touch `archive/`.
 
 To scrub every record as it is written, set `redact = true` in the `[logging]` table.
 
