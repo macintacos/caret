@@ -12,7 +12,11 @@ export function docsServeCommand(args: string[]): string[] {
 
 const UNBUILT_PAGE_HREF = /href="(?!https?:\/\/)([^"]*\.md(?:#[^"]*)?)"/g;
 
-/** Site-internal hrefs still ending in .md: zensical rewrites every link to a page it built into a directory URL, so these name a page the build did not produce (a nav entry for a missing or excluded page, which --strict lets through). */
+/**
+ * Site-internal hrefs still ending in .md: zensical rewrites every link to a page it
+ * built into a directory URL, so these name a page the build did not produce (a nav
+ * entry for a missing or excluded page, which --strict lets through).
+ */
 export function unbuiltPageLinks(html: string): string[] {
   return [...html.matchAll(UNBUILT_PAGE_HREF)].map((match) => match[1] ?? "");
 }
