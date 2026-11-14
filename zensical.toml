@@ -1,0 +1,52 @@
+[project]
+site_name = "caret"
+site_url  = "https://macintacos.github.io/caret/"
+repo_url  = "https://github.com/macintacos/caret"
+repo_name = "macintacos/caret"
+extra_css = ["stylesheets/caret.css"]
+
+# Pages kept off the site. One merely left out of `nav` is still built and searchable.
+exclude_docs = """
+/agents/
+/README.md
+/DEVELOPMENT.md
+/RUNNING.md
+/CONFIGURING.md
+/ARCHITECTURE.md
+"""
+
+# Each section leads with its index.md: a section with no page renders a dead link.
+nav = [
+  { "Home" = "index.md" },
+  { "Tutorial" = [
+    "tutorial/index.md",
+  ] },
+  { "How-to guides" = [
+    "how-to/index.md",
+  ] },
+  { "Reference" = [
+    "reference/index.md",
+  ] },
+  { "Explanation" = [
+    "explanation/index.md",
+  ] },
+]
+
+[project.theme]
+features = ["content.code.copy", "navigation.sections"]
+
+[[project.theme.palette]]
+media       = "(prefers-color-scheme: light)"
+scheme      = "default"
+primary     = "custom"
+accent      = "custom"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media       = "(prefers-color-scheme: dark)"
+scheme      = "slate"
+primary     = "custom"
+accent      = "custom"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"

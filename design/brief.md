@@ -24,6 +24,7 @@ it back, without reaching for the mouse.
 | OpenCode TUI: the pending line, the toasts, `<leader>p` | `opencode/caret.tui.ts`, `opencode/caret.core.ts` | Operate |
 | pi TUI: the pending-plan notice, the footer status, the review tool's row, `/caret doctor`'s report | `pi/notice.ts`, `pi/render.ts`, `pi/doctor.ts` | Operate |
 | Dev console and task output: `mise run dev`, `mise run preflight` | `scripts/tasks/` | Operate |
+| Docs site: the published user docs | `zensical.toml`, `docs/stylesheets/caret.css` | Read |
 
 ## Direction
 
