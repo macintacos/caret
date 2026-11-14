@@ -12,6 +12,8 @@ When to edit it:
 - A `mise` task is added, removed, or changes what it does; the bootstrap or build flow
   changes; a dev-loop gotcha is worth recording.
 - The tasks CLI grows a subcommand or changes how forwarders work.
+- A `[dev]` key, or a dev-only or preflight-only `CARET_*` variable, changes; its row
+  lives in § Dev and preflight settings.
 - Keep `CONTRIBUTING.md` the short front door — it orients a new contributor in a page and
   points here for the full catalog.
 

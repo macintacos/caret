@@ -1,15 +1,15 @@
 # Theme file format
 
-_Audience: anyone writing or checking a caret theme file._
+*Audience: anyone writing or checking a caret theme file.*
 
 A theme file is a JSON file that describes one caret theme: its name, whether it is light
-or dark, the colors of the review page, and the colors used to highlight code and,
-optionally, the plan's markdown. A theme file is self-contained. caret derives everything
-else it needs, such as hairline rules, selection washes, and chip tints, from the colors
-the file names. A theme reaches caret either from its
+or dark, the colors of the [review page](glossary.md#review-page), and the colors used to
+highlight code and, optionally, the plan's markdown. A theme file is self-contained. caret
+derives everything else it needs, such as hairline rules, selection washes, and chip
+tints, from the colors the file names. A theme reaches caret either from its
 [themes folder](#where-caret-finds-theme-files) or by
-[uploading it](../how-to/make-a-theme.md#upload-a-theme) in the Appearance settings, which
-writes it into the folder. Each theme appears in the Appearance theme picker for its
+[uploading it](../how-to/make-a-theme.md#upload-a-theme) in **Settings → Appearance**,
+which writes it into the folder. Each theme appears in the theme picker there for its
 scheme: a dropped file after a page reload, an uploaded one straight away. When the theme
 selected for light or dark stops loading, caret shows its own theme for that scheme and
 keeps the selection, so restoring the file brings it back.
@@ -32,8 +32,8 @@ caret skips a file, and reports an error that names it, when the file:
 - uses the `id` of a [built-in theme](built-in-themes.md);
 - shares its `id` with another file. caret skips every file with that `id`.
 
-The Appearance settings list each file that didn't load, with its errors, under the theme
-pickers.
+**Settings → Appearance** lists each file that didn't load, with its errors, under the
+theme pickers.
 
 ## Top-level fields
 
@@ -75,12 +75,12 @@ caret still decides how strong it is.
 | `ruleHue`       | The two hairline rules               | `ink`              |
 | `washHue`       | The selection wash                   | `accent`           |
 | `markHue`       | The two highlight marks              | `washHue`, then `accent` |
-| `chipBoldHue`   | The bold chip in the plan view       | `ink`              |
-| `chipItalicHue` | The italic chip in the plan view     | `inkSoft`          |
-| `chipCodeHue`   | The inline-code chip in the plan view | `neutral`         |
-| `chipLinkHue`   | The link chip in the plan view       | `accentBright`     |
-| `chipRefHue`    | The file-reference chip in the plan view | `ok`           |
-| `chipSkillHue`  | The skill chip in the plan view      | `attention`        |
+| `chipBoldHue`   | The bold chip in the source view       | `ink`              |
+| `chipItalicHue` | The italic chip in the source view     | `inkSoft`          |
+| `chipCodeHue`   | The inline-code chip in the source view | `neutral`         |
+| `chipLinkHue`   | The link chip in the source view       | `accentBright`     |
+| `chipRefHue`    | The file-reference chip in the source view | `ok`           |
+| `chipSkillHue`  | The skill chip in the source view      | `attention`        |
 
 ## `syntax`
 
@@ -147,8 +147,8 @@ one of them.
 
 A few elements keep part of their look whatever the style says:
 
-- Bold text stays bold, italic text stays italic, and a link keeps its underline, dotted
-  in the plan view, and, in the source view, its chip. A `fontStyle` adds to these.
+- Bold text stays bold, italic text stays italic, and a link keeps its dotted underline
+    and, in the source view, its chip. A `fontStyle` adds to these.
 - A heading style sets the heading's weight on every surface, so name `"bold"` for a
     bold heading.
 - A styled `quote` paints at full strength, since its color already sets it apart.

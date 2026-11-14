@@ -60,7 +60,7 @@ pinned. After it registers or restarts the service, `caret install` waits up to 
 for the service's daemon, at least as new as itself. If none answers, it warns instead of
 announcing the review UI, and names the older version it found, if any, and
 `logs/daemon-stderr.log`. The service's daemon also sees only the environment captured at
-install — see [Runtime](reference/environment-variables.md).
+install — see [Environment variables](reference/environment-variables.md).
 
 ### When the daemon exits
 

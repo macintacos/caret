@@ -1,7 +1,7 @@
 # Platform support
 
-*Audience: anyone running caret who wants to know what works on their operating system and
-agent host.*
+*Audience: anyone running caret who wants to know what works on their operating system or
+OpenCode version.*
 
 caret supports macOS and Linux. Windows is best-effort. What differs between them is the
 [background service](glossary.md#background-service) that keeps the review page up, and
