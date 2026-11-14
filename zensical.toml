@@ -26,6 +26,7 @@ nav = [
   ] },
   { "Reference" = [
     "reference/index.md",
+    { "Glossary" = "reference/glossary.md" },
   ] },
   { "Explanation" = [
     "explanation/index.md",
