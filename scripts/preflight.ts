@@ -9,11 +9,12 @@
 //
 // DAG: lint, `test unit`, `build ui`, `docs:build`, `test bats` and `test mod`
 // start immediately; `build bin` starts once `build ui` passes; `smoke` starts
-// once `build bin` passes (EXC-914). The build-first ordering + skip mechanism live in the tasks
-// CLI (scripts/tasks/build.ts), so each dependent is spawned with the skips that
-// let it reuse its gate's artifact: CARET_SKIP_BUILD_UI keeps the UI built at
-// exactly one run per gate (two concurrent Vite builds would otherwise race on
-// ui/dist), and CARET_SKIP_BUILD_BIN keeps smoke from paying a second compile.
+// once `build bin` passes (EXC-914). The build-first ordering + skip mechanism
+// live in the tasks CLI (scripts/tasks/build.ts), so each dependent is spawned
+// with the skips that let it reuse its gate's artifact: CARET_SKIP_BUILD_UI
+// keeps the UI built at exactly one run per gate (two concurrent Vite builds
+// would otherwise race on ui/dist), and CARET_SKIP_BUILD_BIN keeps smoke from
+// paying a second compile.
 //
 // smoke is here because it is the only task that exercises the artifacts users
 // receive rather than the source tree: preflight proves the source works, smoke
