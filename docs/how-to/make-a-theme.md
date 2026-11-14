@@ -1,11 +1,12 @@
 # Make your own theme
 
-_Audience: anyone who wants caret's review page in colors of their own._
+*Audience: anyone who wants caret's [review page](../reference/glossary.md#review-page) in
+colors of their own.*
 
 A caret theme is one JSON file. Start from a theme caret ships or from a VS Code theme you
-already like, edit its colors, then put it in caret's themes folder or upload it from the
-Appearance settings. The [theme file format](../reference/theme-files.md) lists every
-field.
+already like, edit its colors, then put it in caret's themes folder or upload it from
+**Settings → Appearance**. The [theme file format](../reference/theme-files.md) lists
+every field.
 
 ## Start from a built-in theme
 
@@ -39,7 +40,7 @@ The input may contain comments and trailing commas (JSONC). The command maps:
     takes caret's own color for the scheme and is printed as a `palette.<key>:` note. The
     optional hues are left out, so caret derives them.
 - `id` and `label`: from the theme's `name`, or the file name when it has none. An `id`
-  that matches a built-in theme gets `-custom` appended, with a note.
+    that matches a built-in theme gets `-custom` appended, with a note.
 
 Notes go to stderr as `caret convert-theme: <note>` and leave the exit code 0. The command
 refuses a theme that uses `include`, a `tokenColors` that names a `.tmTheme` file, a theme
@@ -58,9 +59,9 @@ Schema, such as VS Code, then completes field names and flags invalid values as 
 
 Save the file in the
 [themes folder](../reference/theme-files.md#where-caret-finds-theme-files), then reload
-the review page. The theme appears in the Appearance theme picker for its scheme. The
-Appearance settings list each file that didn't load, with its errors, under the theme
-pickers.
+the review page. The theme appears in the theme picker in **Settings → Appearance** for
+its scheme. **Settings → Appearance** lists each file that didn't load, with its errors,
+under the theme pickers.
 
 ## Upload a theme
 

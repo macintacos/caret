@@ -3,8 +3,9 @@
 *Audience: anyone changing caret's settings.*
 
 caret reads optional settings from a TOML file you own. caret writes only two lines
-itself, `[updates] check` and `[review] band`, described below. This page lists each table
-and key the file accepts.
+itself, `[updates] check` and `[review] band` (see
+[The `[updates]` table](#the-updates-table)). This page lists each table and key the file
+accepts.
 
 ## Which file caret reads
 
@@ -20,12 +21,13 @@ The file and every key in it are optional:
 
 - A missing file, or a missing key, falls back to the default.
 - An invalid file never crashes caret. It keeps the last valid parse, or, if there has
-  never been one, the defaults with token login on, where the review page opens only
-  through a login link caret gives you (see
-  [If the background service stays on loopback](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#if-the-daemon-stays-on-loopback)).
+    never been one, the defaults with token login on, where the
+    [review page](glossary.md#review-page) opens only through a login link caret gives you
+    (see
+    [If the background service stays on loopback](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#if-the-daemon-stays-on-loopback)).
 - Settings reload on their own: caret re-reads the file when it changes, so you don't
-  restart the background service. The `[daemon]`, `[review]`, and `[opencode]` settings
-  are the exceptions; see below.
+    restart the [background service](glossary.md#background-service). The `[daemon]`,
+    `[review]`, and `[opencode]` settings are the exceptions; see below.
 
 ## The `[logging]` table
 
@@ -41,11 +43,20 @@ config file, which wins over the default (see
 [Environment variables](environment-variables.md)). caret reads both live, so an edit
 takes effect on the next record written, with no restart.
 
+```toml
+[logging]
+level = "info"
+redact = false
+max_size = 5242880
+keep = 10
+```
+
 Logs are raw by default. `caret redact` makes shareable copies after the fact (see
 [Logging & Debugging](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#logging--debugging)).
 
 ## The `[daemon]` and `[review]` tables
 
+The `[daemon]` keys configure the background service; they keep its older name, `daemon`.
 The `CARET_*` environment variables also cover these settings (see
 [Environment variables](environment-variables.md)), except `daemon.host`,
 `daemon.hostnames`, and `daemon.auth`, which you set only here. Precedence is
@@ -60,12 +71,12 @@ The `CARET_*` environment variables also cover these settings (see
 | `daemon.hostnames`    | `[]`          | Extra names the background service answers to, such as `"caret.home.lan"` or `"192.168.1.5"` (IPv6 bracketed). Matched case-insensitively on any port, over `http` or `https`. The first entry is the name review links and login links use. Takes effect when the background service restarts. |
 | `daemon.auth`         | *unset*       | `"token"` or `"none"`. Unset, token login is on exactly when `daemon.host` is exposed. Takes effect when the background service restarts. |
 | `review.timeout_s`    | `3600`        | Review window in seconds before the hook denies the plan to fail safe (default 1 hour). Values at or above `3900`, the hook's own time limit, are rejected. |
-| `review.band`         | `true`        | Claude Code only: shows a band above the prompt while a plan waits for review. `false` turns the band off. See [The plan-waiting band](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#the-plan-waiting-band). |
+| `review.band`         | `true`        | Claude Code only: shows a band above the prompt while a plan waits for review. `false` turns the band off. See [Get notified about plans](../how-to/notifications.md#see-a-waiting-plan-in-your-agent-host). |
 
 !!! warning "Opening caret to other devices"
 
     A `host` outside loopback (`127.0.0.0/8`, `::1`, `localhost`) lets any device that can
-    reach that address and port open the review page. caret turns token login on for it
+    reach that address and port reach the background service; caret asks for a login link
     unless `auth` says otherwise. Setting `auth = "none"` on such a `host` turns that
     login off: anyone who can reach the port can then read plans, read files under a
     review's working directory, and approve a plan. `caret serve` and `caret login-link`
@@ -76,21 +87,15 @@ The `CARET_*` environment variables also cover these settings (see
 
     Unlike the `[logging]` keys, these settings don't reload on their own. `port`,
     `idle_ms`, `heartbeat_ms`, `host`, `hostnames`, and `auth` take effect the next time
-    the background service starts, and `timeout_s` on the next review. To restart the
-    background service, run `caret install --refresh`, which also moves it to the newest
-    caret installed, or
+    the background service starts, and `timeout_s` on the next review. If `caret install`
+    keeps the background service running, restart it with `caret install --refresh`, which
+    also moves it to the newest caret installed, or
     [restart the service](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#the-caret-service).
 
     caret reads `band` on every `caret band-link` run, so it applies from the next review
     with no restart.
 
 ```toml
-[logging]
-level = "info"
-redact = false
-max_size = 5242880
-keep = 10
-
 [daemon]
 port = 42718
 idle_ms = 60000

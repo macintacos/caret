@@ -1,7 +1,7 @@
 # caret — Development
 
 *Audience: contributors hacking on caret — building from source, the dev workflow, the
-tasks CLI, and icons.*
+tasks CLI, icons, and dev settings.*
 
 Part of the deep reference behind [README.md](../README.md). For what caret is, how to
 install it, and basic usage, start there. [CONTRIBUTING.md](../CONTRIBUTING.md) is the
@@ -825,21 +825,19 @@ to [THIRD_PARTY_LICENSES.md](../THIRD_PARTY_LICENSES.md).
 
 #### The dev config file
 
-`mise run dev` takes the first of those: it points `CARET_CONFIG_FILE` at a separate
-`config.dev.toml` beside your `config.toml`.
+`mise run dev` sets `CARET_CONFIG_FILE`, which wins the
+[config-file lookup](reference/config-file.md#which-file-caret-reads), to a separate
+`config.dev.toml` beside your `config.toml`. With `--fresh` it points into that run's own
+ephemeral state dir instead, which starts empty so dev boots from built-in defaults. It
+also sets `CARET_SUPERVISED=1`, so the dev background service stays resident instead of
+idle-exiting.
 
 > [!NOTE]
 > A dev instance never reads or writes your production config, and its state and logs are
 > already isolated under an ephemeral `XDG_STATE_HOME`.
 
-`mise run dev` sets `CARET_CONFIG_FILE` to `config.dev.toml`; `--fresh` sets it into that
-run's own ephemeral state dir, which starts empty so dev boots from built-in defaults.
-
-`mise run dev` also sets `CARET_SUPERVISED=1`.
-
 [Environment variables](reference/environment-variables.md) has the precedence rule and
-the runtime variables, and [Config file](reference/config-file.md#which-file-caret-reads)
-the file-lookup order "the first of those" refers to.
+the runtime variables.
 
 #### The `[dev]` table
 

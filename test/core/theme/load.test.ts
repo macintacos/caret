@@ -188,8 +188,11 @@ describe("collectThemes", () => {
   });
 });
 
-test("docs/reference/built-in-themes.md names every built-in theme id", () => {
+test("docs/reference/built-in-themes.md lists exactly the built-in theme ids", () => {
   const doc = readFileSync(join(REPO_ROOT, "docs/reference/built-in-themes.md"), "utf8");
-  const named = [...doc.matchAll(/`([a-z0-9-]+)`/g)].map((m) => m[1]);
-  for (const id of BUILTIN_THEME_IDS) expect(named).toContain(id);
+  const section = doc.split("\n## The themes\n")[1]?.split("\n## ")[0] ?? "";
+  const listed = [...section.matchAll(/^\| [^|]+ \| `([a-z0-9-]+)` \| (?:light|dark) \|/gm)].map(
+    (m) => m[1],
+  );
+  expect([...listed].sort()).toEqual([...BUILTIN_THEME_IDS].sort());
 });

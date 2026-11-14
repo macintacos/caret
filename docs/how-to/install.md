@@ -164,10 +164,10 @@ button in the pane opens the same dialog.
 
 The pane can show two messages that are not errors:
 
-- **Nothing to compare against.** A caret built from a commit that is not on caret's main
-  branch has nothing for GitHub to compare it to.
-- **Update checks are off.** Either caret runs straight from a clone of its repository, or
-  you turned the checks off.
+- **Nothing to compare against.** A caret built from a commit that is not on caret's
+    main branch has nothing for GitHub to compare it to.
+- **Update checks are off.** Either caret runs straight from a clone of its repository,
+    or you turned the checks off.
 
 ### Turn update checks off
 
