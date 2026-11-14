@@ -10,6 +10,10 @@ workflows:
         - 'actions/upload-artifact@v7.0.2'
         - 'awalsh128/cache-apt-pkgs-action@v1.6.3'
         - 'jdx/mise-action@v5.2.1'
+    '.github/workflows/docs-gate.yml':
+        - 'actions/cache@v6.1.0'
+        - 'actions/checkout@v7.0.1'
+        - 'jdx/mise-action@v5.2.1'
 dependencies:
     'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9':
         ref: 'v6.1.0'

@@ -106,3 +106,61 @@ describe("the entry point", () => {
     expect(stdout).toBe("");
   });
 });
+
+type GateStep = {
+  uses?: string;
+  run?: string;
+  with?: Record<string, unknown>;
+  env?: Record<string, string>;
+};
+
+const gateYaml = await Bun.file(".github/workflows/docs-gate.yml")
+  .text()
+  .catch(() => "");
+const gateWorkflow = (Bun.YAML.parse(gateYaml) ?? {}) as {
+  on?: { pull_request?: { types?: string[]; branches?: string[] } };
+  permissions?: unknown;
+  jobs?: Record<string, { permissions?: unknown; steps: GateStep[] }>;
+};
+const gateJobs = Object.values(gateWorkflow.jobs ?? {});
+const gateSteps = gateJobs.flatMap((job) => job.steps);
+const actionsLock = await Bun.file(".github/workflows/actions.lock").text();
+
+describe("docs-gate.yml", () => {
+  test("runs on pull requests against main, re-running on label changes", () => {
+    expect(Object.keys(gateWorkflow.on ?? {})).toEqual(["pull_request"]);
+    expect([...(gateWorkflow.on?.pull_request?.types ?? [])].sort()).toEqual([
+      "labeled",
+      "opened",
+      "reopened",
+      "synchronize",
+      "unlabeled",
+    ]);
+    expect(gateWorkflow.on?.pull_request?.branches).toEqual(["main"]);
+  });
+
+  test("never runs with a write token", () => {
+    expect(gateYaml).not.toContain("pull_request_target");
+    expect(gateYaml).not.toContain("secrets.");
+    expect(gateWorkflow.permissions).toEqual({ contents: "read", "pull-requests": "read" });
+    expect(gateJobs.some((job) => job.permissions !== undefined)).toBe(false);
+    const checkouts = gateSteps.filter((step) => step.uses?.startsWith("actions/checkout@"));
+    expect(checkouts.length).toBeGreaterThan(0);
+    for (const step of checkouts) expect(step.with?.["persist-credentials"]).toBe(false);
+  });
+
+  test("pipes the PR's files and labels into the gate", () => {
+    const gate = gateSteps.find((step) => step.run?.includes("| bun scripts/docs-gate.ts"));
+    expect(gate?.env?.PR_LABELS).toContain("github.event.pull_request.labels.*.name");
+  });
+
+  test("every action ref is locked for this workflow", () => {
+    expect(actionsLock).toContain("'.github/workflows/docs-gate.yml':");
+    const refs = gateSteps.flatMap((step) => (step.uses ? [step.uses.split(" ")[0] ?? ""] : []));
+    expect(refs.length).toBeGreaterThan(0);
+    for (const ref of refs) {
+      const [repo, tag] = ref.split("@");
+      expect(actionsLock).toContain(`${repo?.split("/").slice(0, 2).join("/")}@${tag}`);
+    }
+  });
+});
