@@ -7,7 +7,7 @@ and opening the files a plan cites.
 
 ## Switch between the preview and the source view
 
-Caret shows each [version](../reference/glossary.md#version) of a plan on the
+caret shows each [version](../reference/glossary.md#version) of a plan on the
 [review page](../reference/glossary.md#review-page) in one of two views:
 
 - The [preview](../reference/glossary.md#preview) renders the plan as a document, with
@@ -24,7 +24,7 @@ Switching keeps your place: the other view opens at the part of the plan you wer
 A link to a heading opens at that heading in either view, and the address bar follows the
 heading you are reading in both.
 
-Everything else works in the preview too:
+These also work in the preview:
 
 - Cited files open, and the outline and breadcrumbs work.
 - The keyboard cursor moves one wrapped line at a time.
@@ -36,8 +36,8 @@ hides the **Source** button. Leaving compare mode returns to the view you chose.
 
 ## Change the text size
 
-Open **Settings → Base font size** to set the size of the preview's body text. It is 15px
-by default, and the preview's headings and code scale with it.
+Set **Base font size** in **Settings → Appearance** to size the preview's body text. It is
+15px by default, and the preview's headings and code scale with it.
 
 In a window wide enough for the preview's column, each wrapped line keeps its words at any
 zoom. In a narrower window, or beside a
@@ -50,7 +50,7 @@ The [outline](../reference/glossary.md#outline) down the left of the plan lists 
 headings and marks the one you are reading. Click a heading to go to it.
 
 - Press `\` to filter the outline.
-- Press Shift+`\` to hide or show it. Your browser remembers a hidden outline.
+- Press `shift+\` to hide or show it. Your browser remembers a hidden outline.
 - Drag the outline's right edge to make it wider or narrower, or tab to the edge and use
   the left and right arrow keys. Double-click the edge to return it to its default width.
   Your browser remembers the width.
@@ -85,7 +85,7 @@ The peek closes when:
 
 - the pointer leaves the outline, or the outline loses focus;
 - you turn the mouse wheel, or click;
-- you press a key other than the arrows, Tab, Home, End, or `s`;
+- you press a key other than the arrow keys, `tab`, `home`, `end`, or `s`;
 - you change the filter or pick a heading.
 
 There is no peek while you compare versions.
@@ -97,7 +97,7 @@ file preview of that file beside the plan. The file preview shows the head of th
 the lines the reference names, so `src/mail/send.ts:127-141` opens on line 127. A folder
 opens its tree instead.
 
-Caret recognizes two ways a plan cites a file:
+caret recognizes two ways a plan cites a file:
 
 - a path in backticks, such as `` `src/mail/send.ts` ``;
 - a path in parentheses beside the thing it belongs to, the way a plan cites its evidence:
@@ -107,7 +107,7 @@ A path loose in a sentence gets no icon, so ordinary words never look like files
 parentheses, a path needs a `/` or a `.`, so `(Makefile)` gets no icon, while
 `` `Makefile` `` in backticks does.
 
-Caret checks each path against the project folder the agent was working in. A path that
+caret checks each path against the project folder the agent was working in. A path that
 does not exist there stays plain text, with no icon and nothing to click, so a filename
 the agent invented never looks like one you can open.
 

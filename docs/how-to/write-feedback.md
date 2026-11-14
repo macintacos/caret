@@ -20,7 +20,7 @@ Pick the lines a comment is about, then type it. In either view of the plan:
   the **+** on the cursor's line.
 
 The lines stay shaded while you write. Clicking and dragging pick lines, not text, so hold
-Shift to select text instead. Selecting text opens no comment.
+`shift` to select text instead. Selecting text opens no comment.
 
 In the preview, comments and unsent drafts show right under the last wrapped line they
 cover, and hovering or focusing one highlights the text it covers. Switching between the
@@ -32,7 +32,7 @@ keeps its text as a draft, which you resume in either view.
 Two characters open a list in any feedback editor: the comment box beside a line, a
 comment card, and the **Request changes** dialog.
 
-Type `/` at the start of a word to list the skills the agent reviewing this plan can use.
+Type `/` at the start of a word to list the skills the agent that wrote this plan can use.
 The list filters as you type. Choosing a skill inserts its name in the exact form that
 agent needs, so a plugin skill arrives with its plugin's name in front, as
 `/superpowers:brainstorming`. Each row shows where its skill came from, which tells apart
@@ -45,14 +45,14 @@ Which skills the `/` list offers depends on the
 - OpenCode offers its slash commands.
 - pi offers its skills.
 
-Caret reads the list once when the review opens, so a skill you add mid-review shows up
+caret reads the list once when the review opens, so a skill you add mid-review shows up
 after you reload the page. The name becomes part of the
 [feedback](../reference/glossary.md#feedback) the agent reads; caret never runs the skill
 itself.
 
 Type `@` to list the files under the project folder the agent was working in. The match is
 loose, so `@srlbfoo` finds `src/lib/foo.ts`, and each row marks the characters your query
-matched. Choosing a file leaves `@` and the path, relative to that directory, as ordinary
+matched. Choosing a file leaves `@` and the path, relative to that folder, as ordinary
 text, so the reference still resolves when the agent picks the plan up in a later session.
 Type `:42` after the name to cite line 42 with it. In a project too large to search in
 full, the list says how much of the result it shows.
@@ -60,9 +60,9 @@ full, the list says how much of the result it shows.
 To use either list:
 
 - Move through it with the arrow keys, or with `tab` and `shift+tab`.
-- Press `enter` to take the highlighted row. Caret leaves a space after it, ready for the
+- Press `enter` to take the highlighted row. caret leaves a space after it, ready for the
   next word.
-- Press Escape to close the list without closing the dialog around it.
+- Press `esc` to close the list without closing the dialog around it.
 
 A `/` inside ordinary text, such as the path `src/lib/api.ts`, opens no list.
 
@@ -80,12 +80,12 @@ window too narrow for both side by side, the two stack on whichever side of your
 room, and stay together on screen.
 
 Opening the panel keeps your place in the list. Press `ctrl+space` again to close it.
-Caret remembers whether you left it open, so the next list you open, in this review or
+caret remembers whether you left it open, so the next list you open, in this review or
 after a reload, opens the same way. A skill with no description, or a file caret cannot
 read, says so in a sentence, and the list keeps working.
 
-The top of the list names the shortcut. Turning off **Settings → Shortcut hints** removes
-that line, and the shortcut keeps working.
+The top of the list names the shortcut. Turning off **Shortcut hints** in
+**Settings → Appearance** removes that line, and the shortcut keeps working.
 
 ## Check that a reference resolves
 
@@ -94,9 +94,9 @@ text. One it cannot find stays plain text. A chip that never appears is how you 
 misremembered skill name or a path that does not exist while you can still fix it.
 Otherwise you find the mistake only when the agent sends back its revised plan.
 
-Caret checks each kind against the same source its list completes from:
+caret checks each kind against the same source its list completes from:
 
-- A `/name` against the skills the reviewing agent has.
+- A `/name` against the skills the agent that wrote this plan has.
 - A path against the project folder the agent was working in.
 
 Both re-check as you edit, so fixing a typo brings the chip back.
