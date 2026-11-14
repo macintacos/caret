@@ -28,6 +28,8 @@ exclude = [
   "vendor",
   "dist",
   "build",
+  ".venv",
+  "site",
   "LICENSE.md",
   "scripts/tasks/dev/fake-plan.md",
 ]
