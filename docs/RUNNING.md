@@ -60,7 +60,7 @@ pinned. After it registers or restarts the service, `caret install` waits up to 
 for the service's daemon, at least as new as itself. If none answers, it warns instead of
 announcing the review UI, and names the older version it found, if any, and
 `logs/daemon-stderr.log`. The service's daemon also sees only the environment captured at
-install — see [Runtime](CONFIGURING.md#runtime).
+install — see [Runtime](reference/environment-variables.md).
 
 ### When the daemon exits
 
@@ -86,9 +86,9 @@ logged-in browser on a phone, tablet or another computer. They assume a network 
 otherwise see [Plain HTTP and an HTTPS proxy](#plain-http-and-an-https-proxy).
 
 1. **Set the address.** In the `[daemon]` table of
-   [`config.toml`](CONFIGURING.md#config-file) (keys in
-   [The daemon and review tables](CONFIGURING.md#the-daemon-and-review-tables)), bind the
-   daemon to the network and give it a name:
+   [`config.toml`](reference/config-file.md) (keys in
+   [The daemon and review tables](reference/config-file.md#the-daemon-and-review-tables)),
+   bind the daemon to the network and give it a name:
 
    ```toml
    [daemon]
@@ -305,7 +305,7 @@ only genuine failures sit at error.
 
 > [!TIP]
 > To raise verbosity, set `level = "debug"` in `config.toml`'s `[logging]` table (see
-> [Config file](CONFIGURING.md#config-file)). It hot-reloads — no restart needed.
+> [Config file](reference/config-file.md)). It hot-reloads — no restart needed.
 
 ### Diagnostics
 

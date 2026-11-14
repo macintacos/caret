@@ -32,6 +32,9 @@ nav = [
   { "Reference" = [
     "reference/index.md",
     { "Glossary" = "reference/glossary.md" },
+    { "Config file" = "reference/config-file.md" },
+    { "Environment variables" = "reference/environment-variables.md" },
+    { "Platform support" = "reference/platform-support.md" },
   ] },
   { "Explanation" = [
     "explanation/index.md",
