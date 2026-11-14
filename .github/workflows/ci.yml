@@ -1,7 +1,7 @@
 name: ci
 on:
   pull_request:
-    # No "edited": it would re-run all eight jobs on every title or body edit.
+    # No "edited": it would re-run all nine jobs on every title or body edit.
     types: [opened, reopened, synchronize]
     branches: [main]
   push:
@@ -106,6 +106,26 @@ jobs:
       # Keep in sync with publish.yml's mod-tests pin.
       - run: npm install --global @anthropic-ai/claude-code@2.1.308
       - run: mise run test mod
+  docs-build:
+    name: docs:build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5.2.1
+        with:
+          version: 2026.11.3
+          cache_save: false
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+      - run: bun install --frozen-lockfile
+      - run: mise run docs:build
   build-ui:
     name: build ui
     runs-on: ubuntu-latest
