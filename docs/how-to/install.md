@@ -10,8 +10,7 @@ pi. It also covers running caret yourself instead of having it start at login.
 You need:
 
 - macOS or Linux. Windows is best-effort and runs caret on demand only; see
-  [Platform support](https://github.com/macintacos/caret/blob/main/docs/CONFIGURING.md#platform-support)
-  for what differs.
+  [Platform support](../reference/platform-support.md) for what differs.
 - [`bun`](https://bun.sh) on your PATH.
 - At least one [agent host](../reference/glossary.md#agent-host) at its minimum version,
   listed below.
@@ -165,10 +164,10 @@ button in the pane opens the same dialog.
 
 The pane can show two messages that are not errors:
 
-- **Nothing to compare against.** A caret built from a commit that is not on caret's main
-  branch has nothing for GitHub to compare it to.
-- **Update checks are off.** Either caret runs straight from a clone of its repository, or
-  you turned the checks off.
+- **Nothing to compare against.** A caret built from a commit that is not on caret's
+    main branch has nothing for GitHub to compare it to.
+- **Update checks are off.** Either caret runs straight from a clone of its repository,
+    or you turned the checks off.
 
 ### Turn update checks off
 
@@ -178,7 +177,7 @@ caret already checked in the last day, and shows the answer the next time you op
 reload the review page.
 
 Or set this in `~/.config/caret/config.toml`, as
-[the `[updates]` table](https://github.com/macintacos/caret/blob/main/docs/CONFIGURING.md#the-updates-table)
+[the `[updates]` table](../reference/config-file.md#the-updates-table)
 describes:
 
 ```toml
@@ -205,8 +204,7 @@ marketplace registered.
 
 - Review a plan from start to finish in
   [Review your first plan](../tutorial/first-plan.md).
-- Change caret's settings with
-  [`CONFIGURING.md`](https://github.com/macintacos/caret/blob/main/docs/CONFIGURING.md).
+- Change caret's settings in the [config file](../reference/config-file.md).
 - Open the review page from another device with
   [Reaching caret from another device](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#reaching-caret-from-another-device).
 - See what the install changes in each agent host in

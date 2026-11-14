@@ -29,7 +29,7 @@ import {
 } from "@/review/orchestrate.ts";
 
 /** Select the platform's URL-opening argv: darwin `open`, win32 `cmd /c start`,
- * anything else `xdg-open` (support per platform: docs/CONFIGURING.md § Platform support).
+ * anything else `xdg-open` (support per platform: docs/reference/platform-support.md).
  * Pure so the branch selection is unit-testable without spawning. */
 export function browserOpenCmd(platform: NodeJS.Platform | string, url: string): string[] {
   return platform === "darwin"

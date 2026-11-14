@@ -70,12 +70,12 @@ caret plays a short sound at these moments:
   [background service](../reference/glossary.md#background-service) dropping or coming
   back; a decision going out; a comment posted; a notice appearing.
 - Things you do while reading: starting, discarding, or dropping a comment; opening the
-  outline's filter or a breadcrumb menu; opening, committing, stepping through, and
-  closing search; entering or leaving line selection; switching plans; comparing versions;
-  showing or hiding the comments panel; opening or closing a file preview; opening
-  Settings or the shortcuts help; changing the theme; and copying code.
-- On the waiting screen, clicking its `^` key or typing `^` to show the next carrot fact,
-  the line of trivia at its foot.
+    outline's filter or a breadcrumb menu; opening, committing, stepping through, and
+    closing search; entering or leaving line selection; switching plans; comparing
+    versions; showing or hiding the comments panel; opening or closing a file preview;
+    opening Settings or the shortcuts help; changing the theme; and copying code.
+- On the waiting screen, clicking its `^` key or typing `^` to show the next carrot
+    fact, the line of trivia at its foot.
 
 Each sound lasts a fraction of a second. Scrolling, hovering, and moving the pointer make
 no sound. A keyboard shortcut and its button play the same sound.
@@ -119,7 +119,7 @@ your port and login token.
 
 To turn the band off, turn off the **Plan-waiting band** switch in
 **Settings → Notifications**, or set `[review] band = false` in `config.toml` (see
-[The `[review]` table](https://github.com/macintacos/caret/blob/main/docs/CONFIGURING.md#the-daemon-and-review-tables)).
+[The `[review]` table](../reference/config-file.md#the-daemon-and-review-tables)).
 The change applies from the next review; a band already showing stays until its review
 ends. Claude Code's `disableAllHooks` and `--safe-mode` also turn it off.
 
@@ -140,9 +140,9 @@ unread mark when the agent sends a plan. caret clears that mark once you have re
 plan, in every agent host. Either of these counts as reviewed:
 
 - You decide on the plan: approve, reject, or request changes.
-- You read it: the plan is on screen, with the tab visible and focused, for 5 seconds in a
-  row. Hiding the tab or leaving the window starts the count over, so a tab left open in
-  the background never clears a mark.
+- You read it: the plan is on screen, with the tab visible and focused, for 5 seconds in
+    a row. Hiding the tab or leaving the window starts the count over, so a tab left open
+    in the background never clears a mark.
 
 Only the pane that sent the plan is cleared. There is nothing to set up, and outside cmux
 nothing happens. The `cmux` command must be on the PATH the background service runs with.

@@ -45,6 +45,16 @@ tables      = false
 reflow      = true
 reflow-mode = "normalize"
 
+# Site pages are rendered by zensical (Python-Markdown). Under the standard flavor MD046
+# reads a `!!!` admonition's indented body as indented code once the page has a fence.
+# This flavor also wraps list-item continuation lines at a 4-space indent.
+[per-file-flavor]
+"docs/index.md"       = "mkdocs"
+"docs/tutorial/**"    = "mkdocs"
+"docs/how-to/**"      = "mkdocs"
+"docs/reference/**"   = "mkdocs"
+"docs/explanation/**" = "mkdocs"
+
 # The demo template's placeholder link resolves in the user's repo, not this one; an inline
 # disable would be presented with the plan.
 [per-file-ignores]

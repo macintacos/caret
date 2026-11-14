@@ -344,7 +344,7 @@ may belong to another of your plugins. On its next start OpenCode installs the p
 its `@opencode-ai/plugin` dependency into its own cache and loads it — caret writes no
 config-dir manifest and runs no `bun install` itself. The plugin resolves the caret binary
 and its own version at runtime from the package it ships in (`CARET_OPENCODE_BIN`
-overrides the binary — see [Environment variables](CONFIGURING.md#environment-variables)),
+overrides the binary — see [Environment variables](reference/environment-variables.md)),
 and on load it checks caret's latest GitHub release and toasts an update nudge when you're
 behind (`CARET_OPENCODE_NO_UPDATE_CHECK` opts out).
 [Installing with `caret install`](#installing-with-caret-install) covers the agent choice
@@ -415,7 +415,7 @@ which pi loads through the `pi` manifest in the `@macintacos/caret` package.
   `caret doctor` and shows its report in the session.
 
 `CARET_PI_BIN` overrides the caret binary the extension spawns — see
-[Environment variables](CONFIGURING.md#environment-variables).
+[Environment variables](reference/environment-variables.md).
 
 `caret install`'s pi target drives pi only through its own package commands (`pi install`,
 `pi update`, `pi remove`); caret never writes pi's `settings.json`. It needs pi 1.5.0 or
@@ -500,9 +500,9 @@ a plugin no way to ask, so caret refuses every `path` review there with an error
 few places, so caret's planning steer tells it to write to OpenCode's plans directory — on
 v1 `~/.local/share/opencode/plans` (under `$XDG_DATA_HOME` when that is set), on v2
 `~/.opencode/plan` — or wherever `[opencode] plans_dir` in caret's
-[config file](CONFIGURING.md#the-opencode-table) points. Any other agent can use any `.md`
-file its edit rules allow. On v2 a file outside the project hits `external_directory`,
-which defaults to `ask`, so OpenCode asks the user.
+[config file](reference/config-file.md#the-opencode-table) points. Any other agent can use
+any `.md` file its edit rules allow. On v2 a file outside the project hits
+`external_directory`, which defaults to `ask`, so OpenCode asks the user.
 
 On Claude Code a long wait has two more wrinkles. From Claude Code v2.1.212 a tool call
 still running after two minutes can move to the background; the tool's description tells
@@ -513,7 +513,7 @@ which sits above the highest `review.timeout_s` caret accepts (it must stay belo
 
 The same **fail-safe = deny** rule holds where it matters, on the review decision itself:
 a spawn failure, an unparseable decision, or a timeout (`review.timeout_s`, 1 hour by
-default — see [Config file](CONFIGURING.md#config-file)) all come back as a change request
+default — see [Config file](reference/config-file.md)) all come back as a change request
 rather than an approval. On the caret-owned flat wire, a deny caret made itself carries
 `failsafe: true`; pi reports it as a failed review rather than a change request.
 Cancelling a pending call on Claude Code (Esc), or quitting Claude Code, expires its
@@ -595,27 +595,6 @@ The polished diff/compare viewer for plan versions is a planned fast-follow.
 
 The built-in themes are theme files in `ui/src/lib/themes/`, built into `THEMES` at module
 load rather than through `addTheme`. `ui/theme-drift.md` measures each vendor file against
-the original it was converted from, held in `ui/upstream-shiki.ts`. The mapping decisions
-a file's colors don't explain:
-
-- **caret dark / caret light** name their own colors, an earth-pigment set for a proofing
-  desk: nothing at full chroma and nothing on the violet arc, so keyword takes red ochre.
-  The skill chip rides the syntax `type` hue, because no semantic color sits far enough
-  from `ok` to separate it from the path chip. Type and function, number and escape, and
-  attribute and property are held at least 130° apart in OKLCH in both schemes, and the
-  eight colored syntax roles sit in one narrow, high-chroma band.
-- **Catppuccin** follows its own editor convention — chrome on `mantle`, code on `base`,
-  panels on `surface0` — shifted down a step in Latte, which has nothing above `base`. The
-  ink ramp takes the deeper `subtext1` / `overlay2` so it holds on raised surfaces.
-  Latte's low-contrast `green` and `lavender` stay as published: reading Latte's own
-  colors is the point of picking it.
-- **Dracula** publishes only two text neutrals, so `inkSoft` and `inkFaint` are mixed
-  along its Foreground↔Comment ramp.
-- **GitHub** uses Primer functional tokens throughout: the page on GitHub's own canvas
-  (`bgColor.muted` light, `bgColor.default` dark), cards on the brightest, code on the
-  recessed one. GitHub Light's `accentBright` is the deeper prettylights blue `#0550ae`,
-  not a lighter one, since it paints inline code and fence bodies on a white code surface.
-- **Nightfox** bends Dawnfox: `sunk` is bg2 since bg1 must be `raised`; `ink` is fg0
-  because fg1 fails 4.5:1 once quoted text fades it; `inkFaint` is mixed fg2 → comment;
-  and `accent` is blue, since no neutral reads on magenta. Neither flavor's ref chip is
-  green — Nightfox's greens are too desaturated.
+the original it was converted from, held in `ui/upstream-shiki.ts`.
+[Built-in themes](reference/built-in-themes.md) explains the mapping decisions a file's
+colors don't.

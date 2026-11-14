@@ -2,16 +2,16 @@
 
 When you introduce a new user setting — a `config.toml` key or a `CARET_*` environment
 variable — it must land **with its documentation in the same change**. A setting that
-exists only in code is undiscoverable; `docs/CONFIGURING.md` is the configuration
-reference.
+exists only in code is undiscoverable; `docs/reference/config-file.md` and
+`docs/reference/environment-variables.md` are the configuration reference.
 
 - **Schema.** For a `config.toml` key, add it to `SettingsSchema` in
   `src/config/settings.ts` with a default and a comment citing the introducing issue
   (existing keys follow this pattern, e.g. `level: ... // EXC-398`).
-- **Reference doc.** Document it in `docs/CONFIGURING.md`: config-file keys as a row in
-  the relevant table under `## Config file` (e.g. the `[logging]` table), environment
-  variables as a row in the **Runtime** table under `## Environment variables` — unless
-  the var is dev-only or preflight-only, which have their own tables there.
+- **Reference doc.** Document a config-file key as a row in its table in
+  `docs/reference/config-file.md` (e.g. the `[logging]` table), and a runtime environment
+  variable as a row in `docs/reference/environment-variables.md`. A dev-only or
+  preflight-only variable is a row in `docs/DEVELOPMENT.md` § Dev and preflight settings.
 - **Hot-reload.** If the setting is read live, note its hot-reload semantics — the
   settings service re-reads `config.toml` on change, so daemon-held settings take effect
   without a restart.

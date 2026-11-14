@@ -52,8 +52,8 @@ headings and marks the one you are reading. Click a heading to go to it.
 - Press `\` to filter the outline.
 - Press `shift+\` to hide or show it. Your browser remembers a hidden outline.
 - Drag the outline's right edge to make it wider or narrower, or tab to the edge and use
-  the left and right arrow keys. Double-click the edge to return it to its default width.
-  Your browser remembers the width.
+    the left and right arrow keys. Double-click the edge to return it to its default
+    width. Your browser remembers the width.
 
 With a file open beside the plan, neither a drag nor a double-click widens the outline
 past the width that keeps it beside the plan.
@@ -100,8 +100,8 @@ opens its tree instead.
 caret recognizes two ways a plan cites a file:
 
 - a path in backticks, such as `` `src/mail/send.ts` ``;
-- a path in parentheses beside the thing it belongs to, the way a plan cites its evidence:
-  ``the retry lives in `attempt_send` (src/mail/send.ts:127-141)``.
+- a path in parentheses beside the thing it belongs to, the way a plan cites its
+    evidence: ``the retry lives in `attempt_send` (src/mail/send.ts:127-141)``.
 
 A path loose in a sentence gets no icon, so ordinary words never look like files. In
 parentheses, a path needs a `/` or a `.`, so `(Makefile)` gets no icon, while
