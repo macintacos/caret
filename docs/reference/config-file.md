@@ -90,7 +90,7 @@ The `CARET_*` environment variables also cover these settings (see
     the background service starts, and `timeout_s` on the next review. If `caret install`
     keeps the background service running, restart it with `caret install --refresh`, which
     also moves it to the newest caret installed, or
-    [restart the service](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#the-caret-service).
+    [restart the service](../how-to/background-service.md#check-restart-or-stop-it).
 
     caret reads `band` on every `caret band-link` run, so it applies from the next review
     with no restart.

@@ -121,7 +121,7 @@ Ctrl+C. To go back to starting at login, run the install again and answer
 **Keep it running**.
 
 To turn caret off entirely, see
-[Turning caret off](https://github.com/macintacos/caret/blob/main/docs/RUNNING.md#turning-caret-off).
+[Turn caret off](turn-off.md).
 
 ## Update caret
 
