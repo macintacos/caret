@@ -3,7 +3,7 @@ on:
   pull_request:
     # No "edited": it would re-run every job on each title or body edit.
     types: [opened, reopened, synchronize]
-    branches: [main]
+    # No branches filter: a stacked PR targets the branch below it until it joins its stack.
   push:
     branches: [main]
 permissions: {}

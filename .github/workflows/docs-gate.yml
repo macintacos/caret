@@ -3,7 +3,7 @@ on:
   pull_request:
     # labeled and unlabeled re-run the gate when docs-not-needed is added or removed.
     types: [opened, synchronize, reopened, labeled, unlabeled]
-    branches: [main]
+    # No branches filter: a stacked PR targets the branch below it until it joins its stack.
 permissions:
   contents: read
   pull-requests: read

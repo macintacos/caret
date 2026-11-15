@@ -2,7 +2,7 @@ name: menubar
 on:
   pull_request:
     types: [opened, reopened, synchronize]
-    branches: [main]
+    # No branches filter: a stacked PR targets the branch below it until it joins its stack.
 permissions: {}
 concurrency:
   group: menubar-${{ github.event.pull_request.number }}

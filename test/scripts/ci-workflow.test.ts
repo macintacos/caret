@@ -36,9 +36,9 @@ const TASKS = [
   "test e2e",
 ];
 
-test("runs on pull requests and pushes to main only", () => {
+test("runs on pull requests into any base, and on pushes to main", () => {
   expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
-  expect(workflow.on.pull_request?.branches).toEqual(["main"]);
+  expect(workflow.on.pull_request?.branches).toBeUndefined();
   expect(workflow.on.push?.branches).toEqual(["main"]);
 });
 

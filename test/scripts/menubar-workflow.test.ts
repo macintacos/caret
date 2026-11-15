@@ -20,7 +20,7 @@ type Job = {
 
 const yaml = await Bun.file(".github/workflows/menubar.yml").text();
 const workflow = Bun.YAML.parse(yaml) as {
-  on: { pull_request: { branches: string[] } };
+  on: { pull_request: { branches?: string[] } };
   permissions: unknown;
   jobs: { changes: Job; menubar: Job };
 };
@@ -29,9 +29,9 @@ const lock = Bun.YAML.parse(await Bun.file(".github/workflows/actions.lock").tex
   workflows: Record<string, string[]>;
 };
 
-test("runs on pull requests against main only", () => {
+test("runs on pull requests into any base", () => {
   expect(Object.keys(workflow.on)).toEqual(["pull_request"]);
-  expect(workflow.on.pull_request.branches).toEqual(["main"]);
+  expect(workflow.on.pull_request.branches).toBeUndefined();
 });
 
 test("never runs with a write token", () => {

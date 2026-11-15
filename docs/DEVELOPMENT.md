@@ -755,18 +755,18 @@ entirely by those links.
 #### PR checks
 
 The local gate never runs `test e2e`; the PR checks are the full gate.
-`.github/workflows/ci.yml` runs on every PR against `main` and on pushes to `main`, with
-one job per preflight task, each named after its task (`lint`, `test unit`, `test bats`,
-`test mod`, `build ui`, `test e2e`, `build bin`, `smoke`, `docs:build`). The two that need
-macOS, `test swift` and `build menubar`, run in the `menubar` workflow below instead.
-`build ui` hands `ui/dist` to `test e2e` and `build bin` as an artifact, and `build bin`
-hands the binary to `smoke`. The e2e suite runs as four shard jobs, because one 4-vCPU
-runner cannot finish it inside Playwright's 15-minute global timeout; the `test e2e` check
-passes only when every shard does. Caches are saved only on `main` pushes: a cache saved
-from a PR is restorable by that PR alone and still counts against the repository's cache
-quota, where it evicts main's. The e2e shards' apt packages are the exception —
-`cache-apt-pkgs-action` saves on any miss, so a PR that changes the package set saves a
-copy of its own.
+`.github/workflows/ci.yml` runs on every PR, whatever its base, and on pushes to `main`,
+with one job per preflight task, each named after its task (`lint`, `test unit`,
+`test bats`, `test mod`, `build ui`, `test e2e`, `build bin`, `smoke`, `docs:build`). The
+two that need macOS, `test swift` and `build menubar`, run in the `menubar` workflow below
+instead. `build ui` hands `ui/dist` to `test e2e` and `build bin` as an artifact, and
+`build bin` hands the binary to `smoke`. The e2e suite runs as four shard jobs, because
+one 4-vCPU runner cannot finish it inside Playwright's 15-minute global timeout; the
+`test e2e` check passes only when every shard does. Caches are saved only on `main`
+pushes: a cache saved from a PR is restorable by that PR alone and still counts against
+the repository's cache quota, where it evicts main's. The e2e shards' apt packages are the
+exception — `cache-apt-pkgs-action` saves on any miss, so a PR that changes the package
+set saves a copy of its own.
 
 - Job names are what branch protection matches — renaming one drops it from the required
   checks.
@@ -778,10 +778,13 @@ copy of its own.
     .github/workflows/docs-gate.yml .github/workflows/menubar.yml
   ```
 
-- A stacked PR retargeted to `main` gets its checks on the next push, not on the retarget.
+- The PR workflows filter on no base branch. A stacked PR targets the branch below it
+  until it joins its stack, and joining fires no activity type they run on, so a `main`
+  filter leaves a PR opened before it joins its stack with no checks until its next push.
+  Retargeting a PR fires none either; its checks stay those of its last push.
 
 The docs gate is a separate workflow, `.github/workflows/docs-gate.yml`, whose one job is
-the `docs gate` check. It runs on every PR against `main` when the PR opens, gets new
+the `docs gate` check. It runs on every PR, whatever its base, when the PR opens, gets new
 commits, reopens, or gains or loses a label. It reads the PR's changed paths from the
 GitHub API and pipes them to `scripts/docs-gate.ts`, which fails when a path is
 user-visible (listed in the script's `USER_VISIBLE` table) and no page the docs site
