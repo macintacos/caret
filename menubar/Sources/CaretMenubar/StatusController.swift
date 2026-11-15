@@ -11,7 +11,7 @@ final class StatusController: NSObject {
     private let config: LaunchConfig
     private let session = URLSession(configuration: .ephemeral)
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let carrot = carrotImage(description: "caret: a plan is waiting for review")
+    private let colouredCarrot = carrotImage(description: "caret: a plan is waiting for review")
     private let greyCarrot = carrotImage(description: "caret: nothing to review", template: true)
     private let unansweredItem = NSMenuItem(title: "caret didn't answer the app", action: nil, keyEquivalent: "")
     private var inFlight = false
@@ -36,9 +36,9 @@ final class StatusController: NSObject {
         menu.autoenablesItems = false
         unansweredItem.isEnabled = false
         menu.addItem(unansweredItem)
-        let open = NSMenuItem(title: "Open caret", action: #selector(openCaret), keyEquivalent: "")
-        open.target = self
-        menu.addItem(open)
+        let openItem = NSMenuItem(title: "Open caret", action: #selector(openCaret), keyEquivalent: "")
+        openItem.target = self
+        menu.addItem(openItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         return menu
@@ -73,7 +73,7 @@ final class StatusController: NSObject {
     }
 
     private func show(_ state: IconState) {
-        statusItem.button?.image = state == .pending ? carrot : greyCarrot
+        statusItem.button?.image = state == .pending ? colouredCarrot : greyCarrot
         unansweredItem.isHidden = state != .unanswered
     }
 
