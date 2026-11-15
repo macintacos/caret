@@ -19,6 +19,8 @@ final class StatusController: NSObject {
     private let greyCarrot = carrotImage(description: "caret: nothing to review", template: true)
     private let unansweredItem = NSMenuItem(
         title: "caret didn't answer the app", action: nil, keyEquivalent: "")
+    /// What the last poll showed; nil until the first poll answers, while the grey placeholder
+    /// stands in.
     private var state: IconState?
     private var pollTask: Task<Void, Never>?
 

@@ -25,6 +25,10 @@ const alertsState = await Bun.file(join(uiDir, "state/alerts.ts")).text();
 // are one spelling with nothing else coupling them, so a rename would drop the hand-off
 // through to the theme wipe's unconditional sweep with every unit test still green.
 const planHandoffSrc = await Bun.file(join(uiDir, "lib/planHandoff.ts")).text();
+// Swift can't read CSS, so the menubar app carries both values as literals.
+const menubarFade = await Bun.file(
+  join(uiDir, "../../menubar/Sources/CaretMenubar/NSStatusBarButton+IconTransition.swift"),
+).text();
 
 // The four vendored modal surfaces (EXC-892), keyed by the `data-slot` each stamps. The
 // slot name IS the filename and its primitive is the slot minus `-overlay` / `-content`,
@@ -158,6 +162,12 @@ describe("motion tokens in app.css", () => {
       `const CLOSE_ANIM_MS = ${exit};`, // FileDrawer's slide out, and the folding column's
     );
     expect(alertsState).toContain(`deps.exitMs ?? ${exit};`); // AlertHost's alert-out
+  });
+
+  test("the menubar carrot's fade mirrors --dur-state and --ease-out", () => {
+    expect(menubarFade).toContain(`let duration = ${dur("state") / 1000}`);
+    const ease = root.match(/^\s*--ease-out:\s*cubic-bezier\(([^)]+)\);/m)?.[1];
+    expect(menubarFade).toContain(`controlPoints: ${ease}`);
   });
 
   test("declares the state easing plus the key's spring, both cubic-beziers", () => {

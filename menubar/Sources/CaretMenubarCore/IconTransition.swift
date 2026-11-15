@@ -10,7 +10,7 @@ extension IconTransition {
     /// The transition from the icon shown to the next one, or nil when the carrot switches at
     /// once: on the first icon, when its colour stays the same, and under Reduce Motion.
     package init?(from old: IconState?, to new: IconState, reduceMotion: Bool) {
-        guard !reduceMotion, let old, (old == .pending) != (new == .pending) else { return nil }
-        self = new == .pending ? .lightUp : .dim
+        guard !reduceMotion, let old, old.isColoured != new.isColoured else { return nil }
+        self = new.isColoured ? .lightUp : .dim
     }
 }

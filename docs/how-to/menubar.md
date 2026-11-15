@@ -5,8 +5,8 @@
 caret's menubar app puts a carrot in the macOS menu bar. The carrot colours in while a
 plan waits for review and is grey otherwise, including when no caret is running. When it
 changes, it fades from one to the other in under a fifth of a second. It doesn't fade when
-the app starts. With **Reduce motion** on in System Settings > Accessibility, it changes
-at once.
+the app starts. With **Reduce motion** on in **System Settings → Accessibility**, it
+changes at once.
 
 Its menu has two items:
 

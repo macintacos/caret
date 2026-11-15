@@ -1,15 +1,14 @@
 import AppKit
 import CaretMenubarCore
 
-private let fadeKey = "caret.icon.fade"
 private let growKey = "caret.icon.grow"
 
 extension NSStatusBarButton {
     /// Animates the image change made next in this run-loop pass, or lets it land at once when
-    /// `transition` is nil. Stops whatever an earlier change left running, so changes never
-    /// stack.
+    /// `transition` is nil. A light-up also scales the button's superview. Any fade or grow an
+    /// earlier change left running stops first, so changes never stack.
     func animateImageChange(_ transition: IconTransition?) {
-        layer?.removeAnimation(forKey: fadeKey)
+        layer?.removeAnimation(forKey: kCATransition)
         superview?.layer?.removeAnimation(forKey: growKey)
         guard let transition else { return }
 
@@ -23,24 +22,32 @@ extension NSStatusBarButton {
         fade.type = .fade
         fade.duration = duration
         fade.timingFunction = curve
-        layer?.add(fade, forKey: fadeKey)
+        layer?.add(fade, forKey: kCATransition)
 
-        // The fade drops any transform on the button's own layer, so the grow rides its
-        // superview's.
-        guard transition == .lightUp, let host = superview?.layer else { return }
-        let grow = CABasicAnimation(keyPath: "transform")
-        grow.fromValue = scale(0.85, aboutCentreOf: host)
-        grow.toValue = CATransform3DIdentity
-        grow.duration = duration
-        grow.timingFunction = curve
-        host.add(grow, forKey: growKey)
+        switch transition {
+        case .lightUp:
+            // The fade drops any transform on the button's own layer, so the grow rides the
+            // button-sized wrapper AppKit puts it in. The wrapper is private: grow only while
+            // it still matches the button.
+            guard let host = superview?.layer, host.bounds.size == bounds.size else { return }
+            let grow = CABasicAnimation(keyPath: #keyPath(CALayer.transform))
+            grow.fromValue = host.centredScale(0.85)
+            grow.toValue = CATransform3DIdentity
+            grow.duration = duration
+            grow.timingFunction = curve
+            host.add(grow, forKey: growKey)
+        case .dim:
+            break
+        }
     }
 }
 
-/// A scale about the layer's centre, wherever AppKit put its anchor point.
-private func scale(_ factor: CGFloat, aboutCentreOf layer: CALayer) -> CATransform3D {
-    let dx = layer.bounds.width * (0.5 - layer.anchorPoint.x)
-    let dy = layer.bounds.height * (0.5 - layer.anchorPoint.y)
-    let scaled = CATransform3DScale(CATransform3DMakeTranslation(dx, dy, 0), factor, factor, 1)
-    return CATransform3DTranslate(scaled, -dx, -dy, 0)
+extension CALayer {
+    /// A scale about the layer's centre, wherever AppKit put its anchor point.
+    fileprivate func centredScale(_ factor: CGFloat) -> CATransform3D {
+        let dx = bounds.width * (0.5 - anchorPoint.x)
+        let dy = bounds.height * (0.5 - anchorPoint.y)
+        let scaled = CATransform3DScale(CATransform3DMakeTranslation(dx, dy, 0), factor, factor, 1)
+        return CATransform3DTranslate(scaled, -dx, -dy, 0)
+    }
 }
