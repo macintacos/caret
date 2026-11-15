@@ -9,8 +9,9 @@
 // `build ui` on its own, then spawns `build bin` with CARET_SKIP_BUILD_UI=1 so
 // two concurrent Vite builds can't race on ui/dist.
 
-import { chmodSync, copyFileSync, mkdirSync, rmSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 
+import pkg from "@root/package.json" with { type: "json" };
 import { runCommand } from "@/lib/run.ts";
 import {
   execAndExit,
@@ -283,15 +284,27 @@ export async function buildMenubar(deps: {
   return await deps.run(codesignMenubarCommand());
 }
 
+/** The committed Info.plist with `version` added as the bundle's version keys. The source
+ * stays unversioned so a release bump never touches it. */
+export function menubarPlistWithVersion(plist: string, version: string): string {
+  const keys = ["CFBundleShortVersionString", "CFBundleVersion"]
+    .map((key) => `  <key>${key}</key>\n  <string>${version}</string>\n`)
+    .join("");
+  return plist.replace("</dict>", `${keys}</dict>`);
+}
+
 /** Lay out the .app from the executable SwiftPM built into `binPath` and the committed
- * Info.plist. */
+ * Info.plist, stamped with package.json's version. */
 function assembleMenubarApp(binPath: string): void {
   const executable = `${MENUBAR_APP}/Contents/MacOS/${MENUBAR_EXECUTABLE}`;
   rmSync(MENUBAR_APP, { recursive: true, force: true });
   mkdirSync(`${MENUBAR_APP}/Contents/MacOS`, { recursive: true });
   copyFileSync(`${binPath}/${MENUBAR_EXECUTABLE}`, executable);
   chmodSync(executable, 0o755);
-  copyFileSync("menubar/Info.plist", `${MENUBAR_APP}/Contents/Info.plist`);
+  writeFileSync(
+    `${MENUBAR_APP}/Contents/Info.plist`,
+    menubarPlistWithVersion(readFileSync("menubar/Info.plist", "utf8"), pkg.version),
+  );
 }
 
 export async function runBuildMenubar(): Promise<never> {
