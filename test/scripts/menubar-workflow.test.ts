@@ -102,3 +102,21 @@ test("every action ref is locked for this workflow", () => {
     expect(lockedRefs).toContain(`${repo?.split("/").slice(0, 2).join("/")}@${tag}`);
   }
 });
+
+test("checks the bundle is universal, signed, and built for macOS 13, after the launchable check", () => {
+  const runs = menubar.steps.map((step) => step.run ?? "");
+  const launchable = runs.findIndex((run) => run.includes("CFBundleExecutable"));
+  const universal = runs.findIndex((run) => run.includes("-verify_arch"));
+  const floor = runs.findIndex((run) => run.includes("vtool -show-build"));
+  expect(universal).toBeGreaterThan(launchable);
+  expect(floor).toBeGreaterThan(launchable);
+  expect(runs[universal]).toContain(
+    "lipo bin/caret-menubar.app/Contents/MacOS/CaretMenubar -verify_arch arm64",
+  );
+  expect(runs[universal]).toContain(
+    "lipo bin/caret-menubar.app/Contents/MacOS/CaretMenubar -verify_arch x86_64",
+  );
+  expect(runs[universal]).toContain("codesign --verify --deep --strict bin/caret-menubar.app");
+  expect(runs[floor]).toContain("minos");
+  expect(runs[floor]).toContain("13.0");
+});
