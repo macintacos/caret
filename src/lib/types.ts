@@ -551,6 +551,13 @@ export interface ThemeUpload {
   unremoved: string[];
 }
 
+/** The accent of the theme in each scheme's slot, as the review page shows them: the body
+ * of PUT /api/accent, and the menubar card's tint in GET /api/stats. */
+export interface SchemeAccents {
+  light: string;
+  dark: string;
+}
+
 /** POST /api/themes 400, 409, 413 or 500: why nothing was saved, one line per problem. */
 export interface ThemeUploadRefusal {
   errors: string[];

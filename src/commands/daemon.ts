@@ -13,6 +13,7 @@ import { selectAdapter } from "@/adapters/index.ts";
 import { warnInvalidEnvVars } from "@/commands/boot.ts";
 import { createConfigWriter } from "@/config/config-write.ts";
 import {
+  accentFile,
   configFile,
   daemonLock,
   daemonTokenFile,
@@ -64,8 +65,10 @@ import {
   listReleases,
   publishedCaretVersion,
 } from "@/lib/upstream.ts";
+import { readReviewStats } from "@/review/stats.ts";
 import { createStore } from "@/review/store.ts";
 import { isSupervised, SERVICE_TERMINAL_EXIT_STATUS } from "@/service/manager.ts";
+import { createAccentStore } from "@/theme/accent.ts";
 import { loadUiAssets } from "@/ui/assets.ts";
 
 /** Boots the daemon and resolves with the port it bound and the settings it booted with.
@@ -308,6 +311,8 @@ export async function runDaemon(opts: {
       updateReport: servedReport,
       // Read off the same hot-reloading service, so a GET after a POST sees the write.
       configValues: () => configValuesOf(svc.current()),
+      reviewStats: () => readReviewStats(reviewsDir()),
+      accentStore: createAccentStore(accentFile()),
       // Turning the check back on re-runs it, so a reviewer who opted out long ago gets
       // a real verdict on the spot rather than a daemon lifetime later.
       onUpdatesEnabled: refreshUpdate,

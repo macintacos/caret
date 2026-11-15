@@ -34,7 +34,9 @@ export type SyntaxRole = RequiredSyntaxRole | OptionalSyntaxRole;
 export const MAX_LENGTH = 64;
 const TOO_LONG = `must be at most ${MAX_LENGTH} characters`;
 
-const ColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, "must be a hex color like #1a2b3c");
+export const ColorSchema = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/, "must be a hex color like #1a2b3c");
 
 const RoleStyleSchema = z.strictObject({
   color: ColorSchema,

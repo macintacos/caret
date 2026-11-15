@@ -67,9 +67,11 @@ import { listDirectory } from "@/plan/directory.ts";
 import { isFileTooLargeToPreview, readFileExcerpt, resolveInCwd } from "@/plan/excerpt.ts";
 import { searchFiles } from "@/plan/file-search.ts";
 import { createDecisions } from "@/review/decisions.ts";
+import type { ReviewStats } from "@/review/stats.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
 import { isSupervised } from "@/service/manager.ts";
+import { type AccentStore, SchemeAccentsSchema } from "@/theme/accent.ts";
 import { loadCustomThemes, MAX_THEME_FILE_BYTES, THEME_FILE_TOO_LARGE } from "@/theme/load.ts";
 import { createThemeWriter, type ThemeSaveRefusal, type ThemeWriter } from "@/theme/save.ts";
 import type { UiAssets } from "@/ui/assets.ts";
@@ -213,6 +215,12 @@ export interface CreateServerOptions {
    * runDaemon wires it, and the e2e fixture daemon must too: App reads this route on
    * every load. */
   configValues?: () => ConfigValues;
+  /** A thunk answering GET /api/stats with the tally of every persisted review, for the
+   * menubar app's card. Synchronous, since the route is unbracketed. Omitted → 404. */
+  reviewStats?: () => ReviewStats;
+  /** Where PUT /api/accent keeps the review page's accents, which GET /api/stats then
+   * serves to the menubar app. Omitted → PUT 404s and the stats carry no accent. */
+  accentStore?: AccentStore;
   /** A thunk answering GET /api/update/changes (EXC-1452): what the caret the user is
    * behind would bring, fetched from GitHub on request. Null → 502. Omitted → 404. */
   updateChanges?: () => Promise<UpdateChanges | null>;
@@ -296,6 +304,8 @@ interface ResolvedOptions {
   diagnostics: (() => DaemonDiagnostics) | undefined;
   updateReport: (() => UpdateReport | Promise<UpdateReport>) | undefined;
   configValues: (() => ConfigValues) | undefined;
+  reviewStats: (() => ReviewStats) | undefined;
+  accentStore: AccentStore | undefined;
   updateChanges: (() => Promise<UpdateChanges | null>) | undefined;
   releaseNotes: ((since: string) => Promise<ReleaseNote[] | null>) | undefined;
   restartHint: string | undefined;
@@ -338,6 +348,8 @@ function resolveOptions(opts: CreateServerOptions): ResolvedOptions {
     diagnostics: opts.diagnostics,
     updateReport: opts.updateReport,
     configValues: opts.configValues,
+    reviewStats: opts.reviewStats,
+    accentStore: opts.accentStore,
     updateChanges: opts.updateChanges,
     releaseNotes: opts.releaseNotes,
     restartHint: opts.restartHint,
@@ -415,6 +427,9 @@ function offersVariant(
 ): boolean {
   return id === undefined || declared === undefined || declared.some((v) => v.id === id);
 }
+
+/** The GET routes the menubar app reads, answered outside the liveness bracket. */
+const MENUBAR_READS: ReadonlySet<string> = new Set(["/api/pending", "/api/stats"]);
 
 function expiredDeny(): Decision {
   return {
@@ -546,6 +561,29 @@ export function createServer(opts: CreateServerOptions): CaretServer {
   // Unlike GET /api/reviews it stamps no UI presence: a poll here is not an open tab.
   function handlePending(): Response {
     return Response.json({ pending: store.pendingCount() });
+  }
+
+  // GET /api/stats — the running version and the review tally, for the menubar app's card,
+  // read each time its menu opens. Like GET /api/pending it stamps no UI presence.
+  function handleStats(): Response {
+    if (!cfg.reviewStats) return notFound();
+    const accent = cfg.accentStore?.read();
+    return Response.json({
+      version: IDENTITY.version,
+      ...cfg.reviewStats(),
+      ...(accent ? { accent } : {}),
+    });
+  }
+
+  // PUT /api/accent — the review page reporting its two theme slots' accents, on load and
+  // on every change, for the menubar app's card.
+  async function handleAccent(req: Request): Promise<Response> {
+    if (!cfg.accentStore) return notFound();
+    const parsed = SchemeAccentsSchema.safeParse(await req.json().catch(() => undefined));
+    if (!parsed.success)
+      return Response.json({ error: "expected { light, dark } hex colors" }, { status: 400 });
+    await cfg.accentStore.write(parsed.data);
+    return new Response(null, { status: 204 });
   }
 
   // GET /api/update — whether the caret this daemon is, is behind (EXC-1205): the
@@ -1230,6 +1268,8 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "GET" && path === "/api/diagnostics") return handleDiagnostics();
     if (method === "GET" && path === "/api/config") return handleGetConfig();
     if (method === "GET" && path === "/api/pending") return handlePending();
+    if (method === "GET" && path === "/api/stats") return handleStats();
+    if (method === "PUT" && path === "/api/accent") return handleAccent(req);
     if (method === "GET" && path === "/api/update") return handleUpdate();
     if (method === "GET" && path === "/api/update/changes") return handleUpdateChanges();
     if (method === "GET" && path === "/api/update/notes") return handleReleaseNotes(req);
@@ -1324,10 +1364,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       if (!isSafeMethod(method) && isCrossOrigin(req, port, names)) {
         return new Response("cross-origin request blocked", { status: 403 });
       }
-      // GET /api/pending skips the bracket: the menubar app polls it every few seconds,
-      // and begin() restarts the idle countdown. Unbracketed means uncounted in flight,
-      // so its handler must stay synchronous.
-      if (!(method === "GET" && path === "/api/pending")) end = liveness.begin(method);
+      // The menubar app's reads skip the bracket: it polls /api/pending every few seconds
+      // and reads /api/stats on each menu open, and begin() restarts the idle countdown.
+      // Unbracketed means uncounted in flight, so their handlers must stay synchronous.
+      if (!(method === "GET" && MENUBAR_READS.has(path))) end = liveness.begin(method);
 
       const idRoute = matchIdRoute(path);
       const route = idRoute && { ...idRoute, log: log.child({ reviewId: idRoute.id }) };

@@ -25,6 +25,11 @@ export function reviewsDir(): string {
   return `${stateDir()}/reviews`;
 }
 
+/** The accents the review page last reported, for the menubar app's card. */
+export function accentFile(): string {
+  return `${stateDir()}/accent.json`;
+}
+
 /** Directory holding the downloaded rumdl binary + its formatting config
  * (EXC-828). caret owns this dir (off PATH) and installs rumdl into it on first
  * plan format; ensureStateDir() keeps it at 0700 like the rest of stateDir. */
