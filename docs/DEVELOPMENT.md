@@ -585,7 +585,7 @@ opens `menubar/Package.swift` directly. `swift test --package-path menubar` runs
 tests.
 
 `mise run build menubar` builds it in release and assembles `bin/caret-menubar.app`, with
-`LSUIElement` set so it has no Dock icon. It needs macOS 13 or later and Xcode 16 or
+`LSUIElement` set so it has no Dock icon. It needs macOS 13 or later and Xcode 26 or
 later; elsewhere the target prints one line and succeeds. Run it with
 `open bin/caret-menubar.app`, or pass launch arguments after `--args`:
 
@@ -597,6 +597,18 @@ open bin/caret-menubar.app --args --base-url http://127.0.0.1:42718 \
 All three arguments are optional, and the URLs default as shown. With no `--token-file`
 the app sends no token, which a daemon without auth doesn't need. A base URL that isn't
 loopback is refused.
+
+The app logs each icon change to the unified log under the subsystem
+`dev.excessive.caret.menubar`:
+
+```sh
+log show --last 1h --predicate 'subsystem == "dev.excessive.caret.menubar"'
+```
+
+`swift format` formats the Swift, with the settings in `menubar/.swift-format`.
+`swift format --in-place --recursive menubar` rewrites the files, and
+`swift format lint --strict --recursive menubar` checks them. `mise run format` and
+`mise run lint` run the same over the package, and skip it where `swift` isn't installed.
 
 `mise run preflight` never runs Swift; the `menubar` workflow (see
 [PR checks](#pr-checks)) is the gate.

@@ -106,7 +106,7 @@ replaces the default `scripts/` rather than joining it; `--filter <regex>` narro
 whatever is selected. `mise run test mod` runs the Claude Code mod's kit tests under
 `mod/` (`claude plugin test mod`) and forwards nothing; preflight skips it when `claude`
 is not on PATH. `swift test --package-path menubar` runs the menubar app's Swift tests; it
-needs macOS and Xcode 16 or later, and neither `mise run test` nor `mise run preflight`
+needs macOS and Xcode 26 or later, and neither `mise run test` nor `mise run preflight`
 runs it, so run it yourself when you change `menubar/`.
 
 **`mise run test --json` is the call you want when you only need the verdict.** It emits
