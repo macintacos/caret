@@ -29,6 +29,7 @@ what-does: Load the file for every area the change touches
   adding or working with vendored icons > icon-rules
   OpenCode adapter, plugin, or install (caret install) > opencode-integration
   pi adapter, extension, or install (caret install) > pi-integration
+  the macOS menubar app in menubar/: its Swift, Package.swift, its tests, the contract.json it shares with TypeScript > swift-rules
   rumdl: bumping its version, touching any of its three configs or invocations (repo hygiene, plan formatting, release notes), or scripts/tasks/dev/fake-plan.md > rumdl-rules
   documentation: which doc to update — README, the docs site's pages and nav (`zensical.toml`), the contributor pages (ARCHITECTURE, DEVELOPMENT), CONTRIBUTING, the docs/ router, or the doc map itself; whether a change needs a site page, and the docs-not-needed label > documentation-rules
   any change a user can see, new features included: a command, flag, setting, host, output, or review-page behaviour > documentation-rules
@@ -46,6 +47,7 @@ dependency-rules!: Load docs/agents/dependency-rules.md
 icon-rules!: Load docs/agents/icon-rules.md
 opencode-integration!: Load docs/agents/opencode-integration.md
 pi-integration!: Load docs/agents/pi-integration.md
+swift-rules!: Load docs/agents/swift-rules.md
 rumdl-rules!: Load docs/agents/rumdl-rules.md
 documentation-rules!: Load docs/agents/documentation-rules.md
 readme!: Load design/README.md
@@ -53,27 +55,30 @@ readme!: Load design/README.md
 
 ## Verifying changes
 
-`mise run preflight` is the fast local pre-push gate — lint, unit + shell tests, build,
-the docs site build, and artifact smoke, run concurrently; it never runs e2e. The full
-gate is the PR checks: CI runs all nine tasks, the whole e2e suite included, on every PR.
-So when you change browser behaviour, run the affected spec yourself with
-`mise run test e2e --json <path>` — preflight will not. When **you** (an agent) run
-preflight, pass `--json`. `mise run preflight --json` replaces the live human display with
-two compact JSON documents on stdout, one per line: a `start` document (the planned tasks,
-why that set, plus the filters in effect) and a `result` document carrying each task's
-status and `durationMs` and an overall `ok` boolean. The exit code is unchanged (`0` pass,
-`1` fail).
+`mise run preflight` is the fast local pre-push gate — lint, unit, shell and Swift tests,
+the builds, the docs site build, and artifact smoke, run concurrently; it never runs e2e.
+The full gate is the PR checks: CI runs every gate task plus the whole e2e suite. Its
+macOS lanes, `test swift` and `build menubar`, run in the `menubar` workflow, which runs
+only when a PR touches the app or its build or test task. So when you change browser
+behaviour, run the affected spec yourself with `mise run test e2e --json <path>` —
+preflight will not. When **you** (an agent) run preflight, pass `--json`.
+`mise run preflight --json` replaces the live human display with two compact JSON
+documents on stdout, one per line: a `start` document (the planned tasks, why that set,
+plus the filters in effect) and a `result` document carrying each task's status and
+`durationMs` and an overall `ok` boolean. The exit code is unchanged (`0` pass, `1` fail).
 
-**The gate scopes itself to your diff, so `ok` does not always mean all eight tasks ran.**
-A change where every path is Markdown runs `lint` alone — plus `test unit` when it touches
+**The gate scopes itself to your diff, so `ok` does not always mean all ten tasks ran.** A
+change where every path is Markdown runs `lint` alone — plus `test unit` when it touches
 one of the Markdown files a test reads from disk (listed in `MARKDOWN_READ_BY_TESTS` in
 `scripts/preflight.ts`), and `docs:build` when it touches anything under `docs/`. Anything
-else runs the full eight, as does an empty or unreadable diff. Read the `start` document's
+else runs the full ten, as does an empty or unreadable diff. Read the `start` document's
 `selection` object before you report a run as green: `{"narrowed": true, "reason": "…"}`
 means you proved less than the whole gate, and `schemaVersion` is `2` precisely because
-`ok` now means "every task that ran passed". `--full` forces all eight — it is the one
+`ok` now means "every task that ran passed". `--full` forces all ten — it is the one
 preflight flag that works without `--json` too. Note that `lint` always scans the whole
-tree even when the gate narrows, so cross-file link fragments stay checked.
+tree even when the gate narrows, so cross-file link fragments stay checked. Off macOS, or
+without `swift` on PATH, `test swift` and `build menubar` report `skipped` with the reason
+as their `output`, so a green run there has not touched the Swift.
 
 `mise run preflight --json` is the call you want almost every time.
 **Failures show their output by default**, so you can act immediately — and if a task's
@@ -105,28 +110,31 @@ arguments, so `mise run test <path>` scopes the run to one file. On `bats` a nam
 replaces the default `scripts/` rather than joining it; `--filter <regex>` narrows within
 whatever is selected. `mise run test mod` runs the Claude Code mod's kit tests under
 `mod/` (`claude plugin test mod`) and forwards nothing; preflight skips it when `claude`
-is not on PATH. `swift test --package-path menubar` runs the menubar app's Swift tests; it
-needs macOS and Xcode 26 or later, and neither `mise run test` nor `mise run preflight`
-runs it, so run it yourself when you change `menubar/`.
+is not on PATH. `mise run test swift` runs the menubar app's Swift tests
+(`swift test --package-path menubar`, warnings as errors) and forwards its arguments, so
+`mise run test swift --filter <regex>` narrows it. It needs macOS and Xcode 26 or later;
+anywhere else it prints why and exits `0`.
 
 **`mise run test --json` is the call you want when you only need the verdict.** It emits
 one JSON document on stdout and nothing else — every child, the UI build included, runs
 captured — and the exit code is unchanged (`0` pass, non-zero fail):
 
 ```text
-{"schemaVersion": 1, "target": "unit"|"e2e"|"bats"|"mod", "ok", "passed", "failed", "durationMs", "report"}
+{"schemaVersion": 1, "target": "unit"|"e2e"|"bats"|"mod"|"swift", "ok", "passed", "failed", "durationMs", "report"}
 ```
 
-`ok` is the runner's own exit code, never re-derived from the counts.
+`ok` is the runner's own exit code, never re-derived from the counts. A `swift` run on a
+host that cannot build the app adds `skipReason`, and its `ok: true` means nothing ran.
 
 **What rides along depends on the verdict**, the same discipline `preflight --json`
 applies. A **passing** run is that envelope and nothing else — about 120 bytes, whether it
 ran one file or all 4900. A **failing** run adds two fields: `report`, the runner's native
-report nested unnormalised (JUnit XML as a string for `unit` and `bats`, Playwright's json
-report as an object for `e2e`), and `output`, everything the runner wrote. Read `output`
-first: it is the human-formatted stream. Both runners put the diagnosis in their XML too,
-but out of `&#10;`-escaped attributes. `report` is `null` when the runner produced none,
-and `output` still carries what it wrote, so a run that died early stays diagnosable.
+report nested unnormalised (JUnit XML as a string for `unit`, `bats` and `swift`,
+Playwright's json report as an object for `e2e`), and `output`, everything the runner
+wrote. Read `output` first: it is the human-formatted stream. Both runners put the
+diagnosis in their XML too, but out of `&#10;`-escaped attributes. `report` is `null` when
+the runner produced none, and `output` still carries what it wrote, so a run that died
+early stays diagnosable.
 
 A failing whole-suite run is large — the native report grows with the number of tests, so
 scope the run when you can. `--verbose` restores the full stream; `--quiet` is a dot per

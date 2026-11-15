@@ -58,11 +58,11 @@ mise run caret      # caret's own CLI from src/cli.ts, e.g. `mise run caret doct
 mise run test       # bun test (unit); `mise run test unit` is the same target
 mise run test e2e   # Playwright browser e2e (isolated daemon; Chromium, plus WebKit for the JSC probe)
                     # both take --quiet / --verbose / --json, before any forwarded args
-mise run test bats  # the hermetic shell suites under scripts/; `test mod` the mod's kit tests; --json only
+mise run test bats  # shell suites under scripts/; `test mod` the mod kit; `test swift` the menubar app; --json only
 mise run lint       # read-only gate: formatting + Biome lint + tsc + svelte-check
 mise run format     # Biome (write)
 mise run smoke      # smoke the shipped artifacts; also `smoke bin` / `smoke bundle`
-mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ mod) + build + docs build + smoke, scoped to the diff
+mise run preflight  # pre-push gate: lint + tests (unit ∥ bats ∥ mod ∥ swift) + builds + docs build + smoke, scoped to the diff
 mise run verify     # check the service unit against a real supervisor: `verify macos` or `verify linux`
                     # macos drives this Mac's own launchctl; linux boots a real systemd in a container
 ```
@@ -496,9 +496,9 @@ and any review respawns the fresh build. The second is below.
 
 `unit` and `e2e` take the same three flags, and with none of them the mode follows the
 audience: a terminal gets `quiet`, anything piped keeps the full stream, so no script or
-gate that reads the output today sees a different one. `bats` takes `--json` alone — its
-TAP stream is already one line per test, so there is no volume to reduce or add, and a
-flag that did nothing would be worse than no flag.
+gate that reads the output today sees a different one. `bats` and `swift` take `--json`
+alone — each stream is already one line per test, so there is no volume to reduce or add,
+and a flag that did nothing would be worse than no flag.
 
 | Flag        | What the runner prints                                              |
 | ----------- | ------------------------------------------------------------------- |
@@ -524,18 +524,20 @@ runner's own exit code. What rides along depends on the verdict, the same way
 `mise run preflight --json` reports a passing task: a **passing** run is that envelope
 alone, because a green run's native report says only what `passed` already says and costs
 megabytes to say it. A **failing** run adds `report` — the runner's native report nested
-unnormalised, JUnit XML as a string for `unit` and `bats`, Playwright's json report as an
-object for `e2e` — and `output`, everything the runner wrote. `output` is the one to read:
-it is the human-formatted stream. Both JUnit writers put the diagnosis in the XML as well,
-but inside `&#10;`-escaped attributes rather than as something you can scan. A runner that
-produced no report at all yields `report: null` and still carries `output`. Everything the
-run spawns is captured in this mode, the UI build included, so the document is the only
-thing on stdout.
+unnormalised, JUnit XML as a string for `unit`, `bats` and `swift`, Playwright's json
+report as an object for `e2e` — and `output`, everything the runner wrote. `output` is the
+one to read: it is the human-formatted stream. Both JUnit writers put the diagnosis in the
+XML as well, but inside `&#10;`-escaped attributes rather than as something you can scan.
+A runner that produced no report at all yields `report: null` and still carries `output`.
+Everything the run spawns is captured in this mode, the UI build included, so the document
+is the only thing on stdout. `swift` on a host that cannot build the menubar app runs
+nothing and adds `skipReason`, so its `ok: true` with zero counts never reads as a suite
+that passed.
 
-The two JUnit writers split their counts differently, and one parser serves both: bun
-repeats the whole-run totals on the root `<testsuites>`, while bats leaves the root
-carrying only a `time` and puts every count on a per-file `<testsuite>` child — so the
-counts are summed across those children, which agrees with bun's root by construction.
+The JUnit writers split their counts two ways, and one parser serves them all: bun repeats
+the whole-run totals on the root `<testsuites>`, while bats and Swift Testing leave the
+root without counts and put them on `<testsuite>` children — so the counts are summed
+across those children, which agrees with bun's root by construction.
 
 The flags must come **before** any argument you are forwarding to the runner:
 `mise run test --json path/to/x.test.ts` is parsed by caret, while
@@ -581,8 +583,9 @@ every 3 seconds and never starts the daemon. The carrot is drawn from the system
 font at runtime, so no Apple artwork is committed or built.
 
 There is no Xcode project. `swift build` and `swift test` work from the package, and Xcode
-opens `menubar/Package.swift` directly. `swift test --package-path menubar` runs its
-tests.
+opens `menubar/Package.swift` directly. `mise run test swift` runs its tests, with
+compiler warnings as errors, and forwards its arguments to `swift test`. The conventions
+the package follows are in [`agents/swift-rules.md`](agents/swift-rules.md).
 
 `mise run build menubar` builds it in release as a universal binary (`arm64` and
 `x86_64`), assembles `bin/caret-menubar.app` with `LSUIElement` set so it has no Dock
@@ -611,8 +614,9 @@ log show --last 1h --predicate 'subsystem == "dev.excessive.caret.menubar"'
 `swift format lint --strict --recursive menubar` checks them. `mise run format` and
 `mise run lint` run the same over the package, and skip it where `swift` isn't installed.
 
-`mise run preflight` never runs Swift; the `menubar` workflow (see
-[PR checks](#pr-checks)) is the gate.
+`mise run preflight` runs `test swift` and `build menubar` as lanes of their own, and
+skips both, with the reason, off macOS or without `swift`. In CI the `menubar` workflow
+runs them (see [PR checks](#pr-checks)).
 
 ### A quick trial without installing
 
@@ -720,13 +724,13 @@ diff, plus untracked files — and picks a task set from them:
   an omission silently stops running a real check.
 - **…and any of them is under `docs/`** → `docs:build` joins either set above, so a broken
   site link or nav entry fails before push.
-- **Anything else** → all eight. That covers a non-Markdown path, an empty diff, and a
-  diff that could not be read at all (no `origin/HEAD`, a shallow clone). The default is
-  always the full gate; narrowing is an optimisation, never a weakening.
+- **Anything else** → all ten. That covers a non-Markdown path, an empty diff, and a diff
+  that could not be read at all (no `origin/HEAD`, a shallow clone). The default is always
+  the full gate; narrowing is an optimisation, never a weakening.
 
-`mise run preflight --full` forces all eight regardless. Unlike `-v` / `--grep` /
-`--task`, it is not `--json`-only — the human display narrows too, so it needs the same
-escape hatch.
+`mise run preflight --full` forces all ten regardless. Unlike `-v` / `--grep` / `--task`,
+it is not `--json`-only — the human display narrows too, so it needs the same escape
+hatch.
 
 The narrowing is never silent. In `--json` mode the `start` document carries a `selection`
 object (`narrowed` plus a `reason`) alongside the shortened `tasks` list; the human
@@ -747,14 +751,16 @@ entirely by those links.
 The local gate never runs `test e2e`; the PR checks are the full gate.
 `.github/workflows/ci.yml` runs on every PR against `main` and on pushes to `main`, with
 one job per preflight task, each named after its task (`lint`, `test unit`, `test bats`,
-`test mod`, `build ui`, `test e2e`, `build bin`, `smoke`, `docs:build`). `build ui` hands
-`ui/dist` to `test e2e` and `build bin` as an artifact, and `build bin` hands the binary
-to `smoke`. The e2e suite runs as four shard jobs, because one 4-vCPU runner cannot finish
-it inside Playwright's 15-minute global timeout; the `test e2e` check passes only when
-every shard does. Caches are saved only on `main` pushes: a cache saved from a PR is
-restorable by that PR alone and still counts against the repository's cache quota, where
-it evicts main's. The e2e shards' apt packages are the exception — `cache-apt-pkgs-action`
-saves on any miss, so a PR that changes the package set saves a copy of its own.
+`test mod`, `build ui`, `test e2e`, `build bin`, `smoke`, `docs:build`). The two that need
+macOS, `test swift` and `build menubar`, run in the `menubar` workflow below instead.
+`build ui` hands `ui/dist` to `test e2e` and `build bin` as an artifact, and `build bin`
+hands the binary to `smoke`. The e2e suite runs as four shard jobs, because one 4-vCPU
+runner cannot finish it inside Playwright's 15-minute global timeout; the `test e2e` check
+passes only when every shard does. Caches are saved only on `main` pushes: a cache saved
+from a PR is restorable by that PR alone and still counts against the repository's cache
+quota, where it evicts main's. The e2e shards' apt packages are the exception —
+`cache-apt-pkgs-action` saves on any miss, so a PR that changes the package set saves a
+copy of its own.
 
 - Job names are what branch protection matches — renaming one drops it from the required
   checks.
@@ -783,13 +789,15 @@ in `test/scripts/docs-gate.test.ts` (the script) and
 The menubar app has its own workflow, `.github/workflows/menubar.yml`. Its
 `menubar changes` job reads the PR's changed paths from the GitHub API. Its `menubar` job
 builds and tests the app on the `macos-26` image with a pinned Xcode (`DEVELOPER_DIR`),
-and runs only when the PR touches `menubar/`, the build task (`scripts/tasks/build.ts`,
-`.mise/tasks/build`), or the workflow. A skipped job reports as passing, so making
-`menubar` a required check never blocks other PRs, and a failed `menubar changes` job
-makes `menubar` build anyway rather than skip. The runner image and the Xcode pin are
-bumped together, in `menubar.yml` and in `publish.yml`'s `menubar` job, in the same
-change; `test/scripts/release-workflow.test.ts` fails when they differ. The workflow's
-cases live in `test/scripts/menubar-workflow.test.ts`.
+through the same `mise run build menubar` and `mise run test swift` preflight runs, and
+runs only when the PR touches `menubar/`, the build or test task
+(`scripts/tasks/build.ts`, `scripts/tasks/test.ts`, and their `.mise/tasks/` forwarders),
+or the workflow. A skipped job reports as passing, so making `menubar` a required check
+never blocks other PRs, and a failed `menubar changes` job makes `menubar` build anyway
+rather than skip. The runner image and the Xcode pin are bumped together, in `menubar.yml`
+and in `publish.yml`'s `menubar` job, in the same change;
+`test/scripts/release-workflow.test.ts` fails when they differ. The workflow's cases live
+in `test/scripts/menubar-workflow.test.ts`.
 
 #### Adding a task
 
