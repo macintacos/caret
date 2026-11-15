@@ -50,6 +50,12 @@ async function parseDevArgs(args: string[]): Promise<RunDevOptions> {
   return captured;
 }
 
+/** The `<key>`/`<string>` pairs of a flat plist dict. */
+function plistKeys(plist: string): Map<string, string> {
+  const pairs = plist.matchAll(/<key>([^<]+)<\/key>\s*<string>([^<]*)<\/string>/g);
+  return new Map([...pairs].map((match) => [match[1] ?? "", match[2] ?? ""]));
+}
+
 describe("tasks CLI: dev command", () => {
   test("defaults: num-versions 4, notify false, persist false, fresh false", async () => {
     expect(await parseDevArgs([])).toEqual({
@@ -454,15 +460,12 @@ describe("tasks CLI: build pipeline command lines", () => {
 
   test("build menubar stamps the package version into the bundle's Info.plist", async () => {
     const plist = menubarPlistWithVersion(await Bun.file("menubar/Info.plist").text(), "1.2.3");
-    const parsed = Bun.spawnSync(["plutil", "-convert", "json", "-o", "-", "-"], {
-      stdin: new TextEncoder().encode(plist),
-    });
+    const dict = plistKeys(plist);
 
-    expect(JSON.parse(parsed.stdout.toString())).toMatchObject({
-      CFBundleShortVersionString: "1.2.3",
-      CFBundleVersion: "1.2.3",
-      CFBundleExecutable: "CaretMenubar",
-    });
+    expect(dict.get("CFBundleShortVersionString")).toBe("1.2.3");
+    expect(dict.get("CFBundleVersion")).toBe("1.2.3");
+    expect(dict.get("CFBundleExecutable")).toBe("CaretMenubar");
+    expect(dict.get("CFBundleIdentifier")).toBe("dev.excessive.caret.menubar");
   });
 
   test("build menubar off macOS prints one line, runs nothing, and succeeds", async () => {
