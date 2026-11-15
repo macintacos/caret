@@ -36,8 +36,9 @@ mise run preflight  # the pre-push gate: lint + unit/shell/Swift tests + builds 
 diff, so a Markdown-only change runs fewer than the full ten tasks — `--full` forces all
 of them. Off macOS it skips the two Swift tasks. It never runs e2e: run a new or changed
 spec with `mise run test e2e <path>`. The full gate is the PR checks, which run every
-preflight task plus the whole e2e suite. The full task catalog (`build`, `test`, `smoke`,
-`lint`, `format`, `docs:build`) is documented in
+preflight task (the two Swift ones only when a PR touches the app) plus the whole e2e
+suite. The full task catalog (`build`, `test`, `smoke`, `lint`, `format`, `docs:build`) is
+documented in
 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#development).
 
 ## Where tests live

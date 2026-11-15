@@ -82,7 +82,6 @@ local formatters = new Mapping<String, Step> {
   ["Pkl(Format)      [[builtins.pkl_format]]"] = Builtins.pkl_format
 
   // swift-format ships with the Swift toolchain, so a machine without one skips the step.
-  // `lint --strict` enforces swift-format's lint rules too, so Swift has no separate linter.
   ["Swift(Format)    [[swift-format]]"] = new Step {
     glob = List("menubar/**/*.swift")
     step_condition = "exec_ok('command -v swift')"
@@ -152,6 +151,13 @@ local linters = new Mapping<String, Step> {
   ["TOML(Lint)        [[builtins.taplo]]"] = Builtins.taplo
 
   ["Pkl(Lint)         [[builtins.pkl]]"] = Builtins.pkl
+
+  // Swift(Format)'s pre-commit run only rewrites, so the lint rules need their own step.
+  ["Swift(Lint)       [[swift-format]]"] = new Step {
+    glob = List("menubar/**/*.swift")
+    step_condition = "exec_ok('command -v swift')"
+    check = "swift format lint --strict {{ files }}"
+  }
 }
 
 hooks {

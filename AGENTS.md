@@ -76,9 +76,11 @@ else runs the full ten, as does an empty or unreadable diff. Read the `start` do
 means you proved less than the whole gate, and `schemaVersion` is `2` precisely because
 `ok` now means "every task that ran passed". `--full` forces all ten — it is the one
 preflight flag that works without `--json` too. Note that `lint` always scans the whole
-tree even when the gate narrows, so cross-file link fragments stay checked. Off macOS, or
-without `swift` on PATH, `test swift` and `build menubar` report `skipped` with the reason
-as their `output`, so a green run there has not touched the Swift.
+tree even when the gate narrows, so cross-file link fragments stay checked. Off macOS,
+`test swift` and `build menubar` report `skipped` with the reason as their `output`, so a
+green run there has not touched the Swift. On a Mac `swift` is always on PATH
+(`/usr/bin/swift` is a shim) and its version goes unchecked, so with Xcode older than 26
+both fail rather than skip.
 
 `mise run preflight --json` is the call you want almost every time.
 **Failures show their output by default**, so you can act immediately — and if a task's
@@ -113,7 +115,7 @@ whatever is selected. `mise run test mod` runs the Claude Code mod's kit tests u
 is not on PATH. `mise run test swift` runs the menubar app's Swift tests
 (`swift test --package-path menubar`, warnings as errors) and forwards its arguments, so
 `mise run test swift --filter <regex>` narrows it. It needs macOS and Xcode 26 or later;
-anywhere else it prints why and exits `0`.
+off macOS it prints why and exits `0`, while an older Xcode fails it.
 
 **`mise run test --json` is the call you want when you only need the verdict.** It emits
 one JSON document on stdout and nothing else — every child, the UI build included, runs
@@ -131,7 +133,7 @@ applies. A **passing** run is that envelope and nothing else — about 120 bytes
 ran one file or all 4900. A **failing** run adds two fields: `report`, the runner's native
 report nested unnormalised (JUnit XML as a string for `unit`, `bats` and `swift`,
 Playwright's json report as an object for `e2e`), and `output`, everything the runner
-wrote. Read `output` first: it is the human-formatted stream. Both runners put the
+wrote. Read `output` first: it is the human-formatted stream. The JUnit runners put the
 diagnosis in their XML too, but out of `&#10;`-escaped attributes. `report` is `null` when
 the runner produced none, and `output` still carries what it wrote, so a run that died
 early stays diagnosable.

@@ -255,17 +255,17 @@ export function codesignMenubarCommand(): string[] {
   return ["codesign", "--force", "--sign", "-", MENUBAR_APP];
 }
 
-/** The host a task runs on, as much as a task's preconditions ask of it. */
-export interface Host {
+/** The machine a task runs on, as much as a task's preconditions ask of it. */
+export interface Machine {
   platform: NodeJS.Platform;
   which: (bin: string) => string | null;
 }
 
 /** Why this host cannot build or test the menubar app, or null when it can. A Linux Swift
  * toolchain does not count: the app needs AppKit. */
-export function menubarSkipReason(host: Host): string | null {
-  if (host.platform !== "darwin") return "the menubar app builds on macOS only";
-  if (!host.which("swift")) return "swift not on PATH";
+export function menubarSkipReason(machine: Machine): string | null {
+  if (machine.platform !== "darwin") return "the menubar app builds on macOS only";
+  if (!machine.which("swift")) return "swift not on PATH";
   return null;
 }
 
@@ -280,7 +280,7 @@ function swiftBinPath(): Promise<string> {
  * bin path. Off macOS, or without swift, it prints why in one line and succeeds, so a Linux
  * checkout's build never fails on it. */
 export async function buildMenubar(
-  deps: Host & {
+  deps: Machine & {
     run: typeof runForward;
     binPath: () => Promise<string>;
     assemble: (binPath: string) => void;

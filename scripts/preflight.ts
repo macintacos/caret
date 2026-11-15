@@ -8,8 +8,8 @@
 // gate, and a lint failure points at `mise run format`.
 //
 // DAG: lint, `test unit`, `build ui`, `docs:build`, `test bats`, `test mod`,
-// `test swift` and `build menubar` start immediately; `build bin` starts once `build ui` passes; `smoke` starts
-// once `build bin` passes (EXC-914). The build-first ordering + skip mechanism
+// `test swift` and `build menubar` start immediately; `build bin` starts once `build ui`
+// passes; `smoke` starts once `build bin` passes (EXC-914). The build-first ordering + skip mechanism
 // live in the tasks CLI (scripts/tasks/build.ts), so each dependent is spawned
 // with the skips that let it reuse its gate's artifact: CARET_SKIP_BUILD_UI
 // keeps the UI built at exactly one run per gate (two concurrent Vite builds
@@ -44,7 +44,7 @@ import { $ } from "bun";
 
 import { DefaultRenderer, Listr, type ListrTask } from "listr2";
 
-import { type Host, menubarSkipReason } from "@/tasks/build.ts";
+import { type Machine, menubarSkipReason } from "@/tasks/build.ts";
 import { lastDisplayLine } from "@/tasks/lib/exec.ts";
 
 export interface SpawnOutcome {
@@ -160,7 +160,7 @@ interface Dependent {
 const SKIP_UI = { CARET_SKIP_BUILD_UI: "1" } as const;
 
 // The tasks after `build ui` within IMMEDIATE gate nothing, and `build ui` gates the
-// dependents below.
+// dependents below. `test swift` and `build menubar` serialize on SwiftPM's lock.
 const IMMEDIATE = [
   "lint",
   "test unit",
@@ -171,10 +171,12 @@ const IMMEDIATE = [
   "test swift",
   "build menubar",
 ] as const;
-/** Why an immediate task cannot run on this host, or null when it can. Such a task is
+/** Why an immediate task cannot run on this machine, or null when it can. Such a task is
  * recorded skipped with that reason rather than failed. */
-const SKIP_REASON: Partial<Record<(typeof IMMEDIATE)[number], (host: Host) => string | null>> = {
-  "test mod": (host) => (host.which("claude") ? null : "claude not on PATH"),
+const SKIP_REASON: Partial<
+  Record<(typeof IMMEDIATE)[number], (machine: Machine) => string | null>
+> = {
+  "test mod": (machine) => (machine.which("claude") ? null : "claude not on PATH"),
   "test swift": menubarSkipReason,
   "build menubar": menubarSkipReason,
 };
@@ -397,7 +399,7 @@ export async function runPreflight(deps: {
   /** The host's platform; defaults to `process.platform`. */
   platform?: NodeJS.Platform;
 }): Promise<PreflightOutcome> {
-  const host = { which: deps.which ?? Bun.which, platform: deps.platform ?? process.platform };
+  const machine = { which: deps.which ?? Bun.which, platform: deps.platform ?? process.platform };
   const selection = deps.selection ?? FULL_GATE;
   const selected = new Set(selection.tasks);
   const immediateTasks = IMMEDIATE.filter((name) => selected.has(name));
@@ -459,7 +461,7 @@ export async function runPreflight(deps: {
   const immediate = (name: (typeof IMMEDIATE)[number]): ListrTask => ({
     title: name,
     task: async (_ctx, task) => {
-      const reason = SKIP_REASON[name]?.(host) ?? null;
+      const reason = SKIP_REASON[name]?.(machine) ?? null;
       if (reason !== null) {
         results.set(name, { status: "skipped", output: "", durationMs: 0, reason });
         return task.skip(`${name} (skipped: ${reason})`);

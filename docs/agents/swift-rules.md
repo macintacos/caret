@@ -11,7 +11,7 @@ the menu-bar icon. These are the conventions it follows.
 
 - **Swift 6 mode, tools 6.2.** `Package.swift` declares `swift-tools-version: 6.2`, which
   turns on Swift 6 language mode with complete concurrency checking. It needs Xcode 26 or
-  later. CI pins Xcode 26.6 through `DEVELOPER_DIR` in both `menubar.yml` and
+  later. CI pins one Xcode through `DEVELOPER_DIR` in both `menubar.yml` and
   `publish.yml`, and `test/scripts/release-workflow.test.ts` keeps the two equal.
 - **macOS 13 floor.** `platforms: [.macOS(.v13)]` matches `Info.plist`'s
   `LSMinimumSystemVersion`. Put any API newer than macOS 13 behind
@@ -55,15 +55,22 @@ declares no resources.
   executable has no tests, which is one more reason to keep it thin.
 - **Run them with `mise run test swift`.** It passes `-Xswiftc -warnings-as-errors`.
   `Package.swift` does not, so a newer toolchain's new warnings never break a plain
-  `swift build`. Off macOS, or without `swift` on PATH, it prints why and exits `0`.
+  `swift build`. Off macOS it prints why and exits `0`. On a Mac `swift` is always on PATH
+  (`/usr/bin/swift` is a shim) and its version goes unchecked, so an Xcode older than 26
+  fails it rather than skipping.
 
 ## Format and lint
 
 `swift format` ships in the toolchain and reads `menubar/.swift-format`: 4-space indents
 and 100 columns. The hk step `Swift(Format)` runs `swift format --in-place` on commit and
-in `mise run format`, and `swift format lint --strict` in `mise run lint`. `--strict`
-turns its lint rules' warnings into failures, which is why there is no SwiftLint. The step
-skips on a machine without `swift`.
+in `mise run format`, and `swift format lint --strict` in `mise run lint`; `Swift(Lint)`
+runs the lint on commit too. swift-format's lint rules cover what the package needs, and
+`--strict` makes them fail the gate, so there is no SwiftLint. Both steps skip on a
+machine without `swift`.
+
+The config lists every rule by name, because swift-format turns off any rule its `rules`
+map leaves out. So a rule a later swift-format adds stays off until listed, and list one
+only once CI's Xcode knows it: under `--strict` an unrecognised rule name is an error.
 
 Different toolchains can format differently. The required `lint` check runs this step on
 GitHub's Ubuntu image, whose Swift is unpinned, and the `menubar` workflow lints again
@@ -72,9 +79,10 @@ satisfy both.
 
 ## The gates
 
-- **`mise run preflight`** runs `test swift` and `build menubar` as lanes of their own.
-  Off macOS, or without `swift`, it reports both `skipped`, with the reason.
+- **`mise run preflight`** runs `test swift` and `build menubar` as lanes of their own. It
+  runs both on any non-Markdown diff, like every other lane. Off macOS it reports both
+  `skipped`, with the reason; on a Mac with Xcode older than 26 both fail.
 - **The `menubar` workflow** builds the app, checks the bundle, and runs
   `mise run test swift` and `swift format lint --strict --recursive menubar` on macOS. It
-  runs only when a PR touches `menubar/`, `scripts/tasks/build.ts` or
-  `scripts/tasks/test.ts`, their `.mise/tasks/` forwarders, or the workflow itself.
+  scopes itself by path, running only when a PR touches the app or the tasks that build
+  and test it ([the list](../DEVELOPMENT.md#pr-checks)).

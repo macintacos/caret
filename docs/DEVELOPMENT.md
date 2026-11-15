@@ -526,7 +526,7 @@ alone, because a green run's native report says only what `passed` already says 
 megabytes to say it. A **failing** run adds `report` — the runner's native report nested
 unnormalised, JUnit XML as a string for `unit`, `bats` and `swift`, Playwright's json
 report as an object for `e2e` — and `output`, everything the runner wrote. `output` is the
-one to read: it is the human-formatted stream. Both JUnit writers put the diagnosis in the
+one to read: it is the human-formatted stream. The JUnit writers put the diagnosis in the
 XML as well, but inside `&#10;`-escaped attributes rather than as something you can scan.
 A runner that produced no report at all yields `report: null` and still carries `output`.
 Everything the run spawns is captured in this mode, the UI build included, so the document
@@ -534,10 +534,12 @@ is the only thing on stdout. `swift` on a host that cannot build the menubar app
 nothing and adds `skipReason`, so its `ok: true` with zero counts never reads as a suite
 that passed.
 
-The JUnit writers split their counts two ways, and one parser serves them all: bun repeats
-the whole-run totals on the root `<testsuites>`, while bats and Swift Testing leave the
-root without counts and put them on `<testsuite>` children — so the counts are summed
-across those children, which agrees with bun's root by construction.
+bun and bats share one count reading: bun repeats the whole-run totals on the root
+`<testsuites>`, while bats leaves the root without counts and puts them on `<testsuite>`
+children — so the counts are summed across those children, which agrees with bun's root by
+construction. Swift Testing gets its own reading, which counts `<testcase>` elements,
+because its `failures` attribute counts failed expectations rather than tests and its
+`tests` attribute leaves skipped tests out.
 
 The flags must come **before** any argument you are forwarding to the runner:
 `mise run test --json path/to/x.test.ts` is parsed by caret, while
@@ -611,11 +613,15 @@ log show --last 1h --predicate 'subsystem == "dev.excessive.caret.menubar"'
 
 `swift format` formats the Swift, with the settings in `menubar/.swift-format`.
 `swift format --in-place --recursive menubar` rewrites the files, and
-`swift format lint --strict --recursive menubar` checks them. `mise run format` and
-`mise run lint` run the same over the package, and skip it where `swift` isn't installed.
+`swift format lint --strict --recursive menubar` checks them against the lint rules the
+config turns on. `mise run format` and `mise run lint` run the same over the package, the
+pre-commit hook both formats and lints the staged Swift, and all of them skip it where
+`swift` isn't installed.
 
 `mise run preflight` runs `test swift` and `build menubar` as lanes of their own, and
-skips both, with the reason, off macOS or without `swift`. In CI the `menubar` workflow
+skips both, with the reason, off macOS. On a Mac `swift` is always on PATH
+(`/usr/bin/swift` is a shim), and preflight checks only that it exists, not its version,
+so with Xcode older than 26 both lanes fail rather than skip. In CI the `menubar` workflow
 runs them (see [PR checks](#pr-checks)).
 
 ### A quick trial without installing

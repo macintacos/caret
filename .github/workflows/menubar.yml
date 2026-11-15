@@ -18,6 +18,7 @@ jobs:
       menubar: ${{ steps.paths.outputs.menubar }}
     steps:
       - id: paths
+        # Lists the files that define the two tasks; their shared plumbing is gated by `test unit`.
         # Captured, not piped into grep -q (which could SIGPIPE gh): a failed gh api fails this job.
         shell: bash
         env:

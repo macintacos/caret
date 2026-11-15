@@ -266,8 +266,9 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   // runs the Playwright suite (building the UI first); `bats` runs the hermetic
   // shell suites under scripts/; `swift` the menubar app's Swift tests. Each
   // forwards its own args — a path / --test-name-pattern for unit, a spec path /
-  // --grep for e2e, --filter for bats and swift — and carries its output-mode flags (EXC-1146) as REAL options rather than
-  // passthrough, the way `preflight` carries its own --json. passThroughOptions
+  // --grep for e2e, --filter for bats and swift — and carries its output-mode flags
+  // (EXC-1146) as REAL options rather than passthrough, the way `preflight` carries its
+  // own --json. passThroughOptions
   // stops parsing at the first operand, which is what preserves the forwarding
   // contract (EXC-738/739), so these must precede the forwarded args — hence the
   // "(before forwarded args)" each description carries. unit and e2e share one

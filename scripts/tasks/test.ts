@@ -1,14 +1,15 @@
 // `test` task group (EXC-739): the bun unit suite, the Playwright e2e suite, the
 // hermetic bats suites, the Claude Code mod's kit tests, and the menubar app's Swift
-// tests, consolidated into one command whose `unit`/`e2e`/`bats`/`mod`/`swift` positional
-// targets map to `mise run test <target>`. Bare `mise run test` (and `mise run test unit`) run
-// the unit suite, preserving today's `mise run test == unit` behaviour.
+// tests, consolidated into one command whose `unit`/`e2e`/`bats`/`mod`/`swift`
+// positional targets map to `mise run test <target>`. Bare `mise run test` (and
+// `mise run test unit`) run the unit suite, preserving today's `mise run test == unit`
+// behaviour.
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { ensureUi, type Host, menubarSkipReason, paletteCssCommand } from "@/tasks/build.ts";
+import { ensureUi, type Machine, menubarSkipReason, paletteCssCommand } from "@/tasks/build.ts";
 import {
   execAndExit,
   runCapture,
@@ -114,7 +115,7 @@ export interface TestReport {
   passed: number;
   failed: number;
   durationMs: number;
-  /** The runner's native report, unnormalised: JUnit XML text (unit, bats) or
+  /** The runner's native report, unnormalised: JUnit XML text (unit, bats, swift) or
    * Playwright's JSON (e2e). Null on a passing run, where the envelope is the
    * whole answer, and on a run whose runner produced no report at all. */
   report: string | Record<string, unknown> | null;
@@ -135,7 +136,7 @@ export interface TestReportInput {
   native: string | null;
   /** Everything the runner wrote, interleaved as it arrived. */
   output: string;
-  /** Set when the target could not run on this host, which then exits 0. */
+  /** Set only when the target could not run here: exit code 0, nothing captured. */
   skipReason?: string;
 }
 
@@ -166,8 +167,9 @@ function parseNative(
       return parsePlaywrightReport(native);
     case "unit":
     case "bats":
-    case "swift":
       return parseJUnit(native);
+    case "swift":
+      return parseSwiftTestingJUnit(native);
     default: {
       const unreachable: never = target;
       return unreachable;
@@ -186,7 +188,20 @@ function parseKitSummary(output: string): Pick<TestReport, "passed" | "failed" |
   return { passed: Number(passed ?? 0), failed: Number(failed ?? 0), report: null };
 }
 
-/** The JUnit dialect bun, bats and Swift Testing write. They put their counts in two
+/** Swift Testing's `failures` counts issues and its `tests` excludes skips, so count cases. */
+function parseSwiftTestingJUnit(
+  xml: string,
+): Pick<TestReport, "passed" | "failed" | "report"> | null {
+  if (!/<testsuites\b/.test(xml)) return null;
+  const bodies = [...xml.matchAll(/<testcase\b[^>]*?(?:\/>|>([\s\S]*?)<\/testcase>)/g)].map(
+    ([, body]) => body ?? "",
+  );
+  const failed = bodies.filter((body) => /<(failure|error)\b/.test(body)).length;
+  const skipped = bodies.filter((body) => body.includes("<skipped")).length;
+  return { passed: bodies.length - failed - skipped, failed, report: stripAnsi(xml) };
+}
+
+/** The JUnit dialect bun and bats write. They put their counts in two
  * different places, and neither reading serves both:
  *
  * bun states the whole run on the root `<testsuites>` — and also nests a
@@ -249,9 +264,10 @@ function stripAnsiDeep(value: unknown): unknown {
 
 /**
  * Run something that writes its report into a throwaway directory, and read the
- * report back. All three collectors need this and differ only in how the path
- * reaches the runner — a `--reporter-outfile` flag, a `-o` directory, an env var —
- * which is what `spawn` receives it for.
+ * report back. Every collector needs this and differs only in how the path reaches
+ * the runner — a `--reporter-outfile` flag, a `-o` directory, an env var — which is
+ * what `spawn` receives it for. A runner that may write the report under another name
+ * in that directory lists it in `preferred`; the first that exists is read.
  *
  * The `finally` is not decoration: `Bun.spawn` throws synchronously when the binary
  * is missing, so without it a host lacking `mise` or `bunx` leaks a temp directory
@@ -260,12 +276,13 @@ function stripAnsiDeep(value: unknown): unknown {
 async function withReportFile(
   basename: string,
   spawn: (path: string) => Promise<number>,
+  preferred: string[] = [],
 ): Promise<{ exitCode: number; native: string | null }> {
   const dir = mkdtempSync(join(tmpdir(), "caret-test-json-"));
-  const path = join(dir, basename);
   try {
-    const exitCode = await spawn(path);
-    return { exitCode, native: existsSync(path) ? readFileSync(path, "utf8") : null };
+    const exitCode = await spawn(join(dir, basename));
+    const found = [...preferred, basename].map((name) => join(dir, name)).find(existsSync);
+    return { exitCode, native: found === undefined ? null : readFileSync(found, "utf8") };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -489,10 +506,10 @@ export function swiftTestCommand(args: string[]): string[] {
  * build the app. */
 export async function collectSwiftJsonRun(
   args: string[],
-  host: Host,
+  machine: Machine,
   run: typeof runCapture = runCapture,
 ): Promise<Omit<TestReportInput, "durationMs">> {
-  const skipReason = menubarSkipReason(host);
+  const skipReason = menubarSkipReason(machine);
   if (skipReason !== null) {
     return { target: "swift", exitCode: 0, native: null, output: "", skipReason };
   }
@@ -501,13 +518,12 @@ export async function collectSwiftJsonRun(
   const sink = (chunk: string): void => {
     log += chunk;
   };
-  // SwiftPM writes XCTest's report at the path it is handed and Swift Testing's beside it,
-  // as <stem>-swift-testing.xml. The package has Swift Testing suites only.
-  const { exitCode, native } = await withReportFile("report-swift-testing.xml", (reportPath) =>
-    run(
-      swiftTestCommand(["--xunit-output", join(dirname(reportPath), "report.xml"), ...args]),
-      sink,
-    ),
+  // SwiftPM writes Swift Testing's report beside the path it is handed, as
+  // <stem>-swift-testing.xml, while XCTest is enabled, and at the path itself when not.
+  const { exitCode, native } = await withReportFile(
+    "report.xml",
+    (xunitPath) => run(swiftTestCommand(["--xunit-output", xunitPath, ...args]), sink),
+    ["report-swift-testing.xml"],
   );
   return { target: "swift", exitCode, native, output: log };
 }
@@ -517,13 +533,13 @@ export async function runTestSwift(
   args: string[],
   flags: Pick<TestFlags, "json"> = {},
 ): Promise<never> {
-  const host = { platform: process.platform, which: Bun.which };
+  const machine = { platform: process.platform, which: Bun.which };
   if (flags.json) {
     const startedAt = Date.now();
-    return emitTestReport({ ...(await collectSwiftJsonRun(args, host)), startedAt });
+    return emitTestReport({ ...(await collectSwiftJsonRun(args, machine)), startedAt });
   }
 
-  const skip = menubarSkipReason(host);
+  const skip = menubarSkipReason(machine);
   if (skip !== null) {
     await writeAndFlush(process.stdout, `test swift: skipped, ${skip}\n`);
     process.exit(0);

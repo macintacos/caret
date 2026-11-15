@@ -200,17 +200,24 @@ const FAILING_BATS_JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
 </testsuite>
 </testsuites>`;
 
-// Swift Testing's xunit writer under Swift 6.4.2, trimmed to three of its testcases with
-// the counts left as written: 18 tests, one failing. Like bats', its root carries no
-// counts at all.
+// Swift Testing's xunit writer under Swift 6.4.2, verbatim: two passing tests, one failing
+// with two issues, one failing once, one disabled. Its `failures` counts issues (3) and its
+// `tests` leaves the skip out (4), so only the testcases give 2 passed, 2 failed.
 const FAILING_SWIFT_JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
 <testsuites>
-  <testsuite name="TestResults" errors="0" tests="18" failures="1" skipped="0" time="0.002653625">
-    <testcase classname="CaretMenubarCoreTests" name="refusals()" time="0.000599708" />
-    <testcase classname="CaretMenubarCoreTests" name="contractDefaults()" time="0.000699709" >
-      <failure message="Expectation failed: config.baseURL.absoluteString == &quot;nope&quot; (error)" />
+  <testsuite name="TestResults" errors="0" tests="4" failures="3" skipped="1" time="0.000906625">
+    <testcase classname="ProbeTests" name="disabled()" >
+      <skipped>probe</skipped>
     </testcase>
-    <testcase classname="CaretMenubarCoreTests" name="contractFlags()" time="0.000651458" />
+    <testcase classname="ProbeTests" name="failsTwice()" time="0.000564083" >
+      <failure message="Expectation failed: probe == 2 (error)" />
+      <failure message="Expectation failed: probe == 3 (error)" />
+    </testcase>
+    <testcase classname="ProbeTests" name="passes()" time="0.000254958" />
+    <testcase classname="ProbeTests" name="alsoPasses()" time="0.000151625" />
+    <testcase classname="ProbeTests" name="failsOnce()" time="0.000506875" >
+      <failure message="Expectation failed: probe == 4 (error)" />
+    </testcase>
   </testsuite>
 </testsuites>`;
 
@@ -559,7 +566,7 @@ describe("collectBatsJsonRun", () => {
 describe("test swift", () => {
   const MAC = { platform: "darwin", which: (bin: string) => `/usr/bin/${bin}` } as const;
 
-  test("counts come from Swift Testing's JUnit report", () => {
+  test("counts Swift Testing's test cases, not its issue-counting attributes", () => {
     const report = buildTestReport({
       target: "swift",
       exitCode: 1,
@@ -568,8 +575,8 @@ describe("test swift", () => {
       output: "log",
     });
     expect(report.target).toBe("swift");
-    expect(report.passed).toBe(17);
-    expect(report.failed).toBe(1);
+    expect(report.passed).toBe(2);
+    expect(report.failed).toBe(2);
     expect(report.report).toBe(FAILING_SWIFT_JUNIT);
   });
 
@@ -582,17 +589,30 @@ describe("test swift", () => {
     expect(cmd.slice(-2)).toEqual(["--filter", "Contract"]);
   });
 
-  // SwiftPM writes Swift Testing's results beside the path it is handed, under a derived
-  // name, and only XCTest's at the path itself.
-  test("reads Swift Testing's report from beside the xunit path", async () => {
-    const run = async (cmd: string[]): Promise<number> => {
-      const xunit = cmd[cmd.indexOf("--xunit-output") + 1] ?? "";
-      await Bun.write(xunit.replace(/\.xml$/, "-swift-testing.xml"), FAILING_SWIFT_JUNIT);
+  /** A fake `swift test` that writes the report under `name(xunitPath)`. */
+  const writingReportAt =
+    (name: (xunit: string) => string) =>
+    async (cmd: string[]): Promise<number> => {
+      await Bun.write(name(cmd[cmd.indexOf("--xunit-output") + 1] ?? ""), FAILING_SWIFT_JUNIT);
       return 1;
     };
+
+  // With XCTest enabled SwiftPM writes Swift Testing's results beside the path it is
+  // handed, under a derived name; with `--disable-xctest`, at the path itself.
+  test("reads Swift Testing's report from beside the xunit path", async () => {
+    const run = writingReportAt((xunit) => xunit.replace(/\.xml$/, "-swift-testing.xml"));
     const collected = await collectSwiftJsonRun([], MAC, run);
     expect(collected.native).toBe(FAILING_SWIFT_JUNIT);
-    expect(buildTestReport({ ...collected, durationMs: 0 }).failed).toBe(1);
+    expect(buildTestReport({ ...collected, durationMs: 0 }).failed).toBe(2);
+  });
+
+  test("reads Swift Testing's report at the xunit path when XCTest is disabled", async () => {
+    const collected = await collectSwiftJsonRun(
+      ["--disable-xctest"],
+      MAC,
+      writingReportAt((x) => x),
+    );
+    expect(collected.native).toBe(FAILING_SWIFT_JUNIT);
   });
 
   test("a host that cannot build the app runs nothing and reports why", async () => {
