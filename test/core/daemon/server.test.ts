@@ -1668,6 +1668,7 @@ describe("read-confidentiality posture", () => {
     const { id } = await newReview();
     const cases: Array<[string, () => Promise<Response>]> = [
       ["GET /api/health", () => fetch(`${base}/api/health`)],
+      ["GET /api/pending", () => fetch(`${base}/api/pending`)],
       ["GET /api/reviews", () => fetch(`${base}/api/reviews`)],
       ["GET /api/reviews/:id", () => fetch(`${base}/api/reviews/${id}`)],
       ["GET /api/reviews/:id/decision", () => fetch(`${base}/api/reviews/${id}/decision`)],
