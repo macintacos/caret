@@ -1,7 +1,6 @@
 // `build` task group (EXC-738): the Svelte UI, the standalone binary, the
 // distribution bundle, and the bare umbrella that chains UI -> binary. Its
-// `ui`/`bin`/`bundle`/`menubar` positional targets map to `mise run build <target>`;
-// `menubar` is never part of the bare umbrella.
+// `ui`/`bin`/`bundle`/`menubar` positional targets map to `mise run build <target>`.
 //
 // UI-first ordering lives here rather than in a mise `depends` edge: the
 // ui-dependent targets (`bin`, `bundle`, and the umbrella) build the UI first
@@ -224,8 +223,10 @@ export async function runBuildBundle(): Promise<never> {
 // umbrella or the preflight gate: Swift builds only on macOS, and the `menubar` workflow
 // (.github/workflows/menubar.yml) is this target's gate.
 
-/** Where the assembled app lands; the release packs it and `caret install` copies it from here. */
-export const MENUBAR_APP = "bin/caret-menubar.app";
+/** Where `build menubar` assembles the app; gitignored with the rest of bin/. */
+const MENUBAR_APP = "bin/caret-menubar.app";
+// Package.swift's executableTarget and Info.plist's CFBundleExecutable.
+const MENUBAR_EXECUTABLE = "CaretMenubar";
 
 /** The SwiftPM release build of the menubar package. */
 export function swiftBuildCommand(): string[] {
@@ -247,17 +248,17 @@ export async function buildMenubar(deps: {
   const code = await deps.run(swiftBuildCommand());
   if (code !== 0) return code;
 
-  assembleMenubarApp("menubar/.build/release/CaretMenubar");
+  assembleMenubarApp();
   return 0;
 }
 
 /** Lay out the .app from the release executable and the committed Info.plist. */
-function assembleMenubarApp(executable: string): void {
-  const macos = `${MENUBAR_APP}/Contents/MacOS`;
+function assembleMenubarApp(): void {
+  const executable = `${MENUBAR_APP}/Contents/MacOS/${MENUBAR_EXECUTABLE}`;
   rmSync(MENUBAR_APP, { recursive: true, force: true });
-  mkdirSync(macos, { recursive: true });
-  copyFileSync(executable, `${macos}/CaretMenubar`);
-  chmodSync(`${macos}/CaretMenubar`, 0o755);
+  mkdirSync(`${MENUBAR_APP}/Contents/MacOS`, { recursive: true });
+  copyFileSync(`menubar/.build/release/${MENUBAR_EXECUTABLE}`, executable);
+  chmodSync(executable, 0o755);
   copyFileSync("menubar/Info.plist", `${MENUBAR_APP}/Contents/Info.plist`);
 }
 

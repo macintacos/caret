@@ -18,8 +18,7 @@ jobs:
       menubar: ${{ steps.paths.outputs.menubar }}
     steps:
       - id: paths
-        # Explicit bash runs with -o pipefail, and the list is captured before grep reads it:
-        # a failed gh api fails the step instead of quietly skipping the build.
+        # Captured, not piped into grep -q (which could SIGPIPE gh): a failed gh api fails this job.
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -34,9 +33,10 @@ jobs:
   menubar:
     name: menubar
     needs: changes
-    # A skipped job counts as passing, so a PR that never touches the app still merges.
-    if: needs.changes.outputs.menubar == 'true'
-    runs-on: macos-latest
+    # Builds unless the filter said the app is untouched: if `changes` fails, the output is
+    # empty, and skipping here would report this check as passing.
+    if: ${{ !cancelled() && needs.changes.outputs.menubar != 'false' }}
+    runs-on: macos-26
     timeout-minutes: 20
     permissions:
       contents: read
@@ -52,4 +52,9 @@ jobs:
           cache_save: false
       - run: bun install --frozen-lockfile
       - run: mise run build menubar
+      - name: The assembled bundle is launchable
+        run: |
+          plist=bin/caret-menubar.app/Contents/Info.plist
+          plutil -lint "$plist"
+          test -x "bin/caret-menubar.app/Contents/MacOS/$(plutil -extract CFBundleExecutable raw "$plist")"
       - run: swift test --package-path menubar

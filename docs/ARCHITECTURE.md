@@ -310,6 +310,7 @@ src/adapters/       the coding-agent adapter axis — the AgentAdapter interface
 ui/                 Svelte 5 multi-asset SPA (Vite) embedded into the binary via the build-generated asset manifest, served by the daemon by URL path · src/state/ runes state modules · src/icons/ vendored Lucide SVGs · src/lib/themes/ the built-in theme files · src/code-themes/ the vendored Nightfox shiki themes, the theme comparison's reference rather than a shipped theme
 hooks/              hooks.json (PermissionRequest/ExitPlanMode + PostToolUse/EnterPlanMode + PostToolUse/ExitPlanMode + UserPromptSubmit, plus the `modules` entry that loads the mod) — Claude-adapter packaging
 mod/                the Claude Code mod — the plan-waiting band's hooks module, its state typings, and its kit tests (`claude plugin test mod`) — Claude-adapter packaging
+menubar/            the macOS menubar app — a SwiftPM package: CaretMenubarCore (the poll→icon mapping and launch-argument parsing, with its Swift Testing suites) and the AppKit executable; `mise run build menubar` assembles it into bin/caret-menubar.app
 skills/             caret/ — the /caret skill (listed as caret:caret): SKILL.md routes its argument to one of references/{plan,doctor,demo}.md — Claude-adapter packaging (agent-specific behavioral prose)
 opencode/           the plugin OpenCode loads — the review tool, the planning steer, the config-hook mutation, commands/caret.md (the /caret router) and references/ (the plan, doctor and demo bodies it loads) — OpenCode-adapter packaging; caret.core.ts is the host-neutral core the v1, v2 and TUI modules share
 pi/                 the extension pi loads — the caret.ts entry, the caret_review_plan tool, its row rendering, the per-session review state, the pending-plan notice with its shortcut, the /caret command and its dispatch, the planning mode and its edit gate, and the demo and doctor handlers — pi-adapter packaging
@@ -317,7 +318,7 @@ bridge/             review-bridge.ts — the bridge from an agent's review tool 
 templates/          demo.md — the /caret demo plan the Claude Code skill and the OpenCode and pi commands fill and present
 test/               core/ (tool-agnostic suites) · adapters/<tool>/ (per-adapter suites + fixtures) · bridge/ (the repo-root bridge/ module) · opencode/ (the repo-root opencode/ package) · pi/ (the repo-root pi/ extension) · e2e/ (Playwright) · structure/ (repo-shape invariants) · scripts/ (release + dev tooling) · support/ (shared scaffolding)
 scripts/            dev and release tooling for the checkout, plus the two committed shims' tests
-bin/                the caret entrypoint shim (bin/caret) and the service launcher (bin/caret-launcher) — the only tracked files here; a local build drops the compiled binary and the UI assets beside them
+bin/                the caret entrypoint shim (bin/caret) and the service launcher (bin/caret-launcher) — the only tracked files here; a local build drops the compiled binary, the UI assets and bin/caret-menubar.app beside them
 ```
 
 ## Built-in themes

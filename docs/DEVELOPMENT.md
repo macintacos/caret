@@ -585,9 +585,9 @@ opens `menubar/Package.swift` directly. `swift test --package-path menubar` runs
 tests.
 
 `mise run build menubar` builds it in release and assembles `bin/caret-menubar.app`, with
-`LSUIElement` set so it has no Dock icon. It needs macOS 13 or later and Xcode; elsewhere
-the target prints one line and succeeds. Run it with `open bin/caret-menubar.app`, or pass
-launch arguments after `--args`:
+`LSUIElement` set so it has no Dock icon. It needs macOS 13 or later and Xcode 16 or
+later; elsewhere the target prints one line and succeeds. Run it with
+`open bin/caret-menubar.app`, or pass launch arguments after `--args`:
 
 ```sh
 open bin/caret-menubar.app --args --base-url http://127.0.0.1:42718 \
@@ -769,11 +769,13 @@ in `test/scripts/docs-gate.test.ts` (the script) and
 
 The menubar app has its own workflow, `.github/workflows/menubar.yml`. Its
 `menubar changes` job reads the PR's changed paths from the GitHub API. Its `menubar` job
-builds and tests the app on `macos-latest` with a pinned Xcode (`DEVELOPER_DIR`), and runs
-only when the PR touches `menubar/`, the build task (`scripts/tasks/build.ts`,
+builds and tests the app on the `macos-26` image with a pinned Xcode (`DEVELOPER_DIR`),
+and runs only when the PR touches `menubar/`, the build task (`scripts/tasks/build.ts`,
 `.mise/tasks/build`), or the workflow. A skipped job reports as passing, so making
-`menubar` a required check never blocks other PRs. When GitHub drops the pinned Xcode from
-the runner image, bump the pin. Its cases live in `test/scripts/menubar-workflow.test.ts`.
+`menubar` a required check never blocks other PRs, and a failed `menubar changes` job
+makes `menubar` build anyway rather than skip. The runner image and the Xcode pin are
+bumped together, in the same change. Its cases live in
+`test/scripts/menubar-workflow.test.ts`.
 
 #### Adding a task
 

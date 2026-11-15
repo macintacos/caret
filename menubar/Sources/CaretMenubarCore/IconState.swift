@@ -22,9 +22,10 @@ private struct PendingBody: Decodable {
     let pending: Int
 }
 
+/// Maps one poll to the icon: no answer, or a 404 from a daemon older than the route, is idle; a
+/// 200 `{"pending": n}` is pending when n > 0, idle otherwise; anything else is unanswered.
 public func iconState(for outcome: PollOutcome) -> IconState {
     switch outcome {
-    // A 404 is a daemon from before the route existed: nothing it could report.
     case .noResponse, .response(status: 404, body: _):
         return .idle
     case let .response(status: 200, body: body):

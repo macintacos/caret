@@ -38,7 +38,6 @@ final class StatusController: NSObject {
         menu.addItem(unansweredItem)
         let open = NSMenuItem(title: "Open caret", action: #selector(openCaret), keyEquivalent: "")
         open.target = self
-        open.isEnabled = isWebURL(config.reviewURL)
         menu.addItem(open)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
@@ -79,7 +78,6 @@ final class StatusController: NSObject {
     }
 
     @objc private func openCaret() {
-        guard isWebURL(config.reviewURL) else { return }
         NSWorkspace.shared.open(config.reviewURL)
     }
 }

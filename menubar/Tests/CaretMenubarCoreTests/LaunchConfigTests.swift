@@ -51,6 +51,15 @@ func refusals() {
     }
 }
 
+@Test("an http URL with no host is refused, with a message naming the host")
+func hostlessURL() {
+    #expect(throws: LaunchConfigError.invalidURL("http:foo")) {
+        try parseLaunchArguments(["--review-url", "http:foo"])
+    }
+    #expect(LaunchConfigError.invalidURL("http:foo").description
+        == "not an http or https URL with a host: http:foo")
+}
+
 @Test("only http and https URLs open")
 func webURLs() {
     #expect(isWebURL(URL(string: "http://caret.localhost:42718")!))

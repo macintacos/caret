@@ -47,7 +47,9 @@ test("never runs with a write token", () => {
 
 test("builds only when the app, its build task, or this workflow changed", () => {
   expect(menubar.needs).toBe("changes");
-  expect(menubar.if).toBe("needs.changes.outputs.menubar == 'true'");
+  expect(menubar.if?.match(/^\$\{\{ (.*) \}\}$/)?.[1]).toBe(
+    "!cancelled() && needs.changes.outputs.menubar != 'false'",
+  );
   const run = changes.steps.find((step) => step.id === "paths")?.run ?? "";
   const pattern = run.match(/grep -qE '([^']+)'/)?.[1];
   expect(pattern).toBeDefined();
@@ -72,13 +74,22 @@ test("builds only when the app, its build task, or this workflow changed", () =>
 });
 
 test("builds and tests on macOS with a pinned Xcode", () => {
-  expect(menubar["runs-on"]).toBe("macos-latest");
+  expect(menubar["runs-on"]).toBe("macos-26");
   expect(menubar.env?.DEVELOPER_DIR).toMatch(
     /^\/Applications\/Xcode_[\d.]+\.app\/Contents\/Developer$/,
   );
   const runs = menubar.steps.map((step) => step.run);
   expect(runs).toContain("mise run build menubar");
   expect(runs).toContain("swift test --package-path menubar");
+});
+
+test("checks the assembled bundle launches its declared executable", () => {
+  const runs = menubar.steps.map((step) => step.run ?? "");
+  const build = runs.indexOf("mise run build menubar");
+  const check = runs.findIndex((run) => run.includes("CFBundleExecutable"));
+  expect(check).toBeGreaterThan(build);
+  expect(runs[check]).toContain("plutil -lint");
+  expect(runs[check]).toContain("test -x");
 });
 
 test("every action ref is locked for this workflow", () => {
