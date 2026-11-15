@@ -16,6 +16,7 @@
     getUpdate,
     getUpdateChanges,
     markSeen,
+    reportAccent,
   } from "$lib/api.ts";
   import { approveVariants, pickApproveMode } from "$lib/approve.ts";
   import { readApproveMode } from "$lib/approveModePref.ts";
@@ -473,6 +474,12 @@
   // subscription and stays silent under a pinned mode. No reactive reads: runs once on
   // mount, returns the disposer.
   $effect(() => appearance.watch());
+
+  // Mirror each slot's accent to the daemon for the menubar app's card, on load and on
+  // every change: the theme choice itself lives only in this browser. Reads the slots.
+  $effect(() => {
+    void reportAccent(appearance.accents);
+  });
 
   // ----- Update verdict -----
   // Read the daemon's verdict once on mount. No network check is triggered by the UI:

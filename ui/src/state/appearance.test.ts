@@ -42,6 +42,15 @@ function harness(prefersDark = false, over: AppearanceDeps = {}) {
   return { appearance, wipes: () => wipes };
 }
 
+describe("the accents the page reports", () => {
+  test("are each slot's theme accent, whichever scheme is showing", () => {
+    const { appearance } = harness(false);
+    expect(appearance.accents).toEqual({ light: "#c2490d", dark: "#ff8f3d" });
+    appearance.setSlot("dark", "dracula");
+    expect(appearance.accents).toEqual({ light: "#c2490d", dark: "#bd93f9" });
+  });
+});
+
 describe("the resolved read", () => {
   test("resolves the persisted mode and slots against the OS preference", () => {
     localStorage.setItem(MODE_KEY, "dark");

@@ -344,6 +344,21 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
 // have that explicit choice silently replaced by the new `system` default. Seeded
 // through the real boot path, with the emulated OS set the OTHER way so an unmigrated
 // build would visibly resolve dark.
+test("the page reports each slot's accent to the daemon, on load and on a new pick", async ({
+  daemon,
+  page,
+}) => {
+  const reported = async () =>
+    ((await (await fetch(`${daemon.url}/api/stats`)).json()) as { accent?: unknown }).accent;
+  await seedAndOpen(page, daemon);
+  await expect.poll(reported).toEqual({ light: "#c2490d", dark: "#ff8f3d" });
+
+  await openSettings(page);
+  await pickDraculaDark(page);
+
+  await expect.poll(reported).toEqual({ light: "#c2490d", dark: "#bd93f9" });
+});
+
 test("a pre-mode caret.theme pick migrates to an explicit mode", async ({ daemon, page }) => {
   await page.addInitScript(() => localStorage.setItem("caret.theme", "caret-light"));
   await seedAndOpen(page, daemon);

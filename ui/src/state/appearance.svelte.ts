@@ -22,6 +22,7 @@
 // persisted truth is origin-scoped localStorage — so a per-mount instance would be
 // fiction. `createAppearance` stays exported for isolated unit tests.
 
+import type { SchemeAccents } from "@core/lib/types";
 import {
   appearanceSummary,
   type CachedTheme,
@@ -68,6 +69,8 @@ export interface Appearance {
   readonly scheme: Scheme;
   /** The one-line readout explaining why this palette is the one showing. */
   readonly summary: string;
+  /** Each slot's theme accent, showing or not: what the menubar app's card is tinted with. */
+  readonly accents: SchemeAccents;
 
   /** Pin a scheme, or follow the OS. Persists, then repaints as a wipe. */
   setMode(mode: ThemeMode): void;
@@ -180,6 +183,12 @@ export function createAppearance(deps: AppearanceDeps = {}): Appearance {
     },
     get summary() {
       return appearanceSummary(live.mode, scheme(), themeFor(resolved()).label);
+    },
+    get accents() {
+      return {
+        light: themeFor(live.slots.light).tokens["--accent"],
+        dark: themeFor(live.slots.dark).tokens["--accent"],
+      };
     },
     setMode(mode) {
       commit(() => {
