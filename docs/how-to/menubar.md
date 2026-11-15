@@ -32,6 +32,12 @@ The app reads caret's port and address from your [settings](../reference/config-
 when `caret install` runs. After you change either, run `caret install` again so the app
 finds caret.
 
+The app reaches caret only through this Mac's own address (`127.0.0.1` or `localhost`). It
+still works with [`[daemon] host`](../reference/config-file.md) set to all addresses
+(`0.0.0.0` or `::`). With `host` set to one specific address other than this Mac's own,
+`caret install` warns and does not install or update the app. To use the app, set `host`
+back and run `caret install` again.
+
 When `caret install` runs from a script or another tool instead of at a terminal, it
 cannot ask. If the app is installed, it updates it; otherwise it leaves the app out. An
 update does not reopen an app you quit, so it stays closed until your next login.

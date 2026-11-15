@@ -61,6 +61,15 @@ test("menubarSupported admits macOS 13 (Darwin 22) and later only", () => {
   expect(menubarSupported("linux", "6.8.0")).toBe(false);
 });
 
+test("the label and macOS floor match the bundle's Info.plist", () => {
+  const info = readFileSync(join(import.meta.dir, "../../../menubar/Info.plist"), "utf8");
+  const value = (key: string) =>
+    info.match(new RegExp(`<key>${key}</key>\\s*<string>([^<]*)`))?.[1];
+
+  expect(value("CFBundleIdentifier")).toBe(MENUBAR_LABEL);
+  expect(value("LSMinimumSystemVersion")).toBe("13.0");
+});
+
 describe("buildMenubarPlist", () => {
   test("starts the executable with its three flags, at login, relaunching only after a crash", () => {
     const text = buildMenubarPlist(LAUNCH);
@@ -99,7 +108,7 @@ describe("install", () => {
     const nested = join(dir, "LaunchAgents");
     const fake = printing({ code: 113, stdout: "", stderr: "" });
 
-    await agent(fake, nested).install(LAUNCH, "start");
+    expect(await agent(fake, nested).install(LAUNCH, "start")).toBe("reloaded");
 
     const plist = join(nested, `${MENUBAR_LABEL}.plist`);
     expect(readFileSync(plist, "utf8")).toBe(buildMenubarPlist(LAUNCH));
@@ -109,12 +118,13 @@ describe("install", () => {
     ]);
   });
 
-  for (const start of ["start", "leave-stopped"] as MenubarStart[]) {
+  const STARTS: MenubarStart[] = ["start", "leave-stopped"];
+  for (const start of STARTS) {
     test(`${start}: leaves a running job with an unchanged plist alone`, async () => {
       writeFileSync(plistPath(), buildMenubarPlist(LAUNCH));
       const fake = printing(RUNNING_STATE);
 
-      await agent(fake).install(LAUNCH, start);
+      expect(await agent(fake).install(LAUNCH, start)).toBe("unchanged");
 
       expect(reloads(fake)).toEqual([]);
     });
@@ -123,7 +133,7 @@ describe("install", () => {
       writeFileSync(plistPath(), "stale");
       const fake = printing(RUNNING_STATE);
 
-      await agent(fake).install(LAUNCH, start);
+      expect(await agent(fake).install(LAUNCH, start)).toBe("reloaded");
 
       expect(reloads(fake)).toEqual(["bootout", "bootstrap"]);
       expect(readFileSync(plistPath(), "utf8")).toBe(buildMenubarPlist(LAUNCH));
@@ -135,7 +145,7 @@ describe("install", () => {
       writeFileSync(plistPath(), seeded);
       const fake = printing(STOPPED_STATE);
 
-      await agent(fake).install(LAUNCH, "start");
+      expect(await agent(fake).install(LAUNCH, "start")).toBe("reloaded");
 
       expect(reloads(fake)).toEqual(["bootout", "bootstrap"]);
     }
@@ -145,7 +155,7 @@ describe("install", () => {
     writeFileSync(plistPath(), "stale");
     const fake = printing(STOPPED_STATE);
 
-    await agent(fake).install(LAUNCH, "leave-stopped");
+    expect(await agent(fake).install(LAUNCH, "leave-stopped")).toBe("deferred");
 
     expect(readFileSync(plistPath(), "utf8")).toBe(buildMenubarPlist(LAUNCH));
     expect(reloads(fake)).toEqual([]);
@@ -155,7 +165,7 @@ describe("install", () => {
     writeFileSync(plistPath(), buildMenubarPlist(LAUNCH));
     const fake = printing(STOPPED_STATE);
 
-    await agent(fake).install(LAUNCH, "leave-stopped");
+    expect(await agent(fake).install(LAUNCH, "leave-stopped")).toBe("deferred");
 
     expect(reloads(fake)).toEqual([]);
   });
@@ -165,7 +175,9 @@ describe("install", () => {
       args[0] === "bootstrap" ? BOOTSTRAP_FAILED : { code: 113, stdout: "", stderr: "" },
     );
 
-    await expect(agent(fake).install(LAUNCH, "start")).rejects.toThrow();
+    await expect(agent(fake).install(LAUNCH, "start")).rejects.toThrow(
+      "caret menubar: launchctl bootstrap failed (5): Input/output error",
+    );
   });
 
   test("never names the caret service's job and keeps its plist bytes", async () => {

@@ -6,7 +6,6 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { commandError } from "@/lib/run.ts";
 import { escapeXml, stringEntry } from "@/service/launchd.ts";
 import { type LaunchdDeps, RUNNING, spawnLaunchctl } from "@/service/launchd-manager.ts";
 import { unitUnchanged } from "@/service/unit-file.ts";
@@ -70,16 +69,24 @@ ${stringEntry("ProcessType", "Interactive", "  ")}
  * refresh that leaves the app as found, so a Quit sticks until the next login. */
 export type MenubarStart = "start" | "leave-stopped";
 
+/** What install() left launchd doing: "unchanged" (already running this plist),
+ * "reloaded" (booted out and bootstrapped onto it), or "deferred" (plist written, the
+ * stopped job left alone until the next login). */
+export type MenubarInstallOutcome = "unchanged" | "reloaded" | "deferred";
+
 export interface MenubarAgent {
   /** Whether the LaunchAgent's plist is on disk — a Quit leaves it installed. */
   installed(): boolean;
   /** Write a changed plist, and reload the job unless it is running an unchanged one or
-   * `start` is "leave-stopped" and it is stopped. Loading starts the app. */
-  install(launch: MenubarLaunch, start: MenubarStart): Promise<void>;
+   * `start` is "leave-stopped" and it is stopped. Loading starts the app. A "start" is
+   * never "deferred". */
+  install(launch: MenubarLaunch, start: MenubarStart): Promise<MenubarInstallOutcome>;
   /** Stop the app and remove its plist. Idempotent. */
   uninstall(): Promise<void>;
 }
 
+/** The menubar app's LaunchAgent, driven over launchctl in the gui/<uid> domain. Throws
+ * without a POSIX uid. */
 export function createMenubarAgent(deps: LaunchdDeps = {}): MenubarAgent {
   const launchAgentsDir = deps.launchAgentsDir ?? join(homedir(), "Library", "LaunchAgents");
   const launchctl = deps.launchctl ?? spawnLaunchctl;
@@ -97,21 +104,25 @@ export function createMenubarAgent(deps: LaunchdDeps = {}): MenubarAgent {
       const changed = !unitUnchanged(plistPath, text);
       const printed = await launchctl(["print", target]);
       const running = printed.code === 0 && RUNNING.some((p) => p.test(printed.stdout));
-      if (!changed && running) return;
+      if (!changed && running) return "unchanged";
 
       if (changed) {
         mkdirSync(launchAgentsDir, { recursive: true });
         writeFileSync(plistPath, text);
       }
-      if (!running && start === "leave-stopped") return;
+      if (!running && start === "leave-stopped") return "deferred";
 
       // Best-effort, ahead of bootstrap, as the service's install does.
       await launchctl(["bootout", target]);
-      const bootstrapped = await launchctl(["bootstrap", domain, plistPath]);
-      if (bootstrapped.code !== 0) throw commandError("launchctl", "bootstrap", bootstrapped);
+      const { code, stderr } = await launchctl(["bootstrap", domain, plistPath]);
+      if (code !== 0) {
+        throw new Error(`caret menubar: launchctl bootstrap failed (${code}): ${stderr.trim()}`);
+      }
+      return "reloaded";
     },
 
     async uninstall() {
+      // Best-effort: nothing loaded is the ordinary case.
       await launchctl(["bootout", target]);
       rmSync(plistPath, { force: true });
     },

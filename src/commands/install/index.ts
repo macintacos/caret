@@ -3,11 +3,12 @@
 // Code: the `claude` plugin CLI). caret detects the agents on this machine and asks — on
 // a TTY through the chooser, otherwise by installing into everything it detected (Claude
 // Code when it detected nothing), so CI never hangs on a prompt. The same TTY is then
-// asked whether caret keeps the review UI running; without one, the service is left as
+// asked whether caret keeps the review UI running and, on macOS 13 or later, whether to
+// show caret in the menu bar; without one, the service and the menubar app are left as
 // found. Every install ends by acquiring the rumdl plan formatter: it is part of a
 // working caret, not a step anyone can skip or forget. `--uninstall` is machine-wide — it
-// removes caret from every agent in the registry, since the residency it tears down
-// alongside them is one service for the whole machine. Neither it nor `--dry-run`
+// removes caret from every agent in the registry, with the service and the menubar app,
+// since the residency it tears down alongside them is one per machine. Neither it nor `--dry-run`
 // acquires rumdl.
 
 import { runInstallClaudeTarget } from "@/commands/install/claude.ts";
@@ -47,8 +48,9 @@ import { createInstallUI, type InstallUI, isTerminal } from "@/commands/install/
 import { errorMessage } from "@/lib/types.ts";
 import { ensureRumdl, RUMDL_VERSION } from "@/plan/rumdl.ts";
 
-/** Injection seam for tests: override detection, the chooser, the service question,
- * TTY-ness, each target runner, and — through ServiceStepDeps — the supervisor, to assert
+/** Injection seam for tests: override detection, the chooser, the service and
+ * menubar questions, TTY-ness, each target runner, and — through ServiceStepDeps and
+ * MenubarStepDeps — the supervisor and the menubar agent, to assert
  * selection and dispatch without touching a real config dir, the `claude` or `pi` CLI,
  * launchd, or a terminal. */
 export interface InstallDeps extends ServiceStepDeps, MenubarStepDeps {
@@ -100,7 +102,7 @@ export function installExitCode(outcome: InstallOutcome): number {
 }
 
 /** Run the install command: resolve the targets (the chooser or detection) and the
- * service choice (the question, or the machine as found), then dispatch to each target.
+ * service and menubar choices (the questions, or the machine as found), then dispatch to each target.
  * Reports every problem through `ui` and returns how the run ended — never throws, and
  * never writes `process.exitCode` itself. */
 export async function runInstallSubcommand(

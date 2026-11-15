@@ -22,10 +22,13 @@ import { daemonBaseUrl, isExposed, publicUrl } from "@/daemon/address.ts";
 import { errorMessage } from "@/lib/types.ts";
 import type { MenubarAgent } from "@/service/menubar-agent.ts";
 
-// Keep in sync with menubar/Info.plist CFBundleExecutable and the build's MENUBAR_APP.
+// Keep in sync with menubar/Info.plist CFBundleExecutable and the build's MENUBAR_APP and
+// MENUBAR_EXECUTABLE (scripts/tasks/build.ts).
 const APP_NAME = "caret-menubar.app";
 const EXECUTABLE = "Contents/MacOS/CaretMenubar";
 
+/** What this install does about the menubar app: the question's two answers, or — when
+ * nobody was asked — the app left as found. */
 export type MenubarChoice = "yes" | "no" | "as-found";
 
 export interface MenubarStepDeps {
@@ -61,20 +64,11 @@ export async function reconcileMenubar(
   ui: InstallUI,
 ): Promise<void> {
   await withMenubar(deps, ui, async (agent) => {
-    const installed = agent.installed();
-    if (opts.choice === "no") {
-      await removeMenubar(agent);
-      if (installed) ui.info("Removed the caret menubar app.");
-      return;
-    }
-    if (opts.choice === "as-found" && !installed) {
+    if (opts.choice === "no") return removeReported(agent, opts.dryRun, ui);
+    if (opts.choice === "as-found" && !agent.installed()) {
       ui.info(
         "The caret menubar app isn't installed — a `caret install` at a terminal, without `--dry-run`, asks whether to add it.",
       );
-      return;
-    }
-    if (opts.dryRun) {
-      ui.info("Would refresh the caret menubar app and its login item.");
       return;
     }
 
@@ -94,26 +88,33 @@ export async function reconcileMenubar(
     const s = loadSettings();
     const baseUrl = daemonBaseUrl(s);
     const reviewUrl = publicUrl(s.daemon, getPort(s));
-    if (isExposed(new URL(baseUrl).hostname.replace(/^\[(.*)\]$/, "$1"))) {
+    // The app exits 2 on a base URL its isLoopback (LaunchConfig.swift) refuses — a crash
+    // loop under KeepAlive. isExposed is that check's TS twin.
+    const hostname = new URL(baseUrl).hostname.replace(/^\[(.*)\]$/, "$1");
+    if (isExposed(hostname)) {
       ui.warn(
         "The caret menubar app reaches caret over loopback only, and caret is bound to another host — leaving the app as it is.",
       );
       return;
     }
 
-    // A stopped job left by "leave-stopped" still names the pruned path in launchd's
-    // memory, but nothing starts it before the next login, which reads the new plist.
+    if (opts.dryRun) {
+      ui.info("Would refresh the caret menubar app and its login item.");
+      return;
+    }
+
     const app = stageMenubarApp(source);
-    await agent.install(
+    const outcome = await agent.install(
       { executable: join(app, EXECUTABLE), baseUrl, reviewUrl, tokenFile: daemonTokenFile() },
       opts.choice === "yes" ? "start" : "leave-stopped",
     );
-    pruneMenubarApps(app);
+    // launchd still holds the old path for a deferred job; keep that copy until a reload.
+    if (outcome !== "deferred") pruneMenubarApps(app);
 
     ui.info(
-      opts.choice === "yes"
-        ? 'The caret menubar app is in the menu bar and starts at login.\nTo remove it, run `caret install` and answer "No".'
-        : "Refreshed the caret menubar app — if you quit it, it stays quit until the next login.",
+      outcome === "deferred"
+        ? "Refreshed the caret menubar app — it stays quit until your next login."
+        : 'The caret menubar app is in the menu bar and starts at login.\nTo remove it, run `caret install` and answer "No".',
     );
   });
 }
@@ -124,15 +125,19 @@ export async function uninstallMenubar(
   deps: MenubarStepDeps,
   ui: InstallUI,
 ): Promise<void> {
-  await withMenubar(deps, ui, async (agent) => {
-    const installed = agent.installed();
-    if (opts.dryRun) {
-      if (installed) ui.info("Would remove the caret menubar app.");
-      return;
-    }
-    await removeMenubar(agent);
-    if (installed) ui.info("Removed the caret menubar app.");
-  });
+  await withMenubar(deps, ui, (agent) => removeReported(agent, opts.dryRun, ui));
+}
+
+/** Remove the app, or under a dry run say so; report only when it was installed. */
+async function removeReported(agent: MenubarAgent, dryRun: boolean, ui: InstallUI) {
+  const installed = agent.installed();
+  if (dryRun) {
+    if (installed) ui.info("Would remove the caret menubar app.");
+    return;
+  }
+
+  await removeMenubar(agent);
+  if (installed) ui.info("Removed the caret menubar app.");
 }
 
 /** Stop the app and delete caret's own copies — never a path read from a plist. */
@@ -141,8 +146,10 @@ async function removeMenubar(agent: MenubarAgent): Promise<void> {
   rmSync(menubarDir(), { recursive: true, force: true });
 }
 
-/** Copy `source` to menubarDir()/<id>/, keyed by its executable's hash; the copy lands
- * whole or not at all. Returns the copied app's path. */
+/** Copy `source` to menubarDir()/<id>/ unless that copy exists; the copy lands whole or
+ * not at all. Returns the copied app's path. <id> hashes only the executable, whose
+ * ad-hoc signature seals the rest of the bundle. A fresh path per build keeps an
+ * unchanged re-run's plist byte-identical and never overwrites the bundle launchd runs. */
 function stageMenubarApp(source: string): string {
   const id = createHash("sha256")
     .update(readFileSync(join(source, EXECUTABLE)))

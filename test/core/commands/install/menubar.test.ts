@@ -15,11 +15,15 @@ import { join } from "node:path";
 
 import { setupTempConfigFile, setupTempStateDir } from "@test/support/env.ts";
 import { fakeLaunchctl } from "@test/support/launchctl.ts";
-import { reconcileMenubar, uninstallMenubar } from "@/commands/install/menubar.ts";
+import {
+  type MenubarChoice,
+  reconcileMenubar,
+  uninstallMenubar,
+} from "@/commands/install/menubar.ts";
 import { recordingUI } from "@/commands/install/ui.ts";
 import { daemonTokenFile, menubarDir } from "@/config/paths.ts";
 import type { LaunchctlResult } from "@/service/launchd-manager.ts";
-import { createMenubarAgent, MENUBAR_LABEL } from "@/service/menubar-agent.ts";
+import { buildMenubarPlist, createMenubarAgent, MENUBAR_LABEL } from "@/service/menubar-agent.ts";
 
 const configFile = setupTempConfigFile(setupTempStateDir("caret-install-menubar-"));
 
@@ -38,13 +42,27 @@ function reply(args: string[]): LaunchctlResult {
   return { code: 0, stdout: "", stderr: "" };
 }
 
+function bundleExecutable(): string {
+  const info = readFileSync(join(import.meta.dir, "../../../../menubar/Info.plist"), "utf8");
+  const name = info.match(/<key>CFBundleExecutable<\/key>\s*<string>([^<]*)/)?.[1];
+  if (name === undefined) throw new Error("menubar/Info.plist has no CFBundleExecutable");
+  return name;
+}
+const EXECUTABLE = bundleExecutable();
+const exePath = (id: string) =>
+  join(menubarDir(), id, "caret-menubar.app", "Contents/MacOS", EXECUTABLE);
+
 function writeBundle(bytes: string): void {
   const app = join(pkg, "bin", "caret-menubar.app", "Contents");
   mkdirSync(join(app, "MacOS"), { recursive: true });
   writeFileSync(join(app, "Info.plist"), "<plist/>");
-  writeFileSync(join(app, "MacOS", "CaretMenubar"), bytes);
-  chmodSync(join(app, "MacOS", "CaretMenubar"), 0o755);
+  writeFileSync(join(app, "MacOS", EXECUTABLE), bytes);
+  chmodSync(join(app, "MacOS", EXECUTABLE), 0o755);
 }
+
+const LOGIN_LINE =
+  'info:The caret menubar app is in the menu bar and starts at login.\nTo remove it, run `caret install` and answer "No".';
+const QUIT_LINE = "info:Refreshed the caret menubar app — it stays quit until your next login.";
 
 function deps(withAgent = true) {
   return {
@@ -65,7 +83,7 @@ function onlyId(): string {
 }
 const mutations = () => fake.calls.filter((a) => a[0] !== "print");
 
-async function run(choice: "yes" | "no" | "as-found", dryRun = false, localRoot?: string) {
+async function run(choice: MenubarChoice, dryRun = false, localRoot?: string) {
   const ui = recordingUI();
   await reconcileMenubar({ dryRun, choice, localRoot }, deps(), ui);
   return ui.events;
@@ -96,15 +114,19 @@ describe("reconcileMenubar", () => {
 
     const id = onlyId();
     expect(id).toMatch(/^[0-9a-f]{12}$/);
-    const exe = join(menubarDir(), id, "caret-menubar.app", "Contents/MacOS/CaretMenubar");
+    const exe = exePath(id);
     expect(statSync(exe).mode & 0o111).not.toBe(0);
     expect(statSync(menubarDir()).mode & 0o777).toBe(0o700);
-    expect(plist()).toContain(`<string>${exe}</string>`);
-    expect(plist()).toContain("http://127.0.0.1:4321");
-    expect(plist()).toContain(":4321");
-    expect(plist()).toContain(daemonTokenFile());
+    expect(plist()).toBe(
+      buildMenubarPlist({
+        executable: exe,
+        baseUrl: "http://127.0.0.1:4321",
+        reviewUrl: "http://caret.localhost:4321",
+        tokenFile: daemonTokenFile(),
+      }),
+    );
     expect(fake.subcommands()).toEqual(["print", "bootout", "bootstrap"]);
-    expect(events.filter((e) => e.startsWith("info:"))).toHaveLength(1);
+    expect(events).toEqual([LOGIN_LINE]);
   });
 
   test("a changed bundle lands under a new id, reloads, and prunes the old copy", async () => {
@@ -132,29 +154,44 @@ describe("reconcileMenubar", () => {
     expect(fake.subcommands()).not.toContain("bootstrap");
   });
 
-  test("an as-found refresh of a running app carries a new port and reloads it", async () => {
+  test("an as-found refresh of a running app carries a new build and port, reloads, and prunes", async () => {
     await run("yes");
+    const old = onlyId();
+    writeBundle("build-2");
     writeFileSync(configFile(), "[daemon]\nport = 4322\n");
     fake.calls.length = 0;
 
-    await run("as-found");
+    const events = await run("as-found");
 
-    expect(plist()).toContain(":4322");
-    expect(plist()).not.toContain(":4321");
+    const next = onlyId();
+    expect(next).not.toBe(old);
+    expect(plist()).toBe(
+      buildMenubarPlist({
+        executable: exePath(next),
+        baseUrl: "http://127.0.0.1:4322",
+        reviewUrl: "http://caret.localhost:4322",
+        tokenFile: daemonTokenFile(),
+      }),
+    );
     expect(fake.subcommands()).toEqual(["print", "bootout", "bootstrap"]);
+    expect(events).toEqual([LOGIN_LINE]);
   });
 
-  test("an as-found refresh of a quit app rewrites the plist but leaves it stopped", async () => {
+  test("an as-found refresh of a quit app rewrites the plist, leaves it stopped, and keeps the old copy", async () => {
     await run("yes");
+    const old = onlyId();
+    writeBundle("build-2");
     writeFileSync(configFile(), "[daemon]\nport = 4322\n");
     state = "not running";
     fake.calls.length = 0;
 
     const events = await run("as-found");
 
-    expect(plist()).toContain(":4322");
+    expect(plist()).toContain("http://caret.localhost:4322");
     expect(mutations()).toEqual([]);
-    expect(events.some((e) => e.includes("next login"))).toBe(true);
+    expect(ids()).toContain(old);
+    expect(ids()).toHaveLength(2);
+    expect(events).toEqual([QUIT_LINE]);
   });
 
   test("as-found with nothing installed asks nothing of launchd and copies nothing", async () => {
@@ -198,6 +235,29 @@ describe("reconcileMenubar", () => {
     expect(fake.calls).toEqual([]);
   });
 
+  test("a dry run of a no leaves the app and its copies in place", async () => {
+    await run("yes");
+    const id = onlyId();
+    fake.calls.length = 0;
+
+    const events = await run("no", true);
+
+    expect(events).toEqual(["info:Would remove the caret menubar app."]);
+    expect(existsSync(plistPath())).toBe(true);
+    expect(ids()).toEqual([id]);
+    expect(fake.calls).toEqual([]);
+  });
+
+  test("a dry run with a missing bundle warns as the real run would", async () => {
+    await run("yes");
+    rmSync(join(pkg, "bin"), { recursive: true });
+
+    const events = await run("as-found", true);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toStartWith("warn:No menubar app at");
+  });
+
   test("a missing bundle warns with its path and leaves launchd alone", async () => {
     rmSync(join(pkg, "bin"), { recursive: true });
 
@@ -230,6 +290,19 @@ describe("reconcileMenubar", () => {
     expect(fake.calls).toEqual([]);
   });
 
+  for (const [host, baseUrl] of [
+    ["0.0.0.0", "http://127.0.0.1:4321"],
+    ["::", "http://[::1]:4321"],
+  ]) {
+    test(`a wildcard bind (${host}) installs against loopback`, async () => {
+      writeFileSync(configFile(), `[daemon]\nhost = "${host}"\nport = 4321\n`);
+
+      await run("yes");
+
+      expect(plist()).toContain(`<string>${baseUrl}</string>`);
+    });
+  }
+
   test("without a menubar agent it does nothing and says nothing", async () => {
     const ui = recordingUI();
     await reconcileMenubar({ dryRun: false, choice: "yes" }, deps(false), ui);
@@ -247,6 +320,7 @@ describe("reconcileMenubar", () => {
 
     expect(events).toHaveLength(1);
     expect(events[0]).toStartWith("warn:");
+    expect(events[0]).not.toInclude("caret service");
   });
 });
 

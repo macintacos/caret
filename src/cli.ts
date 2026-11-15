@@ -131,11 +131,11 @@ function buildProgram(): Command {
   program
     .command("install")
     .description(
-      "install caret into a coding agent, plus the rumdl plan formatter, and choose whether the review UI runs as a service",
+      "install caret into a coding agent, plus the rumdl plan formatter, and choose whether the review UI runs as a service and, on macOS, whether caret shows in the menu bar",
     )
     .option(
       "--uninstall",
-      "remove caret from every agent on this machine, and its service, instead of installing",
+      "remove caret from every agent on this machine, with its service and menubar app, instead of installing",
     )
     .option("--dry-run", "print what would change without writing")
     .option(
