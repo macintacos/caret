@@ -62,6 +62,12 @@ export function ownedRootsDir(): string {
   return `${stateDir()}/roots`;
 }
 
+/** The menubar app's copies, one dir per bundle build. Not under stateDir()/bin, which
+ * uninstallLauncher() and the launcher's evict() delete whole. */
+export function menubarDir(): string {
+  return `${stateDir()}/menubar`;
+}
+
 /** Absolute `bun`, recorded at service-install time. */
 export function launcherBunFile(): string {
   return `${launcherRecordDir()}/bun-path`;
