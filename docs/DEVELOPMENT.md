@@ -787,9 +787,9 @@ and runs only when the PR touches `menubar/`, the build task (`scripts/tasks/bui
 `.mise/tasks/build`), or the workflow. A skipped job reports as passing, so making
 `menubar` a required check never blocks other PRs, and a failed `menubar changes` job
 makes `menubar` build anyway rather than skip. The runner image and the Xcode pin are
-bumped together, here and in `publish.yml`'s `menubar` job, in the same change;
-`test/scripts/release-workflow.test.ts` fails when they differ. Its cases live in
-`test/scripts/menubar-workflow.test.ts`.
+bumped together, in `menubar.yml` and in `publish.yml`'s `menubar` job, in the same
+change; `test/scripts/release-workflow.test.ts` fails when they differ. The workflow's
+cases live in `test/scripts/menubar-workflow.test.ts`.
 
 #### Adding a task
 

@@ -43,7 +43,9 @@ jobs:
           lipo bin/caret-menubar.app/Contents/MacOS/CaretMenubar -verify_arch arm64
           lipo bin/caret-menubar.app/Contents/MacOS/CaretMenubar -verify_arch x86_64
           codesign --verify --deep --strict bin/caret-menubar.app
-      - run: tar -czf caret-menubar.app.tgz -C bin caret-menubar.app
+      # Plain macOS tar adds ._ AppleDouble files for xattrs, which unpack into the bundle
+      # and break its seal.
+      - run: tar --no-mac-metadata -czf caret-menubar.app.tgz -C bin caret-menubar.app
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: menubar-app
@@ -84,6 +86,7 @@ jobs:
           app="$RUNNER_TEMP/packed/package/bin/caret-menubar.app/Contents"
           test -f "$app/Info.plist"
           test -x "$app/MacOS/CaretMenubar"
+          test -f "$app/_CodeSignature/CodeResources"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: package

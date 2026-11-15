@@ -5,7 +5,7 @@ import { expect, test } from "bun:test";
 import pkg from "@root/package.json" with { type: "json" };
 import { PUBLISH_WORKFLOW, STAGE_ID_ANNOTATION, STAGE_JOB } from "@/tasks/release/github.ts";
 
-type Step = { name?: string; uses?: string; run?: string; with?: Record<string, unknown> };
+type Step = { uses?: string; run?: string; with?: Record<string, unknown> };
 type Job = {
   name?: string;
   "runs-on": string;
@@ -38,8 +38,8 @@ test("the stage job keeps its id as its display name", () => {
 });
 
 test("the stage job annotates the stage id under the title finalize reads", () => {
-  const runs = workflow.jobs[STAGE_JOB]?.steps.map((step) => step.run ?? "") ?? [];
-  expect(runs.some((script) => script.includes(`title=${STAGE_ID_ANNOTATION}::`))).toBe(true);
+  const scripts = runs(workflow.jobs[STAGE_JOB]);
+  expect(scripts.some((script) => script.includes(`title=${STAGE_ID_ANNOTATION}::`))).toBe(true);
 });
 
 test("builds the menubar app on the image and Xcode the menubar PR check pins", () => {
@@ -52,13 +52,14 @@ test("checks the app is universal and signed, then tars it for the build job", (
   const steps = runs(menubar);
   const built = steps.indexOf("mise run build menubar");
   const check = steps.findIndex((run) => run.includes("codesign --verify --deep --strict"));
-  const tarred = steps.findIndex((run) => run.startsWith("tar -czf"));
+  const tarred = steps.findIndex((run) => run.includes("-czf caret-menubar.app.tgz"));
   const upload =
     menubar?.steps.findIndex((step) => step.uses?.startsWith("actions/upload-artifact@")) ?? -1;
   expect(check).toBeGreaterThan(built);
   expect(steps[check]).toContain("-verify_arch arm64");
   expect(steps[check]).toContain("-verify_arch x86_64");
   expect(tarred).toBeGreaterThan(check);
+  expect(steps[tarred]).toContain("--no-mac-metadata");
   expect(upload).toBeGreaterThan(tarred);
 });
 
@@ -70,11 +71,14 @@ test("the release fails when the menubar job fails", () => {
 
 test("the menubar job reads only, with no credentials and no cache", () => {
   expect(menubar?.permissions).toEqual({ contents: "read" });
-  for (const step of menubar?.steps ?? []) {
-    if (step.uses?.startsWith("actions/checkout@"))
-      expect(step.with?.["persist-credentials"]).toBe(false);
-    if (step.uses?.startsWith("jdx/mise-action@")) expect(step.with?.cache).toBe(false);
-  }
+  const using = (prefix: string) =>
+    menubar?.steps.filter((step) => step.uses?.startsWith(prefix)) ?? [];
+  const checkouts = using("actions/checkout@");
+  const mises = using("jdx/mise-action@");
+  expect(checkouts).toHaveLength(1);
+  expect(mises).toHaveLength(1);
+  for (const step of checkouts) expect(step.with?.["persist-credentials"]).toBe(false);
+  for (const step of mises) expect(step.with?.cache).toBe(false);
 });
 
 test("every action in the publish workflow is pinned to a commit SHA, and none is a cache", () => {
@@ -103,6 +107,17 @@ test("the build job unpacks the app before npm pack, then fails the release with
   expect(unpack).toBeGreaterThan(download);
   expect(pack).toBeGreaterThan(unpack);
   expect(check).toBeGreaterThan(pack);
+  expect(steps[check]).toContain("_CodeSignature/CodeResources");
+});
+
+test("the build job downloads the artifact and file the menubar job uploads", () => {
+  const upload = menubar?.steps.find((step) => step.uses?.startsWith("actions/upload-artifact@"));
+  const download = build?.steps.find((step) => step.uses?.startsWith("actions/download-artifact@"));
+  const name = upload?.with?.name;
+  expect(typeof name === "string" && name.length > 0).toBe(true);
+  expect(download?.with?.name).toBe(name);
+  const unpack = runs(build).find((run) => run.startsWith("tar -xzf"));
+  expect(unpack).toContain(String(upload?.with?.path));
 });
 
 test("package.json ships the menubar app", () => {

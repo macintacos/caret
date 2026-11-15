@@ -11,6 +11,7 @@
 
 import { chmodSync, copyFileSync, mkdirSync, rmSync } from "node:fs";
 
+import { runCommand } from "@/lib/run.ts";
 import {
   execAndExit,
   runCapture,
@@ -113,19 +114,12 @@ export function buildBinCompileCommand(commit: string): string[] {
   ];
 }
 
-/** Run `cmd` and resolve its trimmed stdout, throwing with its stderr when it fails. */
+/** Run `cmd` and resolve its trimmed stdout, throwing with its stderr when it fails. Stderr
+ * is captured, not inherited, so it never draws over a live progress line. */
 async function pipedStdout(cmd: string[]): Promise<string> {
-  // Diagnostics are piped, not inherited: the umbrella build renders a live progress
-  // line, and anything written straight to stderr would land on top of it. They ride
-  // along in the thrown error instead.
-  const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
-  const [out, err, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  if (code !== 0) throw new Error(`${cmd.join(" ")} failed: ${err.trim()}`);
-  return out.trim();
+  const { code, stdout, stderr } = await runCommand(cmd);
+  if (code !== 0) throw new Error(`${cmd.join(" ")} failed: ${stderr.trim()}`);
+  return stdout.trim();
 }
 
 /** Read HEAD's commit sha, throwing if git fails (e.g. not a checkout) so the
@@ -224,17 +218,21 @@ export async function runBuildBundle(): Promise<never> {
 
 // --- build menubar ----------------------------------------------------------
 // The macOS menubar app: the SwiftPM package under menubar/, built universal in release,
-// assembled into a .app by hand, since there is no Xcode project, and signed ad hoc. Never part of the bare
-// umbrella or the preflight gate: Swift builds only on macOS, and the `menubar` workflow
-// (.github/workflows/menubar.yml) is this target's gate.
+// assembled into a .app by hand (there is no Xcode project), then signed ad hoc.
+// Never part of the bare umbrella or the preflight gate: Swift builds only on macOS. The
+// `menubar` workflow (.github/workflows/menubar.yml) is this target's PR gate, and
+// publish.yml's `menubar` job builds the app the npm package ships.
 
-/** Where `build menubar` assembles the app; gitignored with the rest of bin/. */
+/** Where `build menubar` assembles the app; gitignored with the rest of bin/, shipped by
+ * package.json "files" and publish.yml. */
 const MENUBAR_APP = "bin/caret-menubar.app";
-// Package.swift's executableTarget and Info.plist's CFBundleExecutable.
+// Package.swift's executableTarget, Info.plist's CFBundleExecutable, and publish.yml's
+// bundle checks.
 const MENUBAR_EXECUTABLE = "CaretMenubar";
 
 /** The SwiftPM release build of the menubar package, universal so one app runs on Apple
- * silicon and Intel Macs. */
+ * silicon and Intel Macs. Xcode 27 warns that x86_64 is deprecated; the slice stays while
+ * Intel Macs are supported. */
 export function swiftBuildCommand(): string[] {
   return [
     "swift",
@@ -262,8 +260,10 @@ function swiftBinPath(): Promise<string> {
   return pipedStdout([...swiftBuildCommand(), "--show-bin-path"]);
 }
 
-/** Build the menubar package and assemble the .app, resolving the exit code. Off macOS it
- * prints one line and succeeds, so a Linux checkout's build never fails on it. */
+/** Build the menubar package, assemble the .app from SwiftPM's bin path, and sign it ad
+ * hoc, resolving the first failing step's exit code; throws if SwiftPM can't report its
+ * bin path. Off macOS it prints one line and succeeds, so a Linux checkout's build never
+ * fails on it. */
 export async function buildMenubar(deps: {
   platform: NodeJS.Platform;
   run: typeof runForward;
