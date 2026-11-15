@@ -1,0 +1,55 @@
+name: menubar
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches: [main]
+permissions: {}
+concurrency:
+  group: menubar-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  changes:
+    name: menubar changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      menubar: ${{ steps.paths.outputs.menubar }}
+    steps:
+      - id: paths
+        # Explicit bash runs with -o pipefail, and the list is captured before grep reads it:
+        # a failed gh api fails the step instead of quietly skipping the build.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files?per_page=100" --jq '.[].filename')"
+          if grep -qE '^(menubar/|scripts/tasks/build\.ts$|\.mise/tasks/build$|\.github/workflows/menubar\.yml$)' <<<"$files"; then
+            echo menubar=true >>"$GITHUB_OUTPUT"
+          else
+            echo menubar=false >>"$GITHUB_OUTPUT"
+          fi
+  menubar:
+    name: menubar
+    needs: changes
+    # A skipped job counts as passing, so a PR that never touches the app still merges.
+    if: needs.changes.outputs.menubar == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5.2.1
+        with:
+          version: 2026.11.3
+          cache_save: false
+      - run: bun install --frozen-lockfile
+      - run: mise run build menubar
+      - run: swift test --package-path menubar
