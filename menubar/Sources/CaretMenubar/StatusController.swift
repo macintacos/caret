@@ -27,6 +27,8 @@ final class StatusController: NSObject {
         super.init()
         statusItem.menu = makeMenu()
         show(.idle)
+        // The grey carrot stands in until the first poll answers, so that answer lands at once.
+        state = nil
     }
 
     func start() {
@@ -70,6 +72,10 @@ final class StatusController: NSObject {
 
     private func show(_ newState: IconState) {
         guard newState != state else { return }
+        statusItem.button?.animateImageChange(
+            IconTransition(
+                from: state, to: newState,
+                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion))
         state = newState
         Self.log.notice("icon \(String(describing: newState), privacy: .public)")
         switch newState {
