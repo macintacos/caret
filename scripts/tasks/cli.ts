@@ -405,7 +405,7 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   program
     .command("preflight")
     .description(
-      "Pre-push gate: lint, unit + shell tests, build, the docs site build, and artifact smoke, run concurrently",
+      "Pre-push gate: lint, unit + shell + Swift tests, the builds, the docs site build, and artifact smoke, run concurrently",
     )
     .option(
       "--json",
