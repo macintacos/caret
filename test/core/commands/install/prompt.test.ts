@@ -96,12 +96,10 @@ describe("the menubar question", () => {
     expect(absent.asked[0]?.initialValue).toBe(false);
   });
 
-  test("asks whether to show caret in the menu bar, starting at login", async () => {
+  test("asks whether to show caret in the menu bar", async () => {
     const { asked, clack } = recordingConfirm();
     expect(await promptForMenubar(false, clack)).toBe(true);
-    expect(asked[0]?.message).toBe(
-      "Show caret in the menu bar? The carrot colours in while a plan waits for review, and starts at login.",
-    );
+    expect(asked[0]?.message).toBe("Show caret in the menu bar?");
   });
 
   test("a cancelled question answers null", async () => {

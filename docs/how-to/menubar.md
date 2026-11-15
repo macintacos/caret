@@ -17,7 +17,7 @@ The app needs macOS 13 or later. It runs with or without the
 Run `caret install` at a terminal. On macOS 13 or later, it asks:
 
 ```text
-Show caret in the menu bar? The carrot colours in while a plan waits for review, and starts at login.
+Show caret in the menu bar?
 ```
 
 Answer **Yes** to add the app. It opens right away and starts at login. If it crashes,

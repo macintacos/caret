@@ -81,8 +81,7 @@ export async function promptForMenubar(
 ): Promise<boolean | null> {
   const { confirm, isCancel }: ClackConfirm = clack ?? (await import("@clack/prompts"));
   const answer = await confirm({
-    message:
-      "Show caret in the menu bar? The carrot colours in while a plan waits for review, and starts at login.",
+    message: "Show caret in the menu bar?",
     initialValue: installed,
   });
   return isCancel(answer) ? null : answer === true;
