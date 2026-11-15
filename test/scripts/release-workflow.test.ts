@@ -49,17 +49,17 @@ test("builds the menubar app on the image and Xcode the menubar PR check pins", 
 });
 
 test("checks the app is universal and signed, then tars it for the build job", () => {
-  const steps = runs(menubar);
-  const built = steps.indexOf("mise run build menubar");
-  const check = steps.findIndex((run) => run.includes("codesign --verify --deep --strict"));
-  const tarred = steps.findIndex((run) => run.includes("-czf caret-menubar.app.tgz"));
+  const scripts = runs(menubar);
+  const built = scripts.indexOf("mise run build menubar");
+  const check = scripts.findIndex((run) => run.includes("codesign --verify --deep --strict"));
+  const tarred = scripts.findIndex((run) => run.includes("-czf caret-menubar.app.tgz"));
   const upload =
     menubar?.steps.findIndex((step) => step.uses?.startsWith("actions/upload-artifact@")) ?? -1;
   expect(check).toBeGreaterThan(built);
-  expect(steps[check]).toContain("-verify_arch arm64");
-  expect(steps[check]).toContain("-verify_arch x86_64");
+  expect(scripts[check]).toContain("-verify_arch arm64");
+  expect(scripts[check]).toContain("-verify_arch x86_64");
   expect(tarred).toBeGreaterThan(check);
-  expect(steps[tarred]).toContain("--no-mac-metadata");
+  expect(scripts[tarred]).toContain("--no-mac-metadata");
   expect(upload).toBeGreaterThan(tarred);
 });
 
@@ -71,14 +71,14 @@ test("the release fails when the menubar job fails", () => {
 
 test("the menubar job reads only, with no credentials and no cache", () => {
   expect(menubar?.permissions).toEqual({ contents: "read" });
-  const using = (prefix: string) =>
+  const stepsUsing = (prefix: string) =>
     menubar?.steps.filter((step) => step.uses?.startsWith(prefix)) ?? [];
-  const checkouts = using("actions/checkout@");
-  const mises = using("jdx/mise-action@");
+  const checkouts = stepsUsing("actions/checkout@");
+  const miseSteps = stepsUsing("jdx/mise-action@");
   expect(checkouts).toHaveLength(1);
-  expect(mises).toHaveLength(1);
+  expect(miseSteps).toHaveLength(1);
   for (const step of checkouts) expect(step.with?.["persist-credentials"]).toBe(false);
-  for (const step of mises) expect(step.with?.cache).toBe(false);
+  for (const step of miseSteps) expect(step.with?.cache).toBe(false);
 });
 
 test("every action in the publish workflow is pinned to a commit SHA, and none is a cache", () => {
@@ -93,21 +93,21 @@ test("every action in the publish workflow is pinned to a commit SHA, and none i
 });
 
 test("the build job unpacks the app before npm pack, then fails the release without it", () => {
-  const steps = runs(build);
+  const scripts = runs(build);
   const download =
     build?.steps.findIndex((step) => step.uses?.startsWith("actions/download-artifact@")) ?? -1;
-  const unpack = steps.findIndex(
+  const unpack = scripts.findIndex(
     (run) => run.startsWith("tar -xzf") && run.includes("caret-menubar.app.tgz"),
   );
-  const pack = steps.indexOf("npm pack --ignore-scripts");
-  const check = steps.findIndex(
+  const pack = scripts.indexOf("npm pack --ignore-scripts");
+  const check = scripts.findIndex(
     (run) => run.includes("test -x") && run.includes("caret-menubar.app"),
   );
   expect(download).toBeGreaterThanOrEqual(0);
   expect(unpack).toBeGreaterThan(download);
   expect(pack).toBeGreaterThan(unpack);
   expect(check).toBeGreaterThan(pack);
-  expect(steps[check]).toContain("_CodeSignature/CodeResources");
+  expect(scripts[check]).toContain("_CodeSignature/CodeResources");
 });
 
 test("the build job downloads the artifact and file the menubar job uploads", () => {

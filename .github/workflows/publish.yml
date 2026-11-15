@@ -83,10 +83,10 @@ jobs:
         run: |
           mkdir "$RUNNER_TEMP/packed"
           tar -xzf ./*.tgz -C "$RUNNER_TEMP/packed"
-          app="$RUNNER_TEMP/packed/package/bin/caret-menubar.app/Contents"
-          test -f "$app/Info.plist"
-          test -x "$app/MacOS/CaretMenubar"
-          test -f "$app/_CodeSignature/CodeResources"
+          contents="$RUNNER_TEMP/packed/package/bin/caret-menubar.app/Contents"
+          test -f "$contents/Info.plist"
+          test -x "$contents/MacOS/CaretMenubar"
+          test -f "$contents/_CodeSignature/CodeResources"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: package
