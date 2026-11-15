@@ -381,10 +381,12 @@ test("nodeSpawnRunner kills a running child when the signal aborts", async () =>
 });
 
 test("nodeSpawnRunner kills the child at once when the signal is already aborted", async () => {
-  // A non-empty stdin, as every real call pipes: the child dies before reading it.
+  // A non-empty stdin, as every real call pipes: the child dies before reading it. The pid
+  // lands by rename because a kill between the redirect's create and its write leaves the
+  // file empty, which reads as pid 0, and kill(0, 0) probes our own process group.
   const pidFile = join(tmp, "pid-aborted");
   const run = nodeSpawnRunner(
-    [shim(`echo $$ > ${pidFile}\nexec sleep 10`)],
+    [shim(`echo $$ > ${pidFile}.tmp && mv ${pidFile}.tmp ${pidFile}\nexec sleep 10`)],
     process.env,
     "{}",
     undefined,
