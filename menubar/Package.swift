@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
@@ -6,7 +6,15 @@ let package = Package(
     platforms: [.macOS(.v13)],
     targets: [
         .target(name: "CaretMenubarCore"),
-        .executableTarget(name: "CaretMenubar", dependencies: ["CaretMenubarCore"]),
-        .testTarget(name: "CaretMenubarCoreTests", dependencies: ["CaretMenubarCore"]),
+        .executableTarget(
+            name: "CaretMenubar",
+            dependencies: ["CaretMenubarCore"],
+            swiftSettings: [.defaultIsolation(MainActor.self)]
+        ),
+        .testTarget(
+            name: "CaretMenubarCoreTests",
+            dependencies: ["CaretMenubarCore"],
+            exclude: ["contract.json"]
+        ),
     ]
 )

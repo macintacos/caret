@@ -3,7 +3,7 @@ import CaretMenubarCore
 
 let config: LaunchConfig
 do {
-    config = try parseLaunchArguments(Array(CommandLine.arguments.dropFirst()))
+    config = try LaunchConfig(arguments: CommandLine.arguments.dropFirst())
 } catch {
     FileHandle.standardError.write(Data("caret-menubar: \(error)\n".utf8))
     exit(2)
