@@ -542,6 +542,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return Response.json(cfg.configValues());
   }
 
+  // GET /api/pending — how many reviews await a decision, for the menubar app (EXC-2393).
+  // Unlike GET /api/reviews it stamps no UI presence: a poll here is not an open tab.
+  function handlePending(): Response {
+    return Response.json({ pending: store.pendingCount() });
+  }
+
   // GET /api/update — whether the caret this daemon is, is behind (EXC-1205): the
   // install kind, the running version/commit, whether the check is on, and the verdict
   // with the command that would take the upgrade. The thunk reads a verdict the daemon
@@ -1317,6 +1323,9 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       if (!isSafeMethod(method) && isCrossOrigin(req, port, names)) {
         return new Response("cross-origin request blocked", { status: 403 });
       }
+      // Ahead of liveness.begin, which restarts the idle countdown: the menubar app
+      // polls this every few seconds, and an on-demand daemon must still idle-exit.
+      if (method === "GET" && path === "/api/pending") return handlePending();
       end = liveness.begin(method);
 
       const idRoute = matchIdRoute(path);
