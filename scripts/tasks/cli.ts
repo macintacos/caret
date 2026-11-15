@@ -29,7 +29,13 @@ import {
 
 import { createProgram } from "@/lib/program.ts";
 import { runAssets } from "@/tasks/assets.ts";
-import { runBuild, runBuildBin, runBuildBundle, runBuildUi } from "@/tasks/build.ts";
+import {
+  runBuild,
+  runBuildBin,
+  runBuildBundle,
+  runBuildMenubar,
+  runBuildUi,
+} from "@/tasks/build.ts";
 import { runCaret } from "@/tasks/caret.ts";
 import { DEFAULT_NUM_VERSIONS, parsePositiveInt } from "@/tasks/dev/protocol.ts";
 import { type RunDevOptions, runDev } from "@/tasks/dev/run.ts";
@@ -52,6 +58,7 @@ export interface TaskActions {
   buildUi: (args: string[]) => Promise<unknown>;
   buildBin: () => Promise<unknown>;
   buildBundle: () => Promise<unknown>;
+  buildMenubar: () => Promise<unknown>;
   lint: (args: string[]) => Promise<unknown>;
   format: (args: string[]) => Promise<unknown>;
   caret: (args: string[]) => Promise<unknown>;
@@ -75,6 +82,7 @@ const realActions: TaskActions = {
   buildUi: runBuildUi,
   buildBin: runBuildBin,
   buildBundle: runBuildBundle,
+  buildMenubar: runBuildMenubar,
   lint: runLint,
   format: runFormat,
   caret: runCaret,
@@ -204,13 +212,13 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   ).helpOption(false);
 
   // `build`: bare umbrella (UI -> binary, plus the optional --install dev step),
-  // with `ui`/`bin`/`bundle` as positional targets so `mise run build ui` reaches
+  // with `ui`/`bin`/`bundle`/`menubar` as positional targets so `mise run build ui` reaches
   // the `ui` subcommand. UI-first ordering + the CARET_SKIP_BUILD_UI skip live in
   // build.ts, not a mise `depends` edge — scripts/preflight.ts is why the gate
   // builds the UI exactly once. `ui` forwards args to `vite build`.
   const build = program
     .command("build")
-    .description("Build the UI then the binary (bare); or a `ui`/`bin`/`bundle` target")
+    .description("Build the UI then the binary (bare); or a `ui`/`bin`/`bundle`/`menubar` target")
     .option("--install", "after building, install the local checkout + cycle the daemon (dev only)")
     .action(async (opts) => {
       await actions.build({ install: opts.install ?? false });
@@ -237,6 +245,12 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     )
     .action(async () => {
       await actions.buildBundle();
+    });
+  build
+    .command("menubar")
+    .description("Build the macOS menubar app into bin/caret-menubar.app (swift build; macOS only)")
+    .action(async () => {
+      await actions.buildMenubar();
     });
 
   // `test`: bare and `unit` run the bun unit suite (the default target); `e2e`
