@@ -6,7 +6,8 @@
 you pick, sets up the [background service](../reference/glossary.md#background-service) if
 you keep it running, and fetches the
 [plan formatter](../reference/glossary.md#plan-formatter) (see
-[Plan formatting](plan-formatting.md)). The steps are in
+[Plan formatting](plan-formatting.md)). On macOS 13 or later, it can also add the
+[menubar app](../how-to/menubar.md). The steps are in
 [Install caret](../how-to/install.md); this page says what each one changes.
 
 ## Which agent hosts it picks

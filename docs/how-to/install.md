@@ -29,6 +29,9 @@ You need:
         still starts when your agent sends a plan. See
         [Run caret yourself](#run-caret-yourself).
 
+4. On macOS 13 or later, answer whether to show caret in the menu bar. See
+    [Show caret in the menu bar](menubar.md).
+
 The command also installs the [plan formatter](../reference/glossary.md#plan-formatter).
 While the background service runs, the [review page](../reference/glossary.md#review-page)
 is at <http://caret.localhost:42718>.
@@ -132,9 +135,9 @@ Run:
 bunx --no-cache @macintacos/caret@latest install --refresh
 ```
 
-The command asks the same two questions as the install. It then takes the newest caret in
-each agent host you pick, replacing a cached or pinned OpenCode copy without asking. If
-you keep the background service running, the command restarts it. Restart each agent host
+The command asks the same questions as the install. It then takes the newest caret in each
+agent host you pick, replacing a cached or pinned OpenCode copy without asking. If you
+keep the background service running, the command restarts it. Restart each agent host
 afterward so it loads the new caret.
 
 To update one agent host by hand:
@@ -202,9 +205,9 @@ Run:
 bunx --no-cache @macintacos/caret@latest install --uninstall
 ```
 
-The command removes caret from every agent host, along with the background service and the
-copies of caret it installed under `~/.local/state/caret/`. It keeps your settings and
-your reviews.
+The command removes caret from every agent host, along with the background service, the
+[menubar app](menubar.md), and the copies of caret it installed under
+`~/.local/state/caret/`. It keeps your settings and your reviews.
 
 In Claude Code, it uninstalls the `caret@caret` plugin but leaves the `macintacos/caret`
 marketplace registered. To remove that too, run `claude plugin marketplace remove caret`.
