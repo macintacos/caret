@@ -21,6 +21,7 @@ const LAUNCH: MenubarLaunch = {
   baseUrl: "http://127.0.0.1:42718",
   reviewUrl: "http://caret.localhost:42718",
   tokenFile: "/state/token",
+  stderrLog: "/state/logs/menubar-stderr.log",
 };
 
 const RUNNING_STATE: LaunchctlResult = { code: 0, stdout: "\tstate = running\n", stderr: "" };
@@ -94,6 +95,12 @@ describe("buildMenubarPlist", () => {
     );
     expect(text).toContain("<key>LimitLoadToSessionType</key>\n  <string>Aqua</string>");
     expect(text).toContain("<key>ProcessType</key>\n  <string>Interactive</string>");
+  });
+
+  test("sends the app's stderr to its log, so a bad-flag exit or crash is recorded", () => {
+    expect(buildMenubarPlist(LAUNCH)).toContain(
+      `<key>StandardErrorPath</key>\n  <string>${LAUNCH.stderrLog}</string>`,
+    );
   });
 
   test("escapes XML metacharacters in a path", () => {

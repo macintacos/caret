@@ -16,7 +16,13 @@ import { basename, dirname, join } from "node:path";
 
 import { resolveCaretRoot } from "@/adapters/opencode/packaging.ts";
 import type { InstallUI } from "@/commands/install/ui.ts";
-import { daemonTokenFile, ensureStateDir, menubarDir } from "@/config/paths.ts";
+import {
+  daemonTokenFile,
+  ensureLogsDir,
+  ensureStateDir,
+  menubarDir,
+  menubarStderrLogFile,
+} from "@/config/paths.ts";
 import { getPort, loadSettings } from "@/config/settings.ts";
 import { daemonBaseUrl, isExposed, publicUrl } from "@/daemon/address.ts";
 import { errorMessage } from "@/lib/types.ts";
@@ -88,8 +94,8 @@ export async function reconcileMenubar(
     const s = loadSettings();
     const baseUrl = daemonBaseUrl(s);
     const reviewUrl = publicUrl(s.daemon, getPort(s));
-    // The app exits 2 on a base URL its isLoopback (LaunchConfig.swift) refuses — a crash
-    // loop under KeepAlive. isExposed is that check's TS twin.
+    // The app exits 2 on a base URL its LaunchConfig.isLoopback refuses — a crash
+    // loop under KeepAlive. contract.json pins isExposed to that rule.
     const hostname = new URL(baseUrl).hostname.replace(/^\[(.*)\]$/, "$1");
     if (isExposed(hostname)) {
       ui.warn(
@@ -104,8 +110,16 @@ export async function reconcileMenubar(
     }
 
     const stagedApp = stageMenubarApp(source);
+    // launchd opens StandardErrorPath but never creates its directory.
+    ensureLogsDir();
     const outcome = await agent.install(
-      { executable: join(stagedApp, EXECUTABLE), baseUrl, reviewUrl, tokenFile: daemonTokenFile() },
+      {
+        executable: join(stagedApp, EXECUTABLE),
+        baseUrl,
+        reviewUrl,
+        tokenFile: daemonTokenFile(),
+        stderrLog: menubarStderrLogFile(),
+      },
       opts.choice === "yes" ? "start" : "leave-stopped",
     );
     // launchd still holds the old path for a deferred job; keep that copy until a reload.

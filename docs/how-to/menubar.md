@@ -51,6 +51,20 @@ the app at its old version. Run `caret install` to update it.
     `XDG_STATE_HOME`).
 - The LaunchAgent, the macOS file that starts the app at login:
     `~/Library/LaunchAgents/dev.excessive.caret.menubar.plist`.
+- Its error log: `logs/menubar-stderr.log` in the same state directory (see
+    [Find the log files](logs.md#find-the-log-files)).
+
+## Fix an app that misbehaves
+
+If the carrot never appears or keeps vanishing, read `logs/menubar-stderr.log`. It holds
+the app's errors and any crash output.
+
+If the carrot shows but never colours in, the app records each change of its icon in the
+macOS log. To read the last hour of it:
+
+```bash
+log show --last 1h --predicate 'subsystem == "dev.excessive.caret.menubar"'
+```
 
 ## Remove the app
 

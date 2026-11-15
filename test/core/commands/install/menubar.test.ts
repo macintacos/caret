@@ -21,7 +21,7 @@ import {
   uninstallMenubar,
 } from "@/commands/install/menubar.ts";
 import { recordingUI } from "@/commands/install/ui.ts";
-import { daemonTokenFile, menubarDir } from "@/config/paths.ts";
+import { daemonTokenFile, menubarDir, menubarStderrLogFile } from "@/config/paths.ts";
 import type { LaunchctlResult } from "@/service/launchd-manager.ts";
 import { buildMenubarPlist, createMenubarAgent, MENUBAR_LABEL } from "@/service/menubar-agent.ts";
 
@@ -123,6 +123,7 @@ describe("reconcileMenubar", () => {
         baseUrl: "http://127.0.0.1:4321",
         reviewUrl: "http://caret.localhost:4321",
         tokenFile: daemonTokenFile(),
+        stderrLog: menubarStderrLogFile(),
       }),
     );
     expect(fake.subcommands()).toEqual(["print", "bootout", "bootstrap"]);
@@ -171,6 +172,7 @@ describe("reconcileMenubar", () => {
         baseUrl: "http://127.0.0.1:4322",
         reviewUrl: "http://caret.localhost:4322",
         tokenFile: daemonTokenFile(),
+        stderrLog: menubarStderrLogFile(),
       }),
     );
     expect(fake.subcommands()).toEqual(["print", "bootout", "bootstrap"]);

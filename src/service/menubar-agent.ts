@@ -20,12 +20,14 @@ export function menubarSupported(platform: string, release: string): boolean {
   return platform === "darwin" && Number.parseInt(release, 10) >= 22;
 }
 
-/** What the LaunchAgent starts: the copied app's executable and its three flags. */
+/** What the LaunchAgent starts — the copied app's executable and its three flags — and
+ * where its stderr goes. */
 export interface MenubarLaunch {
   executable: string;
   baseUrl: string;
   reviewUrl: string;
   tokenFile: string;
+  stderrLog: string;
 }
 
 /** The LaunchAgent plist for `launch`. KeepAlive on a failed exit only, so a crash
@@ -60,6 +62,7 @@ ${args}
   </dict>
 ${stringEntry("LimitLoadToSessionType", "Aqua", "  ")}
 ${stringEntry("ProcessType", "Interactive", "  ")}
+${stringEntry("StandardErrorPath", launch.stderrLog, "  ")}
 </dict>
 </plist>
 `;

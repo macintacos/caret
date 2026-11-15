@@ -160,6 +160,12 @@ export function daemonStderrLogFile(): string {
   return `${logsDir()}/daemon-stderr.log`;
 }
 
+/** The menubar app's stderr, which its LaunchAgent redirects here: launchd discards a
+ * job's stdio otherwise, so a bad-flag exit or a crash would leave no trace. */
+export function menubarStderrLogFile(): string {
+  return `${logsDir()}/menubar-stderr.log`;
+}
+
 /** Single-instance lock file: written atomically on daemon bind and removed on
  * every exit path. Holds a DaemonLock record so a newer caret can discover and
  * gracefully retire an older unsupervised one (EXC-406); a supervised one is cycled
