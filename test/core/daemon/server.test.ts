@@ -1055,16 +1055,16 @@ test("a session-scoped reviews read leaves hasLiveClient false", async () => {
 
 test("GET /api/pending counts pending reviews; a deny drops one, its revision restores it (EXC-2392)", async () => {
   await boot();
-  const pending = async () => (await (await fetch(`${base}/api/pending`)).json()) as unknown;
-  expect(await pending()).toEqual({ pending: 0 });
+  const fetchPending = async () => (await (await fetch(`${base}/api/pending`)).json()) as unknown;
+  expect(await fetchPending()).toEqual({ pending: 0 });
   const { id } = await newReview({ sessionId: "menubar-a", plan: "# A v1" });
   await newReview({ sessionId: "menubar-b", plan: "# B" });
-  expect(await pending()).toEqual({ pending: 2 });
+  expect(await fetchPending()).toEqual({ pending: 2 });
   await resolve(id, { behavior: "deny", feedback: "rework" });
-  expect(await pending()).toEqual({ pending: 1 });
+  expect(await fetchPending()).toEqual({ pending: 1 });
   const { id: revised } = await newReview({ sessionId: "menubar-a", plan: "# A v2" });
   expect(revised).toBe(id);
-  expect(await pending()).toEqual({ pending: 2 });
+  expect(await fetchPending()).toEqual({ pending: 2 });
 });
 
 test("polling GET /api/pending does not read as an open review tab (EXC-2392)", async () => {
