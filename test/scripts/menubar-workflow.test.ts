@@ -1,6 +1,6 @@
 // Pins the menubar workflow's shape: a read-only pull_request check that builds and tests
-// the macOS menubar app on a pinned Xcode, only when a PR touches the app, its build task,
-// or this workflow, with every action ref locked.
+// the macOS menubar app on a pinned Xcode, only when a PR touches the app, its build or test
+// task, or this workflow, with every action ref locked.
 import { expect, test } from "bun:test";
 
 type Step = {
@@ -45,7 +45,7 @@ test("never runs with a write token", () => {
   for (const step of checkouts) expect(step.with?.["persist-credentials"]).toBe(false);
 });
 
-test("builds only when the app, its build task, or this workflow changed", () => {
+test("builds only when the app, its build or test task, or this workflow changed", () => {
   expect(menubar.needs).toBe("changes");
   expect(menubar.if?.match(/^\$\{\{ (.*) \}\}$/)?.[1]).toBe(
     "!cancelled() && needs.changes.outputs.menubar != 'false'",
@@ -59,6 +59,8 @@ test("builds only when the app, its build task, or this workflow changed", () =>
     "menubar/Sources/CaretMenubar/main.swift",
     "scripts/tasks/build.ts",
     ".mise/tasks/build",
+    "scripts/tasks/test.ts",
+    ".mise/tasks/test",
     ".github/workflows/menubar.yml",
   ]) {
     expect(touches.test(path)).toBe(true);
@@ -80,7 +82,7 @@ test("builds and tests on macOS with a pinned Xcode", () => {
   );
   const runs = menubar.steps.map((step) => step.run);
   expect(runs).toContain("mise run build menubar");
-  expect(runs).toContain("swift test --package-path menubar -Xswiftc -warnings-as-errors");
+  expect(runs).toContain("mise run test swift");
   expect(runs).toContain("swift format lint --strict --recursive menubar");
 });
 
