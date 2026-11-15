@@ -584,10 +584,11 @@ There is no Xcode project. `swift build` and `swift test` work from the package,
 opens `menubar/Package.swift` directly. `swift test --package-path menubar` runs its
 tests.
 
-`mise run build menubar` builds it in release and assembles `bin/caret-menubar.app`, with
-`LSUIElement` set so it has no Dock icon. It needs macOS 13 or later and Xcode 26 or
-later; elsewhere the target prints one line and succeeds. Run it with
-`open bin/caret-menubar.app`, or pass launch arguments after `--args`:
+`mise run build menubar` builds it in release as a universal binary (`arm64` and
+`x86_64`), assembles `bin/caret-menubar.app` with `LSUIElement` set so it has no Dock
+icon, and signs it ad hoc. It needs macOS 13 or later and Xcode 26 or later; elsewhere the
+target prints one line and succeeds. Run it with `open bin/caret-menubar.app`, or pass
+launch arguments after `--args`:
 
 ```sh
 open bin/caret-menubar.app --args --base-url http://127.0.0.1:42718 \

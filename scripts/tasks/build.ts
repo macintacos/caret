@@ -113,20 +113,25 @@ export function buildBinCompileCommand(commit: string): string[] {
   ];
 }
 
-/** Read HEAD's commit sha, throwing if git fails (e.g. not a checkout) so the
- * build aborts loudly instead of baking an empty commit into the binary. */
-async function headCommit(): Promise<string> {
-  // git's diagnostics are piped, not inherited: the umbrella build renders a live
-  // progress line, and anything written straight to stderr would land on top of it.
-  // They ride along in the thrown error instead.
-  const proc = Bun.spawn(["git", "rev-parse", "HEAD"], { stdout: "pipe", stderr: "pipe" });
+/** Run `cmd` and resolve its trimmed stdout, throwing with its stderr when it fails. */
+async function pipedStdout(cmd: string[]): Promise<string> {
+  // Diagnostics are piped, not inherited: the umbrella build renders a live progress
+  // line, and anything written straight to stderr would land on top of it. They ride
+  // along in the thrown error instead.
+  const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([
     new Response(proc.stdout).text(),
     new Response(proc.stderr).text(),
     proc.exited,
   ]);
-  if (code !== 0) throw new Error(`git rev-parse HEAD failed: ${err.trim()}`);
+  if (code !== 0) throw new Error(`${cmd.join(" ")} failed: ${err.trim()}`);
   return out.trim();
+}
+
+/** Read HEAD's commit sha, throwing if git fails (e.g. not a checkout) so the
+ * build aborts loudly instead of baking an empty commit into the binary. */
+async function headCommit(): Promise<string> {
+  return await pipedStdout(["git", "rev-parse", "HEAD"]);
 }
 
 /** Compile the standalone binary from an already-built ui/dist: regenerate the
@@ -218,8 +223,8 @@ export async function runBuildBundle(): Promise<never> {
 }
 
 // --- build menubar ----------------------------------------------------------
-// The macOS menubar app: the SwiftPM package under menubar/, built in release and
-// assembled into a .app by hand, since there is no Xcode project. Never part of the bare
+// The macOS menubar app: the SwiftPM package under menubar/, built universal in release,
+// assembled into a .app by hand, since there is no Xcode project, and signed ad hoc. Never part of the bare
 // umbrella or the preflight gate: Swift builds only on macOS, and the `menubar` workflow
 // (.github/workflows/menubar.yml) is this target's gate.
 
@@ -228,9 +233,33 @@ const MENUBAR_APP = "bin/caret-menubar.app";
 // Package.swift's executableTarget and Info.plist's CFBundleExecutable.
 const MENUBAR_EXECUTABLE = "CaretMenubar";
 
-/** The SwiftPM release build of the menubar package. */
+/** The SwiftPM release build of the menubar package, universal so one app runs on Apple
+ * silicon and Intel Macs. */
 export function swiftBuildCommand(): string[] {
-  return ["swift", "build", "-c", "release", "--package-path", "menubar"];
+  return [
+    "swift",
+    "build",
+    "-c",
+    "release",
+    "--package-path",
+    "menubar",
+    "--arch",
+    "arm64",
+    "--arch",
+    "x86_64",
+  ];
+}
+
+/** The ad-hoc signature over the finished bundle. The linker's own signature binds no
+ * Info.plist, so `codesign --verify --strict` rejects the app without this one. */
+export function codesignMenubarCommand(): string[] {
+  return ["codesign", "--force", "--sign", "-", MENUBAR_APP];
+}
+
+/** Where SwiftPM put swiftBuildCommand()'s product. A multi-arch build's directory moves
+ * between Swift releases, so it is asked for rather than assumed. */
+function swiftBinPath(): Promise<string> {
+  return pipedStdout([...swiftBuildCommand(), "--show-bin-path"]);
 }
 
 /** Build the menubar package and assemble the .app, resolving the exit code. Off macOS it
@@ -238,6 +267,8 @@ export function swiftBuildCommand(): string[] {
 export async function buildMenubar(deps: {
   platform: NodeJS.Platform;
   run: typeof runForward;
+  binPath: () => Promise<string>;
+  assemble: (binPath: string) => void;
   print: (text: string) => Promise<void>;
 }): Promise<number> {
   if (deps.platform !== "darwin") {
@@ -248,16 +279,17 @@ export async function buildMenubar(deps: {
   const code = await deps.run(swiftBuildCommand());
   if (code !== 0) return code;
 
-  assembleMenubarApp();
-  return 0;
+  deps.assemble(await deps.binPath());
+  return await deps.run(codesignMenubarCommand());
 }
 
-/** Lay out the .app from the release executable and the committed Info.plist. */
-function assembleMenubarApp(): void {
+/** Lay out the .app from the executable SwiftPM built into `binPath` and the committed
+ * Info.plist. */
+function assembleMenubarApp(binPath: string): void {
   const executable = `${MENUBAR_APP}/Contents/MacOS/${MENUBAR_EXECUTABLE}`;
   rmSync(MENUBAR_APP, { recursive: true, force: true });
   mkdirSync(`${MENUBAR_APP}/Contents/MacOS`, { recursive: true });
-  copyFileSync(`menubar/.build/release/${MENUBAR_EXECUTABLE}`, executable);
+  copyFileSync(`${binPath}/${MENUBAR_EXECUTABLE}`, executable);
   chmodSync(executable, 0o755);
   copyFileSync("menubar/Info.plist", `${MENUBAR_APP}/Contents/Info.plist`);
 }
@@ -267,6 +299,8 @@ export async function runBuildMenubar(): Promise<never> {
     await buildMenubar({
       platform: process.platform,
       run: runForward,
+      binPath: swiftBinPath,
+      assemble: assembleMenubarApp,
       print: (text) => writeAndFlush(process.stdout, text),
     }),
   );
