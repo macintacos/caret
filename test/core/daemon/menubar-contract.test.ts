@@ -8,11 +8,13 @@ import { join } from "node:path";
 import { bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
 import { DEFAULT_PORT, VANITY_HOST } from "@/config/constants.ts";
 import { isExposed } from "@/daemon/address.ts";
+import { buildMenubarPlist } from "@/service/menubar-agent.ts";
 
 const contract = (await Bun.file(
   join(import.meta.dir, "../../../menubar/Tests/CaretMenubarCoreTests/contract.json"),
 ).json()) as {
   defaults: { baseURL: string; reviewURL: string };
+  flags: string[];
   loopbackHosts: string[];
   exposedHosts: string[];
   pendingBody: Record<string, number>;
@@ -47,4 +49,16 @@ test("the app's loopback hosts are exactly the ones the daemon treats as unexpos
 test("GET /api/pending answers with the body the app decodes", async () => {
   const body = (await (await fetch(`${d.url}/api/pending`)).json()) as Record<string, unknown>;
   expect(Object.keys(body)).toEqual(Object.keys(contract.pendingBody));
+});
+
+test("the LaunchAgent passes the app exactly the flags it parses", () => {
+  const plist = buildMenubarPlist({
+    executable: "/app",
+    baseUrl: "b",
+    reviewUrl: "r",
+    tokenFile: "t",
+    stderrLog: "e",
+  });
+  const passed = [...plist.matchAll(/<string>(--[a-z-]+)<\/string>/g)].map((m) => m[1]);
+  expect(passed).toEqual(contract.flags);
 });
