@@ -581,8 +581,10 @@ gate rather than skipping.
 
 `menubar/` is the Swift package for the macOS menubar app. The app shows 🥕 while a plan
 waits for review and a grey carrot otherwise. It polls the daemon's `GET /api/pending`
-every 3 seconds and never starts the daemon. The carrot is drawn from the system emoji
-font at runtime, so no Apple artwork is committed or built.
+every 3 seconds and never starts the daemon. Its menu opens on a card of review stats,
+which it reads from `GET /api/stats` as the menu opens. That answer also carries the theme
+accents the review page reports through `PUT /api/accent`, which tint the card. The carrot
+is drawn from the system emoji font at runtime, so no Apple artwork is committed or built.
 
 There is no Xcode project. `swift build` and `swift test` work from the package, and Xcode
 opens `menubar/Package.swift` directly. `mise run test swift` runs its tests, with
