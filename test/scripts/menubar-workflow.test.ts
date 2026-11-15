@@ -80,7 +80,8 @@ test("builds and tests on macOS with a pinned Xcode", () => {
   );
   const runs = menubar.steps.map((step) => step.run);
   expect(runs).toContain("mise run build menubar");
-  expect(runs).toContain("swift test --package-path menubar");
+  expect(runs).toContain("swift test --package-path menubar -Xswiftc -warnings-as-errors");
+  expect(runs).toContain("swift format lint --strict --recursive menubar");
 });
 
 test("checks the assembled bundle launches its declared executable", () => {

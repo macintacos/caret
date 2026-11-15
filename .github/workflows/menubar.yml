@@ -57,4 +57,7 @@ jobs:
           plist=bin/caret-menubar.app/Contents/Info.plist
           plutil -lint "$plist"
           test -x "bin/caret-menubar.app/Contents/MacOS/$(plutil -extract CFBundleExecutable raw "$plist")"
-      - run: swift test --package-path menubar
+      # Here rather than in Package.swift, so a newer local toolchain's new warnings never
+      # block a developer's build.
+      - run: swift test --package-path menubar -Xswiftc -warnings-as-errors
+      - run: swift format lint --strict --recursive menubar
