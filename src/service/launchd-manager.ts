@@ -37,7 +37,7 @@ export const spawnLaunchctl: Launchctl = (args) => runCommand(["launchctl", ...a
 
 /** launchd prints `state = running` alongside a `pid` line, and the two have moved
  * relative to each other across releases; either alone is the whole answer. */
-const RUNNING = [/^\s*state\s*=\s*running\b/m, /^\s*pid\s*=\s*\d+/m];
+export const RUNNING = [/^\s*state\s*=\s*running\b/m, /^\s*pid\s*=\s*\d+/m];
 
 /** Older macOS spells a user's opt-out `"<label>" => true`, Ventura-era `=> disabled`. */
 const DISABLED = new RegExp(

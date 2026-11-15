@@ -9,11 +9,11 @@ const EXIT_TIMEOUT_SEC = 20;
 
 /** Paths, labels and environment entries are user-derived, and a raw `&` alone is
  * enough to make a plist launchd refuses to parse. */
-function escapeXml(value: string): string {
+export function escapeXml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function stringEntry(key: string, value: string, indent: string): string {
+export function stringEntry(key: string, value: string, indent: string): string {
   return `${indent}<key>${escapeXml(key)}</key>\n${indent}<string>${escapeXml(value)}</string>`;
 }
 
