@@ -8,8 +8,8 @@
 // found. Every install ends by acquiring the rumdl plan formatter: it is part of a
 // working caret, not a step anyone can skip or forget. `--uninstall` is machine-wide — it
 // removes caret from every agent in the registry, with the service and the menubar app,
-// since the residency it tears down alongside them is one per machine. Neither it nor `--dry-run`
-// acquires rumdl.
+// since the residency it tears down alongside them is one per machine. Neither it nor
+// `--dry-run` acquires rumdl.
 
 import { runInstallClaudeTarget } from "@/commands/install/claude.ts";
 import {
@@ -101,10 +101,10 @@ export function installExitCode(outcome: InstallOutcome): number {
   return { ok: 0, refused: 2, failed: 1 }[outcome];
 }
 
-/** Run the install command: resolve the targets (the chooser or detection) and the
- * service and menubar choices (the questions, or the machine as found), then dispatch to each target.
- * Reports every problem through `ui` and returns how the run ended — never throws, and
- * never writes `process.exitCode` itself. */
+/** Run the install command: resolve the targets (the chooser or detection) and the service
+ * and menubar choices (the questions, or the machine as found), then dispatch to each
+ * target. Reports every problem through `ui` and returns how the run ended — never
+ * throws, and never writes `process.exitCode` itself. */
 export async function runInstallSubcommand(
   opts: {
     uninstall: boolean;
