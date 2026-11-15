@@ -1,6 +1,6 @@
 import Foundation
 
-/// What one poll of `GET /api/pending` came back with.
+/// What one request to the daemon came back with.
 package enum PollOutcome: Equatable, Sendable {
     /// The daemon answered over HTTP.
     case response(status: Int, body: Data)

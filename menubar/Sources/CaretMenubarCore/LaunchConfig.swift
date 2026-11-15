@@ -33,10 +33,18 @@ package struct LaunchConfig: Equatable, Sendable {
         self.tokenFile = tokenFile
     }
 
-    /// The `GET /api/pending` request, carrying the daemon token when the token file has one.
-    /// The file is re-read on every call, so a token the daemon rotates is picked up.
-    package func pendingRequest() -> URLRequest {
-        var request = URLRequest(url: pendingURL)
+    /// The `GET /api/pending` request the icon polls with.
+    package func pendingRequest() -> URLRequest { authorizedRequest(pendingURL) }
+
+    /// The `GET /api/stats` request the menu sends as it opens.
+    package func statsRequest() -> URLRequest {
+        authorizedRequest(baseURL.appending(path: "api/stats"))
+    }
+
+    /// A request to `url`, carrying the daemon token when the token file has one. The file is
+    /// re-read on every call, so a token the daemon rotates is picked up.
+    private func authorizedRequest(_ url: URL) -> URLRequest {
+        var request = URLRequest(url: url)
         if let token = tokenFile.flatMap(Self.token(atPath:)) {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }

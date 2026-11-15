@@ -17,8 +17,7 @@ final class StatusController: NSObject {
         withLength: NSStatusItem.variableLength)
     private let colouredCarrot = carrotImage(description: "caret: a plan is waiting for review")
     private let greyCarrot = carrotImage(description: "caret: nothing to review", template: true)
-    private let unansweredItem = NSMenuItem(
-        title: "caret didn't answer the app", action: nil, keyEquivalent: "")
+    private lazy var statsCard = StatsCard(config: config, session: session)
     /// What the last poll showed; nil until the first poll answers, while the grey placeholder
     /// stands in.
     private var state: IconState?
@@ -46,8 +45,8 @@ final class StatusController: NSObject {
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
-        unansweredItem.isEnabled = false
-        menu.addItem(unansweredItem)
+        menu.delegate = statsCard
+        menu.addItem(statsCard.item)
         let openItem = NSMenuItem(
             title: "Open caret", action: #selector(openCaret), keyEquivalent: "")
         openItem.target = self
@@ -60,16 +59,7 @@ final class StatusController: NSObject {
     }
 
     private func poll() async {
-        let outcome: PollOutcome
-        do {
-            let (data, response) = try await session.data(for: config.pendingRequest())
-            outcome =
-                (response as? HTTPURLResponse).map { .response(status: $0.statusCode, body: data) }
-                ?? .noResponse
-        } catch {
-            outcome = .noResponse
-        }
-        show(IconState(outcome))
+        show(IconState(await session.outcome(of: config.pendingRequest())))
     }
 
     private func show(_ newState: IconState) {
@@ -80,17 +70,7 @@ final class StatusController: NSObject {
                 reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion))
         state = newState
         Self.log.notice("icon \(String(describing: newState), privacy: .public)")
-        switch newState {
-        case .pending:
-            statusItem.button?.image = colouredCarrot
-            unansweredItem.isHidden = true
-        case .idle:
-            statusItem.button?.image = greyCarrot
-            unansweredItem.isHidden = true
-        case .unanswered:
-            statusItem.button?.image = greyCarrot
-            unansweredItem.isHidden = false
-        }
+        statusItem.button?.image = newState.isColoured ? colouredCarrot : greyCarrot
     }
 
     @objc private func openCaret() {
