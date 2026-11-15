@@ -119,6 +119,11 @@ it.
   `claude plugin test mod` (`mise run test mod`). They import `claude-code/testing`, which
   only Claude Code's kit resolves, so `bunfig.toml`'s `pathIgnorePatterns` keeps them out
   of bun's collection.
+- **Menubar app** — `menubar/Tests/`, Swift Testing suites beside the package they cover,
+  run by `swift test --package-path menubar`. They need macOS and Xcode, so neither
+  `mise run test` nor `mise run preflight` runs them. The `menubar` workflow
+  (`.github/workflows/menubar.yml`) is their gate, and it runs only when a PR touches the
+  app or its build task.
 - **Linux systemd** — `scripts/linux/verify.sh`, run by hand through
   `mise run verify linux`, which boots a real systemd under Apple `container` and drives
   the install, restart and uninstall sequence `createSystemdManager` performs against the
