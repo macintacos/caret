@@ -10,7 +10,7 @@ final class StatsCard: NSObject, NSMenuDelegate {
     private let session: URLSession
     private let bundleVersion =
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-    private var fetch: Task<Void, Never>?
+    private var inFlightFetch: Task<Void, Never>?
     private var accent = Accent.caret
 
     init(config: LaunchConfig, session: URLSession) {
@@ -25,8 +25,8 @@ final class StatsCard: NSObject, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         view.apply(currentStyle())
 
-        fetch?.cancel()
-        fetch = Task { [weak self] in
+        inFlightFetch?.cancel()
+        inFlightFetch = Task { [weak self] in
             guard let self,
                 let outcome = try? await session.outcome(of: config.statsRequest())
             else { return }

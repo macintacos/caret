@@ -62,14 +62,14 @@ function verdicts({ status, decision, versions }: CountedReview): (Verdict | und
 }
 
 function tally(review: CountedReview): ReviewStats {
-  const closed = verdicts(review);
+  const verdictPerVersion = verdicts(review);
   return {
     approved: review.status === "approved" ? 1 : 0,
-    rejected: closed.filter((v) => v === "reject").length,
+    rejected: verdictPerVersion.filter((v) => v === "reject").length,
     revisions: Math.max(review.versions.length - 1, 0),
     comments: review.versions.reduce(
       (n, v, i) =>
-        closed[i] === "approve" || closed[i] === "request-changes"
+        verdictPerVersion[i] === "approve" || verdictPerVersion[i] === "request-changes"
           ? n + v.annotations.length + (v.generalComment ? 1 : 0)
           : n,
       0,
