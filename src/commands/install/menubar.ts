@@ -78,10 +78,10 @@ export async function reconcileMenubar(
       APP_NAME,
     );
     if (!existsSync(join(source, EXECUTABLE))) {
-      const build = opts.localRoot
+      const buildHint = opts.localRoot
         ? " Run `mise run build menubar` in the checkout to build it."
         : "";
-      ui.warn(`No menubar app at ${source} — skipping it.${build}`);
+      ui.warn(`No menubar app at ${source} — skipping it.${buildHint}`);
       return;
     }
 
@@ -103,13 +103,13 @@ export async function reconcileMenubar(
       return;
     }
 
-    const app = stageMenubarApp(source);
+    const stagedApp = stageMenubarApp(source);
     const outcome = await agent.install(
-      { executable: join(app, EXECUTABLE), baseUrl, reviewUrl, tokenFile: daemonTokenFile() },
+      { executable: join(stagedApp, EXECUTABLE), baseUrl, reviewUrl, tokenFile: daemonTokenFile() },
       opts.choice === "yes" ? "start" : "leave-stopped",
     );
     // launchd still holds the old path for a deferred job; keep that copy until a reload.
-    if (outcome !== "deferred") pruneMenubarApps(app);
+    if (outcome !== "deferred") pruneMenubarApps(stagedApp);
 
     ui.info(
       outcome === "deferred"
