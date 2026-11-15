@@ -25,7 +25,7 @@ describe("CARROT_FACTS", () => {
     expect(new Set(texts).size).toBe(texts.length);
   });
 
-  // Per-URL, not per-page: eleven entries cite different sections of the same
+  // Per-URL, not per-page: several entries cite different sections of the same
   // Carrot article, which is the convention rather than a leak in this check.
   test("no source repeats", () => {
     const sources = CARROT_FACTS.map((f) => f.source);
