@@ -1,14 +1,15 @@
 // The `caret install` orchestrator: the selection policy (chooser on a TTY, detected
 // agents otherwise) and dispatch to the injected target runners.
 
-import { expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { manifest, rootAt, runnableRoot } from "@test/support/caret-root.ts";
-import { withEnv } from "@test/support/env.ts";
+import { setupTempConfigFile, setupTempStateDir, withEnv } from "@test/support/env.ts";
+import { fakeLaunchctl } from "@test/support/launchctl.ts";
 import { fakeServiceTarget } from "@test/support/service-manager.ts";
 import { installExitCode, runInstallSubcommand } from "@/commands/install/index.ts";
 import { installLauncher, prodLauncherRoot } from "@/commands/install/launcher.ts";
@@ -16,6 +17,7 @@ import { INSTALL_TARGET_IDS, type InstallTarget } from "@/commands/install/targe
 import { recordingUI, silentUI } from "@/commands/install/ui.ts";
 import { ownedRootsDir } from "@/config/paths.ts";
 import { RUMDL_VERSION } from "@/plan/rumdl.ts";
+import { createMenubarAgent, MENUBAR_LABEL } from "@/service/menubar-agent.ts";
 
 /** Keep a test off the real rumdl download: without this seam the command falls through
  * to the production acquisition, which reaches the network and writes to the state dir. */
@@ -284,6 +286,101 @@ test("with no TTY or under --dry-run, the service question is never asked", asyn
     { ...deps, isInteractive: () => true, promptService: question.prompt },
   );
   expect(question.wasPrompted()).toBe(false);
+});
+
+describe("the menubar question", () => {
+  setupTempConfigFile(setupTempStateDir("caret-install-index-menubar-"));
+
+  let agents: string;
+  let pkg: string;
+  let launchctl: ReturnType<typeof fakeLaunchctl>;
+
+  beforeEach(() => {
+    agents = mkdtempSync(join(tmpdir(), "caret-install-index-agents-"));
+    pkg = mkdtempSync(join(tmpdir(), "caret-install-index-pkg-"));
+    launchctl = fakeLaunchctl();
+  });
+
+  afterEach(() => {
+    rmSync(agents, { recursive: true, force: true });
+    rmSync(pkg, { recursive: true, force: true });
+  });
+
+  /** A run whose menubar question is recorded into `calls`, answering `answer`. */
+  function menubarDeps(calls: string[], answer: boolean | null = false) {
+    return {
+      ...claudeThenRumdlDeps(calls),
+      ui: recordingUI(),
+      isInteractive: () => true,
+      prompt: async (): Promise<InstallTarget[]> => ["claude"],
+      promptService: async () => {
+        calls.push("service");
+        return "run-yourself" as const;
+      },
+      promptMenubar: async (installed: boolean) => {
+        calls.push(`menubar:${installed}`);
+        return answer;
+      },
+      service: fakeServiceTarget({ calls }).target,
+      installLauncher: () => ({ unpinned: false }),
+      menubar: createMenubarAgent({
+        launchctl: launchctl.launchctl,
+        uid: 501,
+        launchAgentsDir: agents,
+      }),
+      packageRoot: () => pkg,
+    };
+  }
+
+  test("is asked after the service question, defaulting to whether the app is installed", async () => {
+    const calls: string[] = [];
+    await runInstallSubcommand(PLAIN_INSTALL, menubarDeps(calls));
+    writeFileSync(join(agents, `${MENUBAR_LABEL}.plist`), "<plist/>");
+    await runInstallSubcommand(PLAIN_INSTALL, menubarDeps(calls));
+    expect(calls.filter((c) => c === "service" || c.startsWith("menubar:"))).toEqual([
+      "service",
+      "menubar:false",
+      "service",
+      "menubar:true",
+    ]);
+  });
+
+  test("is not asked without an agent, under --dry-run or --uninstall, or without a TTY", async () => {
+    const calls: string[] = [];
+    await runInstallSubcommand(PLAIN_INSTALL, { ...menubarDeps(calls), menubar: undefined });
+    await runInstallSubcommand({ uninstall: false, dryRun: true }, menubarDeps(calls));
+    await runInstallSubcommand({ uninstall: true, dryRun: false }, menubarDeps(calls));
+    await runInstallSubcommand(PLAIN_INSTALL, {
+      ...menubarDeps(calls),
+      isInteractive: () => false,
+    });
+    expect(calls.some((c) => c.startsWith("menubar:"))).toBe(false);
+  });
+
+  test("a cancelled menubar question installs nothing", async () => {
+    const calls: string[] = [];
+    const outcome = await runInstallSubcommand(PLAIN_INSTALL, menubarDeps(calls, null));
+    expect(outcome).toBe("ok");
+    expect(calls).toEqual(["service", "menubar:false"]);
+  });
+
+  test("a yes reaches the menubar step", async () => {
+    const deps = menubarDeps([], true);
+    await runInstallSubcommand(PLAIN_INSTALL, deps);
+    expect(deps.ui.events.some((e) => e.startsWith("warn:No menubar app at"))).toBe(true);
+  });
+
+  test("--uninstall removes the menubar app", async () => {
+    await runInstallSubcommand(
+      { uninstall: true, dryRun: false },
+      {
+        ...menubarDeps([]),
+        runOpencode: () => {},
+        runPi: () => {},
+      },
+    );
+    expect(launchctl.calls).toContainEqual(["bootout", `gui/501/${MENUBAR_LABEL}`]);
+  });
 });
 
 test.each([

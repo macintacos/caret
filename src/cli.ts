@@ -12,6 +12,8 @@
 // allow. Every abnormal path (bad stdin, unreachable daemon, timeout, signal,
 // daemon death) emits a deny — never an allow.
 
+import { release } from "node:os";
+
 import type { Command } from "@commander-js/extra-typings";
 
 import { fatalDeny } from "@/adapters/index.ts";
@@ -35,6 +37,7 @@ import { VERSION } from "@/lib/build-id.ts";
 import { logError } from "@/lib/log.ts";
 import { createProgram, runProgram } from "@/lib/program.ts";
 import { isSupervised } from "@/service/manager.ts";
+import { createMenubarAgent, menubarSupported } from "@/service/menubar-agent.ts";
 
 // The CLI command tree (EXC-472). The daemon self-spawn vector (selfCommand)
 // and runReviewSubcommand's fail-safe are independent of this layer.
@@ -157,6 +160,7 @@ function buildProgram(): Command {
           service: prodService,
           watch: prodServiceWatch(),
           launcherRoot: prodLauncherRoot,
+          menubar: menubarSupported(process.platform, release()) ? createMenubarAgent() : undefined,
         },
       );
       // The command reports every problem itself; this is the only place one becomes an

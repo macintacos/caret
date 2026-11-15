@@ -17,10 +17,17 @@ import {
   prewarmLocalBuild,
   resolveLocalCheckout,
 } from "@/commands/install/local.ts";
+import {
+  type MenubarChoice,
+  type MenubarStepDeps,
+  reconcileMenubar,
+  uninstallMenubar,
+} from "@/commands/install/menubar.ts";
 import { runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
 import { runInstallPiTarget } from "@/commands/install/pi.ts";
 import {
   type AskedServiceChoice,
+  promptForMenubar,
   promptForServiceChoice,
   promptForTargets,
 } from "@/commands/install/prompt.ts";
@@ -44,7 +51,7 @@ import { ensureRumdl, RUMDL_VERSION } from "@/plan/rumdl.ts";
  * TTY-ness, each target runner, and — through ServiceStepDeps — the supervisor, to assert
  * selection and dispatch without touching a real config dir, the `claude` or `pi` CLI,
  * launchd, or a terminal. */
-export interface InstallDeps extends ServiceStepDeps {
+export interface InstallDeps extends ServiceStepDeps, MenubarStepDeps {
   /** A runner returns false to report "this target failed" (it has already said why);
    * returning nothing means it got through. */
   runOpencode?: (opts: TargetOpts, deps: { ui: InstallUI }) => unknown;
@@ -53,6 +60,7 @@ export interface InstallDeps extends ServiceStepDeps {
   detect?: () => InstallTarget[];
   prompt?: (detected: InstallTarget[]) => Promise<InstallTarget[] | null>;
   promptService?: () => Promise<AskedServiceChoice | null>;
+  promptMenubar?: (installed: boolean) => Promise<boolean | null>;
   isInteractive?: () => boolean;
   /** Narrowed to what the step reports — the real `ensureRumdl` satisfies it, and a test
    * can describe an outcome without the config path it never reads. */
@@ -120,6 +128,8 @@ export async function runInstallSubcommand(
   if (targets === null) return "ok";
   const choice = await selectServiceChoice(opts, deps, ui);
   if (choice === null) return "ok";
+  const menubarChoice = await selectMenubarChoice(opts, deps, ui);
+  if (menubarChoice === null) return "ok";
 
   const runOpencode = deps.runOpencode ?? runInstallOpencodeTarget;
   const runClaude = deps.runClaude ?? runInstallClaudeTarget;
@@ -166,8 +176,10 @@ export async function runInstallSubcommand(
   await rumdlStep(opts, deps, ui);
   // After the target runners, so --refresh's restart, and the root the step names, see the
   // agent caches those runners just updated.
-  if (opts.uninstall) await uninstallService({ dryRun: opts.dryRun }, deps, ui);
-  else
+  if (opts.uninstall) {
+    await uninstallService({ dryRun: opts.dryRun }, deps, ui);
+    await uninstallMenubar({ dryRun: opts.dryRun }, deps, ui);
+  } else {
     await reconcileService(
       {
         dryRun: opts.dryRun,
@@ -178,6 +190,12 @@ export async function runInstallSubcommand(
       deps,
       ui,
     );
+    await reconcileMenubar(
+      { dryRun: opts.dryRun, choice: menubarChoice, localRoot: local?.repoDir },
+      deps,
+      ui,
+    );
+  }
   if (local && !opts.dryRun) await prewarmStep(local.repoDir, deps, ui);
   ui.outro(closingLine(targets, opts, local !== undefined));
   return "ok";
@@ -336,4 +354,21 @@ async function selectServiceChoice(
   const choice = await (deps.promptService ?? promptForServiceChoice)();
   if (choice === null) ui.cancel("Cancelled — nothing was changed.");
   return choice;
+}
+
+/** Ask whether to show the menubar app, under the service question's conditions, and
+ * only where there is an app to show. `null` means the user cancelled. */
+async function selectMenubarChoice(
+  opts: { uninstall: boolean; dryRun: boolean },
+  deps: InstallDeps,
+  ui: InstallUI,
+): Promise<MenubarChoice | null> {
+  const isInteractive = deps.isInteractive ?? isTerminal;
+  if (!deps.menubar || opts.uninstall || opts.dryRun || !isInteractive()) return "as-found";
+  const answer = await (deps.promptMenubar ?? promptForMenubar)(deps.menubar.installed());
+  if (answer === null) {
+    ui.cancel("Cancelled — nothing was changed.");
+    return null;
+  }
+  return answer ? "yes" : "no";
 }

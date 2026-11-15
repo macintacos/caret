@@ -3,9 +3,14 @@
 // offers, how it marks the agents detected on this machine, and what a stale OpenCode is
 // told about the version gap.
 
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 
-import { chooserOptions, promptUpgrade, upgradePromptMessage } from "@/commands/install/prompt.ts";
+import {
+  chooserOptions,
+  promptForMenubar,
+  promptUpgrade,
+  upgradePromptMessage,
+} from "@/commands/install/prompt.ts";
 import { INSTALL_TARGET_IDS } from "@/commands/install/targets.ts";
 
 const STALE_CACHE = { kind: "stale-cache", cached: "0.2.0", published: "0.8.1" } as const;
@@ -65,4 +70,41 @@ test("the confirm is asked the verdict's question, and its answer is passed thro
   expect(
     await promptUpgrade(STALE_CACHE, { confirm: async () => true, isCancel: () => false }),
   ).toBe(true);
+});
+
+describe("the menubar question", () => {
+  function recordingConfirm(answer: unknown = true) {
+    const asked: { message: string; initialValue?: boolean }[] = [];
+    return {
+      asked,
+      clack: {
+        confirm: async (o: { message: string; initialValue?: boolean }) => {
+          asked.push(o);
+          return answer;
+        },
+        isCancel: (v: unknown) => typeof v === "symbol",
+      },
+    };
+  }
+
+  test("defaults to yes only when the app is already installed", async () => {
+    const installed = recordingConfirm();
+    const absent = recordingConfirm();
+    await promptForMenubar(true, installed.clack);
+    await promptForMenubar(false, absent.clack);
+    expect(installed.asked[0]?.initialValue).toBe(true);
+    expect(absent.asked[0]?.initialValue).toBe(false);
+  });
+
+  test("asks whether to show caret in the menu bar, starting at login", async () => {
+    const { asked, clack } = recordingConfirm();
+    expect(await promptForMenubar(false, clack)).toBe(true);
+    expect(asked[0]?.message).toBe(
+      "Show caret in the menu bar? The carrot colours in while a plan waits for review, and starts at login.",
+    );
+  });
+
+  test("a cancelled question answers null", async () => {
+    expect(await promptForMenubar(true, recordingConfirm(Symbol("cancel")).clack)).toBeNull();
+  });
 });
