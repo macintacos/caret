@@ -1,14 +1,14 @@
 // `test` task group (EXC-739): the bun unit suite, the Playwright e2e suite, the
-// hermetic bats suites, and the Claude Code mod's kit tests, consolidated into one
-// command whose `unit`/`e2e`/`bats`/`mod` positional targets map to
-// `mise run test <target>`. Bare `mise run test` (and `mise run test unit`) run
+// hermetic bats suites, the Claude Code mod's kit tests, and the menubar app's Swift
+// tests, consolidated into one command whose `unit`/`e2e`/`bats`/`mod`/`swift` positional
+// targets map to `mise run test <target>`. Bare `mise run test` (and `mise run test unit`) run
 // the unit suite, preserving today's `mise run test == unit` behaviour.
 
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { ensureUi, paletteCssCommand } from "@/tasks/build.ts";
+import { ensureUi, type Host, menubarSkipReason, paletteCssCommand } from "@/tasks/build.ts";
 import {
   execAndExit,
   runCapture,
@@ -85,8 +85,8 @@ export function e2eModeArgs(mode: TestOutputMode): string[] {
 
 // --- the --json result document ----------------------------------------------
 // One document per run, on stdout, and nothing else. The envelope is shared
-// across all four targets; a runner's native report is nested UNNORMALISED
-// beneath it — JUnit XML text for unit and bats, Playwright's parsed JSON for
+// across all five targets; a runner's native report is nested UNNORMALISED
+// beneath it — JUnit XML text for unit, bats and swift, Playwright's parsed JSON for
 // e2e, none for mod (report null) — so this file never has to model what a "test
 // result" is in more than two dialects.
 //
@@ -104,7 +104,7 @@ export function e2eModeArgs(mode: TestOutputMode): string[] {
 const REPORT_SCHEMA_VERSION = 1;
 
 /** The suites a run can target, each with its own runner. */
-export type TestTarget = "unit" | "e2e" | "bats" | "mod";
+export type TestTarget = "unit" | "e2e" | "bats" | "mod" | "swift";
 
 export interface TestReport {
   schemaVersion: number;
@@ -121,6 +121,9 @@ export interface TestReport {
   /** Everything the runner wrote. Carried on every failing run — it is where the
    * failure reads as a human wrote it — and never on a passing one. */
   output?: string;
+  /** Why the target ran nothing on this host. Present only then, so an `ok` with zero
+   * counts never reads as a suite that ran and passed. */
+  skipReason?: string;
 }
 
 export interface TestReportInput {
@@ -132,6 +135,8 @@ export interface TestReportInput {
   native: string | null;
   /** Everything the runner wrote, interleaved as it arrived. */
   output: string;
+  /** Set when the target could not run on this host, which then exits 0. */
+  skipReason?: string;
 }
 
 /** The result document for one run. */
@@ -141,6 +146,7 @@ export function buildTestReport(input: TestReportInput): TestReport {
     target: input.target,
     ok: input.exitCode === 0,
     durationMs: input.durationMs,
+    ...(input.skipReason === undefined ? {} : { skipReason: input.skipReason }),
   };
   const parsed = input.native === null ? null : parseNative(input.target, input.native);
   const counts = { passed: parsed?.passed ?? 0, failed: parsed?.failed ?? 0 };
@@ -160,6 +166,7 @@ function parseNative(
       return parsePlaywrightReport(native);
     case "unit":
     case "bats":
+    case "swift":
       return parseJUnit(native);
     default: {
       const unreachable: never = target;
@@ -179,8 +186,8 @@ function parseKitSummary(output: string): Pick<TestReport, "passed" | "failed" |
   return { passed: Number(passed ?? 0), failed: Number(failed ?? 0), report: null };
 }
 
-/** The JUnit dialect both bun and bats write. The two put their counts in different
- * places, and neither reading serves both:
+/** The JUnit dialect bun, bats and Swift Testing write. They put their counts in two
+ * different places, and neither reading serves both:
  *
  * bun states the whole run on the root `<testsuites>` — and also nests a
  * `<testsuite>` inside the file's own for every `describe`, so summing elements
@@ -464,6 +471,64 @@ export async function runTestMod(flags: Pick<TestFlags, "json"> = {}): Promise<n
   if (!flags.json) return execAndExit(modCommand());
   const startedAt = Date.now();
   return emitTestReport({ ...(await collectModJsonRun()), startedAt });
+}
+
+// --- test swift -------------------------------------------------------------
+// The menubar app's Swift Testing suites under menubar/Tests. Extra args (`--filter`, …)
+// are forwarded to `swift test`. Unlike `mod`, a host that cannot run them skips with its
+// reason and exits 0, the way `build menubar` does: every Linux checkout is such a host.
+
+/** The argv `test swift` runs, plus forwarded args. Warnings fail the gate here rather
+ * than in Package.swift, so a newer local toolchain's new warnings never block a plain
+ * `swift build`. */
+export function swiftTestCommand(args: string[]): string[] {
+  return ["swift", "test", "--package-path", "menubar", "-Xswiftc", "-warnings-as-errors", ...args];
+}
+
+/** `collectBatsJsonRun`'s Swift twin, or a skip carrying its reason on a host that cannot
+ * build the app. */
+export async function collectSwiftJsonRun(
+  args: string[],
+  host: Host,
+  run: typeof runCapture = runCapture,
+): Promise<Omit<TestReportInput, "durationMs">> {
+  const skipReason = menubarSkipReason(host);
+  if (skipReason !== null) {
+    return { target: "swift", exitCode: 0, native: null, output: "", skipReason };
+  }
+
+  let log = "";
+  const sink = (chunk: string): void => {
+    log += chunk;
+  };
+  // SwiftPM writes XCTest's report at the path it is handed and Swift Testing's beside it,
+  // as <stem>-swift-testing.xml. The package has Swift Testing suites only.
+  const { exitCode, native } = await withReportFile("report-swift-testing.xml", (reportPath) =>
+    run(
+      swiftTestCommand(["--xunit-output", join(dirname(reportPath), "report.xml"), ...args]),
+      sink,
+    ),
+  );
+  return { target: "swift", exitCode, native, output: log };
+}
+
+/** `flags` is narrowed to what this target registers — the volume pair is not on it. */
+export async function runTestSwift(
+  args: string[],
+  flags: Pick<TestFlags, "json"> = {},
+): Promise<never> {
+  const host = { platform: process.platform, which: Bun.which };
+  if (flags.json) {
+    const startedAt = Date.now();
+    return emitTestReport({ ...(await collectSwiftJsonRun(args, host)), startedAt });
+  }
+
+  const skip = menubarSkipReason(host);
+  if (skip !== null) {
+    await writeAndFlush(process.stdout, `test swift: skipped, ${skip}\n`);
+    process.exit(0);
+  }
+  return execAndExit(swiftTestCommand(args));
 }
 
 // --- test e2e ---------------------------------------------------------------

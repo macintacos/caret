@@ -220,9 +220,9 @@ export async function runBuildBundle(): Promise<never> {
 // --- build menubar ----------------------------------------------------------
 // The macOS menubar app: the SwiftPM package under menubar/, built universal in release,
 // assembled into a .app by hand (there is no Xcode project), then signed ad hoc.
-// Never part of the bare umbrella or the preflight gate: Swift builds only on macOS. The
-// `menubar` workflow (.github/workflows/menubar.yml) is this target's PR gate, and
-// publish.yml's `menubar` job builds the app the npm package ships.
+// Never part of the bare umbrella, whose artifacts every platform builds. The preflight gate
+// runs it as a lane of its own, and the `menubar` workflow (.github/workflows/menubar.yml)
+// is its PR gate; publish.yml's `menubar` job builds the app the npm package ships.
 
 /** Where `build menubar` assembles the app; gitignored with the rest of bin/, shipped by
  * package.json "files" and publish.yml. */
@@ -255,6 +255,20 @@ export function codesignMenubarCommand(): string[] {
   return ["codesign", "--force", "--sign", "-", MENUBAR_APP];
 }
 
+/** The host a task runs on, as much as a task's preconditions ask of it. */
+export interface Host {
+  platform: NodeJS.Platform;
+  which: (bin: string) => string | null;
+}
+
+/** Why this host cannot build or test the menubar app, or null when it can. A Linux Swift
+ * toolchain does not count: the app needs AppKit. */
+export function menubarSkipReason(host: Host): string | null {
+  if (host.platform !== "darwin") return "the menubar app builds on macOS only";
+  if (!host.which("swift")) return "swift not on PATH";
+  return null;
+}
+
 /** Where SwiftPM put swiftBuildCommand()'s product. A multi-arch build's directory moves
  * between Swift releases, so it is asked for rather than assumed. */
 function swiftBinPath(): Promise<string> {
@@ -263,17 +277,19 @@ function swiftBinPath(): Promise<string> {
 
 /** Build the menubar package, assemble the .app from SwiftPM's bin path, and sign it ad
  * hoc, resolving the first failing step's exit code; throws if SwiftPM can't report its
- * bin path. Off macOS it prints one line and succeeds, so a Linux checkout's build never
- * fails on it. */
-export async function buildMenubar(deps: {
-  platform: NodeJS.Platform;
-  run: typeof runForward;
-  binPath: () => Promise<string>;
-  assemble: (binPath: string) => void;
-  print: (text: string) => Promise<void>;
-}): Promise<number> {
-  if (deps.platform !== "darwin") {
-    await deps.print("build menubar: skipped, the menubar app builds on macOS only\n");
+ * bin path. Off macOS, or without swift, it prints why in one line and succeeds, so a Linux
+ * checkout's build never fails on it. */
+export async function buildMenubar(
+  deps: Host & {
+    run: typeof runForward;
+    binPath: () => Promise<string>;
+    assemble: (binPath: string) => void;
+    print: (text: string) => Promise<void>;
+  },
+): Promise<number> {
+  const skip = menubarSkipReason(deps);
+  if (skip !== null) {
+    await deps.print(`build menubar: skipped, ${skip}\n`);
     return 0;
   }
 
@@ -311,6 +327,7 @@ export async function runBuildMenubar(): Promise<never> {
   process.exit(
     await buildMenubar({
       platform: process.platform,
+      which: Bun.which,
       run: runForward,
       binPath: swiftBinPath,
       assemble: assembleMenubarApp,

@@ -7,6 +7,7 @@ import {
   collectBatsJsonRun,
   collectE2eJsonRun,
   collectModJsonRun,
+  collectSwiftJsonRun,
   collectUnitJsonRun,
   e2eModeArgs,
   ensureUiForE2e,
@@ -197,6 +198,20 @@ const FAILING_BATS_JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
     </testcase>
 
 </testsuite>
+</testsuites>`;
+
+// Swift Testing's xunit writer under Swift 6.4.2, trimmed to three of its testcases with
+// the counts left as written: 18 tests, one failing. Like bats', its root carries no
+// counts at all.
+const FAILING_SWIFT_JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="TestResults" errors="0" tests="18" failures="1" skipped="0" time="0.002653625">
+    <testcase classname="CaretMenubarCoreTests" name="refusals()" time="0.000599708" />
+    <testcase classname="CaretMenubarCoreTests" name="contractDefaults()" time="0.000699709" >
+      <failure message="Expectation failed: config.baseURL.absoluteString == &quot;nope&quot; (error)" />
+    </testcase>
+    <testcase classname="CaretMenubarCoreTests" name="contractFlags()" time="0.000651458" />
+  </testsuite>
 </testsuites>`;
 
 /** Playwright's json reporter, trimmed to the fields the envelope reads, with a
@@ -538,6 +553,56 @@ describe("collectBatsJsonRun", () => {
     expect(collected.exitCode).toBe(1);
     expect(collected.native).toBeNull();
     expect(collected.output).toContain("[mise] ran");
+  });
+});
+
+describe("test swift", () => {
+  const MAC = { platform: "darwin", which: (bin: string) => `/usr/bin/${bin}` } as const;
+
+  test("counts come from Swift Testing's JUnit report", () => {
+    const report = buildTestReport({
+      target: "swift",
+      exitCode: 1,
+      durationMs: 5000,
+      native: FAILING_SWIFT_JUNIT,
+      output: "log",
+    });
+    expect(report.target).toBe("swift");
+    expect(report.passed).toBe(17);
+    expect(report.failed).toBe(1);
+    expect(report.report).toBe(FAILING_SWIFT_JUNIT);
+  });
+
+  test("forwards its args to swift test, after the report flag", async () => {
+    const { calls, run } = capturingCapture();
+    await collectSwiftJsonRun(["--filter", "Contract"], MAC, run);
+    const cmd = calls[0]?.cmd ?? [];
+    expect(cmd.slice(0, 2)).toEqual(["swift", "test"]);
+    expect(cmd).toContain("--xunit-output");
+    expect(cmd.slice(-2)).toEqual(["--filter", "Contract"]);
+  });
+
+  // SwiftPM writes Swift Testing's results beside the path it is handed, under a derived
+  // name, and only XCTest's at the path itself.
+  test("reads Swift Testing's report from beside the xunit path", async () => {
+    const run = async (cmd: string[]): Promise<number> => {
+      const xunit = cmd[cmd.indexOf("--xunit-output") + 1] ?? "";
+      await Bun.write(xunit.replace(/\.xml$/, "-swift-testing.xml"), FAILING_SWIFT_JUNIT);
+      return 1;
+    };
+    const collected = await collectSwiftJsonRun([], MAC, run);
+    expect(collected.native).toBe(FAILING_SWIFT_JUNIT);
+    expect(buildTestReport({ ...collected, durationMs: 0 }).failed).toBe(1);
+  });
+
+  test("a host that cannot build the app runs nothing and reports why", async () => {
+    const { calls, run } = capturingCapture();
+    const collected = await collectSwiftJsonRun([], { ...MAC, platform: "linux" }, run);
+    const report = buildTestReport({ ...collected, durationMs: 0 });
+    expect(calls).toEqual([]);
+    expect(report.ok).toBe(true);
+    expect(report.skipReason).toContain("macOS");
+    expect(report.passed + report.failed).toBe(0);
   });
 });
 
