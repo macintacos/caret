@@ -26,7 +26,7 @@ const alertsState = await Bun.file(join(uiDir, "state/alerts.ts")).text();
 // through to the theme wipe's unconditional sweep with every unit test still green.
 const planHandoffSrc = await Bun.file(join(uiDir, "lib/planHandoff.ts")).text();
 // Swift can't read CSS, so the menubar app carries both values as literals.
-const menubarFade = await Bun.file(
+const menubarFadeSrc = await Bun.file(
   join(uiDir, "../../menubar/Sources/CaretMenubar/NSStatusBarButton+IconTransition.swift"),
 ).text();
 
@@ -165,9 +165,9 @@ describe("motion tokens in app.css", () => {
   });
 
   test("the menubar carrot's fade mirrors --dur-state and --ease-out", () => {
-    expect(menubarFade).toContain(`let duration = ${dur("state") / 1000}`);
+    expect(menubarFadeSrc).toContain(`let duration = ${dur("state") / 1000}`);
     const ease = root.match(/^\s*--ease-out:\s*cubic-bezier\(([^)]+)\);/m)?.[1];
-    expect(menubarFade).toContain(`controlPoints: ${ease}`);
+    expect(menubarFadeSrc).toContain(`controlPoints: ${ease}`);
   });
 
   test("declares the state easing plus the key's spring, both cubic-beziers", () => {

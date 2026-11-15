@@ -29,13 +29,13 @@ extension NSStatusBarButton {
             // The fade drops any transform on the button's own layer, so the grow rides the
             // button-sized wrapper AppKit puts it in. The wrapper is private: grow only while
             // it still matches the button.
-            guard let host = superview?.layer, host.bounds.size == bounds.size else { return }
+            guard let wrapper = superview?.layer, wrapper.bounds.size == bounds.size else { return }
             let grow = CABasicAnimation(keyPath: #keyPath(CALayer.transform))
-            grow.fromValue = host.centredScale(0.85)
+            grow.fromValue = wrapper.centredScale(0.85)
             grow.toValue = CATransform3DIdentity
             grow.duration = duration
             grow.timingFunction = curve
-            host.add(grow, forKey: growKey)
+            wrapper.add(grow, forKey: growKey)
         case .dim:
             break
         }
