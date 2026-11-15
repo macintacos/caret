@@ -281,8 +281,8 @@ async function withReportFile(
   const dir = mkdtempSync(join(tmpdir(), "caret-test-json-"));
   try {
     const exitCode = await spawn(join(dir, basename));
-    const found = [...preferred, basename].map((name) => join(dir, name)).find(existsSync);
-    return { exitCode, native: found === undefined ? null : readFileSync(found, "utf8") };
+    const reportPath = [...preferred, basename].map((name) => join(dir, name)).find(existsSync);
+    return { exitCode, native: reportPath === undefined ? null : readFileSync(reportPath, "utf8") };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -539,9 +539,9 @@ export async function runTestSwift(
     return emitTestReport({ ...(await collectSwiftJsonRun(args, machine)), startedAt });
   }
 
-  const skip = menubarSkipReason(machine);
-  if (skip !== null) {
-    await writeAndFlush(process.stdout, `test swift: skipped, ${skip}\n`);
+  const skipReason = menubarSkipReason(machine);
+  if (skipReason !== null) {
+    await writeAndFlush(process.stdout, `test swift: skipped, ${skipReason}\n`);
     process.exit(0);
   }
   return execAndExit(swiftTestCommand(args));

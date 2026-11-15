@@ -287,9 +287,9 @@ export async function buildMenubar(
     print: (text: string) => Promise<void>;
   },
 ): Promise<number> {
-  const skip = menubarSkipReason(deps);
-  if (skip !== null) {
-    await deps.print(`build menubar: skipped, ${skip}\n`);
+  const skipReason = menubarSkipReason(deps);
+  if (skipReason !== null) {
+    await deps.print(`build menubar: skipped, ${skipReason}\n`);
     return 0;
   }
 
