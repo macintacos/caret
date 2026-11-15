@@ -476,7 +476,7 @@
   $effect(() => appearance.watch());
 
   // Mirror each slot's accent to the daemon for the menubar app's card, on load and on
-  // every change: the theme choice itself lives only in this browser. Reads the slots.
+  // every change: the theme choice itself lives only in this browser. Re-runs when either slot's theme changes.
   $effect(() => {
     void reportAccent(appearance.accents);
   });

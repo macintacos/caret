@@ -12,7 +12,7 @@ import { manualTimer } from "@test/support/manual-timer.ts";
 import { type RecordedEmit, recordingLog } from "@test/support/recording-log.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { themeFileText } from "@test/support/theme.ts";
-import { VANITY_HOST } from "@/config/constants.ts";
+import { PLAN_REJECTED_MESSAGE, VANITY_HOST } from "@/config/constants.ts";
 import { configValuesOf, loadSettings } from "@/config/settings.ts";
 import {
   isClientLive,
@@ -1579,6 +1579,28 @@ test("approve records no general comment on the version", async () => {
   // Approve is terminal — the review leaves memory, so a retained comment could
   // never be listed.
   expect((await store.persisted(id))?.versions.at(-1)?.generalComment).toBeUndefined();
+});
+
+test("an approval whose notes carried the general comment keeps it on the version", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { generalCommentDraft: "watch the migration" });
+  await resolve(id, { behavior: "allow", feedback: "Reviewer notes:\n\nwatch the migration" });
+  expect((await store.persisted(id))?.versions.at(-1)?.generalComment).toBe("watch the migration");
+});
+
+test("resolving stamps the version with the reviewer's verdict", async () => {
+  await boot();
+  const verdictAfter = async (body: Record<string, unknown>) => {
+    const { id } = await newReview();
+    await resolve(id, body);
+    return (await store.persisted(id))?.versions.at(-1)?.verdict;
+  };
+  expect(await verdictAfter({ behavior: "allow" })).toBe("approve");
+  expect(await verdictAfter({ behavior: "deny", feedback: "split step 2" })).toBe(
+    "request-changes",
+  );
+  expect(await verdictAfter({ behavior: "deny", feedback: PLAN_REJECTED_MESSAGE })).toBe("reject");
 });
 
 test("cross-origin mutating requests are blocked (CSRF guard)", async () => {

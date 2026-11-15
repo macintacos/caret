@@ -53,19 +53,23 @@ the app at its old version. Run `caret install` to update it.
 ## Read your review stats
 
 The card at the top of the menu shows the version of caret that is running, and four
-counts over every review caret has kept on this Mac:
+counts over every [review](../reference/glossary.md#review) you have done on this Mac:
 
 - **plans approved**: the plans you approved.
-- **plans rejected**: the plans you turned down with **Reject**. A plan you send back
-    with **Request changes** is not counted here; the version the agent sends next counts
-    as a revision.
+- **plans rejected**: the plan versions you turned down with **Reject**. A Reject stays
+    counted when the agent later sends another plan. A plan you send back with
+    **Request changes** is not counted here; the version the agent sends next counts as a
+    revision.
 - **revisions**: every version of a plan after its first.
-- **comments**: the comments you left on plans you approved or sent back, the general
-    comment included.
+- **comments**: the inline comments and the
+    [general comment](../reference/glossary.md#feedback) on versions you approved or sent
+    back with **Request changes**. A Reject sends no comments, so comments drafted on a
+    rejected version don't count, and nor do drafts on a plan still waiting.
 
-The app asks caret for these as you open the menu. When no caret is running, each count
-shows a dash and the version is the app's own. When caret answers with an error, the card
-says **caret didn't answer the app** (see
+The app asks caret for these as you open the menu. When no caret is running, or the
+running caret is too old to report stats, each count shows a dash and the version is the
+app's own. Run `caret install` to update an old caret. When caret answers with an error,
+the card says **caret didn't answer the app** (see
 [Fix an app that misbehaves](#fix-an-app-that-misbehaves)).
 
 The `^` and a faint tint on the card take the accent of the themes you chose in the review

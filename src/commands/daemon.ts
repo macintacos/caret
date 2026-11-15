@@ -65,7 +65,7 @@ import {
   listReleases,
   publishedCaretVersion,
 } from "@/lib/upstream.ts";
-import { readReviewStats } from "@/review/stats.ts";
+import { createReviewStats } from "@/review/stats.ts";
 import { createStore } from "@/review/store.ts";
 import { isSupervised, SERVICE_TERMINAL_EXIT_STATUS } from "@/service/manager.ts";
 import { createAccentStore } from "@/theme/accent.ts";
@@ -311,7 +311,7 @@ export async function runDaemon(opts: {
       updateReport: servedReport,
       // Read off the same hot-reloading service, so a GET after a POST sees the write.
       configValues: () => configValuesOf(svc.current()),
-      reviewStats: () => readReviewStats(reviewsDir()),
+      reviewStats: createReviewStats(reviewsDir()),
       accentStore: createAccentStore(accentFile()),
       // Turning the check back on re-runs it, so a reviewer who opted out long ago gets
       // a real verdict on the spot rather than a daemon lifetime later.

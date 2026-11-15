@@ -1,0 +1,25 @@
+{
+  "id": "4f1c2a9e-7b3d-4c8a-9e2f-1a6b5d3c7e90",
+  "sessionId": "session-1",
+  "cwd": "/Users/me/project",
+  "title": "Add a cache",
+  "status": "rejected",
+  "versions": [
+    {
+      "version": 1,
+      "plan": "# Add a cache\n\n1. Wrap the fetch in an LRU.\n",
+      "annotations": [{ "id": "a1", "startLine": 3, "endLine": 3, "comment": "why LRU?" }],
+      "composerScratches": [],
+      "agentCopyMatches": true,
+      "createdAt": 1762000000000
+    }
+  ],
+  "decision": {
+    "behavior": "deny",
+    "feedback": "The user rejected the plan. Wait for the user's next message to decide how to proceed; do not present a plan for review again unless they ask.",
+    "decidedAt": 1762000060000
+  },
+  "generalCommentDraft": "",
+  "createdAt": 1762000000000,
+  "updatedAt": 1762000060000
+}

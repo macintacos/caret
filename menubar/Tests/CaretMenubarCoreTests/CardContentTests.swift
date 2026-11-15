@@ -12,8 +12,8 @@ private func stats(_ json: String) -> PollOutcome {
 private func tally(
     version: String? = nil, approved: Int = 0, rejected: Int = 0, revisions: Int = 0,
     comments: Int = 0, accent: Accent? = nil
-) -> ReviewStats {
-    ReviewStats(
+) -> StatsBody {
+    StatsBody(
         version: version, approved: approved, rejected: rejected, revisions: revisions,
         comments: comments, accent: accent)
 }
@@ -148,39 +148,45 @@ func accessibilityLabelWithoutVersion() {
 }
 
 @Test("Reduce Transparency turns every material solid", arguments: [true, false])
-func reduceTransparency(glass: Bool) {
-    let style = CardStyle(reduceTransparency: true, increaseContrast: false, glass: glass)
+func reduceTransparency(hasLiquidGlass: Bool) {
+    let style = CardStyle(
+        reduceTransparency: true, increaseContrast: false, hasLiquidGlass: hasLiquidGlass)
     #expect(style.material == .solid)
 }
 
 @Test("the card is Liquid Glass where the system has it, and vibrant below")
 func materials() {
     #expect(
-        CardStyle(reduceTransparency: false, increaseContrast: false, glass: true).material
+        CardStyle(reduceTransparency: false, increaseContrast: false, hasLiquidGlass: true).material
             == .glass)
     #expect(
-        CardStyle(reduceTransparency: false, increaseContrast: false, glass: false).material
+        CardStyle(reduceTransparency: false, increaseContrast: false, hasLiquidGlass: false)
+            .material
             == .vibrant)
 }
 
 @Test(
     "Increase Contrast draws every card's edge a full point wide",
     arguments: [(false, true), (false, false), (true, false)])
-func increaseContrast(reduceTransparency: Bool, glass: Bool) {
+func increaseContrast(reduceTransparency: Bool, hasLiquidGlass: Bool) {
     let style = CardStyle(
-        reduceTransparency: reduceTransparency, increaseContrast: true, glass: glass)
+        reduceTransparency: reduceTransparency, increaseContrast: true,
+        hasLiquidGlass: hasLiquidGlass)
     #expect(style.borderWidth == 1)
 }
 
 @Test("glass draws its own edge, and the other materials take a hairline")
 func defaultBorders() {
     #expect(
-        CardStyle(reduceTransparency: false, increaseContrast: false, glass: true).borderWidth
+        CardStyle(reduceTransparency: false, increaseContrast: false, hasLiquidGlass: true)
+            .borderWidth
             == 0)
     #expect(
-        CardStyle(reduceTransparency: false, increaseContrast: false, glass: false).borderWidth
+        CardStyle(reduceTransparency: false, increaseContrast: false, hasLiquidGlass: false)
+            .borderWidth
             == 0.5)
     #expect(
-        CardStyle(reduceTransparency: true, increaseContrast: false, glass: true).borderWidth
+        CardStyle(reduceTransparency: true, increaseContrast: false, hasLiquidGlass: true)
+            .borderWidth
             == 0.5)
 }

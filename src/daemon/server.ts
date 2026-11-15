@@ -67,7 +67,7 @@ import { listDirectory } from "@/plan/directory.ts";
 import { isFileTooLargeToPreview, readFileExcerpt, resolveInCwd } from "@/plan/excerpt.ts";
 import { searchFiles } from "@/plan/file-search.ts";
 import { createDecisions } from "@/review/decisions.ts";
-import type { ReviewStats } from "@/review/stats.ts";
+import { type ReviewStats, verdictOf } from "@/review/stats.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
 import { isSupervised } from "@/service/manager.ts";
@@ -1175,14 +1175,15 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     await store.update(id, (r) => {
       r.decision = decision;
       r.status = decision.behavior === "allow" ? "approved" : "rejected";
+      currentVersion(r).verdict = verdictOf(decision);
       // A submitted general comment outlives its draft: keep it on the version it
       // was written against, so a later revision can show what was asked for.
-      // Gated on the deny having actually carried it — Request changes composes it
-      // into the feedback verbatim, while a plain Reject sends a canned message
-      // after telling the reviewer the draft would NOT be sent, so keeping it
-      // would record feedback they chose to discard.
+      // Gated on the decision having actually carried it — Request changes and an
+      // approval's notes compose it into the feedback verbatim, while a plain Reject
+      // sends a canned message after telling the reviewer the draft would NOT be
+      // sent, so keeping it would record feedback they chose to discard.
       const general = r.generalCommentDraft?.trim();
-      if (general && decision.behavior === "deny" && decision.feedback?.includes(general)) {
+      if (general && decision.feedback?.includes(general)) {
         currentVersion(r).generalComment = general;
       }
       // Clear the unsent draft as part of resolving (both paths): a deny keeps

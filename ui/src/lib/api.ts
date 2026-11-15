@@ -402,8 +402,9 @@ export async function putDraft(
 }
 
 /** Tell the daemon the accent of each scheme slot's theme, for the menubar app's card.
- * Non-essential: an older daemon 404s and the card keeps caret's own accent, so a failure
- * is a debug record, never thrown. */
+ * Non-essential: a failed report only leaves the card's tint stale, so failure is
+ * swallowed rather than thrown. `debug`, not this file's usual `warn`: the failure it
+ * hides is a 500 from an unwritable state directory, which costs the review nothing. */
 export async function reportAccent(accents: SchemeAccents): Promise<void> {
   try {
     const res = await fetch("/api/accent", {

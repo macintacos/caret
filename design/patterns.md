@@ -818,7 +818,7 @@ specific code areas live in [`docs/agents/`](../docs/agents/).
 
 The carrot in the macOS menu bar and the menu it opens (`menubar/`). It is native chrome:
 the system's fonts, label colours and materials, with caret's mark kept to the `^` and a
-faint tint.
+faint wash.
 
 - **The stats card** is the menu's first item. It shows `^caret` and the running version
   over four counts in two pairs: plans approved and plans rejected, then revisions and
@@ -826,20 +826,21 @@ faint tint.
   read as decisions above feedback.
 - **Type:** the wordmark at the menu's text size, and each figure two points larger,
   semibold, with monospaced digits. Labels are 11 pt, and the version is 11 pt in the
-  system monospaced face. All text takes the system label colour, so hierarchy comes from
-  size and weight. The secondary label colour falls under 4.5:1 on the vibrant and solid
-  backgrounds.
+  system monospaced face. All text takes the system's primary label colour, because the
+  secondary one falls under 4.5:1 on the vibrant and solid backgrounds, so hierarchy comes
+  from size and weight.
 - **One size in every state**, so the menu never jumps. A daemon that answers shows its
-  counts. When none answers, or one older than the route, each count shows a dash and the
-  app's own version stands in. Any other answer shows "caret didn't answer the app" where
-  the counts sit, by the same rule that greys the carrot.
-- **Background:** Liquid Glass on macOS 26 and later, the menu's own vibrant material
-  below that, and an opaque fill under Reduce Transparency (see
+  counts. When none answers, or a daemon older than `GET /api/stats`, each count shows a
+  dash and the app's own version stands in. Any other answer shows "caret didn't answer
+  the app" where the counts sit, by the same rule that greys the carrot.
+- **Background:** Liquid Glass (macOS 26's translucent, light-refracting material) on
+  macOS 26 and later, the menu's own vibrant material (the blurred backdrop earlier macOS
+  menus draw) below that, and an opaque fill under Reduce Transparency (see
   [`exceptions.md`](exceptions.md#the-menubar-card)). The card rounds at 10 pt, as
   `--radius-lg` does, and insets 5 pt from the menu's edge, as the menu's row highlight
   does. Glass draws its own edge. The other backgrounds take a hairline in the separator
   colour, and Increase Contrast widens every edge to 1 pt.
-- **Tint:** the `^` and a faint wash take the accent of the review page's light or dark
+- **Wash:** the `^` and a faint wash take the accent of the review page's light or dark
   theme slot, whichever the menu's appearance calls for. Until the page reports one, the
   card uses caret's own accent. While no caret answers, it keeps the last accent it had.
 - **VoiceOver** reads the card as one sentence, for example "caret 1.10.1. 12 plans

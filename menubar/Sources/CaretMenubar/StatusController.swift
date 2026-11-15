@@ -9,7 +9,8 @@ final class StatusController: NSObject {
     private let config: LaunchConfig
     private let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
-        // A whole-request deadline, under the poll interval; the request's own timeout is idle-only.
+        // A whole-request deadline, under the poll interval and short enough for a menu that
+        // is already open; the request's own timeout is idle-only.
         configuration.timeoutIntervalForResource = 2
         return URLSession(configuration: configuration)
     }()
@@ -34,10 +35,14 @@ final class StatusController: NSObject {
 
     func start() {
         pollTask = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self else { return }
-                await self.poll()
-                try? await Task.sleep(for: .seconds(3), tolerance: .seconds(1))
+            do {
+                while true {
+                    guard let self else { return }
+                    try await self.poll()
+                    try await Task.sleep(for: .seconds(3), tolerance: .seconds(1))
+                }
+            } catch {
+                // Only cancellation throws, and it ends the loop.
             }
         }
     }
@@ -58,8 +63,8 @@ final class StatusController: NSObject {
         return menu
     }
 
-    private func poll() async {
-        show(IconState(await session.outcome(of: config.pendingRequest())))
+    private func poll() async throws {
+        show(IconState(try await session.outcome(of: config.pendingRequest())))
     }
 
     private func show(_ newState: IconState) {

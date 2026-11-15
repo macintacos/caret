@@ -14,14 +14,20 @@ private struct Contract: Decodable {
     let loopbackHosts: [String]
     let exposedHosts: [String]
     let pendingBody: [String: Int]
+    let statsBody: StatsFixture
     let accent: [String: String]
 
-    static let url = URL(filePath: #filePath).deletingLastPathComponent()
-        .appending(path: "contract.json")
-
     static func load() throws -> Contract {
-        try JSONDecoder().decode(Contract.self, from: Data(contentsOf: url))
+        let url = URL(filePath: #filePath).deletingLastPathComponent()
+            .appending(path: "contract.json")
+        return try JSONDecoder().decode(Contract.self, from: Data(contentsOf: url))
     }
+}
+
+private struct StatsFixture: Codable {
+    let version: String
+    let approved, rejected, revisions, comments: Int
+    let accent: [String: String]
 }
 
 @Test("the default URLs match the daemon's defaults")
@@ -61,22 +67,22 @@ func contractPendingBody() throws {
 
 @Test("the daemon's stats body decodes to its version, tally and accent")
 func contractStatsBody() throws {
-    let contract = try JSONSerialization.jsonObject(with: Data(contentsOf: Contract.url))
-    let fields = try #require((contract as? [String: Any])?["statsBody"] as? [String: Any])
-    let accent = try #require(fields["accent"] as? [String: String])
-    let expected = ReviewStats(
-        version: try #require(fields["version"] as? String),
-        approved: try #require(fields["approved"] as? Int),
-        rejected: try #require(fields["rejected"] as? Int),
-        revisions: try #require(fields["revisions"] as? Int),
-        comments: try #require(fields["comments"] as? Int),
-        accent: Accent(light: try rgb(accent["light"]), dark: try rgb(accent["dark"])))
-    let body = try JSONSerialization.data(withJSONObject: fields)
-    #expect(CardState(.response(status: 200, body: body)) == .stats(expected))
-}
-
-private func rgb(_ hex: String?) throws -> Int {
-    try #require(hex.flatMap { Int($0.dropFirst(), radix: 16) })
+    let fixture = try Contract.load().statsBody
+    let body = try JSONEncoder().encode(fixture)
+    let state = CardState(.response(status: 200, body: body))
+    guard case let .stats(stats) = state else {
+        Issue.record("expected stats, got \(state)")
+        return
+    }
+    #expect(stats.version == fixture.version)
+    #expect(
+        Tally.allCases.map { stats[$0] } == [
+            fixture.approved, fixture.rejected, fixture.revisions, fixture.comments,
+        ])
+    #expect(
+        stats.accent.map { [hex($0.light), hex($0.dark)] } == [
+            fixture.accent["light"], fixture.accent["dark"],
+        ])
 }
 
 @Test("the card's default tint is caret's own accent in both appearances")

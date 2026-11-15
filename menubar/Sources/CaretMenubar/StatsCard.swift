@@ -5,7 +5,7 @@ import CaretMenubarCore
 /// the daemon as the menu opens, and at no other time.
 final class StatsCard: NSObject, NSMenuDelegate {
     let item = NSMenuItem()
-    private let view = StatsCardView()
+    private let view = StatsCardView(style: currentStyle())
     private let config: LaunchConfig
     private let session: URLSession
     private let bundleVersion =
@@ -23,18 +23,13 @@ final class StatsCard: NSObject, NSMenuDelegate {
     }
 
     func menuWillOpen(_ menu: NSMenu) {
-        let workspace = NSWorkspace.shared
-        view.apply(
-            CardStyle(
-                reduceTransparency: workspace.accessibilityDisplayShouldReduceTransparency,
-                increaseContrast: workspace.accessibilityDisplayShouldIncreaseContrast,
-                glass: hasLiquidGlass))
+        view.apply(currentStyle())
 
         fetch?.cancel()
         fetch = Task { [weak self] in
-            guard let self else { return }
-            let outcome = await session.outcome(of: config.statsRequest())
-            guard !Task.isCancelled else { return }
+            guard let self,
+                let outcome = try? await session.outcome(of: config.statsRequest())
+            else { return }
             show(CardState(outcome))
         }
     }
@@ -44,6 +39,15 @@ final class StatsCard: NSObject, NSMenuDelegate {
         accent = state.accent(keeping: accent)
         view.tint(accent)
     }
+}
+
+/// The card's style under the system's display settings as they stand now.
+private func currentStyle() -> CardStyle {
+    let workspace = NSWorkspace.shared
+    return CardStyle(
+        reduceTransparency: workspace.accessibilityDisplayShouldReduceTransparency,
+        increaseContrast: workspace.accessibilityDisplayShouldIncreaseContrast,
+        hasLiquidGlass: hasLiquidGlass)
 }
 
 private var hasLiquidGlass: Bool {

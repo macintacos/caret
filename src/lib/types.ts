@@ -131,8 +131,15 @@ export interface PlanVersion {
    * true, a feedback line reference needs no quote to land. Optional because
    * pre-existing on-disk versions predate the field; absent reads as false. */
   agentCopyMatches?: boolean;
+  /** The reviewer's decision that closed this version, stamped when it resolves. Absent
+   * on a version no decision closed, and on every record that predates the field. */
+  verdict?: Verdict;
   createdAt: number;
 }
+
+/** The review page's three decisions. Not `ReviewStatus`, whose `"rejected"` covers both
+ * denies. */
+export type Verdict = "approve" | "request-changes" | "reject";
 
 /** The decision recorded when a review resolves. */
 export interface Decision {

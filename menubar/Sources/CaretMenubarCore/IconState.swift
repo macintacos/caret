@@ -14,7 +14,7 @@ package enum IconState: Equatable, Sendable {
     case pending
     /// Nothing to review, or no daemon to ask: the grey carrot.
     case idle
-    /// The daemon answered, but not with a count: the grey carrot, plus a menu line saying so.
+    /// The daemon answered, but not with a count: the grey carrot.
     case unanswered
 }
 

@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { bootDaemon, type TestDaemon } from "@test/support/daemon.ts";
 import { DEFAULT_PORT, VANITY_HOST } from "@/config/constants.ts";
 import { isExposed } from "@/daemon/address.ts";
-import { readReviewStats } from "@/review/stats.ts";
+import { createReviewStats } from "@/review/stats.ts";
 import { buildMenubarPlist } from "@/service/menubar-agent.ts";
 import { createAccentStore } from "@/theme/accent.ts";
 
@@ -32,7 +32,7 @@ beforeAll(async () => {
   d = await bootDaemon(dir, {
     configPath: join(dir, "config.toml"),
     themesDir: join(dir, "themes"),
-    reviewStats: () => readReviewStats(join(dir, "reviews")),
+    reviewStats: createReviewStats(join(dir, "reviews")),
     accentStore: createAccentStore(join(dir, "accent.json")),
   });
 });

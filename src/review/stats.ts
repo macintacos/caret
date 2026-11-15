@@ -2,82 +2,123 @@
 // from the files, not the store: the store holds only unresolved reviews, and an on-demand
 // daemon's memory lasts one idle window.
 
-import { readdirSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { z } from "zod";
 
 import { PLAN_REJECTED_MESSAGE } from "@/config/constants.ts";
 import { readJsonFileSync } from "@/lib/json-file.ts";
+import type { Behavior, ReviewStatus, Verdict } from "@/lib/types.ts";
 
 export interface ReviewStats {
   /** Reviews whose plan was approved. */
   approved: number;
-  /** Reviews the review page's Reject turned down. Request changes sends a plan back
-   * instead, and its revisions count below. */
+  /** Versions the review page's Reject closed. Request changes sends a plan back instead,
+   * and its revisions count below. */
   rejected: number;
   /** Plan versions after each review's first. */
   revisions: number;
-  /** Inline and general comments on the versions a decision closed. */
+  /** Inline and general comments on the versions an approval or Request changes closed.
+   * Reject sends none, so its drafted comments don't count. */
   comments: number;
+}
+
+/** The verdict a decision delivers: Reject is the deny carrying the one fixed message,
+ * Request changes any other deny. */
+export function verdictOf(decision: { behavior: Behavior; feedback?: string }): Verdict {
+  if (decision.behavior === "allow") return "approve";
+  return decision.feedback === PLAN_REJECTED_MESSAGE ? "reject" : "request-changes";
 }
 
 // Only the fields the tally reads, so a record from any caret since these fields existed
 // counts.
 const CountedReviewSchema = z.object({
-  status: z.string(),
-  decision: z.object({ feedback: z.string().optional() }).optional(),
+  status: z.enum(["pending", "approved", "rejected", "expired"]) satisfies z.ZodType<ReviewStatus>,
+  decision: z
+    .object({ behavior: z.enum(["allow", "deny"]), feedback: z.string().optional() })
+    .optional(),
   versions: z.array(
-    z.object({ annotations: z.array(z.unknown()), generalComment: z.string().optional() }),
+    z.object({
+      annotations: z.array(z.unknown()),
+      generalComment: z.string().optional(),
+      verdict: z.enum(["approve", "request-changes", "reject"]).optional(),
+    }),
   ),
 });
 
 type CountedReview = z.infer<typeof CountedReviewSchema>;
-type CountedVersion = CountedReview["versions"][number];
 
-/** The versions whose comments reached the agent: each one a revision replaced, and the
- * last once the review is approved or rejected. A pending version's comments are still
- * drafts, and an expired one's were never sent. */
-function decidedVersions({ status, versions }: CountedReview): CountedVersion[] {
-  return status === "approved" || status === "rejected" ? versions : versions.slice(0, -1);
+/** Each version's verdict: its stamp, else inferred for a record that predates the stamp.
+ * A version a revision replaced was sent back; the last one carries the review's decision,
+ * and none while pending or expired. */
+function verdicts({ status, decision, versions }: CountedReview): (Verdict | undefined)[] {
+  return versions.map((v, i) => {
+    if (v.verdict) return v.verdict;
+    if (i < versions.length - 1) return "request-changes";
+    if (status === "approved") return "approve";
+    return status === "rejected" && decision ? verdictOf(decision) : undefined;
+  });
 }
 
-/** Whether Reject decided the review: the deny it sends carries the one fixed message,
- * where Request changes carries the reviewer's own feedback. */
-function isRejected({ decision }: CountedReview): boolean {
-  return decision?.feedback === PLAN_REJECTED_MESSAGE;
-}
-
-function commentCount(version: CountedVersion): number {
-  return version.annotations.length + (version.generalComment ? 1 : 0);
-}
-
-/** Every review file in `dir`, skipping one that doesn't parse as a review as rehydrate
- * does; none when `dir` doesn't exist yet. */
-function readCountedReviews(dir: string): CountedReview[] {
-  let names: string[];
-  try {
-    names = readdirSync(dir);
-  } catch {
-    return [];
-  }
-  return names
-    .filter((name) => name.endsWith(".json"))
-    .flatMap((name) => {
-      const parsed = CountedReviewSchema.safeParse(readJsonFileSync(join(dir, name)));
-      return parsed.success ? [parsed.data] : [];
-    });
-}
-
-/** Tally every review kept in `dir`. */
-// ponytail: reads every file per call (~20 ms for 1,000 reviews); cache tallies by file once
-// histories grow past that.
-export function readReviewStats(dir: string): ReviewStats {
-  const reviews = readCountedReviews(dir);
+function tally(review: CountedReview): ReviewStats {
+  const closed = verdicts(review);
   return {
-    approved: reviews.filter((review) => review.status === "approved").length,
-    rejected: reviews.filter(isRejected).length,
-    revisions: reviews.reduce((n, review) => n + Math.max(review.versions.length - 1, 0), 0),
-    comments: reviews.flatMap(decidedVersions).reduce((n, v) => n + commentCount(v), 0),
+    approved: review.status === "approved" ? 1 : 0,
+    rejected: closed.filter((v) => v === "reject").length,
+    revisions: Math.max(review.versions.length - 1, 0),
+    comments: review.versions.reduce(
+      (n, v, i) =>
+        closed[i] === "approve" || closed[i] === "request-changes"
+          ? n + v.annotations.length + (v.generalComment ? 1 : 0)
+          : n,
+      0,
+    ),
+  };
+}
+
+const NONE: ReviewStats = { approved: 0, rejected: 0, revisions: 0, comments: 0 };
+
+/** One file's tally, or none when it doesn't parse as a review. Silently: this runs on
+ * every menu open, so a log line would repeat on each one. */
+function tallyFile(path: string): ReviewStats {
+  const parsed = CountedReviewSchema.safeParse(readJsonFileSync(path));
+  return parsed.success ? tally(parsed.data) : NONE;
+}
+
+/** The `.json` names in `dir`; none when `dir` doesn't exist yet. */
+function reviewFileNames(dir: string): string[] {
+  try {
+    return readdirSync(dir).filter((name) => name.endsWith(".json"));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw err;
+  }
+}
+
+/** A tally of every review kept in `dir`, re-parsing only the files new or changed since
+ * the last call: decided reviews never change again, so a call costs a stat per file. */
+export function createReviewStats(dir: string): () => ReviewStats {
+  const cache = new Map<string, { mtimeMs: number; size: number; tally: ReviewStats }>();
+  return () => {
+    const names = reviewFileNames(dir);
+    const present = new Set(names);
+    for (const name of cache.keys()) if (!present.has(name)) cache.delete(name);
+
+    const sum = { ...NONE };
+    for (const name of names) {
+      const path = join(dir, name);
+      const { mtimeMs, size } = statSync(path);
+      let entry = cache.get(name);
+      if (!entry || entry.mtimeMs !== mtimeMs || entry.size !== size) {
+        entry = { mtimeMs, size, tally: tallyFile(path) };
+        cache.set(name, entry);
+      }
+      sum.approved += entry.tally.approved;
+      sum.rejected += entry.tally.rejected;
+      sum.revisions += entry.tally.revisions;
+      sum.comments += entry.tally.comments;
+    }
+    return sum;
   };
 }

@@ -7,6 +7,7 @@ package struct LaunchConfig: Equatable, Sendable {
     package let tokenFile: String?
 
     package var pendingURL: URL { baseURL.appending(path: "api/pending") }
+    package var statsURL: URL { baseURL.appending(path: "api/stats") }
 
     /// Reads `--base-url`, `--review-url` and `--token-file`, each followed by its value.
     /// Arguments that don't start with `--` are AppKit's or launchd's, and are left alone.
@@ -37,9 +38,7 @@ package struct LaunchConfig: Equatable, Sendable {
     package func pendingRequest() -> URLRequest { authorizedRequest(pendingURL) }
 
     /// The `GET /api/stats` request the menu sends as it opens.
-    package func statsRequest() -> URLRequest {
-        authorizedRequest(baseURL.appending(path: "api/stats"))
-    }
+    package func statsRequest() -> URLRequest { authorizedRequest(statsURL) }
 
     /// A request to `url`, carrying the daemon token when the token file has one. The file is
     /// re-read on every call, so a token the daemon rotates is picked up.

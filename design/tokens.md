@@ -12,10 +12,10 @@ Every palette is a theme file under `ui/src/lib/themes/<id>.json`; `caret-dark` 
 `ui/src/lib/theme.ts` loads them into `THEMES`, and `paintTheme()` writes the active one
 onto `:root` as custom properties. `ui/src/lib/appearance.ts` decides which palette is
 live. The menubar app repeats caret's two accents as `Accent.caret` in
-`menubar/Sources/CaretMenubarCore/StatsCard.swift`. Both test suites hold it to the theme
-files through `menubar/Tests/CaretMenubarCoreTests/contract.json`.
-`ui/src/styles/palette.generated.css` is the generated pre-JS fallback; never edit it.
-User theme files follow
+`menubar/Sources/CaretMenubarCore/StatsBody.swift`. The Swift `ContractTests` and the bun
+suite `test/core/daemon/menubar-contract.test.ts` hold it to the theme files through
+`menubar/Tests/CaretMenubarCoreTests/contract.json`. `ui/src/styles/palette.generated.css`
+is the generated pre-JS fallback; never edit it. User theme files follow
 [`docs/reference/theme-files.md`](../docs/reference/theme-files.md).
 
 | Role | Tokens |

@@ -13,6 +13,7 @@ import { createKeyedQueue } from "@/lib/keyed-queue.ts";
 import type { SchemeAccents } from "@/lib/types.ts";
 import { ColorSchema } from "@/theme/schema.ts";
 
+/** The body of PUT /api/accent, and the shape of accent.json. */
 export const SchemeAccentsSchema = z.object({
   light: ColorSchema,
   dark: ColorSchema,
@@ -24,6 +25,7 @@ export interface AccentStore {
   write(accents: SchemeAccents): Promise<void>;
 }
 
+/** Writes queue on the file: writeFileAtomic's temp is shared by every write to one path. */
 export function createAccentStore(path: string): AccentStore {
   const writes = createKeyedQueue();
   return {

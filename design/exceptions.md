@@ -72,8 +72,8 @@ the wordmark, the primary action, and the text cursor.
 **caret:** the stats card the menubar app's menu opens on
 (`menubar/Sources/CaretMenubar/StatsCardView.swift`) is Liquid Glass on macOS 26 and
 later. The menu around it is glass there, so a flat card would read as a web page set into
-a system menu. Below macOS 26 it takes the menu's own vibrant material. The card also
-carries a faint wash of the review page's accent, 7% in light and 6% in dark, besides the
-wordmark's `^`. The text never takes the accent, so no theme can lower its contrast.
+a system menu. Below macOS 26 it takes the menu's own vibrant material. The wordmark's `^`
+takes the review page's accent, and the card carries a faint wash of it: 7% in light mode
+and 6% in dark. The text never takes the accent, so no theme can lower its contrast.
 Chosen on 2026-11-15
 ([`decisions.md`](decisions.md#2026-11-15-the-menubar-menu-opens-on-a-stats-card)).

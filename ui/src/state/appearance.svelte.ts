@@ -69,7 +69,7 @@ export interface Appearance {
   readonly scheme: Scheme;
   /** The one-line readout explaining why this palette is the one showing. */
   readonly summary: string;
-  /** Each slot's theme accent, showing or not: what the menubar app's card is tinted with. */
+  /** Each slot's theme accent, whether or not that slot is showing. */
   readonly accents: SchemeAccents;
 
   /** Pin a scheme, or follow the OS. Persists, then repaints as a wipe. */

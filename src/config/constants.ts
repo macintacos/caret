@@ -48,6 +48,9 @@ export const VANITY_HOST = "caret.localhost";
  * Request changes, Reject carries no inline comments — only this message. Lives
  * in @core (not the UI) so both the browser (which sends it) and the dev driver
  * (which recognizes it to simulate the agent waiting) share one source of truth.
+ * The resolve route stamps a Reject verdict by these exact bytes, and the stats reader
+ * matches them in records that predate the verdict: a reword must keep recognizing the
+ * old text.
  */
 export const PLAN_REJECTED_MESSAGE =
   "The user rejected the plan. Wait for the user's next message to decide how to proceed; do not present a plan for review again unless they ask.";
