@@ -542,6 +542,12 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     return Response.json(cfg.configValues());
   }
 
+  // GET /api/pending — how many reviews await a decision, for the menubar app (EXC-2392).
+  // Unlike GET /api/reviews it stamps no UI presence: a poll here is not an open tab.
+  function handlePending(): Response {
+    return Response.json({ pending: store.pendingCount() });
+  }
+
   // GET /api/update — whether the caret this daemon is, is behind (EXC-1205): the
   // install kind, the running version/commit, whether the check is on, and the verdict
   // with the command that would take the upgrade. The thunk reads a verdict the daemon
@@ -1223,6 +1229,7 @@ export function createServer(opts: CreateServerOptions): CaretServer {
     if (method === "GET" && path === "/api/health") return handleHealth();
     if (method === "GET" && path === "/api/diagnostics") return handleDiagnostics();
     if (method === "GET" && path === "/api/config") return handleGetConfig();
+    if (method === "GET" && path === "/api/pending") return handlePending();
     if (method === "GET" && path === "/api/update") return handleUpdate();
     if (method === "GET" && path === "/api/update/changes") return handleUpdateChanges();
     if (method === "GET" && path === "/api/update/notes") return handleReleaseNotes(req);
@@ -1317,7 +1324,10 @@ export function createServer(opts: CreateServerOptions): CaretServer {
       if (!isSafeMethod(method) && isCrossOrigin(req, port, names)) {
         return new Response("cross-origin request blocked", { status: 403 });
       }
-      end = liveness.begin(method);
+      // GET /api/pending skips the bracket: the menubar app polls it every few seconds,
+      // and begin() restarts the idle countdown. Unbracketed means uncounted in flight,
+      // so its handler must stay synchronous.
+      if (!(method === "GET" && path === "/api/pending")) end = liveness.begin(method);
 
       const idRoute = matchIdRoute(path);
       const route = idRoute && { ...idRoute, log: log.child({ reviewId: idRoute.id }) };

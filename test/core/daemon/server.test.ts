@@ -1050,6 +1050,60 @@ test("a session-scoped reviews read leaves hasLiveClient false", async () => {
   expect(r.hasLiveClient).toBe(false);
 });
 
+// EXC-2392: the menubar app's poll. It must not read as an open review tab, and must
+// not restart an on-demand daemon's idle countdown, or the app would keep it up forever.
+
+test("GET /api/pending counts pending reviews; a deny drops one, its revision restores it (EXC-2392)", async () => {
+  await boot();
+  const fetchPending = async () => (await (await fetch(`${base}/api/pending`)).json()) as unknown;
+  expect(await fetchPending()).toEqual({ pending: 0 });
+  const { id } = await newReview({ sessionId: "menubar-a", plan: "# A v1" });
+  await newReview({ sessionId: "menubar-b", plan: "# B" });
+  expect(await fetchPending()).toEqual({ pending: 2 });
+  await resolve(id, { behavior: "deny", feedback: "rework" });
+  expect(await fetchPending()).toEqual({ pending: 1 });
+  const { id: revised } = await newReview({ sessionId: "menubar-a", plan: "# A v2" });
+  expect(revised).toBe(id);
+  expect(await fetchPending()).toEqual({ pending: 2 });
+});
+
+test("polling GET /api/pending does not read as an open review tab (EXC-2392)", async () => {
+  await boot();
+  const res = await fetch(`${base}/api/pending`);
+  expect(res.status).toBe(200);
+  const r = await postReviewRaw();
+  expect(r.hasLiveClient).toBe(false);
+});
+
+test("polling GET /api/pending leaves the idle countdown running (EXC-2392)", async () => {
+  let arms = 0;
+  const sig = shutdownSignal();
+  const timer = manualTimer();
+  await boot({
+    idleMs: 30,
+    onShutdown: sig.onShutdown,
+    setIdleTimer: (fn, ms) => {
+      arms += 1;
+      return timer.setTimer(fn, ms);
+    },
+    clearIdleTimer: timer.clearTimer,
+  });
+  const before = arms;
+  for (let i = 0; i < 3; i++) {
+    expect((await fetch(`${base}/api/pending`)).status).toBe(200);
+  }
+  expect(arms).toBe(before);
+  expect(timer.pending()).toBe(true);
+  timer.fire();
+  await sig.shutdown;
+});
+
+test("GET /api/pending sits behind the Host and token gates (EXC-2392)", async () => {
+  await boot({ tokenFile: join(dir, "daemon.token") });
+  expect((await fetch(`${base}/api/pending`, { headers: { Host: "evil.com" } })).status).toBe(403);
+  expect((await fetch(`${base}/api/pending`)).status).toBe(401);
+});
+
 // EXC-562: the EXC-559 liveness window keyed on the 2s reviews poll is defeated
 // by browser background-tab timer throttling — a hidden tab's poll is slowed to
 // ~1/min, so a backgrounded-but-open tab read as not-live and the hook opened a
@@ -1614,6 +1668,7 @@ describe("read-confidentiality posture", () => {
     const { id } = await newReview();
     const cases: Array<[string, () => Promise<Response>]> = [
       ["GET /api/health", () => fetch(`${base}/api/health`)],
+      ["GET /api/pending", () => fetch(`${base}/api/pending`)],
       ["GET /api/reviews", () => fetch(`${base}/api/reviews`)],
       ["GET /api/reviews/:id", () => fetch(`${base}/api/reviews/${id}`)],
       ["GET /api/reviews/:id/decision", () => fetch(`${base}/api/reviews/${id}/decision`)],
