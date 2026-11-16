@@ -3,12 +3,13 @@
 // Code: the `claude` plugin CLI). caret detects the agents on this machine and asks — on
 // a TTY through the chooser, otherwise by installing into everything it detected (Claude
 // Code when it detected nothing), so CI never hangs on a prompt. The same TTY is then
-// asked whether caret keeps the review UI running; without one, the service is left as
+// asked whether caret keeps the review UI running and, on macOS 13 or later, whether to
+// show caret in the menu bar; without one, the service and the menubar app are left as
 // found. Every install ends by acquiring the rumdl plan formatter: it is part of a
 // working caret, not a step anyone can skip or forget. `--uninstall` is machine-wide — it
-// removes caret from every agent in the registry, since the residency it tears down
-// alongside them is one service for the whole machine. Neither it nor `--dry-run`
-// acquires rumdl.
+// removes caret from every agent in the registry, with the service and the menubar app,
+// since the residency it tears down alongside them is one per machine. Neither it nor
+// `--dry-run` acquires rumdl.
 
 import { runInstallClaudeTarget } from "@/commands/install/claude.ts";
 import {
@@ -17,10 +18,17 @@ import {
   prewarmLocalBuild,
   resolveLocalCheckout,
 } from "@/commands/install/local.ts";
+import {
+  type MenubarChoice,
+  type MenubarStepDeps,
+  reconcileMenubar,
+  uninstallMenubar,
+} from "@/commands/install/menubar.ts";
 import { runInstallOpencodeTarget } from "@/commands/install/opencode.ts";
 import { runInstallPiTarget } from "@/commands/install/pi.ts";
 import {
   type AskedServiceChoice,
+  promptForMenubar,
   promptForServiceChoice,
   promptForTargets,
 } from "@/commands/install/prompt.ts";
@@ -40,11 +48,12 @@ import { createInstallUI, type InstallUI, isTerminal } from "@/commands/install/
 import { errorMessage } from "@/lib/types.ts";
 import { ensureRumdl, RUMDL_VERSION } from "@/plan/rumdl.ts";
 
-/** Injection seam for tests: override detection, the chooser, the service question,
- * TTY-ness, each target runner, and — through ServiceStepDeps — the supervisor, to assert
+/** Injection seam for tests: override detection, the chooser, the service and
+ * menubar questions, TTY-ness, each target runner, and — through ServiceStepDeps and
+ * MenubarStepDeps — the supervisor and the menubar agent, to assert
  * selection and dispatch without touching a real config dir, the `claude` or `pi` CLI,
  * launchd, or a terminal. */
-export interface InstallDeps extends ServiceStepDeps {
+export interface InstallDeps extends ServiceStepDeps, MenubarStepDeps {
   /** A runner returns false to report "this target failed" (it has already said why);
    * returning nothing means it got through. */
   runOpencode?: (opts: TargetOpts, deps: { ui: InstallUI }) => unknown;
@@ -53,6 +62,7 @@ export interface InstallDeps extends ServiceStepDeps {
   detect?: () => InstallTarget[];
   prompt?: (detected: InstallTarget[]) => Promise<InstallTarget[] | null>;
   promptService?: () => Promise<AskedServiceChoice | null>;
+  promptMenubar?: (installed: boolean) => Promise<boolean | null>;
   isInteractive?: () => boolean;
   /** Narrowed to what the step reports — the real `ensureRumdl` satisfies it, and a test
    * can describe an outcome without the config path it never reads. */
@@ -91,10 +101,10 @@ export function installExitCode(outcome: InstallOutcome): number {
   return { ok: 0, refused: 2, failed: 1 }[outcome];
 }
 
-/** Run the install command: resolve the targets (the chooser or detection) and the
- * service choice (the question, or the machine as found), then dispatch to each target.
- * Reports every problem through `ui` and returns how the run ended — never throws, and
- * never writes `process.exitCode` itself. */
+/** Run the install command: resolve the targets (the chooser or detection) and the service
+ * and menubar choices (the questions, or the machine as found), then dispatch to each
+ * target. Reports every problem through `ui` and returns how the run ended — never
+ * throws, and never writes `process.exitCode` itself. */
 export async function runInstallSubcommand(
   opts: {
     uninstall: boolean;
@@ -120,6 +130,8 @@ export async function runInstallSubcommand(
   if (targets === null) return "ok";
   const choice = await selectServiceChoice(opts, deps, ui);
   if (choice === null) return "ok";
+  const menubarChoice = await selectMenubarChoice(opts, deps, ui);
+  if (menubarChoice === null) return "ok";
 
   const runOpencode = deps.runOpencode ?? runInstallOpencodeTarget;
   const runClaude = deps.runClaude ?? runInstallClaudeTarget;
@@ -166,8 +178,10 @@ export async function runInstallSubcommand(
   await rumdlStep(opts, deps, ui);
   // After the target runners, so --refresh's restart, and the root the step names, see the
   // agent caches those runners just updated.
-  if (opts.uninstall) await uninstallService({ dryRun: opts.dryRun }, deps, ui);
-  else
+  if (opts.uninstall) {
+    await uninstallService({ dryRun: opts.dryRun }, deps, ui);
+    await uninstallMenubar({ dryRun: opts.dryRun }, deps, ui);
+  } else {
     await reconcileService(
       {
         dryRun: opts.dryRun,
@@ -178,6 +192,12 @@ export async function runInstallSubcommand(
       deps,
       ui,
     );
+    await reconcileMenubar(
+      { dryRun: opts.dryRun, choice: menubarChoice, localRoot: local?.repoDir },
+      deps,
+      ui,
+    );
+  }
   if (local && !opts.dryRun) await prewarmStep(local.repoDir, deps, ui);
   ui.outro(closingLine(targets, opts, local !== undefined));
   return "ok";
@@ -336,4 +356,21 @@ async function selectServiceChoice(
   const choice = await (deps.promptService ?? promptForServiceChoice)();
   if (choice === null) ui.cancel("Cancelled — nothing was changed.");
   return choice;
+}
+
+/** Ask whether to show the menubar app, under the service question's conditions, and
+ * only where there is an app to show. `null` means the user cancelled. */
+async function selectMenubarChoice(
+  opts: { uninstall: boolean; dryRun: boolean },
+  deps: InstallDeps,
+  ui: InstallUI,
+): Promise<MenubarChoice | null> {
+  const isInteractive = deps.isInteractive ?? isTerminal;
+  if (!deps.menubar || opts.uninstall || opts.dryRun || !isInteractive()) return "as-found";
+  const answer = await (deps.promptMenubar ?? promptForMenubar)(deps.menubar.installed());
+  if (answer === null) {
+    ui.cancel("Cancelled — nothing was changed.");
+    return null;
+  }
+  return answer ? "yes" : "no";
 }

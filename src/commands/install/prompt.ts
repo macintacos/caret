@@ -69,8 +69,22 @@ export function upgradePromptMessage(verdict: StaleVerdict): string {
 /** clack's confirm session, narrowed to the two functions the question needs — the seam
  * a test drives the cancel path through without a terminal. The module satisfies it. */
 export interface ClackConfirm {
-  confirm(opts: { message: string }): Promise<unknown>;
+  confirm(opts: { message: string; initialValue?: boolean }): Promise<unknown>;
   isCancel(value: unknown): boolean;
+}
+
+/** Ask whether the menubar app runs from login, defaulting to yes when it is already
+ * installed. Returns the answer, or null when the user cancels. */
+export async function promptForMenubar(
+  installed: boolean,
+  clack?: ClackConfirm,
+): Promise<boolean | null> {
+  const { confirm, isCancel }: ClackConfirm = clack ?? (await import("@clack/prompts"));
+  const answer = await confirm({
+    message: "Show caret in the menu bar?",
+    initialValue: installed,
+  });
+  return isCancel(answer) ? null : answer === true;
 }
 
 /** Ask whether to take the published caret. Returns the answer, or null when the user

@@ -62,6 +62,12 @@ export function ownedRootsDir(): string {
   return `${stateDir()}/roots`;
 }
 
+/** The menubar app's copies, one dir per bundle build. Not under stateDir()/bin, which
+ * uninstallLauncher() and the launcher's evict() delete whole. */
+export function menubarDir(): string {
+  return `${stateDir()}/menubar`;
+}
+
 /** Absolute `bun`, recorded at service-install time. */
 export function launcherBunFile(): string {
   return `${launcherRecordDir()}/bun-path`;
@@ -152,6 +158,12 @@ export function daemonLogFile(): string {
  * crash before or around the NDJSON sink — so daemon.log stays parseable. */
 export function daemonStderrLogFile(): string {
   return `${logsDir()}/daemon-stderr.log`;
+}
+
+/** The menubar app's stderr, which its LaunchAgent redirects here: launchd discards a
+ * job's stdio otherwise, so a bad-flag exit or a crash would leave no trace. */
+export function menubarStderrLogFile(): string {
+  return `${logsDir()}/menubar-stderr.log`;
 }
 
 /** Single-instance lock file: written atomically on daemon bind and removed on

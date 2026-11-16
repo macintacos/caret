@@ -23,6 +23,7 @@ nav = [
     { "Read a plan" = "how-to/read-a-plan.md" },
     { "Write feedback" = "how-to/write-feedback.md" },
     { "Get notified about plans" = "how-to/notifications.md" },
+    { "Show caret in the menu bar" = "how-to/menubar.md" },
     { "Make your own theme" = "how-to/make-a-theme.md" },
     { "Run the background service" = "how-to/background-service.md" },
     { "Open caret from another device" = "how-to/remote-access.md" },

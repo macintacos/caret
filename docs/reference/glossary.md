@@ -56,6 +56,12 @@ you can add when you approve.
 A file the plan cites, opened beside the plan. Older pages sometimes call it a preview,
 but on this site Preview means the rendered plan.
 
+## Menubar app
+
+The macOS app that puts a carrot in the menu bar. The carrot colours in while a plan waits
+for review, and its menu opens the review page. `caret install` adds it on macOS 13 or
+later. See [Show caret in the menu bar](../how-to/menubar.md).
+
 ## Outline
 
 The list of a plan's headings, shown beside it so you can jump between sections.

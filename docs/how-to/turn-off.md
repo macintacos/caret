@@ -32,6 +32,12 @@ it, the records the launcher reads, and caret's own copies under
 `~/.local/state/caret/roots/`. It keeps your reviews. The launcher removes the same things
 itself once it finds no caret installed anywhere, its own copies included.
 
+`--uninstall` also removes the [menubar app](menubar.md) and the macOS file that starts it
+at login. When the launcher cleans up on its own, it keeps the menubar app.
+
+To remove only the menubar app, run `caret install` and answer **No** to its question (see
+[Show caret in the menu bar](menubar.md#remove-the-app)).
+
 ## If macOS Login Items shows caret
 
 !!! warning

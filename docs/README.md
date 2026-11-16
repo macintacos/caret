@@ -15,6 +15,7 @@ Find the row that matches what you came here to do, then follow the link.
 | Understand how caret reformats a plan before you read it | [Plan formatting](explanation/plan-formatting.md) |
 | Write or check a theme file | [Theme file format](reference/theme-files.md) |
 | Turn on desktop notifications, or work out why none appear | [Get notified about plans § Turn on desktop notifications](how-to/notifications.md#turn-on-desktop-notifications) |
+| See from the macOS menu bar whether a plan is waiting for review | [Show caret in the menu bar](how-to/menubar.md) |
 | Turn caret's sounds off | [Get notified about plans § Turn the sound off or down](how-to/notifications.md#turn-the-sound-off-or-down) |
 | Switch a plan between its source and a rendered preview | [Read a plan § Switch between the preview and the source view](how-to/read-a-plan.md#switch-between-the-preview-and-the-source-view) |
 | Tell which plans arrived while you were reading another one | [Get notified about plans § Find plans you have not read](how-to/notifications.md#find-plans-you-have-not-read) |

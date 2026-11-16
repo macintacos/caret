@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { fakeLaunchctl } from "@test/support/launchctl.ts";
 import { fakeServiceConfig } from "@test/support/service-config.ts";
 import { buildLaunchdPlist } from "@/service/launchd.ts";
 import { createLaunchdManager, type LaunchctlResult } from "@/service/launchd-manager.ts";
@@ -27,19 +28,6 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
-
-/** A launchctl that records every argv it is handed and answers from `reply`. */
-function fakeLaunchctl(reply: (args: string[]) => LaunchctlResult = () => OK) {
-  const calls: string[][] = [];
-  return {
-    calls,
-    subcommands: () => calls.map((args) => args[0]),
-    launchctl: async (args: string[]) => {
-      calls.push(args);
-      return reply(args);
-    },
-  };
-}
 
 function manager(fake: ReturnType<typeof fakeLaunchctl>) {
   return createLaunchdManager({ launchAgentsDir: dir, uid: UID, launchctl: fake.launchctl });
