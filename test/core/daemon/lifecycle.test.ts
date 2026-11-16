@@ -1508,6 +1508,23 @@ test("retireDaemon treats a legacy lock (no stateDir) as same-world", async () =
   expect(kills).toBe(1);
 });
 
+test("isPidAlive reports a pid of 0 or below as dead", () => {
+  expect(isPidAlive(0)).toBe(false);
+  expect(isPidAlive(-1)).toBe(false);
+});
+
+test("retireDaemon does not SIGTERM a lock naming pid 0", async () => {
+  let kills = 0;
+  const ok = await retireDaemon(
+    "http://127.0.0.1:1",
+    { pid: 0, port: 1, stateDir: "/my/world" },
+    "/my/world",
+    () => kills++,
+  );
+  expect(ok).toBe(false);
+  expect(kills).toBe(0);
+});
+
 // ---- openDaemonStderr (EXC-1068) ----
 
 test("openDaemonStderr creates daemon-stderr.log at 0600 inside logs/", () => {
