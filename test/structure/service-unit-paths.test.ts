@@ -12,8 +12,10 @@ import {
   launcherPinnedRootFile,
   launcherRecordDir,
   launcherServiceFile,
+  menubarDir,
   ownedRootsDir,
 } from "@/config/paths.ts";
+import { MENUBAR_LABEL } from "@/service/menubar-agent.ts";
 
 const LAUNCHER = readFileSync(join(import.meta.dir, "..", "..", "bin", "caret-launcher"), "utf8");
 
@@ -39,6 +41,11 @@ test("bin/caret-launcher's self-eviction removes what uninstallLauncher removes"
   expect(LAUNCHER).toContain(`\${state:?}/${basename(dirname(launcherPath()))}`);
   expect(LAUNCHER).toContain(`\${state:?}/${basename(launcherRecordDir())}`);
   expect(LAUNCHER).toContain(`\${state:?}/${basename(ownedRootsDir())}`);
+});
+
+test("bin/caret-launcher's self-eviction removes what removeMenubar removes", () => {
+  expect(LAUNCHER).toContain(MENUBAR_LABEL);
+  expect(LAUNCHER).toContain(`\${state:?}/${basename(menubarDir())}`);
 });
 
 test("bin/caret-launcher scans the owned roots caret install stages", () => {

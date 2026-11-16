@@ -309,6 +309,21 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
   [ ! -e "$home/.local/state/caret/roots" ]
 }
 
+@test "no caret anywhere evicts the menubar app too" {
+  seed_service
+  cat >"$home/bin/launchctl" <<STUB
+#!/bin/sh
+echo "\$*" >>"$home/launchctl.log"
+STUB
+  local plist="$home/Library/LaunchAgents/dev.excessive.caret.menubar.plist"
+  mkdir -p "$home/Library/LaunchAgents" "$home/.local/state/caret/menubar/build"
+  touch "$plist"
+  run -0 launcher
+  [ ! -e "$plist" ]
+  [ ! -e "$home/.local/state/caret/menubar" ]
+  grep -qx "bootout gui/$(id -u)/dev.excessive.caret.menubar" "$home/launchctl.log"
+}
+
 @test "an owned root beats a stale Claude root once OpenCode's cache is empty" {
   stub_bun
   seed_caret "$home/.claude/plugins/cache/caret/caret/1.0.2" 1.0.2
