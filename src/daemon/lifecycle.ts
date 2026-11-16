@@ -619,7 +619,8 @@ function rmQuiet(path: string): void {
 
 /** Liveness probe via signal 0 (kills nothing). ESRCH ⇒ dead; EPERM ⇒ alive but
  * owned by another user (treated as alive — we must not assume it's an orphan).
- * A pid ≤ 0 addresses a process group, never a daemon, so it reads as dead. */
+ * A pid ≤ 0 makes kill(2) target a group (or, at -1, every process), never one
+ * daemon, so it reads as dead. */
 export function isPidAlive(pid: number): boolean {
   if (pid <= 0) return false;
   try {

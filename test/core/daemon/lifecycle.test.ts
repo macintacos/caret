@@ -1469,8 +1469,8 @@ test("prodEnsureDeps is pinned only while the pin names a runnable caret", async
 // ---- retireDaemon: SIGTERM fallback is gated on the lock's world (EXC-461) ----
 
 // http://127.0.0.1:1 — nothing listens there, so the /api/retire attempt fails
-// fast and the SIGTERM fallback is what's under test. The injected kill spy
-// keeps the test from signaling anything real; pid is our own (always alive).
+// fast and the SIGTERM fallback is what's under test. The injected kill spy keeps
+// every case from signaling anything real — for pid 0, the runner's own process group.
 
 test("retireDaemon does not SIGTERM a foreign world's lock pid", async () => {
   let kills = 0;
