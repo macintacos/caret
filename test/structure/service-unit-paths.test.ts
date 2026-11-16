@@ -1,8 +1,7 @@
-// Each unit directory is spelled twice: the platform manager's default in TypeScript
-// writes the unit there, and evict() in bin/caret-launcher deletes it from there in bash.
-// Let them drift and a self-evicting launcher stops removing the file the manager wrote,
-// leaving a unit the supervisor loads at every login. Only this suite makes the shell half
-// falsifiable.
+// Every path and label evict() in bin/caret-launcher spells in bash, TypeScript derives on
+// its own: unit directories, records, roots, the menubar app's label and directory. Let
+// them drift and a self-evicting launcher stops removing what caret wrote, leaving a unit
+// or agent that loads at every login. Only this suite makes the shell half falsifiable.
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -12,8 +11,10 @@ import {
   launcherPinnedRootFile,
   launcherRecordDir,
   launcherServiceFile,
+  menubarDir,
   ownedRootsDir,
 } from "@/config/paths.ts";
+import { MENUBAR_LABEL } from "@/service/menubar-agent.ts";
 
 const LAUNCHER = readFileSync(join(import.meta.dir, "..", "..", "bin", "caret-launcher"), "utf8");
 
@@ -39,6 +40,11 @@ test("bin/caret-launcher's self-eviction removes what uninstallLauncher removes"
   expect(LAUNCHER).toContain(`\${state:?}/${basename(dirname(launcherPath()))}`);
   expect(LAUNCHER).toContain(`\${state:?}/${basename(launcherRecordDir())}`);
   expect(LAUNCHER).toContain(`\${state:?}/${basename(ownedRootsDir())}`);
+});
+
+test("bin/caret-launcher's self-eviction removes what removeMenubar removes", () => {
+  expect(LAUNCHER).toContain(MENUBAR_LABEL);
+  expect(LAUNCHER).toContain(`\${state:?}/${basename(menubarDir())}`);
 });
 
 test("bin/caret-launcher scans the owned roots caret install stages", () => {

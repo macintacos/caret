@@ -207,16 +207,29 @@ stop_agent() {
   if [ -n "$service" ]; then launchctl bootout "gui/$(id -u)/$service" || true; fi
 }
 
-# caret cannot outlive its own install: with no caret left anywhere, the launcher
-# tears its service down and deletes itself. Returns non-zero without touching
-# anything when there is no `service` record — nothing here installed a
-# supervisor, so this launcher cannot know what still names it, and deleting
-# itself would leave whatever does respawning on ENOENT. Deleting bin/, the
-# records and caret's own roots leaves review state for a reinstall.
+# caret cannot outlive its own install: with no caret left anywhere, the
+# launcher tears its service and the menubar app down and deletes itself.
+# Returns non-zero without touching anything when there is no `service` record —
+# nothing here installed a supervisor, so this launcher cannot know what still
+# names it, and deleting itself would leave whatever does respawning on ENOENT.
+# Deleting bin/, the records and caret's own roots leaves review state for a
+# reinstall.
 evict() {
   local service unit
+  # Keep in sync with MENUBAR_LABEL (src/service/menubar-agent.ts).
+  local menubar_label=dev.excessive.caret.menubar
+  local menubar_plist="$HOME/Library/LaunchAgents/$menubar_label.plist"
   service="$(read_record "$records/service" || true)"
   [ -n "$service" ] || return 1
+  # Gated on the plist, as MenubarAgent.installed() is, and run before the service
+  # teardown below, which stops this launcher's own job and may end this script.
+  if [ -e "$menubar_plist" ]; then
+    printf 'caret-launcher: removing the menubar app: %s and %s/menubar.\n' \
+      "$menubar_plist" "$state" >&2
+    launchctl bootout "gui/$(id -u)/$menubar_label" || true
+    rm -f "$menubar_plist"
+    rm -rf "${state:?}/menubar"
+  fi
   if [ "$(uname)" = Darwin ]; then
     launchctl bootout "gui/$(id -u)/$service" || true
     unit="$HOME/Library/LaunchAgents/$service.plist"

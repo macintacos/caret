@@ -75,11 +75,15 @@ stub_bun() {
   printf '%s\n' "$home/bin/bun" >"$home/.local/state/caret/launcher/bun-path"
 }
 
-# launchctl / systemctl the launcher can call without touching the real machine.
+# launchctl / systemctl the launcher can call without touching the real machine. Both
+# append their argv to one log, in call order, so a case can assert the sequence.
 stub_service() {
   local tool
   for tool in launchctl systemctl; do
-    printf '#!/bin/sh\nexit 0\n' >"$home/bin/$tool"
+    cat >"$home/bin/$tool" <<'STUB'
+#!/bin/sh
+printf '%s\n' "${0##*/} $*" >>"$HOME/service-calls.log"
+STUB
     chmod +x "$home/bin/$tool"
   done
 }
@@ -307,6 +311,18 @@ launcher_supervised() { CARET_SUPERVISED=1 launcher "$@"; }
   [ ! -e "$home/.local/state/caret/bin" ]
   [ ! -e "$home/.local/state/caret/launcher" ]
   [ ! -e "$home/.local/state/caret/roots" ]
+  [[ "$output" != *"menubar app"* ]]
+}
+
+@test "no caret anywhere evicts the menubar app too" {
+  seed_service
+  local plist="$home/Library/LaunchAgents/dev.excessive.caret.menubar.plist"
+  mkdir -p "$home/Library/LaunchAgents" "$home/.local/state/caret/menubar/build"
+  touch "$plist"
+  run -0 launcher
+  [ ! -e "$plist" ]
+  [ ! -e "$home/.local/state/caret/menubar" ]
+  [ "$(sed -n 1p "$home/service-calls.log")" = "launchctl bootout gui/$(id -u)/dev.excessive.caret.menubar" ]
 }
 
 @test "an owned root beats a stale Claude root once OpenCode's cache is empty" {
