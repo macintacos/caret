@@ -1469,8 +1469,8 @@ test("prodEnsureDeps is pinned only while the pin names a runnable caret", async
 // ---- retireDaemon: SIGTERM fallback is gated on the lock's world (EXC-461) ----
 
 // http://127.0.0.1:1 — nothing listens there, so the /api/retire attempt fails
-// fast and the SIGTERM fallback is what's under test. The injected kill spy
-// keeps the test from signaling anything real; pid is our own (always alive).
+// fast and the SIGTERM fallback is what's under test. The injected kill spy keeps
+// every case from signaling anything real — for pid 0, the runner's own process group.
 
 test("retireDaemon does not SIGTERM a foreign world's lock pid", async () => {
   let kills = 0;
@@ -1506,6 +1506,23 @@ test("retireDaemon treats a legacy lock (no stateDir) as same-world", async () =
   );
   expect(ok).toBe(true);
   expect(kills).toBe(1);
+});
+
+test("isPidAlive reports a pid of 0 or below as dead", () => {
+  expect(isPidAlive(0)).toBe(false);
+  expect(isPidAlive(-1)).toBe(false);
+});
+
+test("retireDaemon does not SIGTERM a lock naming pid 0", async () => {
+  let kills = 0;
+  const ok = await retireDaemon(
+    "http://127.0.0.1:1",
+    { pid: 0, port: 1, stateDir: "/my/world" },
+    "/my/world",
+    () => kills++,
+  );
+  expect(ok).toBe(false);
+  expect(kills).toBe(0);
 });
 
 // ---- openDaemonStderr (EXC-1068) ----
