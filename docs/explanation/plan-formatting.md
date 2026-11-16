@@ -18,7 +18,7 @@ therefore run wider than 90 columns and scroll sideways on the review page.
 
 caret formats plans with [rumdl](https://github.com/rvben/rumdl), its
 [plan formatter](../reference/glossary.md#plan-formatter). You do not install rumdl
-yourself: caret downloads its own copy, pinned to v0.3.2, into
+yourself: caret downloads its own copy, pinned to v0.3.4, into
 `$XDG_STATE_HOME/caret/rumdl/` (`~/.local/state/caret/rumdl/` by default) and checks its
 checksum. Formatting behaves the same however you installed caret.
 
