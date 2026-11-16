@@ -35,3 +35,14 @@ func pendingRequestNoToken(contents: String?) throws {
     defer { try? FileManager.default.removeItem(atPath: path) }
     #expect(try authorization(tokenFile: path) == nil)
 }
+
+@Test("the stats request asks the base URL's /api/stats, with the same token")
+func statsRequest() throws {
+    let path = try tokenFile("abc123\n")
+    defer { try? FileManager.default.removeItem(atPath: path) }
+    let request = try LaunchConfig(arguments: [
+        "--base-url", "http://127.0.0.1:4000", "--token-file", path,
+    ]).statsRequest()
+    #expect(request.url?.absoluteString == "http://127.0.0.1:4000/api/stats")
+    #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer abc123")
+}

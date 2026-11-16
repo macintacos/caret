@@ -33,7 +33,7 @@
 
 import { fakeDiagnostics } from "@test/support/diagnostics.ts";
 import { NEVER_IDLE_MS } from "@/config/constants.ts";
-import { configFile, reviewsDir } from "@/config/paths.ts";
+import { accentFile, configFile, reviewsDir } from "@/config/paths.ts";
 import { configValuesOf, createSettings } from "@/config/settings.ts";
 import { createServer } from "@/daemon/server.ts";
 import { createReleaseNotes } from "@/daemon/update-changes.ts";
@@ -42,7 +42,9 @@ import { buildHash } from "@/lib/build-id.ts";
 import { createDaemonLogger } from "@/lib/log.ts";
 import type { BuildKind, UpdateChanges, UpdateStatus } from "@/lib/types.ts";
 import type { GitHubRelease } from "@/lib/upstream.ts";
+import { createReviewStats } from "@/review/stats.ts";
 import { createStore } from "@/review/store.ts";
+import { createAccentStore } from "@/theme/accent.ts";
 import { loadUiAssets } from "@/ui/assets.ts";
 
 // Refuse to run without an isolated state dir — never fall back to the real
@@ -177,6 +179,10 @@ const server = createServer({
       }
     : {}),
   diagnostics: fakeDiagnostics,
+  // Wired for the reason updateReport is: App reports its accents with PUT /api/accent on
+  // every load. GET /api/stats rides along so a spec can read the report back.
+  accentStore: createAccentStore(accentFile()),
+  reviewStats: createReviewStats(reviewsDir()),
   log,
 });
 

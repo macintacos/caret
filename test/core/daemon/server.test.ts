@@ -12,7 +12,7 @@ import { manualTimer } from "@test/support/manual-timer.ts";
 import { type RecordedEmit, recordingLog } from "@test/support/recording-log.ts";
 import { expectNeverLogsBody } from "@test/support/redaction.ts";
 import { themeFileText } from "@test/support/theme.ts";
-import { VANITY_HOST } from "@/config/constants.ts";
+import { PLAN_REJECTED_MESSAGE, VANITY_HOST } from "@/config/constants.ts";
 import { configValuesOf, loadSettings } from "@/config/settings.ts";
 import {
   isClientLive,
@@ -36,6 +36,7 @@ import { formatPlanMarkdown } from "@/plan/markdown.ts";
 import type { Store } from "@/review/store.ts";
 import { routeIncomingPlan } from "@/review/threading.ts";
 import { SUPERVISED_VAR } from "@/service/manager.ts";
+import { createAccentStore } from "@/theme/accent.ts";
 import { MAX_THEME_FILE_BYTES, THEME_FILE_TOO_LARGE } from "@/theme/load.ts";
 import { parseThemeFile } from "@/theme/schema.ts";
 
@@ -1050,8 +1051,11 @@ test("a session-scoped reviews read leaves hasLiveClient false", async () => {
   expect(r.hasLiveClient).toBe(false);
 });
 
-// EXC-2392: the menubar app's poll. It must not read as an open review tab, and must
-// not restart an on-demand daemon's idle countdown, or the app would keep it up forever.
+// The menubar app's reads: its poll of /api/pending and its menu's /api/stats. Neither may
+// read as an open review tab or restart an on-demand daemon's idle countdown, or the app
+// would keep it up forever.
+const MENUBAR_READS = ["/api/pending", "/api/stats"];
+const servedStats = () => ({ approved: 3, rejected: 1, revisions: 4, comments: 7 });
 
 test("GET /api/pending counts pending reviews; a deny drops one, its revision restores it (EXC-2392)", async () => {
   await boot();
@@ -1067,15 +1071,79 @@ test("GET /api/pending counts pending reviews; a deny drops one, its revision re
   expect(await fetchPending()).toEqual({ pending: 2 });
 });
 
-test("polling GET /api/pending does not read as an open review tab (EXC-2392)", async () => {
+test("GET /api/stats answers with the running version and the review tally", async () => {
+  await boot({ reviewStats: servedStats });
+  const res = await fetch(`${base}/api/stats`);
+  expect(await res.json()).toEqual({
+    version: VERSION,
+    approved: 3,
+    rejected: 1,
+    revisions: 4,
+    comments: 7,
+  });
+});
+
+test("GET /api/stats is 404 when unwired", async () => {
   await boot();
-  const res = await fetch(`${base}/api/pending`);
+  expect((await fetch(`${base}/api/stats`)).status).toBe(404);
+});
+
+const dracula = { light: "#8839ef", dark: "#bd93f9" };
+const putAccent = (body: unknown) =>
+  fetch(`${base}/api/accent`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+const statsAccent = async () =>
+  ((await (await fetch(`${base}/api/stats`)).json()) as { accent?: unknown }).accent;
+
+test("GET /api/stats serves the accents the review page last reported", async () => {
+  await boot({
+    reviewStats: servedStats,
+    accentStore: createAccentStore(join(dir, "accent.json")),
+  });
+  expect(await statsAccent()).toBeUndefined();
+  expect((await putAccent(dracula)).status).toBe(204);
+  expect(await statsAccent()).toEqual(dracula);
+});
+
+test("a reported accent survives a daemon restart", async () => {
+  const file = join(dir, "accent.json");
+  await boot({ accentStore: createAccentStore(file) });
+  await putAccent(dracula);
+  d.stop();
+  await boot({ reviewStats: servedStats, accentStore: createAccentStore(file) });
+  expect(await statsAccent()).toEqual(dracula);
+});
+
+test.each([{ light: "rebeccapurple", dark: "#bd93f9" }, { light: "#8839ef" }])(
+  "PUT /api/accent refuses %j and keeps the last report",
+  async (body) => {
+    await boot({
+      reviewStats: servedStats,
+      accentStore: createAccentStore(join(dir, "accent.json")),
+    });
+    await putAccent({ light: "#c2490d", dark: "#ff8f3d" });
+    expect((await putAccent(body)).status).toBe(400);
+    expect(await statsAccent()).toEqual({ light: "#c2490d", dark: "#ff8f3d" });
+  },
+);
+
+test("PUT /api/accent is 404 when unwired", async () => {
+  await boot();
+  expect((await putAccent(dracula)).status).toBe(404);
+});
+
+test.each(MENUBAR_READS)("reading %s does not read as an open review tab", async (path) => {
+  await boot({ reviewStats: servedStats });
+  const res = await fetch(`${base}${path}`);
   expect(res.status).toBe(200);
   const r = await postReviewRaw();
   expect(r.hasLiveClient).toBe(false);
 });
 
-test("polling GET /api/pending leaves the idle countdown running (EXC-2392)", async () => {
+test.each(MENUBAR_READS)("reading %s leaves the idle countdown running", async (path) => {
   let arms = 0;
   const sig = shutdownSignal();
   const timer = manualTimer();
@@ -1087,10 +1155,11 @@ test("polling GET /api/pending leaves the idle countdown running (EXC-2392)", as
       return timer.setTimer(fn, ms);
     },
     clearIdleTimer: timer.clearTimer,
+    reviewStats: servedStats,
   });
   const before = arms;
   for (let i = 0; i < 3; i++) {
-    expect((await fetch(`${base}/api/pending`)).status).toBe(200);
+    expect((await fetch(`${base}${path}`)).status).toBe(200);
   }
   expect(arms).toBe(before);
   expect(timer.pending()).toBe(true);
@@ -1098,10 +1167,10 @@ test("polling GET /api/pending leaves the idle countdown running (EXC-2392)", as
   await sig.shutdown;
 });
 
-test("GET /api/pending sits behind the Host and token gates (EXC-2392)", async () => {
-  await boot({ tokenFile: join(dir, "daemon.token") });
-  expect((await fetch(`${base}/api/pending`, { headers: { Host: "evil.com" } })).status).toBe(403);
-  expect((await fetch(`${base}/api/pending`)).status).toBe(401);
+test.each(MENUBAR_READS)("%s sits behind the Host and token gates", async (path) => {
+  await boot({ tokenFile: join(dir, "daemon.token"), reviewStats: servedStats });
+  expect((await fetch(`${base}${path}`, { headers: { Host: "evil.com" } })).status).toBe(403);
+  expect((await fetch(`${base}${path}`)).status).toBe(401);
 });
 
 // EXC-562: the EXC-559 liveness window keyed on the 2s reviews poll is defeated
@@ -1512,6 +1581,28 @@ test("approve records no general comment on the version", async () => {
   expect((await store.persisted(id))?.versions.at(-1)?.generalComment).toBeUndefined();
 });
 
+test("an approval whose notes carried the general comment keeps it on the version", async () => {
+  await boot();
+  const { id } = await newReview();
+  await putDraft(id, { generalCommentDraft: "watch the migration" });
+  await resolve(id, { behavior: "allow", feedback: "Reviewer notes:\n\nwatch the migration" });
+  expect((await store.persisted(id))?.versions.at(-1)?.generalComment).toBe("watch the migration");
+});
+
+test("resolving stamps the version with the reviewer's verdict", async () => {
+  await boot();
+  const verdictAfter = async (body: Record<string, unknown>) => {
+    const { id } = await newReview();
+    await resolve(id, body);
+    return (await store.persisted(id))?.versions.at(-1)?.verdict;
+  };
+  expect(await verdictAfter({ behavior: "allow" })).toBe("approve");
+  expect(await verdictAfter({ behavior: "deny", feedback: "split step 2" })).toBe(
+    "request-changes",
+  );
+  expect(await verdictAfter({ behavior: "deny", feedback: PLAN_REJECTED_MESSAGE })).toBe("reject");
+});
+
 test("cross-origin mutating requests are blocked (CSRF guard)", async () => {
   await boot();
   const foreign = await fetch(`${base}/api/reviews`, {
@@ -1660,6 +1751,8 @@ describe("read-confidentiality posture", () => {
         status: { kind: "current" as const },
       }),
       updateChanges: async () => ({ kind: "commits" as const, commits: [], more: 0 }),
+      reviewStats: servedStats,
+      accentStore: createAccentStore(join(dir, "accent.json")),
       assets: fakeAssets({
         "/index.html": '<!doctype html><html><body><div id="app"></div></body></html>',
         "/assets/index-AB12.js": "export const x = 1;\n",
@@ -1669,6 +1762,16 @@ describe("read-confidentiality posture", () => {
     const cases: Array<[string, () => Promise<Response>]> = [
       ["GET /api/health", () => fetch(`${base}/api/health`)],
       ["GET /api/pending", () => fetch(`${base}/api/pending`)],
+      ["GET /api/stats", () => fetch(`${base}/api/stats`)],
+      [
+        "PUT /api/accent",
+        () =>
+          fetch(`${base}/api/accent`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ light: "#c2490d", dark: "#ff8f3d" }),
+          }),
+      ],
       ["GET /api/reviews", () => fetch(`${base}/api/reviews`)],
       ["GET /api/reviews/:id", () => fetch(`${base}/api/reviews/${id}`)],
       ["GET /api/reviews/:id/decision", () => fetch(`${base}/api/reviews/${id}/decision`)],

@@ -130,6 +130,25 @@ Open items first, then the log, newest first.
   paints the waiting plan as an inverse `warning` fill with a 🥕 emoji. Either align it
   with the 2026-11-05 OpenCode decision or record why the two hosts differ.
 
+## 2026-11-15: the menubar menu opens on a stats card
+
+- **Four counts in two pairs.** Plans approved and plans rejected, then revisions and
+  comments. The user wanted more than two numbers without a crowded card. A 2×2 of figures
+  over labels stays calm at four, where four rows of figure and label read as a ledger. No
+  tile sits behind a figure, so the grid stays one card.
+- **Counted from the review files on disk,** not the daemon's memory, so an on-demand
+  daemon's idle exit can't reset them. "Rejected" counts only the review page's
+  **Reject**, and a Reject stays counted when the agent later sends another plan. Request
+  changes sends a plan back, and its next version counts as a revision. Comments count
+  only on versions approved or sent back with Request changes, since a Reject sends none.
+- **The card replaces the "caret didn't answer the app" line** and keeps its meaning,
+  decided by the same rule that greys the carrot.
+- **Liquid Glass, against the direction's "no glass"** (see
+  [`exceptions.md`](exceptions.md#the-menubar-card)), because the menu around the card is
+  glass.
+- **Washed with the review page's theme, faintly.** The `^` and a 6–7% wash take the
+  accent; the text never does.
+
 ## 2026-11-15: the menubar carrot fades between grey and coloured
 
 - **A state transition, both ways.** The carrot fades between grey and coloured on

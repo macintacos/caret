@@ -131,8 +131,15 @@ export interface PlanVersion {
    * true, a feedback line reference needs no quote to land. Optional because
    * pre-existing on-disk versions predate the field; absent reads as false. */
   agentCopyMatches?: boolean;
+  /** The reviewer's decision that closed this version, stamped when it resolves. Absent
+   * on a version no decision closed, and on every record that predates the field. */
+  verdict?: Verdict;
   createdAt: number;
 }
+
+/** The review page's three decisions. Not `ReviewStatus`, whose `"rejected"` covers both
+ * denies. */
+export type Verdict = "approve" | "request-changes" | "reject";
 
 /** The decision recorded when a review resolves. */
 export interface Decision {
@@ -549,6 +556,13 @@ export interface ThemeUpload {
   /** Files that also declare the id and could not be removed. While they remain, the folder
    * loads neither the saved theme nor them. */
   unremoved: string[];
+}
+
+/** The accent of the theme in each scheme's slot, as the review page shows them: the body
+ * of PUT /api/accent, and the menubar card's tint in GET /api/stats. */
+export interface SchemeAccents {
+  light: string;
+  dark: string;
 }
 
 /** POST /api/themes 400, 409, 413 or 500: why nothing was saved, one line per problem. */

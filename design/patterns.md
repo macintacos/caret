@@ -669,8 +669,8 @@ specific code areas live in [`docs/agents/`](../docs/agents/).
   arriving stands out more than the last plan leaving. The fade runs between the images as
   the system draws them, so the grey carrot keeps the tint the menu bar gives a template
   image. The carrot changes at once in three cases: the app's first status check after
-  launch, a change between its two grey states (nothing waiting, and the menu's "caret
-  didn't answer the app" line showing), and every change under Reduce motion.
+  launch, a change between its two grey states (nothing waiting, and caret not answering
+  the app), and every change under Reduce motion.
 - Reduced motion stops every animation. Where a timer swaps content (the carrot fact), the
   timer stops too. No key travels under it: `--key-rise` and `--key-sink` are 0.
 
@@ -813,6 +813,38 @@ specific code areas live in [`docs/agents/`](../docs/agents/).
   open it again to retry."
 - **Focus on open:** a modal that opens on its own, such as Onboarding or What's new,
   hands focus to its panel.
+
+## The menubar app
+
+The carrot in the macOS menu bar and the menu it opens (`menubar/`). It is native chrome:
+the system's fonts, label colours and materials, with caret's mark kept to the `^` and a
+faint wash.
+
+- **The stats card** is the menu's first item. It shows `^caret` and the running version
+  over four counts in two pairs: plans approved and plans rejected, then revisions and
+  comments. Each count is a figure over its label, with no tile behind it, so the pairs
+  read as decisions above feedback.
+- **Type:** the wordmark at the menu's text size, and each figure two points larger,
+  semibold, with monospaced digits. Labels are 11 pt, and the version is 11 pt in the
+  system monospaced face. All text takes the system's primary label colour, because the
+  secondary one falls under 4.5:1 on the vibrant and solid backgrounds, so hierarchy comes
+  from size and weight.
+- **One size in every state**, so the menu never jumps. A daemon that answers shows its
+  counts. When none answers, or a daemon older than `GET /api/stats`, each count shows a
+  dash and the app's own version stands in. Any other answer shows "caret didn't answer
+  the app" where the counts sit, by the same rule that greys the carrot.
+- **Background:** Liquid Glass (macOS 26's translucent, light-refracting material) on
+  macOS 26 and later, the menu's own vibrant material (the blurred backdrop earlier macOS
+  menus draw) below that, and an opaque fill under Reduce Transparency (see
+  [`exceptions.md`](exceptions.md#the-menubar-card)). The card rounds at 10 pt, as
+  `--radius-lg` does, and insets 5 pt from the menu's edge, as the menu's row highlight
+  does. Glass draws its own edge. The other backgrounds take a hairline in the separator
+  colour, and Increase Contrast widens every edge to 1 pt.
+- **Wash:** the `^` and a faint wash take the accent of the review page's light or dark
+  theme slot, whichever the menu's appearance calls for. Until the page reports one, the
+  card uses caret's own accent. While no caret answers, it keeps the last accent it had.
+- **VoiceOver** reads the card as one sentence, for example "caret 1.10.1. 12 plans
+  approved, 1 plan rejected, 4 revisions, 30 comments."
 
 ## Terminal output
 

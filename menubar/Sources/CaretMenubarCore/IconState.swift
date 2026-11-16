@@ -1,6 +1,6 @@
 import Foundation
 
-/// What one poll of `GET /api/pending` came back with.
+/// What one request to the daemon came back with.
 package enum PollOutcome: Equatable, Sendable {
     /// The daemon answered over HTTP.
     case response(status: Int, body: Data)
@@ -14,7 +14,7 @@ package enum IconState: Equatable, Sendable {
     case pending
     /// Nothing to review, or no daemon to ask: the grey carrot.
     case idle
-    /// The daemon answered, but not with a count: the grey carrot, plus a menu line saying so.
+    /// The daemon answered, but not with a count: the grey carrot.
     case unanswered
 }
 

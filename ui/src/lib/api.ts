@@ -17,6 +17,7 @@ import type {
   PersistedScratch,
   ReleaseNote,
   ResolveBody,
+  SchemeAccents,
   SkillDescriptionResponse,
   SkillRef,
   ThemeUpload,
@@ -397,6 +398,23 @@ export async function putDraft(
       reason: String(err),
     });
     throw err;
+  }
+}
+
+/** Tell the daemon the accent of each scheme slot's theme, for the menubar app's card.
+ * Non-essential: a failed report only leaves the card's tint stale, so failure is
+ * swallowed rather than thrown. `debug`, not this file's usual `warn`: the failure it
+ * hides is a 500 from an unwritable state directory, which costs the review nothing. */
+export async function reportAccent(accents: SchemeAccents): Promise<void> {
+  try {
+    const res = await fetch("/api/accent", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(accents),
+    });
+    if (!res.ok) throw new HttpError(res.status);
+  } catch (err) {
+    uiLog.debug("ui", "accent report failed", { reason: String(err) });
   }
 }
 

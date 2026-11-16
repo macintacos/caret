@@ -340,6 +340,21 @@ test("picking a vendor palette retints the chrome and the code", async ({ daemon
   await expect.poll(() => rowColors(page, "function warm")).toContain("rgb(255, 121, 198)");
 });
 
+test("the page reports each slot's accent to the daemon, on load and on a new pick", async ({
+  daemon,
+  page,
+}) => {
+  const reported = async () =>
+    ((await (await fetch(`${daemon.url}/api/stats`)).json()) as { accent?: unknown }).accent;
+  await seedAndOpen(page, daemon);
+  await expect.poll(reported).toEqual({ light: "#c2490d", dark: "#ff8f3d" });
+
+  await openSettings(page);
+  await pickDraculaDark(page);
+
+  await expect.poll(reported).toEqual({ light: "#c2490d", dark: "#bd93f9" });
+});
+
 // Back-compat (EXC-773): a user who picked a theme under the pre-mode model must not
 // have that explicit choice silently replaced by the new `system` default. Seeded
 // through the real boot path, with the emulated OS set the OTHER way so an unmigrated

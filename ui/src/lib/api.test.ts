@@ -36,6 +36,7 @@ import {
   HttpError,
   markSeen,
   putDraft,
+  reportAccent,
   resolveFileRefs,
   resolveReview,
   searchFiles,
@@ -305,6 +306,31 @@ describe("putDraft instrumentation", () => {
     const scratches = [{ startLine: 2, endLine: 3, text: "wip" }];
     await putDraft(ID, { annotations, generalCommentDraft: "", composerScratches: scratches });
     expect(body).toMatchObject({ composerScratches: scratches });
+  });
+});
+
+describe("reportAccent", () => {
+  const accents = { light: "#8839ef", dark: "#bd93f9" };
+
+  test("puts both slots' accents to the daemon", async () => {
+    let seen: { url: string; method?: string; body: unknown } | undefined;
+    respond = (url, options) => {
+      seen = { url, method: options?.method, body: JSON.parse(String(options?.body)) };
+      return Promise.resolve(new Response(null, { status: 204 }));
+    };
+    await reportAccent(accents);
+    expect(seen?.url).toContain("/api/accent");
+    expect(seen?.method).toBe("PUT");
+    expect(seen?.body).toEqual(accents);
+  });
+
+  test("an older daemon's 404 or no daemon at all settles quietly", async () => {
+    respond = () => Promise.resolve(new Response("not found", { status: 404 }));
+    await reportAccent(accents);
+    respond = () => Promise.reject(new Error("offline"));
+    await reportAccent(accents);
+    flush();
+    expect(cap.events().some((r) => r.level === "warn" || r.level === "error")).toBe(false);
   });
 });
 
