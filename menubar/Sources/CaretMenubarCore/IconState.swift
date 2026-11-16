@@ -18,6 +18,16 @@ package enum IconState: Equatable, Sendable {
     case unanswered
 }
 
+extension IconState {
+    /// Whether the menubar shows the coloured carrot.
+    package var isColoured: Bool {
+        switch self {
+        case .pending: true
+        case .idle, .unanswered: false
+        }
+    }
+}
+
 private struct PendingBody: Decodable {
     let pending: Int
 }

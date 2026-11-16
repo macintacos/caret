@@ -130,6 +130,21 @@ Open items first, then the log, newest first.
   paints the waiting plan as an inverse `warning` fill with a 🥕 emoji. Either align it
   with the 2026-11-05 OpenCode decision or record why the two hosts differ.
 
+## 2026-11-15: the menubar carrot fades between grey and coloured
+
+- **A state transition, both ways.** The carrot fades between grey and coloured on
+  `--dur-state` and `--ease-out`, as every other state change in caret does.
+- **Turning coloured grows the carrot from 85% of its size.** A plan arriving is the
+  change worth noticing, so only it grows. The grow has no overshoot, so nothing in the
+  menu bar bounces.
+- **The fade runs on Core Animation, macOS's layer animation framework.** It fades between
+  the images as the system draws them. The grey carrot is a template image, which the
+  system tints to suit each menu bar: light, dark, tinted, or with reduced transparency. A
+  blend drawn into one image would fix that grey to a single colour.
+- **Some changes skip the fade.** The app's first status check after launch, a change
+  between the carrot's two grey states (nothing waiting, and the menu's "caret didn't
+  answer the app" line showing), and every change under Reduce motion switch at once.
+
 ## 2026-11-12: `/caret` is one command on every host
 
 - **One argument-routed command.** `/caret <description>` plans, `/caret doctor` runs the

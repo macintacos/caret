@@ -662,8 +662,15 @@ specific code areas live in [`docs/agents/`](../docs/agents/).
 - Ambient loops (the waiting screen's breathing legend, the reference-hint ping, the
   safe-mode pulse) and the plan's scroll travel are not state transitions and keep their
   own timing.
-- Motion is CSS only. A Svelte JS transition throws under happy-dom and ignores reduced
-  motion; `ui/src/lib/motion.test.ts` enforces this.
+- The review page's motion is CSS only. A Svelte JS transition throws under happy-dom and
+  ignores reduced motion; `ui/src/lib/motion.test.ts` enforces this.
+- The menubar carrot fades between grey and coloured on `--dur-state` and `--ease-out`.
+  Turning coloured, it also grows from 85% of its size, with no overshoot, so a plan
+  arriving stands out more than the last plan leaving. The fade runs between the images as
+  the system draws them, so the grey carrot keeps the tint the menu bar gives a template
+  image. The carrot changes at once in three cases: the app's first status check after
+  launch, a change between its two grey states (nothing waiting, and the menu's "caret
+  didn't answer the app" line showing), and every change under Reduce motion.
 - Reduced motion stops every animation. Where a timer swaps content (the carrot fact), the
   timer stops too. No key travels under it: `--key-rise` and `--key-sink` are 0.
 

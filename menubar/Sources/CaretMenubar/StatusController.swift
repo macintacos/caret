@@ -19,6 +19,8 @@ final class StatusController: NSObject {
     private let greyCarrot = carrotImage(description: "caret: nothing to review", template: true)
     private let unansweredItem = NSMenuItem(
         title: "caret didn't answer the app", action: nil, keyEquivalent: "")
+    /// What the last poll showed; nil until the first poll answers, while the grey placeholder
+    /// stands in.
     private var state: IconState?
     private var pollTask: Task<Void, Never>?
 
@@ -27,6 +29,8 @@ final class StatusController: NSObject {
         super.init()
         statusItem.menu = makeMenu()
         show(.idle)
+        // The grey carrot stands in until the first poll answers, so that answer lands at once.
+        state = nil
     }
 
     func start() {
@@ -70,6 +74,10 @@ final class StatusController: NSObject {
 
     private func show(_ newState: IconState) {
         guard newState != state else { return }
+        statusItem.button?.animateImageChange(
+            IconTransition(
+                from: state, to: newState,
+                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion))
         state = newState
         Self.log.notice("icon \(String(describing: newState), privacy: .public)")
         switch newState {

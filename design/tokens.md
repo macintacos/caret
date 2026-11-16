@@ -71,7 +71,10 @@ All in `ui/src/styles/tokens.css`:
   The reading base is the 15px on `<body>` in `ui/src/styles/base.css`.
 - **Motion:** `--dur-pane` for a pane or column entering, `--dur-state` and `--ease-out`
   for every other state transition, `--ease-spring` for a key's return from a press,
-  `--dur-travel` for the plan's scroll. `ui/src/lib/motion.test.ts` pins the set.
+  `--dur-travel` for the plan's scroll. `ui/src/lib/motion.test.ts` pins the set. Swift
+  can't read CSS, so the menubar app repeats `--dur-state` and `--ease-out` in
+  `menubar/Sources/CaretMenubar/NSStatusBarButton+IconTransition.swift`, and
+  `ui/src/lib/motion.test.ts` pins the copy.
 - **Radius:** `--radius` for fields and menu rows, `--radius-lg` for panels, `99px` for
   badges. The keypad has its own: `--key-radius` for keys, `--nub-radius` for keycaps and
   the switch's key, `--pad-radius` for a table's or a code block's pad, and
