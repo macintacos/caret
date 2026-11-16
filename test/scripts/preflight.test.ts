@@ -37,20 +37,27 @@ import { DEV_FIXTURES } from "@/tasks/dev/protocol.ts";
 
 const ALL_TASKS = [
   "build bin",
+  "build menubar",
   "build ui",
   "docs:build",
   "lint",
   "smoke",
   "test bats",
   "test mod",
+  "test swift",
   "test unit",
 ];
 // Markdown outside docs/ that no test reads, so it alone narrows the gate to lint.
 const UNREAD_MARKDOWN = "CONTRIBUTING.md";
 
-/** The gate as if `claude` were on PATH, so the suite does not depend on the host's. */
+/** The gate on a Mac with `claude` and `swift` on PATH, so the suite does not depend on the host's. */
 const runGate: typeof runPreflight = (deps) =>
-  runPreflight({ which: (bin) => `/usr/bin/${bin}`, concurrency: ALL_TASKS.length, ...deps });
+  runPreflight({
+    which: (bin) => `/usr/bin/${bin}`,
+    platform: "darwin",
+    concurrency: ALL_TASKS.length,
+    ...deps,
+  });
 
 /** Fake spawner that resolves immediately from a per-task plan (default: pass). */
 function fakeSpawner(plan?: Record<string, SpawnOutcome>) {
@@ -91,7 +98,16 @@ async function releaseRemainingAndFinish(
   s: ReturnType<typeof gatedSpawner>,
   run: Promise<{ exitCode: number }>,
 ): Promise<void> {
-  for (const name of ["lint", "test unit", "docs:build", "test bats", "test mod", "smoke"]) {
+  for (const name of [
+    "lint",
+    "test unit",
+    "docs:build",
+    "test bats",
+    "test mod",
+    "test swift",
+    "build menubar",
+    "smoke",
+  ]) {
     s.release(name);
   }
   const r = await run;
@@ -113,19 +129,21 @@ test("the immediate tasks start at once; dependents wait for build ui", async ()
   const s = gatedSpawner();
   const run = runGate({ spawnTask: s.spawnTask, renderer: "silent" });
 
-  await waitForCond(() => s.calls.length === 6);
+  await waitForCond(() => s.calls.length === 8);
   await Bun.sleep(20); // would catch eagerly-spawned dependents
   expect([...s.calls].sort()).toEqual([
+    "build menubar",
     "build ui",
     "docs:build",
     "lint",
     "test bats",
     "test mod",
+    "test swift",
     "test unit",
   ]);
 
   s.release("build ui");
-  await waitForCond(() => s.calls.length === 7);
+  await waitForCond(() => s.calls.length === 9);
   expect(s.calls).toContain("build bin");
 
   s.release("build bin");
@@ -140,9 +158,9 @@ test("smoke waits for build bin, not merely build ui", async () => {
   const s = gatedSpawner();
   const run = runGate({ spawnTask: s.spawnTask, renderer: "silent" });
 
-  await waitForCond(() => s.calls.length === 6);
+  await waitForCond(() => s.calls.length === 8);
   s.release("build ui");
-  await waitForCond(() => s.calls.length === 7);
+  await waitForCond(() => s.calls.length === 9);
   await Bun.sleep(20); // would catch a smoke gated on `build ui`
   expect(s.calls).not.toContain("smoke");
 
@@ -169,6 +187,8 @@ test("concurrency 1: the whole gate still completes, in array order", async () =
     "docs:build",
     "test bats",
     "test mod",
+    "test swift",
+    "build menubar",
     "build bin",
     "smoke",
   ]);
@@ -185,6 +205,34 @@ test("without claude on PATH, test mod is skipped with the reason and the gate s
   expect(mod?.durationMs).toBe(0);
   expect(mod?.output).toContain("claude not on PATH");
   expect(report.ok).toBe(true);
+});
+
+test("off macOS, the menubar lanes are skipped with the reason and the gate stays green", async () => {
+  const { calls, spawnTask } = fakeSpawner();
+  const r = await runGate({ spawnTask, renderer: "silent", platform: "linux" });
+  const report = buildResultReport(r.results);
+
+  for (const name of ["test swift", "build menubar"]) {
+    expect(calls.map((c) => c.name)).not.toContain(name);
+    const lane = report.tasks.find((t) => t.name === name);
+    expect(lane?.status).toBe("skipped");
+    expect(lane?.output).toContain("macOS");
+  }
+  expect(report.ok).toBe(true);
+});
+
+test("without swift on PATH, the menubar lanes are skipped and the rest still run", async () => {
+  const { calls, spawnTask } = fakeSpawner();
+  const which = (bin: string) => (bin === "swift" ? null : `/usr/bin/${bin}`);
+  const r = await runGate({ spawnTask, renderer: "silent", which });
+  const report = buildResultReport(r.results);
+
+  expect(calls.map((c) => c.name).sort()).toEqual(
+    ALL_TASKS.filter((name) => name !== "test swift" && name !== "build menubar"),
+  );
+  for (const name of ["test swift", "build menubar"]) {
+    expect(report.tasks.find((t) => t.name === name)?.output).toContain("swift");
+  }
 });
 
 test("an aborted task's partial output stays out of the default result report", async () => {
@@ -489,7 +537,7 @@ test("the site config and the Python lockfiles run the full gate, docs build inc
   }
 });
 
-test("a single non-Markdown path runs the full eight-task gate", async () => {
+test("a single non-Markdown path runs the full gate", async () => {
   expect(await spawnedFor([UNREAD_MARKDOWN, "src/daemon.ts"])).toEqual(ALL_TASKS);
   expect(selectTasks([UNREAD_MARKDOWN, "src/daemon.ts"]).narrowed).toBe(false);
 });
@@ -583,6 +631,8 @@ test("buildStartReport echoes the parsed filters and lists planned tasks", () =>
     "docs:build",
     "test bats",
     "test mod",
+    "test swift",
+    "build menubar",
     "build bin",
     "smoke",
   ]);
@@ -624,6 +674,8 @@ test("buildResultReport level 0: passing tasks carry status only", async () => {
     "docs:build",
     "test bats",
     "test mod",
+    "test swift",
+    "build menubar",
     "build bin",
     "smoke",
   ]);

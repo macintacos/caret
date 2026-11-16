@@ -45,7 +45,14 @@ import { runLint } from "@/tasks/lint.ts";
 import { buildReleaseCommand } from "@/tasks/release/command.ts";
 import { runSetup } from "@/tasks/setup.ts";
 import { runSmoke, runSmokeBin, runSmokeBundle } from "@/tasks/smoke.ts";
-import { runTest, runTestBats, runTestE2e, runTestMod, type TestFlags } from "@/tasks/test.ts";
+import {
+  runTest,
+  runTestBats,
+  runTestE2e,
+  runTestMod,
+  runTestSwift,
+  type TestFlags,
+} from "@/tasks/test.ts";
 
 import { type JsonArgs, runPreflightCli } from "../../scripts/preflight.ts";
 
@@ -66,6 +73,7 @@ export interface TaskActions {
   testE2e: (args: string[], flags: TestFlags) => Promise<unknown>;
   testBats: (args: string[], flags: TestFlags) => Promise<unknown>;
   testMod: (flags: TestFlags) => Promise<unknown>;
+  testSwift: (args: string[], flags: TestFlags) => Promise<unknown>;
   setup: () => Promise<unknown>;
   smoke: () => Promise<unknown>;
   smokeBin: () => Promise<unknown>;
@@ -90,6 +98,7 @@ const realActions: TaskActions = {
   testE2e: runTestE2e,
   testBats: runTestBats,
   testMod: runTestMod,
+  testSwift: runTestSwift,
   setup: runSetup,
   smoke: runSmoke,
   smokeBin: runSmokeBin,
@@ -253,17 +262,17 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
       await actions.buildMenubar();
     });
 
-  // `test`: bare and `unit` run the bun unit suite (the default target); `e2e`
-  // runs the Playwright suite (building the UI first); `bats` runs the hermetic
-  // shell suites under scripts/. Each forwards its own args — a path /
-  // --test-name-pattern for unit, a spec path / --grep for e2e, --filter for bats
-  // — and carries its output-mode flags (EXC-1146) as REAL options rather than
-  // passthrough, the way `preflight` carries its own --json. passThroughOptions
-  // stops parsing at the first operand, which is what preserves the forwarding
-  // contract (EXC-738/739), so these must precede the forwarded args — hence the
-  // "(before forwarded args)" each description carries. unit and e2e share one
-  // declaration so a reworded description cannot drift between them.
-  // `--json` is split out because all four targets carry it and only two carry the
+  // `test`: bare and `unit` run the bun unit suite (the default target); `e2e` runs the
+  // Playwright suite (building the UI first); `bats` runs the hermetic shell suites under
+  // scripts/; `swift` the menubar app's Swift tests. Each forwards its own args — a path
+  // / --test-name-pattern for unit, a spec path / --grep for e2e, --filter for bats and
+  // swift — and carries its output-mode flags (EXC-1146) as REAL options rather than
+  // passthrough, the way `preflight` carries its own --json. passThroughOptions stops
+  // parsing at the first operand, which is what preserves the forwarding contract
+  // (EXC-738/739), so these must precede the forwarded args — hence the "(before
+  // forwarded args)" each description carries. unit and e2e share one declaration so a
+  // reworded description cannot drift between them.
+  // `--json` is split out because all five targets carry it and only two carry the
   // volume pair — one declaration each, so neither can drift.
   const withJsonFlag = <Args extends unknown[], Opts extends OptionValues>(
     cmd: Command<Args, Opts>,
@@ -277,7 +286,7 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   const test = program
     .command("test")
     .description(
-      "Run tests: bare/`unit` = bun test, `e2e` = Playwright, `bats` = shell, `mod` = Claude Code kit",
+      "Run tests: bare/`unit` = bun test, `e2e` = Playwright, `bats` = shell, `mod` = Claude Code kit, `swift` = menubar app",
     );
   withModeFlags(
     test
@@ -302,8 +311,9 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   // withJsonFlag, not withModeFlags. The other two targets carry --quiet and
   // --verbose because each runner's default is wrong in one direction — bun
   // prints nothing between banner and summary, Playwright a line per spec. bats'
-  // TAP stream is already one line per test, so there is nothing to reduce and
-  // nothing to add, and a flag that does nothing is worse than no flag.
+  // TAP stream, like `swift test`'s, is already one line per test, so there is
+  // nothing to reduce and nothing to add, and a flag that does nothing is worse
+  // than no flag.
   withJsonFlag(
     test
       .command("bats")
@@ -318,6 +328,16 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
     test.command("mod").description("Run the Claude Code mod's kit tests (claude plugin test mod)"),
   ).action(async (opts) => {
     await actions.testMod(opts);
+  });
+  withJsonFlag(
+    test
+      .command("swift")
+      .description("Run the menubar app's Swift tests (swift test; macOS only)")
+      .allowUnknownOption()
+      .passThroughOptions()
+      .argument("[args...]", "forwarded to swift test"),
+  ).action(async (args: string[], opts) => {
+    await actions.testSwift(args, opts);
   });
 
   program
@@ -385,7 +405,7 @@ export function buildProgram(overrides: Partial<TaskActions> = {}) {
   program
     .command("preflight")
     .description(
-      "Pre-push gate: lint, unit + shell tests, build, the docs site build, and artifact smoke, run concurrently",
+      "Pre-push gate: lint, unit + shell + Swift tests, the builds, the docs site build, and artifact smoke, run concurrently",
     )
     .option(
       "--json",

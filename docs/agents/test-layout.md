@@ -120,10 +120,10 @@ it.
   only Claude Code's kit resolves, so `bunfig.toml`'s `pathIgnorePatterns` keeps them out
   of bun's collection.
 - **Menubar app** — `menubar/Tests/`, Swift Testing suites beside the package they cover,
-  run by `swift test --package-path menubar`. They need macOS and Xcode, so neither
-  `mise run test` nor `mise run preflight` runs them. The `menubar` workflow
-  (`.github/workflows/menubar.yml`) is their gate, and it runs only when a PR touches the
-  app or its build task.
+  run by `mise run test swift`. They need macOS and Xcode, so `mise run preflight` skips
+  them anywhere else. In CI the `menubar` workflow (`.github/workflows/menubar.yml`) runs
+  them, only when a PR touches the app or its build or test task. How to write them:
+  [`swift-rules.md`](swift-rules.md).
 - **Linux systemd** — `scripts/linux/verify.sh`, run by hand through
   `mise run verify linux`, which boots a real systemd under Apple `container` and drives
   the install, restart and uninstall sequence `createSystemdManager` performs against the

@@ -2,7 +2,7 @@ name: menubar
 on:
   pull_request:
     types: [opened, reopened, synchronize]
-    branches: [main]
+    # No branches filter: a stacked PR targets the branch below it until it joins its stack.
 permissions: {}
 concurrency:
   group: menubar-${{ github.event.pull_request.number }}
@@ -18,6 +18,7 @@ jobs:
       menubar: ${{ steps.paths.outputs.menubar }}
     steps:
       - id: paths
+        # Lists the files that define the two tasks; their shared plumbing is gated by `test unit`.
         # Captured, not piped into grep -q (which could SIGPIPE gh): a failed gh api fails this job.
         shell: bash
         env:
@@ -25,7 +26,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files?per_page=100" --jq '.[].filename')"
-          if grep -qE '^(menubar/|scripts/tasks/build\.ts$|\.mise/tasks/build$|\.github/workflows/menubar\.yml$)' <<<"$files"; then
+          if grep -qE '^(menubar/|scripts/tasks/(build|test)\.ts$|\.mise/tasks/(build|test)$|\.github/workflows/menubar\.yml$)' <<<"$files"; then
             echo menubar=true >>"$GITHUB_OUTPUT"
           else
             echo menubar=false >>"$GITHUB_OUTPUT"
@@ -68,7 +69,5 @@ jobs:
           minos="$(vtool -show-build bin/caret-menubar.app/Contents/MacOS/CaretMenubar | awk '$1 == "minos" { print $2 }')"
           echo "$minos"
           test "$minos" = "$(printf '13.0\n13.0')"
-      # Here rather than in Package.swift, so a newer local toolchain's new warnings never
-      # block a developer's build.
-      - run: swift test --package-path menubar -Xswiftc -warnings-as-errors
+      - run: mise run test swift
       - run: swift format lint --strict --recursive menubar

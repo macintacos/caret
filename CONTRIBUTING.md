@@ -29,15 +29,16 @@ run it before the e2e suite, `mise run test e2e`.
 
 ```sh
 mise run dev        # dev console: isolated daemon + three fake plans + the Vite UI
-mise run preflight  # the pre-push gate: lint + unit/shell tests + build + docs build + artifact smoke
+mise run preflight  # the pre-push gate: lint + unit/shell/Swift tests + builds + docs build + artifact smoke
 ```
 
 `mise run preflight` is the fast gate to pass before pushing. It scopes itself to your
-diff, so a Markdown-only change runs fewer than the full eight tasks — `--full` forces all
-of them. It never runs e2e: run a new or changed spec with `mise run test e2e <path>`. The
-full gate is the PR checks, which run all nine tasks, the whole e2e suite included, on
-every PR. The full task catalog (`build`, `test`, `smoke`, `lint`, `format`, `docs:build`)
-is documented in
+diff, so a Markdown-only change runs fewer than the full ten tasks — `--full` forces all
+of them. Off macOS it skips the two Swift tasks. It never runs e2e: run a new or changed
+spec with `mise run test e2e <path>`. The full gate is the PR checks, which run every
+preflight task (the two Swift ones only when a PR touches the app) plus the whole e2e
+suite. The full task catalog (`build`, `test`, `smoke`, `lint`, `format`, `docs:build`) is
+documented in
 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md#development).
 
 ## Where tests live
@@ -57,8 +58,8 @@ is documented in
   in a container (`mise run verify linux`). Hand-run: no gate spawns it.
 - `scripts/macos/verify.sh` — the launchd contract, checked against this Mac's own
   launchctl (`mise run verify macos`). Hand-run too, and it needs a GUI login session.
-- `menubar/Tests/` — the menubar app's Swift tests. `swift test --package-path menubar`
-  runs them on macOS, and the `menubar` workflow runs them in CI.
+- `menubar/Tests/` — the menubar app's Swift tests (`mise run test swift`, macOS only).
+  The `menubar` workflow runs them in CI.
 
 ## Configuration
 

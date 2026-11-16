@@ -14,6 +14,7 @@ import {
   ensureBin,
   ensureUi,
   menubarPlistWithVersion,
+  menubarSkipReason,
   shouldBuildBin,
   shouldBuildUi,
   swiftBuildCommand,
@@ -30,6 +31,7 @@ import {
   e2eCommand,
   modCommand,
   resolveTestMode,
+  swiftTestCommand,
   type TestFlags,
   testCommand,
 } from "@/tasks/test.ts";
@@ -191,6 +193,7 @@ describe("tasks CLI: passthrough forwarding", () => {
     [["test", "unit"], "test"],
     [["test", "e2e"], "testE2e"],
     [["test", "bats"], "testBats"],
+    [["test", "swift"], "testSwift"],
     [["caret"], "caret"],
   ];
   for (const [commandPath, key] of cases) {
@@ -214,7 +217,7 @@ describe("tasks CLI: passthrough forwarding", () => {
 // runner.
 async function parseTestArgs(
   commandPath: string[],
-  actionKey: "test" | "testE2e" | "testBats",
+  actionKey: "test" | "testE2e" | "testBats" | "testSwift",
   args: string[],
 ): Promise<{ args: string[]; flags: TestFlags }> {
   let captured: { args: string[]; flags: TestFlags } | undefined;
@@ -291,6 +294,12 @@ describe("tasks CLI: test output-mode flags", () => {
       args: ["--verbose"],
       flags: {},
     });
+  });
+
+  test("test swift: --json parses, and a flag after it forwards to swift test", async () => {
+    expect(
+      await parseTestArgs(["test", "swift"], "testSwift", ["--json", "--filter", "Contract"]),
+    ).toEqual({ args: ["--filter", "Contract"], flags: { json: true } });
   });
 
   test("test mod: --json parses", async () => {
@@ -474,6 +483,7 @@ describe("tasks CLI: build pipeline command lines", () => {
     const called: string[] = [];
     const code = await buildMenubar({
       platform: "linux",
+      which: (bin) => `/usr/bin/${bin}`,
       run: async (cmd) => {
         ran.push(cmd);
         return 0;
@@ -496,11 +506,42 @@ describe("tasks CLI: build pipeline command lines", () => {
     expect(printed.join("")).toContain("macOS");
   });
 
+  test("build menubar without swift on PATH says so, runs nothing, and succeeds", async () => {
+    const ran: string[][] = [];
+    const printed: string[] = [];
+    const code = await buildMenubar({
+      platform: "darwin",
+      which: () => null,
+      run: async (cmd) => {
+        ran.push(cmd);
+        return 0;
+      },
+      binPath: async () => "",
+      assemble: () => {},
+      print: async (text) => {
+        printed.push(text);
+      },
+    });
+    expect(code).toBe(0);
+    expect(ran).toEqual([]);
+    expect(printed.join("")).toContain("swift");
+  });
+
+  // Linux has Swift toolchains too, and the Ubuntu runner image ships one, but AppKit
+  // exists only on macOS: a Linux `swift` must not count.
+  test("the menubar app builds only on macOS with swift on PATH", () => {
+    const swift = (bin: string) => (bin === "swift" ? "/usr/bin/swift" : null);
+    expect(menubarSkipReason({ platform: "darwin", which: swift })).toBeNull();
+    expect(menubarSkipReason({ platform: "linux", which: swift })).toContain("macOS");
+    expect(menubarSkipReason({ platform: "darwin", which: () => null })).toContain("swift");
+  });
+
   test("build menubar on macOS returns a failed swift build's code before assembling", async () => {
     const ran: string[][] = [];
     const called: string[] = [];
     const code = await buildMenubar({
       platform: "darwin",
+      which: (bin) => `/usr/bin/${bin}`,
       run: async (cmd) => {
         ran.push(cmd);
         return 3;
@@ -523,6 +564,7 @@ describe("tasks CLI: build pipeline command lines", () => {
     const events: string[] = [];
     const code = await buildMenubar({
       platform: "darwin",
+      which: (bin) => `/usr/bin/${bin}`,
       run: async (cmd) => {
         events.push(cmd.join(" "));
         return cmd[0] === "codesign" ? 5 : 0;
@@ -602,6 +644,19 @@ describe("tasks CLI: build pipeline command lines", () => {
       "test",
       "--grep",
       "smoke",
+    ]);
+  });
+
+  test("test swift runs the menubar package's tests with warnings as errors, then forwarded args", () => {
+    expect(swiftTestCommand(["--filter", "Contract"])).toEqual([
+      "swift",
+      "test",
+      "--package-path",
+      "menubar",
+      "-Xswiftc",
+      "-warnings-as-errors",
+      "--filter",
+      "Contract",
     ]);
   });
 

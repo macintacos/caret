@@ -12,7 +12,7 @@ type Step = {
 
 const gateYaml = await Bun.file(".github/workflows/docs-gate.yml").text();
 const workflow = Bun.YAML.parse(gateYaml) as {
-  on: { pull_request: { types: string[]; branches: string[] } };
+  on: { pull_request: { types: string[]; branches?: string[] } };
   permissions: unknown;
   jobs: Record<string, { permissions?: unknown; steps: Step[] }>;
 };
@@ -22,7 +22,7 @@ const lock = Bun.YAML.parse(await Bun.file(".github/workflows/actions.lock").tex
   workflows: Record<string, string[]>;
 };
 
-test("runs on pull requests against main, re-running on label changes", () => {
+test("runs on pull requests into any base, re-running on label changes", () => {
   expect(Object.keys(workflow.on)).toEqual(["pull_request"]);
   expect([...workflow.on.pull_request.types].sort()).toEqual([
     "labeled",
@@ -31,7 +31,7 @@ test("runs on pull requests against main, re-running on label changes", () => {
     "synchronize",
     "unlabeled",
   ]);
-  expect(workflow.on.pull_request.branches).toEqual(["main"]);
+  expect(workflow.on.pull_request.branches).toBeUndefined();
 });
 
 test("never runs with a write token", () => {

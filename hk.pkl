@@ -21,8 +21,8 @@ import "package://github.com/jdx/hk/releases/download/v2.11.1/hk@2.11.1#/Builtin
 //
 // Beyond the web stack, the mappings also cover the rest of the repo: rumdl
 // (Markdown format + lint), yamlfmt (YAML), taplo (TOML), shfmt + shellcheck
-// (shell, incl. the extensionless .mise/tasks/* scripts), and pkl + pkl-format
-// (this file).
+// (shell, incl. the extensionless .mise/tasks/* scripts), swift-format (the
+// menubar app), and pkl + pkl-format (this file).
 
 // Formatters — rewrite files into canonical form.
 local formatters = new Mapping<String, Step> {
@@ -80,6 +80,14 @@ local formatters = new Mapping<String, Step> {
   ["Shell(Format)    [[builtins.shfmt]]"] = Builtins.shfmt
 
   ["Pkl(Format)      [[builtins.pkl_format]]"] = Builtins.pkl_format
+
+  // swift-format ships with the Swift toolchain, so a machine without one skips the step.
+  ["Swift(Format)    [[swift-format]]"] = new Step {
+    glob = List("menubar/**/*.swift")
+    step_condition = "exec_ok('command -v swift')"
+    check = "swift format lint --strict {{ files }}"
+    fix = "swift format --in-place {{ files }}"
+  }
 }
 
 // Linters — read-only checks (no rewrite): Biome lint (JS/TS) plus the type
@@ -119,15 +127,6 @@ local linters = new Mapping<String, Step> {
     check = "bash -c 'cd ui && bunx svelte-check --tsconfig ./tsconfig.json --tsgo'"
   }
 
-  // swift-format ships with the Swift toolchain, so a machine without one (Linux CI's lint
-  // job) skips the step; the macOS menubar workflow is the real gate.
-  ["Swift(Format)     [[swift-format]]"] = new Step {
-    glob = List("menubar/**/*.swift")
-    step_condition = "exec_ok('command -v swift')"
-    check = "swift format lint --strict {{ files }}"
-    fix = "swift format --in-place {{ files }}"
-  }
-
   // `types` is inherited, so the builtin's shebang-driven selector still reaches the
   // extensionless scripts; only `glob` is widened. shellcheck reads bats files as bash
   // (it knows the shebang) but the builtin's glob stops at .sh/.bash, and a bats file
@@ -152,6 +151,13 @@ local linters = new Mapping<String, Step> {
   ["TOML(Lint)        [[builtins.taplo]]"] = Builtins.taplo
 
   ["Pkl(Lint)         [[builtins.pkl]]"] = Builtins.pkl
+
+  // Swift(Format)'s pre-commit run only rewrites, so the lint rules need their own step.
+  ["Swift(Lint)       [[swift-format]]"] = new Step {
+    glob = List("menubar/**/*.swift")
+    step_condition = "exec_ok('command -v swift')"
+    check = "swift format lint --strict {{ files }}"
+  }
 }
 
 hooks {

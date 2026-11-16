@@ -7,6 +7,7 @@ import {
   collectBatsJsonRun,
   collectE2eJsonRun,
   collectModJsonRun,
+  collectSwiftJsonRun,
   collectUnitJsonRun,
   e2eModeArgs,
   ensureUiForE2e,
@@ -197,6 +198,27 @@ const FAILING_BATS_JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
     </testcase>
 
 </testsuite>
+</testsuites>`;
+
+// Swift Testing's xunit writer under Swift 6.4.2, verbatim: two passing tests, one failing
+// with two issues, one failing once, one disabled. Its `failures` counts issues (3) and its
+// `tests` leaves the skip out (4), so only the testcases give 2 passed, 2 failed.
+const FAILING_SWIFT_JUNIT = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="TestResults" errors="0" tests="4" failures="3" skipped="1" time="0.000906625">
+    <testcase classname="ProbeTests" name="disabled()" >
+      <skipped>probe</skipped>
+    </testcase>
+    <testcase classname="ProbeTests" name="failsTwice()" time="0.000564083" >
+      <failure message="Expectation failed: probe == 2 (error)" />
+      <failure message="Expectation failed: probe == 3 (error)" />
+    </testcase>
+    <testcase classname="ProbeTests" name="passes()" time="0.000254958" />
+    <testcase classname="ProbeTests" name="alsoPasses()" time="0.000151625" />
+    <testcase classname="ProbeTests" name="failsOnce()" time="0.000506875" >
+      <failure message="Expectation failed: probe == 4 (error)" />
+    </testcase>
+  </testsuite>
 </testsuites>`;
 
 /** Playwright's json reporter, trimmed to the fields the envelope reads, with a
@@ -538,6 +560,69 @@ describe("collectBatsJsonRun", () => {
     expect(collected.exitCode).toBe(1);
     expect(collected.native).toBeNull();
     expect(collected.output).toContain("[mise] ran");
+  });
+});
+
+describe("test swift", () => {
+  const MAC = { platform: "darwin", which: (bin: string) => `/usr/bin/${bin}` } as const;
+
+  test("counts Swift Testing's test cases, not its issue-counting attributes", () => {
+    const report = buildTestReport({
+      target: "swift",
+      exitCode: 1,
+      durationMs: 5000,
+      native: FAILING_SWIFT_JUNIT,
+      output: "log",
+    });
+    expect(report.target).toBe("swift");
+    expect(report.passed).toBe(2);
+    expect(report.failed).toBe(2);
+    expect(report.report).toBe(FAILING_SWIFT_JUNIT);
+  });
+
+  test("forwards its args to swift test, after the report flag", async () => {
+    const { calls, run } = capturingCapture();
+    await collectSwiftJsonRun(["--filter", "Contract"], MAC, run);
+    const cmd = calls[0]?.cmd ?? [];
+    expect(cmd.slice(0, 2)).toEqual(["swift", "test"]);
+    expect(cmd).toContain("--xunit-output");
+    expect(cmd.slice(-2)).toEqual(["--filter", "Contract"]);
+  });
+
+  /** A fake `swift test` that writes the report under `name(xunitPath)`. */
+  const writingReportAt =
+    (name: (xunit: string) => string) =>
+    async (cmd: string[]): Promise<number> => {
+      await Bun.write(name(cmd[cmd.indexOf("--xunit-output") + 1] ?? ""), FAILING_SWIFT_JUNIT);
+      return 1;
+    };
+
+  // With XCTest enabled SwiftPM writes Swift Testing's results beside the path it is
+  // handed, under a derived name; with `--disable-xctest`, at the path itself.
+  test("reads Swift Testing's report from beside the xunit path", async () => {
+    const run = writingReportAt((xunit) => xunit.replace(/\.xml$/, "-swift-testing.xml"));
+    const collected = await collectSwiftJsonRun([], MAC, run);
+    expect(collected.native).toBe(FAILING_SWIFT_JUNIT);
+    expect(buildTestReport({ ...collected, durationMs: 0 }).failed).toBe(2);
+  });
+
+  test("reads Swift Testing's report at the xunit path when XCTest is disabled", async () => {
+    const collected = await collectSwiftJsonRun(
+      ["--disable-xctest"],
+      MAC,
+      writingReportAt((x) => x),
+    );
+    expect(collected.native).toBe(FAILING_SWIFT_JUNIT);
+  });
+
+  test("a host that cannot build the app runs nothing and reports why", async () => {
+    const { calls, run } = capturingCapture();
+    const collected = await collectSwiftJsonRun([], { ...MAC, platform: "linux" }, run);
+    const report = buildTestReport({ ...collected, durationMs: 0 });
+    expect(calls).toEqual([]);
+    expect(report.ok).toBe(true);
+    expect(report.skipReason).toContain("macOS");
+    expect(report.passed + report.failed).toBe(0);
   });
 });
 

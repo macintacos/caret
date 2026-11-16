@@ -25,7 +25,7 @@ which-doc: Edit every doc the change affects
   developing caret: build-from-source, the mise task catalog and dev workflow, the tasks CLI, icons, dev and preflight settings > development
   human contributor onboarding: local setup, the mise workflow, where tests live > contributing
   the code-change routing index, plus the CodeGraph / verifying-changes prose > agents
-  a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, plan rendering, testing, icons, settings, dependencies, OpenCode, pi, rumdl) > edit-a
+  a rule-of-the-road for a code area (architecture, logging, TS, Svelte, shadcn, plan rendering, testing, icons, settings, dependencies, OpenCode, pi, rumdl, Swift) > edit-a
   the router for the docs/ directory: which page answers a given reader's question > readme-2
   design direction: how caret looks, moves, sounds, or prints, its deliberate exceptions, and the decision log > edit-design
   a user-facing page on the docs site, or its place in the site's nav: a tutorial, how-to guide, reference, or explanation page, such as install, notifications, logs and diagnostics, the config file and user-facing CARET_* variables, the theme file format, platform support, how caret works, or plan formatting > site

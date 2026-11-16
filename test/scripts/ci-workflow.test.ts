@@ -28,12 +28,17 @@ const steps = jobs.flatMap((job) => job.steps);
 const shardJob = workflow.jobs["test-e2e-shard"];
 const e2eGate = jobByName("test e2e");
 
-// CI is the local gate plus the one suite the local gate leaves out.
-const TASKS = [...selectTasks(null).tasks, "test e2e"];
+// The gate's menubar lanes need macOS, so menubar.yml runs them. This workflow runs the
+// rest of the local gate, plus the one suite the local gate leaves out.
+const MACOS_TASKS = ["test swift", "build menubar"];
+const TASKS = [
+  ...selectTasks(null).tasks.filter((name) => !MACOS_TASKS.includes(name)),
+  "test e2e",
+];
 
-test("runs on pull requests and pushes to main only", () => {
+test("runs on pull requests into any base, and on pushes to main", () => {
   expect(Object.keys(workflow.on).sort()).toEqual(["pull_request", "push"]);
-  expect(workflow.on.pull_request?.branches).toEqual(["main"]);
+  expect(workflow.on.pull_request?.branches).toBeUndefined();
   expect(workflow.on.push?.branches).toEqual(["main"]);
 });
 
@@ -63,6 +68,17 @@ test("every job is read-only, time-boxed, and unconditional but the e2e gate", (
   expect(e2eGate?.permissions).toEqual({});
   expect(e2eGate?.if).toBe("always()");
   expect(e2eGate?.needs).toBe("test-e2e-shard");
+});
+
+test("the gate's macOS lanes run in the menubar workflow", async () => {
+  const menubar = Bun.YAML.parse(await Bun.file(".github/workflows/menubar.yml").text()) as {
+    jobs: { menubar: { steps: Step[] } };
+  };
+  const runs = menubar.jobs.menubar.steps.map((step) => step.run);
+  for (const name of MACOS_TASKS) {
+    expect(selectTasks(null).tasks).toContain(name);
+    expect(runs).toContain(`mise run ${name}`);
+  }
 });
 
 test("checkout never persists the token", () => {

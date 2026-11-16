@@ -7,14 +7,13 @@
 // it). `lint`'s `hk check` step is the read-only one — it is the formatting
 // gate, and a lint failure points at `mise run format`.
 //
-// DAG: lint, `test unit`, `build ui`, `docs:build`, `test bats` and `test mod`
-// start immediately; `build bin` starts once `build ui` passes; `smoke` starts
-// once `build bin` passes (EXC-914). The build-first ordering + skip mechanism
-// live in the tasks CLI (scripts/tasks/build.ts), so each dependent is spawned
-// with the skips that let it reuse its gate's artifact: CARET_SKIP_BUILD_UI
-// keeps the UI built at exactly one run per gate (two concurrent Vite builds
-// would otherwise race on ui/dist), and CARET_SKIP_BUILD_BIN keeps smoke from
-// paying a second compile.
+// DAG: lint, `test unit`, `build ui`, `docs:build`, `test bats`, `test mod`, `test swift`
+// and `build menubar` start immediately; `build bin` starts once `build ui` passes;
+// `smoke` starts once `build bin` passes (EXC-914). The build-first ordering + skip
+// mechanism live in the tasks CLI (scripts/tasks/build.ts), so each dependent is spawned
+// with the skips that let it reuse its gate's artifact: CARET_SKIP_BUILD_UI keeps the UI
+// built at exactly one run per gate (two concurrent Vite builds would otherwise race on
+// ui/dist), and CARET_SKIP_BUILD_BIN keeps smoke from paying a second compile.
 //
 // smoke is here because it is the only task that exercises the artifacts users
 // receive rather than the source tree: preflight proves the source works, smoke
@@ -23,7 +22,7 @@
 // Which of those tasks run is scoped to the diff (EXC-1042): a change confined
 // to Markdown runs `lint` alone, plus `test unit` when it touches Markdown a test
 // reads from disk, plus `docs:build` when it touches `docs/`. Everything else
-// runs all eight, as does a diff that cannot be read at all.
+// runs all ten, as does a diff that cannot be read at all.
 //
 // DI mirrors scripts/tasks/release/command.ts: the spawn collaborator is injected so
 // test/scripts/preflight.test.ts can drive the DAG without running real tasks.
@@ -44,6 +43,7 @@ import { $ } from "bun";
 
 import { DefaultRenderer, Listr, type ListrTask } from "listr2";
 
+import { type Machine, menubarSkipReason } from "@/tasks/build.ts";
 import { lastDisplayLine } from "@/tasks/lib/exec.ts";
 
 export interface SpawnOutcome {
@@ -91,7 +91,7 @@ export interface PreflightOutcome {
 export interface PreflightStartReport {
   event: "start";
   schemaVersion: number;
-  /** The tasks this run will spawn — a subset of the eight when `selection.narrowed`. */
+  /** The tasks this run will spawn — a subset of the ten when `selection.narrowed`. */
   tasks: string[];
   /**
    * Why this task set (EXC-1042). A scoped run must never read as a full green
@@ -107,7 +107,7 @@ export interface PreflightTaskReport {
   name: string;
   status: TaskStatus;
   /** How long the task ran: 0 when it was skipped before ever spawning, and excluding
-   * time queued behind an upstream gate — so the eight never sum to the gate's wall clock. */
+   * time queued behind an upstream gate — so the ten never sum to the gate's wall clock. */
   durationMs: number;
   /** Captured output, included per the verbosity / --grep / --task selection. */
   output?: string;
@@ -158,11 +158,27 @@ interface Dependent {
 
 const SKIP_UI = { CARET_SKIP_BUILD_UI: "1" } as const;
 
-// `docs:build`, `test bats` and `test mod` are last within IMMEDIATE: they gate
-// nothing, and `build ui` gates the dependents below.
-const IMMEDIATE = ["lint", "test unit", "build ui", "docs:build", "test bats", "test mod"] as const;
-/** An immediate task that needs a binary on PATH, skipped rather than failed without it. */
-const NEEDS_ON_PATH: Partial<Record<(typeof IMMEDIATE)[number], string>> = { "test mod": "claude" };
+// The tasks after `build ui` within IMMEDIATE gate nothing, and `build ui` gates the
+// dependents below. `test swift` and `build menubar` serialize on SwiftPM's lock.
+const IMMEDIATE = [
+  "lint",
+  "test unit",
+  "build ui",
+  "docs:build",
+  "test bats",
+  "test mod",
+  "test swift",
+  "build menubar",
+] as const;
+/** Why an immediate task cannot run on this machine, or null when it can. Such a task is
+ * recorded skipped with that reason rather than failed. */
+const SKIP_REASON: Partial<
+  Record<(typeof IMMEDIATE)[number], (machine: Machine) => string | null>
+> = {
+  "test mod": (machine) => (machine.which("claude") ? null : "claude not on PATH"),
+  "test swift": menubarSkipReason,
+  "build menubar": menubarSkipReason,
+};
 // ORDER IS LOAD-BEARING: listr2 fills its concurrency slots in array order, so a
 // task can only start once every task before it has started. `smoke` therefore
 // stays LAST — a gate capped below the task count (CARET_PREFLIGHT_JOBS=1) would
@@ -379,8 +395,10 @@ export async function runPreflight(deps: {
   selection?: TaskSelection;
   /** Resolves a binary on PATH; defaults to `Bun.which`. */
   which?: (bin: string) => string | null;
+  /** The host's platform; defaults to `process.platform`. */
+  platform?: NodeJS.Platform;
 }): Promise<PreflightOutcome> {
-  const which = deps.which ?? Bun.which;
+  const machine = { which: deps.which ?? Bun.which, platform: deps.platform ?? process.platform };
   const selection = deps.selection ?? FULL_GATE;
   const selected = new Set(selection.tasks);
   const immediateTasks = IMMEDIATE.filter((name) => selected.has(name));
@@ -442,15 +460,10 @@ export async function runPreflight(deps: {
   const immediate = (name: (typeof IMMEDIATE)[number]): ListrTask => ({
     title: name,
     task: async (_ctx, task) => {
-      const bin = NEEDS_ON_PATH[name];
-      if (bin && !which(bin)) {
-        results.set(name, {
-          status: "skipped",
-          output: "",
-          durationMs: 0,
-          reason: `${bin} not on PATH`,
-        });
-        return task.skip(`${name} (skipped: ${bin} not on PATH)`);
+      const reason = SKIP_REASON[name]?.(machine) ?? null;
+      if (reason !== null) {
+        results.set(name, { status: "skipped", output: "", durationMs: 0, reason });
+        return task.skip(`${name} (skipped: ${reason})`);
       }
       const status = await runTask(name, undefined, (line) => {
         task.output = line;
