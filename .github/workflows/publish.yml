@@ -20,8 +20,39 @@ jobs:
       # Pinned here, not in mise.toml: a repo-local `claude` shim would shadow every developer's own.
       - run: npm install --global @anthropic-ai/claude-code@2.1.308
       - run: mise run test mod
+  # Swift builds only on macOS. The app reaches `build` as a tarball: upload-artifact drops
+  # the executable bit.
+  menubar:
+    runs-on: macos-26
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@fc42bcc7ddbf51124c30f95a877a0c5168a3bfde # v5.2.1
+        with:
+          cache: false # no cache on a release path (poisoning)
+      - run: bun install --frozen-lockfile
+      - run: mise run build menubar
+      - name: Check the app is universal and signed
+        run: |
+          lipo bin/caret-menubar.app/Contents/MacOS/CaretMenubar -verify_arch arm64
+          lipo bin/caret-menubar.app/Contents/MacOS/CaretMenubar -verify_arch x86_64
+          codesign --verify --deep --strict bin/caret-menubar.app
+      # Plain macOS tar adds ._ AppleDouble files for xattrs, which unpack into the bundle
+      # and break its seal.
+      - run: tar --no-mac-metadata -czf caret-menubar.app.tgz -C bin caret-menubar.app
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: menubar-app
+          path: caret-menubar.app.tgz
+          if-no-files-found: error
   build:
-    needs: mod-tests
+    needs: [mod-tests, menubar]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -41,7 +72,21 @@ jobs:
           fi
       - run: bun install --frozen-lockfile
       - run: mise run smoke bundle
+      # Outside the workspace, so the npm tarball stays the only *.tgz `package` uploads.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: menubar-app
+          path: ${{ runner.temp }}/menubar-app
+      - run: tar -xzf "$RUNNER_TEMP/menubar-app/caret-menubar.app.tgz" -C bin
       - run: npm pack --ignore-scripts
+      - name: Check the package ships the menubar app
+        run: |
+          mkdir "$RUNNER_TEMP/packed"
+          tar -xzf ./*.tgz -C "$RUNNER_TEMP/packed"
+          contents="$RUNNER_TEMP/packed/package/bin/caret-menubar.app/Contents"
+          test -f "$contents/Info.plist"
+          test -x "$contents/MacOS/CaretMenubar"
+          test -f "$contents/_CodeSignature/CodeResources"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: package

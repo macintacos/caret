@@ -34,6 +34,7 @@
     "ui/dist/",
     "bin/caret",
     "bin/caret-launcher",
+    "bin/caret-menubar.app",
     "hooks/",
     "skills/",
     "opencode/",

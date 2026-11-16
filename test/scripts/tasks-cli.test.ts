@@ -10,8 +10,10 @@ import {
   buildInstallCommand,
   buildMenubar,
   buildUiCommand,
+  codesignMenubarCommand,
   ensureBin,
   ensureUi,
+  menubarPlistWithVersion,
   shouldBuildBin,
   shouldBuildUi,
   swiftBuildCommand,
@@ -46,6 +48,12 @@ async function parseDevArgs(args: string[]): Promise<RunDevOptions> {
   await program.parseAsync(["dev", ...args], { from: "user" });
   if (!captured) throw new Error("dev action was not invoked");
   return captured;
+}
+
+/** The `<key>`/`<string>` pairs of a flat plist dict. */
+function plistKeys(plist: string): Map<string, string> {
+  const pairs = plist.matchAll(/<key>([^<]+)<\/key>\s*<string>([^<]*)<\/string>/g);
+  return new Map([...pairs].map((match) => [match[1] ?? "", match[2] ?? ""]));
 }
 
 describe("tasks CLI: dev command", () => {
@@ -425,7 +433,7 @@ describe("tasks CLI: build command", () => {
 });
 
 describe("tasks CLI: build pipeline command lines", () => {
-  test("build menubar runs a SwiftPM release build of menubar/", () => {
+  test("build menubar runs a universal SwiftPM release build of menubar/", () => {
     expect(swiftBuildCommand()).toEqual([
       "swift",
       "build",
@@ -433,17 +441,49 @@ describe("tasks CLI: build pipeline command lines", () => {
       "release",
       "--package-path",
       "menubar",
+      "--arch",
+      "arm64",
+      "--arch",
+      "x86_64",
     ]);
+  });
+
+  test("build menubar signs the app ad hoc", () => {
+    expect(codesignMenubarCommand()).toEqual([
+      "codesign",
+      "--force",
+      "--sign",
+      "-",
+      "bin/caret-menubar.app",
+    ]);
+  });
+
+  test("build menubar stamps the package version into the bundle's Info.plist", async () => {
+    const plist = menubarPlistWithVersion(await Bun.file("menubar/Info.plist").text(), "1.2.3");
+    const dict = plistKeys(plist);
+
+    expect(dict.get("CFBundleShortVersionString")).toBe("1.2.3");
+    expect(dict.get("CFBundleVersion")).toBe("1.2.3");
+    expect(dict.get("CFBundleExecutable")).toBe("CaretMenubar");
+    expect(dict.get("CFBundleIdentifier")).toBe("dev.excessive.caret.menubar");
   });
 
   test("build menubar off macOS prints one line, runs nothing, and succeeds", async () => {
     const ran: string[][] = [];
     const printed: string[] = [];
+    const called: string[] = [];
     const code = await buildMenubar({
       platform: "linux",
       run: async (cmd) => {
         ran.push(cmd);
         return 0;
+      },
+      binPath: async () => {
+        called.push("binPath");
+        return "";
+      },
+      assemble: () => {
+        called.push("assemble");
       },
       print: async (text) => {
         printed.push(text);
@@ -451,22 +491,58 @@ describe("tasks CLI: build pipeline command lines", () => {
     });
     expect(code).toBe(0);
     expect(ran).toEqual([]);
+    expect(called).toEqual([]);
     expect(printed.join("").trimEnd().split("\n")).toHaveLength(1);
     expect(printed.join("")).toContain("macOS");
   });
 
   test("build menubar on macOS returns a failed swift build's code before assembling", async () => {
     const ran: string[][] = [];
+    const called: string[] = [];
     const code = await buildMenubar({
       platform: "darwin",
       run: async (cmd) => {
         ran.push(cmd);
         return 3;
       },
+      binPath: async () => {
+        called.push("binPath");
+        return "";
+      },
+      assemble: () => {
+        called.push("assemble");
+      },
       print: async () => {},
     });
     expect(code).toBe(3);
     expect(ran).toEqual([swiftBuildCommand()]);
+    expect(called).toEqual([]);
+  });
+
+  test("build menubar on macOS assembles from SwiftPM's bin path, then signs the app ad hoc", async () => {
+    const events: string[] = [];
+    const code = await buildMenubar({
+      platform: "darwin",
+      run: async (cmd) => {
+        events.push(cmd.join(" "));
+        return cmd[0] === "codesign" ? 5 : 0;
+      },
+      binPath: async () => {
+        events.push("binPath");
+        return "menubar/.build/out/Products/Release";
+      },
+      assemble: (binPath) => {
+        events.push(`assemble ${binPath}`);
+      },
+      print: async () => {},
+    });
+    expect(code).toBe(5);
+    expect(events).toEqual([
+      swiftBuildCommand().join(" "),
+      "binPath",
+      "assemble menubar/.build/out/Products/Release",
+      codesignMenubarCommand().join(" "),
+    ]);
   });
 
   // `build bin`/`build bundle`/`test e2e` build the UI first UNLESS

@@ -61,8 +61,8 @@ function bundleArgv(outdir: string): string[] {
   return [...argv, "--external", "@/ui-manifest.generated.ts"];
 }
 
-/** Stage package.json + every `files` entry but dist/ and ui/dist/ under `root`, build
- * dist/cli.js into the stage, `npm pack` it, untar; returns the unpacked package dir. */
+/** Stage package.json + every `files` entry but dist/, ui/dist/ and the menubar app under
+ * `root`, build dist/cli.js into the stage, `npm pack` it, untar; returns the unpacked package dir. */
 export function packCaret(root: string): string {
   const stage = join(root, "stage");
   const packDir = join(root, "pack");
@@ -72,7 +72,7 @@ export function packCaret(root: string): string {
   mkdirSync(unpackDir);
   cpSync(join(REPO_ROOT, "package.json"), join(stage, "package.json"));
   for (const entry of pkg.files.map((f) => f.replace(/\/$/, ""))) {
-    if (entry === "dist" || entry === "ui/dist") continue;
+    if (entry === "dist" || entry === "ui/dist" || entry === "bin/caret-menubar.app") continue;
     const src = join(REPO_ROOT, entry);
     if (!existsSync(src)) throw new Error(`package.json files entry missing on disk: ${entry}`);
     const dst = join(stage, entry);

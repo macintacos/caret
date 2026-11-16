@@ -57,6 +57,17 @@ jobs:
           plist=bin/caret-menubar.app/Contents/Info.plist
           plutil -lint "$plist"
           test -x "bin/caret-menubar.app/Contents/MacOS/$(plutil -extract CFBundleExecutable raw "$plist")"
+      - name: Check the app is universal and signed
+        run: |
+          lipo bin/caret-menubar.app/Contents/MacOS/CaretMenubar -verify_arch arm64
+          lipo bin/caret-menubar.app/Contents/MacOS/CaretMenubar -verify_arch x86_64
+          codesign --verify --deep --strict bin/caret-menubar.app
+      # Info.plist's LSMinimumSystemVersion promises macOS 13; no build setting may raise it.
+      - name: Both slices target macOS 13
+        run: |
+          minos="$(vtool -show-build bin/caret-menubar.app/Contents/MacOS/CaretMenubar | awk '$1 == "minos" { print $2 }')"
+          echo "$minos"
+          test "$minos" = "$(printf '13.0\n13.0')"
       # Here rather than in Package.swift, so a newer local toolchain's new warnings never
       # block a developer's build.
       - run: swift test --package-path menubar -Xswiftc -warnings-as-errors

@@ -584,10 +584,11 @@ There is no Xcode project. `swift build` and `swift test` work from the package,
 opens `menubar/Package.swift` directly. `swift test --package-path menubar` runs its
 tests.
 
-`mise run build menubar` builds it in release and assembles `bin/caret-menubar.app`, with
-`LSUIElement` set so it has no Dock icon. It needs macOS 13 or later and Xcode 26 or
-later; elsewhere the target prints one line and succeeds. Run it with
-`open bin/caret-menubar.app`, or pass launch arguments after `--args`:
+`mise run build menubar` builds it in release as a universal binary (`arm64` and
+`x86_64`), assembles `bin/caret-menubar.app` with `LSUIElement` set so it has no Dock
+icon, and signs it ad hoc. It needs macOS 13 or later and Xcode 26 or later; elsewhere the
+target prints one line and succeeds. Run it with `open bin/caret-menubar.app`, or pass
+launch arguments after `--args`:
 
 ```sh
 open bin/caret-menubar.app --args --base-url http://127.0.0.1:42718 \
@@ -786,8 +787,9 @@ and runs only when the PR touches `menubar/`, the build task (`scripts/tasks/bui
 `.mise/tasks/build`), or the workflow. A skipped job reports as passing, so making
 `menubar` a required check never blocks other PRs, and a failed `menubar changes` job
 makes `menubar` build anyway rather than skip. The runner image and the Xcode pin are
-bumped together, in the same change. Its cases live in
-`test/scripts/menubar-workflow.test.ts`.
+bumped together, in `menubar.yml` and in `publish.yml`'s `menubar` job, in the same
+change; `test/scripts/release-workflow.test.ts` fails when they differ. The workflow's
+cases live in `test/scripts/menubar-workflow.test.ts`.
 
 #### Adding a task
 
@@ -821,11 +823,13 @@ that whole class of footgun.
 
 `/release-caret` bumps the version, tags main, and drafts the GitHub Release; the tag push
 runs `.github/workflows/publish.yml`, which builds, smoke-tests, and stages the version on
-npm over OIDC trusted publishing, with no npm token. The operator approves the stage with
-npm 2FA, and `release publish` makes the Release live once npm serves the version. The
-same `v*` tag runs `.github/workflows/docs.yml`, which rebuilds the docs site and deploys
-it to GitHub Pages; a manual run (Actions → docs → Run workflow) ships an urgent docs fix
-between releases.
+npm over OIDC trusted publishing, with no npm token. Its `menubar` job builds the menubar
+app on macOS with `mise run build menubar`, and `build` packs the app into the tarball; a
+failed `menubar` job fails the release. The operator approves the stage with npm 2FA, and
+`release publish` makes the Release live once npm serves the version. The same `v*` tag
+runs `.github/workflows/docs.yml`, which rebuilds the docs site and deploys it to GitHub
+Pages; a manual run (Actions → docs → Run workflow) ships an urgent docs fix between
+releases.
 
 The site's Changelog tab, `docs/changelog.md`, mirrors the GitHub Releases.
 `release prepare` regenerates it from the published Releases plus the new release's notes
