@@ -33,7 +33,7 @@ it, the records the launcher reads, and caret's own copies under
 itself once it finds no caret installed anywhere, its own copies included.
 
 `--uninstall` also removes the [menubar app](menubar.md) and the macOS file that starts it
-at login. The launcher removes both too when it cleans up on its own.
+at login. So does the launcher when it cleans up on its own.
 
 To remove only the menubar app, run `caret install` and answer **No** to its question (see
 [Show caret in the menu bar](menubar.md#remove-the-app)).

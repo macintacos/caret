@@ -55,7 +55,8 @@ its package cache.
 When the launcher finds no caret anywhere, its own copies included, it looks twice more,
 five seconds apart. If it still finds none, it removes the service's unit file, itself,
 the records it reads (the bun path, the pinned build, and the service's name), and caret's
-own copies. It keeps your reviews. When caret is installed but can't run, the launcher
+own copies, and on macOS the [menubar app](../how-to/menubar.md) and the file that starts
+it at login. It keeps your reviews. When caret is installed but can't run, the launcher
 stops the service instead (see
 [Fix a background service that keeps stopping](../how-to/background-service.md#fix-a-background-service-that-keeps-stopping)).
 Either way, `caret install` brings the service back.

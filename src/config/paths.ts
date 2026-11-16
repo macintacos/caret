@@ -68,7 +68,7 @@ export function ownedRootsDir(): string {
 }
 
 /** The menubar app's copies, one dir per bundle build. Not under stateDir()/bin, which
- * uninstallLauncher() and the launcher's evict() delete whole. */
+ * uninstallLauncher() deletes whole while the app stays installed. */
 export function menubarDir(): string {
   return `${stateDir()}/menubar`;
 }

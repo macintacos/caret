@@ -154,7 +154,9 @@ async function removeReported(agent: MenubarAgent, dryRun: boolean, ui: InstallU
   if (installed) ui.info("Removed the caret menubar app.");
 }
 
-/** Stop the app and delete caret's own copies — never a path read from a plist. */
+/** Stop the app and delete caret's own copies — never a path read from a plist. Mirrors the
+ * menubar block of evict() in bin/caret-launcher, which removes the same LaunchAgent and
+ * directory in bash. */
 async function removeMenubar(agent: MenubarAgent): Promise<void> {
   await agent.uninstall();
   rmSync(menubarDir(), { recursive: true, force: true });
