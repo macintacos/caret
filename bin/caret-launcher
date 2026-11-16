@@ -217,8 +217,8 @@ stop_agent() {
 evict() {
   local service unit
   # Keep in sync with MENUBAR_LABEL (src/service/menubar-agent.ts).
-  local menubar=dev.excessive.caret.menubar
-  local menubar_plist="$HOME/Library/LaunchAgents/$menubar.plist"
+  local menubar_label=dev.excessive.caret.menubar
+  local menubar_plist="$HOME/Library/LaunchAgents/$menubar_label.plist"
   service="$(read_record "$records/service" || true)"
   [ -n "$service" ] || return 1
   # Gated on the plist, as MenubarAgent.installed() is, and run before the service
@@ -226,7 +226,7 @@ evict() {
   if [ -e "$menubar_plist" ]; then
     printf 'caret-launcher: removing the menubar app: %s and %s/menubar.\n' \
       "$menubar_plist" "$state" >&2
-    launchctl bootout "gui/$(id -u)/$menubar" || true
+    launchctl bootout "gui/$(id -u)/$menubar_label" || true
     rm -f "$menubar_plist"
     rm -rf "${state:?}/menubar"
   fi
