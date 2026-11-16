@@ -1,6 +1,6 @@
 // `build` task group (EXC-738): the Svelte UI, the standalone binary, the
 // distribution bundle, and the bare umbrella that chains UI -> binary. Its
-// `ui`/`bin`/`bundle` positional targets map to `mise run build <target>`.
+// `ui`/`bin`/`bundle`/`menubar` positional targets map to `mise run build <target>`.
 //
 // UI-first ordering lives here rather than in a mise `depends` edge: the
 // ui-dependent targets (`bin`, `bundle`, and the umbrella) build the UI first
@@ -9,7 +9,7 @@
 // `build ui` on its own, then spawns `build bin` with CARET_SKIP_BUILD_UI=1 so
 // two concurrent Vite builds can't race on ui/dist.
 
-import { mkdirSync, rmSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, rmSync } from "node:fs";
 
 import {
   execAndExit,
@@ -215,6 +215,61 @@ export async function runBuildBundle(): Promise<never> {
     console.log("caret bundle complete: dist/cli.js (serves UI from sibling ui/dist)");
   }
   process.exit(code);
+}
+
+// --- build menubar ----------------------------------------------------------
+// The macOS menubar app: the SwiftPM package under menubar/, built in release and
+// assembled into a .app by hand, since there is no Xcode project. Never part of the bare
+// umbrella or the preflight gate: Swift builds only on macOS, and the `menubar` workflow
+// (.github/workflows/menubar.yml) is this target's gate.
+
+/** Where `build menubar` assembles the app; gitignored with the rest of bin/. */
+const MENUBAR_APP = "bin/caret-menubar.app";
+// Package.swift's executableTarget and Info.plist's CFBundleExecutable.
+const MENUBAR_EXECUTABLE = "CaretMenubar";
+
+/** The SwiftPM release build of the menubar package. */
+export function swiftBuildCommand(): string[] {
+  return ["swift", "build", "-c", "release", "--package-path", "menubar"];
+}
+
+/** Build the menubar package and assemble the .app, resolving the exit code. Off macOS it
+ * prints one line and succeeds, so a Linux checkout's build never fails on it. */
+export async function buildMenubar(deps: {
+  platform: NodeJS.Platform;
+  run: typeof runForward;
+  print: (text: string) => Promise<void>;
+}): Promise<number> {
+  if (deps.platform !== "darwin") {
+    await deps.print("build menubar: skipped, the menubar app builds on macOS only\n");
+    return 0;
+  }
+
+  const code = await deps.run(swiftBuildCommand());
+  if (code !== 0) return code;
+
+  assembleMenubarApp();
+  return 0;
+}
+
+/** Lay out the .app from the release executable and the committed Info.plist. */
+function assembleMenubarApp(): void {
+  const executable = `${MENUBAR_APP}/Contents/MacOS/${MENUBAR_EXECUTABLE}`;
+  rmSync(MENUBAR_APP, { recursive: true, force: true });
+  mkdirSync(`${MENUBAR_APP}/Contents/MacOS`, { recursive: true });
+  copyFileSync(`menubar/.build/release/${MENUBAR_EXECUTABLE}`, executable);
+  chmodSync(executable, 0o755);
+  copyFileSync("menubar/Info.plist", `${MENUBAR_APP}/Contents/Info.plist`);
+}
+
+export async function runBuildMenubar(): Promise<never> {
+  process.exit(
+    await buildMenubar({
+      platform: process.platform,
+      run: runForward,
+      print: (text) => writeAndFlush(process.stdout, text),
+    }),
+  );
 }
 
 // --- build (umbrella) -------------------------------------------------------

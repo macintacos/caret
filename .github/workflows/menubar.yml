@@ -1,0 +1,63 @@
+name: menubar
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches: [main]
+permissions: {}
+concurrency:
+  group: menubar-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  changes:
+    name: menubar changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      menubar: ${{ steps.paths.outputs.menubar }}
+    steps:
+      - id: paths
+        # Captured, not piped into grep -q (which could SIGPIPE gh): a failed gh api fails this job.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files?per_page=100" --jq '.[].filename')"
+          if grep -qE '^(menubar/|scripts/tasks/build\.ts$|\.mise/tasks/build$|\.github/workflows/menubar\.yml$)' <<<"$files"; then
+            echo menubar=true >>"$GITHUB_OUTPUT"
+          else
+            echo menubar=false >>"$GITHUB_OUTPUT"
+          fi
+  menubar:
+    name: menubar
+    needs: changes
+    # Builds unless the filter said the app is untouched: if `changes` fails, the output is
+    # empty, and skipping here would report this check as passing.
+    if: ${{ !cancelled() && needs.changes.outputs.menubar != 'false' }}
+    runs-on: macos-26
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v5.2.1
+        with:
+          version: 2026.11.3
+          cache_save: false
+      - run: bun install --frozen-lockfile
+      - run: mise run build menubar
+      - name: The assembled bundle is launchable
+        run: |
+          plist=bin/caret-menubar.app/Contents/Info.plist
+          plutil -lint "$plist"
+          test -x "bin/caret-menubar.app/Contents/MacOS/$(plutil -extract CFBundleExecutable raw "$plist")"
+      # Here rather than in Package.swift, so a newer local toolchain's new warnings never
+      # block a developer's build.
+      - run: swift test --package-path menubar -Xswiftc -warnings-as-errors
+      - run: swift format lint --strict --recursive menubar

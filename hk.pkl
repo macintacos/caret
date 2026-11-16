@@ -119,6 +119,15 @@ local linters = new Mapping<String, Step> {
     check = "bash -c 'cd ui && bunx svelte-check --tsconfig ./tsconfig.json --tsgo'"
   }
 
+  // swift-format ships with the Swift toolchain, so a machine without one (Linux CI's lint
+  // job) skips the step; the macOS menubar workflow is the real gate.
+  ["Swift(Format)     [[swift-format]]"] = new Step {
+    glob = List("menubar/**/*.swift")
+    step_condition = "exec_ok('command -v swift')"
+    check = "swift format lint --strict {{ files }}"
+    fix = "swift format --in-place {{ files }}"
+  }
+
   // `types` is inherited, so the builtin's shebang-driven selector still reaches the
   // extensionless scripts; only `glob` is widened. shellcheck reads bats files as bash
   // (it knows the shebang) but the builtin's glob stops at .sh/.bash, and a bats file

@@ -57,6 +57,8 @@ is documented in
   in a container (`mise run verify linux`). Hand-run: no gate spawns it.
 - `scripts/macos/verify.sh` — the launchd contract, checked against this Mac's own
   launchctl (`mise run verify macos`). Hand-run too, and it needs a GUI login session.
+- `menubar/Tests/` — the menubar app's Swift tests. `swift test --package-path menubar`
+  runs them on macOS, and the `menubar` workflow runs them in CI.
 
 ## Configuration
 

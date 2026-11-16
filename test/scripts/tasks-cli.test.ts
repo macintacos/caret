@@ -8,11 +8,13 @@ import {
   buildBinCompileCommand,
   buildBundleCommand,
   buildInstallCommand,
+  buildMenubar,
   buildUiCommand,
   ensureBin,
   ensureUi,
   shouldBuildBin,
   shouldBuildUi,
+  swiftBuildCommand,
 } from "@/tasks/build.ts";
 import { caretCommand } from "@/tasks/caret.ts";
 import { buildProgram, type TaskActions } from "@/tasks/cli.ts";
@@ -410,9 +412,63 @@ describe("tasks CLI: build command", () => {
     }).parseAsync(["build", "bundle"], { from: "user" });
     expect(called).toBe(true);
   });
+
+  test("build menubar subcommand invokes its action", async () => {
+    let called = false;
+    await buildProgram({
+      buildMenubar: async () => {
+        called = true;
+      },
+    }).parseAsync(["build", "menubar"], { from: "user" });
+    expect(called).toBe(true);
+  });
 });
 
 describe("tasks CLI: build pipeline command lines", () => {
+  test("build menubar runs a SwiftPM release build of menubar/", () => {
+    expect(swiftBuildCommand()).toEqual([
+      "swift",
+      "build",
+      "-c",
+      "release",
+      "--package-path",
+      "menubar",
+    ]);
+  });
+
+  test("build menubar off macOS prints one line, runs nothing, and succeeds", async () => {
+    const ran: string[][] = [];
+    const printed: string[] = [];
+    const code = await buildMenubar({
+      platform: "linux",
+      run: async (cmd) => {
+        ran.push(cmd);
+        return 0;
+      },
+      print: async (text) => {
+        printed.push(text);
+      },
+    });
+    expect(code).toBe(0);
+    expect(ran).toEqual([]);
+    expect(printed.join("").trimEnd().split("\n")).toHaveLength(1);
+    expect(printed.join("")).toContain("macOS");
+  });
+
+  test("build menubar on macOS returns a failed swift build's code before assembling", async () => {
+    const ran: string[][] = [];
+    const code = await buildMenubar({
+      platform: "darwin",
+      run: async (cmd) => {
+        ran.push(cmd);
+        return 3;
+      },
+      print: async () => {},
+    });
+    expect(code).toBe(3);
+    expect(ran).toEqual([swiftBuildCommand()]);
+  });
+
   // `build bin`/`build bundle`/`test e2e` build the UI first UNLESS
   // CARET_SKIP_BUILD_UI is set, which is how the preflight gate keeps the UI built
   // exactly once (scripts/preflight.ts spawns the dependents with it set).

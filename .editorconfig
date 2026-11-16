@@ -26,3 +26,8 @@ indent_size = 2
 [*.{ts,tsx,js,jsx,mjs,cjs,svelte,json,jsonc}]
 indent_style = space
 indent_size = 2
+
+# swift-format reads menubar/.swift-format; this keeps editors on the same 4 spaces.
+[*.swift]
+indent_style = space
+indent_size = 4

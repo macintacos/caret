@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-#MISE description="Build the UI then the binary (bare); or a ui/bin/bundle target"
+#MISE description="Build the UI then the binary (bare); or a ui/bin/bundle/menubar target"
 #MISE raw_args=true
 # Suppresses mise's own `[build] $ …` command echo, so the umbrella build's progress
 # line is the first thing on the terminal; being task-level, it drops the echo for the
-# `ui`/`bin`/`bundle` targets too. The task's own stdout is untouched either way.
+# `ui`/`bin`/`bundle`/`menubar` targets too. The task's own stdout is untouched either way.
 #MISE quiet=true
 # Fresh-clone guard (scripts/bootstrap.sh); `|| exit 1` is its caller contract.
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/../../scripts/bootstrap.sh" || exit 1
 # raw_args hands every argument (including a bare --help) straight to the CLI, so
 # `mise run build --help` shows the CLI's real help instead of mise's task help.
-# Thin forwarder: the ui/bin/bundle targets, the UI-first ordering + skip
+# Thin forwarder: the ui/bin/bundle/menubar targets, the UI-first ordering + skip
 # mechanism, and the optional --install step all live in the caret tasks CLI
-# (scripts/tasks/cli.ts). `mise run build ui|bin|bundle` passes the target as $1;
+# (scripts/tasks/cli.ts). `mise run build ui|bin|bundle|menubar` passes the target as $1;
 # bare `mise run build` builds the UI then the binary. "$@" is safe on an empty
 # arg list (a special parameter, not a plain array — no set -u footgun).
 exec bun scripts/tasks/cli.ts build "$@"

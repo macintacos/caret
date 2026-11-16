@@ -573,6 +573,46 @@ directly it fails without one; `mise run preflight` records the task skipped ins
 Preflight checks only that `claude` exists, not its version, so an older one fails the
 gate rather than skipping.
 
+### The menubar app
+
+`menubar/` is the Swift package for the macOS menubar app. The app shows 🥕 while a plan
+waits for review and a grey carrot otherwise. It polls the daemon's `GET /api/pending`
+every 3 seconds and never starts the daemon. The carrot is drawn from the system emoji
+font at runtime, so no Apple artwork is committed or built.
+
+There is no Xcode project. `swift build` and `swift test` work from the package, and Xcode
+opens `menubar/Package.swift` directly. `swift test --package-path menubar` runs its
+tests.
+
+`mise run build menubar` builds it in release and assembles `bin/caret-menubar.app`, with
+`LSUIElement` set so it has no Dock icon. It needs macOS 13 or later and Xcode 26 or
+later; elsewhere the target prints one line and succeeds. Run it with
+`open bin/caret-menubar.app`, or pass launch arguments after `--args`:
+
+```sh
+open bin/caret-menubar.app --args --base-url http://127.0.0.1:42718 \
+  --review-url http://caret.localhost:42718 --token-file ~/.local/state/caret/daemon.token
+```
+
+All three arguments are optional, and the URLs default as shown. With no `--token-file`
+the app sends no token, which a daemon without auth doesn't need. A base URL that isn't
+loopback is refused.
+
+The app logs each icon change to the unified log under the subsystem
+`dev.excessive.caret.menubar`:
+
+```sh
+log show --last 1h --predicate 'subsystem == "dev.excessive.caret.menubar"'
+```
+
+`swift format` formats the Swift, with the settings in `menubar/.swift-format`.
+`swift format --in-place --recursive menubar` rewrites the files, and
+`swift format lint --strict --recursive menubar` checks them. `mise run format` and
+`mise run lint` run the same over the package, and skip it where `swift` isn't installed.
+
+`mise run preflight` never runs Swift; the `menubar` workflow (see
+[PR checks](#pr-checks)) is the gate.
+
 ### A quick trial without installing
 
 To exercise caret's hooks from a checkout without registering anything, load the plugin
@@ -600,7 +640,7 @@ forwarder sets `#MISE raw_args=true` so mise hands every argument — including 
 | Subcommand                                          | Module                          | Notes                                                                             |
 | --------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------- |
 | `dev`                                               | `scripts/tasks/dev/`            | The one multi-file task, so it keeps a folder rather than a single module.        |
-| `build` — bare, `ui`, `bin`, `bundle`               | `scripts/tasks/build.ts`        | Bare is the umbrella; `mise run build bin` reaches a target.                      |
+| `build` — bare, `ui`, `bin`, `bundle`, `menubar`    | `scripts/tasks/build.ts`        | Bare is the umbrella; `mise run build bin` reaches a target.                      |
 | `test` — bare / `unit`, `e2e`, `bats`, `mod`        | `scripts/tasks/test.ts`         | Bare and `unit` are the same bun target; `e2e` is Playwright; `bats` is the shell suites under `scripts/`; `mod` is `claude plugin test mod`. The first two carry `--quiet`, `--verbose`, and `--json` ahead of their forwarded args; `bats` and `mod` carry `--json` alone. |
 | `smoke` — bare, `bin`, `bundle`                     | `scripts/tasks/smoke.ts`        | Bare smokes both artifacts.                                                       |
 | `docs` — `build`, `serve`                           | `scripts/tasks/docs.ts`         | `build` writes `site/` and fails on a broken link, anchor, or nav entry; `serve` previews at http://localhost:2273/caret/ and forwards its args to `zensical serve`. |
@@ -718,8 +758,13 @@ saves on any miss, so a PR that changes the package set saves a copy of its own.
 - Job names are what branch protection matches — renaming one drops it from the required
   checks.
 - Actions are pinned through `.github/workflows/actions.lock`; whenever an action ref
-  changes, regenerate it with
-  `gh actions-lock --no-interactive .github/workflows/ci.yml .github/workflows/docs-gate.yml`.
+  changes, regenerate it with:
+
+  ```sh
+  gh actions-lock --no-interactive .github/workflows/ci.yml \
+    .github/workflows/docs-gate.yml .github/workflows/menubar.yml
+  ```
+
 - A stacked PR retargeted to `main` gets its checks on the next push, not on the retarget.
 
 The docs gate is a separate workflow, `.github/workflows/docs-gate.yml`, whose one job is
@@ -733,6 +778,16 @@ publishes changed. A published page is a `docs/**/*.md` that `zensical.toml`'s
 and read-only permissions mean a fork's PR never runs with a write token. Its cases live
 in `test/scripts/docs-gate.test.ts` (the script) and
 `test/scripts/docs-gate-workflow.test.ts` (the workflow), which `test unit` runs.
+
+The menubar app has its own workflow, `.github/workflows/menubar.yml`. Its
+`menubar changes` job reads the PR's changed paths from the GitHub API. Its `menubar` job
+builds and tests the app on the `macos-26` image with a pinned Xcode (`DEVELOPER_DIR`),
+and runs only when the PR touches `menubar/`, the build task (`scripts/tasks/build.ts`,
+`.mise/tasks/build`), or the workflow. A skipped job reports as passing, so making
+`menubar` a required check never blocks other PRs, and a failed `menubar changes` job
+makes `menubar` build anyway rather than skip. The runner image and the Xcode pin are
+bumped together, in the same change. Its cases live in
+`test/scripts/menubar-workflow.test.ts`.
 
 #### Adding a task
 
