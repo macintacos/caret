@@ -87,22 +87,19 @@ describe("the menubar question", () => {
     };
   }
 
-  test("defaults to yes only when the app is already installed", async () => {
-    const installed = recordingConfirm();
-    const absent = recordingConfirm();
-    await promptForMenubar(true, installed.clack);
-    await promptForMenubar(false, absent.clack);
-    expect(installed.asked[0]?.initialValue).toBe(true);
-    expect(absent.asked[0]?.initialValue).toBe(false);
+  test("defaults to yes", async () => {
+    const { asked, clack } = recordingConfirm();
+    await promptForMenubar(clack);
+    expect(asked[0]?.initialValue).toBe(true);
   });
 
   test("asks whether to show caret in the menu bar", async () => {
     const { asked, clack } = recordingConfirm();
-    expect(await promptForMenubar(false, clack)).toBe(true);
+    expect(await promptForMenubar(clack)).toBe(true);
     expect(asked[0]?.message).toBe("Show caret in the menu bar?");
   });
 
   test("a cancelled question answers null", async () => {
-    expect(await promptForMenubar(true, recordingConfirm(Symbol("cancel")).clack)).toBeNull();
+    expect(await promptForMenubar(recordingConfirm(Symbol("cancel")).clack)).toBeNull();
   });
 });

@@ -28,8 +28,8 @@ Show caret in the menu bar?
 Answer **Yes** to add the app. It opens right away and starts at login. If it crashes,
 macOS starts it again. If you choose **Quit**, it stays closed until your next login.
 
-The question's default is **Yes** when the app is already installed, and **No** otherwise.
-`caret install` does not ask under `--dry-run` or `--uninstall`.
+The question's default is **Yes**. `caret install` does not ask under `--dry-run` or
+`--uninstall`.
 
 ## Keep the app current
 

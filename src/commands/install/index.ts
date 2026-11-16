@@ -62,7 +62,7 @@ export interface InstallDeps extends ServiceStepDeps, MenubarStepDeps {
   detect?: () => InstallTarget[];
   prompt?: (detected: InstallTarget[]) => Promise<InstallTarget[] | null>;
   promptService?: () => Promise<AskedServiceChoice | null>;
-  promptMenubar?: (installed: boolean) => Promise<boolean | null>;
+  promptMenubar?: () => Promise<boolean | null>;
   isInteractive?: () => boolean;
   /** Narrowed to what the step reports — the real `ensureRumdl` satisfies it, and a test
    * can describe an outcome without the config path it never reads. */
@@ -367,7 +367,7 @@ async function selectMenubarChoice(
 ): Promise<MenubarChoice | null> {
   const isInteractive = deps.isInteractive ?? isTerminal;
   if (!deps.menubar || opts.uninstall || opts.dryRun || !isInteractive()) return "as-found";
-  const answer = await (deps.promptMenubar ?? promptForMenubar)(deps.menubar.installed());
+  const answer = await (deps.promptMenubar ?? promptForMenubar)();
   if (answer === null) {
     ui.cancel("Cancelled — nothing was changed.");
     return null;

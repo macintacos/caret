@@ -2,7 +2,7 @@
 // agents otherwise) and dispatch to the injected target runners.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -317,8 +317,8 @@ describe("the menubar question", () => {
         calls.push("service");
         return "run-yourself" as const;
       },
-      promptMenubar: async (installed: boolean) => {
-        calls.push(`menubar:${installed}`);
+      promptMenubar: async () => {
+        calls.push("menubar");
         return answer;
       },
       service: fakeServiceTarget({ calls }).target,
@@ -332,17 +332,10 @@ describe("the menubar question", () => {
     };
   }
 
-  test("is asked after the service question, defaulting to whether the app is installed", async () => {
+  test("is asked after the service question", async () => {
     const calls: string[] = [];
     await runInstallSubcommand(PLAIN_INSTALL, menubarDeps(calls));
-    writeFileSync(join(agents, `${MENUBAR_LABEL}.plist`), "<plist/>");
-    await runInstallSubcommand(PLAIN_INSTALL, menubarDeps(calls));
-    expect(calls.filter((c) => c === "service" || c.startsWith("menubar:"))).toEqual([
-      "service",
-      "menubar:false",
-      "service",
-      "menubar:true",
-    ]);
+    expect(calls.filter((c) => c === "service" || c === "menubar")).toEqual(["service", "menubar"]);
   });
 
   test("is not asked without an agent, under --dry-run or --uninstall, or without a TTY", async () => {
@@ -354,14 +347,14 @@ describe("the menubar question", () => {
       ...menubarDeps(calls),
       isInteractive: () => false,
     });
-    expect(calls.some((c) => c.startsWith("menubar:"))).toBe(false);
+    expect(calls.includes("menubar")).toBe(false);
   });
 
   test("a cancelled menubar question installs nothing", async () => {
     const calls: string[] = [];
     const outcome = await runInstallSubcommand(PLAIN_INSTALL, menubarDeps(calls, null));
     expect(outcome).toBe("ok");
-    expect(calls).toEqual(["service", "menubar:false"]);
+    expect(calls).toEqual(["service", "menubar"]);
   });
 
   test("a yes reaches the menubar step", async () => {

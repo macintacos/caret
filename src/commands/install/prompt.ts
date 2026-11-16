@@ -73,16 +73,13 @@ export interface ClackConfirm {
   isCancel(value: unknown): boolean;
 }
 
-/** Ask whether the menubar app runs from login, defaulting to yes when it is already
- * installed. Returns the answer, or null when the user cancels. */
-export async function promptForMenubar(
-  installed: boolean,
-  clack?: ClackConfirm,
-): Promise<boolean | null> {
+/** Ask whether the menubar app runs from login, defaulting to yes. Returns the answer, or
+ * null when the user cancels. */
+export async function promptForMenubar(clack?: ClackConfirm): Promise<boolean | null> {
   const { confirm, isCancel }: ClackConfirm = clack ?? (await import("@clack/prompts"));
   const answer = await confirm({
     message: "Show caret in the menu bar?",
-    initialValue: installed,
+    initialValue: true,
   });
   return isCancel(answer) ? null : answer === true;
 }
