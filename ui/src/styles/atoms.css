@@ -9,6 +9,17 @@
   letter-spacing: 0.01em;
 }
 
+/* A one-line label's inline markdown: its code spans take the plan's code tint without its
+   stamped shadow or block padding, so the line keeps its height and the span stays inline
+   for text-overflow. */
+.md-inline code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding-inline: var(--chip-pad-inline);
+  border-radius: var(--radius);
+  background-color: var(--chip-code);
+}
+
 /* ----- The tactile kit -----
 
    A silicone keypad. Controls are rubber keys that stand proud of wells cut into the
@@ -1000,15 +1011,4 @@ button.tray:is(:active, [data-key-pressed]) > .cap {
   text-align: right;
   color: var(--ink-faint);
   font-variant-numeric: tabular-nums;
-}
-
-/* A one-line label rendering a heading's inline markdown (the review title, the plan's
-   crumbs): its code spans wear a quiet chip in inherited ink, with inline padding only so
-   the line keeps its height and stays inline for text-overflow. */
-.md-inline code {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  padding-inline: var(--chip-pad-inline);
-  border-radius: var(--radius);
-  background-color: var(--chip-code);
 }

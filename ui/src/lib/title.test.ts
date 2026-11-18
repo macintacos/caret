@@ -73,8 +73,18 @@ describe("plainTitle", () => {
     expect(plainTitle("**b** *e* `c` ~~s~~")).toBe("b e c s");
   });
 
-  test("decodes entities rather than escaping them", () => {
+  test("leaves `&`, `<` and `>` unescaped", () => {
     expect(plainTitle("**a** & `b` <i>")).toBe("a & b <i>");
+  });
+
+  test("keeps an entity reference inside a code span literal, as the label shows it", () => {
+    expect(plainTitle("Escape `&amp;` in templates")).toBe("Escape &amp; in templates");
+  });
+
+  test("leaves the shared renderer's options untouched", () => {
+    const before = renderTitle("**a** `b`");
+    plainTitle("**x**");
+    expect(renderTitle("**a** `b`")).toBe(before);
   });
 
   test("flattens links and images to their text", () => {

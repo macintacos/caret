@@ -1,4 +1,4 @@
-// Feeds {@html}, so the output is sanitized: js-xss, since DOMPurify mis-sanitizes under
+// `renderTitle` feeds {@html}, so its output is sanitized: js-xss, since DOMPurify mis-sanitizes under
 // the unit suite's happy-dom.
 import { Marked, TextRenderer } from "marked";
 import { escapeHtml, FilterXSS } from "xss";
@@ -30,37 +30,31 @@ const sanitizer = new FilterXSS({
   css: false,
 });
 
-/** Renders a plan title's inline markdown as sanitized HTML. */
+/** Renders a plan title or a heading's inline markdown as sanitized HTML. */
 export function renderTitle(title: string): string {
   const html = marked.parseInline(title, { async: false });
   return sanitizer.process(html);
 }
 
+// Reads a hard break as a space, as `renderTitle` does.
 class PlainRenderer extends TextRenderer {
   override br(): string {
     return " ";
   }
 }
 
-/** A plan title's inline markdown as plain text, for a `title` attribute or an accessible name. */
+// A copy: the Lexer and Parser constructors write into the options they are handed.
+const plainOptions = { ...marked.defaults };
+const plainParser = new marked.Parser(plainOptions);
+const plainRenderer = new PlainRenderer();
+plainRenderer.parser = plainParser;
+
+/**
+ * A plan title or a heading's inline markdown as plain text, for a `title` attribute or an
+ * accessible name. Unescaped: bind it as text or an attribute, never through `{@html}`.
+ */
 export function plainTitle(title: string): string {
-  const tokens = marked.Lexer.lexInline(title, marked.defaults);
-  const parser = new marked.Parser(marked.defaults);
-  const renderer = new PlainRenderer();
-  renderer.parser = parser;
-  const text = parser.parseInline(tokens, renderer);
-  return decodeEntities(text);
-}
-
-const ENTITIES: Record<string, string> = {
-  "&amp;": "&",
-  "&lt;": "<",
-  "&gt;": ">",
-  "&quot;": '"',
-  "&#39;": "'",
-};
-
-// Undoes exactly the escapes marked emits.
-function decodeEntities(text: string): string {
-  return text.replace(/&(?:amp|lt|gt|quot|#39);/g, (e) => ENTITIES[e] ?? e);
+  // ponytail: an entity reference typed outside a code span (`&copy;`) renders as `©` in
+  // the label but stays literal here; decode outside code spans if that ever matters.
+  return plainParser.parseInline(marked.Lexer.lexInline(title, plainOptions), plainRenderer);
 }

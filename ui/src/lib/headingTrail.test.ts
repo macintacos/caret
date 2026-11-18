@@ -231,6 +231,19 @@ describe("headingMatches", () => {
   test("returns nothing for a plan with no headings", () => {
     expect(headingMatches([], "")).toEqual([]);
   });
+
+  test("matches a heading on the text its markdown renders", () => {
+    const headings = extractHeadings("# **bold** and `code`\n");
+    expect(headingMatches(headings, "bold and").map((m) => m.heading.text)).toEqual([
+      "**bold** and `code`",
+    ]);
+  });
+
+  test("does not match a heading through its markdown syntax", () => {
+    const headings = extractHeadings("# **bold** and `code`\n");
+    expect(headingMatches(headings, "`")).toEqual([]);
+    expect(headingMatches(headings, "*")).toEqual([]);
+  });
 });
 
 // The filter the ToC popup renders (EXC-1103): the same matches `headingMatches`

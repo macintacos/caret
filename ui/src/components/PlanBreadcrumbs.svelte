@@ -694,6 +694,10 @@
   }
 </script>
 
+{#snippet mdLabel(className: string, text: string)}
+  <span class="{className} md-inline" title={plainTitle(text)}>{@html renderTitle(text)}</span>
+{/snippet}
+
 <!-- One level of the heading tree. EVERY heading that encloses others nests them
      through a DropdownMenuSub, not just the one on the reader's own trail
      (EXC-957): the menus recurse the whole hierarchy, bottoming out at the headings
@@ -713,7 +717,7 @@
           onkeydown={(e) => onRowKeydown(e, heading.line)}
           onclick={(e) => onRowClick(e, heading.line)}
         >
-          <span class="crumb-label md-inline" title={plainTitle(heading.text)}>{@html renderTitle(heading.text)}</span>
+          {@render mdLabel("crumb-label", heading.text)}
         </DropdownMenu.SubTrigger>
         <DropdownMenu.SubContent
           class="plan-crumb-menu"
@@ -724,7 +728,7 @@
       </DropdownMenu.Sub>
     {:else}
       <DropdownMenu.Item aria-current={here} onSelect={() => goTo(heading.line)}>
-        <span class="crumb-label md-inline" title={plainTitle(heading.text)}>{@html renderTitle(heading.text)}</span>
+        {@render mdLabel("crumb-label", heading.text)}
       </DropdownMenu.Item>
     {/if}
   {/each}
@@ -955,9 +959,9 @@
               aria-current={match.heading.line === activeLine ? "location" : undefined}
               onSelect={() => pick(match.heading.line)}
             >
-              <span class="crumb-label md-inline" title={plainTitle(match.heading.text)}>{@html renderTitle(match.heading.text)}</span>
+              {@render mdLabel("crumb-label", match.heading.text)}
               {#if match.parent}
-                <span class="crumb-parent md-inline" title={plainTitle(match.parent)}>{@html renderTitle(match.parent)}</span>
+                <span class="crumb-parent" title={plainTitle(match.parent)}>{plainTitle(match.parent)}</span>
               {/if}
             </Command.Item>
           {/each}

@@ -4,7 +4,8 @@
 // filter results flat and gathered under their ancestor paths, and how much of the trail
 // a row of a given width can hold. Pure and DOM-free like `toc.ts`.
 
-import { filterHeadings, type TocHeading } from "$lib/toc.ts";
+import { plainTitle } from "$lib/title.ts";
+import { filterHeadings, headingMatcher, type TocHeading } from "$lib/toc.ts";
 
 /** A heading with the headings nested under it, in document order. */
 export interface HeadingNode {
@@ -144,7 +145,8 @@ export function visibleDepths(
 /**
  * Headings matching `query`, in document order, each carrying the text of the heading
  * enclosing it — what keeps two identically titled sections apart in a flat list.
- * Matching is `filterHeadings`', so an empty query returns every heading.
+ * Matches the text a heading's markdown renders, not its source; an empty query returns
+ * every heading.
  */
 export function headingMatches(headings: TocHeading[], query: string): HeadingMatch[] {
   const parents = parentIndices(headings);
@@ -153,10 +155,10 @@ export function headingMatches(headings: TocHeading[], query: string): HeadingMa
   const parentText = new Map(
     headings.map((h, index) => [h.line, headings[parents[index] ?? -1]?.text ?? null]),
   );
-  return filterHeadings(headings, query).map((heading) => ({
-    heading,
-    parent: parentText.get(heading.line) ?? null,
-  }));
+  const match = headingMatcher(query);
+  return headings
+    .filter((h) => match(plainTitle(h.text)) !== null)
+    .map((heading) => ({ heading, parent: parentText.get(heading.line) ?? null }));
 }
 
 /**

@@ -27,6 +27,9 @@ Open items first, then the log, newest first.
 - **Keycap hints on GitHub dark's body:** keycaps and breadcrumb chevrons keep
   `--ink-faint`, about 2.9:1 on GitHub dark's `--body`. The old raised bar gave about
   3.2:1, also under the floor.
+- **A code span in a risen crumb:** `--ink` on `--crumb-face-hover` under the
+  `--chip-code` tint measures 4.20 in Catppuccin Frappé, under the 4.5:1 floor.
+  `theme.test.ts` holds that palette at 4.2 and every other at 4.5.
 - **`--pane-recess` has no contact-edge test:** `coreStyles.test.ts` pins `--panel-recess`
   to 1px outer layers with no blur or spread, and nothing pins `--pane-recess` the same
   way.
