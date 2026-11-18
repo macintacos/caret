@@ -1,5 +1,5 @@
-// `renderTitle` feeds {@html}, so its output is sanitized: js-xss, since DOMPurify mis-sanitizes under
-// the unit suite's happy-dom.
+// `renderTitle` feeds {@html}, so its output is sanitized: js-xss, since DOMPurify
+// mis-sanitizes under the unit suite's happy-dom.
 import { Marked, TextRenderer } from "marked";
 import { escapeHtml, FilterXSS } from "xss";
 

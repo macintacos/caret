@@ -813,7 +813,6 @@ describe("every theme", () => {
   // The review switcher lays a --chip-code tint under a title's code span, on every ground
   // the title sits on: the trigger key resting and hovered, the single-review label on the
   // page, and a dropdown row resting and highlighted.
-  // The review switcher lays a --chip-code tint under a title's code span.
   test("keeps a code span in the review title at AA under the code chip", () => {
     for (const [id, theme] of themeEntries()) {
       const tokens = theme.tokens;
