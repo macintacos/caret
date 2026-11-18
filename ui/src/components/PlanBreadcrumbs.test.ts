@@ -806,10 +806,12 @@ describe("PlanBreadcrumbs heading markdown", () => {
       ],
       activeLine: 5,
     });
-    const [sub, item] = menuRows().map((r) => r.querySelector<HTMLElement>(".crumb-label"));
-    expect(sub?.querySelector("strong")?.textContent).toBe("bold");
-    expect(sub?.title).toBe("bold and code");
-    expect(item?.querySelector("code")?.textContent).toBe("tail");
-    expect(item?.title).toBe("tail");
+    const [subLabel, itemLabel] = menuRows().map((r) =>
+      r.querySelector<HTMLElement>(".crumb-label"),
+    );
+    expect(subLabel?.querySelector("strong")?.textContent).toBe("bold");
+    expect(subLabel?.title).toBe("bold and code");
+    expect(itemLabel?.querySelector("code")?.textContent).toBe("tail");
+    expect(itemLabel?.title).toBe("tail");
   });
 });
