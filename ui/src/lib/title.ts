@@ -1,16 +1,37 @@
-// Post-title display helper. Pure TS (no DOM/node imports) so it stays
-// node-free and unit-testable, mirroring shortCwd in ./cwd.ts.
+// Feeds {@html}, so the output is sanitized: js-xss, since DOMPurify mis-sanitizes under
+// the unit suite's happy-dom.
+import { Marked } from "marked";
+import { escapeHtml, FilterXSS } from "xss";
 
-/**
- * Strips inline markdown links from a title, leaving the link text in place:
- * `[EXC-562](https://…)` becomes `EXC-562`. The titlebar renders titles as
- * plain text, so without this a title carrying a link shows its raw markdown
- * syntax (brackets, parens, and the full URL) instead of the readable text.
- *
- * The URL portion allows one level of balanced parentheses so a link whose URL
- * itself contains parens (`…/Foo_(bar)`) is consumed whole rather than leaving
- * a stray `)` behind.
- */
-export function stripTitleLinks(title: string): string {
-  return title.replace(/\[([^\]]+)\]\([^()]*(?:\([^()]*\)[^()]*)*\)/g, "$1");
+// Links and images flatten to text: the title sits inside a button and a menu item,
+// where a nested link is invalid and a click would leave the review. Raw HTML reads
+// as literal text, as in the source view.
+const marked = new Marked({
+  gfm: true,
+  renderer: {
+    link({ tokens }) {
+      return this.parser.parseInline(tokens);
+    },
+    image({ tokens }) {
+      return this.parser.parseInline(tokens, this.parser.textRenderer);
+    },
+    html({ text }) {
+      return escapeHtml(text);
+    },
+    br() {
+      return " ";
+    },
+  },
+});
+
+// Exactly the tags the inline renderer above emits; a tag added there must be added here.
+const sanitizer = new FilterXSS({
+  whiteList: { strong: [], em: [], code: [], del: [] },
+  css: false,
+});
+
+/** Renders a plan title's inline markdown as sanitized HTML. */
+export function renderTitle(title: string): string {
+  const html = marked.parseInline(title, { async: false });
+  return sanitizer.process(html);
 }
