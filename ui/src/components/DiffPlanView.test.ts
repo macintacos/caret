@@ -543,6 +543,54 @@ describe("DiffPlanView annotation display", () => {
     });
   });
 
+  /** Props whose focusedStop follows onFocusStop, as App's store does. */
+  function focusOwningProps(over: Record<string, unknown>) {
+    const p = reactiveProps({
+      ...props(),
+      focusedStop: null as FocusedStop | null,
+      onFocusStop: (_stop: FocusedStop | null) => {},
+      ...over,
+    });
+    p.onFocusStop = (stop) => {
+      p.focusedStop = stop;
+    };
+    return p;
+  }
+  const cursorRow = (target: HTMLElement) =>
+    shadow(target)?.querySelector("[data-content] [data-line][data-caret-cursor]") ?? null;
+
+  test("removing the hovered comment lands the cursor on its last line", async () => {
+    const p = focusOwningProps({
+      annotations: [lineAnn({ id: "a", startLine: 2, endLine: 3 })],
+      focusedStop: { ref: { kind: "comment", id: "a" }, line: 3 },
+    });
+    const { target, flush } = render(DiffPlanView, p);
+    await until(() => target.querySelector('[data-annotation-card="a"]') != null);
+    expect(cursorRow(target) === null).toBe(true);
+
+    p.annotations = [];
+    flush();
+    expect(p.focusedStop === null).toBe(true);
+    await until(() => cursorRow(target) != null);
+    expect(cursorRow(target)?.getAttribute("data-line")).toBe("3");
+  });
+
+  test("switching reviews with a comment hovered places no cursor", async () => {
+    const p = focusOwningProps({
+      annotations: [lineAnn({ id: "a", startLine: 2, endLine: 3 })],
+      focusedStop: { ref: { kind: "comment", id: "a" }, line: 3 },
+    });
+    const { target, flush } = render(DiffPlanView, p);
+    await until(() => target.querySelector('[data-annotation-card="a"]') != null);
+
+    p.review = reviewFixture({ id: "r2" });
+    p.annotations = [];
+    flush();
+    expect(p.focusedStop === null).toBe(true);
+    await until(() => shadow(target)?.querySelector("pre") != null);
+    expect(cursorRow(target) === null).toBe(true);
+  });
+
   test("two comments on one line render as a single ordered thread", async () => {
     const annotations = [
       lineAnn({ id: "first", startLine: 3, endLine: 3, comment: "earlier note" }),

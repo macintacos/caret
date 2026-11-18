@@ -943,7 +943,11 @@
 <CommentNavigator
   open={active !== null && showComments}
   {comments}
-  activeId={autosave.focusedStop?.ref.kind === "comment" ? autosave.focusedStop.ref.id : null}
+  activeId={autosave.focusedStop == null
+    ? null
+    : autosave.focusedStop.ref.kind === "comment"
+      ? autosave.focusedStop.ref.id
+      : autosave.focusedStop.ref.key}
   onReveal={revealComment}
   onClose={() => setComments(false)}
   compare={compareRange !== null}

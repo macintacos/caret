@@ -170,13 +170,13 @@ export function createAutosave(
         void flushPending();
         lastLoadedKey = key;
         store.annotations = active.annotations.map((a) => ({ ...a }));
-        store.focusedStop = null;
         // Version-scoped: a fresh plan version starts with its own scratches
         // (none), never a prior version's stale line anchors.
         store.composerScratches = copyScratches(active.composerScratches);
         currentVersionNum = active.version;
         if (active.id !== lastDraftLoadedId) {
           lastDraftLoadedId = active.id;
+          store.focusedStop = null;
           store.generalCommentDraft = active.generalCommentDraft ?? "";
         }
       } else if (!active) {
@@ -204,8 +204,6 @@ export function createAutosave(
     },
     deleteAnnotation(id) {
       store.annotations = store.annotations.filter((a) => a.id !== id);
-      const ref = store.focusedStop?.ref;
-      if (ref?.kind === "comment" && ref.id === id) store.focusedStop = null;
       scheduleSave();
     },
     focusStop(stop) {

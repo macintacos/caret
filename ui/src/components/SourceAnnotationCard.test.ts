@@ -195,6 +195,17 @@ describe("SourceAnnotationCard collapse", () => {
     expect(edited).toBe(false);
   });
 
+  test("collapsing the card focuses it too", () => {
+    const focused: string[] = [];
+    const { target, flush } = render(
+      SourceAnnotationCard,
+      base({ focused: true, onFocus: (id: string) => focused.push(id) }),
+    );
+    click(target, ".chip");
+    flush();
+    expect(focused).toEqual(["a1"]);
+  });
+
   test("clicking the comment body (not a button) collapses the expanded card", () => {
     const { target, flush } = render(SourceAnnotationCard, base({ focused: true }));
     expect(target.querySelector(".card.expanded")).not.toBeNull();

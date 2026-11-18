@@ -76,8 +76,8 @@
 
   function toggle() {
     expanded = !expanded;
-    if (expanded) onFocus(annotation.id);
-    else editing = false;
+    if (!expanded) editing = false;
+    onFocus(annotation.id);
   }
 
   // The whole card is the toggle surface (EXC-765) — the pointer layer over the

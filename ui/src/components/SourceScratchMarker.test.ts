@@ -41,6 +41,12 @@ describe("SourceScratchMarker", () => {
     expect(resumed()).toBe(1);
   });
 
+  test("the hovered marker carries the focused class and its key", () => {
+    const { button } = mount({ hovered: true, scratchKey: "3:5" });
+    expect(button.classList.contains("focused")).toBe(true);
+    expect(button.dataset.scratchMarker).toBe("3:5");
+  });
+
   test("the control is a button so it is keyboard-focusable", () => {
     const { button } = mount();
     expect(button).not.toBeNull();

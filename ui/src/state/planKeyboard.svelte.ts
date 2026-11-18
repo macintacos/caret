@@ -11,6 +11,13 @@
 
 import { normalizeRange } from "$lib/diffview/commenting.ts";
 import {
+  type CommentStop,
+  crossedStop,
+  type FocusedStop,
+  sameStop,
+  stopNeighbour,
+} from "$lib/diffview/commentStops.ts";
+import {
   blankLinesOf,
   type CursorMotion,
   JUMP_MOTIONS,
@@ -88,9 +95,20 @@ export interface PlanKeyboardDeps {
   clearTimer?: (handle: ReturnType<typeof setTimeout>) => void;
   /** Play a moment's cue. Optional so a test drives the factory silently. */
   sound?: (event: SoundEvent) => void;
+  /** The comment stops in render order; empty where comments take no keys. */
+  stops(): CommentStop[];
+  /** The hovered stop, owned by the host. */
+  focusedStop(): FocusedStop | null;
+  setFocusedStop(stop: FocusedStop | null): void;
+  /** Scroll `stop`'s card or marker into view. */
+  followStop(stop: CommentStop): void;
 }
 
 export interface PlanKeyboard {
+  /** Hover `stop`: exits visual mode, puts the cursor on its last line, and follows it. */
+  placeOnStop(stop: CommentStop): void;
+  /** Put the cursor on `line`, leaving any hovered stop. Scrolls nothing. */
+  landOnLine(line: number): void;
   /** The matches for the current query over the rendered text — consumed by the host's
    * `searchMatches` derived (pill counter, highlight) and internally by the transitions.
    * An empty query yields no matches. */
@@ -153,7 +171,52 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
 
   // The shared seed every search/motion transition starts from.
   function seedLine(): number {
-    return store.cursorLine ?? deps.readingLine() ?? 1;
+    return deps.focusedStop()?.line ?? store.cursorLine ?? deps.readingLine() ?? 1;
+  }
+
+  function leaveStop(): void {
+    if (deps.focusedStop() != null) deps.setFocusedStop(null);
+  }
+
+  function placeOnStop(stop: CommentStop): void {
+    store.visualAnchor = null;
+    deps.setFocusedStop({ ref: stop.ref, line: stop.line });
+    store.cursorLine = stop.line;
+    deps.followStop(stop);
+  }
+
+  function landOnLine(line: number): void {
+    leaveStop();
+    store.cursorLine = line;
+  }
+
+  /** `j`/`k` off the hovered stop: to its slot's next stop, else past the slot. Reports
+   * whether a stop was hovered. */
+  function stepFromStop(dir: 1 | -1, lineCount: number): boolean {
+    const focused = deps.focusedStop();
+    if (focused == null) return false;
+    const stops = deps.stops();
+    const i = stops.findIndex((s) => sameStop(s.ref, focused.ref));
+    const stop = stops[i];
+    if (stop == null) return false;
+
+    const next = stops[stopNeighbour(stops, i, dir)];
+    if (next != null) {
+      placeOnStop(next);
+      return true;
+    }
+
+    if (dir > 0 && stop.slot >= lineCount) return true;
+    const line = dir > 0 ? stop.slot + 1 : stop.slot;
+    landOnLine(line);
+    deps.follow(line);
+    return true;
+  }
+
+  /** `j`/`k` from line `from` to `to`: the stop between them, if any. */
+  function stopBetween(from: number, to: number, dir: 1 | -1): CommentStop | undefined {
+    const stops = deps.stops();
+    return stops[crossedStop(stops, from, dir > 0 && to === from ? null : to, dir)];
   }
 
   // `scroll` picks WHICH scroll: the scrolloff follow by default (a match reveal, the
@@ -187,6 +250,7 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
   function revealMatch(): boolean {
     const m = matches()[store.searchIndex];
     if (m == null) return false;
+    leaveStop();
     reveal(m.line, () => deps.followMatch(m));
     return true;
   }
@@ -208,17 +272,33 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
 
   return {
     matches,
+    placeOnStop,
+    landOnLine,
 
     moveCursor(motion) {
       const lines = deps.lines();
+      const lineCount = lineCountOf(lines);
+      const dir = motion === "down" ? 1 : motion === "up" ? -1 : 0;
+      if (dir !== 0 && store.visualAnchor == null && stepFromStop(dir, lineCount)) return;
+
       const line = resolveCursorLine(motion, {
         cursor: store.cursorLine,
-        lineCount: lineCountOf(lines),
+        lineCount,
         headingLines: deps.headingLines(),
         blankLines: blankLinesOf(lines),
         halfPage: deps.halfPage(),
         seed: deps.readingLine() ?? 1,
       });
+      const crossed =
+        dir !== 0 && store.visualAnchor == null && store.cursorLine != null
+          ? stopBetween(store.cursorLine, line, dir)
+          : undefined;
+      if (crossed != null) {
+        placeOnStop(crossed);
+        return;
+      }
+
+      leaveStop();
       reveal(line, JUMP_MOTIONS.has(motion) ? deps.jump : deps.follow);
     },
 
@@ -248,6 +328,7 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
         return;
       }
       const anchor = seedLine();
+      leaveStop();
       reveal(anchor);
       store.visualAnchor = anchor;
       deps.sound?.("visualEntered");

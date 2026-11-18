@@ -428,7 +428,13 @@ test.describe("preview keyboard cursor", () => {
     await sourceToggle(page).click();
     await expect(page.locator(PLAN_PREVIEW)).toBeVisible();
 
-    await toLongParagraph(page);
+    // The Resume marker after the short paragraph is a stop of its own.
+    await press(page, "g", "g");
+    await expect.poll(() => bandCovers(page, "Overview")).toBe(true);
+    await press(page, "j", "j");
+    await expect(page.locator("[data-scratch-marker]")).toHaveClass(/\bfocused\b/);
+    await press(page, "j");
+    await expect.poll(() => bandCovers(page, "Marmalade")).toBe(true);
     let top = await stepFrom(page, "j", await bandTop(page));
     top = await stepFrom(page, "j", top);
     const recorded = await bandText(page);

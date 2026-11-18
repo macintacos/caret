@@ -4,6 +4,13 @@
 // carries it unchanged.
 
 import {
+  type CommentStop,
+  crossedStop,
+  type FocusedStop,
+  sameStop,
+  stopNeighbour,
+} from "$lib/diffview/commentStops.ts";
+import {
   blankLinesOf,
   type CursorMotion,
   JUMP_MOTIONS,
@@ -52,9 +59,24 @@ export interface PreviewCursorDeps {
   comment(range: Range): void;
   /** Play a moment's cue. Optional so a test drives the factory silently. */
   sound?: (event: SoundEvent) => void;
+  /** The comment stops in render order; empty where comments take no keys. */
+  stops(): CommentStop[];
+  /** The hovered stop, owned by the host. */
+  focusedStop(): FocusedStop | null;
+  setFocusedStop(stop: FocusedStop | null): void;
+  /** Scroll `stop`'s card or marker into view. */
+  followStop(stop: CommentStop): void;
+  /** The block whose comment slot holds comments ending on `line`. */
+  slotOf(line: number): number;
+  /** The first visual line after block `slot`, or the last within it; null past the end. */
+  slotEdge(slot: number, edge: "first-after" | "last-in"): TextPoint | null;
 }
 
 export interface PreviewCursor {
+  /** Hover `stop`: exits visual mode, puts the cursor on its last line, and follows it. */
+  placeOnStop(stop: CommentStop): void;
+  /** Put the cursor at the start of `line`, leaving any hovered stop. Scrolls nothing. */
+  landOnLine(line: number): void;
   /** The cursor's point, or null when unplaced. A cursorLine with no point of its own
    * resolves through pointForLine — for a blank line, the next line with text, so the
    * point's line can differ from cursorLine. */
@@ -132,6 +154,58 @@ export function createPreviewCursor(
     scroll(p);
   }
 
+  /** Where a line action starts: the hovered stop's last line, else the cursor, else the
+   * reading position. */
+  function seedPoint(): TextPoint | null {
+    const focused = deps.focusedStop();
+    if (focused != null) return deps.pointForLine(focused.line);
+    return point() ?? deps.seed();
+  }
+
+  function leaveStop(): void {
+    if (deps.focusedStop() != null) deps.setFocusedStop(null);
+  }
+
+  function placeOnStop(stop: CommentStop): void {
+    store.visualAnchor = null;
+    deps.setFocusedStop({ ref: stop.ref, line: stop.line });
+    store.cursorLine = stop.line;
+    store.cursorPoint = null;
+    deps.followStop(stop);
+  }
+
+  /** `j`/`k` off the hovered stop: to its slot's next stop, else past the slot. Reports
+   * whether a stop was hovered. */
+  function stepFromStop(dir: 1 | -1): boolean {
+    const focused = deps.focusedStop();
+    if (focused == null) return false;
+    const stops = deps.stops();
+    const i = stops.findIndex((s) => sameStop(s.ref, focused.ref));
+    const stop = stops[i];
+    if (stop == null) return false;
+
+    const next = stops[stopNeighbour(stops, i, dir)];
+    if (next != null) {
+      placeOnStop(next);
+      return true;
+    }
+
+    const edge = deps.slotEdge(stop.slot, dir > 0 ? "first-after" : "last-in");
+    if (edge == null) return true;
+    leaveStop();
+    land(edge);
+    return true;
+  }
+
+  /** `j`/`k` from `from` to `to`: the stop between their blocks, if any. */
+  function stopBetween(from: TextPoint, to: TextPoint, dir: 1 | -1): CommentStop | undefined {
+    const stops = deps.stops();
+    const stuck = dir > 0 && !before(from, to);
+    return stops[
+      crossedStop(stops, deps.slotOf(from.line), stuck ? null : deps.slotOf(to.line), dir)
+    ];
+  }
+
   function resolve(motion: CursorMotion, from: TextPoint | null): TextPoint | null {
     const stepBy = (count: () => number) => (from == null ? deps.seed() : deps.step(from, count()));
     switch (motion) {
@@ -164,9 +238,30 @@ export function createPreviewCursor(
       store.visualAnchorPoint = null;
     },
 
+    placeOnStop,
+
+    landOnLine(line) {
+      leaveStop();
+      store.cursorLine = line;
+      store.cursorPoint = deps.pointForLine(line);
+    },
+
     moveCursor(motion) {
-      const p = resolve(motion, point());
+      const dir = motion === "down" ? 1 : motion === "up" ? -1 : 0;
+      const stepsStops = dir !== 0 && store.visualAnchor == null;
+      if (stepsStops && stepFromStop(dir)) return;
+
+      const from = point();
+      const p = resolve(motion, from);
       if (p == null) return;
+
+      const crossed = stepsStops && from != null ? stopBetween(from, p, dir) : undefined;
+      if (crossed != null) {
+        placeOnStop(crossed);
+        return;
+      }
+
+      leaveStop();
       land(p, JUMP_MOTIONS.has(motion) ? deps.jump : deps.follow);
     },
 
@@ -193,8 +288,9 @@ export function createPreviewCursor(
         deps.sound?.("visualExited");
         return;
       }
-      const p = point() ?? deps.seed();
+      const p = seedPoint();
       if (p == null) return;
+      leaveStop();
       land(p);
       store.visualAnchor = p.line;
       store.visualAnchorPoint = p;
@@ -202,7 +298,7 @@ export function createPreviewCursor(
     },
 
     comment() {
-      const p = point() ?? deps.seed();
+      const p = seedPoint();
       const anchor = anchorPoint();
       store.visualAnchor = null;
       if (p == null) return;
