@@ -766,3 +766,16 @@ describe("PlanBreadcrumbs overflow", () => {
     expect(menuRows()[0]?.textContent?.trim()).toBe("One");
   });
 });
+
+describe("PlanBreadcrumbs heading markdown", () => {
+  test("a crumb renders its heading's inline markdown, titled in plain text", () => {
+    const { target } = mountCrumbs({
+      headings: [{ level: 1, text: "**bold** and `code`", line: 1 }],
+      activeLine: 1,
+    });
+    const crumb = crumbs(target)[0];
+    expect(crumb?.querySelector(".crumb-text strong")?.textContent).toBe("bold");
+    expect(crumb?.querySelector(".crumb-text code")?.textContent).toBe("code");
+    expect(crumb?.title).toBe("bold and code");
+  });
+});

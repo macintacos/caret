@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { renderTitle } from "$lib/title.ts";
+import { plainTitle, renderTitle } from "$lib/title.ts";
 
 describe("renderTitle", () => {
   test("escapes plain text", () => {
@@ -65,5 +65,25 @@ describe("renderTitle", () => {
     expect(html).toContain("<strong>Environment:</strong>");
     expect(html).toContain("<code>https://jira.example.org</code>");
     expect(html).not.toMatch(/[*`]/);
+  });
+});
+
+describe("plainTitle", () => {
+  test("strips inline markdown syntax", () => {
+    expect(plainTitle("**b** *e* `c` ~~s~~")).toBe("b e c s");
+  });
+
+  test("decodes entities rather than escaping them", () => {
+    expect(plainTitle("**a** & `b` <i>")).toBe("a & b <i>");
+  });
+
+  test("flattens links and images to their text", () => {
+    expect(plainTitle("[**EXC**](https://example.org) ![logo](https://example.org/a.png)")).toBe(
+      "EXC logo",
+    );
+  });
+
+  test("reads a hard break as a space", () => {
+    expect(plainTitle("a  \nb")).toBe("a b");
   });
 });

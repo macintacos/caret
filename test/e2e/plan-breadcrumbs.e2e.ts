@@ -1623,3 +1623,37 @@ test("the filter field looks as the outline's filter does under focus", async ({
   await expect(contents).toBeFocused();
   expect(ours).toEqual(await fieldLook(contents));
 });
+
+// A heading's inline markdown renders in a menu row and a filter row, titled in plain text.
+const MARKDOWN_PLAN = [
+  "# Plan",
+  filler("Plan"),
+  "## **bold** and `code`",
+  filler("Bold"),
+  "### Child",
+  filler("Child"),
+  "## Tail",
+  filler("Tail"),
+  "",
+].join("\n\n");
+
+test("a menu row renders its heading's inline markdown", async ({ daemon, page }) => {
+  await arriveAt(page, daemon, MARKDOWN_PLAN, "Child");
+  await page.locator(CRUMB).nth(1).click();
+
+  const label = page.locator(`${MENU} .crumb-label`).first();
+  await expect(label.locator("strong")).toHaveText("bold");
+  await expect(label.locator("code")).toHaveText("code");
+  await expect(label).toHaveAttribute("title", "bold and code");
+});
+
+test("a filter row renders its heading and parent's inline markdown", async ({ daemon, page }) => {
+  await openFilterOn(page, daemon, MARKDOWN_PLAN);
+  await page.keyboard.type("child");
+
+  const row = results(page).first();
+  await expect(row.locator(".crumb-label")).toHaveText("Child");
+  const parent = row.locator(".crumb-parent");
+  await expect(parent.locator("code")).toHaveText("code");
+  await expect(parent).toHaveAttribute("title", "bold and code");
+});

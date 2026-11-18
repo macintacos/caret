@@ -56,6 +56,7 @@
   import { createKeyRepeat, walkCommandList } from "$lib/keyRepeat.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
   import { sound } from "$lib/sound.ts";
+  import { plainTitle, renderTitle } from "$lib/title.ts";
   import type { TocHeading } from "$lib/toc.ts";
 
   interface Props {
@@ -552,7 +553,7 @@
   // this a screen-reader user hears a control that says nothing about where it
   // leads — the same gap the inert vendored marker left.
   const markerLabel = $derived.by(() => {
-    const names = trail.slice(1, depths[1] ?? 1).map((crumb) => crumb.heading.text);
+    const names = trail.slice(1, depths[1] ?? 1).map((crumb) => plainTitle(crumb.heading.text));
     return names.length > 0 ? `Hidden levels: ${names.join(", ")}` : "Hidden levels";
   });
 
@@ -712,7 +713,7 @@
           onkeydown={(e) => onRowKeydown(e, heading.line)}
           onclick={(e) => onRowClick(e, heading.line)}
         >
-          <span class="crumb-label" title={heading.text}>{heading.text}</span>
+          <span class="crumb-label md-inline" title={plainTitle(heading.text)}>{@html renderTitle(heading.text)}</span>
         </DropdownMenu.SubTrigger>
         <DropdownMenu.SubContent
           class="plan-crumb-menu"
@@ -723,7 +724,7 @@
       </DropdownMenu.Sub>
     {:else}
       <DropdownMenu.Item aria-current={here} onSelect={() => goTo(heading.line)}>
-        <span class="crumb-label" title={heading.text}>{heading.text}</span>
+        <span class="crumb-label md-inline" title={plainTitle(heading.text)}>{@html renderTitle(heading.text)}</span>
       </DropdownMenu.Item>
     {/if}
   {/each}
@@ -840,10 +841,10 @@
             type="button"
             class="crumb"
             class:current
-            title={crumb.heading.text}
+            title={plainTitle(crumb.heading.text)}
             aria-current={current ? "location" : undefined}
             aria-keyshortcuts={current ? ariaKeyshortcutsFor("actions.headingNav") : undefined}
-          >{#key crumb.heading.line}<span class="crumb-text">{crumb.heading.text}</span>{/key}</button>
+          >{#key crumb.heading.line}<span class="crumb-text md-inline">{@html renderTitle(crumb.heading.text)}</span>{/key}</button>
         {/snippet}
         <Breadcrumb.Item class="crumb-item {current ? 'current' : ''} {hidden}">
           {#snippet child({ props })}
@@ -954,9 +955,9 @@
               aria-current={match.heading.line === activeLine ? "location" : undefined}
               onSelect={() => pick(match.heading.line)}
             >
-              <span class="crumb-label" title={match.heading.text}>{match.heading.text}</span>
+              <span class="crumb-label md-inline" title={plainTitle(match.heading.text)}>{@html renderTitle(match.heading.text)}</span>
               {#if match.parent}
-                <span class="crumb-parent" title={match.parent}>{match.parent}</span>
+                <span class="crumb-parent md-inline" title={plainTitle(match.parent)}>{@html renderTitle(match.parent)}</span>
               {/if}
             </Command.Item>
           {/each}

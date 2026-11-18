@@ -817,6 +817,40 @@ describe("every theme", () => {
     }
   });
 
+  // The plan's breadcrumbs lay the same chip under a heading's code span: a crumb at rest
+  // and current on the plan header's bed, and the menu and filter rows resting, risen and
+  // latched, the filter's parent heading in its own inks. A risen crumb (catppuccin-frappe
+  // 4.20) and a resting row's --ink-faint parent miss AA under the chip.
+  test("keeps a code span in a breadcrumb at AA on each ground it sits on", () => {
+    const step = /--cap-label:\s*color-mix\(in lab, var\(--ink-soft\), var\(--ink\) (\d+)%\)/.exec(
+      readAppCss(),
+    )?.[1];
+    for (const [id, theme] of themeEntries()) {
+      const tokens = theme.tokens;
+      const chip = tokens["--chip-code"];
+      const capLabel = banded(tokens["--ink-soft"], tokens["--ink"], Number(step) / 100);
+      const pairs: [string, string, string][] = [];
+      for (const floor of ["--paper", "--paper-sunk"] as const) {
+        const bed = headerBedFloor(floor, theme);
+        pairs.push([`a resting crumb over ${floor}`, tokens["--ink-soft"], bed]);
+        pairs.push([`the current crumb over ${floor}`, tokens["--ink"], bed]);
+      }
+      pairs.push(
+        ["a resting row", tokens["--ink"], tokens["--paper-raised"]],
+        ["a risen row", tokens["--ink"], derived("--neutral-face-hover", theme)],
+        ["a latched row", tokens["--ink"], derived("--neutral-face-down", theme)],
+        ["a latched row's parent", capLabel, derived("--neutral-face-down", theme)],
+        ["a risen row's parent", tokens["--ink"], derived("--neutral-face-hover", theme)],
+      );
+      for (const [name, ink, ground] of pairs) {
+        expect(
+          contrast(ink, over(chip, ground)),
+          `${id} ${name} under --chip-code`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
   // Focus draws no ring and looks exactly like hover, so a hover face is the only place a
   // keyboard user sees where focus went. Each has to read apart from the face or ground it
   // leaves by FOUND in CIE76, about twice the step a reader can just tell apart. GLANCE
