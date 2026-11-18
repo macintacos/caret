@@ -788,14 +788,16 @@ set saves a copy of its own.
 
 The docs gate is a separate workflow, `.github/workflows/docs-gate.yml`, whose one job is
 the `docs gate` check. It runs on every PR, whatever its base, when the PR opens, gets new
-commits, reopens, or gains or loses a label. It reads the PR's changed paths from the
-GitHub API and pipes them to `scripts/docs-gate.ts`, which fails when a path is
-user-visible (listed in the script's `USER_VISIBLE` table) and no page the docs site
-publishes changed. A published page is a `docs/**/*.md` that `zensical.toml`'s
-`exclude_docs` does not list, read from `zensical.toml` itself. Adding the
-`docs-not-needed` label re-runs the check, which then passes. The `pull_request` trigger
-and read-only permissions mean a fork's PR never runs with a write token. Its cases live
-in `test/scripts/docs-gate.test.ts` (the script) and
+commits, reopens, or gains or loses a label. It reads the PR's changed paths and labels
+from the GitHub API when it runs, not from the event, so a re-run judges the labels the PR
+has now. It pipes them to `scripts/docs-gate.ts`, which fails when a path is user-visible
+(listed in the script's `USER_VISIBLE` table) and no page the docs site publishes changed.
+A published page is a `docs/**/*.md` that `zensical.toml`'s `exclude_docs` does not list,
+read from `zensical.toml` itself. Adding the `docs-not-needed` label re-runs the check,
+which then passes. No run cancels another: opening a PR with a label fires two events a
+second apart, and GitHub keeps a cancelled run on the PR as an unsuccessful check. The
+`pull_request` trigger and read-only permissions mean a fork's PR never runs with a write
+token. Its cases live in `test/scripts/docs-gate.test.ts` (the script) and
 `test/scripts/docs-gate-workflow.test.ts` (the workflow), which `test unit` runs.
 
 The menubar app has its own workflow, `.github/workflows/menubar.yml`. Its

@@ -7,9 +7,8 @@ on:
 permissions:
   contents: read
   pull-requests: read
-concurrency:
-  group: docs-gate-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+# No concurrency group: opening a PR with a label fires opened and labeled a second apart,
+# and a run cancelled for the newer one stays on the PR as an unsuccessful check.
 jobs:
   docs-gate:
     name: docs gate
@@ -30,11 +29,14 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
       - run: bun install --frozen-lockfile
       - name: A user-visible change updates a site page
-        # Explicit bash runs with -o pipefail: a failed gh api fails the step instead of
-        # feeding the gate a partial list.
+        # Explicit bash runs with -e -o pipefail: a failed gh api fails the step instead of
+        # feeding the gate a partial list. The labels are read when the step runs, not from
+        # the event, so a re-run judges the labels the PR has now.
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
-          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
-        run: gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files?per_page=100" --jq '.[].filename' | bun scripts/docs-gate.ts
+        run: |
+          PR_LABELS=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '[.labels[].name]')
+          export PR_LABELS
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files?per_page=100" --jq '.[].filename' | bun scripts/docs-gate.ts
