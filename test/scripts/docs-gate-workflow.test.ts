@@ -14,6 +14,7 @@ const gateYaml = await Bun.file(".github/workflows/docs-gate.yml").text();
 const workflow = Bun.YAML.parse(gateYaml) as {
   on: { pull_request: { types: string[]; branches?: string[] } };
   permissions: unknown;
+  concurrency?: unknown;
   jobs: Record<string, { permissions?: unknown; steps: Step[] }>;
 };
 const jobs = Object.values(workflow.jobs);
@@ -46,8 +47,17 @@ test("never runs with a write token", () => {
 
 test("pipes the PR's files and labels into the gate", () => {
   const gateStep = steps.find((step) => step.run?.includes("| bun scripts/docs-gate.ts"));
-  expect(gateStep?.env?.PR_LABELS).toContain("github.event.pull_request.labels.*.name");
   expect(gateStep?.shell).toBe("bash");
+  expect(gateStep?.run).toContain(
+    `PR_LABELS=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '[.labels[].name]')`,
+  );
+  expect(gateYaml).not.toContain("github.event.pull_request.labels");
+});
+
+// Opening a PR with a label fires opened and labeled a second apart, and GitHub keeps a
+// cancelled run on the PR as an unsuccessful check.
+test("never cancels one of its own runs", () => {
+  expect(workflow.concurrency).toBeUndefined();
 });
 
 test("every action ref is locked for this workflow", () => {
