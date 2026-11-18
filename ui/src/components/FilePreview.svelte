@@ -706,6 +706,8 @@
      inside the panel rather than stretching it. */
   .file-preview {
     position: relative;
+    /* Its layers stack inside it, so the lane's recess lies over the opaque gutter too. */
+    isolation: isolate;
     display: flex;
     flex-direction: column;
     height: 100%;

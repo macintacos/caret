@@ -758,6 +758,43 @@ test("beside the plan, the lane's title bar lies in a bed level with the plan he
   }
 });
 
+// The lane's recess shades each side of the pane, over the preview's own floors. The
+// gutter's floor is opaque, so a recess under it would stop dead where the code begins.
+test("the lane's edge runs on unbroken from beside its title bar to beside the code", async ({
+  daemon,
+  page,
+}) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await seedCacheDrawer(daemon, page, proj.dir, WIDE);
+    await openPreview(page);
+    const code = page.locator("[data-file-preview] .fp-code");
+    await expect(code).toBeVisible();
+    await code.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
+    const [pane, bar, body] = await Promise.all(
+      [
+        "[data-file-drawer] .fd-content",
+        "[data-file-preview] .ref-header",
+        "[data-file-preview] .fp-code",
+      ].map((sel) => page.locator(sel).boundingBox()),
+    );
+    if (!pane || !bar || !body) throw new Error("the lane is not laid out");
+
+    // Rows below the pane's rounded corner and its top shade, in the 3px between the
+    // pane's edge and the bar's bed.
+    const rows = 8;
+    const besideBar = Math.floor(bar.y + bar.height) - rows - 4;
+    const besideCode = Math.floor(body.y + body.height / 2);
+    const sides = { left: Math.ceil(pane.x), right: Math.floor(pane.x + pane.width) - 2 };
+    for (const [side, x] of Object.entries(sides)) {
+      const strip = (y: number) => page.screenshot({ clip: { x, y, width: 2, height: rows } });
+      expect((await strip(besideCode)).equals(await strip(besideBar)), side).toBe(true);
+    }
+  } finally {
+    await proj.cleanup();
+  }
+});
+
 // EXC-1137: the one exception to placement-once. A file row opened from the card
 // is the reader asking for the lane, so the card steps out of the box it just
 // created rather than sitting under it. The lane is measured mid-slide here — it
