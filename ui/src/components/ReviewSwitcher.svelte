@@ -4,7 +4,7 @@
   // and a count Badge, and whose items list each plan's title + abbreviated cwd.
   // bits-ui owns open/close, Escape, outside-click, and focus.
   import { shortCwd } from "$lib/cwd.ts";
-  import { stripTitleLinks } from "$lib/title.ts";
+  import { renderTitle } from "$lib/title.ts";
   import type { ClientReview } from "@core/lib/types";
   import { Badge } from "$lib/components/ui/badge/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
@@ -55,7 +55,7 @@
             aria-label="Switch review"
             aria-describedby="switcher-count"
           >
-            <span class="title">{stripTitleLinks(active?.title ?? "—")}</span>
+            <span class="title md-inline">{@html renderTitle(active?.title ?? "—")}</span>
             <Badge variant="secondary" class="count metric">{reviews.length}</Badge>
             {#if unreadCount > 0}
               <!-- Keyed on the arrival counter so the jiggle replays each time a plan
@@ -75,7 +75,7 @@
       {#each reviews as r (r.id)}
         <DropdownMenu.Item class="switcher-option" onSelect={() => onSelect(r.id)}>
           <span class="opt">
-            <span class="m-title">{stripTitleLinks(r.title)}</span>
+            <span class="m-title md-inline">{@html renderTitle(r.title)}</span>
             <span class="m-meta mono">{shortCwd(r.cwd)}</span>
           </span>
           {#if r.id === activeId}
@@ -97,7 +97,7 @@
   </DropdownMenu.Root>
 {:else}
   <div class="switcher single">
-    <span class="title">{stripTitleLinks(active?.title ?? "—")}</span>
+    <span class="title md-inline">{@html renderTitle(active?.title ?? "—")}</span>
   </div>
 {/if}
 

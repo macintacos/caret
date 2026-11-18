@@ -1623,3 +1623,11 @@ test("the filter field looks as the outline's filter does under focus", async ({
   await expect(contents).toBeFocused();
   expect(ours).toEqual(await fieldLook(contents));
 });
+
+// Collapse needs real layout, which happy-dom has none of.
+test("the elision marker names a hidden heading in plain text", async ({ daemon, page }) => {
+  const plan = DEEP_PLAN.replace("## Bravo", "## **bold** and `code`");
+  await arriveAt(page, daemon, plan, "Echo");
+  await page.setViewportSize({ width: 480, height: 900 });
+  await expect(page.locator(MARKER)).toHaveAttribute("aria-label", /^Hidden levels: bold and code/);
+});

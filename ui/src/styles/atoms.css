@@ -1,4 +1,4 @@
-/* Shared chrome atoms — .mono, the tactile kit, .metric, the form label, the count chip, the keycap, the settings pane's section label and copy
+/* Shared chrome atoms — .mono, the inline-markdown label, the tactile kit, .metric, the form label, the count chip, the keycap, the settings pane's section label and copy
    block, the quiet badge, the clamped line, the reference-surface header, and
    the completion preview panel. @imported by app.css after the base layer. */
 
@@ -7,6 +7,17 @@
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   letter-spacing: 0.01em;
+}
+
+/* A one-line label's inline markdown: its code spans take the plan's code tint without its
+   stamped shadow or block padding, so the line keeps its height and the span stays inline
+   for text-overflow. */
+.md-inline code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding-inline: var(--chip-pad-inline);
+  border-radius: var(--radius);
+  background-color: var(--chip-code);
 }
 
 /* ----- The tactile kit -----

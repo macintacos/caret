@@ -121,17 +121,16 @@ describe("ReviewSwitcher unread marker (EXC-411)", () => {
   });
 });
 
-describe("ReviewSwitcher strips markdown links from the trigger title", () => {
-  const linked = "Triage analysis to post — [EXC-562](https://linear.app/macintacos/issue/EXC-562)";
-  const stripped = "Triage analysis to post — EXC-562";
+describe("ReviewSwitcher renders the title's inline markdown", () => {
+  const markdownTitle = "**bold** and `code`";
 
-  test("shows the active title's link text on the single-review label", () => {
-    const { target } = mountSwitcher({ reviews: [review("r1", linked)] });
-    expect(target.querySelector(".title")!.textContent).toBe(stripped);
-  });
-
-  test("shows the active title's link text on the dropdown trigger", () => {
-    const { target } = mountSwitcher({ reviews: [review("r1", linked), review("r2", "Second")] });
-    expect(target.querySelector(".title")!.textContent).toBe(stripped);
+  test.each([
+    ["single-review label", [review("r1", markdownTitle)]],
+    ["dropdown trigger", [review("r1", markdownTitle), review("r2", "Second")]],
+  ] as const)("formats the %s", (_, reviews) => {
+    const { target } = mountSwitcher({ reviews: [...reviews] });
+    const title = target.querySelector(".title")!;
+    expect(title.querySelector("strong")?.textContent).toBe("bold");
+    expect(title.querySelector("code")?.textContent).toBe("code");
   });
 });

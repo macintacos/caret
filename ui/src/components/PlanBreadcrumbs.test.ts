@@ -521,6 +521,23 @@ describe("PlanBreadcrumbs filter", () => {
     await closeFilter(flush);
   });
 
+  test("renders a result's inline markdown and names its parent in plain text", async () => {
+    const { flush } = await openedFilter({
+      headings: [
+        { level: 1, text: "**bold** and `code`", line: 1 },
+        { level: 2, text: "`Child`", line: 3 },
+        { level: 3, text: "Leaf", line: 5 },
+      ],
+      activeLine: 5,
+    });
+    const row = options()[1];
+    expect(row?.querySelector(".crumb-label code")?.textContent).toBe("Child");
+    const parent = row?.querySelector<HTMLElement>(".crumb-parent");
+    expect(parent?.innerHTML).toBe("bold and code");
+    expect(parent?.title).toBe("bold and code");
+    await closeFilter(flush);
+  });
+
   test("narrows the results as the query is typed", async () => {
     const { flush } = await openedFilter();
     await typeQuery("ver", flush, () => options().length === 2);
@@ -764,5 +781,37 @@ describe("PlanBreadcrumbs overflow", () => {
       "dropdown-menu-sub-trigger",
     ]);
     expect(menuRows()[0]?.textContent?.trim()).toBe("One");
+  });
+});
+
+describe("PlanBreadcrumbs heading markdown", () => {
+  test("a crumb renders its heading's inline markdown, titled in plain text", () => {
+    const { target } = mountCrumbs({
+      headings: [{ level: 1, text: "**bold** and `code`", line: 1 }],
+      activeLine: 1,
+    });
+    const crumb = crumbs(target)[0];
+    expect(crumb?.querySelector(".crumb-text strong")?.textContent).toBe("bold");
+    expect(crumb?.querySelector(".crumb-text code")?.textContent).toBe("code");
+    expect(crumb?.title).toBe("bold and code");
+  });
+
+  test("a menu row renders its heading's inline markdown, titled in plain text", async () => {
+    await openedCrumb(1, {
+      headings: [
+        { level: 1, text: "Plan", line: 1 },
+        { level: 2, text: "**bold** and `code`", line: 3 },
+        { level: 3, text: "Child", line: 5 },
+        { level: 2, text: "`tail`", line: 7 },
+      ],
+      activeLine: 5,
+    });
+    const [subLabel, itemLabel] = menuRows().map((r) =>
+      r.querySelector<HTMLElement>(".crumb-label"),
+    );
+    expect(subLabel?.querySelector("strong")?.textContent).toBe("bold");
+    expect(subLabel?.title).toBe("bold and code");
+    expect(itemLabel?.querySelector("code")?.textContent).toBe("tail");
+    expect(itemLabel?.title).toBe("tail");
   });
 });

@@ -4,10 +4,15 @@
 // overlay behavior (portalled, pointer/keyboard driven), so it is proven here in
 // a real browser rather than in the happy-dom unit suite (per
 // docs/agents/browser-testing.md). Two distinct plans are seeded (distinct
-// sessions → two pending reviews) so a switch is observable in the trigger.
+// sessions → two pending reviews) so a switch is observable in the trigger. The
+// markdown-title row assertions are e2e for the same reason, and the ellipsis needs
+// real layout; the rendering itself is unit-tested in ui/src/lib/title.test.ts.
 
+import { reviewSwitcher } from "@test/e2e/support/chrome.ts";
 import { seedTwoPlansAndOpen } from "@test/e2e/support/decision.ts";
+import { titledPlan } from "@test/e2e/support/fixture-plan.ts";
 import { expect, test } from "@test/e2e/support/fixtures.ts";
+import { planSurface } from "@test/e2e/support/source-view.ts";
 
 test("switches the active plan through the dropdown, both ways", async ({ daemon, page }) => {
   const trigger = await seedTwoPlansAndOpen(daemon, page);
@@ -49,4 +54,35 @@ test("Escape closes the switcher menu, leaving the active plan unchanged", async
     await expect(alpha).toHaveCount(0, { timeout: 500 });
   }).toPass();
   await expect(trigger.locator(".title")).toHaveText(before ?? "");
+});
+
+test("formats a markdown title in its dropdown row", async ({ daemon, page }) => {
+  await daemon.seed({ plan: titledPlan("Plan Alpha"), cwd: "/tmp/proj-alpha" });
+  await daemon.seed({ plan: titledPlan("**Bold** and `code`"), cwd: "/tmp/proj-beta" });
+  await page.goto("/");
+  await planSurface(page);
+  const trigger = reviewSwitcher(page);
+
+  await trigger.click();
+  const row = page.getByRole("menuitem", { name: "Bold and code" });
+  await expect(row.locator(".m-title strong")).toHaveText("Bold");
+  await expect(row.locator(".m-title code")).toHaveText("code");
+});
+
+test("a long markdown title still ellipsizes in the trigger", async ({ daemon, page }) => {
+  const longTitle =
+    "**Environment:** `prod` (`https://jira.example.org/a/long/path`, user `someone@example.org`)";
+  await daemon.seed({ plan: titledPlan("Plan Alpha"), cwd: "/tmp/proj-alpha" });
+  await daemon.seed({ plan: titledPlan(longTitle), cwd: "/tmp/proj-beta" });
+  await page.setViewportSize({ width: 500, height: 800 });
+  await page.goto("/");
+  await planSurface(page);
+
+  const trigger = reviewSwitcher(page);
+  await trigger.click();
+  await page.getByRole("menuitem", { name: /^Environment:/ }).click();
+
+  const title = trigger.locator(".title");
+  await expect(title.locator("code").first()).toBeVisible();
+  await expect.poll(() => title.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
 });

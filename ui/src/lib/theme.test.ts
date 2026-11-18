@@ -263,6 +263,29 @@ function over(fg: string, ground: string): string {
   return banded(ground, fg.slice(0, 7), alpha === undefined ? 1 : Number.parseInt(alpha, 16) / 255);
 }
 
+/** A neutral key's label: --ink-soft stepped toward --ink by app.css's --cap-label. */
+function capLabelInk(tokens: Record<string, string>): string {
+  const step = /--cap-label:\s*color-mix\(in lab, var\(--ink-soft\), var\(--ink\) (\d+)%\)/.exec(
+    readAppCss(),
+  )?.[1];
+  if (step === undefined) throw new Error("--cap-label's step not found in app.css");
+  return banded(tokens["--ink-soft"] ?? "", tokens["--ink"] ?? "", Number(step) / 100);
+}
+
+/** Holds each `[name, ink, ground]` at AA with the --chip-code tint laid over its ground. */
+function expectAaUnderCodeChip(
+  id: string,
+  chip: string,
+  pairs: [name: string, ink: string, ground: string][],
+): void {
+  for (const [name, ink, ground] of pairs) {
+    expect(
+      contrast(ink, over(chip, ground)),
+      `${id} ${name} under --chip-code`,
+    ).toBeGreaterThanOrEqual(4.5);
+  }
+}
+
 describe("THEMES", () => {
   test("THEME_IDS lists caret's palettes first, then each vendor family", () => {
     expect(THEME_IDS).toEqual([
@@ -765,13 +788,9 @@ describe("every theme", () => {
   // neutral face; hovered or pressed, it is --ink on that state's face, as is a crumb's or a
   // latched row's under the cursor.
   test("keeps a neutral key's label at AA on its face, hovered and pressed", () => {
-    const step = /--cap-label:\s*color-mix\(in lab, var\(--ink-soft\), var\(--ink\) (\d+)%\)/.exec(
-      readAppCss(),
-    )?.[1];
-    expect(step).toBeDefined();
     for (const [id, theme] of themeEntries()) {
       const tokens = theme.tokens;
-      const label = banded(tokens["--ink-soft"], tokens["--ink"], Number(step) / 100);
+      const label = capLabelInk(tokens);
       expect(
         contrast(label, derived("--neutral-face", theme)),
         `${id} key label on --neutral-face`,
@@ -788,6 +807,56 @@ describe("every theme", () => {
           `${id} --ink on ${face}`,
         ).toBeGreaterThanOrEqual(4.5);
       }
+    }
+  });
+
+  // The review switcher lays a --chip-code tint under a title's code span, on every ground
+  // the title sits on: the trigger key resting and hovered, the single-review label on the
+  // page, and a dropdown row resting and highlighted.
+  test("keeps a code span in the review title at AA under the code chip", () => {
+    for (const [id, theme] of themeEntries()) {
+      const tokens = theme.tokens;
+      expectAaUnderCodeChip(id, tokens["--chip-code"], [
+        ["trigger label on --neutral-face", capLabelInk(tokens), derived("--neutral-face", theme)],
+        ["--ink on --neutral-face-hover", tokens["--ink"], derived("--neutral-face-hover", theme)],
+        ["--ink on --paper", tokens["--ink"], tokens["--paper"]],
+        ["--ink on --paper-raised", tokens["--ink"], tokens["--paper-raised"]],
+      ]);
+    }
+  });
+
+  // The plan's breadcrumbs lay the same chip under a heading's code span.
+  test("keeps a code span in a breadcrumb or its menu rows at AA under the code chip", () => {
+    for (const [id, theme] of themeEntries()) {
+      const tokens = theme.tokens;
+      const pairs: [string, string, string][] = [];
+      for (const floor of ["--paper", "--paper-sunk"] as const) {
+        const bed = headerBedFloor(floor, theme);
+        pairs.push([`a resting crumb over ${floor}`, tokens["--ink-soft"], bed]);
+        pairs.push([`the current crumb over ${floor}`, tokens["--ink"], bed]);
+      }
+      pairs.push(
+        ["a resting row", tokens["--ink"], tokens["--paper-raised"]],
+        ["a risen row", tokens["--ink"], derived("--neutral-face-hover", theme)],
+        ["a latched row", tokens["--ink"], derived("--neutral-face-down", theme)],
+      );
+      expectAaUnderCodeChip(id, tokens["--chip-code"], pairs);
+    }
+  });
+
+  // A palette listed here misses AA and is held at its measured figure instead, so a
+  // regression still reds; once it reaches 4.5 the entry is stale and reds too.
+  const RISEN_CRUMB_FLOORS: Partial<Record<BuiltinThemeId, number>> = { "catppuccin-frappe": 4.2 };
+  test("keeps a code span in a risen crumb at its floor under the code chip", () => {
+    for (const [id, theme] of themeEntries()) {
+      const tokens = theme.tokens;
+      const ratio = contrast(
+        tokens["--ink"],
+        over(tokens["--chip-code"], derived("--crumb-face-hover", theme)),
+      );
+      const floor = RISEN_CRUMB_FLOORS[id];
+      expect(ratio, `${id} a risen crumb under --chip-code`).toBeGreaterThanOrEqual(floor ?? 4.5);
+      if (floor !== undefined) expect(ratio, `${id} exemption is stale`).toBeLessThan(4.5);
     }
   });
 

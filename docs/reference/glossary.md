@@ -79,6 +79,9 @@ downloads its own copy, and `caret install` fetches it ahead of time. See
 ## Plan switcher
 
 The list of every plan waiting across your sessions. Older pages call it the switcher.
+Each plan is listed by its title: its first `#` heading, else its first `##` heading, else
+its first line. Bold, italics, code and strikethrough show formatted; a link shows as its
+text and an image as its alt text.
 
 ## Preview
 
