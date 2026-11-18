@@ -85,6 +85,7 @@
   } from "$lib/updatesPref.ts";
   import { type ComposerScratch, createSourceCommenting } from "$lib/diffview/commenting.ts";
   import { preloadPlanLanguages } from "$lib/diffview/languages.ts";
+  import type { FocusedStop } from "$lib/diffview/commentStops.ts";
   import type { DiffSide } from "$lib/diffview/types.ts";
   import type {
     ApproveVariantId,
@@ -161,8 +162,8 @@
     annotations: Annotation[];
     generalCommentDraft: string;
     composerScratches: PersistedScratch[];
-    focusedAnnotation: string | null;
-  }>({ annotations: [], generalCommentDraft: "", composerScratches: [], focusedAnnotation: null });
+    focusedStop: FocusedStop | null;
+  }>({ annotations: [], generalCommentDraft: "", composerScratches: [], focusedStop: null });
 
   let showDialog = $state(false);
   // Whether the keyboard shortcuts help modal is open (EXC-787). Toggled by the
@@ -173,6 +174,7 @@
   // plan to a navigated comment's line; undefined until the source view paints.
   let showComments = $state(false);
   let revealLine = $state<((line: number, side?: DiffSide) => void) | undefined>();
+  let revealCommentAt = $state<((id: string, line: number, side?: DiffSide) => void) | undefined>();
   // The approve variant a pending-comment guard is holding: the mode the reviewer
   // chose, parked until they confirm or divert. Null = no guard open.
   let pendingApproveMode = $state<ApproveVariantId | null>(null);
@@ -457,8 +459,8 @@
   // prefix that matches no card, so it would strand a bogus id in the working copy.
   function revealComment(entry: CommentIndexEntry) {
     if (!entry.linkable || entry.line == null) return;
-    if (compareRange === null) autosave.focusAnnotation(entry.id);
-    revealLine?.(entry.line, entry.side);
+    if (compareRange === null) revealCommentAt?.(entry.id, entry.line, entry.side);
+    else revealLine?.(entry.line, entry.side);
   }
 
   // ----- Working-copy reload -----
@@ -869,11 +871,12 @@
       {pendingText}
       {scratches}
       annotations={autosave.annotations}
-      focusedAnnotation={autosave.focusedAnnotation}
+      focusedStop={autosave.focusedStop}
       onEditAnnotation={autosave.editAnnotation}
       onDeleteAnnotation={autosave.deleteAnnotation}
-      onFocusAnnotation={autosave.focusAnnotation}
+      onFocusStop={autosave.focusStop}
       onExposeReveal={(r) => (revealLine = r)}
+      onExposeRevealComment={(r) => (revealCommentAt = r)}
       onCompareChange={(r) => (compareRange = r)}
       {reviewContext}
       {showShortcutHints}
@@ -940,7 +943,7 @@
 <CommentNavigator
   open={active !== null && showComments}
   {comments}
-  activeId={autosave.focusedAnnotation}
+  activeId={autosave.focusedStop?.ref.kind === "comment" ? autosave.focusedStop.ref.id : null}
   onReveal={revealComment}
   onClose={() => setComments(false)}
   compare={compareRange !== null}

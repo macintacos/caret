@@ -36,6 +36,7 @@
     toLineAnnotations,
   } from "$lib/diffview/annotationSlot.ts";
   import { type BracketSpan, bracketLayer } from "$lib/diffview/bracket.ts";
+  import type { CardHandle, FocusedStop, RegisterCard } from "$lib/diffview/commentStops.ts";
   import { type CodeBlockRange, codeBlockRanges, codeBlockText } from "$lib/diffview/codeBlocks.ts";
   import {
     type ChromeBox,
@@ -216,11 +217,11 @@
     review: ClientReview;
     /** The working-copy annotations to display over the source. */
     annotations: Annotation[];
-    /** The single focused annotation id (drives expand + highlight), or null. */
-    focusedAnnotation: string | null;
+    /** The hovered comment stop (drives the card's focus and the highlight), or null. */
+    focusedStop: FocusedStop | null;
     onEditAnnotation: (id: string, comment: string) => void;
     onDeleteAnnotation: (id: string) => void;
-    onFocusAnnotation: (id: string) => void;
+    onFocusStop: (stop: FocusedStop | null) => void;
     /** The unsent-scratch controller, owned by App and injected down (EXC-877). This
      * view operates it (open/submit/cancel/resume + the contentKey reseed effect) and
      * reads its reactive state through the three mirror props below; App wires the
@@ -241,6 +242,9 @@
      * view ignores it. A call before the view paints is a bounded-retry no-op; on the
      * plan preview it scrolls to the line's item in its comment slot. */
     onExposeReveal?: (reveal: (line: number, side?: DiffSide) => void) => void;
+    /** Hand the host a revealComment(id, line, side) action once on mount: it focuses
+     * the comment, expands its card, and reveals its line. Single-version only. */
+    onExposeRevealComment?: (reveal: (id: string, line: number, side?: DiffSide) => void) => void;
     /** Report the compared versions upward (null when not comparing), so App can
      * point the single CommentNavigator instance at the cross-version index.
      * `before`/`after` name the two documents the diff renders — not a sorted
@@ -275,15 +279,16 @@
   let {
     review,
     annotations,
-    focusedAnnotation,
+    focusedStop,
     onEditAnnotation,
     onDeleteAnnotation,
-    onFocusAnnotation,
+    onFocusStop,
     commenting,
     pending = undefined,
     pendingText = "",
     scratches = [],
     onExposeReveal,
+    onExposeRevealComment,
     onCompareChange,
     themeId,
     showShortcutHints = true,
@@ -437,11 +442,13 @@
     end: r.endLine,
   });
   const pendingSpan = $derived(pending ? spanOf(pending) : null);
-  const focusedAnnotationSpan = $derived.by(() => {
-    const a = lineAnnotations.find((x) => x.id === focusedAnnotation);
+  const focusedStopSpan = $derived.by(() => {
+    const ref = focusedStop?.ref;
+    if (ref?.kind !== "comment") return null;
+    const a = lineAnnotations.find((x) => x.id === ref.id);
     return a ? spanOf(a) : null;
   });
-  const activeSpan = $derived(pointerSpan ?? focusSpan ?? pendingSpan ?? focusedAnnotationSpan);
+  const activeSpan = $derived(pointerSpan ?? focusSpan ?? pendingSpan ?? focusedStopSpan);
 
   // A version switch or a flip leaves the boxes on the previous document's coordinates,
   // and removes slots without the pointerleave/focusout that would clear their spans.
@@ -1827,6 +1834,30 @@
     untrack(() => onExposeReveal)?.(revealLine);
   });
 
+  // Each mounted comment card's keyboard handle, by comment id.
+  const cardHandles = new Map<string, CardHandle>();
+  const registerCard: RegisterCard = (id, handle) => {
+    cardHandles.set(id, handle);
+    return () => {
+      if (cardHandles.get(id) === handle) cardHandles.delete(id);
+    };
+  };
+
+  function revealComment(id: string, line: number, side?: DiffSide): void {
+    onFocusStop({ ref: { kind: "comment", id }, line });
+    cardHandles.get(id)?.expand();
+    revealLine(line, side);
+  }
+
+  $effect(() => {
+    untrack(() => onExposeRevealComment)?.(revealComment);
+  });
+
+  function focusComment(id: string): void {
+    const a = lineAnnotations.find((x) => x.id === id);
+    if (a) onFocusStop({ ref: { kind: "comment", id }, line: a.endLine });
+  }
+
   // The source line of the heading currently in the reading zone. Tracked from
   // the scroll container's topmost rendered line so the breadcrumbs bar reports
   // the section being read.
@@ -3040,10 +3071,11 @@
       {#snippet commentThread(annotations: LineAnnotation[])}
         <SourceAnnotationThread
           {annotations}
-          {focusedAnnotation}
-          onFocus={onFocusAnnotation}
+          {focusedStop}
+          onFocus={focusComment}
           onEdit={onEditAnnotation}
           onDelete={onDeleteAnnotation}
+          register={registerCard}
           {reviewContext}
         />
       {/snippet}

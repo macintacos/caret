@@ -10,15 +10,17 @@
     confirmLabel = "Discard",
     cancelLabel,
     onConfirm = () => {},
+    open = $bindable(false),
   }: {
     question?: string;
     confirmLabel?: string;
     cancelLabel?: string;
     onConfirm?: () => void;
+    open?: boolean;
   } = $props();
 </script>
 
-<ConfirmPopover {question} {confirmLabel} {cancelLabel} {onConfirm}>
+<ConfirmPopover {question} {confirmLabel} {cancelLabel} {onConfirm} bind:open>
   {#snippet trigger(props)}
     <button {...props} type="button" class="fixture-trigger">Discard</button>
   {/snippet}

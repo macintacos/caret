@@ -62,7 +62,7 @@ function makeStore(over: Partial<AutosaveStore> = {}): AutosaveStore {
     annotations: [],
     generalCommentDraft: "",
     composerScratches: [],
-    focusedAnnotation: null,
+    focusedStop: null,
     ...over,
   };
 }
@@ -282,7 +282,7 @@ describe("line-anchored create", () => {
     expect(created).toMatchObject({ startLine: 4, endLine: 4, comment: "fix this line" });
     expect(typeof created.id).toBe("string");
     expect(created.id.length).toBeGreaterThan(0);
-    expect(store.focusedAnnotation).toBe(created.id);
+    expect(store.focusedStop).toEqual({ ref: { kind: "comment", id: created.id }, line: 4 });
     timer.fire();
     expect(saves).toHaveLength(1);
     expect(saves[0]!.annotations).toHaveLength(1);
@@ -306,11 +306,14 @@ describe("line-anchored create", () => {
 
 describe("annotation CRUD", () => {
   test("delete clears focus when the deleted annotation was focused", () => {
-    const store = makeStore({ annotations: [ann("a1"), ann("a2")], focusedAnnotation: "a1" });
+    const store = makeStore({
+      annotations: [ann("a1"), ann("a2")],
+      focusedStop: { ref: { kind: "comment", id: "a1" }, line: 1 },
+    });
     const { autosave } = build(store, () => "r1");
     autosave.deleteAnnotation("a1");
     expect(store.annotations.map((a) => a.id)).toEqual(["a2"]);
-    expect(store.focusedAnnotation).toBe(null);
+    expect(store.focusedStop).toBe(null);
   });
 
   test("edit updates the matching annotation's comment", () => {

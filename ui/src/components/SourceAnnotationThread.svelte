@@ -7,30 +7,36 @@
   // the framing only (EXC-765).
   import type { LineAnnotation } from "@core/lib/types";
   import { Card } from "$lib/components/ui/card/index.js";
+  import type { FocusedStop, RegisterCard } from "$lib/diffview/commentStops.ts";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
   import SourceAnnotationCard from "@/components/SourceAnnotationCard.svelte";
 
   interface Props {
     /** The comments on this line, in thread (display) order. */
     annotations: LineAnnotation[];
-    /** The single focused annotation id across the whole surface, or null. */
-    focusedAnnotation: string | null;
+    /** The single hovered stop across the whole surface, or null. */
+    focusedStop: FocusedStop | null;
     onFocus: (id: string) => void;
     onEdit: (id: string, comment: string) => void;
     onDelete: (id: string) => void;
+    /** Forwarded to each card, which registers its keyboard handle on mount. */
+    register?: RegisterCard;
     /** The review being commented on, forwarded to each card's edit composer. */
     reviewContext?: ReviewContext;
   }
   let {
     annotations,
-    focusedAnnotation,
+    focusedStop,
     onFocus,
     onEdit,
     onDelete,
+    register,
     reviewContext,
   }: Props = $props();
 
   const threaded = $derived(annotations.length > 1);
+  const isFocused = (id: string) =>
+    focusedStop?.ref.kind === "comment" && focusedStop.ref.id === id;
 </script>
 
 {#if threaded}
@@ -43,10 +49,11 @@
         <span class="thread-ordinal metric" aria-hidden="true">{i + 1}</span>
         <SourceAnnotationCard
           annotation={a}
-          focused={a.id === focusedAnnotation}
+          focused={isFocused(a.id)}
           {onFocus}
           {onEdit}
           {onDelete}
+          {register}
           {reviewContext}
         />
       </div>
@@ -60,10 +67,11 @@
   {#key annotations[0].id}
     <SourceAnnotationCard
       annotation={annotations[0]}
-      focused={annotations[0].id === focusedAnnotation}
+      focused={isFocused(annotations[0].id)}
       {onFocus}
       {onEdit}
       {onDelete}
+      {register}
       {reviewContext}
     />
   {/key}

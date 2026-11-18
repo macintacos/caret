@@ -21,7 +21,7 @@
 <button type="button" class="swap" onclick={() => (swapped = true)}>swap</button>
 <SourceAnnotationThread
   {annotations}
-  focusedAnnotation={null}
+  focusedStop={null}
   onFocus={() => {}}
   onEdit={() => {}}
   onDelete={() => {}}

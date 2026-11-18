@@ -17,6 +17,7 @@
   import type { LineAnnotation } from "@core/lib/types";
   import { Button } from "$lib/components/ui/button/index.js";
   import { commentState } from "$lib/commentState.ts";
+  import type { RegisterCard } from "$lib/diffview/commentStops.ts";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { renderMarkdown } from "$lib/markdown.ts";
   import ConfirmPopover from "@/components/ConfirmPopover.svelte";
@@ -32,21 +33,32 @@
     onDelete: (id: string) => void;
     /** The review being commented on, forwarded to the edit-mode composer. */
     reviewContext?: ReviewContext;
+    /** Hands the parent this card's keyboard handle on mount. */
+    register?: RegisterCard;
   }
-  let { annotation, focused, onFocus, onEdit, onDelete, reviewContext }: Props = $props();
+  let { annotation, focused, onFocus, onEdit, onDelete, reviewContext, register }: Props =
+    $props();
 
-  // Nudged open when THIS card becomes the focused one (a navigator reveal). Both
-  // initial reads are untracked: they want focus's value now, not a reactive
-  // dependency on it — the effect below owns that.
+  // Seeded once from focus, so a just-submitted comment mounts open; later focus
+  // changes never expand it (a reveal expands through the registered handle).
   let expanded = $state(untrack(() => focused));
-  let wasFocused = untrack(() => focused);
-  $effect(() => {
-    if (focused && !wasFocused) expanded = true;
-    wasFocused = focused;
-  });
 
   // Editing reuses SourceComposer (mode="edit"); implies expanded.
   let editing = $state(false);
+  let confirming = $state(false);
+
+  $effect(() =>
+    register?.(annotation.id, {
+      expand: () => (expanded = true),
+      collapse: () => {
+        expanded = false;
+        editing = false;
+      },
+      edit: startEdit,
+      discard: () => (confirming = true),
+      expanded: () => expanded,
+    }),
+  );
 
 
   const label = $derived(
@@ -148,6 +160,7 @@
           question="Discard this comment?"
           confirmLabel="Discard"
           onConfirm={confirmDelete}
+          bind:open={confirming}
         >
           {#snippet trigger(props)}
             <Button {...props} variant="ghost" size="sm" class="danger" aria-label="Discard comment">

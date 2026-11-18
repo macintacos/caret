@@ -31,10 +31,18 @@
      * the popover's aria-expanded / aria-controls wiring on top. */
     trigger: Snippet<[Record<string, unknown>]>;
     onConfirm: () => void;
+    /** Bindable so a host can open it without its trigger (a keyboard discard). */
+    open?: boolean;
   }
-  let { question, confirmLabel, cancelLabel = "Cancel", trigger, onConfirm }: Props = $props();
+  let {
+    question,
+    confirmLabel,
+    cancelLabel = "Cancel",
+    trigger,
+    onConfirm,
+    open = $bindable(false),
+  }: Props = $props();
 
-  let open = $state(false);
   let confirmEl = $state<HTMLButtonElement | null>(null);
 </script>
 
