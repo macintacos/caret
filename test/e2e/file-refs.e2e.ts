@@ -1941,3 +1941,38 @@ test.describe("on the preview", () => {
     }
   });
 });
+
+test("the preview sets a bare reference and a backticked one alike", async ({ daemon, page }) => {
+  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
+  try {
+    await daemon.seed({
+      cwd: proj.dir,
+      plan: "# Refs\n\nEdit `src/cache.ts` first.\n\nThe store lives in (src/cache.ts).\n",
+    });
+    await page.goto("/");
+    await planSurface(page);
+    await sourceToggle(page).click();
+    const backticked = page.locator(".plan-preview code:has(> [data-file-ref])");
+    const bare = page.locator(".plan-preview :not(code) > [data-file-ref]");
+    await expect(backticked).toHaveCount(1);
+    await expect(bare).toHaveCount(1);
+    await page.mouse.move(0, 0);
+
+    const look = (chip: import("@playwright/test").Locator) =>
+      chip.evaluate((el) => {
+        const s = getComputedStyle(el);
+        return {
+          fontFamily: s.fontFamily,
+          fontSize: s.fontSize,
+          color: s.color,
+          backgroundColor: s.backgroundColor,
+          padding: s.padding,
+          borderRadius: s.borderRadius,
+          boxShadow: s.boxShadow,
+        };
+      });
+    expect(await look(bare)).toEqual(await look(backticked));
+  } finally {
+    await proj.cleanup();
+  }
+});

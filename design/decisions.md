@@ -133,6 +133,16 @@ Open items first, then the log, newest first.
   paints the waiting plan as an inverse `warning` fill with a 🥕 emoji. Either align it
   with the 2026-11-05 OpenCode decision or record why the two hosts differ.
 
+## 2026-11-18: a cited file reads as code
+
+- **A resolved reference wears inline code's type in the preview,** backticked or not:
+  Berkeley Mono at 0.9em in the code ink. The user asked for `` `foo/bar.py` `` and a bare
+  `foo/bar.py` to look the same, and the brief already sets paths in Berkeley Mono.
+- **The `--chip-ref` fill and the file glyph stay,** so a file still reads apart from
+  ordinary code.
+- **The source view is unchanged:** its rows are already monospace and show the backticks,
+  so the two forms can't match there.
+
 ## 2026-11-15: the menubar menu opens on a stats card
 
 - **Four counts in two pairs.** Plans approved and plans rejected, then revisions and

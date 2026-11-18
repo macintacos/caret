@@ -361,12 +361,16 @@
   }
   /* Padding, radius and tint pinned to coreStyles.ts's code chip by coreStyles.test.ts. */
   .plan-preview :global(:not(pre) > code) {
-    font-family: var(--font-mono);
-    font-size: 0.9em;
     padding: var(--chip-pad-block) var(--chip-pad-inline);
     border-radius: var(--radius);
     background-color: var(--chip-code);
     box-shadow: var(--chip-stamped);
+  }
+  /* A cited file reads as code whether or not it was backticked; one inside code takes
+     the type from the code. Outranks the link ink, so a reference in a label keeps it. */
+  .plan-preview :global(:is(:not(pre) > code, :not(code) > [data-file-ref])) {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
     color: var(--markdown-code-color, var(--accent-bright));
     font-weight: var(--markdown-code-font-weight);
     font-style: var(--markdown-code-font-style);

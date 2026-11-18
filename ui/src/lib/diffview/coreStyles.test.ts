@@ -1601,6 +1601,20 @@ describe("the preview's copies of the link, code and reference chips (EXC-2021)"
     );
   });
 
+  test("a reference outside code wears inline code's type, and one inside code takes it once", () => {
+    const type = previewRule(":is(:not(pre) > code, :not(code) > [data-file-ref])");
+    expect(Object.keys(type).sort()).toEqual([
+      "color",
+      "font-family",
+      "font-size",
+      "font-style",
+      "font-weight",
+      "text-decoration",
+    ]);
+    const code = previewRule(":not(pre) > code");
+    for (const property of Object.keys(type)) expect(code[property]).toBeUndefined();
+  });
+
   test.each([
     "[data-file-ref]",
     "[data-file-ref]:hover",
