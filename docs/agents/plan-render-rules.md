@@ -434,7 +434,9 @@ only the blocks a step crosses, never the whole document. The band
 map's text order is untouched. It glides a step as the hover band glides between rows,
 below. The cursor can also rest on a comment stop, a thread or a Resume marker, held as
 `focusedStop`; `enterStop` puts it there and `placeOnStop` also scrolls to it. Preview
-stops are block-granular: a stop sits at its slot, after the block it follows.
+stops sit where their card's gap opens in the text, often mid-paragraph: `slotRanks` in
+`previewComments.ts` orders the gaps top to bottom with the text, and a `j`/`k` step
+crosses every gap that opens between the point it leaves and the point it reaches.
 
 `search` is ported through `ui/src/lib/previewSearch.ts`, which matches the text as
 rendered, segmented once per map, on the first query, by `createPreviewSearch`. A block,

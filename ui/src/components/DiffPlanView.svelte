@@ -185,6 +185,7 @@
     type SlotBox,
     type SlotGap,
     slotGap,
+    slotRanks,
     spanRanges,
   } from "$lib/previewComments.ts";
   import { previewFileRefs } from "$lib/previewRefs.ts";
@@ -439,11 +440,14 @@
         ]).map((slot) => ({ ...slot, start: Math.min(...slot.items.map(itemStart)) }))
       : [],
   );
+  // Where each preview slot's gap opens, by line, as the gap effect last read it; reassigned
+  // only on a change, so a settled layout leaves `stops` alone.
+  let previewGapsByLine = $state.raw(new Map<number, SlotGap>());
+  const previewRanks = $derived(
+    planPreview ? slotRanks(planPreview.blocks, previewGapsByLine) : null,
+  );
   // The cursor's comment stops, in the order each surface renders them.
-  const stopSlotOf = $derived.by(() => {
-    const blocks = planPreview?.blocks;
-    return blocks ? (line: number) => commentSlotIndex(blocks, line) ?? 0 : (line: number) => line;
-  });
+  const stopSlotOf = $derived(previewRanks ? previewRanks.slotOf : (line: number) => line);
   const stops = $derived(
     runs("keyboardComments") ? deriveStops(lineThreads, draftMarkers, stopSlotOf) : [],
   );
@@ -614,11 +618,16 @@
       ]),
     );
     const open = new Map<number, { at: SlotGap; height: number }>();
+    const byLine = new Map<number, SlotGap>();
     for (const { start, line } of untrack(() => previewSlots)) {
       const at = slotGap(root, map, blocks, { start, end: line });
+      if (at === null) continue;
+      byLine.set(line, at);
       const height = heights.get(line);
-      if (at !== null && height !== undefined) open.set(line, { at, height });
+      if (height !== undefined) open.set(line, { at, height });
     }
+    if (JSON.stringify([...byLine]) !== JSON.stringify([...untrack(() => previewGapsByLine)]))
+      previewGapsByLine = byLine;
     gaps.set(map, open);
     const next = gaps.boxes(scroller);
     if (!sameSlotBoxes(untrack(() => slotBoxes), next)) slotBoxes = next;
@@ -2109,16 +2118,23 @@
     openComposer: openRange,
     sound: sound.play,
     ...stopDeps(),
-    slotOf: (line) => stopSlotOf(line),
+    slotOf: (p) => previewRanks?.slotAt(p) ?? 0,
     slotEdge: (slot, edge) => {
       const blocks = planPreview?.blocks;
       const map = previewSourceMap;
-      if (blocks == null || map == null) return null;
-      const next = blocks[slot + 1];
-      const after = next ? pointForLine(map, next.start, planLineCount) : null;
-      if (edge === "first-after") return after;
+      const gap = previewRanks?.gapOf(slot);
       const geometry = previewGeometry();
-      if (geometry == null) return null;
+      if (blocks == null || map == null || gap === undefined || geometry == null) return null;
+      if ("before" in gap)
+        return edge === "first-after"
+          ? gap.before
+          : stepVisualLine(geometry.root, geometry.map, gap.before, -1);
+      const next = blocks[gap.block + 1];
+      const found = next ? pointForLine(map, next.start, planLineCount) : null;
+      // pointForLine walks back when no later line renders text; that is not below the gap.
+      const after =
+        found && (commentSlotIndex(blocks, found.line) ?? 0) > gap.block ? found : null;
+      if (edge === "first-after") return after;
       return after == null
         ? lastVisualLine(geometry.root, geometry.map)
         : stepVisualLine(geometry.root, geometry.map, after, -1);

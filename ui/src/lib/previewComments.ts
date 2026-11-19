@@ -92,6 +92,44 @@ export function slotGap(
   return block === null ? null : { block };
 }
 
+/** Where a slot gap or text point sits top to bottom: a gap opening before a point sits
+ * with it, so the point is below the gap; a block's end sits after all its text. */
+type RankKey = readonly [number, number, number, number];
+
+const compareKeys = (a: RankKey, b: RankKey): number =>
+  a[0] - b[0] || a[1] - b[1] || a[2] - b[2] || a[3] - b[3];
+
+/** The preview's comment slots in visual order. A slot is its gap's index among the
+ * distinct gaps top to bottom, so comments sharing a gap share a slot; `slotAt` counts the
+ * gaps above a point. A line `gaps` lacks takes its block's end. */
+export function slotRanks(
+  blocks: readonly SourceSpan[],
+  gaps: ReadonlyMap<number, SlotGap>,
+): {
+  slotOf(line: number): number;
+  slotAt(p: TextPoint): number;
+  gapOf(slot: number): SlotGap | undefined;
+} {
+  const blockOf = (line: number) => commentSlotIndex(blocks, line) ?? 0;
+  const pointKey = (p: TextPoint): RankKey => [blockOf(p.line), 0, p.line, p.column];
+  const gapKey = (g: SlotGap): RankKey => ("block" in g ? [g.block, 1, 0, 0] : pointKey(g.before));
+  const sorted = [...gaps.values()]
+    .map((gap) => ({ gap, key: gapKey(gap) }))
+    .sort((a, b) => compareKeys(a.key, b.key))
+    .filter((g, i, all) => i === 0 || compareKeys(all[i - 1]?.key ?? g.key, g.key) !== 0);
+  const countBelow = (key: RankKey, inclusive: boolean) =>
+    sorted.filter((g) => {
+      const c = compareKeys(g.key, key);
+      return inclusive ? c <= 0 : c < 0;
+    }).length;
+
+  return {
+    slotOf: (line) => countBelow(gapKey(gaps.get(line) ?? { block: blockOf(line) }), false),
+    slotAt: (p) => countBelow(pointKey(p), true),
+    gapOf: (slot) => sorted[slot]?.gap,
+  };
+}
+
 const GAP = "data-preview-gap";
 
 const isGap = (node: Node | null): node is HTMLElement =>

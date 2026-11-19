@@ -13,6 +13,7 @@ import {
   paintCommentHighlight,
   type SlotGap,
   slotGap,
+  slotRanks,
   spanRanges,
 } from "$lib/previewComments.ts";
 
@@ -60,6 +61,48 @@ describe("commentSlotIndex", () => {
 
   test("has no slot without blocks", () => {
     expect(commentSlotIndex([], 1)).toBeNull();
+  });
+});
+
+describe("slotRanks", () => {
+  // Blocks: a paragraph on 1–3, a paragraph on 5–6.
+  const blocks = [
+    { start: 1, end: 3 },
+    { start: 5, end: 6 },
+  ];
+  // Line 1's comment opens mid-paragraph before the row starting at 2:4; lines 3 and 6 end
+  // their blocks; line 2's shares line 1's gap.
+  const gaps = new Map<number, SlotGap>([
+    [1, { before: { line: 2, column: 4 } }],
+    [2, { before: { line: 2, column: 4 } }],
+    [3, { block: 0 }],
+    [6, { block: 1 }],
+  ]);
+  const ranks = slotRanks(blocks, gaps);
+
+  test("orders gaps top to bottom, a mid-block gap before its block's end", () => {
+    expect([1, 3, 6].map(ranks.slotOf)).toEqual([0, 1, 2]);
+  });
+
+  test("gives comments sharing a gap one slot", () => {
+    expect(ranks.slotOf(2)).toBe(ranks.slotOf(1));
+  });
+
+  test("counts a gap above a point at or after where it opens", () => {
+    expect(ranks.slotAt({ line: 2, column: 3 })).toBe(0);
+    expect(ranks.slotAt({ line: 2, column: 4 })).toBe(1);
+    expect(ranks.slotAt({ line: 3, column: 0 })).toBe(1);
+    expect(ranks.slotAt({ line: 5, column: 0 })).toBe(2);
+    expect(ranks.slotAt({ line: 6, column: 9 })).toBe(2);
+  });
+
+  test("resolves a slot back to its gap", () => {
+    expect(ranks.gapOf(0)).toEqual({ before: { line: 2, column: 4 } });
+    expect(ranks.gapOf(2)).toEqual({ block: 1 });
+  });
+
+  test("puts a line without a gap after its block", () => {
+    expect(ranks.slotOf(5)).toBe(ranks.slotOf(6));
   });
 });
 

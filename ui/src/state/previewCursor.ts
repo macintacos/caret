@@ -70,9 +70,10 @@ export interface PreviewCursorDeps {
   setFocusedStop(stop: FocusedStop | null): void;
   /** Scroll `stop`'s card or marker into view. */
   followStop(stop: CommentStop): void;
-  /** The block whose comment slot holds comments ending on `line`. */
-  slotOf(line: number): number;
-  /** The first visual line after block `slot`, or the last within it; null past the end. */
+  /** How many comment slots sit above `p`: a stop at slot `s` lies below `p` iff `s` is at
+   * least this. */
+  slotOf(p: TextPoint): number;
+  /** The first visual line below slot `slot`'s gap, or the last above it; null past the end. */
   slotEdge(slot: number, edge: "first-after" | "last-in"): TextPoint | null;
 }
 
@@ -213,13 +214,13 @@ export function createPreviewCursor(
     return true;
   }
 
-  /** `j`/`k` from `from` to `to`: the stop between their blocks, if any. A `j` that cannot
+  /** `j`/`k` from `from` to `to`: the stop whose gap lies between them, if any. A `j` that cannot
    * move counts as reaching Infinity, so a comment on the last line stays reachable. */
   function stopBetween(from: TextPoint, to: TextPoint, dir: 1 | -1): CommentStop | undefined {
     const stops = deps.stops();
     const stuck = dir > 0 && !before(from, to);
-    const end = stuck ? Number.POSITIVE_INFINITY : deps.slotOf(to.line);
-    return stops[crossedStop(stops, deps.slotOf(from.line), end, dir)];
+    const end = stuck ? Number.POSITIVE_INFINITY : deps.slotOf(to);
+    return stops[crossedStop(stops, deps.slotOf(from), end, dir)];
   }
 
   function resolve(motion: CursorMotion, from: TextPoint | null): TextPoint | null {
@@ -261,7 +262,7 @@ export function createPreviewCursor(
       const stops = deps.stops();
       const i = focusedIndex(stops);
       const seed = i >= 0 ? null : seedPoint();
-      const from = i >= 0 ? { stop: i } : { slot: seed ? deps.slotOf(seed.line) : 0 };
+      const from = i >= 0 ? { stop: i } : { slot: seed ? deps.slotOf(seed) : 0 };
       const hit = stops[stepComment(stops, from, delta)];
       if (hit != null) placeOnStop(hit);
     },

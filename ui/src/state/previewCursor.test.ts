@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { createPreviewCursor, type PreviewCursorStore } from "@/state/previewCursor.ts";
 import { type CommentStop, deriveStops, type FocusedStop } from "$lib/diffview/commentStops.ts";
 import type { CursorPlacement } from "$lib/diffview/types.ts";
+import { type SlotGap, slotRanks } from "$lib/previewComments.ts";
 import type { TextPoint } from "$lib/previewLines.ts";
 import type { SoundEvent } from "$lib/sound.ts";
 
@@ -31,6 +32,7 @@ function build(
     noRange?: boolean;
     stops?: CommentStop[];
     focused?: FocusedStop | null;
+    ranks?: ReturnType<typeof slotRanks>;
   } = {},
 ) {
   let focusedStop = over.focused ?? null;
@@ -78,11 +80,16 @@ function build(
       focusedStop = s;
     },
     followStop: (s) => followedStops.push(s),
-    slotOf: blockOf,
-    slotEdge: (slot, edge) =>
-      edge === "first-after"
-        ? (lines.find((v) => blockOf(v.line) > slot) ?? null)
-        : (lines.findLast((v) => blockOf(v.line) === slot) ?? null),
+    slotOf: over.ranks ? over.ranks.slotAt : (p) => blockOf(p.line),
+    slotEdge: (slot, edge) => {
+      const gap = over.ranks?.gapOf(slot);
+      if (gap !== undefined && "before" in gap)
+        return edge === "first-after" ? gap.before : (lines[indexOf(gap.before) - 1] ?? null);
+      const block = gap?.block ?? slot;
+      return edge === "first-after"
+        ? (lines.find((v) => blockOf(v.line) > block) ?? null)
+        : (lines.findLast((v) => blockOf(v.line) === block) ?? null);
+    },
   });
   return {
     cursor,
@@ -329,6 +336,75 @@ test("every other motion takes the follow scroll", () => {
     h.cursor.moveCursor(m);
   expect(h.follows.length).toBe(5);
   expect(h.jumps).toEqual([]);
+});
+
+describe("comment stops at a gap inside a block", () => {
+  // The comment on line 3 opens its gap before the paragraph's second row, 3:10; the one
+  // on 8 after the last block.
+  const GAPS = new Map<number, SlotGap>([
+    [3, { before: at(2) }],
+    [8, { block: 3 }],
+  ]);
+  const ranks = slotRanks(
+    BLOCK_STARTS.map((start, i) => ({ start, end: (BLOCK_STARTS[i + 1] ?? 9) - 1 })),
+    GAPS,
+  );
+  const STOPS = deriveStops(
+    [
+      { line: 3, annotations: [{ id: "m", startLine: 3, endLine: 3 }] },
+      { line: 8, annotations: [{ id: "c", startLine: 8, endLine: 8 }] },
+    ],
+    [],
+    ranks.slotOf,
+  );
+  const onM: FocusedStop = { ref: { kind: "comment", id: "m" }, line: 3 };
+  const build2 = (store: PreviewCursorStore, focused: FocusedStop | null = null) =>
+    build(store, { stops: STOPS, focused, ranks });
+
+  test("j onto the row above the gap's lands on its comment, and k back from below", () => {
+    const down = build2(placed(at(1)));
+    down.cursor.moveCursor("down");
+    expect(down.focused()).toEqual(onM);
+
+    const up = build2(placed(at(2)));
+    up.cursor.moveCursor("up");
+    expect(up.focused()).toEqual(onM);
+  });
+
+  test("j and k between the rows below the gap pass no comment", () => {
+    const store = placed(at(3));
+    const h = build2(store);
+    h.cursor.moveCursor("up");
+    expect(h.focused() === null).toBe(true);
+    expect(store.cursorPoint).toEqual(at(2));
+    h.cursor.moveCursor("down");
+    expect(h.focused() === null).toBe(true);
+    expect(store.cursorPoint).toEqual(at(3));
+  });
+
+  test("j off the comment lands on the row below its gap, k on the row above", () => {
+    const below = placed(at(0));
+    build2(below, onM).cursor.moveCursor("down");
+    expect(below.cursorPoint).toEqual(at(2));
+
+    const above = placed(at(0));
+    build2(above, onM).cursor.moveCursor("up");
+    expect(above.cursorPoint).toEqual(at(1));
+  });
+
+  test("]c and [c count the gap from where it opens", () => {
+    const fromAbove = build2(placed(at(1)));
+    fromAbove.cursor.stepComment(1);
+    expect(fromAbove.focused()).toEqual(onM);
+
+    const fromBelow = build2(placed(at(2)));
+    fromBelow.cursor.stepComment(1);
+    expect(fromBelow.focused()?.ref).toEqual({ kind: "comment", id: "c" });
+
+    const back = build2(placed(at(2)));
+    back.cursor.stepComment(-1);
+    expect(back.focused()).toEqual(onM);
+  });
 });
 
 describe("c and V on a hovered stop", () => {
