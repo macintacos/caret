@@ -163,6 +163,33 @@ export const CANONICAL_KEYMAP: ShortcutEntry[] = [
     group: "commenting",
     label: "Clear selection",
   },
+  // Live only while a comment stop is hovered, which is what frees these bare letters.
+  { id: "commenting.edit", keys: [{ key: "e" }], group: "commenting", label: "Edit comment" },
+  {
+    id: "commenting.editInsert",
+    keys: [{ key: "i" }],
+    group: "commenting",
+    label: "Edit comment",
+  },
+  {
+    id: "commenting.activate",
+    keys: [{ key: "Enter" }],
+    group: "commenting",
+    label: "Expand or edit comment",
+  },
+  {
+    id: "commenting.collapse",
+    keys: [{ key: "h" }],
+    group: "commenting",
+    label: "Collapse comment",
+  },
+  { id: "commenting.expand", keys: [{ key: "l" }], group: "commenting", label: "Expand comment" },
+  {
+    id: "commenting.discard",
+    keys: [{ key: "D" }],
+    group: "commenting",
+    label: "Discard comment",
+  },
   // Actions & chrome
   { id: "actions.approve", keys: [{ key: "a" }], group: "actions", label: "Approve" },
   {

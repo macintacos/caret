@@ -316,6 +316,13 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
         deps.openComposer(startLine, endLine);
         return;
       }
+      const focused = deps.focusedStop();
+      if (focused?.ref.kind === "resume") return;
+      if (focused != null) {
+        const stop = deps.stops().find((s) => sameStop(s.ref, focused.ref));
+        deps.openComposer(stop?.start ?? focused.line, focused.line);
+        return;
+      }
       const line = seedLine();
       deps.openComposer(line, line);
     },
@@ -327,6 +334,7 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
         deps.sound?.("visualExited");
         return;
       }
+      if (deps.focusedStop()?.ref.kind === "resume") return;
       const anchor = seedLine();
       leaveStop();
       reveal(anchor);

@@ -564,11 +564,11 @@ describe("comment stops", () => {
     expect(h.focused() === null).toBe(true);
   });
 
-  test("c on a hovered comment comments on its last line", () => {
+  test("c on a hovered comment comments on its anchored lines", () => {
     store.cursorLine = 1;
     const h = stopsBuild(onStop("a", 3));
     h.keyboard.commentCursorLine();
-    expect(h.composerOpens).toEqual([{ startLine: 3, endLine: 3 }]);
+    expect(h.composerOpens).toEqual([{ startLine: 2, endLine: 3 }]);
   });
 
   test("landOnLine leaves the hovered comment for the line", () => {
@@ -604,6 +604,17 @@ describe("enterVisualMode", () => {
     expect(store.visualAnchor).toBe(5);
   });
 
+  test("on a Resume marker, does nothing", () => {
+    store.cursorLine = 5;
+    const h = build(store, {
+      text: CURSOR_PLAN,
+      focused: { ref: { kind: "resume", key: "k" }, line: 5 },
+    });
+    h.keyboard.enterVisualMode();
+    expect(store.visualAnchor).toBeNull();
+    expect(h.focused()?.ref).toEqual({ kind: "resume", key: "k" });
+  });
+
   test("pressing V again exits, keeping the cursor placed", () => {
     store.cursorLine = 6;
     store.visualAnchor = 4;
@@ -626,6 +637,17 @@ describe("commentCursorLine", () => {
     const h = build(store, { text: CURSOR_PLAN, reading: 3 });
     h.keyboard.commentCursorLine();
     expect(h.composerOpens).toEqual([{ startLine: 3, endLine: 3 }]);
+  });
+
+  test("on a Resume marker, opens nothing", () => {
+    const stops = deriveStops([], [{ key: "k", startLine: 3, endLine: 5 }], (l) => l);
+    const h = build(store, {
+      text: CURSOR_PLAN,
+      stops,
+      focused: { ref: { kind: "resume", key: "k" }, line: 5 },
+    });
+    h.keyboard.commentCursorLine();
+    expect(h.composerOpens).toEqual([]);
   });
 
   test("in visual mode, comments the whole (normalized) selection and exits visual mode", () => {

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   type CommentStop,
+  commentKeys,
   crossedStop,
   deriveStops,
   sameStop,
@@ -110,5 +111,30 @@ describe("stopNeighbour", () => {
     expect(stopNeighbour(stops, 1, 1)).toBe(-1);
     expect(stopNeighbour(stops, 0, -1)).toBe(-1);
     expect(stopNeighbour(stops, 2, -1)).toBe(-1);
+  });
+});
+
+describe("commentKeys", () => {
+  const ALL = ["edit", "editInsert", "activate", "collapse", "expand", "discard"];
+  const sorted = (ids: string[]) => [...ids].sort();
+
+  test("a draft comment takes every comment key, collapsed or expanded", () => {
+    expect(sorted(commentKeys({ kind: "comment" }, false))).toEqual(sorted(ALL));
+    expect(sorted(commentKeys({ kind: "comment", state: "pending" }, true))).toEqual(sorted(ALL));
+  });
+
+  test("an accepted or expired comment only folds, and Enter expands it while collapsed", () => {
+    for (const state of ["approved", "expired"] as const) {
+      expect(sorted(commentKeys({ kind: "comment", state }, false))).toEqual(
+        sorted(["collapse", "expand", "activate"]),
+      );
+      expect(sorted(commentKeys({ kind: "comment", state }, true))).toEqual(
+        sorted(["collapse", "expand"]),
+      );
+    }
+  });
+
+  test("a Resume marker takes Enter only", () => {
+    expect(commentKeys({ kind: "resume" }, false)).toEqual(["activate"]);
   });
 });

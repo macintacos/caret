@@ -45,6 +45,7 @@ function build(
   const seeds = { count: 0 };
   const selections: [TextPoint, TextPoint][] = [];
   const comments: Range[] = [];
+  const opened: [number, number][] = [];
   const sounds: SoundEvent[] = [];
   const range = {} as Range;
   const cursor = createPreviewCursor(store, {
@@ -69,6 +70,7 @@ function build(
       return over.noRange ? null : range;
     },
     comment: (r) => comments.push(r),
+    openComposer: (start, end) => opened.push([start, end]),
     sound: (e) => sounds.push(e),
     stops: () => over.stops ?? [],
     focusedStop: () => focusedStop,
@@ -91,6 +93,7 @@ function build(
     seeds,
     selections,
     comments,
+    opened,
     sounds,
     range,
     followedStops,
@@ -293,6 +296,38 @@ test("every other motion takes the follow scroll", () => {
     h.cursor.moveCursor(m);
   expect(h.follows.length).toBe(5);
   expect(h.jumps).toEqual([]);
+});
+
+describe("c and V on a hovered stop", () => {
+  const STOPS = deriveStops(
+    [{ line: 4, annotations: [{ id: "a", startLine: 3, endLine: 4 }] }],
+    [{ key: "k", startLine: 3, endLine: 4 }],
+    blockOf,
+  );
+  const comment: FocusedStop = { ref: { kind: "comment", id: "a" }, line: 4 };
+  const resume: FocusedStop = { ref: { kind: "resume", key: "k" }, line: 4 };
+
+  test("c on a comment opens the composer over its anchored lines", () => {
+    const h = build(placed(at(1)), { stops: STOPS, focused: comment });
+    h.cursor.comment();
+    expect(h.opened).toEqual([[3, 4]]);
+    expect(h.comments).toEqual([]);
+  });
+
+  test("c on a Resume marker opens nothing", () => {
+    const h = build(placed(at(1)), { stops: STOPS, focused: resume });
+    h.cursor.comment();
+    expect(h.opened).toEqual([]);
+    expect(h.comments).toEqual([]);
+  });
+
+  test("V on a Resume marker does nothing", () => {
+    const store = placed(at(1));
+    const h = build(store, { stops: STOPS, focused: resume });
+    h.cursor.enterVisualMode();
+    expect(store.visualAnchor).toBeNull();
+    expect(h.focused()).toEqual(resume);
+  });
 });
 
 describe("paragraph motions", () => {

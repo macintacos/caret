@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { filterShortcuts, fitsSingleColumn, groupShortcuts } from "$lib/shortcuts/help.ts";
+import { CANONICAL_KEYMAP } from "$lib/shortcuts/keymap.ts";
 import type { ShortcutEntry } from "$lib/shortcuts/registry.ts";
 
 // A small out-of-order fixture spanning three of the five groups (commenting and
@@ -39,6 +40,22 @@ describe("groupShortcuts", () => {
   test("preserves input order of entries within a group", () => {
     const motion = groupShortcuts(entries).find((g) => g.group === "motion");
     expect(motion?.entries.map((e) => e.id)).toEqual(["motion.top", "motion.down"]);
+  });
+
+  test("lists the hovered-comment keys under Commenting", () => {
+    const commenting = groupShortcuts(CANONICAL_KEYMAP).find((g) => g.group === "commenting");
+    expect(commenting?.label).toBe("Commenting");
+    const ids = commenting?.entries.map((e) => e.id) ?? [];
+    for (const id of [
+      "commenting.edit",
+      "commenting.editInsert",
+      "commenting.activate",
+      "commenting.collapse",
+      "commenting.expand",
+      "commenting.discard",
+    ]) {
+      expect(ids).toContain(id);
+    }
   });
 
   test("places the Settings group above Help (the scoped-help section order, EXC-849)", () => {

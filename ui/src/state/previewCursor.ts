@@ -57,6 +57,8 @@ export interface PreviewCursorDeps {
   selection(from: TextPoint, to: TextPoint): Range | null;
   /** Opens the composer on the source lines `range` covers. */
   comment(range: Range): void;
+  /** Opens the composer on the source lines `startLine`–`endLine`. */
+  openComposer(startLine: number, endLine: number): void;
   /** Play a moment's cue. Optional so a test drives the factory silently. */
   sound?: (event: SoundEvent) => void;
   /** The comment stops in render order; empty where comments take no keys. */
@@ -288,6 +290,7 @@ export function createPreviewCursor(
         deps.sound?.("visualExited");
         return;
       }
+      if (deps.focusedStop()?.ref.kind === "resume") return;
       const p = seedPoint();
       if (p == null) return;
       leaveStop();
@@ -298,6 +301,13 @@ export function createPreviewCursor(
     },
 
     comment() {
+      const focused = deps.focusedStop();
+      if (focused?.ref.kind === "resume") return;
+      if (focused != null) {
+        const stop = deps.stops().find((s) => sameStop(s.ref, focused.ref));
+        deps.openComposer(stop?.start ?? focused.line, focused.line);
+        return;
+      }
       const p = seedPoint();
       const anchor = anchorPoint();
       store.visualAnchor = null;

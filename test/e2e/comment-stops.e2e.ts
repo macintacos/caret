@@ -12,7 +12,13 @@
 
 import type { Locator, Page } from "@playwright/test";
 
-import { commentNavigator, commentTally, rows, sourceToggle } from "@test/e2e/support/chrome.ts";
+import {
+  commentNavigator,
+  commentTally,
+  discardConfirm,
+  rows,
+  sourceToggle,
+} from "@test/e2e/support/chrome.ts";
 import { cursor, previewCursor } from "@test/e2e/support/cursor.ts";
 import { type Daemon, expect, test } from "@test/e2e/support/fixtures.ts";
 import {
@@ -54,8 +60,17 @@ interface Lines {
 
 /** Seed PLAN, anchor `draft` to its rendered lines by their text, reload, and open `view`
  * ready for keys. */
-async function open(page: Page, daemon: Daemon, view: View, draft: Draft): Promise<Lines> {
-  const id = await daemon.seed({ plan: PLAN });
+async function open(
+  page: Page,
+  daemon: Daemon,
+  view: View,
+  draft: Draft,
+  versions = 1,
+): Promise<Lines> {
+  const id =
+    versions > 1
+      ? await daemon.seedVersions(versions, Array(versions).fill(PLAN))
+      : await daemon.seed({ plan: PLAN });
   await page.goto("/");
   await awaitPlanReadyForKeys(page);
   const lines = new Map<string, number>();
@@ -210,6 +225,149 @@ for (const view of ["source", "preview"] as const) {
       await card(page, "b").hover();
       await expect(card(page, "b")).not.toHaveClass(/\bfocused\b/);
       await expect(rows(commentNavigator(page)).and(page.locator("[aria-current]"))).toHaveCount(0);
+    });
+
+    test("e and i open the edit composer, and saving or cancelling keeps the card focused", async ({
+      daemon,
+      page,
+    }) => {
+      await open(page, daemon, view, (line) => ({
+        annotations: [comment("b", line("Bravo line."))],
+      }));
+      await toLine(page, "Bravo");
+      await page.keyboard.press("j");
+      await expect(card(page, "b")).not.toHaveClass(/\bexpanded\b/);
+
+      await page.keyboard.press("e");
+      await expect(card(page, "b").locator(".cm-content")).toBeFocused();
+      // The first Escape blurs the editor into its composer; the second cancels the edit.
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
+      await expect(card(page, "b")).not.toHaveClass(/\bediting\b/);
+      await expectOnCard(page, view, "b");
+
+      await page.keyboard.press("i");
+      await expect(card(page, "b").locator(".cm-content")).toBeFocused();
+      await page.keyboard.press("End");
+      await page.keyboard.type(" revised");
+      await page.keyboard.press("ControlOrMeta+Enter");
+      await expect(card(page, "b")).toContainText("note b revised");
+      await expectOnCard(page, view, "b");
+    });
+
+    test("Enter expands then edits, and h and l fold", async ({ daemon, page }) => {
+      await open(page, daemon, view, (line) => ({
+        annotations: [comment("b", line("Bravo line."))],
+      }));
+      await toLine(page, "Bravo");
+      await page.keyboard.press("j");
+
+      await page.keyboard.press("Enter");
+      await expect(card(page, "b")).toHaveClass(/\bexpanded\b/);
+      await page.keyboard.press("Enter");
+      await expect(card(page, "b").locator(".cm-content")).toBeFocused();
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
+      await expect(card(page, "b")).not.toHaveClass(/\bediting\b/);
+
+      await page.keyboard.press("h");
+      await expect(card(page, "b")).not.toHaveClass(/\bexpanded\b/);
+      await page.keyboard.press("l");
+      await expect(card(page, "b")).toHaveClass(/\bexpanded\b/);
+    });
+
+    test("Shift+D asks to discard: Escape keeps the card, Enter discards it", async ({
+      daemon,
+      page,
+    }) => {
+      const lines = await open(page, daemon, view, (line) => ({
+        annotations: [comment("b", line("Bravo line."))],
+      }));
+      await toLine(page, "Bravo");
+      await page.keyboard.press("j");
+      await expect(card(page, "b")).not.toHaveClass(/\bexpanded\b/);
+
+      await page.keyboard.press("D");
+      await expect(discardConfirm(page)).toBeVisible();
+      await expect(discardConfirm(page).getByRole("button", { name: "Discard" })).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(discardConfirm(page)).toHaveCount(0);
+      await expectOnCard(page, view, "b");
+      // Focus went back off the Discard trigger, so Enter reaches the card, not the trigger.
+      await page.keyboard.press("Enter");
+      await expect(card(page, "b")).toHaveClass(/\bexpanded\b/);
+      await expect(discardConfirm(page)).toHaveCount(0);
+
+      await page.keyboard.press("D");
+      await expect(discardConfirm(page).getByRole("button", { name: "Discard" })).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(card(page, "b")).toHaveCount(0);
+      await expectOnLine(page, view, lines.at("Bravo line."));
+    });
+
+    test("d toggles compare while a card is hovered", async ({ daemon, page }) => {
+      await open(
+        page,
+        daemon,
+        view,
+        (line) => ({ annotations: [comment("b", line("Bravo line."))] }),
+        2,
+      );
+      await toLine(page, "Bravo");
+      await page.keyboard.press("j");
+      await expectOnCard(page, view, "b");
+      await page.keyboard.press("d");
+      await expect(sourceToggle(page)).toHaveCount(0);
+    });
+
+    test("c adds to the hovered comment's thread, over its anchored lines", async ({
+      daemon,
+      page,
+    }) => {
+      await open(page, daemon, view, (line) => ({
+        annotations: [
+          {
+            id: "b",
+            startLine: line("Alpha line."),
+            endLine: line("Bravo line."),
+            comment: "note b",
+          },
+        ],
+      }));
+      await toLine(page, "Bravo");
+      await page.keyboard.press("j");
+      await expectOnCard(page, view, "b");
+
+      await page.keyboard.press("c");
+      await expect(page.locator(".composer .label")).toHaveText(/^Lines /);
+      await page.keyboard.type("second thought");
+      await page.keyboard.press("ControlOrMeta+Enter");
+      await expect(page.locator("[data-annotation-card]")).toHaveCount(2);
+      const fresh = page.locator("[data-annotation-card]").filter({ hasText: "second thought" });
+      await expect(fresh).toHaveClass(/\bfocused\b/);
+    });
+
+    test("V starts visual mode on the hovered comment's last line", async ({ daemon, page }) => {
+      const lines = await open(page, daemon, view, (line) => ({
+        annotations: [comment("b", line("Bravo line."))],
+      }));
+      await toLine(page, "Bravo");
+      await page.keyboard.press("j");
+      await page.keyboard.press("V");
+      await expectOnLine(page, view, lines.at("Bravo line."));
+      await page.keyboard.press("c");
+      await expect(page.locator(".composer .label")).toHaveText(`Line ${lines.at("Bravo line.")}`);
+    });
+
+    test("h, e and Enter off a comment do nothing", async ({ daemon, page }) => {
+      const lines = await open(page, daemon, view, (line) => ({
+        annotations: [comment("b", line("Bravo line."))],
+      }));
+      await toLine(page, "Bravo");
+      for (const key of ["h", "e", "Enter"]) await page.keyboard.press(key);
+      await expectOnLine(page, view, lines.at("Bravo line."));
+      await expect(page.locator(".cm-content")).toHaveCount(0);
+      await expect(card(page, "b")).not.toHaveClass(/\bexpanded\b/);
     });
 
     test("a card taller than the viewport shows its top", async ({ daemon, page }) => {

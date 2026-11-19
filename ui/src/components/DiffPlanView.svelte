@@ -38,10 +38,13 @@
   import { type BracketSpan, bracketLayer } from "$lib/diffview/bracket.ts";
   import {
     type CardHandle,
+    type CommentKey,
     type CommentStop,
+    commentKeys,
     deriveStops,
     type FocusedStop,
     type RegisterCard,
+    type StopRef,
     sameStop,
   } from "$lib/diffview/commentStops.ts";
   import { type CodeBlockRange, codeBlockRanges, codeBlockText } from "$lib/diffview/codeBlocks.ts";
@@ -2110,6 +2113,7 @@
       return geometry && visualLineRange(geometry.root, geometry.map, from, to);
     },
     comment: commentOnPreview,
+    openComposer: openRange,
     sound: sound.play,
     ...stopDeps(),
     slotOf: (line) => stopSlotOf(line),
@@ -2686,6 +2690,50 @@
       for (const off of offs) off();
     };
   });
+
+  // Keys on the hovered comment act through its card's handle; commentKeys decides which
+  // work on it. Off a native control for Enter, so a focused button's own Enter activation
+  // never fires twice, and never under the discard confirm.
+  $effect(() => {
+    if (!runs("keyboardComments")) return;
+    const actions: Record<CommentKey, (h: CardHandle | undefined, ref: StopRef) => void> = {
+      edit: (h) => h?.edit(),
+      editInsert: (h) => h?.edit(),
+      activate: (h, ref) => {
+        if (ref.kind === "resume") resumeScratch(ref.key);
+        else if (h?.expanded()) h.edit();
+        else h?.expand();
+      },
+      collapse: (h) => h?.collapse(),
+      expand: (h) => h?.expand(),
+      discard: (h) => h?.discard(),
+    };
+    const offs = Object.entries(actions).map(([key, act]) =>
+      shortcuts.register(
+        bind(`commenting.${key}`, {
+          run: () => {
+            const ref = focusedStop?.ref;
+            if (ref) act(ref.kind === "comment" ? cardHandles.get(ref.id) : undefined, ref);
+          },
+          enabled: () => commentKeyLive(key as CommentKey),
+        }),
+      ),
+    );
+    return () => {
+      for (const off of offs) off();
+    };
+  });
+  function commentKeyLive(key: CommentKey): boolean {
+    const ref = focusedStop?.ref;
+    if (ref == null) return false;
+    const active = document.activeElement;
+    if (active?.closest('[role="alertdialog"]')) return false;
+    if (key === "activate" && active?.closest("button, a[href]")) return false;
+    const stop = stops.find((s) => sameStop(s.ref, ref));
+    if (stop == null) return false;
+    const expanded = ref.kind === "comment" && (cardHandles.get(ref.id)?.expanded() ?? false);
+    return commentKeys({ kind: ref.kind, state: stop.state }, expanded).includes(key);
+  }
 
   // Esc closes search / exits visual mode but never clears the line cursor (EXC-834,
   // narrowing EXC-790's Esc reconciliation). Gated on something to clear so Esc neither

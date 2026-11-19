@@ -94,6 +94,21 @@ export function stopNeighbour(stops: readonly CommentStop[], i: number, dir: 1 |
   return stops[next]?.slot === stops[i]?.slot ? next : -1;
 }
 
+export type CommentKey = "edit" | "editInsert" | "activate" | "collapse" | "expand" | "discard";
+
+/** The `commenting.*` keys that act on a stop. A settled comment (Accepted, Expired) only
+ * folds; a Resume marker only resumes. */
+export function commentKeys(
+  stop: { kind: StopRef["kind"]; state?: ReviewStatus },
+  expanded: boolean,
+): CommentKey[] {
+  if (stop.kind === "resume") return ["activate"];
+  if (stop.state === "approved" || stop.state === "expired") {
+    return expanded ? ["collapse", "expand"] : ["collapse", "expand", "activate"];
+  }
+  return ["edit", "editInsert", "activate", "collapse", "expand", "discard"];
+}
+
 export function sameStop(a: StopRef, b: StopRef): boolean {
   if (a.kind === "comment") return b.kind === "comment" && a.id === b.id;
   return b.kind === "resume" && a.key === b.key;

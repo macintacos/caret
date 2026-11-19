@@ -7,6 +7,7 @@ import {
   bind,
   CANONICAL_KEYMAP,
   EDITOR_SHORTCUTS,
+  SETTINGS_SHORTCUTS,
 } from "$lib/shortcuts/keymap.ts";
 import { matchKeydown } from "$lib/shortcuts/match.ts";
 import {
@@ -87,6 +88,34 @@ describe("CANONICAL_KEYMAP", () => {
     for (const sig of ["j", "k", "g g", "] ]", "a", "r", "?", "ctrl+d", ","]) {
       expect(sigs.has(sig)).toBe(true);
     }
+  });
+
+  test("reserves the hovered-comment keys under Commenting", () => {
+    const sig = (id: string) => {
+      const e = CANONICAL_KEYMAP.find((x) => x.id === id);
+      return e && { group: e.group, keys: specSignature(e.keys) };
+    };
+    expect(sig("commenting.edit")).toEqual({ group: "commenting", keys: "e" });
+    expect(sig("commenting.editInsert")).toEqual({ group: "commenting", keys: "i" });
+    expect(sig("commenting.activate")).toEqual({ group: "commenting", keys: "Enter" });
+    expect(sig("commenting.collapse")).toEqual({ group: "commenting", keys: "h" });
+    expect(sig("commenting.expand")).toEqual({ group: "commenting", keys: "l" });
+    expect(sig("commenting.discard")).toEqual({ group: "commenting", keys: "D" });
+  });
+
+  test("Shift+D discards a comment without taking d's compare toggle", () => {
+    const live = CANONICAL_KEYMAP.map((e) => ({ ...e, run: () => {} }));
+    const press = (key: string) =>
+      matchKeydown(null, new KeyboardEvent("keydown", { key }), live, 0, 800).entry?.id;
+    expect(press("D")).toBe("commenting.discard");
+    expect(press("d")).toBe("actions.toggleDiff");
+  });
+
+  test("a bare Enter is distinct from the editor's and settings' Enter-bearing chords", () => {
+    const enter = CANONICAL_KEYMAP.find((e) => e.id === "commenting.activate");
+    if (!enter) throw new Error("commenting.activate missing");
+    const others = [...EDITOR_SHORTCUTS, ...SETTINGS_SHORTCUTS].map((e) => specSignature(e.keys));
+    expect(others).not.toContain(specSignature(enter.keys));
   });
 
   test("reserves zz, zt and zb as motions", () => {
