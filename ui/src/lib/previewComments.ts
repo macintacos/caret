@@ -123,21 +123,21 @@ export function slotRanks(
     ...[...gaps.values()].map((gap) => ({ gap, key: gapKey(gap) })),
     ...blocks.map((_, block) => ({ gap: { block }, key: gapKey({ block }) })),
   ].sort((a, b) => compareKeys(a.key, b.key));
-  const sorted: typeof keyed = [];
+  const distinctGaps: typeof keyed = [];
   let prev: RankKey | undefined;
   for (const g of keyed) {
-    if (prev === undefined || compareKeys(prev, g.key) !== 0) sorted.push(g);
+    if (prev === undefined || compareKeys(prev, g.key) !== 0) distinctGaps.push(g);
     prev = g.key;
   }
   const firstAtOrAfter = (key: RankKey) => {
-    const i = sorted.findIndex((g) => compareKeys(g.key, key) >= 0);
-    return i < 0 ? sorted.length : i;
+    const i = distinctGaps.findIndex((g) => compareKeys(g.key, key) >= 0);
+    return i < 0 ? distinctGaps.length : i;
   };
 
   return {
     slotOf: (line) => firstAtOrAfter(gapKey(gaps.get(line) ?? { block: blockOf(line) })),
-    slotAt: (p) => sorted.findLastIndex((g) => compareKeys(g.key, pointKey(p)) <= 0) + 1,
-    gapOf: (slot) => sorted[slot]?.gap,
+    slotAt: (p) => distinctGaps.findLastIndex((g) => compareKeys(g.key, pointKey(p)) <= 0) + 1,
+    gapOf: (slot) => distinctGaps[slot]?.gap,
   };
 }
 
@@ -174,15 +174,18 @@ export function slotEdge(
   gap: SlotGap,
   edge: "below" | "above",
   blocks: readonly SourceSpan[],
-  at: VisualLines,
+  visualLines: VisualLines,
 ): TextPoint | null {
-  if ("before" in gap) return edge === "below" ? gap.before : at.step(gap.before, -1);
+  if ("before" in gap) return edge === "below" ? gap.before : visualLines.step(gap.before, -1);
   const next = blocks[gap.block + 1];
-  const found = next ? at.pointForLine(next.start) : null;
+  const nextBlockStart = next ? visualLines.pointForLine(next.start) : null;
   // pointForLine walks back when no later line renders text; that is not below the gap.
-  const below = found && (commentSlotIndex(blocks, found.line) ?? 0) > gap.block ? found : null;
+  const below =
+    nextBlockStart && (commentSlotIndex(blocks, nextBlockStart.line) ?? 0) > gap.block
+      ? nextBlockStart
+      : null;
   if (edge === "below") return below;
-  return below == null ? at.last() : at.step(below, -1);
+  return below == null ? visualLines.last() : visualLines.step(below, -1);
 }
 
 const GAP = "data-preview-gap";

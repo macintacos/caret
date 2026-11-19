@@ -79,7 +79,7 @@ async function open(page: Page, daemon: Daemon, view: View): Promise<void> {
   const id = await daemon.seed({ plan: PLAN });
   await page.goto("/");
   await awaitPlanReadyForKeys(page);
-  const same = await lineWith(page, "pbw35");
+  const sharedLine = await lineWith(page, "pbw35");
   const code = await lineWith(page, "first");
   await daemon.putDraft(id, {
     annotations: [
@@ -88,8 +88,8 @@ async function open(page: Page, daemon: Daemon, view: View): Promise<void> {
       note("rule", await lineWith(page, "---")),
       note("pair-a", await lineWith(page, "pbw05")),
       note("pair-b", await lineWith(page, "pbw20")),
-      note("same-a", same),
-      note("same-b", same),
+      note("same-a", sharedLine),
+      note("same-b", sharedLine),
       note("list", await lineWith(page, "law20")),
       note("table", await lineWith(page, "tc")),
       note("code", code, code + 1),
@@ -188,13 +188,13 @@ async function walk(
   keys: string[],
   isEnd: (p: Position, seen: readonly Position[]) => boolean,
 ): Promise<Position[]> {
-  let p = await position(page, view);
-  const seen = [p];
+  let rest = await position(page, view);
+  const seen = [rest];
   for (let i = 0; i < 200; i++) {
-    p = await step(page, view, p, keys);
-    const end = isEnd(p, seen);
-    const repeat = seen.some((s) => s.key === p.key && s.top === p.top);
-    seen.push(p);
+    rest = await step(page, view, rest, keys);
+    const end = isEnd(rest, seen);
+    const repeat = seen.some((s) => s.key === rest.key && s.top === rest.top);
+    seen.push(rest);
     if (end || repeat) break;
   }
   return seen;

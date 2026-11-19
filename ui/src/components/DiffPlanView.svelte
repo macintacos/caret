@@ -620,15 +620,15 @@
       ]),
     );
     const open = new Map<number, { at: SlotGap; height: number }>();
-    const byLine = new Map<number, SlotGap>();
+    const gapsByLine = new Map<number, SlotGap>();
     for (const { start, line } of untrack(() => previewSlots)) {
       const at = slotGap(root, map, blocks, { start, end: line });
       if (at === null) continue;
-      byLine.set(line, at);
+      gapsByLine.set(line, at);
       const height = heights.get(line);
       if (height !== undefined) open.set(line, { at, height });
     }
-    if (!sameSlotGaps(untrack(() => previewGapsByLine), byLine)) previewGapsByLine = byLine;
+    if (!sameSlotGaps(untrack(() => previewGapsByLine), gapsByLine)) previewGapsByLine = gapsByLine;
     gaps.set(map, open);
     const next = gaps.boxes(scroller);
     if (!sameSlotBoxes(untrack(() => slotBoxes), next)) slotBoxes = next;
