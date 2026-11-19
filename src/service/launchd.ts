@@ -5,7 +5,7 @@ import { SERVICE_ARGS, type ServiceConfig, sortedEnvironment } from "@/service/m
 
 // SIGTERM→SIGKILL grace. launchd's default is system-defined (5s on macOS 15), which
 // leaves the daemon's drain (DRAIN_DEADLINE_MS, src/daemon/server.ts) no room.
-const EXIT_TIMEOUT_SEC = 20;
+export const EXIT_TIMEOUT_SEC = 20;
 
 /** Paths, labels and environment entries are user-derived, and a raw `&` alone is
  * enough to make a plist launchd refuses to parse. */

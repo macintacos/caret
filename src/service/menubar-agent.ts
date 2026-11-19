@@ -7,7 +7,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { escapeXml, stringEntry } from "@/service/launchd.ts";
-import { type LaunchdDeps, RUNNING, spawnLaunchctl } from "@/service/launchd-manager.ts";
+import {
+  bootoutAndWait,
+  type LaunchdDeps,
+  RUNNING,
+  spawnLaunchctl,
+} from "@/service/launchd-manager.ts";
 import { unitUnchanged } from "@/service/unit-file.ts";
 
 /** The menubar app's LaunchAgent label — its CFBundleIdentifier (menubar/Info.plist), and
@@ -116,7 +121,7 @@ export function createMenubarAgent(deps: LaunchdDeps = {}): MenubarAgent {
       if (!running && start === "leave-stopped") return "deferred";
 
       // Best-effort, ahead of bootstrap, as the service's install does.
-      await launchctl(["bootout", target]);
+      await bootoutAndWait(launchctl, target);
       const { code, stderr } = await launchctl(["bootstrap", domain, plistPath]);
       if (code !== 0) {
         throw new Error(`caret menubar: launchctl bootstrap failed (${code}): ${stderr.trim()}`);

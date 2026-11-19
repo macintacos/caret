@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 import { logDebug } from "@/lib/log.ts";
 import { type CommandResult, commandError, runCommand } from "@/lib/run.ts";
-import { buildLaunchdPlist } from "@/service/launchd.ts";
+import { buildLaunchdPlist, EXIT_TIMEOUT_SEC } from "@/service/launchd.ts";
 import {
   LAUNCHD_LABEL,
   type ServiceConfig,
@@ -46,6 +46,21 @@ const DISABLED = new RegExp(
 
 const launchctlError = (action: string, result: LaunchctlResult) =>
   commandError("launchctl", action, result);
+
+const BOOTOUT_POLL_MS = 50;
+
+/** Boot `target` out and wait until launchd has removed it: bootout returns once the job
+ * is signalled, and a bootstrap while it is still exiting fails with "5: Input/output
+ * error". Best-effort — past ExitTimeOut launchd has SIGKILLed the job, so a job still
+ * there after that is the bootstrap's to report. */
+export async function bootoutAndWait(launchctl: Launchctl, target: string): Promise<void> {
+  await launchctl(["bootout", target]);
+  const polls = ((EXIT_TIMEOUT_SEC + 5) * 1000) / BOOTOUT_POLL_MS;
+  for (let i = 0; i < polls; i++) {
+    if ((await launchctl(["print", target])).code !== 0) return;
+    await Bun.sleep(BOOTOUT_POLL_MS);
+  }
+}
 
 /** The launchd user agent manager. Nothing here emits `launchctl enable`, so a
  * `launchctl disable` stays in force and install reads it back through status().disabled.
@@ -104,7 +119,7 @@ export function createLaunchdManager(deps: LaunchdDeps = {}): ServiceManager {
       // one a reload rather than a "service already loaded" failure. Keep it ahead of
       // bootstrap — that ordering is also what leaves a failed install unloaded rather
       // than matching the skip above with a plist launchd never accepted.
-      await launchctl(["bootout", target]);
+      await bootoutAndWait(launchctl, target);
       const bootstrapped = await launchctl(["bootstrap", domain, plistPath]);
       if (bootstrapped.code !== 0) throw launchctlError("bootstrap", bootstrapped);
     },

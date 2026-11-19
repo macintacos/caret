@@ -126,7 +126,7 @@ describe("reconcileMenubar", () => {
         stderrLog: menubarStderrLogFile(),
       }),
     );
-    expect(fake.subcommands()).toEqual(["print", "bootout", "bootstrap"]);
+    expect(fake.subcommands()).toEqual(["print", "bootout", "print", "bootstrap"]);
     expect(events).toEqual([LOGIN_LINE]);
   });
 
@@ -141,7 +141,7 @@ describe("reconcileMenubar", () => {
     const next = onlyId();
     expect(next).not.toBe(old);
     expect(plist()).toContain(join(menubarDir(), next));
-    expect(fake.subcommands()).toEqual(["print", "bootout", "bootstrap"]);
+    expect(fake.subcommands()).toEqual(["print", "bootout", "print", "bootstrap"]);
   });
 
   test("an unchanged re-run of a running app reloads nothing", async () => {
@@ -175,7 +175,7 @@ describe("reconcileMenubar", () => {
         stderrLog: menubarStderrLogFile(),
       }),
     );
-    expect(fake.subcommands()).toEqual(["print", "bootout", "bootstrap"]);
+    expect(fake.subcommands()).toEqual(["print", "bootout", "print", "bootstrap"]);
     expect(events).toEqual([LOGIN_LINE]);
   });
 

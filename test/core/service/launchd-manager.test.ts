@@ -86,6 +86,7 @@ test("install boots the agent out before bootstrapping it", async () => {
   await manager(fake).install(fakeServiceConfig());
   expect(fake.calls).toEqual([
     ["bootout", TARGET],
+    ["print", TARGET],
     ["bootstrap", DOMAIN, plistPath()],
   ]);
 });
@@ -96,11 +97,18 @@ test("installing twice reloads the agent rather than failing", async () => {
   await mgr.install(fakeServiceConfig());
   await mgr.install(fakeServiceConfig({ launcherPath: "/opt/caret/bin/caret" }));
   expect(readFileSync(plistPath(), "utf8")).toContain("<string>/opt/caret/bin/caret</string>");
-  expect(fake.subcommands()).toEqual(["bootout", "bootstrap", "bootout", "bootstrap"]);
+  expect(fake.subcommands()).toEqual([
+    "bootout",
+    "print",
+    "bootstrap",
+    "bootout",
+    "print",
+    "bootstrap",
+  ]);
 });
 
 const READ_STATUS = ["print", "print-disabled"];
-const FULL_INSTALL = ["bootout", "bootstrap"];
+const FULL_INSTALL = ["bootout", "print", "bootstrap"];
 
 /** Install, forget those calls, then install the same config again. */
 async function reinstall(fake: ReturnType<typeof fakeLaunchctl>) {
