@@ -168,14 +168,18 @@ matches "print reports a running state, one of readStatus's two RUNNING patterns
 matches "print reports a pid, the other one" \
   '^[[:space:]]*pid[[:space:]]*=[[:space:]]*[0-9]+$' launchctl print "$target"
 
-printf -- '--- reload: the bootout/bootstrap pair a caret install --refresh takes\n'
-# Back to back against a running agent, which is where `Bootstrap failed: 5: Input/output
-# error` comes from: bootout returns before launchd has finished tearing the job down, and
-# the bootstrap behind it lands on a domain still holding the old one.
+printf -- '--- reload: the bootout/wait/bootstrap a caret install --refresh takes\n'
+# bootout returns before launchd has finished tearing a running job down, and a bootstrap
+# back to back with it fails `Bootstrap failed: 5: Input/output error` — so bootoutAndWait
+# polls print until the job is gone, giving up ExitTimeOut + 5s in.
 reload_failure=""
 for i in $(seq 1 10); do
   bootout_out="$(launchctl bootout "$target" 2>&1)"
   bootout_rc=$?
+  if ! until_true $((exit_timeout + 5)) job_gone; then
+    reload_failure="iteration $i: print still finds the job $((exit_timeout + 5))s after bootout"
+    break
+  fi
   bootstrap_out="$(launchctl bootstrap "$domain" "$plist" 2>&1)"
   bootstrap_rc=$?
   if [ "$bootout_rc" != 0 ] || [ "$bootstrap_rc" != 0 ]; then

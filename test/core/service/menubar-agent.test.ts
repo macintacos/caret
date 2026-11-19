@@ -121,6 +121,7 @@ describe("install", () => {
     expect(readFileSync(plist, "utf8")).toBe(buildMenubarPlist(LAUNCH));
     expect(fake.calls.slice(1)).toEqual([
       ["bootout", TARGET],
+      ["print", TARGET],
       ["bootstrap", "gui/501", plist],
     ]);
   });
@@ -175,6 +176,28 @@ describe("install", () => {
     expect(await agent(fake).install(LAUNCH, "leave-stopped")).toBe("deferred");
 
     expect(reloads(fake)).toEqual([]);
+  });
+
+  test("bootstraps a reloaded job only once launchd has finished removing it", async () => {
+    writeFileSync(plistPath(), "stale");
+    // As launchd does: bootout returns while the app is still exiting, and a bootstrap
+    // fails until it is gone.
+    let printsUntilGone: number | undefined;
+    const gone = () => printsUntilGone !== undefined && printsUntilGone <= 0;
+    const launchctl = async ([cmd]: string[]): Promise<LaunchctlResult> => {
+      if (cmd === "bootout") printsUntilGone = 2;
+      if (cmd === "print") {
+        if (gone()) return { code: 113, stdout: "", stderr: "" };
+        if (printsUntilGone !== undefined) printsUntilGone--;
+        return RUNNING_STATE;
+      }
+      if (cmd === "bootstrap" && !gone()) return BOOTSTRAP_FAILED;
+      return { code: 0, stdout: "", stderr: "" };
+    };
+
+    const menubar = createMenubarAgent({ launchAgentsDir: dir, uid: 501, launchctl });
+
+    expect(await menubar.install(LAUNCH, "start")).toBe("reloaded");
   });
 
   test("throws when bootstrap fails", async () => {
