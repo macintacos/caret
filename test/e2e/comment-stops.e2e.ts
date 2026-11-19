@@ -255,6 +255,30 @@ for (const view of ["source", "preview"] as const) {
       await expectOnCard(page, view, "b");
     });
 
+    test("h and Shift+D leave an edit in progress alone once its field blurs", async ({
+      daemon,
+      page,
+    }) => {
+      await open(page, daemon, view, (line) => ({
+        annotations: [comment("b", line("Bravo line."))],
+      }));
+      await toLine(page, "Bravo");
+      await page.keyboard.press("j");
+      await page.keyboard.press("e");
+      await page.keyboard.press("End");
+      await page.keyboard.type(" unsaved");
+      await page.keyboard.press("Escape");
+
+      await page.keyboard.press("h");
+      await page.keyboard.press("D");
+      await expect(card(page, "b")).toHaveClass(/\bediting\b/);
+      await expect(card(page, "b").locator(".cm-content")).toHaveText("note b unsaved");
+
+      await page.keyboard.press("Escape");
+      await expect(card(page, "b")).not.toHaveClass(/\bediting\b/);
+      await expect(discardConfirm(page)).toHaveCount(0);
+    });
+
     test("Enter expands then edits, and h and l fold", async ({ daemon, page }) => {
       await open(page, daemon, view, (line) => ({
         annotations: [comment("b", line("Bravo line."))],
@@ -424,8 +448,42 @@ for (const view of ["source", "preview"] as const) {
   });
 }
 
+test("} after a navigator pick moves on from the picked comment", async ({ daemon, page }) => {
+  const lines = await open(page, daemon, "source", (line) => ({
+    annotations: [comment("d", line("Delta line."))],
+  }));
+  await toLine(page, "Alpha");
+  await page.keyboard.press("C");
+  await expect(rows(commentNavigator(page)).first()).toBeFocused();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Escape");
+  await expectOnCard(page, "source", "d");
+
+  await page.keyboard.press("}");
+  await expectOnLine(page, "source", lines.at("Delta line.") + 1);
+});
+
+test("Enter acts on the hovered card while another card's chip holds focus", async ({
+  daemon,
+  page,
+}) => {
+  await open(page, daemon, "source", (line) => ({
+    annotations: [comment("a", line("Alpha line.")), comment("d", line("Delta line."))],
+  }));
+  await card(page, "a").getByRole("button", { name: "Expand comment" }).click();
+  await expect(card(page, "a")).toHaveClass(/\bexpanded\b/);
+  await page.keyboard.press("]");
+  await page.keyboard.press("c");
+  await expectOnCard(page, "source", "d");
+
+  await page.keyboard.press("Enter");
+  await expect(card(page, "d")).toHaveClass(/\bexpanded\b/);
+  await expect(card(page, "d")).toHaveClass(/\bfocused\b/);
+  await expect(card(page, "a")).toHaveClass(/\bexpanded\b/);
+});
+
 test.describe("key caps on the hovered comment", () => {
-  const caps = (page: Page, id: string): Locator => card(page, id).locator("[data-cap]");
+  const caps = (page: Page, id: string): Locator => card(page, id).locator('[data-slot="kbd"]');
   const one = (line: (text: string) => number) => ({
     annotations: [comment("b", line("Bravo line."))],
   });
@@ -480,7 +538,7 @@ test.describe("key caps on the hovered comment", () => {
     await page.keyboard.press("ControlOrMeta+Enter");
     const fresh = page.locator("[data-annotation-card]").filter({ hasText: "fresh thought" });
     await expect(fresh).toHaveClass(/\bfocused\b/);
-    await expect(fresh.locator("[data-cap]").first()).toBeVisible();
+    await expect(fresh.locator('[data-slot="kbd"]').first()).toBeVisible();
   });
 
   for (const view of ["source", "preview"] as const) {
@@ -497,7 +555,9 @@ test.describe("key caps on the hovered comment", () => {
       await page.keyboard.press("j");
       await page.keyboard.press("j");
       await expectOnCard(page, view, "b");
-      const discard = card(page, "b").locator('[data-cap="discard"]');
+      const discard = card(page, "b")
+        .getByRole("button", { name: "Discard comment" })
+        .locator('[data-slot="kbd"]');
       await expect(discard).toBeVisible();
 
       const thread = page.locator('[data-slot="card"].thread').filter({ has: card(page, "b") });

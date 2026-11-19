@@ -1,12 +1,16 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  COMMENT_KEYS,
   type CommentStop,
   commentKeys,
   crossedStop,
   deriveStops,
   sameStop,
   stepComment,
+  stopIndex,
+  stopKey,
+  stopLines,
   stopNeighbour,
 } from "$lib/diffview/commentStops.ts";
 
@@ -96,7 +100,40 @@ describe("crossedStop", () => {
   });
 
   test("down from the last line reaches a comment on it", () => {
-    expect(crossedStop(stops, 5, null, 1)).toBe(2);
+    expect(crossedStop(stops, 5, Number.POSITIVE_INFINITY, 1)).toBe(2);
+  });
+});
+
+describe("stop lookups", () => {
+  const stops = deriveStops(
+    [thread(3, ["a", 3]), { line: 6, annotations: [{ id: "b", startLine: 4, endLine: 6 }] }],
+    [{ key: "s1", startLine: 2, endLine: 6 }],
+    identity,
+  );
+
+  test("stopKey is a comment's id or a Resume marker's scratch key", () => {
+    expect(stopKey({ kind: "comment", id: "a" })).toBe("a");
+    expect(stopKey({ kind: "resume", key: "s1" })).toBe("s1");
+  });
+
+  test("stopIndex finds a ref's stop, or -1", () => {
+    expect(stopIndex(stops, { kind: "comment", id: "b" })).toBe(1);
+    expect(stopIndex(stops, { kind: "resume", key: "s1" })).toBe(2);
+    expect(stopIndex(stops, { kind: "comment", id: "gone" })).toBe(-1);
+  });
+
+  test("stopLines spans a stop's first through last anchored line", () => {
+    expect(stopLines(stops, { ref: { kind: "comment", id: "b" }, line: 6 })).toEqual({
+      start: 4,
+      end: 6,
+    });
+  });
+
+  test("stopLines falls back to the focused line for a stop no longer listed", () => {
+    expect(stopLines(stops, { ref: { kind: "comment", id: "gone" }, line: 9 })).toEqual({
+      start: 9,
+      end: 9,
+    });
   });
 });
 
@@ -159,7 +196,7 @@ describe("stopNeighbour", () => {
 });
 
 describe("commentKeys", () => {
-  const ALL = ["edit", "editInsert", "activate", "collapse", "expand", "discard"];
+  const ALL = [...COMMENT_KEYS];
   const sorted = (ids: string[]) => [...ids].sort();
 
   test("a draft comment takes every comment key, collapsed or expanded", () => {

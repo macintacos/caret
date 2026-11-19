@@ -4,7 +4,7 @@
 // plain factory over an injected backing store plus a deps bag.
 //
 // The three surfaces are one machine: they share the reading-position seed
-// (`cursorLine ?? readingLine()`), the Esc-priority chain (Esc closes search, THEN exits
+// (`focusedStop?.line ?? cursorLine ?? readingLine()`), the Esc-priority chain (Esc closes search, THEN exits
 // visual — never clears the cursor), and the content-switch reset. The pure sinks
 // (resolveCursorLine, nearestMatchIndex, matchStepFromLine, stepIndex) do
 // the arithmetic; this factory only sequences them and mutates the store.
@@ -14,8 +14,9 @@ import {
   type CommentStop,
   crossedStop,
   type FocusedStop,
-  sameStop,
   stepComment,
+  stopIndex,
+  stopLines,
   stopNeighbour,
 } from "$lib/diffview/commentStops.ts";
 import {
@@ -96,7 +97,8 @@ export interface PlanKeyboardDeps {
   clearTimer?: (handle: ReturnType<typeof setTimeout>) => void;
   /** Play a moment's cue. Optional so a test drives the factory silently. */
   sound?: (event: SoundEvent) => void;
-  /** The comment stops in render order; empty where comments take no keys. */
+  /** The comment stops in render order, with source lines as slots; empty where comments
+   * take no keys. */
   stops(): CommentStop[];
   /** The hovered stop, owned by the host. */
   focusedStop(): FocusedStop | null;
@@ -106,7 +108,9 @@ export interface PlanKeyboardDeps {
 }
 
 export interface PlanKeyboard {
-  /** Hover `stop`: exits visual mode, puts the cursor on its last line, and follows it. */
+  /** Hover `stop` without scrolling: exits visual mode and puts the cursor on its last line. */
+  enterStop(stop: CommentStop): void;
+  /** enterStop, then follow the stop. */
   placeOnStop(stop: CommentStop): void;
   /** `]c`/`[c`: hover the next or previous comment, wrapping; no-op with none. */
   stepComment(delta: 1 | -1): void;
@@ -181,11 +185,21 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     if (deps.focusedStop() != null) deps.setFocusedStop(null);
   }
 
-  function placeOnStop(stop: CommentStop): void {
+  function enterStop(stop: CommentStop): void {
     store.visualAnchor = null;
     deps.setFocusedStop({ ref: stop.ref, line: stop.line });
     store.cursorLine = stop.line;
+  }
+
+  function placeOnStop(stop: CommentStop): void {
+    enterStop(stop);
     deps.followStop(stop);
+  }
+
+  /** The hovered stop's index in `stops`, or -1 when none is hovered. */
+  function focusedIndex(stops: readonly CommentStop[]): number {
+    const focused = deps.focusedStop();
+    return focused == null ? -1 : stopIndex(stops, focused.ref);
   }
 
   function landOnLine(line: number): void {
@@ -196,10 +210,8 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
   /** `j`/`k` off the hovered stop: to its slot's next stop, else past the slot. Reports
    * whether a stop was hovered. */
   function stepFromStop(dir: 1 | -1, lineCount: number): boolean {
-    const focused = deps.focusedStop();
-    if (focused == null) return false;
     const stops = deps.stops();
-    const i = stops.findIndex((s) => sameStop(s.ref, focused.ref));
+    const i = focusedIndex(stops);
     const stop = stops[i];
     if (stop == null) return false;
 
@@ -209,17 +221,19 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
       return true;
     }
 
-    if (dir > 0 && stop.slot >= lineCount) return true;
-    const line = dir > 0 ? stop.slot + 1 : stop.slot;
+    if (dir > 0 && stop.line >= lineCount) return true;
+    const line = dir > 0 ? stop.line + 1 : stop.line;
     landOnLine(line);
     deps.follow(line);
     return true;
   }
 
-  /** `j`/`k` from line `from` to `to`: the stop between them, if any. */
+  /** `j`/`k` from line `from` to `to`: the stop between them, if any. A `j` that cannot move
+   * counts as reaching Infinity, so a comment on the last line stays reachable. */
   function stopBetween(from: number, to: number, dir: 1 | -1): CommentStop | undefined {
     const stops = deps.stops();
-    return stops[crossedStop(stops, from, dir > 0 && to === from ? null : to, dir)];
+    const end = dir > 0 && to === from ? Number.POSITIVE_INFINITY : to;
+    return stops[crossedStop(stops, from, end, dir)];
   }
 
   // `scroll` picks WHICH scroll: the scrolloff follow by default (a match reveal, the
@@ -275,13 +289,13 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
 
   return {
     matches,
+    enterStop,
     placeOnStop,
     landOnLine,
 
     stepComment(delta) {
       const stops = deps.stops();
-      const focused = deps.focusedStop();
-      const i = focused ? stops.findIndex((s) => sameStop(s.ref, focused.ref)) : -1;
+      const i = focusedIndex(stops);
       const hit = stops[stepComment(stops, i >= 0 ? { stop: i } : { slot: seedLine() }, delta)];
       if (hit != null) placeOnStop(hit);
     },
@@ -330,8 +344,8 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
       const focused = deps.focusedStop();
       if (focused?.ref.kind === "resume") return;
       if (focused != null) {
-        const stop = deps.stops().find((s) => sameStop(s.ref, focused.ref));
-        deps.openComposer(stop?.start ?? focused.line, focused.line);
+        const { start, end } = stopLines(deps.stops(), focused);
+        deps.openComposer(start, end);
         return;
       }
       const line = seedLine();

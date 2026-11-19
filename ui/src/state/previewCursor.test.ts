@@ -291,6 +291,15 @@ describe("comment stops", () => {
     expect(store.cursorLine).toBe(8);
     expect(h.focused()).toEqual(onStop("c", 8));
   });
+
+  test("a motion after enterStop resolves from the stop's line, without following it", () => {
+    const store = placed(at(0));
+    const h = build(store, { stops: STOPS });
+    h.cursor.enterStop(STOPS[0] as CommentStop);
+    expect(h.followedStops).toEqual([]);
+    h.cursor.moveCursor("nextBlank");
+    expect(store.cursorPoint).toEqual(at(4));
+  });
 });
 
 test("gg lands on the first line and G on the last visual line", () => {

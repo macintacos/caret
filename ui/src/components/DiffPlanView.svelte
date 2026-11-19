@@ -1,3 +1,11 @@
+<script module lang="ts">
+  import type { InputVia, StopRef } from "$lib/diffview/commentStops.ts";
+
+  /** A navigator pick: the comment or draft, its last anchored line, and the input that
+   * picked it. */
+  export type RevealTarget = { ref: StopRef; line: number; via: InputVia };
+</script>
+
 <script lang="ts">
   // Source-view plan surface: renders the active plan version's stored text as
   // line-numbered markdown source through the diffview SourceView wrapper, with the
@@ -37,15 +45,11 @@
   } from "$lib/diffview/annotationSlot.ts";
   import { type BracketSpan, bracketLayer } from "$lib/diffview/bracket.ts";
   import {
-    type CardHandle,
-    type CommentKey,
+    COMMENT_KEYS,
     type CommentStop,
-    commentKeys,
     deriveStops,
     type FocusedStop,
-    type RegisterCard,
-    type StopRef,
-    sameStop,
+    stopIndex,
   } from "$lib/diffview/commentStops.ts";
   import { type CodeBlockRange, codeBlockRanges, codeBlockText } from "$lib/diffview/codeBlocks.ts";
   import {
@@ -90,6 +94,7 @@
   import { readDiffIndicators, writeDiffIndicators } from "$lib/diffIndicatorsPref.ts";
   import { appearance } from "@/state/appearance.svelte.ts";
   import { type CompareStore, createCompare } from "@/state/compare.svelte.ts";
+  import { createCommentKeys } from "@/state/commentKeys.ts";
   import { createPlanKeyboard, type PlanKeyboardStore } from "@/state/planKeyboard.svelte.ts";
   import { setHeadingSlug, takeHeadingSlug } from "@/state/headingLink.ts";
   import VersionComparePicker from "@/components/VersionComparePicker.svelte";
@@ -254,11 +259,10 @@
      * view ignores it. A call before the view paints is a bounded-retry no-op; on the
      * plan preview it scrolls to the line's item in its comment slot. */
     onExposeReveal?: (reveal: (line: number, side?: DiffSide) => void) => void;
-    /** Hand the host a revealComment(id, line, side) action once on mount: it focuses
-     * the comment, expands its card, and reveals its line. Single-version only. */
-    onExposeRevealComment?: (
-      reveal: (id: string, line: number, side?: DiffSide, via?: "key" | "pointer") => void,
-    ) => void;
+    /** Hand the host a revealComment action once on mount: it puts the cursor on the
+     * comment's or draft's stop, expands a comment's card, and reveals its line.
+     * Single-version only. */
+    onExposeRevealComment?: (reveal: (target: RevealTarget) => void) => void;
     /** Report the compared versions upward (null when not comparing), so App can
      * point the single CommentNavigator instance at the cross-version index.
      * `before`/`after` name the two documents the diff renders — not a sorted
@@ -1859,33 +1863,32 @@
   // Key caps show on the hovered comment once the keyboard put it there; a pointer
   // placement hides them until the next key.
   let capsShown = $state(false);
+  /** `bind` for a key that lands on or acts on a stop: it shows the caps. */
+  const keyed = (id: string, o: { run: () => void; enabled?: () => boolean }) =>
+    bind(id, {
+      ...o,
+      run: () => {
+        capsShown = true;
+        o.run();
+      },
+    });
 
-  // Each mounted comment card's keyboard handle, by comment id.
-  const cardHandles = new Map<string, CardHandle>();
-  const registerCard: RegisterCard = (id, handle) => {
-    cardHandles.set(id, handle);
-    return () => {
-      if (cardHandles.get(id) === handle) cardHandles.delete(id);
-    };
-  };
+  // The keys on the hovered comment, acting through each mounted card's handle.
+  const commentKeyActions = createCommentKeys({
+    stops: () => stops,
+    focusedStop: () => focusedStop,
+    resume: (key) => resumeScratch(key),
+    activeElement: () => document.activeElement,
+  });
 
-  const commentStop = (id: string) =>
-    stops.find((s) => s.ref.kind === "comment" && s.ref.id === id);
-
-  // A navigator pick names a comment by id or a draft by its scratch key. It parks the
-  // stop at the reveal offset, as any navigation to an explicit place does.
-  function revealComment(
-    id: string,
-    line: number,
-    side?: DiffSide,
-    via: "key" | "pointer" = "pointer",
-  ): void {
+  // A navigator pick enters its stop and parks it at the reveal offset, as any navigation
+  // to an explicit place does. A draft whose marker the open composer hides has no stop.
+  function revealComment({ ref, line, via }: RevealTarget): void {
     capsShown = via === "key";
-    cardHandles.get(id)?.expand();
-    const stop = stops.find((s) => (s.ref.kind === "comment" ? s.ref.id : s.ref.key) === id);
-    keyboardStore.visualAnchor = null;
-    onFocusStop(stop ? { ref: stop.ref, line: stop.line } : { ref: { kind: "comment", id }, line });
-    revealLine(line, side);
+    if (ref.kind === "comment") commentKeyActions.expand(ref.id);
+    const stop = stops[stopIndex(stops, ref)];
+    if (stop) (surface === "preview" ? previewCursor : keyboard).enterStop(stop);
+    revealLine(line);
   }
 
   $effect(() => {
@@ -1893,31 +1896,9 @@
   });
 
   function focusComment(id: string): void {
-    const stop = commentStop(id);
-    if (stop) {
-      placeOnStop(stop);
-      return;
-    }
-    const a = lineAnnotations.find((x) => x.id === id);
-    if (a) onFocusStop({ ref: { kind: "comment", id }, line: a.endLine });
+    const stop = stops[stopIndex(stops, { kind: "comment", id })];
+    if (stop) placeOnStop(stop);
   }
-
-  // When the hovered stop goes (discarded, consumed, or dropped by a new version) or
-  // moves, the line cursor lands on the last line it had. A review switch drops the stop
-  // without landing: no cursor may carry into the review just opened.
-  let reconciledReview = untrack(() => review.id);
-  $effect(() => {
-    const focused = focusedStop;
-    const current = stops;
-    if (review.id !== reconciledReview) {
-      reconciledReview = review.id;
-      if (focused != null) untrack(() => onFocusStop(null));
-      return;
-    }
-    if (focused == null || !runs("keyboardComments")) return;
-    if (current.find((s) => sameStop(s.ref, focused.ref))?.line === focused.line) return;
-    untrack(() => landOnLine(Math.min(focused.line, planLineCount)));
-  });
 
   // The source line of the heading currently in the reading zone. Tracked from
   // the scroll container's topmost rendered line so the breadcrumbs bar reports
@@ -2468,6 +2449,25 @@
     previewCursor.reset();
   });
 
+  // When the hovered stop goes (discarded, consumed, or dropped by a new version) or
+  // moves, the line cursor lands on the last line it had. A review switch drops the stop
+  // without landing: no cursor may carry into the review just opened. App's `syncActive`
+  // may run after this effect, so it cannot be relied on to clear first. Declared after
+  // the content-switch clear so, on a new version, the landing runs last and stands.
+  let reconciledReview = untrack(() => review.id);
+  $effect(() => {
+    const focused = focusedStop;
+    const current = stops;
+    if (review.id !== reconciledReview) {
+      reconciledReview = review.id;
+      if (focused != null) untrack(() => onFocusStop(null));
+      return;
+    }
+    if (focused == null || !runs("keyboardComments")) return;
+    if (current[stopIndex(current, focused.ref)]?.line === focused.line) return;
+    untrack(() => landOnLine(Math.min(focused.line, planLineCount)));
+  });
+
   // Recompute the active heading from the source line at the top of the reading
   // zone, throttled with rAF so a scroll burst settles into one read. The view
   // paints each line as <div data-line="N"> in a shadow root; lineAtReadingZone
@@ -2646,9 +2646,8 @@
     for (const [id, motion] of Object.entries(CURSOR_MOTIONS)) {
       offs.push(
         shortcuts.register(
-          bind(id, {
+          keyed(id, {
             run: () => {
-              capsShown = true;
               move(motion);
               if (motion === "nextHeading" || motion === "prevHeading") {
                 latchHeading(keyboardStore.cursorLine);
@@ -2664,12 +2663,10 @@
     for (const [id, where] of Object.entries(CURSOR_PLACEMENTS)) {
       offs.push(
         shortcuts.register(
-          bind(id, {
-            run: () => {
-              capsShown = true;
-              scrollCursor(where);
-            },
-            enabled: () => !defaultIsEditingContext() }),
+          keyed(id, {
+            run: () => scrollCursor(where),
+            enabled: () => !defaultIsEditingContext(),
+          }),
         ),
       );
     }
@@ -2691,12 +2688,10 @@
     ] as const) {
       offs.push(
         shortcuts.register(
-          bind(id, {
-            run: () => {
-              capsShown = true;
-              stepComment(delta);
-            },
-            enabled: () => !defaultIsEditingContext() }),
+          keyed(id, {
+            run: () => stepComment(delta),
+            enabled: () => !defaultIsEditingContext(),
+          }),
         ),
       );
     }
@@ -2725,32 +2720,13 @@
     };
   });
 
-  // Keys on the hovered comment act through its card's handle; commentKeys decides which
-  // work on it. Off a native control for Enter, so a focused button's own Enter activation
-  // never fires twice, and never under the discard confirm.
   $effect(() => {
     if (!runs("keyboardComments")) return;
-    const actions: Record<CommentKey, (h: CardHandle | undefined, ref: StopRef) => void> = {
-      edit: (h) => h?.edit(),
-      editInsert: (h) => h?.edit(),
-      activate: (h, ref) => {
-        if (ref.kind === "resume") resumeScratch(ref.key);
-        else if (h?.expanded()) h.edit();
-        else h?.expand();
-      },
-      collapse: (h) => h?.collapse(),
-      expand: (h) => h?.expand(),
-      discard: (h) => h?.discard(),
-    };
-    const offs = Object.entries(actions).map(([key, act]) =>
+    const offs = COMMENT_KEYS.map((key) =>
       shortcuts.register(
-        bind(`commenting.${key}`, {
-          run: () => {
-            const ref = focusedStop?.ref;
-            capsShown = true;
-            if (ref) act(ref.kind === "comment" ? cardHandles.get(ref.id) : undefined, ref);
-          },
-          enabled: () => commentKeyLive(key as CommentKey),
+        keyed(`commenting.${key}`, {
+          run: () => commentKeyActions.run(key),
+          enabled: () => commentKeyActions.live(key),
         }),
       ),
     );
@@ -2758,17 +2734,6 @@
       for (const off of offs) off();
     };
   });
-  function commentKeyLive(key: CommentKey): boolean {
-    const ref = focusedStop?.ref;
-    if (ref == null) return false;
-    const active = document.activeElement;
-    if (active?.closest('[role="alertdialog"]')) return false;
-    if (key === "activate" && active?.closest("button, a[href]")) return false;
-    const stop = stops.find((s) => sameStop(s.ref, ref));
-    if (stop == null) return false;
-    const expanded = ref.kind === "comment" && (cardHandles.get(ref.id)?.expanded() ?? false);
-    return commentKeys({ kind: ref.kind, state: stop.state }, expanded).includes(key);
-  }
 
   // Esc closes search / exits visual mode but never clears the line cursor (EXC-834,
   // narrowing EXC-790's Esc reconciliation). Gated on something to clear so Esc neither
@@ -3263,7 +3228,7 @@
           }}
           onEdit={onEditAnnotation}
           onDelete={onDeleteAnnotation}
-          register={registerCard}
+          register={commentKeyActions.register}
           {reviewContext}
         />
       {/snippet}

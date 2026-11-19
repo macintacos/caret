@@ -9,6 +9,7 @@ function mount(over: Record<string, unknown> = {}) {
   const { target } = render(SourceScratchMarker, {
     text: "half a thought about this line",
     onResume: () => resumed++,
+    scratchKey: "1:1",
     ...over,
   });
   return {
@@ -55,7 +56,7 @@ describe("SourceScratchMarker", () => {
 });
 
 describe("SourceScratchMarker key cap", () => {
-  const cap = (root: ParentNode) => root.querySelector('[data-cap="activate"]');
+  const cap = (root: ParentNode) => root.querySelector('.resume [data-slot="kbd"]');
 
   test("a hovered marker shows the Enter cap on Resume, hidden from assistive tech", () => {
     const { target } = mount({ hovered: true, showCaps: true });

@@ -85,7 +85,7 @@
   } from "$lib/updatesPref.ts";
   import { type ComposerScratch, createSourceCommenting } from "$lib/diffview/commenting.ts";
   import { preloadPlanLanguages } from "$lib/diffview/languages.ts";
-  import type { FocusedStop } from "$lib/diffview/commentStops.ts";
+  import { type FocusedStop, type InputVia, stopKey } from "$lib/diffview/commentStops.ts";
   import type { DiffSide } from "$lib/diffview/types.ts";
   import type {
     ApproveVariantId,
@@ -101,7 +101,7 @@
   import AlertHost from "@/components/AlertHost.svelte";
   import UnsentCommentsDialog from "@/components/UnsentCommentsDialog.svelte";
   import CommentNavigator from "@/components/CommentNavigator.svelte";
-  import DiffPlanView from "@/components/DiffPlanView.svelte";
+  import DiffPlanView, { type RevealTarget } from "@/components/DiffPlanView.svelte";
   import EmptyState from "@/components/EmptyState.svelte";
   import ModalPresence from "@/components/ModalPresence.svelte";
   import OnboardingDialog from "@/components/OnboardingDialog.svelte";
@@ -174,9 +174,7 @@
   // plan to a navigated comment's line; undefined until the source view paints.
   let showComments = $state(false);
   let revealLine = $state<((line: number, side?: DiffSide) => void) | undefined>();
-  let revealCommentAt = $state<
-    ((id: string, line: number, side?: DiffSide, via?: "key" | "pointer") => void) | undefined
-  >();
+  let revealCommentAt = $state<((target: RevealTarget) => void) | undefined>();
   // The approve variant a pending-comment guard is holding: the mode the reviewer
   // chose, parked until they confirm or divert. Null = no guard open.
   let pendingApproveMode = $state<ApproveVariantId | null>(null);
@@ -459,10 +457,16 @@
   // A row the index marked unlinkable has nothing on screen to scroll to, so it does
   // neither. Focusing is single-version only: a compare entry's id carries a `v3:`
   // prefix that matches no card, so it would strand a bogus id in the working copy.
-  function revealComment(entry: CommentIndexEntry, via: "key" | "pointer") {
+  function revealComment(entry: CommentIndexEntry, via: InputVia) {
     if (!entry.linkable || entry.line == null) return;
-    if (compareRange === null) revealCommentAt?.(entry.id, entry.line, entry.side, via);
-    else revealLine?.(entry.line, entry.side);
+    if (compareRange !== null) {
+      revealLine?.(entry.line, entry.side);
+      return;
+    }
+    const ref = entry.draft
+      ? { kind: "resume" as const, key: entry.id }
+      : { kind: "comment" as const, id: entry.id };
+    revealCommentAt?.({ ref, line: entry.line, via });
   }
 
   // ----- Working-copy reload -----
@@ -945,11 +949,7 @@
 <CommentNavigator
   open={active !== null && showComments}
   {comments}
-  activeId={autosave.focusedStop == null
-    ? null
-    : autosave.focusedStop.ref.kind === "comment"
-      ? autosave.focusedStop.ref.id
-      : autosave.focusedStop.ref.key}
+  activeId={autosave.focusedStop && stopKey(autosave.focusedStop.ref)}
   onReveal={revealComment}
   onClose={() => setComments(false)}
   compare={compareRange !== null}

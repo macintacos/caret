@@ -87,9 +87,10 @@
   const stateView = $derived(commentState(annotation.state));
 
   const liveKeys = $derived(commentKeys({ kind: "comment", state: annotation.state }, expanded));
-  const capped = (key: CommentKey) => focused && showCaps && liveKeys.includes(key);
+  const live = (key: CommentKey) => focused && liveKeys.includes(key);
+  const capped = (key: CommentKey) => showCaps && live(key);
   const keysFor = (key: CommentKey) =>
-    focused ? ariaKeyshortcutsFor(`commenting.${key}`) : undefined;
+    live(key) ? ariaKeyshortcutsFor(`commenting.${key}`) : undefined;
 
   function toggle() {
     expanded = !expanded;
@@ -169,12 +170,14 @@
         {#if !expanded}
           <span class="clamp-line preview">{annotation.comment}</span>
         {/if}
-        <!-- Trailing, so caps appearing on hover never shift the label or stamp. -->
+        <!-- Trailing, so caps appearing on hover never shift the label or stamp. h and l
+             are live on every comment, so this is just "hovered with caps on". An
+             expanded card's Enter edits, which Edit's own cap already names. -->
         {#if capped("collapse") || capped("expand")}
           <span class="caps">
-            {#if !expanded && capped("activate")}<ShortcutCap id="commenting.activate" cap="activate" />{/if}
-            {#if capped("collapse")}<ShortcutCap id="commenting.collapse" cap="collapse" />{/if}
-            {#if capped("expand")}<ShortcutCap id="commenting.expand" cap="expand" />{/if}
+            {#if !expanded && capped("activate")}<ShortcutCap id="commenting.activate" />{/if}
+            {#if capped("collapse")}<ShortcutCap id="commenting.collapse" />{/if}
+            {#if capped("expand")}<ShortcutCap id="commenting.expand" />{/if}
           </span>
         {/if}
       </Button>
@@ -185,7 +188,7 @@
           class="edit"
           onclick={startEdit}
           aria-keyshortcuts={keysFor("edit")}
-          >Edit{#if capped("edit")}<ShortcutCap id="commenting.edit" cap="edit" />{/if}</Button
+          >Edit{#if capped("edit")}<ShortcutCap id="commenting.edit" />{/if}</Button
         >
         <!-- Deleting a submitted comment is irreversible, so it routes through a
              confirmation (EXC-749) instead of firing on the first click. -->
@@ -205,7 +208,7 @@
               aria-keyshortcuts={keysFor("discard")}
             >
               <Icon name="trash-2" size={14} />
-              {#if capped("discard")}<ShortcutCap id="commenting.discard" cap="discard" />{/if}
+              {#if capped("discard")}<ShortcutCap id="commenting.discard" />{/if}
             </Button>
           {/snippet}
         </ConfirmPopover>

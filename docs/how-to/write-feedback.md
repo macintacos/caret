@@ -25,8 +25,9 @@ With the cursor on a comment:
 - `V` starts a selection on its last line.
 
 Accepted and Expired comments only fold, with `h`, `l`, or `Enter` while collapsed. Key
-caps show beside the controls of the comment the keyboard moved to, when the shortcut
-hints setting is on. A mouse click hides them until the next key.
+caps show beside the controls of the comment the keyboard moved to, when
+**Shortcut hints** in **Settings → Appearance** is on. A mouse click hides them until the
+next key.
 
 In the [preview](../reference/glossary.md#preview), hovering anywhere out to the plan's
 right edge shades the wrapped line under the pointer and shows a **+** beside it. Clicking

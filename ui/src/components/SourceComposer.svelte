@@ -10,6 +10,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Card } from "$lib/components/ui/card/index.js";
   import { rangeLabel } from "$lib/diffview/commenting.ts";
+  import type { InputVia } from "$lib/diffview/commentStops.ts";
   import { revealCard } from "$lib/diffview/scroll.ts";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
@@ -32,8 +33,8 @@
      * Save — so editing a comment looks identical to writing one, never a bespoke
      * inline form. */
     mode?: "create" | "edit";
-    /** `via` is "key" for the ⌘↵ chord, "pointer" for the button. */
-    onSubmit: (comment: string, via: "key" | "pointer") => void;
+    /** `via` is "key" for the ⌘↵ chord or Escape, "pointer" for the button. */
+    onSubmit: (comment: string, via: InputVia) => void;
     /** Discard the draft outright — the Discard/Cancel button and the Esc chord.
      * In "create" this drops the text with no scratch retained; in "edit" it
      * reverts to the saved comment. Either way the host closes the composer. */
@@ -95,7 +96,7 @@
     return revealCard(cardEl);
   });
 
-  function submit(via: "key" | "pointer") {
+  function submit(via: InputVia) {
     onSubmit(comment, via);
   }
 

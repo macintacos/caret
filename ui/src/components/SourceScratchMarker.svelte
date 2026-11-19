@@ -17,7 +17,7 @@
     /** The keyboard cursor rests on this marker. */
     hovered?: boolean;
     /** The scratch's key, which the keyboard measures the marker by. */
-    scratchKey?: string;
+    scratchKey: string;
     /** Show the Enter cap on Resume while hovered. */
     showCaps?: boolean;
   }
@@ -35,7 +35,7 @@
   <span class="unsent"><Icon name="message-square-more" size={14} />Unsent</span>
   <span class="clamp-line preview">{text}</span>
   <span class="cap resume"
-    >Resume{#if hovered && showCaps}<ShortcutCap id="commenting.activate" cap="activate" />{/if}</span
+    >Resume{#if hovered && showCaps}<ShortcutCap id="commenting.activate" />{/if}</span
   >
 </button>
 

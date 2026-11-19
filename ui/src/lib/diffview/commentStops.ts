@@ -10,17 +10,22 @@ export interface FocusedStop {
   line: number;
 }
 
-export interface CommentStop {
-  ref: StopRef;
+export type InputVia = "key" | "pointer";
+
+type StopBase = {
   /** First anchored line. */
   start: number;
   /** Last anchored line. */
   line: number;
   /** Where it renders: the line on source, the block index on preview. */
   slot: number;
-  /** Comments only. */
-  state?: ReviewStatus;
-}
+};
+
+export type CommentStop = StopBase &
+  (
+    | { ref: { kind: "comment"; id: string }; state?: ReviewStatus }
+    | { ref: { kind: "resume"; key: string }; state?: never }
+  );
 
 /** The keyboard's handle on a mounted comment card; its state stays card-local. */
 export interface CardHandle {
@@ -46,7 +51,8 @@ interface StopMarker {
 }
 
 /** Every stop in render order: by slot, then line, then a line's thread before its Resume
- * markers. A thread keeps its display order; markers go by first line. */
+ * markers. A thread keeps its display order; markers go by first line. Keep in step with
+ * DiffPlanView's `previewSlots` and the source annotation row. */
 export function deriveStops(
   threads: readonly StopThread[],
   markers: readonly StopMarker[],
@@ -58,7 +64,7 @@ export function deriveStops(
       start: a.startLine,
       line: t.line,
       slot: slotOf(t.line),
-      ...(a.state ? { state: a.state } : {}),
+      state: a.state,
     })),
   );
   const resumes = [...markers]
@@ -77,15 +83,15 @@ export function deriveStops(
 
 /** The stop a one-step move from slot `from` to slot `to` passes, or -1. Comments at a
  * slot render after it, so down enters the first at or after `from`, up the last before
- * it. A null `to` is the document's end, past every slot. */
+ * it. A `to` of Infinity is the document's end, past every slot. */
 export function crossedStop(
   stops: readonly CommentStop[],
   from: number,
-  to: number | null,
+  to: number,
   dir: 1 | -1,
 ): number {
-  if (dir > 0) return stops.findIndex((s) => s.slot >= from && (to == null || s.slot < to));
-  return stops.findLastIndex((s) => to != null && s.slot >= to && s.slot < from);
+  if (dir > 0) return stops.findIndex((s) => s.slot >= from && s.slot < to);
+  return stops.findLastIndex((s) => s.slot >= to && s.slot < from);
 }
 
 /** The next stop on stop `i`'s slot in `dir`, or -1 when the move leaves the slot. */
@@ -102,20 +108,32 @@ export function stepComment(
   from: { stop: number } | { slot: number },
   delta: 1 | -1,
 ): number {
-  const ahead = (s: CommentStop, i: number) =>
-    "stop" in from ? i > from.stop : s.slot >= from.slot;
-  const comments = stops.flatMap((s, i) => (s.ref.kind === "comment" ? [{ s, i }] : []));
+  const [ahead, behind] =
+    "stop" in from
+      ? [(i: number) => i > from.stop, (i: number) => i < from.stop]
+      : [
+          (i: number) => (stops[i]?.slot ?? 0) >= from.slot,
+          (i: number) => (stops[i]?.slot ?? 0) < from.slot,
+        ];
+  const comments = stops.flatMap((s, i) => (s.ref.kind === "comment" ? [i] : []));
   if (comments.length === 0) return -1;
 
-  const hit =
-    delta > 0
-      ? (comments.find((c) => ahead(c.s, c.i)) ?? comments[0])
-      : (comments.findLast((c) => !ahead(c.s, c.i) && !("stop" in from && c.i === from.stop)) ??
-        comments.at(-1));
-  return hit?.i ?? -1;
+  return delta > 0
+    ? (comments.find(ahead) ?? comments[0] ?? -1)
+    : (comments.findLast(behind) ?? comments.at(-1) ?? -1);
 }
 
-export type CommentKey = "edit" | "editInsert" | "activate" | "collapse" | "expand" | "discard";
+export const COMMENT_KEYS = [
+  "edit",
+  "editInsert",
+  "activate",
+  "collapse",
+  "expand",
+  "discard",
+] as const;
+
+/** The suffix of a `commenting.*` keymap id. */
+export type CommentKey = (typeof COMMENT_KEYS)[number];
 
 /** The `commenting.*` keys that act on a stop. A settled comment (Accepted, Expired) only
  * folds; a Resume marker only resumes. */
@@ -127,10 +145,29 @@ export function commentKeys(
   if (stop.state === "approved" || stop.state === "expired") {
     return expanded ? ["collapse", "expand"] : ["collapse", "expand", "activate"];
   }
-  return ["edit", "editInsert", "activate", "collapse", "expand", "discard"];
+  return [...COMMENT_KEYS];
 }
 
 export function sameStop(a: StopRef, b: StopRef): boolean {
   if (a.kind === "comment") return b.kind === "comment" && a.id === b.id;
   return b.kind === "resume" && a.key === b.key;
+}
+
+/** A ref's id: the comment id, or the Resume marker's scratch key. */
+export function stopKey(ref: StopRef): string {
+  return ref.kind === "comment" ? ref.id : ref.key;
+}
+
+/** The index of `ref`'s stop in `stops`, or -1. */
+export function stopIndex(stops: readonly CommentStop[], ref: StopRef): number {
+  return stops.findIndex((s) => sameStop(s.ref, ref));
+}
+
+/** The anchored lines `c` comments on from a hovered stop: its first through last line. */
+export function stopLines(
+  stops: readonly CommentStop[],
+  focused: FocusedStop,
+): { start: number; end: number } {
+  const stop = stops[stopIndex(stops, focused.ref)];
+  return { start: stop?.start ?? focused.line, end: focused.line };
 }

@@ -621,6 +621,15 @@ describe("comment stops", () => {
     expect(h.focused()).toEqual(onStop("c", 7));
     expect(store.cursorLine).toBe(7);
   });
+
+  test("a motion after enterStop resolves from the stop's line, without following it", () => {
+    store.cursorLine = 1;
+    const h = stopsBuild();
+    h.keyboard.enterStop(STOPS[0]!);
+    expect(h.followedStops).toEqual([]);
+    h.keyboard.moveCursor("nextBlank");
+    expect(store.cursorLine).toBe(4);
+  });
 });
 
 describe("enterVisualMode", () => {

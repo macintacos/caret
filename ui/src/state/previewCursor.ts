@@ -7,8 +7,9 @@ import {
   type CommentStop,
   crossedStop,
   type FocusedStop,
-  sameStop,
   stepComment,
+  stopIndex,
+  stopLines,
   stopNeighbour,
 } from "$lib/diffview/commentStops.ts";
 import {
@@ -76,7 +77,9 @@ export interface PreviewCursorDeps {
 }
 
 export interface PreviewCursor {
-  /** Hover `stop`: exits visual mode, puts the cursor on its last line, and follows it. */
+  /** Hover `stop` without scrolling: exits visual mode and puts the cursor on its last line. */
+  enterStop(stop: CommentStop): void;
+  /** enterStop, then follow the stop. */
   placeOnStop(stop: CommentStop): void;
   /** `]c`/`[c`: hover the next or previous comment, wrapping; no-op with none. */
   stepComment(delta: 1 | -1): void;
@@ -171,21 +174,29 @@ export function createPreviewCursor(
     if (deps.focusedStop() != null) deps.setFocusedStop(null);
   }
 
-  function placeOnStop(stop: CommentStop): void {
+  function enterStop(stop: CommentStop): void {
     store.visualAnchor = null;
     deps.setFocusedStop({ ref: stop.ref, line: stop.line });
     store.cursorLine = stop.line;
     store.cursorPoint = null;
+  }
+
+  function placeOnStop(stop: CommentStop): void {
+    enterStop(stop);
     deps.followStop(stop);
+  }
+
+  /** The hovered stop's index in `stops`, or -1 when none is hovered. */
+  function focusedIndex(stops: readonly CommentStop[]): number {
+    const focused = deps.focusedStop();
+    return focused == null ? -1 : stopIndex(stops, focused.ref);
   }
 
   /** `j`/`k` off the hovered stop: to its slot's next stop, else past the slot. Reports
    * whether a stop was hovered. */
   function stepFromStop(dir: 1 | -1): boolean {
-    const focused = deps.focusedStop();
-    if (focused == null) return false;
     const stops = deps.stops();
-    const i = stops.findIndex((s) => sameStop(s.ref, focused.ref));
+    const i = focusedIndex(stops);
     const stop = stops[i];
     if (stop == null) return false;
 
@@ -202,13 +213,13 @@ export function createPreviewCursor(
     return true;
   }
 
-  /** `j`/`k` from `from` to `to`: the stop between their blocks, if any. */
+  /** `j`/`k` from `from` to `to`: the stop between their blocks, if any. A `j` that cannot
+   * move counts as reaching Infinity, so a comment on the last line stays reachable. */
   function stopBetween(from: TextPoint, to: TextPoint, dir: 1 | -1): CommentStop | undefined {
     const stops = deps.stops();
     const stuck = dir > 0 && !before(from, to);
-    return stops[
-      crossedStop(stops, deps.slotOf(from.line), stuck ? null : deps.slotOf(to.line), dir)
-    ];
+    const end = stuck ? Number.POSITIVE_INFINITY : deps.slotOf(to.line);
+    return stops[crossedStop(stops, deps.slotOf(from.line), end, dir)];
   }
 
   function resolve(motion: CursorMotion, from: TextPoint | null): TextPoint | null {
@@ -243,12 +254,12 @@ export function createPreviewCursor(
       store.visualAnchorPoint = null;
     },
 
+    enterStop,
     placeOnStop,
 
     stepComment(delta) {
       const stops = deps.stops();
-      const focused = deps.focusedStop();
-      const i = focused ? stops.findIndex((s) => sameStop(s.ref, focused.ref)) : -1;
+      const i = focusedIndex(stops);
       const seed = i >= 0 ? null : seedPoint();
       const from = i >= 0 ? { stop: i } : { slot: seed ? deps.slotOf(seed.line) : 0 };
       const hit = stops[stepComment(stops, from, delta)];
@@ -317,8 +328,8 @@ export function createPreviewCursor(
       const focused = deps.focusedStop();
       if (focused?.ref.kind === "resume") return;
       if (focused != null) {
-        const stop = deps.stops().find((s) => sameStop(s.ref, focused.ref));
-        deps.openComposer(stop?.start ?? focused.line, focused.line);
+        const { start, end } = stopLines(deps.stops(), focused);
+        deps.openComposer(start, end);
         return;
       }
       const p = seedPoint();

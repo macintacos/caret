@@ -575,6 +575,22 @@ describe("DiffPlanView annotation display", () => {
     expect(cursorRow(target)?.getAttribute("data-line")).toBe("3");
   });
 
+  test("a new version that drops the hovered comment lands the cursor on its last line", async () => {
+    const p = focusOwningProps({
+      annotations: [lineAnn({ id: "a", startLine: 2, endLine: 3 })],
+      focusedStop: { ref: { kind: "comment", id: "a" }, line: 3 },
+    });
+    const { target, flush } = render(DiffPlanView, p);
+    await until(() => target.querySelector('[data-annotation-card="a"]') != null);
+
+    p.review = reviewFixture({ version: 2 });
+    p.annotations = [];
+    flush();
+    expect(p.focusedStop === null).toBe(true);
+    await until(() => cursorRow(target) != null);
+    expect(cursorRow(target)?.getAttribute("data-line")).toBe("3");
+  });
+
   test("switching reviews with a comment hovered places no cursor", async () => {
     const p = focusOwningProps({
       annotations: [lineAnn({ id: "a", startLine: 2, endLine: 3 })],

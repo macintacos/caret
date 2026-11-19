@@ -28,13 +28,18 @@ These also work in the preview:
 - Search, opened with `/`, runs over the text as rendered, so a phrase wrapped across
     source lines matches, while link addresses and Markdown markers do not.
 
-In both views, `j` and `k` also stop on each comment and each unsent draft's **Resume**
-marker. The other motions, such as `G`, `gg`, `}`, `]]`, and search's `n`, pass over them.
-Press `]c` and `[c` to jump to the next and previous comment; both wrap at the ends and
-skip **Resume** markers. Picking a comment in the comment navigator puts the cursor on it.
-
 When you compare two versions to see what changed, caret shows the source view and hides
 the **Source** button. Leaving compare mode returns to the view you chose.
+
+## Move between comments
+
+In both views, `j` and `k` also stop on each [comment](../reference/glossary.md#comment)
+and each unsent draft's **Resume** marker. The other motions, such as `G`, `gg`, `}`,
+`]]`, and search's `n`, pass over them. Press `]c` and `[c` to jump to the next and
+previous comment; both wrap at the ends and skip **Resume** markers.
+
+Press `shift+c` to open the comment navigator, a list of the plan's comments. Picking one
+puts the cursor on it.
 
 ## Change the text size
 

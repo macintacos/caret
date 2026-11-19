@@ -19,6 +19,11 @@ import {
 import { isEntryActive } from "$lib/shortcuts/scope.ts";
 
 describe("CANONICAL_KEYMAP", () => {
+  const sig = (id: string) => {
+    const e = CANONICAL_KEYMAP.find((x) => x.id === id);
+    return e && { group: e.group, keys: specSignature(e.keys) };
+  };
+
   test("every entry id is unique", () => {
     const ids = CANONICAL_KEYMAP.map((e) => e.id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -91,10 +96,6 @@ describe("CANONICAL_KEYMAP", () => {
   });
 
   test("reserves the hovered-comment keys under Commenting", () => {
-    const sig = (id: string) => {
-      const e = CANONICAL_KEYMAP.find((x) => x.id === id);
-      return e && { group: e.group, keys: specSignature(e.keys) };
-    };
     expect(sig("commenting.edit")).toEqual({ group: "commenting", keys: "e" });
     expect(sig("commenting.editInsert")).toEqual({ group: "commenting", keys: "i" });
     expect(sig("commenting.activate")).toEqual({ group: "commenting", keys: "Enter" });
@@ -119,10 +120,6 @@ describe("CANONICAL_KEYMAP", () => {
   });
 
   test("reserves zz, zt and zb as motions", () => {
-    const sig = (id: string) => {
-      const e = CANONICAL_KEYMAP.find((x) => x.id === id);
-      return e && { group: e.group, keys: specSignature(e.keys) };
-    };
     expect(sig("motion.scrollCursorToCenter")).toEqual({ group: "motion", keys: "z z" });
     expect(sig("motion.scrollCursorToTop")).toEqual({ group: "motion", keys: "z t" });
     expect(sig("motion.scrollCursorToBottom")).toEqual({ group: "motion", keys: "z b" });
