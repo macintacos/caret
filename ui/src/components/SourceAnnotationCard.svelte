@@ -170,15 +170,10 @@
         {#if !expanded}
           <span class="clamp-line preview">{annotation.comment}</span>
         {/if}
-        <!-- Trailing, so caps appearing on hover never shift the label or stamp. h and l
-             are live on every comment, so this is just "hovered with caps on". An
+        <!-- Trailing, so the cap appearing on hover never shifts the label or stamp. An
              expanded card's Enter edits, which Edit's own cap already names. -->
-        {#if showsCap("collapse") || showsCap("expand")}
-          <span class="caps">
-            {#if !expanded && showsCap("activate")}<ShortcutCap id="commenting.activate" />{/if}
-            {#if showsCap("collapse")}<ShortcutCap id="commenting.collapse" />{/if}
-            {#if showsCap("expand")}<ShortcutCap id="commenting.expand" />{/if}
-          </span>
+        {#if !expanded && showsCap("activate")}
+          <span class="caps"><ShortcutCap id="commenting.activate" /></span>
         {/if}
       </Button>
       <div class="actions">

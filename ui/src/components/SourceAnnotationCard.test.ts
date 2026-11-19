@@ -416,39 +416,28 @@ describe("SourceAnnotationCard key caps", () => {
       })
       .sort();
 
-  test("a hovered open comment shows the edit, discard and fold caps", () => {
+  test("a hovered open comment shows the edit and discard caps", () => {
     const { target } = render(SourceAnnotationCard, base({ focused: true, showCaps: true }));
-    expect(caps(target)).toEqual([
-      "Collapse comment:H",
-      "Collapse comment:L",
-      "Discard comment:D",
-      "Edit:E",
-    ]);
+    expect(caps(target)).toEqual(["Discard comment:D", "Edit:E"]);
   });
 
   test("a hovered collapsed comment adds the Enter cap on its chip", () => {
     const { target, flush } = render(SourceAnnotationCard, base({ focused: true, showCaps: true }));
     click(target, "button.chip");
     flush();
-    expect(caps(target)).toEqual([
-      "Discard comment:D",
-      "Edit:E",
-      "Expand comment:H",
-      "Expand comment:L",
-      "Expand comment:↵",
-    ]);
+    expect(caps(target)).toEqual(["Discard comment:D", "Edit:E", "Expand comment:↵"]);
   });
 
   for (const state of ["approved", "expired"] as const) {
-    test(`a hovered ${state} comment shows only the fold caps, plus Enter while collapsed`, () => {
+    test(`a hovered ${state} comment shows only the Enter cap, while collapsed`, () => {
       const { target, flush } = render(
         SourceAnnotationCard,
         base({ annotation: { ...annotation, state }, focused: true, showCaps: true }),
       );
-      expect(caps(target)).toEqual(["Collapse comment:H", "Collapse comment:L"]);
+      expect(caps(target)).toEqual([]);
       click(target, "button.chip");
       flush();
-      expect(caps(target)).toEqual(["Expand comment:H", "Expand comment:L", "Expand comment:↵"]);
+      expect(caps(target)).toEqual(["Expand comment:↵"]);
     });
   }
 
