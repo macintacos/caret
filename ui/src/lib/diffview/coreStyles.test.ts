@@ -1601,6 +1601,23 @@ describe("the preview's copies of the link, code and reference chips (EXC-2021)"
     );
   });
 
+  test("inline code and a reference outside code take their type from one rule, which the code box doesn't repeat", () => {
+    // Preview-only: the source view's rows are already monospace.
+    const type = previewRule(
+      ":is(:not(pre) > code, [data-file-ref]:not(code *, [data-file-ref-label]))",
+    );
+    expect(Object.keys(type).sort()).toEqual([
+      "color",
+      "font-family",
+      "font-size",
+      "font-style",
+      "font-weight",
+      "text-decoration",
+    ]);
+    const code = previewRule(":not(pre) > code");
+    expect(Object.keys(code).filter((p) => p in type)).toEqual([]);
+  });
+
   test.each([
     "[data-file-ref]",
     "[data-file-ref]:hover",

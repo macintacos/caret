@@ -107,6 +107,10 @@ caret checks each path against the project folder the agent was working in. A pa
 does not exist there stays plain text, with no icon, so a filename the agent invented
 never looks like one you can open.
 
+The preview sets a cited file in the same type as inline code, on a chip of its own
+colour, whether or not the agent put it in backticks. A link whose label is prose keeps
+the sentence's type.
+
 ## Next steps
 
 - Comment on what you read with [Write feedback](write-feedback.md).

@@ -111,6 +111,10 @@ function wrap({ node, start, end, ref }: Hit): HTMLElement {
   middle.splitText(end - start);
   const el = document.createElement("span");
   el.setAttribute(FILE_REF_ATTR, ref.span.kind === "directory" ? "directory" : "");
+  // `target` is set on every link reference, so whether the label shows the path decides.
+  if (ref.span.target !== undefined && !ref.text.includes(ref.span.path)) {
+    el.setAttribute("data-file-ref-label", "");
+  }
   middle.replaceWith(el);
   el.append(middle);
   return el;

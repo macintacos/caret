@@ -1940,4 +1940,56 @@ test.describe("on the preview", () => {
       await proj.cleanup();
     }
   });
+
+  test("a bare reference and a backticked one look alike", async ({ daemon, page }) => {
+    const proj = await openOnPreview(page, daemon);
+    try {
+      const ref = (text: string) =>
+        page.locator(`${PLAN_PREVIEW} [data-file-ref]`).filter({ hasText: text });
+      const backticked = ref("src/cache.ts:42");
+      const bare = ref("src/lib/util.ts");
+      await page.mouse.move(0, 0);
+
+      // Type from the element holding the text, box from the chip around it.
+      const look = (span: import("@playwright/test").Locator) =>
+        span.evaluate((el) => {
+          const type = getComputedStyle(el);
+          const chip = el.parentElement?.tagName === "CODE" ? el.parentElement : el;
+          const box = getComputedStyle(chip);
+          return {
+            fontFamily: type.fontFamily,
+            fontSize: type.fontSize,
+            color: type.color,
+            fontWeight: type.fontWeight,
+            fontStyle: type.fontStyle,
+            glyphWidth: getComputedStyle(el, "::before").width,
+            backgroundColor: box.backgroundColor,
+            padding: box.padding,
+            borderRadius: box.borderRadius,
+            boxShadow: box.boxShadow,
+          } as Record<string, string>;
+        });
+      const mismatches = async () => {
+        const [bareLook, backtickedLook] = await Promise.all([look(bare), look(backticked)]);
+        return Object.keys(bareLook)
+          .filter((k) => bareLook[k] !== backtickedLook[k])
+          .map((k) => `${k}: ${bareLook[k]} ≠ ${backtickedLook[k]}`);
+      };
+      await expect.poll(mismatches).toEqual([]);
+
+      // A prose link label keeps the sentence's type but still wears the reference chip.
+      const label = ref("the cache");
+      const proseLook = () =>
+        label.evaluate((el) => {
+          const style = getComputedStyle(el);
+          return {
+            keepsProse: style.fontFamily === getComputedStyle(el.closest("li") ?? el).fontFamily,
+            chipped: style.backgroundColor !== "rgba(0, 0, 0, 0)",
+          };
+        });
+      await expect.poll(proseLook).toEqual({ keepsProse: true, chipped: true });
+    } finally {
+      await proj.cleanup();
+    }
+  });
 });

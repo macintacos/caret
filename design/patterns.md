@@ -765,6 +765,9 @@ specific code areas live in [`docs/agents/`](../docs/agents/).
 - Only a link that is itself a chip sinks when pressed in the preview, along with
   reference and citation code. A link wrapping code, a file reference or an image does not
   (`ui/src/components/PlanPreview.svelte`).
+- In the preview a file reference wears inline code's type whether or not it was
+  backticked; its `--chip-ref` fill, glyph and raise set it apart from code. A prose link
+  label keeps prose type (`ui/src/components/PlanPreview.svelte`).
 - Rendering rules live in [`plan-render-rules.md`](../docs/agents/plan-render-rules.md).
 
 ### Keyboard

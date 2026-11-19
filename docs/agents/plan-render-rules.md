@@ -199,7 +199,9 @@ exist today.
 - **Styling** lives in `PlanPreview.svelte`'s scoped stylesheet: every rule is rooted at
   `.plan-preview` and painted from tokens and the theme's `--markdown-*` properties, with
   the source view's fallbacks except an unstyled heading (weight 600) and quote
-  (`--ink-soft`, no subdue). The renderer's empty `span[data-source-line]` markers sit
+  (`--ink-soft`, no subdue). A resolved reference outside code, unless its label hides the
+  path, also takes inline code's type, a preview-only rule `coreStyles.test.ts` pins as
+  one shared declaration block. The renderer's empty `span[data-source-line]` markers sit
   inside every text leaf and before a code block's `pre`, so no rule styles a bare `span`
   or selects text-level content by position (`:first-child`, `:empty`, `:only-child`). A
   task box is matched as `input[data-task]`, and the first-heading margin reset reaches

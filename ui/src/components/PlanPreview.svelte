@@ -361,12 +361,16 @@
   }
   /* Padding, radius and tint pinned to coreStyles.ts's code chip by coreStyles.test.ts. */
   .plan-preview :global(:not(pre) > code) {
-    font-family: var(--font-mono);
-    font-size: 0.9em;
     padding: var(--chip-pad-block) var(--chip-pad-inline);
     border-radius: var(--radius);
     background-color: var(--chip-code);
     box-shadow: var(--chip-stamped);
+  }
+  /* A reference reads as code, backticked or not; the `:not(code *)` guard stops a
+     backticked one taking 0.9em twice, and a prose link label keeps prose type. */
+  .plan-preview :global(:is(:not(pre) > code, [data-file-ref]:not(code *, [data-file-ref-label]))) {
+    font-family: var(--font-mono);
+    font-size: 0.9em;
     color: var(--markdown-code-color, var(--accent-bright));
     font-weight: var(--markdown-code-font-weight);
     font-style: var(--markdown-code-font-style);

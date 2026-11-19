@@ -96,6 +96,20 @@ describe("tagPreviewFileRefs", () => {
     ]);
   });
 
+  test("marks a reference whose link label hides its path", () => {
+    const { root, refs } = prepare(
+      "Read [the cache](src/cache.ts) and [src/cache.ts](src/cache.ts) and `src/lib/util.ts`.",
+    );
+    tagPreviewFileRefs(root, refs);
+    expect(
+      wrappers(root).map((el) => [el.textContent, el.hasAttribute("data-file-ref-label")]),
+    ).toEqual([
+      ["the cache", true],
+      ["src/cache.ts", false],
+      ["src/lib/util.ts", false],
+    ]);
+  });
+
   test("leaves a path the daemon did not resolve plain", () => {
     const { refs, display } = resolved(SHAPES);
     refs.delete(7);
