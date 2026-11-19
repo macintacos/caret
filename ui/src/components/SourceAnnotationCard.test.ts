@@ -404,3 +404,52 @@ describe("SourceAnnotationCard edit/delete", () => {
     expect(target.querySelector(".cm-content")).toBeNull();
   });
 });
+
+describe("SourceAnnotationCard key caps", () => {
+  const caps = (root: ParentNode) =>
+    [...root.querySelectorAll("[data-cap]")].map((k) => k.getAttribute("data-cap")).sort();
+
+  test("a hovered open comment shows the edit, discard and fold caps", () => {
+    const { target } = render(SourceAnnotationCard, base({ focused: true, showCaps: true }));
+    expect(caps(target)).toEqual(["collapse", "discard", "edit", "expand"]);
+  });
+
+  test("a hovered collapsed comment adds the Enter cap on its chip", () => {
+    const { target, flush } = render(SourceAnnotationCard, base({ focused: true, showCaps: true }));
+    click(target, "button.chip");
+    flush();
+    expect(caps(target)).toEqual(["activate", "collapse", "discard", "edit", "expand"]);
+  });
+
+  for (const state of ["approved", "expired"] as const) {
+    test(`a hovered ${state} comment shows only the fold caps, plus Enter while collapsed`, () => {
+      const { target, flush } = render(
+        SourceAnnotationCard,
+        base({ annotation: { ...annotation, state }, focused: true, showCaps: true }),
+      );
+      expect(caps(target)).toEqual(["collapse", "expand"]);
+      click(target, "button.chip");
+      flush();
+      expect(caps(target)).toEqual(["activate", "collapse", "expand"]);
+    });
+  }
+
+  test("caps are hidden from assistive tech", () => {
+    const { target } = render(SourceAnnotationCard, base({ focused: true, showCaps: true }));
+    for (const k of target.querySelectorAll("[data-cap]")) {
+      expect(k.getAttribute("aria-hidden")).toBe("true");
+    }
+  });
+
+  test("no caps without showCaps, or on a card the cursor is not on", () => {
+    expect(caps(render(SourceAnnotationCard, base({ focused: true })).target)).toEqual([]);
+    expect(caps(render(SourceAnnotationCard, base({ showCaps: true })).target)).toEqual([]);
+  });
+
+  test("the hovered card's controls advertise their keys", () => {
+    const { target } = render(SourceAnnotationCard, base({ focused: true }));
+    expect(target.querySelector("button.edit")?.getAttribute("aria-keyshortcuts")).toBe("e");
+    const idle = render(SourceAnnotationCard, base()).target;
+    expect(idle.querySelector("button.edit")?.hasAttribute("aria-keyshortcuts")).toBe(false);
+  });
+});

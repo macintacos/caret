@@ -256,7 +256,9 @@
     onExposeReveal?: (reveal: (line: number, side?: DiffSide) => void) => void;
     /** Hand the host a revealComment(id, line, side) action once on mount: it focuses
      * the comment, expands its card, and reveals its line. Single-version only. */
-    onExposeRevealComment?: (reveal: (id: string, line: number, side?: DiffSide) => void) => void;
+    onExposeRevealComment?: (
+      reveal: (id: string, line: number, side?: DiffSide, via?: "key" | "pointer") => void,
+    ) => void;
     /** Report the compared versions upward (null when not comparing), so App can
      * point the single CommentNavigator instance at the cross-version index.
      * `before`/`after` name the two documents the diff renders — not a sorted
@@ -1854,6 +1856,10 @@
     untrack(() => onExposeReveal)?.(revealLine);
   });
 
+  // Key caps show on the hovered comment once the keyboard put it there; a pointer
+  // placement hides them until the next key.
+  let capsShown = $state(false);
+
   // Each mounted comment card's keyboard handle, by comment id.
   const cardHandles = new Map<string, CardHandle>();
   const registerCard: RegisterCard = (id, handle) => {
@@ -1868,7 +1874,13 @@
 
   // A navigator pick names a comment by id or a draft by its scratch key. It parks the
   // stop at the reveal offset, as any navigation to an explicit place does.
-  function revealComment(id: string, line: number, side?: DiffSide): void {
+  function revealComment(
+    id: string,
+    line: number,
+    side?: DiffSide,
+    via: "key" | "pointer" = "pointer",
+  ): void {
+    capsShown = via === "key";
     cardHandles.get(id)?.expand();
     const stop = stops.find((s) => (s.ref.kind === "comment" ? s.ref.id : s.ref.key) === id);
     keyboardStore.visualAnchor = null;
@@ -2636,6 +2648,7 @@
         shortcuts.register(
           bind(id, {
             run: () => {
+              capsShown = true;
               move(motion);
               if (motion === "nextHeading" || motion === "prevHeading") {
                 latchHeading(keyboardStore.cursorLine);
@@ -2651,7 +2664,12 @@
     for (const [id, where] of Object.entries(CURSOR_PLACEMENTS)) {
       offs.push(
         shortcuts.register(
-          bind(id, { run: () => scrollCursor(where), enabled: () => !defaultIsEditingContext() }),
+          bind(id, {
+            run: () => {
+              capsShown = true;
+              scrollCursor(where);
+            },
+            enabled: () => !defaultIsEditingContext() }),
         ),
       );
     }
@@ -2673,7 +2691,12 @@
     ] as const) {
       offs.push(
         shortcuts.register(
-          bind(id, { run: () => stepComment(delta), enabled: () => !defaultIsEditingContext() }),
+          bind(id, {
+            run: () => {
+              capsShown = true;
+              stepComment(delta);
+            },
+            enabled: () => !defaultIsEditingContext() }),
         ),
       );
     }
@@ -2724,6 +2747,7 @@
         bind(`commenting.${key}`, {
           run: () => {
             const ref = focusedStop?.ref;
+            capsShown = true;
             if (ref) act(ref.kind === "comment" ? cardHandles.get(ref.id) : undefined, ref);
           },
           enabled: () => commentKeyLive(key as CommentKey),
@@ -3232,7 +3256,11 @@
         <SourceAnnotationThread
           {annotations}
           {focusedStop}
-          onFocus={focusComment}
+          showCaps={showShortcutHints && capsShown}
+          onFocus={(id) => {
+            capsShown = false;
+            focusComment(id);
+          }}
           onEdit={onEditAnnotation}
           onDelete={onDeleteAnnotation}
           register={registerCard}
@@ -3246,7 +3274,10 @@
           initial={pendingText}
           {reviewContext}
           onInput={(text) => (liveText = text)}
-          onSubmit={(comment) => commenting.submit(comment)}
+          onSubmit={(comment, via) => {
+            capsShown = via === "key";
+            commenting.submit(comment);
+          }}
           onKeep={(text) => commenting.cancel(text)}
           onDiscard={() => commenting.discardOpen(liveText)}
         />
@@ -3257,6 +3288,7 @@
           onResume={() => resumeScratch(scratch.key)}
           scratchKey={scratch.key}
           hovered={focusedStop?.ref.kind === "resume" && focusedStop.ref.key === scratch.key}
+          showCaps={showShortcutHints && capsShown}
         />
       {/snippet}
       <!-- Visual line-select affordance (EXC-790): while V mode is active, a quiet

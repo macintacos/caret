@@ -17,7 +17,9 @@
   import type { LineAnnotation } from "@core/lib/types";
   import { Button } from "$lib/components/ui/button/index.js";
   import { commentState } from "$lib/commentState.ts";
-  import type { RegisterCard } from "$lib/diffview/commentStops.ts";
+  import { type CommentKey, commentKeys, type RegisterCard } from "$lib/diffview/commentStops.ts";
+  import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
+  import ShortcutCap from "@/components/ShortcutCap.svelte";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { renderMarkdown } from "$lib/markdown.ts";
   import ConfirmPopover from "@/components/ConfirmPopover.svelte";
@@ -35,9 +37,19 @@
     reviewContext?: ReviewContext;
     /** Hands the parent this card's keyboard handle on mount. */
     register?: RegisterCard;
+    /** Show key caps on the controls while this card is focused. */
+    showCaps?: boolean;
   }
-  let { annotation, focused, onFocus, onEdit, onDelete, reviewContext, register }: Props =
-    $props();
+  let {
+    annotation,
+    focused,
+    onFocus,
+    onEdit,
+    onDelete,
+    reviewContext,
+    register,
+    showCaps = false,
+  }: Props = $props();
 
   // Seeded once from focus, so a just-submitted comment mounts open; later focus
   // changes never expand it (a reveal expands through the registered handle).
@@ -73,6 +85,11 @@
   // The same stamp shows collapsed and expanded, so draft-vs-resolved reads without
   // opening the card.
   const stateView = $derived(commentState(annotation.state));
+
+  const liveKeys = $derived(commentKeys({ kind: "comment", state: annotation.state }, expanded));
+  const capped = (key: CommentKey) => focused && showCaps && liveKeys.includes(key);
+  const keysFor = (key: CommentKey) =>
+    focused ? ariaKeyshortcutsFor(`commenting.${key}`) : undefined;
 
   function toggle() {
     expanded = !expanded;
@@ -144,6 +161,7 @@
         class="chip"
         aria-expanded={expanded}
         aria-label={expanded ? "Collapse comment" : "Expand comment"}
+        aria-keyshortcuts={keysFor(expanded ? "collapse" : "expand")}
       >
         <Icon name="chevron-down" size={12} />
         <span class="ref">{label}</span>
@@ -151,9 +169,24 @@
         {#if !expanded}
           <span class="clamp-line preview">{annotation.comment}</span>
         {/if}
+        <!-- Trailing, so caps appearing on hover never shift the label or stamp. -->
+        {#if capped("collapse") || capped("expand")}
+          <span class="caps">
+            {#if !expanded && capped("activate")}<ShortcutCap id="commenting.activate" cap="activate" />{/if}
+            {#if capped("collapse")}<ShortcutCap id="commenting.collapse" cap="collapse" />{/if}
+            {#if capped("expand")}<ShortcutCap id="commenting.expand" cap="expand" />{/if}
+          </span>
+        {/if}
       </Button>
       <div class="actions">
-        <Button variant="ghost" size="sm" class="edit" onclick={startEdit}>Edit</Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="edit"
+          onclick={startEdit}
+          aria-keyshortcuts={keysFor("edit")}
+          >Edit{#if capped("edit")}<ShortcutCap id="commenting.edit" cap="edit" />{/if}</Button
+        >
         <!-- Deleting a submitted comment is irreversible, so it routes through a
              confirmation (EXC-749) instead of firing on the first click. -->
         <ConfirmPopover
@@ -163,8 +196,16 @@
           bind:open={confirming}
         >
           {#snippet trigger(props)}
-            <Button {...props} variant="ghost" size="sm" class="danger" aria-label="Discard comment">
+            <Button
+              {...props}
+              variant="ghost"
+              size="sm"
+              class="danger"
+              aria-label="Discard comment"
+              aria-keyshortcuts={keysFor("discard")}
+            >
               <Icon name="trash-2" size={14} />
+              {#if capped("discard")}<ShortcutCap id="commenting.discard" cap="discard" />{/if}
             </Button>
           {/snippet}
         </ConfirmPopover>
@@ -310,6 +351,12 @@
     color: var(--ink-soft);
   }
 
+  .caps {
+    flex: none;
+    display: inline-flex;
+    gap: 0.2rem;
+    margin-inline-start: auto;
+  }
   .actions {
     flex: none;
     display: flex;

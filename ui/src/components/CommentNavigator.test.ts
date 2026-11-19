@@ -52,6 +52,15 @@ describe("CommentNavigator", () => {
     expect(revealed?.id).toBe("b");
   });
 
+  test("a row picked by pointer reports pointer, one activated by key reports key", () => {
+    const vias: string[] = [];
+    const { target } = render(CommentNavigator, { ...base, onReveal: (_e, via) => vias.push(via) });
+    const row = target.querySelectorAll<HTMLButtonElement>("[data-nav-row]")[1]!;
+    row.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+    row.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 }));
+    expect(vias).toEqual(["pointer", "key"]);
+  });
+
   test("marks the active comment as current", () => {
     const { target } = render(CommentNavigator, { ...base, activeId: "a" });
     const active = target.querySelector('[data-nav-row][aria-current="true"]');

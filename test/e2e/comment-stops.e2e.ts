@@ -423,3 +423,92 @@ for (const view of ["source", "preview"] as const) {
     });
   });
 }
+
+test.describe("key caps on the hovered comment", () => {
+  const caps = (page: Page, id: string): Locator => card(page, id).locator("[data-cap]");
+  const one = (line: (text: string) => number) => ({
+    annotations: [comment("b", line("Bravo line."))],
+  });
+
+  test("j onto a card shows its caps", async ({ daemon, page }) => {
+    await open(page, daemon, "source", one);
+    await toLine(page, "Bravo");
+    await page.keyboard.press("j");
+    await expectOnCard(page, "source", "b");
+    await expect(caps(page, "b").first()).toBeVisible();
+  });
+
+  test("a click onto a card shows none until the next key", async ({ daemon, page }) => {
+    await open(page, daemon, "source", one);
+    await card(page, "b").click();
+    await expectOnCard(page, "source", "b");
+    await expect(caps(page, "b")).toHaveCount(0);
+    await page.keyboard.press("h");
+    await expect(caps(page, "b").first()).toBeVisible();
+  });
+
+  test("with shortcut hints off, a card shows no caps", async ({ daemon, page }) => {
+    await page.addInitScript(() => localStorage.setItem("caret.shortcutHints", "off"));
+    await open(page, daemon, "source", one);
+    await toLine(page, "Bravo");
+    await page.keyboard.press("j");
+    await expectOnCard(page, "source", "b");
+    await expect(caps(page, "b")).toHaveCount(0);
+  });
+
+  test("a keyboard navigator pick shows caps, and a navigator click does not", async ({
+    daemon,
+    page,
+  }) => {
+    await open(page, daemon, "source", one);
+    await page.keyboard.press("C");
+    const nav = commentNavigator(page);
+    await expect(rows(nav).first()).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expectOnCard(page, "source", "b");
+    await expect(caps(page, "b").first()).toBeVisible();
+
+    await rows(nav).first().click();
+    await expect(caps(page, "b")).toHaveCount(0);
+  });
+
+  test("a comment submitted with Cmd+Enter shows its caps", async ({ daemon, page }) => {
+    await open(page, daemon, "source", () => ({ annotations: [] }));
+    await toLine(page, "Bravo");
+    await page.keyboard.press("c");
+    await page.keyboard.type("fresh thought");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    const fresh = page.locator("[data-annotation-card]").filter({ hasText: "fresh thought" });
+    await expect(fresh).toHaveClass(/\bfocused\b/);
+    await expect(fresh.locator("[data-cap]").first()).toBeVisible();
+  });
+
+  for (const view of ["source", "preview"] as const) {
+    test(`a hovered card's caps stay inside its thread on the ${view}`, async ({
+      daemon,
+      page,
+    }) => {
+      await page.setViewportSize({ width: 900, height: 700 });
+      const long = "a long remark that runs well past the width of one clamped line ".repeat(4);
+      await open(page, daemon, view, (line) => ({
+        annotations: [comment("a", line("Bravo line.")), comment("b", line("Bravo line."), long)],
+      }));
+      await toLine(page, "Bravo");
+      await page.keyboard.press("j");
+      await page.keyboard.press("j");
+      await expectOnCard(page, view, "b");
+      const discard = card(page, "b").locator('[data-cap="discard"]');
+      await expect(discard).toBeVisible();
+
+      const thread = page.locator('[data-slot="card"].thread').filter({ has: card(page, "b") });
+      const right = async (l: Locator) => {
+        const box = await l.boundingBox();
+        return (box?.x ?? 0) + (box?.width ?? 0);
+      };
+      const edge = (await right(thread)) + 1;
+      expect(await right(card(page, "a"))).toBeLessThanOrEqual(edge);
+      expect(await right(card(page, "b"))).toBeLessThanOrEqual(edge);
+      expect(await right(discard)).toBeLessThanOrEqual(edge);
+    });
+  }
+});

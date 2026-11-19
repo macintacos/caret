@@ -174,7 +174,9 @@
   // plan to a navigated comment's line; undefined until the source view paints.
   let showComments = $state(false);
   let revealLine = $state<((line: number, side?: DiffSide) => void) | undefined>();
-  let revealCommentAt = $state<((id: string, line: number, side?: DiffSide) => void) | undefined>();
+  let revealCommentAt = $state<
+    ((id: string, line: number, side?: DiffSide, via?: "key" | "pointer") => void) | undefined
+  >();
   // The approve variant a pending-comment guard is holding: the mode the reviewer
   // chose, parked until they confirm or divert. Null = no guard open.
   let pendingApproveMode = $state<ApproveVariantId | null>(null);
@@ -457,9 +459,9 @@
   // A row the index marked unlinkable has nothing on screen to scroll to, so it does
   // neither. Focusing is single-version only: a compare entry's id carries a `v3:`
   // prefix that matches no card, so it would strand a bogus id in the working copy.
-  function revealComment(entry: CommentIndexEntry) {
+  function revealComment(entry: CommentIndexEntry, via: "key" | "pointer") {
     if (!entry.linkable || entry.line == null) return;
-    if (compareRange === null) revealCommentAt?.(entry.id, entry.line, entry.side);
+    if (compareRange === null) revealCommentAt?.(entry.id, entry.line, entry.side, via);
     else revealLine?.(entry.line, entry.side);
   }
 

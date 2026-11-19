@@ -23,6 +23,8 @@
     register?: RegisterCard;
     /** The review being commented on, forwarded to each card's edit composer. */
     reviewContext?: ReviewContext;
+    /** Forwarded to each card: show key caps on the focused one. */
+    showCaps?: boolean;
   }
   let {
     annotations,
@@ -32,6 +34,7 @@
     onDelete,
     register,
     reviewContext,
+    showCaps = false,
   }: Props = $props();
 
   const threaded = $derived(annotations.length > 1);
@@ -55,6 +58,7 @@
           {onDelete}
           {register}
           {reviewContext}
+          {showCaps}
         />
       </div>
     {/each}
@@ -73,6 +77,7 @@
       {onDelete}
       {register}
       {reviewContext}
+      {showCaps}
     />
   {/key}
 {/if}
@@ -83,6 +88,8 @@
      Card's utility classes. */
   :global([data-slot="card"].thread) {
     display: grid;
+    /* An auto track grows to a collapsed card's unwrapped preview; this holds it to the thread. */
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.4rem;
     max-width: min(46rem, 100%);
     margin: 0.4rem 0 0.55rem;

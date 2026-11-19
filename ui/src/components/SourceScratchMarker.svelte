@@ -7,6 +7,7 @@
   // SourceAnnotationCard's state label for a saved comment, and a scratch was never
   // added to the working copy, so it must never read as an existing comment.
   import Icon from "@/components/Icon.svelte";
+  import ShortcutCap from "@/components/ShortcutCap.svelte";
 
   interface Props {
     /** The retained draft text, previewed on one clamped line. */
@@ -17,8 +18,10 @@
     hovered?: boolean;
     /** The scratch's key, which the keyboard measures the marker by. */
     scratchKey?: string;
+    /** Show the Enter cap on Resume while hovered. */
+    showCaps?: boolean;
   }
-  let { text, onResume, hovered = false, scratchKey }: Props = $props();
+  let { text, onResume, hovered = false, scratchKey, showCaps = false }: Props = $props();
 </script>
 
 <button
@@ -31,7 +34,9 @@
 >
   <span class="unsent"><Icon name="message-square-more" size={14} />Unsent</span>
   <span class="clamp-line preview">{text}</span>
-  <span class="cap resume">Resume</span>
+  <span class="cap resume"
+    >Resume{#if hovered && showCaps}<ShortcutCap id="commenting.activate" cap="activate" />{/if}</span
+  >
 </button>
 
 <style>
@@ -80,6 +85,7 @@
     flex: none;
     display: inline-flex;
     align-items: center;
+    gap: 0.35rem;
     height: 1.5rem;
     padding: 0 0.55rem;
     font-size: var(--text-xs);

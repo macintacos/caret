@@ -53,3 +53,17 @@ describe("SourceScratchMarker", () => {
     expect(button.tagName).toBe("BUTTON");
   });
 });
+
+describe("SourceScratchMarker key cap", () => {
+  const cap = (root: ParentNode) => root.querySelector('[data-cap="activate"]');
+
+  test("a hovered marker shows the Enter cap on Resume, hidden from assistive tech", () => {
+    const { target } = mount({ hovered: true, showCaps: true });
+    expect(cap(target)?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("no cap without showCaps, or when not hovered", () => {
+    expect(cap(mount({ hovered: true }).target) === null).toBe(true);
+    expect(cap(mount({ showCaps: true }).target) === null).toBe(true);
+  });
+});
