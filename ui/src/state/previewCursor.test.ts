@@ -3,7 +3,8 @@ import { describe, expect, test } from "bun:test";
 import { createPreviewCursor, type PreviewCursorStore } from "@/state/previewCursor.ts";
 import { type CommentStop, deriveStops, type FocusedStop } from "$lib/diffview/commentStops.ts";
 import type { CursorPlacement } from "$lib/diffview/types.ts";
-import { type SlotGap, slotRanks } from "$lib/previewComments.ts";
+import type { SourceSpan } from "$lib/planMarkdown.ts";
+import { type SlotGap, type SlotRanks, slotEdge, slotRanks } from "$lib/previewComments.ts";
 import type { TextPoint } from "$lib/previewLines.ts";
 import type { SoundEvent } from "$lib/sound.ts";
 
@@ -32,7 +33,8 @@ function build(
     noRange?: boolean;
     stops?: CommentStop[];
     focused?: FocusedStop | null;
-    ranks?: ReturnType<typeof slotRanks>;
+    blocks?: SourceSpan[];
+    ranks?: SlotRanks;
   } = {},
 ) {
   let focusedStop = over.focused ?? null;
@@ -50,6 +52,14 @@ function build(
   const opened: [number, number][] = [];
   const sounds: SoundEvent[] = [];
   const range = {} as Range;
+  const blocks = over.blocks ?? BLOCKS;
+  const ranks = over.ranks ?? slotRanks(blocks, new Map());
+  const geometry = {
+    step: (from: TextPoint, count: number) =>
+      lines[Math.min(Math.max(indexOf(from) + count, 0), lines.length - 1)] as TextPoint,
+    pointForLine: (line: number) => lines.find((v) => v.line >= line) ?? null,
+    last: () => lines.at(-1) ?? null,
+  };
   const cursor = createPreviewCursor(store, {
     lines: () => TEXT.split("\n"),
     headingLines: () => [1, 6],
@@ -60,10 +70,10 @@ function build(
     },
     step: (from, count) => {
       steps.push(count);
-      return lines[Math.min(Math.max(indexOf(from) + count, 0), lines.length - 1)] as TextPoint;
+      return geometry.step(from, count);
     },
-    pointForLine: (line) => lines.find((v) => v.line >= line) ?? null,
-    last: () => lines.at(-1) ?? null,
+    pointForLine: geometry.pointForLine,
+    last: geometry.last,
     follow: (p) => follows.push(p),
     jump: (p) => jumps.push(p),
     place: (p, where) => places.push([p, where]),
@@ -80,15 +90,10 @@ function build(
       focusedStop = s;
     },
     followStop: (s) => followedStops.push(s),
-    slotOf: over.ranks ? over.ranks.slotAt : (p) => blockOf(p.line),
+    slotAt: ranks.slotAt,
     slotEdge: (slot, edge) => {
-      const gap = over.ranks?.gapOf(slot);
-      if (gap !== undefined && "before" in gap)
-        return edge === "first-after" ? gap.before : (lines[indexOf(gap.before) - 1] ?? null);
-      const block = gap?.block ?? slot;
-      return edge === "first-after"
-        ? (lines.find((v) => blockOf(v.line) > block) ?? null)
-        : (lines.findLast((v) => blockOf(v.line) === block) ?? null);
+      const gap = ranks.gapOf(slot);
+      return gap === undefined ? null : slotEdge(gap, edge, blocks, geometry);
     },
   });
   return {
@@ -115,6 +120,7 @@ const blockOf = (line: number) =>
     0,
     BLOCK_STARTS.findLastIndex((start) => start <= line),
   );
+const BLOCKS = BLOCK_STARTS.map((start, i) => ({ start, end: (BLOCK_STARTS[i + 1] ?? 9) - 1 }));
 
 const unplaced = (): PreviewCursorStore => ({
   cursorLine: null,
@@ -345,10 +351,7 @@ describe("comment stops at a gap inside a block", () => {
     [3, { before: at(2) }],
     [8, { block: 3 }],
   ]);
-  const ranks = slotRanks(
-    BLOCK_STARTS.map((start, i) => ({ start, end: (BLOCK_STARTS[i + 1] ?? 9) - 1 })),
-    GAPS,
-  );
+  const ranks = slotRanks(BLOCKS, GAPS);
   const STOPS = deriveStops(
     [
       { line: 3, annotations: [{ id: "m", startLine: 3, endLine: 3 }] },
@@ -358,22 +361,22 @@ describe("comment stops at a gap inside a block", () => {
     ranks.slotOf,
   );
   const onM: FocusedStop = { ref: { kind: "comment", id: "m" }, line: 3 };
-  const build2 = (store: PreviewCursorStore, focused: FocusedStop | null = null) =>
+  const buildWithGaps = (store: PreviewCursorStore, focused: FocusedStop | null = null) =>
     build(store, { stops: STOPS, focused, ranks });
 
   test("j onto the row above the gap's lands on its comment, and k back from below", () => {
-    const down = build2(placed(at(1)));
+    const down = buildWithGaps(placed(at(1)));
     down.cursor.moveCursor("down");
     expect(down.focused()).toEqual(onM);
 
-    const up = build2(placed(at(2)));
+    const up = buildWithGaps(placed(at(2)));
     up.cursor.moveCursor("up");
     expect(up.focused()).toEqual(onM);
   });
 
   test("j and k between the rows below the gap pass no comment", () => {
     const store = placed(at(3));
-    const h = build2(store);
+    const h = buildWithGaps(store);
     h.cursor.moveCursor("up");
     expect(h.focused() === null).toBe(true);
     expect(store.cursorPoint).toEqual(at(2));
@@ -384,26 +387,69 @@ describe("comment stops at a gap inside a block", () => {
 
   test("j off the comment lands on the row below its gap, k on the row above", () => {
     const below = placed(at(0));
-    build2(below, onM).cursor.moveCursor("down");
+    buildWithGaps(below, onM).cursor.moveCursor("down");
     expect(below.cursorPoint).toEqual(at(2));
 
     const above = placed(at(0));
-    build2(above, onM).cursor.moveCursor("up");
+    buildWithGaps(above, onM).cursor.moveCursor("up");
     expect(above.cursorPoint).toEqual(at(1));
   });
 
   test("]c and [c count the gap from where it opens", () => {
-    const fromAbove = build2(placed(at(1)));
+    const fromAbove = buildWithGaps(placed(at(1)));
     fromAbove.cursor.stepComment(1);
     expect(fromAbove.focused()).toEqual(onM);
 
-    const fromBelow = build2(placed(at(2)));
+    const fromBelow = buildWithGaps(placed(at(2)));
     fromBelow.cursor.stepComment(1);
     expect(fromBelow.focused()?.ref).toEqual({ kind: "comment", id: "c" });
 
-    const back = build2(placed(at(2)));
+    const back = buildWithGaps(placed(at(2)));
     back.cursor.stepComment(-1);
     expect(back.focused()).toEqual(onM);
+  });
+});
+
+describe("comment stops on a block that renders no text", () => {
+  // Line 5 is its own block, a rule with no text, between the paragraph 3–4 and the
+  // heading on 6.
+  const blocks = [
+    { start: 1, end: 2 },
+    { start: 3, end: 4 },
+    { start: 5, end: 5 },
+    { start: 6, end: 7 },
+    { start: 8, end: 8 },
+  ];
+  const ranks = slotRanks(
+    blocks,
+    new Map<number, SlotGap>([
+      [4, { block: 1 }],
+      [5, { block: 2 }],
+    ]),
+  );
+  const STOPS = deriveStops(
+    [
+      { line: 4, annotations: [{ id: "p", startLine: 4, endLine: 4 }] },
+      { line: 5, annotations: [{ id: "hr", startLine: 5, endLine: 5 }] },
+    ],
+    [],
+    ranks.slotOf,
+  );
+  const onP: FocusedStop = { ref: { kind: "comment", id: "p" }, line: 4 };
+  const onHr: FocusedStop = { ref: { kind: "comment", id: "hr" }, line: 5 };
+  const buildOn = (focused: FocusedStop) =>
+    build(placed(at(0)), { stops: STOPS, focused, blocks, ranks });
+
+  test("j off the paragraph's comment stops on the rule's", () => {
+    const h = buildOn(onP);
+    h.cursor.moveCursor("down");
+    expect(h.focused()).toEqual(onHr);
+  });
+
+  test("k off the rule's comment stops on the paragraph's", () => {
+    const h = buildOn(onHr);
+    h.cursor.moveCursor("up");
+    expect(h.focused()).toEqual(onP);
   });
 });
 

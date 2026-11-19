@@ -435,8 +435,8 @@ map's text order is untouched. It glides a step as the hover band glides between
 below. The cursor can also rest on a comment stop, a thread or a Resume marker, held as
 `focusedStop`; `enterStop` puts it there and `placeOnStop` also scrolls to it. Preview
 stops sit where their card's gap opens in the text, often mid-paragraph: `slotRanks` in
-`previewComments.ts` orders the gaps top to bottom with the text, and a `j`/`k` step
-crosses every gap that opens between the point it leaves and the point it reaches.
+`previewComments.ts` orders the gaps top to bottom with the text, and a `j`/`k` step that
+would pass a gap stops on that gap's first comment instead.
 
 `search` is ported through `ui/src/lib/previewSearch.ts`, which matches the text as
 rendered, segmented once per map, on the first query, by `createPreviewSearch`. A block,

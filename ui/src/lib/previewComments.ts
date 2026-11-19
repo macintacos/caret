@@ -92,42 +92,97 @@ export function slotGap(
   return block === null ? null : { block };
 }
 
-/** Where a slot gap or text point sits top to bottom: a gap opening before a point sits
- * with it, so the point is below the gap; a block's end sits after all its text. */
-type RankKey = readonly [number, number, number, number];
+/** `[block, 0 for a text point | 1 for the block's end, line, column]`, compared left to
+ * right: a gap opening before a point sits with it, so the point is below the gap; a
+ * block's end sits after all its text. */
+type RankKey = readonly [block: number, end: 0 | 1, line: number, column: number];
 
 const compareKeys = (a: RankKey, b: RankKey): number =>
   a[0] - b[0] || a[1] - b[1] || a[2] - b[2] || a[3] - b[3];
 
+export type SlotRanks = {
+  /** The slot `line`'s comments render in. */
+  slotOf(line: number): number;
+  /** How many slots sit above `p`: a slot `s` lies below `p` iff `s` is at least this. */
+  slotAt(p: TextPoint): number;
+  gapOf(slot: number): SlotGap | undefined;
+};
+
 /** The preview's comment slots in visual order. A slot is its gap's index among the
- * distinct gaps top to bottom, so comments sharing a gap share a slot; `slotAt` counts the
- * gaps above a point. A line `gaps` lacks takes its block's end. */
+ * distinct gaps and block ends top to bottom, so comments sharing a gap share a slot and a
+ * line `gaps` lacks takes its block's end. `gaps` may hold slots that are not stops (the
+ * open composer's), so slot numbers are ordinal, with holes. */
 export function slotRanks(
   blocks: readonly SourceSpan[],
   gaps: ReadonlyMap<number, SlotGap>,
-): {
-  slotOf(line: number): number;
-  slotAt(p: TextPoint): number;
-  gapOf(slot: number): SlotGap | undefined;
-} {
+): SlotRanks {
   const blockOf = (line: number) => commentSlotIndex(blocks, line) ?? 0;
   const pointKey = (p: TextPoint): RankKey => [blockOf(p.line), 0, p.line, p.column];
   const gapKey = (g: SlotGap): RankKey => ("block" in g ? [g.block, 1, 0, 0] : pointKey(g.before));
-  const sorted = [...gaps.values()]
-    .map((gap) => ({ gap, key: gapKey(gap) }))
-    .sort((a, b) => compareKeys(a.key, b.key))
-    .filter((g, i, all) => i === 0 || compareKeys(all[i - 1]?.key ?? g.key, g.key) !== 0);
-  const countBelow = (key: RankKey, inclusive: boolean) =>
-    sorted.filter((g) => {
-      const c = compareKeys(g.key, key);
-      return inclusive ? c <= 0 : c < 0;
-    }).length;
+  const keyed = [
+    ...[...gaps.values()].map((gap) => ({ gap, key: gapKey(gap) })),
+    ...blocks.map((_, block) => ({ gap: { block }, key: gapKey({ block }) })),
+  ].sort((a, b) => compareKeys(a.key, b.key));
+  const sorted: typeof keyed = [];
+  let prev: RankKey | undefined;
+  for (const g of keyed) {
+    if (prev === undefined || compareKeys(prev, g.key) !== 0) sorted.push(g);
+    prev = g.key;
+  }
+  const firstAtOrAfter = (key: RankKey) => {
+    const i = sorted.findIndex((g) => compareKeys(g.key, key) >= 0);
+    return i < 0 ? sorted.length : i;
+  };
 
   return {
-    slotOf: (line) => countBelow(gapKey(gaps.get(line) ?? { block: blockOf(line) }), false),
-    slotAt: (p) => countBelow(pointKey(p), true),
+    slotOf: (line) => firstAtOrAfter(gapKey(gaps.get(line) ?? { block: blockOf(line) })),
+    slotAt: (p) => sorted.findLastIndex((g) => compareKeys(g.key, pointKey(p)) <= 0) + 1,
     gapOf: (slot) => sorted[slot]?.gap,
   };
+}
+
+/** Whether two line-to-gap maps hold the same gaps. */
+export function sameSlotGaps(
+  a: ReadonlyMap<number, SlotGap>,
+  b: ReadonlyMap<number, SlotGap>,
+): boolean {
+  if (a.size !== b.size) return false;
+  for (const [line, gap] of b) {
+    const old = a.get(line);
+    if (old === undefined) return false;
+    if ("block" in gap) {
+      if (!("block" in old) || old.block !== gap.block) return false;
+    } else if (
+      !("before" in old) ||
+      old.before.line !== gap.before.line ||
+      old.before.column !== gap.before.column
+    )
+      return false;
+  }
+  return true;
+}
+
+/** The visual-line reads `slotEdge` needs. */
+export type VisualLines = {
+  pointForLine(line: number): TextPoint | null;
+  step(p: TextPoint, count: number): TextPoint;
+  last(): TextPoint | null;
+};
+
+/** The first visual line below `gap`, or the last above it; null past the end. */
+export function slotEdge(
+  gap: SlotGap,
+  edge: "below" | "above",
+  blocks: readonly SourceSpan[],
+  at: VisualLines,
+): TextPoint | null {
+  if ("before" in gap) return edge === "below" ? gap.before : at.step(gap.before, -1);
+  const next = blocks[gap.block + 1];
+  const found = next ? at.pointForLine(next.start) : null;
+  // pointForLine walks back when no later line renders text; that is not below the gap.
+  const below = found && (commentSlotIndex(blocks, found.line) ?? 0) > gap.block ? found : null;
+  if (edge === "below") return below;
+  return below == null ? at.last() : at.step(below, -1);
 }
 
 const GAP = "data-preview-gap";

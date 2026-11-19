@@ -17,7 +17,7 @@ type StopBase = {
   start: number;
   /** Last anchored line. */
   line: number;
-  /** Where it renders: the line on source, the block index on preview. */
+  /** Where it renders: the line on source; on preview, its gap's rank top to bottom (slotRanks). */
   slot: number;
 };
 

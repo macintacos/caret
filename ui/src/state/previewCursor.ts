@@ -72,9 +72,9 @@ export interface PreviewCursorDeps {
   followStop(stop: CommentStop): void;
   /** How many comment slots sit above `p`: a stop at slot `s` lies below `p` iff `s` is at
    * least this. */
-  slotOf(p: TextPoint): number;
+  slotAt(p: TextPoint): number;
   /** The first visual line below slot `slot`'s gap, or the last above it; null past the end. */
-  slotEdge(slot: number, edge: "first-after" | "last-in"): TextPoint | null;
+  slotEdge(slot: number, edge: "below" | "above"): TextPoint | null;
 }
 
 export interface PreviewCursor {
@@ -193,6 +193,13 @@ export function createPreviewCursor(
     return focused == null ? -1 : stopIndex(stops, focused.ref);
   }
 
+  /** Whether a move off a stop to `edge` passes `stop`'s gap; a `j` with nowhere to land
+   * passes every stop below. */
+  function passes(stop: CommentStop, edge: TextPoint | null, dir: 1 | -1): boolean {
+    if (edge == null) return dir > 0;
+    return dir > 0 ? stop.slot < deps.slotAt(edge) : stop.slot >= deps.slotAt(edge);
+  }
+
   /** `j`/`k` off the hovered stop: to its slot's next stop, else past the slot. Reports
    * whether a stop was hovered. */
   function stepFromStop(dir: 1 | -1): boolean {
@@ -207,7 +214,13 @@ export function createPreviewCursor(
       return true;
     }
 
-    const edge = deps.slotEdge(stop.slot, dir > 0 ? "first-after" : "last-in");
+    // A gap on a block with no text has no row of its own, so the edge can lie past it.
+    const edge = deps.slotEdge(stop.slot, dir > 0 ? "below" : "above");
+    const beyond = stops[i + dir];
+    if (beyond != null && passes(beyond, edge, dir)) {
+      placeOnStop(beyond);
+      return true;
+    }
     if (edge == null) return true;
     leaveStop();
     land(edge);
@@ -219,8 +232,8 @@ export function createPreviewCursor(
   function stopBetween(from: TextPoint, to: TextPoint, dir: 1 | -1): CommentStop | undefined {
     const stops = deps.stops();
     const stuck = dir > 0 && !before(from, to);
-    const end = stuck ? Number.POSITIVE_INFINITY : deps.slotOf(to);
-    return stops[crossedStop(stops, deps.slotOf(from), end, dir)];
+    const end = stuck ? Number.POSITIVE_INFINITY : deps.slotAt(to);
+    return stops[crossedStop(stops, deps.slotAt(from), end, dir)];
   }
 
   function resolve(motion: CursorMotion, from: TextPoint | null): TextPoint | null {
@@ -262,7 +275,7 @@ export function createPreviewCursor(
       const stops = deps.stops();
       const i = focusedIndex(stops);
       const seed = i >= 0 ? null : seedPoint();
-      const from = i >= 0 ? { stop: i } : { slot: seed ? deps.slotOf(seed) : 0 };
+      const from = i >= 0 ? { stop: i } : { slot: seed ? deps.slotAt(seed) : 0 };
       const hit = stops[stepComment(stops, from, delta)];
       if (hit != null) placeOnStop(hit);
     },

@@ -535,9 +535,10 @@ specific code areas live in [`docs/agents/`](../docs/agents/).
   `--stamp-word-toward` and `--stamp-word-mix` tokens in `ui/src/styles/tokens.css`, per
   scheme, and `theme.test.ts` reads them there and holds every word to 4.5:1 on its stamp
   in every palette. A thread of saved comments rests in a recessed group, with no
-  hairlines between its cards. The card the keyboard cursor rests on lifts with
-  `--float-surface-mid`. The unanchored list's items wear the saved card, and their quote
-  is stamped on `--mark-orphan`.
+  hairlines between its cards. The card the keyboard cursor rests on wears its hover paper
+  and lifts with `--float-surface-mid`, on `--dur-state` in both directions. The
+  unanchored list's items wear the saved card, and their quote is stamped on
+  `--mark-orphan`.
 - **Unsent comments** (`scratch` in code, `SourceScratchMarker.svelte`). The plan marks a
   comment kept with **Keep for later** by a full-width `button.tray` under its line. Its
   floor is `--well-floor` mixed with `--attention` at `--unsent-floor`. It holds the
@@ -553,8 +554,7 @@ specific code areas live in [`docs/agents/`](../docs/agents/).
   to cover the marker's cap, and `unsent-marker.e2e.ts` reads the row's edges off a
   screenshot in every dark palette. The keyboard cursor lifts the row as it lifts a
   focused comment card, with `--float-surface-mid` over the row's bed, and its Resume cap
-  takes its hover face. A comment card under the keyboard cursor wears its hover paper and
-  `--float-surface-mid`, entering and leaving on the 160 ms state transition.
+  takes its hover face.
 - **Unsent everywhere.** Every surface marks an unsent comment with the word "unsent", the
   `message-square-more` glyph in the comment stamps' word ink, and the tinted well. The
   word is never "draft". Size picks the tint: a row or a list takes `--unsent-floor`, and
@@ -781,9 +781,10 @@ specific code areas live in [`docs/agents/`](../docs/agents/).
 - Each control shows the key that activates it on the control itself (`KbdCap.svelte`,
   `SubmitCap.svelte`). `ShortcutCap.svelte` draws one keymap id's caps, read from the
   keymap, inside the control that id names. Its caps fade in on `--dur-state` when the
-  cursor lands and leave at once. The hints are on by default and the
-  `caret.shortcutHints` preference hides them (`ui/src/lib/shortcutHintsPref.ts`). They
-  are for desktop only: a touch device hides them in `ui/src/styles/atoms.css`.
+  cursor lands and leave at once, so a hop between stops never shows two sets of caps. The
+  hints are on by default and the `caret.shortcutHints` preference hides them
+  (`ui/src/lib/shortcutHintsPref.ts`). They are for desktop only: a touch device hides
+  them in `ui/src/styles/atoms.css`.
 - An open modal silences the review keymap.
 - A shortcut runs at once and plays the press of the control that carries its
   `aria-keyshortcuts` for `PRESS_HOLD_MS`, 110 ms, a click's mousedown-to-mouseup

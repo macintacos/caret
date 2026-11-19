@@ -269,8 +269,8 @@
   .card:not(.editing) {
     cursor: pointer;
   }
-  /* The keyboard cursor's stop, or a control inside the card under keyboard focus, lifts
-     it as the pointer over it does. */
+  /* The keyboard cursor's stop, or a control inside the card under keyboard focus, wears
+     the card's hover paper, as the pointer over it does. */
   .card:not(.editing):is(:hover, .focused, :has(:global(:focus-visible))) {
     background: color-mix(in lab, var(--paper-raised), var(--ink) 8%);
   }

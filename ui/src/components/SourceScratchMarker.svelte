@@ -28,6 +28,7 @@
   type="button"
   class="scratch tray"
   class:focused={hovered}
+  data-cursor={hovered || undefined}
   data-scratch-marker={scratchKey}
   onclick={onResume}
   aria-label="Resume unsent comment"
@@ -60,8 +61,8 @@
     animation: reveal var(--dur-state) var(--ease-out);
     transition: box-shadow var(--dur-state) var(--ease-out);
   }
-  /* The keyboard cursor lifts the well as it lifts a focused comment card; its cap takes
-     the hover face (styles/atoms.css). */
+  /* The keyboard cursor lifts the well with the shadow a focused comment card takes; its
+     cap takes the hover face through [data-cursor] (styles/atoms.css). */
   .scratch.focused {
     box-shadow: var(--unsent-shade), var(--float-surface-mid);
   }

@@ -108,6 +108,37 @@ async function toLine(page: Page, text: string): Promise<void> {
   await page.keyboard.press("Escape");
 }
 
+/** The painted face of `el`: its background colour and any image layered on it. */
+const face = (el: Locator): Promise<string> =>
+  el.evaluate((node) => {
+    const s = getComputedStyle(node);
+    return `${s.backgroundColor} ${s.backgroundImage}`;
+  });
+
+/** `el`'s face once two reads in a row agree, so a transition in flight is not read. */
+async function settledFace(el: Locator): Promise<string> {
+  let last = "";
+  await expect
+    .poll(async () => {
+      const now = await face(el);
+      const same = now === last;
+      last = now;
+      return same;
+    })
+    .toBe(true);
+  return last;
+}
+
+/** `el`'s face under the pointer, read once settled; the pointer then leaves it. */
+async function hoverFace(page: Page, el: Locator, rest: string): Promise<string> {
+  await el.hover();
+  await expect.poll(() => face(el)).not.toBe(rest);
+  const hovered = await settledFace(el);
+  await page.mouse.move(0, 0);
+  await expect.poll(() => face(el)).toBe(rest);
+  return hovered;
+}
+
 async function expectOnLine(page: Page, view: View, line: number): Promise<void> {
   await expect(lineCursor(page, view)).toHaveAttribute("data-line", String(line));
 }
@@ -417,6 +448,79 @@ for (const view of ["source", "preview"] as const) {
       await toLine(page, "Bravo");
       for (const key of ["]", "c", "[", "c"]) await page.keyboard.press(key);
       await expectOnLine(page, view, lines.at("Bravo line."));
+    });
+
+    test("the keyboard-focused card wears its hover paper, and rests again once left", async ({
+      daemon,
+      page,
+    }) => {
+      await open(page, daemon, view, (line) => ({
+        annotations: [comment("a", line("Alpha line."))],
+      }));
+      await page.mouse.move(0, 0);
+      const a = card(page, "a");
+      const rest = await settledFace(a);
+      const hovered = await hoverFace(page, a, rest);
+
+      await toLine(page, "Alpha");
+      await page.keyboard.press("j");
+      await expectOnCard(page, view, "a");
+      await expect.poll(() => face(a)).toBe(hovered);
+
+      await page.keyboard.press("j");
+      await expect(a).not.toHaveClass(/\bfocused\b/);
+      await expect.poll(() => face(a)).toBe(rest);
+    });
+
+    test("the keyboard-focused Resume marker's cap wears its hover face", async ({
+      daemon,
+      page,
+    }) => {
+      await open(page, daemon, view, (line) => ({
+        composerScratches: [
+          { startLine: line("Bravo line."), endLine: line("Bravo line."), text: "half a thought" },
+        ],
+      }));
+      await page.mouse.move(0, 0);
+      const cap = marker(page).locator(".resume");
+      const rest = await settledFace(cap);
+      const hovered = await hoverFace(page, cap, rest);
+
+      await toLine(page, "Bravo");
+      await page.keyboard.press("j");
+      await expect(marker(page)).toHaveClass(/\bfocused\b/);
+      await expect.poll(() => face(cap)).toBe(hovered);
+
+      await page.keyboard.press("j");
+      await expect(marker(page)).not.toHaveClass(/\bfocused\b/);
+      await expect.poll(() => face(cap)).toBe(rest);
+    });
+
+    test("a card's key caps fade in as the cursor lands on it", async ({ daemon, page }) => {
+      await open(page, daemon, view, (line) => ({
+        annotations: [comment("b", line("Bravo line."))],
+      }));
+      await toLine(page, "Bravo");
+      await page.locator(PLAN_SURFACE).evaluate((plan) => {
+        const w = window as unknown as { __capAnimations: string[] };
+        w.__capAnimations = [];
+        plan.addEventListener(
+          "animationstart",
+          (e) => {
+            if (e instanceof AnimationEvent && (e.target as Element).matches('[data-slot="kbd"]'))
+              w.__capAnimations.push(e.animationName);
+          },
+          { capture: true },
+        );
+      });
+
+      await page.keyboard.press("j");
+      await expectOnCard(page, view, "b");
+      await expect
+        .poll(() =>
+          page.evaluate(() => (window as unknown as { __capAnimations: string[] }).__capAnimations),
+        )
+        .toContain("stop-key-cap-in");
     });
 
     test("a card taller than the viewport shows its top", async ({ daemon, page }) => {

@@ -177,13 +177,14 @@
   } from "$lib/planPlace.ts";
   import {
     clearCommentHighlight,
-    commentSlotIndex,
     createSlotGaps,
     groupBySlot,
     paintCommentHighlight,
     sameSlotBoxes,
+    sameSlotGaps,
     type SlotBox,
     type SlotGap,
+    slotEdge,
     slotGap,
     slotRanks,
     spanRanges,
@@ -480,12 +481,13 @@
   });
   const activeSpan = $derived(pointerSpan ?? focusSpan ?? pendingSpan ?? focusedStopSpan);
 
-  // A version switch or a flip leaves the boxes on the previous document's coordinates,
+  // A version switch or a flip leaves the boxes and gaps on the previous document's coordinates,
   // and removes slots without the pointerleave/focusout that would clear their spans.
   $effect(() => {
     void contentKey;
     void surface;
     slotBoxes = new Map();
+    previewGapsByLine = new Map();
     pointerSpan = null;
     focusSpan = null;
   });
@@ -626,8 +628,7 @@
       const height = heights.get(line);
       if (height !== undefined) open.set(line, { at, height });
     }
-    if (JSON.stringify([...byLine]) !== JSON.stringify([...untrack(() => previewGapsByLine)]))
-      previewGapsByLine = byLine;
+    if (!sameSlotGaps(untrack(() => previewGapsByLine), byLine)) previewGapsByLine = byLine;
     gaps.set(map, open);
     const next = gaps.boxes(scroller);
     if (!sameSlotBoxes(untrack(() => slotBoxes), next)) slotBoxes = next;
@@ -2118,26 +2119,18 @@
     openComposer: openRange,
     sound: sound.play,
     ...stopDeps(),
-    slotOf: (p) => previewRanks?.slotAt(p) ?? 0,
+    slotAt: (p) => previewRanks?.slotAt(p) ?? 0,
     slotEdge: (slot, edge) => {
       const blocks = planPreview?.blocks;
-      const map = previewSourceMap;
       const gap = previewRanks?.gapOf(slot);
       const geometry = previewGeometry();
-      if (blocks == null || map == null || gap === undefined || geometry == null) return null;
-      if ("before" in gap)
-        return edge === "first-after"
-          ? gap.before
-          : stepVisualLine(geometry.root, geometry.map, gap.before, -1);
-      const next = blocks[gap.block + 1];
-      const found = next ? pointForLine(map, next.start, planLineCount) : null;
-      // pointForLine walks back when no later line renders text; that is not below the gap.
-      const after =
-        found && (commentSlotIndex(blocks, found.line) ?? 0) > gap.block ? found : null;
-      if (edge === "first-after") return after;
-      return after == null
-        ? lastVisualLine(geometry.root, geometry.map)
-        : stepVisualLine(geometry.root, geometry.map, after, -1);
+      if (blocks == null || gap === undefined || geometry == null) return null;
+      const { root, map } = geometry;
+      return slotEdge(gap, edge, blocks, {
+        pointForLine: (line) => pointForLine(map, line, planLineCount),
+        step: (p, count) => stepVisualLine(root, map, p, count),
+        last: () => lastVisualLine(root, map),
+      });
     },
   });
 
