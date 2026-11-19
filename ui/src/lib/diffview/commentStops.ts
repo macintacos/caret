@@ -115,12 +115,12 @@ export function stepComment(
           (i: number) => (stops[i]?.slot ?? 0) >= from.slot,
           (i: number) => (stops[i]?.slot ?? 0) < from.slot,
         ];
-  const comments = stops.flatMap((s, i) => (s.ref.kind === "comment" ? [i] : []));
-  if (comments.length === 0) return -1;
+  const commentIndices = stops.flatMap((s, i) => (s.ref.kind === "comment" ? [i] : []));
+  if (commentIndices.length === 0) return -1;
 
   return delta > 0
-    ? (comments.find(ahead) ?? comments[0] ?? -1)
-    : (comments.findLast(behind) ?? comments.at(-1) ?? -1);
+    ? (commentIndices.find(ahead) ?? commentIndices[0] ?? -1)
+    : (commentIndices.findLast(behind) ?? commentIndices.at(-1) ?? -1);
 }
 
 export const COMMENT_KEYS = [
