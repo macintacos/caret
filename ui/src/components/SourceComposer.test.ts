@@ -15,12 +15,16 @@ import SourceComposer from "@/components/SourceComposer.svelte";
 
 function mount(over: Record<string, unknown> = {}) {
   const submitted: string[] = [];
+  const vias: string[] = [];
   const keptWith: string[] = [];
   let discardCalls = 0;
   const { target, flush } = render(SourceComposer, {
     startLine: 3,
     endLine: 3,
-    onSubmit: (c: string) => submitted.push(c),
+    onSubmit: (c: string, via: string) => {
+      submitted.push(c);
+      vias.push(via);
+    },
     onKeep: (c: string) => keptWith.push(c),
     onDiscard: () => {
       discardCalls++;
@@ -39,6 +43,7 @@ function mount(over: Record<string, unknown> = {}) {
     discardBtn: target.querySelector(".ghost") as HTMLButtonElement | null,
     keepBtn: buttons.find((b) => b.textContent?.includes("Keep for later")) ?? null,
     submitted,
+    vias,
     keptWith,
     discardCount: () => discardCalls,
   };
@@ -86,9 +91,10 @@ describe("SourceComposer initial value", () => {
 
 describe("SourceComposer submit/discard/keep", () => {
   test("the Comment button submits the current text", () => {
-    const { submitBtn, submitted } = mount({ initial: "resume me" });
+    const { submitBtn, submitted, vias } = mount({ initial: "resume me" });
     submitBtn!.click();
     expect(submitted).toEqual(["resume me"]);
+    expect(vias).toEqual(["pointer"]);
   });
 
   test("the Keep for later button hands back the current text to stash", () => {
@@ -140,9 +146,10 @@ describe("SourceComposer submit/discard/keep", () => {
 
 describe("SourceComposer keyboard chords", () => {
   test("Cmd/Ctrl+Enter submits", () => {
-    const { content, submitted } = mount({ initial: "via chord" });
+    const { content, submitted, vias } = mount({ initial: "via chord" });
     key(content, "Enter", { metaKey: true });
     expect(submitted).toEqual(["via chord"]);
+    expect(vias).toEqual(["key"]);
   });
 
   test("the first Escape blurs the field without dismissing the draft", () => {

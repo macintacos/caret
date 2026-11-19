@@ -1,3 +1,11 @@
+<script module lang="ts">
+  import type { InputVia, StopRef } from "$lib/diffview/commentStops.ts";
+
+  /** A navigator pick: the comment or draft, its last anchored line, and the input that
+   * picked it. */
+  export type RevealTarget = { ref: StopRef; line: number; via: InputVia };
+</script>
+
 <script lang="ts">
   // Source-view plan surface: renders the active plan version's stored text as
   // line-numbered markdown source through the diffview SourceView wrapper, with the
@@ -36,6 +44,13 @@
     toLineAnnotations,
   } from "$lib/diffview/annotationSlot.ts";
   import { type BracketSpan, bracketLayer } from "$lib/diffview/bracket.ts";
+  import {
+    COMMENT_KEYS,
+    type CommentStop,
+    deriveStops,
+    type FocusedStop,
+    stopIndex,
+  } from "$lib/diffview/commentStops.ts";
   import { type CodeBlockRange, codeBlockRanges, codeBlockText } from "$lib/diffview/codeBlocks.ts";
   import {
     type ChromeBox,
@@ -79,6 +94,7 @@
   import { readDiffIndicators, writeDiffIndicators } from "$lib/diffIndicatorsPref.ts";
   import { appearance } from "@/state/appearance.svelte.ts";
   import { type CompareStore, createCompare } from "@/state/compare.svelte.ts";
+  import { createCommentKeys } from "@/state/commentKeys.ts";
   import { createPlanKeyboard, type PlanKeyboardStore } from "@/state/planKeyboard.svelte.ts";
   import { setHeadingSlug, takeHeadingSlug } from "@/state/headingLink.ts";
   import VersionComparePicker from "@/components/VersionComparePicker.svelte";
@@ -127,6 +143,7 @@
   import { previewSnippet, sourceSnippet } from "$lib/peekSnippet.ts";
   import {
     followBox,
+    followStopBox,
     lineAtReadingZone,
     placeBox,
     REVEAL_MARGIN_BOTTOM,
@@ -164,9 +181,12 @@
     groupBySlot,
     paintCommentHighlight,
     sameSlotBoxes,
+    sameSlotGaps,
     type SlotBox,
     type SlotGap,
+    slotEdge,
     slotGap,
+    slotRanks,
     spanRanges,
   } from "$lib/previewComments.ts";
   import { previewFileRefs } from "$lib/previewRefs.ts";
@@ -216,11 +236,11 @@
     review: ClientReview;
     /** The working-copy annotations to display over the source. */
     annotations: Annotation[];
-    /** The single focused annotation id (drives expand + highlight), or null. */
-    focusedAnnotation: string | null;
+    /** The hovered comment stop (drives the card's focus and the highlight), or null. */
+    focusedStop: FocusedStop | null;
     onEditAnnotation: (id: string, comment: string) => void;
     onDeleteAnnotation: (id: string) => void;
-    onFocusAnnotation: (id: string) => void;
+    onFocusStop: (stop: FocusedStop | null) => void;
     /** The unsent-scratch controller, owned by App and injected down (EXC-877). This
      * view operates it (open/submit/cancel/resume + the contentKey reseed effect) and
      * reads its reactive state through the three mirror props below; App wires the
@@ -241,6 +261,10 @@
      * view ignores it. A call before the view paints is a bounded-retry no-op; on the
      * plan preview it scrolls to the line's item in its comment slot. */
     onExposeReveal?: (reveal: (line: number, side?: DiffSide) => void) => void;
+    /** Hand the host a revealComment action once on mount: it puts the cursor on the
+     * comment's or draft's stop, expands a comment's card, and reveals its line.
+     * Single-version only. */
+    onExposeRevealComment?: (reveal: (target: RevealTarget) => void) => void;
     /** Report the compared versions upward (null when not comparing), so App can
      * point the single CommentNavigator instance at the cross-version index.
      * `before`/`after` name the two documents the diff renders — not a sorted
@@ -275,15 +299,16 @@
   let {
     review,
     annotations,
-    focusedAnnotation,
+    focusedStop,
     onEditAnnotation,
     onDeleteAnnotation,
-    onFocusAnnotation,
+    onFocusStop,
     commenting,
     pending = undefined,
     pendingText = "",
     scratches = [],
     onExposeReveal,
+    onExposeRevealComment,
     onCompareChange,
     themeId,
     showShortcutHints = true,
@@ -416,6 +441,17 @@
         ]).map((slot) => ({ ...slot, start: Math.min(...slot.items.map(itemStart)) }))
       : [],
   );
+  // Where each preview slot's gap opens, by line, as the gap effect last read it; reassigned
+  // only on a change, so a settled layout leaves `stops` alone.
+  let previewGapsByLine = $state.raw(new Map<number, SlotGap>());
+  const previewRanks = $derived(
+    planPreview ? slotRanks(planPreview.blocks, previewGapsByLine) : null,
+  );
+  // The cursor's comment stops, in the order each surface renders them.
+  const stopSlotOf = $derived(previewRanks ? previewRanks.slotOf : (line: number) => line);
+  const stops = $derived(
+    runs("keyboardComments") ? deriveStops(lineThreads, draftMarkers, stopSlotOf) : [],
+  );
   // One string per set of slot spans: previewSlots re-derives on every annotation poll, and
   // re-observing and re-placing on each would bump the layout signal with nothing moved.
   const previewSlotKey = $derived(previewSlots.map((s) => `${s.start}-${s.line}`).join());
@@ -437,18 +473,21 @@
     end: r.endLine,
   });
   const pendingSpan = $derived(pending ? spanOf(pending) : null);
-  const focusedAnnotationSpan = $derived.by(() => {
-    const a = lineAnnotations.find((x) => x.id === focusedAnnotation);
+  const focusedStopSpan = $derived.by(() => {
+    const ref = focusedStop?.ref;
+    if (ref?.kind !== "comment") return null;
+    const a = lineAnnotations.find((x) => x.id === ref.id);
     return a ? spanOf(a) : null;
   });
-  const activeSpan = $derived(pointerSpan ?? focusSpan ?? pendingSpan ?? focusedAnnotationSpan);
+  const activeSpan = $derived(pointerSpan ?? focusSpan ?? pendingSpan ?? focusedStopSpan);
 
-  // A version switch or a flip leaves the boxes on the previous document's coordinates,
+  // A version switch or a flip leaves the boxes and gaps on the previous document's coordinates,
   // and removes slots without the pointerleave/focusout that would clear their spans.
   $effect(() => {
     void contentKey;
     void surface;
     slotBoxes = new Map();
+    previewGapsByLine = new Map();
     pointerSpan = null;
     focusSpan = null;
   });
@@ -581,11 +620,15 @@
       ]),
     );
     const open = new Map<number, { at: SlotGap; height: number }>();
+    const gapsByLine = new Map<number, SlotGap>();
     for (const { start, line } of untrack(() => previewSlots)) {
       const at = slotGap(root, map, blocks, { start, end: line });
+      if (at === null) continue;
+      gapsByLine.set(line, at);
       const height = heights.get(line);
-      if (at !== null && height !== undefined) open.set(line, { at, height });
+      if (height !== undefined) open.set(line, { at, height });
     }
+    if (!sameSlotGaps(untrack(() => previewGapsByLine), gapsByLine)) previewGapsByLine = gapsByLine;
     gaps.set(map, open);
     const next = gaps.boxes(scroller);
     if (!sameSlotBoxes(untrack(() => slotBoxes), next)) slotBoxes = next;
@@ -1729,7 +1772,7 @@
   // only a pick calls onJump — so reading around leaves the cursor untouched.
   function pickHeading(line: number): void {
     latchHeading(line);
-    keyboardStore.cursorLine = line;
+    landOnLine(line);
     if (surface !== "preview") {
       api?.scrollToLine(line);
       return;
@@ -1827,6 +1870,46 @@
     untrack(() => onExposeReveal)?.(revealLine);
   });
 
+  // Key caps show on the hovered comment once the keyboard put it there; a pointer
+  // placement hides them until the next key.
+  let capsShown = $state(false);
+  /** `bind` for a key that lands on or acts on a stop: it shows the caps. */
+  const keyed = (id: string, o: { run: () => void; enabled?: () => boolean }) =>
+    bind(id, {
+      ...o,
+      run: () => {
+        capsShown = true;
+        o.run();
+      },
+    });
+
+  // The keys on the hovered comment, acting through each mounted card's handle.
+  const commentKeyActions = createCommentKeys({
+    stops: () => stops,
+    focusedStop: () => focusedStop,
+    resume: (key) => resumeScratch(key),
+    activeElement: () => document.activeElement,
+  });
+
+  // A navigator pick enters its stop and parks it at the reveal offset, as any navigation
+  // to an explicit place does. A draft whose marker the open composer hides has no stop.
+  function revealComment({ ref, line, via }: RevealTarget): void {
+    capsShown = via === "key";
+    if (ref.kind === "comment") commentKeyActions.expand(ref.id);
+    const stop = stops[stopIndex(stops, ref)];
+    if (stop) (surface === "preview" ? previewCursor : keyboard).enterStop(stop);
+    revealLine(line);
+  }
+
+  $effect(() => {
+    untrack(() => onExposeRevealComment)?.(revealComment);
+  });
+
+  function focusComment(id: string): void {
+    const stop = stops[stopIndex(stops, { kind: "comment", id })];
+    if (stop) placeOnStop(stop);
+  }
+
   // The source line of the heading currently in the reading zone. Tracked from
   // the scroll container's topmost rendered line so the breadcrumbs bar reports
   // the section being read.
@@ -1903,7 +1986,42 @@
     focusField: focusSearchField,
     blur: () => (document.activeElement as HTMLElement | null)?.blur(),
     sound: sound.play,
+    ...stopDeps(),
   });
+
+  /** The comment-stop deps both cursor factories share. */
+  function stopDeps() {
+    return {
+      stops: () => stops,
+      focusedStop: () => focusedStop,
+      setFocusedStop: (stop: FocusedStop | null) => onFocusStop(stop),
+      followStop,
+    };
+  }
+
+  // Measured after the flush, so a card the stop expands or lifts is read at its new size.
+  function followStop(stop: CommentStop): void {
+    const selector =
+      stop.ref.kind === "comment"
+        ? `[data-annotation-card="${CSS.escape(stop.ref.id)}"]`
+        : `[data-scratch-marker="${CSS.escape(stop.ref.key)}"]`;
+    void tick().then(() => {
+      const el = scrollEl?.querySelector(selector);
+      if (scrollEl && el) followStopBox(scrollEl, el.getBoundingClientRect());
+    });
+  }
+
+  /** The active surface's cursor onto `line`, leaving any hovered stop. */
+  function landOnLine(line: number): void {
+    if (surface === "preview") previewCursor.landOnLine(line);
+    else keyboard.landOnLine(line);
+  }
+
+  /** The active surface's cursor onto `stop`. */
+  function placeOnStop(stop: CommentStop): void {
+    if (surface === "preview") previewCursor.placeOnStop(stop);
+    else keyboard.placeOnStop(stop);
+  }
 
   type PreviewGeometry = { root: Element; scroller: HTMLElement; map: PlanSourceMap };
   function previewGeometry(): PreviewGeometry | null {
@@ -1998,7 +2116,22 @@
       return geometry && visualLineRange(geometry.root, geometry.map, from, to);
     },
     comment: commentOnPreview,
+    openComposer: openRange,
     sound: sound.play,
+    ...stopDeps(),
+    slotAt: (p) => previewRanks?.slotAt(p) ?? 0,
+    slotEdge: (slot, edge) => {
+      const blocks = planPreview?.blocks;
+      const gap = previewRanks?.gapOf(slot);
+      const geometry = previewGeometry();
+      if (blocks == null || gap === undefined || geometry == null) return null;
+      const { root, map } = geometry;
+      return slotEdge(gap, edge, blocks, {
+        pointForLine: (line) => pointForLine(map, line, planLineCount),
+        step: (p, count) => stepVisualLine(root, map, p, count),
+        last: () => lastVisualLine(root, map),
+      });
+    },
   });
 
   // The band on screen and the point it marks. A step glides it, as the pointer glides
@@ -2009,7 +2142,10 @@
   let cursorLayout = -1;
   $effect(() => {
     const rev = previewLayoutRev;
-    const p = runs("keyboardCursor") && surface === "preview" ? previewCursor.point() : null;
+    const p =
+      runs("keyboardCursor") && surface === "preview" && focusedStop == null
+        ? previewCursor.point()
+        : null;
     const map = p && previewSourceMap;
     const previous = untrack(() => previewCursorBox);
     const sameLayout = rev === cursorLayout;
@@ -2322,6 +2458,25 @@
     previewCursor.reset();
   });
 
+  // When the hovered stop goes (discarded, consumed, or dropped by a new version) or
+  // moves, the line cursor lands on the last line it had. A review switch drops the stop
+  // without landing: no cursor may carry into the review just opened. App's `syncActive`
+  // may run after this effect, so it cannot be relied on to clear first. Declared after
+  // the content-switch clear so, on a new version, the landing runs last and stands.
+  let reconciledReview = untrack(() => review.id);
+  $effect(() => {
+    const focused = focusedStop;
+    const current = stops;
+    if (review.id !== reconciledReview) {
+      reconciledReview = review.id;
+      if (focused != null) untrack(() => onFocusStop(null));
+      return;
+    }
+    if (focused == null || !runs("keyboardComments")) return;
+    if (current[stopIndex(current, focused.ref)]?.line === focused.line) return;
+    untrack(() => landOnLine(Math.min(focused.line, planLineCount)));
+  });
+
   // Recompute the active heading from the source line at the top of the reading
   // zone, throttled with rAF so a scroll burst settles into one read. The view
   // paints each line as <div data-line="N"> in a shadow root; lineAtReadingZone
@@ -2500,7 +2655,7 @@
     for (const [id, motion] of Object.entries(CURSOR_MOTIONS)) {
       offs.push(
         shortcuts.register(
-          bind(id, {
+          keyed(id, {
             run: () => {
               move(motion);
               if (motion === "nextHeading" || motion === "prevHeading") {
@@ -2517,7 +2672,10 @@
     for (const [id, where] of Object.entries(CURSOR_PLACEMENTS)) {
       offs.push(
         shortcuts.register(
-          bind(id, { run: () => scrollCursor(where), enabled: () => !defaultIsEditingContext() }),
+          keyed(id, {
+            run: () => scrollCursor(where),
+            enabled: () => !defaultIsEditingContext(),
+          }),
         ),
       );
     }
@@ -2531,7 +2689,21 @@
     const onPreview = surface === "preview";
     const comment = onPreview ? previewCursor.comment : keyboard.commentCursorLine;
     const enterVisualMode = onPreview ? previewCursor.enterVisualMode : keyboard.enterVisualMode;
+    const stepComment = onPreview ? previewCursor.stepComment : keyboard.stepComment;
     const offs: Array<() => void> = [];
+    for (const [id, delta] of [
+      ["motion.nextComment", 1],
+      ["motion.prevComment", -1],
+    ] as const) {
+      offs.push(
+        shortcuts.register(
+          keyed(id, {
+            run: () => stepComment(delta),
+            enabled: () => !defaultIsEditingContext(),
+          }),
+        ),
+      );
+    }
     // Commenting on the focused line / a keyboard-selected range (EXC-790): live entries
     // bound over EXC-786's reservations, with the motions' editing-context guard. c
     // comments the cursor line — on the preview, the cursor's visual line — or, in visual
@@ -2549,6 +2721,21 @@
         bind("commenting.visualLine", {
           run: () => enterVisualMode(),
           enabled: () => !defaultIsEditingContext(),
+        }),
+      ),
+    );
+    return () => {
+      for (const off of offs) off();
+    };
+  });
+
+  $effect(() => {
+    if (!runs("keyboardComments")) return;
+    const offs = COMMENT_KEYS.map((key) =>
+      shortcuts.register(
+        keyed(`commenting.${key}`, {
+          run: () => commentKeyActions.run(key),
+          enabled: () => commentKeyActions.live(key),
         }),
       ),
     );
@@ -2678,7 +2865,9 @@
   function openRange(start: number, end: number): void {
     commenting.cancel(liveText); // retain any in-progress text; no-op when closed
     commenting.open({ start, end });
-    keyboardStore.cursorLine = end; // a line click relocates the cursor (keyboard + mouse coherent)
+    // A line click relocates the cursor (keyboard + mouse coherent). The line-only landing
+    // keeps a preview column already on `end`, the row `c` was pressed on.
+    keyboard.landOnLine(end);
   }
   function commentOnPreview(range: Range): void {
     const lines = previewSourceMap?.linesOf(range);
@@ -3040,10 +3229,15 @@
       {#snippet commentThread(annotations: LineAnnotation[])}
         <SourceAnnotationThread
           {annotations}
-          {focusedAnnotation}
-          onFocus={onFocusAnnotation}
+          {focusedStop}
+          showCaps={showShortcutHints && capsShown}
+          onFocus={(id) => {
+            capsShown = false;
+            focusComment(id);
+          }}
           onEdit={onEditAnnotation}
           onDelete={onDeleteAnnotation}
+          register={commentKeyActions.register}
           {reviewContext}
         />
       {/snippet}
@@ -3054,13 +3248,22 @@
           initial={pendingText}
           {reviewContext}
           onInput={(text) => (liveText = text)}
-          onSubmit={(comment) => commenting.submit(comment)}
+          onSubmit={(comment, via) => {
+            capsShown = via === "key";
+            commenting.submit(comment);
+          }}
           onKeep={(text) => commenting.cancel(text)}
           onDiscard={() => commenting.discardOpen(liveText)}
         />
       {/snippet}
       {#snippet draftMarker(scratch: ComposerScratch)}
-        <SourceScratchMarker text={scratch.text} onResume={() => resumeScratch(scratch.key)} />
+        <SourceScratchMarker
+          text={scratch.text}
+          onResume={() => resumeScratch(scratch.key)}
+          scratchKey={scratch.key}
+          hovered={focusedStop?.ref.kind === "resume" && focusedStop.ref.key === scratch.key}
+          showCaps={showShortcutHints && capsShown}
+        />
       {/snippet}
       <!-- Visual line-select affordance (EXC-790): while V mode is active, a quiet
            bottom-pinned chip names the two keys — c commits the selection to a
@@ -3267,7 +3470,7 @@
             dragRange = range ?? undefined;
           }}
           selectedRange={pending ?? visualSelection ?? null}
-          cursorLine={keyboardStore.cursorLine}
+          cursorLine={focusedStop ? null : keyboardStore.cursorLine}
           {searchMatches}
           currentMatchIndex={keyboardStore.searchIndex}
           {reflowedBlocks}

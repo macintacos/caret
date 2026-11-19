@@ -12,6 +12,23 @@ either view of the plan:
 - With the keyboard, press `V` to select whole lines, then `c` to comment on the lines
     the cursor or selection covers.
 
+After you submit a comment with `⌘↵`, the cursor rests on it.
+
+With the cursor on a comment:
+
+- `e` or `i` edits it.
+- `Enter` expands a collapsed comment and edits an expanded one. On a **Resume** marker
+    it resumes the draft.
+- `h` collapses it and `l` expands it.
+- `Shift+D` asks to discard it and discards on confirm.
+- `c` comments on its lines, adding to its thread.
+- `V` starts a selection on its last line.
+
+Accepted and Expired comments only fold, with `h`, `l`, or `Enter` while collapsed. Key
+caps show beside the controls of the comment the keyboard moved to, when
+**Shortcut hints** in **Settings → Appearance** is on. A mouse click hides them until the
+next key.
+
 In the [preview](../reference/glossary.md#preview), hovering anywhere out to the plan's
 right edge shades the wrapped line under the pointer and shows a **+** beside it. Clicking
 the line or its **+** comments on every source line with text on it. `V` shades its

@@ -319,6 +319,19 @@ export function followScrollDelta(g: RowInView): number {
   return 0;
 }
 
+/** `followScrollDelta` for a comment stop: a box taller than the viewport aligns its top
+ * rather than centring, so a long card shows where it starts. */
+export function followStopScrollDelta(g: RowInView): number {
+  if (g.rowHeight <= g.viewBottom - g.viewTop) return followScrollDelta(g);
+  return g.rowTop - g.viewTop;
+}
+
+/** `followBox` for a comment stop's card or marker. */
+export function followStopBox(scroller: HTMLElement, box: { top: number; bottom: number }): void {
+  const delta = followStopScrollDelta(rowInView(scroller, box));
+  if (delta !== 0) animateScrollTop(scroller, scroller.scrollTop + delta, FOLLOW_ANIM_MS);
+}
+
 /** `box` and `scroller`'s viewport as the follow and the placement measure them. */
 function rowInView(scroller: HTMLElement, box: { top: number; bottom: number }): RowInView {
   const view = scroller.getBoundingClientRect();

@@ -107,3 +107,10 @@ test("cancelling closes the bubble without firing onConfirm", async () => {
   expect(calls).toBe(0);
   expect(bubble()).toBeNull();
 });
+
+test("a bound open shows the bubble without the trigger being used", async () => {
+  const { flush } = render(ConfirmPopoverFixture, { open: true });
+  await flushUntil(flush, () => bubble() !== null);
+  expect(bubble() !== null).toBe(true);
+  await close(flush);
+});

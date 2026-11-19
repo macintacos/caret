@@ -8,6 +8,7 @@
   //
   // Keyboard-driven too (EXC-792). While a row holds focus the panel captures the
   // keyboard so the plan's own shortcuts don't fire.
+  import type { InputVia } from "$lib/diffview/commentStops.ts";
   import { type CommentIndexEntry, filterComments, highlightMatches } from "$lib/feedback.ts";
   import { Kbd } from "$lib/components/ui/kbd/index.js";
   import Icon from "@/components/Icon.svelte";
@@ -17,10 +18,11 @@
     open: boolean;
     /** The plan's inline comments, in document order (see commentIndex). */
     comments: CommentIndexEntry[];
-    /** The comment currently focused in the source view, highlighted in the list. */
+    /** The hovered comment's id or draft's scratch key, highlighted in the list. */
     activeId: string | null;
-    /** Reveal a comment: scroll the plan to its line and highlight its card. */
-    onReveal: (entry: CommentIndexEntry) => void;
+    /** Reveal a comment: scroll the plan to its line and put the cursor on it. `via` is
+     * "key" for a keyboard activation (a click with `detail` 0). */
+    onReveal: (entry: CommentIndexEntry, via: InputVia) => void;
     /** Close the navigator (Escape or the close button). */
     onClose: () => void;
     /** Whether the shortcut-hint key caps are shown (EXC-826/EXC-792). When off,
@@ -206,7 +208,7 @@
                 data-nav-row
                 class:draft={entry.draft}
                 aria-current={entry.id === activeId ? "true" : undefined}
-                onclick={() => onReveal(entry)}
+                onclick={(e) => onReveal(entry, e.detail === 0 ? "key" : "pointer")}
               >
                 {@render rowBody(entry)}
               </button>

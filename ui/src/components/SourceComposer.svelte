@@ -10,6 +10,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { Card } from "$lib/components/ui/card/index.js";
   import { rangeLabel } from "$lib/diffview/commenting.ts";
+  import type { InputVia } from "$lib/diffview/commentStops.ts";
   import { revealCard } from "$lib/diffview/scroll.ts";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
@@ -32,7 +33,8 @@
      * Save — so editing a comment looks identical to writing one, never a bespoke
      * inline form. */
     mode?: "create" | "edit";
-    onSubmit: (comment: string) => void;
+    /** `via` is "key" for the ⌘↵ chord or Escape, "pointer" for the button. */
+    onSubmit: (comment: string, via: InputVia) => void;
     /** Discard the draft outright — the Discard/Cancel button and the Esc chord.
      * In "create" this drops the text with no scratch retained; in "edit" it
      * reverts to the saved comment. Either way the host closes the composer. */
@@ -94,8 +96,8 @@
     return revealCard(cardEl);
   });
 
-  function submit() {
-    onSubmit(comment);
+  function submit(via: InputVia) {
+    onSubmit(comment, via);
   }
 
   function keep() {
@@ -110,7 +112,7 @@
     cardEl?.focus({ preventScroll: true });
   }
   function dismiss() {
-    if (isEdit) submit();
+    if (isEdit) submit("key");
     else keep();
   }
   // The first press bubbles up from the still-focused editor, carrying it as the
@@ -143,7 +145,7 @@
     {reviewContext}
     autofocus
     onInput={(text) => (comment = text)}
-    onSubmitChord={submit}
+    onSubmitChord={() => submit("key")}
     onCancelChord={blurToCard}
   />
   <div class="row">
@@ -152,7 +154,7 @@
            so no confirm), Save commits — same amber primary + ⌘↵ hint as Comment. -->
       <Button variant="ghost" class="cancel" onclick={onDiscard}>Cancel</Button>
       <span class="tray tray-submit">
-        <Button class="save" onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
+        <Button class="save" onclick={() => submit("pointer")} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
           Save
           <SubmitCap />
         </Button>
@@ -175,7 +177,7 @@
         {:else}
           {@render discardButton({ onclick: onDiscard })}
         {/if}
-        <Button onclick={submit} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
+        <Button onclick={() => submit("pointer")} aria-keyshortcuts={ariaKeyshortcutsFor("editor.submit")}>
           Comment
           <SubmitCap />
         </Button>

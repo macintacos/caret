@@ -195,6 +195,17 @@ describe("SourceAnnotationCard collapse", () => {
     expect(edited).toBe(false);
   });
 
+  test("collapsing the card focuses it too", () => {
+    const focused: string[] = [];
+    const { target, flush } = render(
+      SourceAnnotationCard,
+      base({ focused: true, onFocus: (id: string) => focused.push(id) }),
+    );
+    click(target, ".chip");
+    flush();
+    expect(focused).toEqual(["a1"]);
+  });
+
   test("clicking the comment body (not a button) collapses the expanded card", () => {
     const { target, flush } = render(SourceAnnotationCard, base({ focused: true }));
     expect(target.querySelector(".card.expanded")).not.toBeNull();
@@ -391,5 +402,71 @@ describe("SourceAnnotationCard edit/delete", () => {
     flush();
     expect(edited.last()).toEqual({ id: "a1", comment: "saved via escape" });
     expect(target.querySelector(".cm-content")).toBeNull();
+  });
+});
+
+describe("SourceAnnotationCard key caps", () => {
+  // Each cap as "control:key", so a cap that lands on the wrong control fails.
+  const caps = (root: ParentNode) =>
+    [...root.querySelectorAll('[data-slot="kbd"]')]
+      .map((k) => {
+        const control = k.closest("button");
+        const name = control?.getAttribute("aria-label") ?? "Edit";
+        return `${name}:${k.textContent?.replace(/\s+/g, "")}`;
+      })
+      .sort();
+
+  test("a hovered open comment shows the edit and discard caps", () => {
+    const { target } = render(SourceAnnotationCard, base({ focused: true, showCaps: true }));
+    expect(caps(target)).toEqual(["Discard comment:D", "Edit:E"]);
+  });
+
+  test("a hovered collapsed comment adds the Enter cap on its chip", () => {
+    const { target, flush } = render(SourceAnnotationCard, base({ focused: true, showCaps: true }));
+    click(target, "button.chip");
+    flush();
+    expect(caps(target)).toEqual(["Discard comment:D", "Edit:E", "Expand comment:↵"]);
+  });
+
+  for (const state of ["approved", "expired"] as const) {
+    test(`a hovered ${state} comment shows only the Enter cap, while collapsed`, () => {
+      const { target, flush } = render(
+        SourceAnnotationCard,
+        base({ annotation: { ...annotation, state }, focused: true, showCaps: true }),
+      );
+      expect(caps(target)).toEqual([]);
+      click(target, "button.chip");
+      flush();
+      expect(caps(target)).toEqual(["Expand comment:↵"]);
+    });
+  }
+
+  test("caps are hidden from assistive tech", () => {
+    const { target } = render(SourceAnnotationCard, base({ focused: true, showCaps: true }));
+    for (const k of target.querySelectorAll('[data-slot="kbd"]')) {
+      expect(k.getAttribute("aria-hidden")).toBe("true");
+    }
+  });
+
+  test("no caps without showCaps, or on a card the cursor is not on", () => {
+    expect(caps(render(SourceAnnotationCard, base({ focused: true })).target)).toEqual([]);
+    expect(caps(render(SourceAnnotationCard, base({ showCaps: true })).target)).toEqual([]);
+  });
+
+  test("the hovered card's controls advertise their keys", () => {
+    const { target } = render(SourceAnnotationCard, base({ focused: true }));
+    expect(target.querySelector("button.edit")?.getAttribute("aria-keyshortcuts")).toBe("e");
+    const idle = render(SourceAnnotationCard, base()).target;
+    expect(idle.querySelector("button.edit")?.hasAttribute("aria-keyshortcuts")).toBe(false);
+  });
+
+  test("a hovered approved comment's Edit and Discard advertise no keys", () => {
+    const { target } = render(
+      SourceAnnotationCard,
+      base({ annotation: { ...annotation, state: "approved" }, focused: true }),
+    );
+    for (const sel of ["button.edit", "button.danger"]) {
+      expect(target.querySelector(sel)?.hasAttribute("aria-keyshortcuts")).toBe(false);
+    }
   });
 });

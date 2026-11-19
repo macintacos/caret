@@ -10,6 +10,7 @@
 import type { Annotation, ClientReview, PersistedScratch } from "@core/lib/types";
 import { isNetworkFailure } from "@/state/resolve.svelte.ts";
 import { putDraft } from "$lib/api.ts";
+import type { FocusedStop } from "$lib/diffview/commentStops.ts";
 
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -36,7 +37,7 @@ export interface AutosaveStore {
   /** The current version's unsent composer scratches (line-anchored drafts the
    * reviewer typed but did not submit). Version-scoped like annotations. */
   composerScratches: PersistedScratch[];
-  focusedAnnotation: string | null;
+  focusedStop: FocusedStop | null;
 }
 
 export interface AutosaveDeps {
@@ -52,7 +53,7 @@ export interface AutosaveDeps {
 
 export interface Autosave {
   readonly annotations: Annotation[];
-  readonly focusedAnnotation: string | null;
+  readonly focusedStop: FocusedStop | null;
   readonly generalCommentDraft: string;
   readonly composerScratches: PersistedScratch[];
 
@@ -68,7 +69,7 @@ export interface Autosave {
   createLineAnnotation: (anchor: { startLine: number; endLine: number; comment: string }) => void;
   editAnnotation: (id: string, comment: string) => void;
   deleteAnnotation: (id: string) => void;
-  focusAnnotation: (id: string) => void;
+  focusStop: (stop: FocusedStop | null) => void;
   editGeneralComment: (value: string) => void;
   /** Clear the local general-comment draft (after a deny clears it server-side). */
   clearGeneralComment: () => void;
@@ -151,8 +152,8 @@ export function createAutosave(
     get annotations() {
       return store.annotations;
     },
-    get focusedAnnotation() {
-      return store.focusedAnnotation;
+    get focusedStop() {
+      return store.focusedStop;
     },
     get generalCommentDraft() {
       return store.generalCommentDraft;
@@ -169,13 +170,13 @@ export function createAutosave(
         void flushPending();
         lastLoadedKey = key;
         store.annotations = active.annotations.map((a) => ({ ...a }));
-        store.focusedAnnotation = null;
         // Version-scoped: a fresh plan version starts with its own scratches
         // (none), never a prior version's stale line anchors.
         store.composerScratches = copyScratches(active.composerScratches);
         currentVersionNum = active.version;
         if (active.id !== lastDraftLoadedId) {
           lastDraftLoadedId = active.id;
+          store.focusedStop = null;
           store.generalCommentDraft = active.generalCommentDraft ?? "";
         }
       } else if (!active) {
@@ -194,7 +195,7 @@ export function createAutosave(
     createLineAnnotation(anchor) {
       const id = crypto.randomUUID();
       store.annotations = [...store.annotations, { id, ...anchor }];
-      store.focusedAnnotation = id;
+      store.focusedStop = { ref: { kind: "comment", id }, line: anchor.endLine };
       scheduleSave();
     },
     editAnnotation(id, comment) {
@@ -203,11 +204,10 @@ export function createAutosave(
     },
     deleteAnnotation(id) {
       store.annotations = store.annotations.filter((a) => a.id !== id);
-      if (store.focusedAnnotation === id) store.focusedAnnotation = null;
       scheduleSave();
     },
-    focusAnnotation(id) {
-      store.focusedAnnotation = id;
+    focusStop(stop) {
+      store.focusedStop = stop;
     },
     editGeneralComment(value) {
       store.generalCommentDraft = value;

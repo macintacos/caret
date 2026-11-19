@@ -31,6 +31,16 @@ These also work in the preview:
 When you compare two versions to see what changed, caret shows the source view and hides
 the **Source** button. Leaving compare mode returns to the view you chose.
 
+## Move between comments
+
+In both views, `j` and `k` also stop on each [comment](../reference/glossary.md#comment)
+and each unsent draft's **Resume** marker. The other motions, such as `G`, `gg`, `}`,
+`]]`, and search's `n`, pass over them. Press `]c` and `[c` to jump to the next and
+previous comment; both wrap at the ends and skip **Resume** markers.
+
+Press `shift+c` to open the comment navigator, a list of the plan's comments. Picking one
+puts the cursor on it.
+
 ## Change the text size
 
 Set **Base font size** in **Settings → Appearance** to size the preview's body text. The

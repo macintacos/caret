@@ -163,8 +163,8 @@ export function pendingItems(
  * or scratch marker renders), a short range label, and the trimmed text. */
 export interface CommentIndexEntry {
   /** The annotation id (a committed comment) or the scratch key (a draft) —
-   * focusing it highlights the card in the source view; a scratch key focuses
-   * nothing, so a draft reveal just scrolls to its marker. */
+   * revealing it puts the cursor on the comment's card or the draft's Resume
+   * marker. */
   id: string;
   /** 1-based source line the entry anchors to (its endLine). Absent on a general
    * entry, which is feedback about the version as a whole and anchors nowhere. */

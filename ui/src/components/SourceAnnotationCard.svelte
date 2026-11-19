@@ -17,6 +17,9 @@
   import type { LineAnnotation } from "@core/lib/types";
   import { Button } from "$lib/components/ui/button/index.js";
   import { commentState } from "$lib/commentState.ts";
+  import { type CommentKey, commentKeys, type RegisterCard } from "$lib/diffview/commentStops.ts";
+  import { ariaKeyshortcutsFor } from "$lib/shortcuts/index.ts";
+  import ShortcutCap from "@/components/ShortcutCap.svelte";
   import type { ReviewContext } from "$lib/editorCompletion.ts";
   import { renderMarkdown } from "$lib/markdown.ts";
   import ConfirmPopover from "@/components/ConfirmPopover.svelte";
@@ -32,21 +35,42 @@
     onDelete: (id: string) => void;
     /** The review being commented on, forwarded to the edit-mode composer. */
     reviewContext?: ReviewContext;
+    /** Hands the parent this card's keyboard handle on mount. */
+    register?: RegisterCard;
+    /** Show key caps on the controls while this card is focused. */
+    showCaps?: boolean;
   }
-  let { annotation, focused, onFocus, onEdit, onDelete, reviewContext }: Props = $props();
+  let {
+    annotation,
+    focused,
+    onFocus,
+    onEdit,
+    onDelete,
+    reviewContext,
+    register,
+    showCaps = false,
+  }: Props = $props();
 
-  // Nudged open when THIS card becomes the focused one (a navigator reveal). Both
-  // initial reads are untracked: they want focus's value now, not a reactive
-  // dependency on it — the effect below owns that.
+  // Seeded once from focus, so a just-submitted comment mounts open; later focus
+  // changes never expand it (a reveal expands through the registered handle).
   let expanded = $state(untrack(() => focused));
-  let wasFocused = untrack(() => focused);
-  $effect(() => {
-    if (focused && !wasFocused) expanded = true;
-    wasFocused = focused;
-  });
 
   // Editing reuses SourceComposer (mode="edit"); implies expanded.
   let editing = $state(false);
+  let confirming = $state(false);
+
+  $effect(() =>
+    register?.(annotation.id, {
+      expand: () => (expanded = true),
+      collapse: () => {
+        expanded = false;
+        editing = false;
+      },
+      edit: startEdit,
+      discard: () => (confirming = true),
+      expanded: () => expanded,
+    }),
+  );
 
 
   const label = $derived(
@@ -62,10 +86,16 @@
   // opening the card.
   const stateView = $derived(commentState(annotation.state));
 
+  const liveKeys = $derived(commentKeys({ kind: "comment", state: annotation.state }, expanded));
+  const live = (key: CommentKey) => focused && liveKeys.includes(key);
+  const showsCap = (key: CommentKey) => showCaps && live(key);
+  const keysFor = (key: CommentKey) =>
+    live(key) ? ariaKeyshortcutsFor(`commenting.${key}`) : undefined;
+
   function toggle() {
     expanded = !expanded;
-    if (expanded) onFocus(annotation.id);
-    else editing = false;
+    if (!expanded) editing = false;
+    onFocus(annotation.id);
   }
 
   // The whole card is the toggle surface (EXC-765) — the pointer layer over the
@@ -132,6 +162,7 @@
         class="chip"
         aria-expanded={expanded}
         aria-label={expanded ? "Collapse comment" : "Expand comment"}
+        aria-keyshortcuts={keysFor(expanded ? "collapse" : "expand")}
       >
         <Icon name="chevron-down" size={12} />
         <span class="ref">{label}</span>
@@ -139,19 +170,40 @@
         {#if !expanded}
           <span class="clamp-line preview">{annotation.comment}</span>
         {/if}
+        <!-- Trailing, so the cap appearing on hover never shifts the label or stamp. An
+             expanded card's Enter edits, which Edit's own cap already names. -->
+        {#if !expanded && showsCap("activate")}
+          <span class="caps"><ShortcutCap id="commenting.activate" /></span>
+        {/if}
       </Button>
       <div class="actions">
-        <Button variant="ghost" size="sm" class="edit" onclick={startEdit}>Edit</Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="edit"
+          onclick={startEdit}
+          aria-keyshortcuts={keysFor("edit")}
+          >Edit{#if showsCap("edit")}<ShortcutCap id="commenting.edit" />{/if}</Button
+        >
         <!-- Deleting a submitted comment is irreversible, so it routes through a
              confirmation (EXC-749) instead of firing on the first click. -->
         <ConfirmPopover
           question="Discard this comment?"
           confirmLabel="Discard"
           onConfirm={confirmDelete}
+          bind:open={confirming}
         >
           {#snippet trigger(props)}
-            <Button {...props} variant="ghost" size="sm" class="danger" aria-label="Discard comment">
+            <Button
+              {...props}
+              variant="ghost"
+              size="sm"
+              class="danger"
+              aria-label="Discard comment"
+              aria-keyshortcuts={keysFor("discard")}
+            >
               <Icon name="trash-2" size={14} />
+              {#if showsCap("discard")}<ShortcutCap id="commenting.discard" />{/if}
             </Button>
           {/snippet}
         </ConfirmPopover>
@@ -212,8 +264,9 @@
   .card:not(.editing) {
     cursor: pointer;
   }
-  /* A control inside the card under keyboard focus lifts it as the pointer over it does. */
-  .card:not(.editing):is(:hover, :has(:global(:focus-visible))) {
+  /* The keyboard cursor's stop, or a control inside the card under keyboard focus, wears
+     the card's hover paper, as the pointer over it does. */
+  .card:not(.editing):is(:hover, .focused, :has(:global(:focus-visible))) {
     background: color-mix(in lab, var(--paper-raised), var(--ink) 8%);
   }
 
@@ -297,6 +350,12 @@
     color: var(--ink-soft);
   }
 
+  .caps {
+    flex: none;
+    display: inline-flex;
+    gap: 0.2rem;
+    margin-inline-start: auto;
+  }
   .actions {
     flex: none;
     display: flex;

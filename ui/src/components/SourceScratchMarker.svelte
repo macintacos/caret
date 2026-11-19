@@ -7,20 +7,37 @@
   // SourceAnnotationCard's state label for a saved comment, and a scratch was never
   // added to the working copy, so it must never read as an existing comment.
   import Icon from "@/components/Icon.svelte";
+  import ShortcutCap from "@/components/ShortcutCap.svelte";
 
   interface Props {
     /** The retained draft text, previewed on one clamped line. */
     text: string;
     /** Resume editing: reopen the composer at this scratch's range. */
     onResume: () => void;
+    /** The keyboard cursor rests on this marker. */
+    hovered?: boolean;
+    /** The scratch's key, which the keyboard measures the marker by. */
+    scratchKey: string;
+    /** Show the Enter cap on Resume while hovered. */
+    showCaps?: boolean;
   }
-  let { text, onResume }: Props = $props();
+  let { text, onResume, hovered = false, scratchKey, showCaps = false }: Props = $props();
 </script>
 
-<button type="button" class="scratch tray" onclick={onResume} aria-label="Resume unsent comment">
+<button
+  type="button"
+  class="scratch tray"
+  class:focused={hovered}
+  data-cursor={hovered || undefined}
+  data-scratch-marker={scratchKey}
+  onclick={onResume}
+  aria-label="Resume unsent comment"
+>
   <span class="unsent"><Icon name="message-square-more" size={14} />Unsent</span>
   <span class="clamp-line preview">{text}</span>
-  <span class="cap resume">Resume</span>
+  <span class="cap resume"
+    >Resume{#if hovered && showCaps}<ShortcutCap id="commenting.activate" />{/if}</span
+  >
 </button>
 
 <style>
@@ -42,6 +59,12 @@
     /* Opacity-only, never size: the row's measured height must not move (the
        preventScroll guard depends on it). */
     animation: reveal var(--dur-state) var(--ease-out);
+    transition: box-shadow var(--dur-state) var(--ease-out);
+  }
+  /* The keyboard cursor lifts the well with the shadow a focused comment card takes; its
+     cap takes the hover face through [data-cursor] (styles/atoms.css). */
+  .scratch.focused {
+    box-shadow: var(--unsent-shade), var(--float-surface-mid);
   }
   /* Inked like a comment stamp's word, so its hue matches the Draft stamp's while the
      word and glyph tell the two apart. */
@@ -64,6 +87,7 @@
     flex: none;
     display: inline-flex;
     align-items: center;
+    gap: 0.35rem;
     height: 1.5rem;
     padding: 0 0.55rem;
     font-size: var(--text-xs);

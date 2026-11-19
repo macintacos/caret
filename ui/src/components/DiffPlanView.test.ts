@@ -14,6 +14,7 @@ import {
   type SourceCommentingDeps,
   scratchKey,
 } from "$lib/diffview/commenting.ts";
+import type { FocusedStop } from "$lib/diffview/commentStops.ts";
 import { flush as flushLog } from "$lib/log.ts";
 import { shortcuts } from "$lib/shortcuts/index.ts";
 
@@ -24,10 +25,10 @@ function props(over: Record<string, unknown> = {}) {
     review: reviewFixture(),
     commenting: createSourceCommenting({ onCreate: () => {} }),
     annotations: [],
-    focusedAnnotation: null,
+    focusedStop: null,
     onEditAnnotation: () => {},
     onDeleteAnnotation: () => {},
-    onFocusAnnotation: () => {},
+    onFocusStop: () => {},
     ...over,
   };
 }
@@ -510,7 +511,10 @@ describe("DiffPlanView annotation display", () => {
 
   test("the focused annotation renders expanded, the rest collapsed", async () => {
     const annotations = twoLineAnnotations();
-    const { target } = render(DiffPlanView, props({ annotations, focusedAnnotation: "a" }));
+    const { target } = render(
+      DiffPlanView,
+      props({ annotations, focusedStop: { ref: { kind: "comment", id: "a" }, line: 1 } }),
+    );
     await until(() => target.querySelector('[data-annotation-card="a"]') != null);
     const a = target.querySelector('[data-annotation-card="a"]')!;
     const b = target.querySelector('[data-annotation-card="b"]')!;
@@ -523,14 +527,84 @@ describe("DiffPlanView annotation display", () => {
   });
 
   test("clicking a collapsed card focuses its annotation", async () => {
-    let focused: string | undefined;
+    const focused: (FocusedStop | null)[] = [];
     const { target } = render(
       DiffPlanView,
-      props({ annotations: [lineAnn()], onFocusAnnotation: (id: string) => (focused = id) }),
+      props({
+        annotations: [lineAnn()],
+        onFocusStop: (stop: FocusedStop | null) => focused.push(stop),
+      }),
     );
     await until(() => target.querySelector('[data-annotation-card="ln1"] .chip') != null);
     target.querySelector<HTMLElement>('[data-annotation-card="ln1"] .chip')!.click();
-    expect(focused).toBe("ln1");
+    expect(focused.at(-1)).toEqual({
+      ref: { kind: "comment", id: "ln1" },
+      line: lineAnn().endLine,
+    });
+  });
+
+  /** Props whose focusedStop follows onFocusStop, as App's store does. */
+  function focusOwningProps(over: Record<string, unknown>) {
+    const p = reactiveProps({
+      ...props(),
+      focusedStop: null as FocusedStop | null,
+      onFocusStop: (_stop: FocusedStop | null) => {},
+      ...over,
+    });
+    p.onFocusStop = (stop) => {
+      p.focusedStop = stop;
+    };
+    return p;
+  }
+  const cursorRow = (target: HTMLElement) =>
+    shadow(target)?.querySelector("[data-content] [data-line][data-caret-cursor]") ?? null;
+
+  test("removing the hovered comment lands the cursor on its last line", async () => {
+    const p = focusOwningProps({
+      annotations: [lineAnn({ id: "a", startLine: 2, endLine: 3 })],
+      focusedStop: { ref: { kind: "comment", id: "a" }, line: 3 },
+    });
+    const { target, flush } = render(DiffPlanView, p);
+    await until(() => target.querySelector('[data-annotation-card="a"]') != null);
+    expect(cursorRow(target) === null).toBe(true);
+
+    p.annotations = [];
+    flush();
+    expect(p.focusedStop === null).toBe(true);
+    await until(() => cursorRow(target) != null);
+    expect(cursorRow(target)?.getAttribute("data-line")).toBe("3");
+  });
+
+  test("a new version that drops the hovered comment lands the cursor on its last line", async () => {
+    const p = focusOwningProps({
+      annotations: [lineAnn({ id: "a", startLine: 2, endLine: 3 })],
+      focusedStop: { ref: { kind: "comment", id: "a" }, line: 3 },
+    });
+    const { target, flush } = render(DiffPlanView, p);
+    await until(() => target.querySelector('[data-annotation-card="a"]') != null);
+
+    p.review = reviewFixture({ version: 2 });
+    p.annotations = [];
+    flush();
+    expect(p.focusedStop === null).toBe(true);
+    await until(() => cursorRow(target) != null);
+    expect(cursorRow(target)?.getAttribute("data-line")).toBe("3");
+  });
+
+  test("switching reviews with a comment hovered places no cursor", async () => {
+    const p = focusOwningProps({
+      annotations: [lineAnn({ id: "a", startLine: 2, endLine: 3 })],
+      focusedStop: { ref: { kind: "comment", id: "a" }, line: 3 },
+    });
+    const { target, flush } = render(DiffPlanView, p);
+    await until(() => target.querySelector('[data-annotation-card="a"]') != null);
+
+    p.review = reviewFixture({ id: "r2" });
+    p.annotations = [];
+    flush();
+    expect(p.focusedStop === null).toBe(true);
+    await until(() => shadow(target)?.querySelector("pre") != null);
+    expect(cursorRow(target) === null).toBe(true);
   });
 
   test("two comments on one line render as a single ordered thread", async () => {

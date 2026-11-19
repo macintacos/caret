@@ -93,6 +93,23 @@ test("j/k walk the rows; Enter reveals without dismissing; / drops into search",
   await expect(items.first()).toContainText("warm the cache path");
 });
 
+test("j onto a comment marks its navigator row current", async ({ daemon, page }) => {
+  const nav = await openWithAnnotations(page, daemon);
+  const card = page.locator('[data-annotation-card="ann-1"]');
+  await page.keyboard.press("g");
+  await page.keyboard.press("g");
+  await expect(cursor(page)).toHaveCount(1);
+  await expect
+    .poll(async () => {
+      await page.keyboard.press("j");
+      return card.evaluate((el) => el.classList.contains("focused"));
+    })
+    .toBe(true);
+
+  await page.keyboard.press("C");
+  await expect(nav.locator('[aria-current="true"]')).toContainText("warm the cache path");
+});
+
 test("the navigator captures j/k, so the plan cursor stays put while it holds focus", async ({
   daemon,
   page,

@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 
 import { flushUntil, render } from "@ui/support/mount.ts";
 import ShortcutsHelp from "@/components/ShortcutsHelp.svelte";
+import { CANONICAL_KEYMAP } from "$lib/shortcuts/keymap.ts";
 import type { ShortcutEntry } from "$lib/shortcuts/registry.ts";
 
 // bits-ui Dialog portals its content to document.body on a deferred tick, so the
@@ -78,6 +79,39 @@ describe("ShortcutsHelp render", () => {
     expect(bodyText()).toContain("Cancel editing"); // entry label
     expect(bodyText()).toContain("Esc"); // key cap for editor.cancel
   });
+});
+
+test("lists the comment jumps under the Motion heading", async () => {
+  const { flush } = render(ShortcutsHelp, {
+    open: true,
+    entries: CANONICAL_KEYMAP.filter((e) => e.id.endsWith("Comment") && e.group === "motion"),
+    onClose: () => {},
+  });
+  await flushUntil(flush, mounted);
+  const text = bodyText();
+  expect(text).toContain("Motion");
+  expect(text).toContain("Next comment");
+  expect(text).toContain("Previous comment");
+});
+
+test("lists the hovered-comment keys under the Commenting heading", async () => {
+  const { flush } = render(ShortcutsHelp, {
+    open: true,
+    entries: CANONICAL_KEYMAP.filter((e) => e.group === "commenting"),
+    onClose: () => {},
+  });
+  await flushUntil(flush, mounted);
+  const text = bodyText();
+  expect(text).toContain("Commenting");
+  for (const label of [
+    "Edit comment",
+    "Expand or edit comment",
+    "Collapse comment",
+    "Expand comment",
+    "Discard comment",
+  ]) {
+    expect(text).toContain(label);
+  }
 });
 
 describe("ShortcutsHelp wiring", () => {

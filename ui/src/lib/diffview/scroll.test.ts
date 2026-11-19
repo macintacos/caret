@@ -6,6 +6,7 @@ import {
   followBox,
   followCursorLine,
   followScrollDelta,
+  followStopScrollDelta,
   indexAtReadingZone,
   jumpToChange,
   lineAtReadingZone,
@@ -686,6 +687,21 @@ describe("followScrollDelta", () => {
     expect(followScrollDelta({ ...tall, rowTop: 650, rowBottom: 950 })).toBe(400);
     expect(followScrollDelta({ ...tall, rowTop: -200, rowBottom: 100 })).toBe(-450);
     expect(followScrollDelta({ ...tall, rowTop: 250, rowBottom: 550 })).toBe(0);
+  });
+});
+
+describe("followStopScrollDelta", () => {
+  const base = { viewTop: 100, viewBottom: 700, scrolloff: 5 };
+
+  test("follows a box that fits the viewport as the cursor's row", () => {
+    const box = { ...base, rowHeight: 20, rowTop: 590, rowBottom: 610 };
+    expect(followStopScrollDelta(box)).toBe(followScrollDelta(box));
+  });
+
+  test("aligns the top of a box taller than the viewport, from below or above", () => {
+    const tall = { ...base, rowHeight: 900 };
+    expect(followStopScrollDelta({ ...tall, rowTop: 650, rowBottom: 1550 })).toBe(550);
+    expect(followStopScrollDelta({ ...tall, rowTop: -400, rowBottom: 500 })).toBe(-500);
   });
 });
 

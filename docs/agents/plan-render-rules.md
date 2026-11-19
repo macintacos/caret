@@ -415,13 +415,13 @@ highlight run only where the `commentThreads` row runs.
   pointerleave, nor in WebKit a focusout, so a discarded composer's lines would otherwise
   stay highlighted.
 - **Highlight precedence.** The pointer's comment, else the focused comment in a slot,
-  else the open composer, else the focused annotation, is highlighted as
+  else the open composer, else the focused stop's comment, is highlighted as
   `caret-comment-span` over the `rangeOf` ranges of its lines.
 - **Accepted trade-off.** A block's bottom includes its slots' gaps, so `previewTopLine`
   can report a block whose text has scrolled past the reading zone while a slot is still
   in view, and a flip to source lands on that block's start.
 - **Reveals.** A scroll flight holds scroll anchoring off while it runs: a slot above the
-  anchor growing, as a card's does when a reveal focuses it, would otherwise move the view
+  anchor growing, as a card's does when a reveal expands it, would otherwise move the view
   in one step, which the flight reads as the reader taking over.
 
 `keyboardCursor` is ported too. The preview cursor is `cursorLine` plus `cursorPoint`, a
@@ -432,7 +432,11 @@ the text without moving the cursor off it; a `cursorPoint` on any other line tha
 only the blocks a step crosses, never the whole document. The band
 (`data-caret-preview-cursor`) is an overlay sibling of `.plan-preview`, so the source
 map's text order is untouched. It glides a step as the hover band glides between rows,
-below.
+below. The cursor can also rest on a comment stop, a thread or a Resume marker, held as
+`focusedStop`; `enterStop` puts it there and `placeOnStop` also scrolls to it. Preview
+stops sit where their card's gap opens in the text, often mid-paragraph: `slotRanks` in
+`previewComments.ts` orders the gaps top to bottom with the text, and a `j`/`k` step that
+would pass a gap stops on that gap's first comment instead.
 
 `search` is ported through `ui/src/lib/previewSearch.ts`, which matches the text as
 rendered, segmented once per map, on the first query, by `createPreviewSearch`. A block,

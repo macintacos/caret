@@ -24,7 +24,7 @@ const ann = (over: Partial<LineAnnotation> = {}): LineAnnotation => ({
 function base(over: Record<string, unknown> = {}) {
   return {
     annotations: [ann()],
-    focusedAnnotation: null,
+    focusedStop: null,
     onFocus: () => {},
     onEdit: () => {},
     onDelete: () => {},
@@ -75,7 +75,7 @@ describe("SourceAnnotationThread stacked comments", () => {
   test("passes the focused flag to the matching card only", () => {
     const { target } = render(
       SourceAnnotationThread,
-      base({ annotations: two, focusedAnnotation: "b" }),
+      base({ annotations: two, focusedStop: { ref: { kind: "comment", id: "b" }, line: 1 } }),
     );
     // The body is always mounted for the grid reveal, so expansion is the
     // .expanded class, not presence.
@@ -88,7 +88,11 @@ describe("SourceAnnotationThread stacked comments", () => {
     const deleted = capture<string>();
     const { target, flush } = render(
       SourceAnnotationThread,
-      base({ annotations: two, focusedAnnotation: "a", onDelete: deleted.cb }),
+      base({
+        annotations: two,
+        focusedStop: { ref: { kind: "comment", id: "a" }, line: 1 },
+        onDelete: deleted.cb,
+      }),
     );
     flush();
     (target.querySelector('[data-annotation-card="a"] .danger') as HTMLElement).click();

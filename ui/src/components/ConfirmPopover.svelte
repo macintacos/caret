@@ -12,9 +12,9 @@
   // because the reviewer nudged the wheel throws away the intent they just expressed.
   // No other caret popover behaves that way.
   //
-  // The trigger arrives as a snippet, so the popover owns its own open state — the
-  // hosts carry no `confirming` flag, no captured anchor element, and no
-  // position:relative wrapper — and bits-ui hands focus back to it on dismiss.
+  // The popover owns its open state and anchor; a host binds `open` only to open it
+  // without its trigger, as the keyboard discard does, and bits-ui still hands focus
+  // back to the trigger on dismiss.
   import type { Snippet } from "svelte";
 
   import * as Popover from "$lib/components/ui/popover/index.js";
@@ -31,10 +31,18 @@
      * the popover's aria-expanded / aria-controls wiring on top. */
     trigger: Snippet<[Record<string, unknown>]>;
     onConfirm: () => void;
+    /** Bindable so a host can open it without its trigger (a keyboard discard). */
+    open?: boolean;
   }
-  let { question, confirmLabel, cancelLabel = "Cancel", trigger, onConfirm }: Props = $props();
+  let {
+    question,
+    confirmLabel,
+    cancelLabel = "Cancel",
+    trigger,
+    onConfirm,
+    open = $bindable(false),
+  }: Props = $props();
 
-  let open = $state(false);
   let confirmEl = $state<HTMLButtonElement | null>(null);
 </script>
 

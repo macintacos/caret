@@ -9,6 +9,7 @@ function mount(over: Record<string, unknown> = {}) {
   const { target } = render(SourceScratchMarker, {
     text: "half a thought about this line",
     onResume: () => resumed++,
+    scratchKey: "1:1",
     ...over,
   });
   return {
@@ -41,9 +42,29 @@ describe("SourceScratchMarker", () => {
     expect(resumed()).toBe(1);
   });
 
+  test("the hovered marker carries the focused class and its key", () => {
+    const { button } = mount({ hovered: true, scratchKey: "3:5" });
+    expect(button.classList.contains("focused")).toBe(true);
+    expect(button.dataset.scratchMarker).toBe("3:5");
+  });
+
   test("the control is a button so it is keyboard-focusable", () => {
     const { button } = mount();
     expect(button).not.toBeNull();
     expect(button.tagName).toBe("BUTTON");
+  });
+});
+
+describe("SourceScratchMarker key cap", () => {
+  const cap = (root: ParentNode) => root.querySelector('.resume [data-slot="kbd"]');
+
+  test("a hovered marker shows the Enter cap on Resume, hidden from assistive tech", () => {
+    const { target } = mount({ hovered: true, showCaps: true });
+    expect(cap(target)?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("no cap without showCaps, or when not hovered", () => {
+    expect(cap(mount({ hovered: true }).target) === null).toBe(true);
+    expect(cap(mount({ showCaps: true }).target) === null).toBe(true);
   });
 });
