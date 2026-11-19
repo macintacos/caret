@@ -1953,27 +1953,27 @@ test.describe("on the preview", () => {
       // Type from the element holding the text, box from the chip around it.
       const look = (span: import("@playwright/test").Locator) =>
         span.evaluate((el) => {
-          const t = getComputedStyle(el);
+          const type = getComputedStyle(el);
           const chip = el.parentElement?.tagName === "CODE" ? el.parentElement : el;
-          const b = getComputedStyle(chip);
+          const box = getComputedStyle(chip);
           return {
-            fontFamily: t.fontFamily,
-            fontSize: t.fontSize,
-            color: t.color,
-            fontWeight: t.fontWeight,
-            fontStyle: t.fontStyle,
+            fontFamily: type.fontFamily,
+            fontSize: type.fontSize,
+            color: type.color,
+            fontWeight: type.fontWeight,
+            fontStyle: type.fontStyle,
             glyphWidth: getComputedStyle(el, "::before").width,
-            backgroundColor: b.backgroundColor,
-            padding: b.padding,
-            borderRadius: b.borderRadius,
-            boxShadow: b.boxShadow,
+            backgroundColor: box.backgroundColor,
+            padding: box.padding,
+            borderRadius: box.borderRadius,
+            boxShadow: box.boxShadow,
           } as Record<string, string>;
         });
       const mismatches = async () => {
-        const [b, t] = await Promise.all([look(bare), look(backticked)]);
-        return Object.keys(b)
-          .filter((k) => b[k] !== t[k])
-          .map((k) => `${k}: ${b[k]} ≠ ${t[k]}`);
+        const [bareLook, backtickedLook] = await Promise.all([look(bare), look(backticked)]);
+        return Object.keys(bareLook)
+          .filter((k) => bareLook[k] !== backtickedLook[k])
+          .map((k) => `${k}: ${bareLook[k]} ≠ ${backtickedLook[k]}`);
       };
       await expect.poll(mismatches).toEqual([]);
 
@@ -1981,10 +1981,10 @@ test.describe("on the preview", () => {
       const label = ref("the cache");
       const proseLook = () =>
         label.evaluate((el) => {
-          const s = getComputedStyle(el);
+          const style = getComputedStyle(el);
           return {
-            keepsProse: s.fontFamily === getComputedStyle(el.closest("li") ?? el).fontFamily,
-            chipped: s.backgroundColor !== "rgba(0, 0, 0, 0)",
+            keepsProse: style.fontFamily === getComputedStyle(el.closest("li") ?? el).fontFamily,
+            chipped: style.backgroundColor !== "rgba(0, 0, 0, 0)",
           };
         });
       await expect.poll(proseLook).toEqual({ keepsProse: true, chipped: true });
