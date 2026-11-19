@@ -347,6 +347,34 @@ test("runReviewViaCaret still returns the decision when onUrl throws (never cras
 
 // --- nodeSpawnRunner (the production runner, against a real shim child) ---
 
+// A child spawned without a cwd of its own inherits its parent's, which may since have been
+// deleted. Run in a subprocess because it chdir()s into a directory it then deletes.
+const DEAD_CWD_PROBE = `
+const { existsSync, mkdtempSync, rmSync } = require("node:fs");
+const { tmpdir } = require("node:os");
+const { join } = require("node:path");
+const { nodeSpawnRunner } = require(process.argv[1]);
+const dir = mkdtempSync(join(tmpdir(), "caret-dead-cwd-"));
+process.chdir(dir);
+rmSync(dir, { recursive: true, force: true });
+if (existsSync(dir)) throw new Error("cwd outlived its unlink; the probe would pass vacuously");
+const { stdout } = await nodeSpawnRunner([process.argv[2]], process.env, "");
+process.stdout.write(stdout);
+`;
+
+test("nodeSpawnRunner starts its child in / even when the caller's cwd was deleted", () => {
+  const bridge = Bun.resolveSync("@bridge/review-bridge.ts", import.meta.dir);
+  const { exitCode, stdout, stderr } = Bun.spawnSync([
+    process.execPath,
+    "-e",
+    DEAD_CWD_PROBE,
+    bridge,
+    shim("exec /bin/pwd -P"),
+  ]);
+  expect(exitCode, stderr.toString()).toBe(0);
+  expect(stdout.toString()).toBe("/\n");
+});
+
 test("nodeSpawnRunner spawns the argv's first entry with the rest as its arguments", async () => {
   const bin = shim(`printf '%s|' "$@"`);
   const { stdout } = await nodeSpawnRunner([bin, "review", "--flag"], process.env, "");

@@ -341,10 +341,14 @@ export async function runReviewViaCaret(
  * renderer never owns it and it lingered after the decision (EXC-691). The child logs
  * diagnostics to caret.log, so dropping the rest of stderr loses nothing. An aborted
  * `signal` SIGTERMs the child, which `caret review` answers by expiring its review; the
- * returned promise rejects with an AbortError. */
+ * returned promise rejects with an AbortError. The child starts in `/`, as the daemon
+ * does (`DAEMON_CWD`, src/daemon/lifecycle.ts): the caller's cwd may since have been
+ * deleted, and a compiled caret will not start in one. So `command[0]` must be absolute
+ * or a bare `PATH` name. */
 export const nodeSpawnRunner: SpawnRunner = (command, env, stdin, onStderr, signal) =>
   new Promise((resolve, reject) => {
     const child = spawn(command[0] as string, command.slice(1), {
+      cwd: "/",
       env,
       signal,
       stdio: ["pipe", "pipe", "pipe"],
