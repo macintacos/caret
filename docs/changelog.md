@@ -3,6 +3,66 @@
 Every caret release, newest first, as its
 [GitHub Release](https://github.com/macintacos/caret/releases) describes it.
 
+## v1.11.0
+
+Released 2026-11-19 ·
+[GitHub release](https://github.com/macintacos/caret/releases/tag/v1.11.0)
+
+caret 1.11.0 adds a menubar app for macOS: a carrot that colours in while a plan waits for
+review and opens on a card of your review stats. It also lets the Vim keys stop on
+comments and act on them, renders markdown in the review title and breadcrumbs, and
+publishes the docs as a site at
+[macintacos.github.io/caret](https://macintacos.github.io/caret/).
+
+![The caret carrot in the macOS menu bar fades from grey to orange as a plan arrives, its menu opens on a card of review stats, and the carrot fades back to grey once the plan is reviewed](https://github.com/macintacos/caret/releases/download/v1.11.0/menubar.gif)
+
+### Added
+
+- A menubar app for macOS 13 or later. `caret install` asks whether to show caret in the
+    menu bar, and the answer defaults to yes. A LaunchAgent starts the app at login and
+    relaunches it after a crash, and **Quit** keeps it closed until the next login.
+    `caret install --uninstall` removes it, and so does caret's own cleanup once caret is
+    gone from every agent host. See
+    [Show caret in the menu bar](https://macintacos.github.io/caret/how-to/menubar/).
+- The carrot colours in while a plan waits for review and greys out once none does. It
+    fades between the two and grows a little as a plan arrives; with Reduce motion on, it
+    switches at once.
+- The carrot's menu opens on a card of your review stats: the running caret's version,
+    plans approved and rejected, revisions, and comments. The card takes the accent of
+    your review page's theme, and **Open caret** sits below it.
+- Comments are stops for the Vim keys. `j`/`k` stop on each comment card and unsent
+    draft in the source view and the preview, and `]c`/`[c` jump between comments. The
+    comment under the cursor takes keys of its own: `e` edits, `h`/`l` fold, `Shift+D`
+    discards after a confirm, `c` adds to its thread, and `V` selects from its last line.
+- A documentation site at
+    [macintacos.github.io/caret](https://macintacos.github.io/caret/), with a tutorial,
+    how-to guides, reference and explanation pages, a glossary, and a changelog of every
+    release.
+
+### Changed
+
+- The top bar and the plan's breadcrumbs render inline markdown in titles and headings
+    (bold, italics, code and strikethrough) instead of showing the raw syntax.
+- In the preview, a file the plan cites reads as inline code whether or not the agent
+    put it in backticks.
+- The theme JSON Schema moved to
+    `https://raw.githubusercontent.com/macintacos/caret/HEAD/docs/theme.schema.json`, and
+    its old `doc/` URL now returns 404. Update the `$schema` line in your theme files:
+    caret still loads a file that keeps the old line, but your editor stops completing and
+    validating it.
+
+### Fixed
+
+- A caret built from source can tell how far behind `main` it is again. Its update check
+    and What's new compared against `trunk`, which stopped resolving when the default
+    branch was renamed to `main`; they now compare against `HEAD`.
+- The file preview's left edge and its shade run unbroken past the line numbers, which
+    used to paint over them.
+- A daemon lock naming pid 0 no longer reads as a running daemon, so caret can't signal
+    its own process group while retiring one.
+
+**Full Changelog**: https://github.com/macintacos/caret/compare/v1.10.1...v1.11.0
+
 ## v1.10.1
 
 Released 2026-11-12 ·
