@@ -704,8 +704,6 @@ specific code areas live in [`docs/agents/`](../docs/agents/).
   clickable ones (links, file references, citations) stand a third of `--key-side` (0.5px)
   above it with `--chip-raised`, in both views. The preview and the source view share
   these values, and `coreStyles.test.ts` pins the preview's copies to the source view's.
-  In the preview a file reference wears inline code's type whether or not it was
-  backticked; only its `--chip-ref` fill and its glyph set it apart from code.
 - **A table is a raised rubber pad**, in both views:
   - The table is a pad of `--body` that stands on the plan as a key does, with a gloss
     along its top edge (`--rubber-gloss`), a side of the body darkened (`--pad-side`, its
@@ -767,6 +765,9 @@ specific code areas live in [`docs/agents/`](../docs/agents/).
 - Only a link that is itself a chip sinks when pressed in the preview, along with
   reference and citation code. A link wrapping code, a file reference or an image does not
   (`ui/src/components/PlanPreview.svelte`).
+- In the preview a file reference wears inline code's type whether or not it was
+  backticked; its `--chip-ref` fill, glyph and raise set it apart from code. A prose link
+  label keeps prose type (`ui/src/components/PlanPreview.svelte`).
 - Rendering rules live in [`plan-render-rules.md`](../docs/agents/plan-render-rules.md).
 
 ### Keyboard

@@ -1940,39 +1940,56 @@ test.describe("on the preview", () => {
       await proj.cleanup();
     }
   });
-});
 
-test("the preview sets a bare reference and a backticked one alike", async ({ daemon, page }) => {
-  const proj = await makeProject({ "src/cache.ts": CACHE_TS });
-  try {
-    await daemon.seed({
-      cwd: proj.dir,
-      plan: "# Refs\n\nEdit `src/cache.ts` first.\n\nThe store lives in (src/cache.ts).\n",
-    });
-    await page.goto("/");
-    await planSurface(page);
-    await sourceToggle(page).click();
-    const backticked = page.locator(".plan-preview code:has(> [data-file-ref])");
-    const bare = page.locator(".plan-preview :not(code) > [data-file-ref]");
-    await expect(backticked).toHaveCount(1);
-    await expect(bare).toHaveCount(1);
-    await page.mouse.move(0, 0);
+  test("a bare reference and a backticked one look alike", async ({ daemon, page }) => {
+    const proj = await openOnPreview(page, daemon);
+    try {
+      const ref = (text: string) =>
+        page.locator(`${PLAN_PREVIEW} [data-file-ref]`).filter({ hasText: text });
+      const backticked = ref("src/cache.ts:42");
+      const bare = ref("src/lib/util.ts");
+      await page.mouse.move(0, 0);
 
-    const look = (chip: import("@playwright/test").Locator) =>
-      chip.evaluate((el) => {
-        const s = getComputedStyle(el);
-        return {
-          fontFamily: s.fontFamily,
-          fontSize: s.fontSize,
-          color: s.color,
-          backgroundColor: s.backgroundColor,
-          padding: s.padding,
-          borderRadius: s.borderRadius,
-          boxShadow: s.boxShadow,
-        };
-      });
-    expect(await look(bare)).toEqual(await look(backticked));
-  } finally {
-    await proj.cleanup();
-  }
+      // Type from the element holding the text, box from the chip around it.
+      const look = (span: import("@playwright/test").Locator) =>
+        span.evaluate((el) => {
+          const t = getComputedStyle(el);
+          const chip = el.parentElement?.tagName === "CODE" ? el.parentElement : el;
+          const b = getComputedStyle(chip);
+          return {
+            fontFamily: t.fontFamily,
+            fontSize: t.fontSize,
+            color: t.color,
+            fontWeight: t.fontWeight,
+            fontStyle: t.fontStyle,
+            glyphWidth: getComputedStyle(el, "::before").width,
+            backgroundColor: b.backgroundColor,
+            padding: b.padding,
+            borderRadius: b.borderRadius,
+            boxShadow: b.boxShadow,
+          } as Record<string, string>;
+        });
+      const mismatches = async () => {
+        const [b, t] = await Promise.all([look(bare), look(backticked)]);
+        return Object.keys(b)
+          .filter((k) => b[k] !== t[k])
+          .map((k) => `${k}: ${b[k]} ≠ ${t[k]}`);
+      };
+      await expect.poll(mismatches).toEqual([]);
+
+      // A prose link label keeps the sentence's type but still wears the reference chip.
+      const label = ref("the cache");
+      const proseLook = () =>
+        label.evaluate((el) => {
+          const s = getComputedStyle(el);
+          return {
+            keepsProse: s.fontFamily === getComputedStyle(el.closest("li") ?? el).fontFamily,
+            chipped: s.backgroundColor !== "rgba(0, 0, 0, 0)",
+          };
+        });
+      await expect.poll(proseLook).toEqual({ keepsProse: true, chipped: true });
+    } finally {
+      await proj.cleanup();
+    }
+  });
 });

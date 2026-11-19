@@ -136,10 +136,12 @@ Open items first, then the log, newest first.
 ## 2026-11-18: a cited file reads as code
 
 - **A resolved reference wears inline code's type in the preview,** backticked or not:
-  Berkeley Mono at 0.9em in the code ink. The user asked for `` `foo/bar.py` `` and a bare
+  Berkeley Mono in the code ink. The user asked for `` `foo/bar.py` `` and a bare
   `foo/bar.py` to look the same, and the brief already sets paths in Berkeley Mono.
-- **The `--chip-ref` fill and the file glyph stay,** so a file still reads apart from
-  ordinary code.
+- **The `--chip-ref` fill, the file glyph, the raise and the hover stay,** so a file still
+  reads apart from ordinary code.
+- **A prose link label keeps prose type.** In `[the cache](src/cache.ts)` the words "the
+  cache" are neither a path nor code, and Berkeley Mono is for those.
 - **The source view is unchanged:** its rows are already monospace and show the backticks,
   so the two forms can't match there.
 

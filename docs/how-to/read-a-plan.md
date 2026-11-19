@@ -103,12 +103,13 @@ A path loose in a sentence gets no icon, so ordinary words never look like files
 parentheses, a path needs a `/` or a `.`, so `(Makefile)` gets no icon, while
 `` `Makefile` `` in backticks does.
 
-The preview sets a cited file as code, in its own tint, whether or not the agent put it in
-backticks.
-
 caret checks each path against the project folder the agent was working in. A path that
 does not exist there stays plain text, with no icon, so a filename the agent invented
 never looks like one you can open.
+
+The preview sets a cited file in the same type as inline code, on a chip of its own
+colour, whether or not the agent put it in backticks. A link whose label is prose keeps
+the sentence's type.
 
 ## Next steps
 

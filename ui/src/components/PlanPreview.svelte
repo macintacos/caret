@@ -366,9 +366,9 @@
     background-color: var(--chip-code);
     box-shadow: var(--chip-stamped);
   }
-  /* A cited file reads as code whether or not it was backticked; one inside code takes
-     the type from the code. Outranks the link ink, so a reference in a label keeps it. */
-  .plan-preview :global(:is(:not(pre) > code, :not(code) > [data-file-ref])) {
+  /* A reference reads as code, backticked or not; the `:not(code *)` guard stops a
+     backticked one taking 0.9em twice, and a prose link label keeps prose type. */
+  .plan-preview :global(:is(:not(pre) > code, [data-file-ref]:not(code *, [data-file-ref-label]))) {
     font-family: var(--font-mono);
     font-size: 0.9em;
     color: var(--markdown-code-color, var(--accent-bright));

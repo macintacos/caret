@@ -158,10 +158,12 @@ A few elements keep part of their look whatever the style says:
 The chip tint behind bold, italic, inline code, and link text comes from the `chip*Hue`
 [palette](#palette) overrides, not from these styles.
 
-In the preview, an unstyled element differs from the source view default in three ways: a
-heading is semibold, a quote is `inkSoft` rather than faded, and a link or emphasis draws
-no chip. The preview leaves a fenced block's body to its own highlighting, so `code`
-colors only inline code there.
+In the preview, an unstyled element differs from the source view default in four ways: a
+heading is semibold, a quote is `inkSoft` rather than faded, a link or emphasis draws no
+chip, and a cited file takes the `code` style whether or not it was backticked. A link
+whose label is prose, such as `[the cache](src/cache.ts)`, keeps the sentence's style. The
+preview leaves a fenced block's body to its own highlighting, so there `code` colors only
+inline code and cited files.
 
 In the comment editor, text nested in a heading, link, or quote takes that element's
 color, and in a heading its weight too. A fenced block that names its language takes the
