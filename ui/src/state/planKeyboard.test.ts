@@ -578,6 +578,41 @@ describe("comment stops", () => {
     expect(store.cursorLine).toBe(5);
   });
 
+  test("]c from a line takes the next comment, its own line's first", () => {
+    store.cursorLine = 3;
+    const h = stopsBuild();
+    h.keyboard.stepComment(1);
+    expect(h.focused()).toEqual(onStop("a", 3));
+    expect(h.followedStops.map((s) => s.ref)).toEqual([{ kind: "comment", id: "a" }]);
+  });
+
+  test("]c walks every comment and wraps; [c wraps back", () => {
+    store.cursorLine = 1;
+    const h = stopsBuild();
+    const walked = [1, 1, 1, 1].map(() => {
+      h.keyboard.stepComment(1);
+      return h.focused()?.ref;
+    });
+    expect(walked.map((r) => (r?.kind === "comment" ? r.id : null))).toEqual(["a", "b", "c", "a"]);
+    h.keyboard.stepComment(-1);
+    expect(h.focused()).toEqual(onStop("c", 7));
+  });
+
+  test("[c from a line takes the last comment before it", () => {
+    store.cursorLine = 5;
+    const h = stopsBuild();
+    h.keyboard.stepComment(-1);
+    expect(h.focused()).toEqual(onStop("b", 3));
+  });
+
+  test("]c with no comments leaves the cursor where it is", () => {
+    store.cursorLine = 2;
+    const h = build(store, { text: CURSOR_PLAN, headings: CURSOR_HEADINGS, stops: [] });
+    h.keyboard.stepComment(1);
+    expect(h.focused() === null).toBe(true);
+    expect(store.cursorLine).toBe(2);
+  });
+
   test("placeOnStop exits visual mode and follows the stop", () => {
     store.visualAnchor = 1;
     const h = stopsBuild();

@@ -42,6 +42,13 @@ describe("groupShortcuts", () => {
     expect(motion?.entries.map((e) => e.id)).toEqual(["motion.top", "motion.down"]);
   });
 
+  test("lists the comment jumps under Motion", () => {
+    const motion = groupShortcuts(CANONICAL_KEYMAP).find((g) => g.group === "motion");
+    const ids = motion?.entries.map((e) => e.id) ?? [];
+    expect(ids).toContain("motion.nextComment");
+    expect(ids).toContain("motion.prevComment");
+  });
+
   test("lists the hovered-comment keys under Commenting", () => {
     const commenting = groupShortcuts(CANONICAL_KEYMAP).find((g) => g.group === "commenting");
     expect(commenting?.label).toBe("Commenting");

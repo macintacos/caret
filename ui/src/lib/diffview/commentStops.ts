@@ -94,6 +94,27 @@ export function stopNeighbour(stops: readonly CommentStop[], i: number, dir: 1 |
   return stops[next]?.slot === stops[i]?.slot ? next : -1;
 }
 
+/** `]c`/`[c`: the index of the next or previous comment, skipping Resume markers and
+ * wrapping at either end; -1 with no comments. From a position at `slot`, comments on
+ * that slot count as ahead, since they render after it. */
+export function stepComment(
+  stops: readonly CommentStop[],
+  from: { stop: number } | { slot: number },
+  delta: 1 | -1,
+): number {
+  const ahead = (s: CommentStop, i: number) =>
+    "stop" in from ? i > from.stop : s.slot >= from.slot;
+  const comments = stops.flatMap((s, i) => (s.ref.kind === "comment" ? [{ s, i }] : []));
+  if (comments.length === 0) return -1;
+
+  const hit =
+    delta > 0
+      ? (comments.find((c) => ahead(c.s, c.i)) ?? comments[0])
+      : (comments.findLast((c) => !ahead(c.s, c.i) && !("stop" in from && c.i === from.stop)) ??
+        comments.at(-1));
+  return hit?.i ?? -1;
+}
+
 export type CommentKey = "edit" | "editInsert" | "activate" | "collapse" | "expand" | "discard";
 
 /** The `commenting.*` keys that act on a stop. A settled comment (Accepted, Expired) only

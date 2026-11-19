@@ -8,6 +8,7 @@ import {
   crossedStop,
   type FocusedStop,
   sameStop,
+  stepComment,
   stopNeighbour,
 } from "$lib/diffview/commentStops.ts";
 import {
@@ -77,6 +78,8 @@ export interface PreviewCursorDeps {
 export interface PreviewCursor {
   /** Hover `stop`: exits visual mode, puts the cursor on its last line, and follows it. */
   placeOnStop(stop: CommentStop): void;
+  /** `]c`/`[c`: hover the next or previous comment, wrapping; no-op with none. */
+  stepComment(delta: 1 | -1): void;
   /** Put the cursor at the start of `line`, leaving any hovered stop. Scrolls nothing. */
   landOnLine(line: number): void;
   /** The cursor's point, or null when unplaced. A cursorLine with no point of its own
@@ -241,6 +244,16 @@ export function createPreviewCursor(
     },
 
     placeOnStop,
+
+    stepComment(delta) {
+      const stops = deps.stops();
+      const focused = deps.focusedStop();
+      const i = focused ? stops.findIndex((s) => sameStop(s.ref, focused.ref)) : -1;
+      const seed = i >= 0 ? null : seedPoint();
+      const from = i >= 0 ? { stop: i } : { slot: seed ? deps.slotOf(seed.line) : 0 };
+      const hit = stops[stepComment(stops, from, delta)];
+      if (hit != null) placeOnStop(hit);
+    },
 
     landOnLine(line) {
       leaveStop();

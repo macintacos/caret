@@ -370,6 +370,31 @@ for (const view of ["source", "preview"] as const) {
       await expect(card(page, "b")).not.toHaveClass(/\bexpanded\b/);
     });
 
+    test("]c walks every comment and wraps, and [c wraps back", async ({ daemon, page }) => {
+      await open(page, daemon, view, (line) => ({
+        annotations: [comment("a", line("Alpha line.")), comment("d", line("Delta line."))],
+        composerScratches: [
+          { startLine: line("Charlie line."), endLine: line("Charlie line."), text: "half" },
+        ],
+      }));
+      await toLine(page, "Alpha");
+      for (const id of ["a", "d", "a"]) {
+        await page.keyboard.press("]");
+        await page.keyboard.press("c");
+        await expectOnCard(page, view, id);
+      }
+      await page.keyboard.press("[");
+      await page.keyboard.press("c");
+      await expectOnCard(page, view, "d");
+    });
+
+    test("]c and [c do nothing on a plan without comments", async ({ daemon, page }) => {
+      const lines = await open(page, daemon, view, () => ({ annotations: [] }));
+      await toLine(page, "Bravo");
+      for (const key of ["]", "c", "[", "c"]) await page.keyboard.press(key);
+      await expectOnLine(page, view, lines.at("Bravo line."));
+    });
+
     test("a card taller than the viewport shows its top", async ({ daemon, page }) => {
       await page.setViewportSize({ width: 1000, height: 480 });
       const long = Array.from({ length: 40 }, (_, i) => `- point ${i + 1}`).join("\n");

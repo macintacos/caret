@@ -15,6 +15,7 @@ import {
   crossedStop,
   type FocusedStop,
   sameStop,
+  stepComment,
   stopNeighbour,
 } from "$lib/diffview/commentStops.ts";
 import {
@@ -107,6 +108,8 @@ export interface PlanKeyboardDeps {
 export interface PlanKeyboard {
   /** Hover `stop`: exits visual mode, puts the cursor on its last line, and follows it. */
   placeOnStop(stop: CommentStop): void;
+  /** `]c`/`[c`: hover the next or previous comment, wrapping; no-op with none. */
+  stepComment(delta: 1 | -1): void;
   /** Put the cursor on `line`, leaving any hovered stop. Scrolls nothing. */
   landOnLine(line: number): void;
   /** The matches for the current query over the rendered text — consumed by the host's
@@ -274,6 +277,14 @@ export function createPlanKeyboard(store: PlanKeyboardStore, deps: PlanKeyboardD
     matches,
     placeOnStop,
     landOnLine,
+
+    stepComment(delta) {
+      const stops = deps.stops();
+      const focused = deps.focusedStop();
+      const i = focused ? stops.findIndex((s) => sameStop(s.ref, focused.ref)) : -1;
+      const hit = stops[stepComment(stops, i >= 0 ? { stop: i } : { slot: seedLine() }, delta)];
+      if (hit != null) placeOnStop(hit);
+    },
 
     moveCursor(motion) {
       const lines = deps.lines();

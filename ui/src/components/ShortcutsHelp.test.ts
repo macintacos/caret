@@ -81,6 +81,19 @@ describe("ShortcutsHelp render", () => {
   });
 });
 
+test("lists the comment jumps under the Motion heading", async () => {
+  const { flush } = render(ShortcutsHelp, {
+    open: true,
+    entries: CANONICAL_KEYMAP.filter((e) => e.id.endsWith("Comment") && e.group === "motion"),
+    onClose: () => {},
+  });
+  await flushUntil(flush, mounted);
+  const text = bodyText();
+  expect(text).toContain("Motion");
+  expect(text).toContain("Next comment");
+  expect(text).toContain("Previous comment");
+});
+
 test("lists the hovered-comment keys under the Commenting heading", async () => {
   const { flush } = render(ShortcutsHelp, {
     open: true,

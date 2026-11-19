@@ -259,6 +259,30 @@ describe("comment stops", () => {
     expect(store.cursorPoint).toEqual(at(4));
   });
 
+  test("]c and [c jump from the cursor's block to the comments around it", () => {
+    const h = build(placed(at(4)), { stops: STOPS });
+    h.cursor.stepComment(1);
+    expect(h.focused()).toEqual(onStop("c", 8));
+
+    const k = build(placed(at(4)), { stops: STOPS });
+    k.cursor.stepComment(-1);
+    expect(k.focused()).toEqual(onStop("b", 4));
+  });
+
+  test("[c from the first comment wraps to the last", () => {
+    const h = build(placed(at(1)), { stops: STOPS, focused: onStop("a", 3) });
+    h.cursor.stepComment(-1);
+    expect(h.focused()).toEqual(onStop("c", 8));
+  });
+
+  test("]c with no comments leaves the cursor where it is", () => {
+    const store = placed(at(1));
+    const h = build(store, { stops: [] });
+    h.cursor.stepComment(1);
+    expect(h.focused() === null).toBe(true);
+    expect(store.cursorPoint).toEqual(at(1));
+  });
+
   test("placeOnStop exits visual mode and puts the cursor on the stop's line", () => {
     const store = { ...placed(at(0)), visualAnchor: 1, visualAnchorPoint: at(0) };
     const h = build(store, { stops: STOPS });

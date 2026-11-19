@@ -2665,7 +2665,18 @@
     const onPreview = surface === "preview";
     const comment = onPreview ? previewCursor.comment : keyboard.commentCursorLine;
     const enterVisualMode = onPreview ? previewCursor.enterVisualMode : keyboard.enterVisualMode;
+    const stepComment = onPreview ? previewCursor.stepComment : keyboard.stepComment;
     const offs: Array<() => void> = [];
+    for (const [id, delta] of [
+      ["motion.nextComment", 1],
+      ["motion.prevComment", -1],
+    ] as const) {
+      offs.push(
+        shortcuts.register(
+          bind(id, { run: () => stepComment(delta), enabled: () => !defaultIsEditingContext() }),
+        ),
+      );
+    }
     // Commenting on the focused line / a keyboard-selected range (EXC-790): live entries
     // bound over EXC-786's reservations, with the motions' editing-context guard. c
     // comments the cursor line — on the preview, the cursor's visual line — or, in visual

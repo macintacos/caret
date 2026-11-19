@@ -6,6 +6,7 @@ import {
   crossedStop,
   deriveStops,
   sameStop,
+  stepComment,
   stopNeighbour,
 } from "$lib/diffview/commentStops.ts";
 
@@ -96,6 +97,49 @@ describe("crossedStop", () => {
 
   test("down from the last line reaches a comment on it", () => {
     expect(crossedStop(stops, 5, null, 1)).toBe(2);
+  });
+});
+
+describe("stepComment", () => {
+  // a(3) b(3) resume:m(5) c(7)
+  const stops = deriveStops(
+    [thread(3, ["a", 3], ["b", 3]), thread(7, ["c", 7])],
+    [marker("m", 5, 5)],
+    identity,
+  );
+  const at = (i: number) => refs(stops)[i];
+
+  test("steps from a comment to the next, skipping Resume markers", () => {
+    expect(at(stepComment(stops, { stop: 1 }, 1))).toBe("c");
+    expect(at(stepComment(stops, { stop: 3 }, -1))).toBe("b");
+  });
+
+  test("wraps at either end", () => {
+    expect(at(stepComment(stops, { stop: 3 }, 1))).toBe("a");
+    expect(at(stepComment(stops, { stop: 0 }, -1))).toBe("c");
+  });
+
+  test("from a Resume marker, steps to the comments around it", () => {
+    expect(at(stepComment(stops, { stop: 2 }, 1))).toBe("c");
+    expect(at(stepComment(stops, { stop: 2 }, -1))).toBe("b");
+  });
+
+  test("]c from a line before, on, and after a comment's slot", () => {
+    expect(at(stepComment(stops, { slot: 2 }, 1))).toBe("a");
+    expect(at(stepComment(stops, { slot: 3 }, 1))).toBe("a");
+    expect(at(stepComment(stops, { slot: 4 }, 1))).toBe("c");
+  });
+
+  test("[c from a line before, on, and after a comment's slot", () => {
+    expect(at(stepComment(stops, { slot: 2 }, -1))).toBe("c");
+    expect(at(stepComment(stops, { slot: 3 }, -1))).toBe("c");
+    expect(at(stepComment(stops, { slot: 4 }, -1))).toBe("b");
+  });
+
+  test("is -1 with no comments", () => {
+    const onlyResume = deriveStops([], [marker("m", 1, 1)], identity);
+    expect(stepComment(onlyResume, { slot: 1 }, 1)).toBe(-1);
+    expect(stepComment(onlyResume, { stop: 0 }, -1)).toBe(-1);
   });
 });
 
