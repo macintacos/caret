@@ -3,6 +3,28 @@
 Every caret release, newest first, as its
 [GitHub Release](https://github.com/macintacos/caret/releases) describes it.
 
+## v1.11.1
+
+Released 2026-11-19 ·
+[GitHub release](https://github.com/macintacos/caret/releases/tag/v1.11.1)
+
+caret 1.11.1 fixes two bugs: a plan review that was rejected at once when the agent
+outlived the directory it started in, and a menubar app that `caret install --refresh`
+could fail to reload.
+
+### Fixed
+
+- A plan review no longer comes back as "changes requested" before anyone looks at it
+    when the agent's session started in a directory that has since been deleted, such as a
+    removed worktree. caret now starts the review from `/`, so the review opens in the
+    browser as usual. This covers Claude Code, OpenCode and pi alike.
+- `caret install --refresh` reloads a running menubar app instead of failing with
+    `launchctl bootstrap failed (5): Input/output error`. caret now waits for launchd to
+    finish removing the old app before it starts the new one, and the background service
+    install does the same.
+
+**Full Changelog**: https://github.com/macintacos/caret/compare/v1.11.0...v1.11.1
+
 ## v1.11.0
 
 Released 2026-11-19 ·
