@@ -345,6 +345,9 @@ export async function runReviewViaCaret(
 export const nodeSpawnRunner: SpawnRunner = (command, env, stdin, onStderr, signal) =>
   new Promise((resolve, reject) => {
     const child = spawn(command[0] as string, command.slice(1), {
+      // Keep in sync with DAEMON_CWD in src/daemon/lifecycle.ts: an inherited cwd may since
+      // have been deleted, and a compiled caret will not start in one.
+      cwd: "/",
       env,
       signal,
       stdio: ["pipe", "pipe", "pipe"],
