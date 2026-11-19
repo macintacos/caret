@@ -141,7 +141,7 @@
    scratch marker) hovers and presses the key it holds, wherever in the row the pointer
    is. */
 :where(.cap, button.float-chip, [data-slot="toggle-group-item"]):not(:disabled):is(:hover, :focus-visible, [aria-expanded="true"]),
-button.tray:is(:hover, :focus-visible) > .cap {
+button.tray:is(:hover, :focus-visible, .focused) > .cap {
   --cap-now: var(--cap-face-hover);
   color: var(--cap-label-hover);
 }

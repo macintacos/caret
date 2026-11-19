@@ -269,8 +269,9 @@
   .card:not(.editing) {
     cursor: pointer;
   }
-  /* A control inside the card under keyboard focus lifts it as the pointer over it does. */
-  .card:not(.editing):is(:hover, :has(:global(:focus-visible))) {
+  /* The keyboard cursor's stop, or a control inside the card under keyboard focus, lifts
+     it as the pointer over it does. */
+  .card:not(.editing):is(:hover, .focused, :has(:global(:focus-visible))) {
     background: color-mix(in lab, var(--paper-raised), var(--ink) 8%);
   }
 

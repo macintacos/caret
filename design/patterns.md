@@ -552,7 +552,9 @@ specific code areas live in [`docs/agents/`](../docs/agents/).
   4.5:1 on the tinted floor in every palette, `tactile-kit.e2e.ts` seeds an unsent comment
   to cover the marker's cap, and `unsent-marker.e2e.ts` reads the row's edges off a
   screenshot in every dark palette. The keyboard cursor lifts the row as it lifts a
-  focused comment card: `--float-surface-mid` over the row's bed.
+  focused comment card, with `--float-surface-mid` over the row's bed, and its Resume cap
+  takes its hover face. A comment card under the keyboard cursor wears its hover paper and
+  `--float-surface-mid`, entering and leaving on the 160 ms state transition.
 - **Unsent everywhere.** Every surface marks an unsent comment with the word "unsent", the
   `message-square-more` glyph in the comment stamps' word ink, and the tinted well. The
   word is never "draft". Size picks the tint: a row or a list takes `--unsent-floor`, and
@@ -778,7 +780,8 @@ specific code areas live in [`docs/agents/`](../docs/agents/).
   don't collide with typing: `j`/`k`, `G`, `/` to search, `?` for help.
 - Each control shows the key that activates it on the control itself (`KbdCap.svelte`,
   `SubmitCap.svelte`). `ShortcutCap.svelte` draws one keymap id's caps, read from the
-  keymap, inside the control that id names. The hints are on by default and the
+  keymap, inside the control that id names. Its caps fade in on `--dur-state` when the
+  cursor lands and leave at once. The hints are on by default and the
   `caret.shortcutHints` preference hides them (`ui/src/lib/shortcutHintsPref.ts`). They
   are for desktop only: a touch device hides them in `ui/src/styles/atoms.css`.
 - An open modal silences the review keymap.

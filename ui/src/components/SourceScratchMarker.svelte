@@ -60,7 +60,8 @@
     animation: reveal var(--dur-state) var(--ease-out);
     transition: box-shadow var(--dur-state) var(--ease-out);
   }
-  /* The keyboard cursor lifts the well as it lifts a focused comment card. */
+  /* The keyboard cursor lifts the well as it lifts a focused comment card; its cap takes
+     the hover face (styles/atoms.css). */
   .scratch.focused {
     box-shadow: var(--unsent-shade), var(--float-surface-mid);
   }
